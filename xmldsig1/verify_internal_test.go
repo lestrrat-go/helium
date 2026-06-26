@@ -123,6 +123,8 @@ func TestParseSignatureElement(t *testing.T) {
 
 	t.Run("bad SignatureValue base64", func(t *testing.T) {
 		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
 			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
 			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
@@ -157,6 +159,40 @@ func TestParseSignedInfo(t *testing.T) {
 		require.Contains(t, err.Error(), "SignatureMethod missing Algorithm")
 	})
 
+	// A SignedInfo with no CanonicalizationMethod is structurally invalid and
+	// must be rejected up front rather than parsing OK and failing later as an
+	// unsupported-algorithm error during canonicalization.
+	t.Run("missing CanonicalizationMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing CanonicalizationMethod")
+	})
+
+	// A SignedInfo with no SignatureMethod is structurally invalid and must be
+	// rejected up front rather than parsing OK and failing later (possibly only
+	// after key resolution) as an unsupported-algorithm error.
+	t.Run("missing SignatureMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing SignatureMethod")
+	})
+
 	t.Run("no Reference", func(t *testing.T) {
 		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
 			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
@@ -167,6 +203,42 @@ func TestParseSignedInfo(t *testing.T) {
 		err := parseSignedInfo(doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "no Reference")
+	})
+
+	// A second CanonicalizationMethod makes the c14n algorithm ambiguous; the
+	// schema fixes its cardinality at one, so it must be rejected rather than
+	// accepted last-one-wins.
+	t.Run("duplicate CanonicalizationMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + C14N10 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple CanonicalizationMethod")
+	})
+
+	// A second SignatureMethod makes the signature algorithm ambiguous.
+	t.Run("duplicate SignatureMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgECDSASHA256 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple SignatureMethod")
 	})
 }
 
@@ -191,6 +263,32 @@ func TestParseReferenceElement(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidSignature)
 	})
 
+	// A Reference with no DigestMethod is structurally invalid and must be
+	// rejected up front rather than parsing OK and failing later as an
+	// unsupported-digest error.
+	t.Run("missing DigestMethod", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing DigestMethod")
+	})
+
+	// A Reference with no DigestValue is structurally invalid and must be
+	// rejected up front rather than parsing OK and failing later as a digest
+	// mismatch (the empty digest never matches the recomputed one).
+	t.Run("missing DigestValue", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing DigestValue")
+	})
+
 	t.Run("with InclusiveNamespaces", func(t *testing.T) {
 		const exc = ExcC14N10
 		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
@@ -206,6 +304,157 @@ func TestParseReferenceElement(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, ref.transforms, 1)
 		require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
+	})
+
+	// ec:InclusiveNamespaces is an Exclusive C14N parameter; under a
+	// non-exclusive Reference Transform (C14N10/C14N11/enveloped-signature) the
+	// prefixes are silently dropped during canonicalization. Accepting it would
+	// be fail-open, so it must be rejected — even an empty PrefixList.
+	t.Run("InclusiveNamespaces on non-exclusive transform rejected", func(t *testing.T) {
+		for _, alg := range []string{C14N10, C14N11URI, TransformEnvelopedSignature} {
+			t.Run(alg, func(t *testing.T) {
+				r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+					`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+					`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + alg + `">` +
+					`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="a b"/>` +
+					`</ds:Transform></ds:Transforms>` +
+					`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+					`</ds:Reference>`
+				doc := mustParse(t, r)
+				_, err := parseReferenceElement(doc.DocumentElement())
+				require.ErrorIs(t, err, ErrUnsupportedTransform)
+				require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
+			})
+		}
+	})
+
+	// An empty PrefixList is still misplaced under a non-exclusive transform; the
+	// boolean-tracked match must reject it rather than treat "no prefixes" as
+	// harmless.
+	t.Run("empty InclusiveNamespaces on non-exclusive transform rejected", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + C14N10 + `">` +
+			`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `"/>` +
+			`</ds:Transform></ds:Transforms>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+	})
+
+	// Accept arm: ec:InclusiveNamespaces on an exclusive c14n transform is valid
+	// and its PrefixList is honored.
+	t.Run("InclusiveNamespaces on exclusive transform accepted", func(t *testing.T) {
+		for _, alg := range []string{ExcC14N10, ExcC14N10Comments} {
+			t.Run(alg, func(t *testing.T) {
+				r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+					`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+					`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + alg + `">` +
+					`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="a b"/>` +
+					`</ds:Transform></ds:Transforms>` +
+					`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+					`</ds:Reference>`
+				doc := mustParse(t, r)
+				ref, err := parseReferenceElement(doc.DocumentElement())
+				require.NoError(t, err)
+				require.Len(t, ref.transforms, 1)
+				require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
+			})
+		}
+	})
+
+	// An unknown child element under a Transform is an algorithm parameter we
+	// cannot honor. Digesting as if it were absent would be fail-open, so any
+	// unrecognized Transform child must be rejected — both under an exclusive
+	// c14n transform (where ec:InclusiveNamespaces is the only valid child) and
+	// under a non-exclusive one (where no child is valid at all).
+	t.Run("unknown Transform child rejected", func(t *testing.T) {
+		for _, alg := range []string{ExcC14N10, C14N10} {
+			t.Run(alg, func(t *testing.T) {
+				r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+					`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+					`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + alg + `">` +
+					`<ds:XPath xmlns:ds="` + dsigNS + `">/foo</ds:XPath>` +
+					`</ds:Transform></ds:Transforms>` +
+					`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+					`</ds:Reference>`
+				doc := mustParse(t, r)
+				_, err := parseReferenceElement(doc.DocumentElement())
+				require.ErrorIs(t, err, ErrUnsupportedTransform)
+				require.Contains(t, err.Error(), "Transform parameter")
+			})
+		}
+	})
+
+	// A second ec:InclusiveNamespaces under an exclusive Transform must be
+	// rejected rather than silently letting the last one win.
+	t.Run("multiple InclusiveNamespaces rejected", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `">` +
+			`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="a"/>` +
+			`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="b"/>` +
+			`</ds:Transform></ds:Transforms>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Contains(t, err.Error(), "multiple ec:InclusiveNamespaces")
+	})
+
+	// A second DigestMethod makes the digest algorithm ambiguous.
+	t.Run("duplicate DigestMethod", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA512 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple DigestMethod")
+	})
+
+	// Two DigestValue children (the core of DSIG-004): even when the second
+	// matches the recomputed digest, the ambiguous schema-invalid Reference
+	// must be rejected rather than accepted last-one-wins.
+	t.Run("duplicate DigestValue", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">BB==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple DigestValue")
+	})
+
+	// At most one Transforms element is permitted; two would let extra
+	// transforms accumulate and silently change the canonical input.
+	t.Run("duplicate Transforms", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`</ds:Transforms>` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + C14N10 + `"/>` +
+			`</ds:Transforms>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple Transforms")
 	})
 }
 
@@ -230,7 +479,7 @@ func TestEmptyReferencesRejected(t *testing.T) {
 	sigElem, err := NewSigner().
 		SignatureAlgorithm(AlgRSASHA256).
 		Reference(ReferenceConfig{
-			URI:             "#payload",
+			URI:             payloadFragment,
 			DigestAlgorithm: DigestSHA256,
 			Transforms:      []Transform{ExcC14NTransform()},
 		}).
@@ -270,6 +519,62 @@ func TestEmptyReferencesRejected(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidSignature)
 	require.True(t, strings.Contains(err.Error(), "Reference"),
 		"error should mention the missing Reference: %v", err)
+}
+
+// TestDuplicateDigestValueRejected is the end-to-end form of DSIG-004: a
+// SignedInfo whose Reference carries two DigestValue children must be rejected
+// even when the document is otherwise a perfectly valid signature. The attack
+// is built with full key control: sign normally, append a second (matching)
+// DigestValue to the Reference, then recompute a valid SignatureValue over the
+// now-ambiguous SignedInfo. Last-one-wins parsing would accept it; a conforming
+// verifier must reject the schema-invalid duplicate.
+func TestDuplicateDigestValueRejected(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><data Id="payload">secret</data></root>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Sanity: the freshly produced signature verifies before tampering.
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.NoError(t, err)
+
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	reference := findChild(t, signedInfo, "Reference")
+	digestValue := findChild(t, reference, "DigestValue")
+
+	// Append an identical second DigestValue so the Reference now has two.
+	dup, err := helium.CopyNode(digestValue, doc)
+	require.NoError(t, err)
+	dupElem, ok := helium.AsNode[*helium.Element](dup)
+	require.True(t, ok)
+	require.NoError(t, reference.AddChild(dupElem))
+	require.Equal(t, 2, countChildren(reference, "DigestValue"))
+
+	// Recompute a valid SignatureValue over the now-ambiguous SignedInfo.
+	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+	require.NoError(t, err)
+	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
+	require.NoError(t, err)
+
+	sigValueElem := findChild(t, sigElem, "SignatureValue")
+	setText(t, sigValueElem, base64.StdEncoding.EncodeToString(sigBytes))
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.Error(t, err, "signature with duplicate DigestValue must be rejected")
+	require.ErrorIs(t, err, ErrInvalidSignature)
+	require.Contains(t, err.Error(), "multiple DigestValue")
 }
 
 // TestVerifyLineWrappedDigestValue ensures a DigestValue carrying embedded
@@ -336,7 +641,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadFragment,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -396,7 +701,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadFragment,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -452,7 +757,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadFragment,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -485,4 +790,272 @@ func TestCloneNilConfig(t *testing.T) {
 		require.NotNil(t, v2.cfg)
 		require.True(t, v2.cfg.allowSHA1)
 	})
+}
+
+// reSignSignedInfo recomputes a valid SignatureValue over the (possibly
+// tampered) SignedInfo using Exclusive C14N (the signer's SignedInfo default)
+// and the given inclusive prefixes, replacing the existing SignatureValue text.
+// Tests use this after mutating SignedInfo so that verification reaches the
+// per-Reference transform handling rather than failing earlier on the
+// SignatureValue check.
+func reSignSignedInfo(t *testing.T, doc *helium.Document, sigElem, signedInfo *helium.Element, prefixes []string, key *rsa.PrivateKey) {
+	t.Helper()
+	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, prefixes)
+	require.NoError(t, err)
+	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
+	require.NoError(t, err)
+
+	sigValueElem := findChild(t, sigElem, "SignatureValue")
+	for c := sigValueElem.FirstChild(); c != nil; c = sigValueElem.FirstChild() {
+		mc, ok := c.(helium.MutableNode)
+		require.True(t, ok)
+		helium.UnlinkNode(mc)
+	}
+	require.NoError(t, sigValueElem.AddChild(
+		doc.CreateText([]byte(base64.StdEncoding.EncodeToString(sigBytes)))))
+}
+
+// TestVerifyUnsupportedTransform drives verifyReference's fail-closed rejection
+// of an unsupported transform URI. The signer now refuses to emit an unknown
+// transform, so the malicious SignedInfo is built by signing a valid
+// Enveloped+ExcC14N reference, rewriting the c14n Transform's Algorithm to an
+// unsupported URI, and recomputing a valid SignatureValue over the tampered
+// SignedInfo. The verifier must reject the unknown transform before digesting.
+func TestVerifyUnsupportedTransform(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><data Id="payload">secret</data></root>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{Enveloped(), ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Rewrite the Exclusive C14N Transform to an unsupported transform URI,
+	// leaving the pipeline as [enveloped, xpath].
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	excTransform := findTransformByAlgorithm(t, signedInfo, ExcC14N10)
+	require.NoError(t, excTransform.SetLiteralAttribute("Algorithm", TransformXPath))
+
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+}
+
+// TestVerifyTransformAfterCanonicalization guards DSIG-001's ordered-pipeline
+// rule: an octet-producing c14n transform ends the pipeline, so any transform
+// ordered after it (here a second, enveloped transform) cannot be applied and
+// the Reference must be rejected fail-closed.
+func TestVerifyTransformAfterCanonicalization(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><data Id="payload">secret</data></root>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Append an enveloped-signature Transform AFTER the c14n transform.
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	refElem := findChild(t, signedInfo, "Reference")
+	transforms := findChild(t, refElem, "Transforms")
+	extra := doc.CreateElement("Transform")
+	require.NoError(t, extra.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, extra.SetLiteralAttribute("Algorithm", TransformEnvelopedSignature))
+	require.NoError(t, transforms.AddChild(extra))
+
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Contains(t, err.Error(), "ordered after canonicalization")
+}
+
+// TestVerifyOmittedTransformDefaultsToC14N10 guards DSIG-001's default: a
+// Reference with no transform must convert the node-set to octets with inclusive
+// Canonical XML 1.0, NOT Exclusive C14N. The document carries an unused ancestor
+// namespace, which inclusive C14N carries into the #payload subtree but
+// Exclusive C14N drops, so the digest matches only under the correct default.
+func TestVerifyOmittedTransformDefaultsToC14N10(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(),
+		[]byte(`<doc xmlns:unused="urn:unused"><data Id="payload"><child>v</child></data></doc>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{C14NTransform(C14N10)},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Drop the Transforms element so the Reference declares no transform; its
+	// DigestValue was computed with inclusive Canonical XML 1.0.
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	refElem := findChild(t, signedInfo, "Reference")
+	helium.UnlinkNode(findChild(t, refElem, "Transforms"))
+
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.NoError(t, err, "omitted transform must default to inclusive Canonical XML 1.0")
+}
+
+// TestVerifySignedInfoInclusiveNamespaces guards DSIG-002: an
+// ec:InclusiveNamespaces PrefixList declared on SignedInfo's
+// CanonicalizationMethod must be honored when canonicalizing SignedInfo. The
+// root declares an unused namespace prefix; Exclusive C14N drops it unless the
+// PrefixList forces its inclusion, so the SignatureValue (computed WITH the
+// prefix list) verifies only when the verifier threads that PrefixList through.
+func TestVerifySignedInfoInclusiveNamespaces(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(),
+		[]byte(`<doc xmlns:extra="urn:extra"><data Id="payload">v</data></doc>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Declare an ec:InclusiveNamespaces PrefixList on the CanonicalizationMethod.
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	c14nMethodElem := findChild(t, signedInfo, "CanonicalizationMethod")
+	inc := doc.CreateElement("InclusiveNamespaces")
+	require.NoError(t, inc.DeclareNamespace("ec", ExcC14N10))
+	require.NoError(t, inc.SetActiveNamespace("ec", ExcC14N10))
+	require.NoError(t, inc.SetLiteralAttribute("PrefixList", "extra"))
+	require.NoError(t, c14nMethodElem.AddChild(inc))
+
+	// Recompute the SignatureValue using the declared exclusive c14n + PrefixList.
+	reSignSignedInfo(t, doc, sigElem, signedInfo, []string{"extra"}, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.NoError(t, err, "SignedInfo ec:InclusiveNamespaces PrefixList must be honored")
+}
+
+// TestVerifyRejectsSignatureMethodParameter guards DSIG-003: any child parameter
+// of SignatureMethod (e.g. ds:HMACOutputLength, which requests a truncated HMAC)
+// is unsupported and must be rejected fail-closed rather than silently ignored.
+func TestVerifyRejectsSignatureMethodParameter(t *testing.T) {
+	si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+		`<ds:CanonicalizationMethod Algorithm="` + ExcC14N10 + `"/>` +
+		`<ds:SignatureMethod Algorithm="` + AlgHMACSHA256 + `">` +
+		`<ds:HMACOutputLength>128</ds:HMACOutputLength>` +
+		`</ds:SignatureMethod>` +
+		`<ds:Reference URI="">` +
+		`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue>` +
+		`</ds:Reference>` +
+		`</ds:SignedInfo>`
+	doc := mustParse(t, si)
+	var parsed parsedSignature
+	err := parseSignedInfo(doc.DocumentElement(), &parsed)
+	require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+	require.Contains(t, err.Error(), "SignatureMethod parameter")
+}
+
+// TestVerifyRejectsCanonicalizationMethodParameter guards DSIG-002's
+// fail-closed arm: an unrecognized child parameter of CanonicalizationMethod
+// must be rejected rather than silently ignored.
+func TestVerifyRejectsCanonicalizationMethodParameter(t *testing.T) {
+	si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+		`<ds:CanonicalizationMethod Algorithm="` + ExcC14N10 + `">` +
+		`<ds:BogusParameter/>` +
+		`</ds:CanonicalizationMethod>` +
+		`<ds:SignatureMethod Algorithm="` + AlgRSASHA256 + `"/>` +
+		`<ds:Reference URI="">` +
+		`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue>` +
+		`</ds:Reference>` +
+		`</ds:SignedInfo>`
+	doc := mustParse(t, si)
+	var parsed parsedSignature
+	err := parseSignedInfo(doc.DocumentElement(), &parsed)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Contains(t, err.Error(), "CanonicalizationMethod parameter")
+}
+
+// TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N guards the fail-closed
+// parameter handling: ec:InclusiveNamespaces is an Exclusive XML Canonicalization
+// parameter and canonicalize() only honors its PrefixList for exclusive modes. A
+// non-exclusive CanonicalizationMethod (C14N 1.0 / C14N 1.1) declaring an
+// ec:InclusiveNamespaces parameter would have it silently ignored, so it must be
+// rejected rather than accepted.
+func TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N(t *testing.T) {
+	for _, alg := range []string{C14N10, C14N10Comments, C14N11URI, C14N11Comments} {
+		t.Run(alg, func(t *testing.T) {
+			si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+				`<ds:CanonicalizationMethod Algorithm="` + alg + `">` +
+				`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="extra"/>` +
+				`</ds:CanonicalizationMethod>` +
+				`<ds:SignatureMethod Algorithm="` + AlgRSASHA256 + `"/>` +
+				`<ds:Reference URI="">` +
+				`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+				`<ds:DigestValue>AA==</ds:DigestValue>` +
+				`</ds:Reference>` +
+				`</ds:SignedInfo>`
+			doc := mustParse(t, si)
+			var parsed parsedSignature
+			err := parseSignedInfo(doc.DocumentElement(), &parsed)
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
+		})
+	}
+}
+
+// TestVerifyAcceptsInclusiveNamespacesOnExclusiveC14N is the accept arm: an
+// ec:InclusiveNamespaces PrefixList declared on an exclusive CanonicalizationMethod
+// is honored and its prefixes threaded through to canonicalization.
+func TestVerifyAcceptsInclusiveNamespacesOnExclusiveC14N(t *testing.T) {
+	for _, alg := range []string{ExcC14N10, ExcC14N10Comments} {
+		t.Run(alg, func(t *testing.T) {
+			si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+				`<ds:CanonicalizationMethod Algorithm="` + alg + `">` +
+				`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="extra ns2"/>` +
+				`</ds:CanonicalizationMethod>` +
+				`<ds:SignatureMethod Algorithm="` + AlgRSASHA256 + `"/>` +
+				`<ds:Reference URI="">` +
+				`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+				`<ds:DigestValue>AA==</ds:DigestValue>` +
+				`</ds:Reference>` +
+				`</ds:SignedInfo>`
+			doc := mustParse(t, si)
+			var parsed parsedSignature
+			require.NoError(t, parseSignedInfo(doc.DocumentElement(), &parsed))
+			require.Equal(t, []string{"extra", "ns2"}, parsed.c14nPrefixes)
+		})
+	}
 }

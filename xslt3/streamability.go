@@ -295,8 +295,8 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 		}
 		// head($param), tail($param), etc. — consuming functions
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) {
-				switch fc.Name {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn {
+				switch local {
 				case "head", "tail", fnNameCopyOf, funcSnapshot, "string-join",
 					"serialize", "deep-equal", "sort", "reverse",
 					"empty", "exists", "count", "sum", "avg", "min", "max",
@@ -357,7 +357,7 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 		}
 		// string($param) — string() on a node consumes it
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == "string" && len(fc.Args) > 0 {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == "string" && len(fc.Args) > 0 {
 				if ve, ok := fc.Args[0].(xpath3.VariableExpr); ok {
 					if paramNames[ve.Name] {
 						found = true
@@ -667,7 +667,7 @@ func exprUsesCurrent(expr xpath3.Expr) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == fnNameCurrent {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == fnNameCurrent {
 				found = true
 				return false
 			}

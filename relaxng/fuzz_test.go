@@ -14,9 +14,9 @@ func FuzzCompile(f *testing.F) {
 	f.Add([]byte(``))
 	f.Add([]byte(`not a schema`))
 
-	// Compile may attempt os.ReadFile for include/externalRef hrefs in fuzz-generated
-	// schemas. This is read-only and random paths will almost always fail with an error.
-	// Injecting a stub loader would require API changes; accepted risk for fuzz testing.
+	// NewCompiler defaults to a deny-all FS, so Compile never touches the host
+	// filesystem for include/externalRef hrefs in fuzz-generated schemas; those
+	// loads fail closed without an os.ReadFile.
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
 			return

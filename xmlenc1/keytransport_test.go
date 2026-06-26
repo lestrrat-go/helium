@@ -254,9 +254,11 @@ func TestResolveSessionKey(t *testing.T) {
 			ed := &xmlenc1.EncryptedData{
 				Type:             xmlenc1.TypeElement,
 				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
-				EncryptedKey: &xmlenc1.EncryptedKey{
-					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
-					CipherValue:      make([]byte, 256),
+				EncryptedKeys: []*xmlenc1.EncryptedKey{
+					{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+						CipherValue:      make([]byte, 256),
+					},
 				},
 				CipherValue: make([]byte, 48),
 			}
@@ -272,9 +274,11 @@ func TestResolveSessionKey(t *testing.T) {
 			ed := &xmlenc1.EncryptedData{
 				Type:             xmlenc1.TypeElement,
 				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
-				EncryptedKey: &xmlenc1.EncryptedKey{
-					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
-					CipherValue:      make([]byte, 40),
+				EncryptedKeys: []*xmlenc1.EncryptedKey{
+					{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
+						CipherValue:      make([]byte, 40),
+					},
 				},
 				CipherValue: make([]byte, 48),
 			}
@@ -290,8 +294,10 @@ func TestResolveSessionKey(t *testing.T) {
 			ed := &xmlenc1.EncryptedData{
 				Type:             xmlenc1.TypeElement,
 				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
-				EncryptedKey: &xmlenc1.EncryptedKey{
-					CipherValue: make([]byte, 40),
+				EncryptedKeys: []*xmlenc1.EncryptedKey{
+					{
+						CipherValue: make([]byte, 40),
+					},
 				},
 				CipherValue: make([]byte, 48),
 			}
@@ -308,9 +314,11 @@ func TestResolveSessionKey(t *testing.T) {
 		ed := &xmlenc1.EncryptedData{
 			Type:             xmlenc1.TypeElement,
 			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
-			EncryptedKey: &xmlenc1.EncryptedKey{
-				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: "urn:example:not-a-real-algorithm"},
-				CipherValue:      make([]byte, 40),
+			EncryptedKeys: []*xmlenc1.EncryptedKey{
+				{
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: "urn:example:not-a-real-algorithm"},
+					CipherValue:      make([]byte, 40),
+				},
 			},
 			CipherValue: make([]byte, 48),
 		}

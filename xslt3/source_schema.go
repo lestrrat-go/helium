@@ -73,7 +73,13 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		if err != nil {
 			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
 		}
-		schemaDoc, err := secureXMLParser(ec.injectedParser(), "").Parse(ctx, data)
+		// Parse with the schema's own URI as the base so doc.URL() carries the
+		// canonical location, mirroring compileSchemaFromURI. The xsd compiler's
+		// Compile derives the circular-include root key from doc.URL(); without a
+		// base, a local-path schema URI leaves doc.URL() empty and a nested
+		// xs:include/xs:redefine pointing back at this schema (main -> inc -> main)
+		// is re-parsed into duplicate components instead of being skipped.
+		schemaDoc, err := secureXMLParser(ec.injectedParser(), uri).Parse(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
 		}

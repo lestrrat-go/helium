@@ -713,7 +713,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			}
 		}
 		// Validate boolean output attributes on xsl:result-document.
-		for _, boolAttr := range []string{paramByteOrderMark, paramEscapeURIAttributes,
+		for _, boolAttr := range []string{paramAllowDuplicateNames, paramBuildTree, paramByteOrderMark, paramEscapeURIAttributes,
 			paramIncludeContentType, paramIndent, paramOmitXMLDeclaration, paramUndeclarePrefixes} {
 			if v := getAttr(elem, boolAttr); v != "" {
 				if !strings.ContainsAny(v, "{}") {
@@ -790,9 +790,11 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			{paramHTMLVersion, &inst.HTMLVersion},
 			{paramIncludeContentType, &inst.IncludeContentType},
 			{paramAllowDuplicateNames, &inst.AllowDuplicateNames},
+			{paramUndeclarePrefixes, &inst.UndeclarePrefixes},
 			{paramEscapeURIAttributes, &inst.EscapeURIAttributes},
 			{paramJSONNodeOutputMethod, &inst.JSONNodeOutputMethodAVT},
 			{paramNormalizationForm, &inst.NormalizationForm},
+			{paramBuildTree, &inst.BuildTree},
 		} {
 			if v := getAttr(elem, sp.attr); v != "" {
 				avt, err := compileAVT(v, c.nsBindings)
@@ -821,10 +823,12 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				// Static parameter-document: load at compile time
 				outDef := &OutputDef{}
 				baseURI := stylesheetBaseURI(elem, c.baseURI)
-				if err := c.loadParameterDocument(ctx, outDef, baseURI, pd); err != nil {
+				_, presence, err := c.loadParameterDocument(ctx, outDef, baseURI, pd, false)
+				if err != nil {
 					return nil, err
 				}
 				inst.ParameterDocOutputDef = outDef
+				inst.ParameterDocPresence = presence
 				// If the parameter-document sets the method, use it as the
 				// compile-time method so isItemOutputMethod works.
 				if outDef.Method != "" && inst.Method == "" {
@@ -839,11 +843,6 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				resolved[i] = resolveQName(n, c.nsBindings)
 			}
 			inst.SuppressIndentation = resolved
-		}
-		if v := getAttr(elem, paramBuildTree); v != "" {
-			if b, ok := parseXSDBool(v); ok {
-				inst.BuildTree = &b
-			}
 		}
 		body, err := c.compileChildren(ctx, elem)
 		if err != nil {

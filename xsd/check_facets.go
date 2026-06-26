@@ -111,19 +111,6 @@ func facetVarietyComponent(td *TypeDef, variety TypeVariety) string {
 	return kind + " type '" + td.Name.Local + "'"
 }
 
-// decimalFamilyTypes is the set of builtin base locals whose value space is the
-// xs:decimal family — xs:decimal and all its integer derivations. These are the
-// ONLY types on which the digit facets (totalDigits, fractionDigits) are
-// applicable; the facets are meaningless on float/double (no decimal digit
-// notion in their value space) and on every non-numeric primitive, so libxml2
-// rejects them there.
-var decimalFamilyTypes = map[string]struct{}{
-	lexicon.TypeDecimal: {}, lexicon.TypeInteger: {}, lexicon.TypeNonPositiveInteger: {}, lexicon.TypeNegativeInteger: {},
-	lexicon.TypeLong: {}, lexicon.TypeInt: {}, lexicon.TypeShort: {}, lexicon.TypeByte: {},
-	lexicon.TypeNonNegativeInteger: {}, lexicon.TypeUnsignedLong: {}, lexicon.TypeUnsignedInt: {},
-	lexicon.TypeUnsignedShort: {}, lexicon.TypeUnsignedByte: {}, lexicon.TypePositiveInteger: {},
-}
-
 // stringDerivedTypes is the set of builtin base locals whose primitive ancestor
 // is xs:string. anyURI is deliberately EXCLUDED: it is its own XSD primitive, so
 // a "facet not allowed" message on an anyURI-derived type names xs:anyURI, not
@@ -161,7 +148,7 @@ var lengthApplicableTypes = map[string]struct{}{
 // primitive (boolean, float, double, the date/time family, the binary types,
 // QName, NOTATION) are their own primitive and pass through unchanged.
 func atomicPrimitiveLocal(builtinLocal string) string {
-	if _, ok := decimalFamilyTypes[builtinLocal]; ok {
+	if value.IsDecimalFamily(builtinLocal) {
 		return lexicon.TypeDecimal
 	}
 	if _, ok := stringDerivedTypes[builtinLocal]; ok {
@@ -271,8 +258,8 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 	}
 	primitive := "xs:" + atomicPrimitiveLocal(builtinLocal)
 
-	_, ordered := orderedRangeFacetTypes[builtinLocal]
-	_, decimal := decimalFamilyTypes[builtinLocal]
+	ordered := value.Orderable(builtinLocal)
+	decimal := value.IsDecimalFamily(builtinLocal)
 	_, lengthOK := lengthApplicableTypes[builtinLocal]
 
 	report := func(facet string) {
@@ -791,7 +778,7 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	variety := resolveVariety(td)
 	builtinLocal := builtinBaseLocal(td)
 	_, lengthApplicable := lengthApplicableTypes[builtinLocal]
-	_, decimalFamily := decimalFamilyTypes[builtinLocal]
+	decimalFamily := value.IsDecimalFamily(builtinLocal)
 
 	// Length consistency (minLength > maxLength). Length facets are applicable to
 	// a list variety (measured as item count) and to atomic primitives in the
@@ -847,7 +834,7 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// 0<NaN (accepted). value.CompareFloatFacetBound encodes that ordering and
 	// still returns ok=false for an invalid float bound, leaving the invalid-bound
 	// error to the dedicated bound-value check (no spurious extra ordering error).
-	_, orderedAtomic := orderedRangeFacetTypes[builtinLocal]
+	orderedAtomic := value.Orderable(builtinLocal)
 	if variety != TypeVarietyAtomic || !orderedAtomic {
 		return
 	}
@@ -936,7 +923,7 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 	// is used ONLY for the unresolved/no-builtin case, preserving prior behavior for
 	// a base chain whose primitive has not resolved.
 	builtinLocal := builtinBaseLocal(td)
-	_, orderedAtomic := orderedRangeFacetTypes[builtinLocal]
+	orderedAtomic := value.Orderable(builtinLocal)
 	rangeCmp := func(a, b string) (int, bool) {
 		if orderedAtomic {
 			if v, ok := value.CompareFloatFacetBound(a, b, builtinLocal); ok {

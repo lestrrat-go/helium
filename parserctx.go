@@ -468,14 +468,26 @@ func (pctx *parserCtx) deliverCharacters(ctx context.Context, handler func(conte
 				end--
 			}
 			if end == 0 {
-				// Should not happen with valid UTF-8, but avoid infinite loop.
-				end = min(bufSize, len(data))
+				// A single rune is wider than bufSize (e.g. CharBufferSize(1)
+				// with multi-byte text). Splitting it would emit invalid UTF-8
+				// fragments, so deliver the whole rune even though it exceeds
+				// bufSize: walk forward to the next character boundary.
+				end = bufSize
+				for end < len(data) && !utf8.RuneStart(data[end]) {
+					end++
+				}
 			}
 		}
 
 		switch err := handler(ctx, data[:end]); err {
 		case nil, sax.ErrHandlerUnspecified:
-			// no op
+			// The handler may have requested a stop on this chunk's callback
+			// (including the final chunk, where the loop would otherwise exit
+			// with nil). Report the stop so the caller terminates promptly and
+			// emits no further chunks.
+			if pctx.stopped {
+				return errParserStopped
+			}
 		default:
 			return pctx.error(ctx, err)
 		}

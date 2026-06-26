@@ -738,7 +738,7 @@ func TestValueOfInterpolation(t *testing.T) {
 		require.Contains(t, collected[0].Message, "result is False")
 	})
 
-	t.Run("nodeset names", func(t *testing.T) {
+	t.Run("nodeset string-value", func(t *testing.T) {
 		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="root">
@@ -747,12 +747,14 @@ func TestValueOfInterpolation(t *testing.T) {
 		</schema>`)
 		require.Equal(t, "", errs)
 
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>X</a><b>Y</b><c>Z</c></root>`))
 		require.NoError(t, err)
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collected[0].Message, "children: a b c")
+		// XPath 1.0: a node-set converts to the string-value of the node
+		// first in document order, i.e. the text of <a>, not the names.
+		require.Contains(t, collected[0].Message, "children: X")
 	})
 
 	t.Run("empty nodeset", func(t *testing.T) {

@@ -94,7 +94,7 @@ XPath 3.1 expression parsing and evaluation.
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan, keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path; `Evaluate()` executes compiled refs by opcode and reuses shared eval helpers for semantics; AST/streamability access reparses from `Expression.source` on demand
-- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `consts.go`, `eval.go`, `eval_path.go`, `eval_operators.go`, `eval_arithmetic.go`, `eval_control.go`, `eval_types.go`, `eval_funcall.go`, `eval_reuse.go`, `evaluator.go`, `vm.go`, `vm_dump.go`, `compile_direct.go`, `compare.go`, `cast.go`, `cast_numeric.go`, `cast_string.go`, `cast_datetime.go`, `types.go`, `float_value.go`, `sequence.go`, `context.go`, `variables.go`, `collation.go`, `regex.go`, `static_check.go`, `streamability.go`, `node_identity.go`, `uri_resolution.go`, `doc.go`, `errors.go`, `arithmetic_datetime.go`, `parse_ietf_date.go`, `format_datetime.go`, `format_integer.go`, `format_number.go`, `function_library.go`, `function_signatures.go`, `functions.go` (registry + boolean/not/true/false + fn:error/fn:trace), `functions_node.go`, `functions_string.go`, `functions_numeric.go`, `functions_aggregate.go`, `functions_sequence.go`, `functions_datetime.go`, `functions_uri.go`, `functions_qname.go`, `functions_hof.go`, `functions_map.go`, `functions_array.go`, `functions_math.go`, `functions_misc.go`, `functions_json.go`, `functions_json_xml.go`, `functions_serialize.go`, `functions_constructors.go` (XSD typed constructors, incl. xs:error), `functions_unparsed_text.go`
+- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `consts.go`, `eval.go`, `eval_path.go`, `eval_operators.go`, `eval_arithmetic.go`, `eval_control.go`, `eval_types.go`, `eval_funcall.go`, `eval_reuse.go`, `evaluator.go`, `vm.go`, `vm_dump.go`, `compile_direct.go`, `compare.go`, `cast.go`, `cast_numeric.go`, `cast_string.go`, `cast_datetime.go`, `types.go`, `float_value.go`, `sequence.go`, `context.go`, `variables.go`, `collation.go`, `regex.go`, `regex_cache.go`, `static_check.go`, `streamability.go`, `node_identity.go`, `uri_resolution.go`, `doc.go`, `errors.go`, `arithmetic_datetime.go`, `parse_ietf_date.go`, `format_datetime.go`, `format_integer.go`, `format_number.go`, `function_library.go`, `function_signatures.go`, `functions.go` (registry + boolean/not/true/false + fn:error/fn:trace), `functions_node.go`, `functions_string.go`, `functions_numeric.go`, `functions_aggregate.go`, `functions_sequence.go`, `functions_datetime.go`, `functions_uri.go`, `functions_qname.go`, `functions_hof.go`, `functions_map.go`, `functions_array.go`, `functions_math.go`, `functions_misc.go`, `functions_json.go`, `functions_json_xml.go`, `functions_serialize.go`, `functions_constructors.go` (XSD typed constructors, incl. xs:error), `functions_unparsed_text.go`
 - Imports: helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence
 
 ## xslt3/
@@ -149,7 +149,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 - **NewCompiler() → Compiler** — create fluent builder for schema compilation
   - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the schema document and all nested `xs:include`/`xs:import`/`xs:redefine` targets; supplies parse policy (limits, FS, XXE/network). Distinct from `FS`, which *fetches* schema bytes; the injected parser governs *parse policy* of those bytes. Unset → default `helium.NewParser()`.
-  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `xs:include`, `xs:import`, and `xs:redefine`. A nil value restores the default permissive FS (`internal/iofs.PermissiveRoot`, opens via `os.Open`). Schema-location resolution is URI-aware: when `BaseDir` is a URI (e.g. `https://…` or `file:///…`) a relative include is resolved with RFC 3986 semantics and an absolute-URI include is passed through unchanged, so the name handed to the FS is the canonical nested-schema URI; when `BaseDir` is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes like `os.DirFS`/`fstest.MapFS`)
+  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `xs:include`, `xs:import`, and `xs:redefine`. **Secure by default** (mirrors `helium.NewParser`): the default (and what a nil value restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), so an untrusted schema cannot disclose local files or exhaust resources via a hostile `schemaLocation`. Opt into host access with `helium.PermissiveFS()` (any `os.Open` path) or a confined FS. Each nested schema is read through a fixed `maxNestedSchemaSize` byte cap (10 MiB) regardless of FS, so an endless source (e.g. `schemaLocation` → `/dev/zero`) cannot exhaust memory; an over-cap read is fatal (`errSchemaTooLarge`, see `IsFatalSchemaLoad`). Schema-location resolution is URI-aware: when `BaseDir` is a URI (e.g. `https://…` or `file:///…`) a relative include is resolved with RFC 3986 semantics and an absolute-URI include is passed through unchanged, so the name handed to the FS is the canonical nested-schema URI; when `BaseDir` is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes like `os.DirFS`/`fstest.MapFS`)
   - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods; return `(nil, ErrCompilationFailed)` on fatal schema diagnostics
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
@@ -159,7 +159,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - **ResolveSchemaURI(ref, base) → (string, error)** / **URIScheme(s) → string** — the single canonical schema-location URI-resolution helper and scheme-detector, shared with `xslt3` so the two layers cannot drift (URI-aware: absolute-URI pass-through, RFC 3986 with `OmitHost` preservation for URI bases, `filepath.Join` + `..`-escape guard for local bases)
 - **FatalSchemaLoader** interface (`FatalSchemaLoad() bool`) — a `Compiler.FS` may return an `Open` error whose chain carries a value satisfying this interface to force an `xs:import` load failure to be FATAL instead of the usual warn-and-continue ("Skipping the import."). `xslt3`'s `schemaResolverFS` uses it so an over-cap nested-import read (`ErrResourceTooLarge`) is not silently skipped; the wrapped chain is preserved so callers can still `errors.Is`/`errors.As` the cause
-- **IsFatalSchemaLoad(err) → bool** — the SINGLE source of truth for "is this a fatal schema-load condition that must abort compilation rather than warn-and-continue or fall back to a pre-compiled schema". Returns true (via `errors.Is`/`errors.As`) for a schema-location `..`-escape, an `xs:import` depth overflow, and any error satisfying `FatalSchemaLoader`. The two xsd import warn-or-continue sites and `xslt3`'s `xsl:import-schema` fallback guard both route through it (xslt3's `isFatalSchemaLoadError` delegates to it, adding the xslt3-package `ErrResourceTooLarge` sentinel), so the classification cannot drift between the layers. The path-escape / depth sentinels stay unexported; this helper is the public surface
+- **IsFatalSchemaLoad(err) → bool** — the SINGLE source of truth for "is this a fatal schema-load condition that must abort compilation rather than warn-and-continue or fall back to a pre-compiled schema". Returns true (via `errors.Is`/`errors.As`) for a schema-location `..`-escape, an `xs:import` depth overflow, an `xs:include`/`xs:redefine` depth overflow (`errIncludeDepthExceeded` — otherwise an over-deep include chain inside an IMPORTED schema would be demoted to a warning and silently ignored by `loadImport`), an over-cap nested-schema read (`errSchemaTooLarge`), and any error satisfying `FatalSchemaLoader`. The two xsd import warn-or-continue sites and `xslt3`'s `xsl:import-schema` fallback guard both route through it (xslt3's `isFatalSchemaLoadError` delegates to it, adding the xslt3-package `ErrResourceTooLarge` sentinel), so the classification cannot drift between the layers. The path-escape / depth sentinels stay unexported; this helper is the public surface
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ErrValidationFailed` — sentinel error returned by `Validate()` when the document is invalid; individual errors delivered via `ErrorHandler`. `Validate()` also returns `ErrNilSchema` (no compiled schema) and `ErrNilDocument` (nil document); a nil `ctx` is normalized to `context.Background()`
 - `ErrCompilationFailed` — sentinel error returned by `Compile()`/`CompileFile()` when the schema has one or more fatal errors; the returned schema is nil and individual diagnostics are delivered via `ErrorHandler`
@@ -172,10 +172,11 @@ XML Schema (XSD) 1.0 compilation and validation.
 RELAX NG schema compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for grammar compilation
-  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `MaxResourceBytes(int)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compiler.BaseDir(dir)` — base directory for resolving relative paths in `include` and `externalRef` during compilation
   - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the grammar and its `include`/`externalRef` targets; supplies parse policy (limits, FS, XXE/network), distinct from the fetch `FS`. Unset → default `helium.NewParser()`.
-  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`. A nil value restores the default permissive FS (`internal/iofs.PermissiveRoot`, opens via `os.Open`). Resolution (`resolveHref` in `parse.go`) honors an absolute href as-is first; otherwise it resolves against ancestor `xml:base` via `BuildURI`; only when neither applies does it fall back to `filepath.Join(BaseDir, href)`, and finally to the bare href. The resolved name may thus be absolute / OS-style; FS implementations enforcing `fs.ValidPath` (`os.DirFS`, `fstest.MapFS`) reject them, so a sandboxing FS must accept OS-style names
+  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`. **Secure by default**: the default (and what a nil value restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), mirroring `helium.NewParser`, so an untrusted schema cannot read host files via `include`/`externalRef`. Pass `helium.PermissiveFS()` (any `os.Open` path) or a confined FS to opt into loading. Resolution (`resolveHref` in `parse.go`) honors an absolute href as-is first; otherwise it resolves against ancestor `xml:base` via `BuildURI`; only when neither applies does it fall back to `filepath.Join(BaseDir, href)`, and finally to the bare href. The resolved name may thus be absolute / OS-style; FS implementations enforcing `fs.ValidPath` (`os.DirFS`, `fstest.MapFS`) reject them, so a sandboxing FS must accept OS-style names
+  - `Compiler.MaxResourceBytes(int)` — per-resource byte cap on each `include`/`externalRef` target read (`readResource` in `parse.go`, via `internal/iolimit`). Default 10 MiB (`defaultMaxResourceBytes`); `<= 0` restores the default. An over-cap resource fails to load with an "exceeds the maximum resource size" compile error rather than being read in full
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
@@ -186,7 +187,7 @@ RELAX NG schema compilation and validation.
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
 - Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go` (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
-- Imports: helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
+- Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xmlchar, internal/uripath
 - Status: 159/159 golden tests passing
 
 ## html/
@@ -194,7 +195,7 @@ RELAX NG schema compilation and validation.
 HTML 4.01 parser producing helium DOM or SAX events.
 
 - **NewParser() → Parser** — create fluent parser builder
-- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `Strict(bool)`, `MaxContentSize(int)` (approximate soft per-chunk cap for raw-text/RCDATA/plaintext — chunks target this size but an indivisible token, e.g. a whole UTF-8 rune or resolved char-ref, is never split, so a chunk may slightly exceed it; HARD cap for comment/bogus-comment/PI — over-cap fails the parse with `ErrContentSizeExceeded` since those are indivisible nodes; RCDATA char-ref resolution uses a FIXED `maxEntityNameLen` (~32 byte) lookahead independent of the cap, so a SHORT resolvable named reference (known entity or legacy prefix) whose run fits the cap is never rejected for being a small name (`&amp;` resolves under `MaxContentSize(2)`); ANY UNRESOLVED named-reference literal (whether short, semicolon-terminated, or unbounded) fails with `ErrContentSizeExceeded` once the bytes it would emit (`&` + name + optional `;`) exceed the cap; a SATURATED ambiguous legacy-prefix run (`&amp` + a tail that overflows the 32-byte lookahead) is consumed into a cap-bounded spool and HARD-FAILS with `ErrContentSizeExceeded` if it exceeds the cap before its end is reached, emitting nothing — only a within-cap saturated run legacy-resolves; default 16 MiB)
+- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `Strict(bool)`, `MaxContentSize(int)` (approximate soft per-chunk cap for normal data-state text and raw-text/RCDATA/plaintext — chunks target this size but an indivisible token, e.g. a whole UTF-8 rune or resolved char-ref, is never split, so a chunk may slightly exceed it; HARD cap for comment/bogus-comment/PI — over-cap fails the parse with `ErrContentSizeExceeded` since those are indivisible nodes; normal data-state and RCDATA char-ref resolution share the same cap-aware path (`parseCharRefBounded`) — it uses a FIXED `maxEntityNameLen` (~32 byte) lookahead independent of the cap, so a SHORT resolvable named reference (known entity or legacy prefix) whose run fits the cap is never rejected for being a small name (`&amp;` resolves under `MaxContentSize(2)`); ANY UNRESOLVED named-reference literal (whether short, semicolon-terminated, or unbounded) fails with `ErrContentSizeExceeded` once the bytes it would emit (`&` + name + optional `;`) exceed the cap; a SATURATED ambiguous legacy-prefix run (`&amp` + a tail that overflows the 32-byte lookahead) is consumed into a cap-bounded spool and HARD-FAILS with `ErrContentSizeExceeded` if it exceeds the cap before its end is reached, emitting nothing — only a within-cap saturated run legacy-resolves; a normal data-state run's LEADING whitespace prefix is deferred (buffer `pendingWS`) until its first non-whitespace byte fixes both whitespace-significance (`StripBlanks`) and implied-`<body>` insertion — so `<html> a` keeps the space and `a` in one run under `<body>`, and `<p> &amp;</p>`/`<p> < b</p>` keep the leading space; that deferred prefix is bounded by the cap and HARD-FAILS with `ErrContentSizeExceeded` (regardless of `StripBlanks`) if it reaches the cap before any non-whitespace byte appears; default 16 MiB)
 - Terminal: **Parse(ctx, []byte)**, **ParseReader(ctx, io.Reader)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
 - Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`, `EscapeControlChars(bool)`
@@ -216,6 +217,7 @@ XInclude 1.0 processing with recursive inclusion and fallback.
 - `Processor.Parser(helium.Parser)` — supplies the **resource limits** (depth/name-length/amplification/content-model-depth) used to parse included documents. XInclude still forces its own loading policy: external-DTD loading is on and the filesystem is confined to the `Resolver`'s sandbox (the injected parser's FS is NOT used for included docs — the `Resolver` is the security boundary). Unset → default `helium.NewParser()` base.
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg is informational only — do NOT re-resolve, or the base directory is double-applied)
+- **Secure by default**: an unset `Resolver` denies all filesystem access (`NewFSResolver(iofs.DenyAll{})`), mirroring `helium.NewParser()`'s deny-all FS — untrusted input cannot disclose local files via `<xi:include>`. Opt in with `Resolver(NewFSResolver(fsys))` (confined `fs.FS`, e.g. `os.Root.FS`) or `Resolver(NewFSResolver(helium.PermissiveFS()))` for historical os.Open passthrough. NOTE: `NewFSResolver(nil)` is still permissive — only the processor's *unset* default is deny-all
 - `Processor.MaxIncludeSize(int)` — per-include byte cap; unset or ≤ 0 uses the default 10 MiB (unexported `defaultMaxIncludeSize`); over-cap reads fail with `ErrIncludeTooLarge`
 - `Processor.MaxIncludeDepth(int)` — xi:include nesting-depth cap; unset or ≤ 0 uses the default 40 (unexported `defaultMaxIncludeDepth`); over-cap fails with "maximum include depth exceeded". Bounds nesting only — cyclic includes are caught separately by circular detection
 - Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts rejected)
@@ -248,7 +250,7 @@ Schematron schema compilation and validation.
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
 - Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting)
-- Imports: helium, xpath1/
+- Imports: helium, internal/xpath, xpath1/
 
 ## catalog/
 
@@ -264,7 +266,7 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
 - Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
-- Imports: helium, internal/catalog/, internal/lexicon/
+- Imports: helium, internal/catalog/, internal/iofs/, internal/lexicon/, internal/xmlchar/
 
 ## stream/
 
@@ -310,6 +312,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`
 - Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
+- Reference transforms run as an ordered pipeline (node-set → octets): a c14n transform ends the pipeline, so a transform/2nd c14n ordered after it is rejected (`ErrUnsupportedTransform`); an omitted final transform defaults to **inclusive C14N 1.0** (not ExcC14N). `ec:InclusiveNamespaces` PrefixList on SignedInfo/CanonicalizationMethod is parsed and threaded into SignedInfo c14n; unknown CanonicalizationMethod parameters and any SignatureMethod child parameter (e.g. HMACOutputLength) are rejected fail-closed.
 - Algorithms: RSA-SHA1/SHA256, ECDSA-SHA256/SHA384, HMAC-SHA1/SHA256, Ed25519
 - Digests: SHA-1, SHA-256, SHA-384, SHA-512
 - **SHA-1 rejected by default** (rsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-256+ unaffected.
@@ -332,6 +335,7 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
 - Key transport: RSA-OAEP (1.0 + 1.1 with configurable digest/MGF)
 - Key wrapping: AES-128/256-KeyWrap (RFC 3394)
 - Key sizes are bound to the declared algorithm URI on encrypt and decrypt (incl. after unwrap/key transport); mismatch → `KeySizeError`
+- Multi-recipient: `EncryptedData.EncryptedKeys []*EncryptedKey` holds one EncryptedKey per recipient; decrypt tries each candidate through full block decryption + plaintext validation (a bogus prepended key cannot mask the real one). `EncryptedData.EncryptedKey` is the **deprecated** single-key field — `EncryptedKeys` wins when non-empty, else the single field is treated as a one-element list; parse populates both
 - Files: `xmlenc1.go` (API), `constants.go`, `block.go`, `keytransport.go`, `keywrap.go`, `types.go`, `serialize.go`, `parse.go`, `errors.go`
 - Imports: helium
 
@@ -398,7 +402,8 @@ Shared spec vocabulary strings reused across packages.
 - XML vocabulary: common prefixes + attribute/value names such as `xml:base`
 - Catalog vocabulary: OASIS catalog element names, attribute names, `prefer` values
 - XSLT vocabulary: `XSLTElement*` constants for all XSLT element local names
-- Files: `ns.go`, `xml.go`, `catalog.go`, `xslt.go`
+- Streamability helpers: `IsFnNamespacePrefix`, `StreamFnLocalName` (shared by xpath3/xslt3/xpathstream; normalizes EQName `Q{...}local` fn calls)
+- Files: `ns.go`, `xml.go`, `catalog.go`, `xslt.go`, `fn.go`
 - Imports: none
 
 - **Load(name) → encoding.Encoding** — lookup by normalized name
@@ -491,7 +496,17 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - **ValidateBuiltin(value, builtinLocal string) error** — validate value against XSD builtin type lexical space
 - **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
 - **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
-- Files: `validate.go`, `compare.go`
+- **CompareFloatFacetBound(a, b, builtinLocal string) (int, bool)** — float/double bound comparison ordering NaN as equal-to-NaN and greater-than-finite (schema-consistency check)
+- **CanonicalKey(s, builtinLocal string) (string, bool)** — canonical value-space key (e.g. for enumeration de-dup)
+- **WhiteSpace(builtinLocal string) string** — the type's XSD whiteSpace facet ("preserve"/"replace"/"collapse")
+- **Normalize(s, builtinLocal string) string** — apply the type's whiteSpace facet to a lexical value
+- **IsFloatNaN(s string) bool** — reports whether a float/double lexical is NaN
+- **XSDFields(s string) []string** — split on XSD list whitespace
+- **Orderable(builtinLocal string) bool** — whether the primitive value space is ordered (range facets may apply)
+- **IsDecimalFamily(builtinLocal string) bool** — whether the type is xs:decimal or a derived integer (digit facets may apply)
+- **CountTotalDigits(value string) int** — significant total-digit count for the totalDigits facet
+- **CountFractionDigits(value string) int** — significant fraction-digit count for the fractionDigits facet
+- Files: `validate.go`, `compare.go`, `facets.go`
 - Imports: `internal/lexicon` (XSD builtin type-name constants)
 
 ## internal/stack/

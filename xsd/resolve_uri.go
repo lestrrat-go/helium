@@ -34,6 +34,101 @@ func URIScheme(s string) string {
 // uriScheme is the unexported spelling used throughout the xsd package.
 func uriScheme(s string) string { return URIScheme(s) }
 
+// schemaURIIsAbsolute reports whether s already addresses its own location and
+// must NOT be re-resolved against a base directory: it has a URI scheme, or it
+// is an absolute filesystem path. A relative reference (the common doc.URL()
+// when a Compiler.BaseDir is configured) returns false so the caller resolves
+// it against that base, matching the key a nested back-reference computes.
+//
+// Absolute-path detection uses [uripath.IsAbsolutePath] so a path that is
+// absolute under EITHER POSIX or Windows conventions classifies the same way
+// regardless of the host OS, matching the GOOS-independent slash math the rest
+// of the package's resolution uses.
+func schemaURIIsAbsolute(s string) bool {
+	if uriScheme(s) != "" {
+		return true
+	}
+	return uripath.IsAbsolutePath(s)
+}
+
+// rootSchemaKey computes the canonical fs.FS key of the TOP-LEVEL schema
+// document, in EXACTLY the form a nested xs:include/xs:redefine pointing back at
+// the root produces via [validateSchemaPath]/[ResolveSchemaURI]. Both the
+// in-memory Compile path and CompileFile derive the circular-include guard's
+// seed key here, so the seeded key and the key a back-reference computes cannot
+// diverge (the bug that let a cycle back to the root re-parse it into spurious
+// duplicate components).
+//
+// docURL is the root document's own location (CompileFile: the file path;
+// Compile: doc.URL()). baseDir is the directory that a direct xs:include
+// schemaLocation resolves against — by convention the root's own directory for a
+// local filesystem, or the full root URI for a URI-addressed schema. Resolution
+// branches on shape:
+//
+//   - An absolute/URI docURL already addresses its own location; it is resolved
+//     with an empty base, so ResolveSchemaURI returns it unchanged.
+//   - A relative docURL with an EMPTY baseDir is resolved by its FULL value
+//     against "". An unset baseDir means nested includes resolve against ""
+//     too (the directory embedded in docURL is NOT a resolution base), so a
+//     back-reference to the root lands on the root's full relative URL — e.g.
+//     a root URL "schemas/main.xsd" is re-included as "schemas/main.xsd", not
+//     "main.xsd". Taking the basename here would seed "main.xsd", wrongly
+//     skipping a real include of "main.xsd" AND missing the real back-reference
+//     to "schemas/main.xsd".
+//   - A docURL with a NON-EMPTY baseDir resolves on shape. If docURL already
+//     addresses its resolved location — it EQUALS baseDir or sits UNDER it, an
+//     already resolved fs key like "schemas/main.xsd" or "schemas/root/main.xsd"
+//     under BaseDir("schemas") — it IS the key and is returned unchanged;
+//     re-joining onto baseDir would double the prefix ("schemas/schemas/...") and
+//     miss the cycle. Otherwise docURL is RELATIVE to baseDir and is joined onto
+//     it in FULL — never just its basename: dropping docURL's own directory
+//     segments would seed "schemas/main.xsd" for a root at "schemas/root/main.xsd"
+//     and miss the back-reference the nested include actually computes
+//     ("schemas/root/main.xsd"), re-parsing the root into spurious duplicates.
+//   - When docURL is empty, a URI-scheme baseDir IS the full root URI (the URI
+//     convention treats the base as the schema's own location); it is the key
+//     verbatim.
+//
+// In every branch the key is produced by the SAME ResolveSchemaURI call
+// loadInclude/loadRedefine use for a back-reference href, so the seeded key and
+// the computed key cannot diverge.
+//
+// The bool result is false when no key can be derived (no docURL and a
+// non-URI/empty baseDir), in which case the caller leaves the guard unseeded.
+func rootSchemaKey(docURL, baseDir string) (string, bool) {
+	switch {
+	case schemaURIIsAbsolute(docURL):
+		key, err := ResolveSchemaURI(docURL, "")
+		return key, err == nil
+	case docURL != "" && baseDir == "":
+		key, err := ResolveSchemaURI(uripath.ToSlash(docURL), "")
+		return key, err == nil
+	case docURL != "":
+		// Non-empty baseDir. docURL is either ALREADY the resolved fs key (it
+		// carries the baseDir prefix, e.g. "schemas/root/main.xsd" under
+		// BaseDir("schemas")) or a reference RELATIVE to baseDir. A back-reference
+		// include pointing at the root resolves against the including schema's base
+		// dir, landing on the root's FULL resolved key — so the seed must equal that
+		// full key, never the basename (which drops docURL's own directory segments).
+		slashDoc := path.Clean(uripath.ToSlash(docURL))
+		slashBase := path.Clean(uripath.ToSlash(baseDir))
+		if slashDoc == slashBase || strings.HasPrefix(slashDoc, slashBase+"/") {
+			// docURL already addresses its resolved location; it IS the key.
+			// Resolve against an empty base so ResolveSchemaURI returns it unchanged
+			// instead of doubling the baseDir prefix.
+			key, err := ResolveSchemaURI(slashDoc, "")
+			return key, err == nil
+		}
+		// docURL is relative to baseDir: resolve it the SAME way loadInclude
+		// resolves a back-reference href.
+		key, err := ResolveSchemaURI(slashDoc, slashBase)
+		return key, err == nil
+	case uriScheme(baseDir) != "":
+		return baseDir, true
+	}
+	return "", false
+}
+
 // ResolveSchemaURI resolves a schema-location reference ref against a base
 // (the FULL location of the schema that contains the reference) and returns
 // the canonical name to hand to the configured loader.

@@ -69,9 +69,29 @@ func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) 
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	grammar, err := relaxng.NewCompiler().CompileFile(ctx, cfg.schemaFile)
+	// The schema path is supplied explicitly on the command line by the user,
+	// so host-filesystem access for include/externalRef is expected (like
+	// xmllint). The compiler's FS now defaults to deny-all, so opt into
+	// permissive loading here to preserve CLI behavior. This mirrors the lint
+	// and xslt subcommands, which also opt into a permissive FS.
+	//
+	// Compile with a Label and an ErrorHandler so fatal schema diagnostics
+	// (e.g. an over-cap include/externalRef "exceeds the maximum resource
+	// size") reach stderr and fail compilation, rather than being discarded.
+	// The RELAX NG compiler may return a (grammar, nil) with a poisoned
+	// notAllowed grammar on a fatal diagnostic; validating against it would
+	// misreport schema-load failure as per-input validation failure.
+	ceh := &compileErrorHandler{w: c.stderr}
+	grammar, err := relaxng.NewCompiler().
+		FS(helium.PermissiveFS()).
+		Label(cfg.schemaFile).
+		ErrorHandler(ceh).
+		CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
+	}
+	if err == nil && ceh.fatal {
+		err = errSchemaCompilation
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to compile schema: %s\n", c.prog, err)

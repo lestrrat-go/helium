@@ -105,7 +105,15 @@ func evalSequenceExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(seq)...)
+		// Concatenate through appendBoundedSeq so maxNodes / OpLimit /
+		// cancellation fire across the aggregate. Each operand is itself capped,
+		// but the concatenation is not, so a sequence of K capped range operands
+		// (1 to N, 1 to N, ...) would otherwise materialize K*N items past the
+		// configured limit.
+		result, err = appendBoundedSeq(ctx, ec, result, seq, ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -978,12 +986,14 @@ func vmPositionFromLiteral(expr LiteralExpr) (int, bool) {
 func positionCall(expr Expr) bool {
 	switch e := expr.(type) {
 	case FunctionCall:
-		return len(e.Args) == 0 && e.Name == "position" && (e.Prefix == "" || e.Prefix == "fn")
+		local, isFn := lexicon.StreamFnLocalName(e.Name, e.Prefix)
+		return len(e.Args) == 0 && isFn && local == "position"
 	case *FunctionCall:
 		if e == nil {
 			return false
 		}
-		return len(e.Args) == 0 && e.Name == "position" && (e.Prefix == "" || e.Prefix == "fn")
+		local, isFn := lexicon.StreamFnLocalName(e.Name, e.Prefix)
+		return len(e.Args) == 0 && isFn && local == "position"
 	default:
 		return false
 	}
