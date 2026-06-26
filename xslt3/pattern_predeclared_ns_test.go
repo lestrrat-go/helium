@@ -831,6 +831,18 @@ func TestPatternStartFunctionRequiresFnNamespace(t *testing.T) {
 		{name: "unprefixed-key-accepted", match: "key('k', '1')"},
 		{name: "fn-prefixed-key-accepted", match: "fn:key('k', '1')"},
 		{name: "fn-eqname-key-accepted", match: "Q{" + fnNS + "}key('k', '1')"},
+		// FilterExpr (predicate) variants: a predicate after the function call
+		// must not let a non-fn-namespace pattern-start function through the
+		// gate (the FilterExpr pattern-primary case must consult
+		// isAllowedPatternFunction too).
+		{name: "custom-prefixed-key-predicate-rejected", match: "c:key('x')[true()]", wantErr: true},
+		{name: "custom-eqname-key-predicate-rejected", match: "Q{urn:custom}key('x')[true()]", wantErr: true},
+		{name: "fn-eqname-key-predicate-accepted", match: "Q{" + fnNS + "}key('k', '1')[true()]"},
+		{name: "unprefixed-key-predicate-accepted", match: "key('k', '1')[1]"},
+		// A predicate-wrapped function call as a NON-leading path step must also
+		// be rejected — pattern-start functions are only valid at the start, so
+		// the FilterExpr wrapper must not smuggle a custom function mid-path.
+		{name: "custom-key-predicate-mid-path-rejected", match: "*/c:key('x')[true()]", wantErr: true},
 	}
 
 	for _, tc := range tests {

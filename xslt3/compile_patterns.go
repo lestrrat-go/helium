@@ -197,7 +197,7 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool, nsBindings map[string]st
 		// FilterExpr: a primary expression with predicates.
 		// XSLT 3.0 allows various filter patterns:
 		//   .[pred], (/)[pred], $var[pred], (union)[pred], etc.
-		switch e.Expr.(type) {
+		switch fexpr := e.Expr.(type) {
 		case xpath3.ContextItemExpr:
 			return nil // .[pred]
 		case xpath3.RootExpr:
@@ -209,7 +209,16 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool, nsBindings map[string]st
 		case xpath3.IntersectExceptExpr:
 			return nil // (a except b)[pred]
 		case xpath3.FunctionCall:
-			return nil // fn()[pred] — e.g., root()[self::A]
+			// fn()[pred] — e.g., root()[self::A]. Only the fn-namespace
+			// pattern-start functions (key/id/idref/doc/element-with-id/root)
+			// qualify; a custom-namespace call like c:key('x')[true()] or
+			// Q{urn:custom}key('x')[true()] must be rejected, mirroring the
+			// bare-FunctionCall and path-start checks routed through
+			// isAllowedPatternFunction.
+			if isAllowedPatternFunction(fexpr, nsBindings) {
+				return nil
+			}
+			return fmt.Errorf("function call %s() not allowed in pattern", fexpr.Name)
 		case xpath3.LocationPath:
 			return nil // (path)[pred]
 		case *xpath3.LocationPath:
@@ -336,6 +345,18 @@ func validatePatternPathStepExpr(e xpath3.PathStepExpr, nsBindings map[string]st
 		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.FunctionCall:
 		return fmt.Errorf("function call %s() not allowed in middle of pattern", r.Name)
+	case xpath3.FilterExpr:
+		// A filtered primary as a non-leading step, e.g. a/key('x')[pred] or
+		// a/c:key('x')[pred]. Pattern-start functions may appear only at the
+		// START of a pattern, so a function-call primary here is rejected just
+		// like the bare mid-pattern function call above — otherwise the
+		// predicate wrapper would smuggle a forbidden/custom function past the
+		// isAllowedPatternFunction gate. Other filtered primaries (a
+		// parenthesized union/path with a predicate such as a/(b|c)[1]) remain
+		// valid and need no further checking here.
+		if fc, ok := r.Expr.(xpath3.FunctionCall); ok {
+			return fmt.Errorf("function call %s() not allowed in middle of pattern", fc.Name)
+		}
 	case xpath3.ArrayConstructorExpr:
 		return fmt.Errorf("array constructor not allowed in pattern")
 	}
