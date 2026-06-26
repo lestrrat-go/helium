@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"math/big"
+	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
@@ -73,8 +74,8 @@ func computeStreamInfo(ast Expr) streamInfo {
 				}
 			}
 		case FunctionCall:
-			if isFnNamespacePrefix(v.Prefix) {
-				si.usedFunctions[v.Name] = true
+			if local, ok := streamFnLocalName(v); ok {
+				si.usedFunctions[local] = true
 			}
 		}
 		return true
@@ -303,6 +304,27 @@ func isFnNamespacePrefix(prefix string) bool {
 	return prefix == "" || prefix == "fn"
 }
 
+// streamFnLocalName resolves a FunctionCall to its local name for streamability
+// purposes, reporting whether the call names the XPath functions namespace.
+//
+// The parser keeps an EQName function call's whole braced spelling in
+// FunctionCall.Name (e.g. "Q{http://www.w3.org/2005/xpath-functions}position"),
+// so a bare lexical-name comparison against "position"/"last" would miss it.
+// This normalizes that form to its local part when the braced URI is the
+// functions namespace. For the lexical (unprefixed or "fn:") forms it defers to
+// isFnNamespacePrefix and returns Name unchanged.
+func streamFnLocalName(fc FunctionCall) (string, bool) {
+	if strings.HasPrefix(fc.Name, "Q{") {
+		if idx := strings.Index(fc.Name, "}"); idx >= 0 {
+			uri := fc.Name[2:idx]
+			local := fc.Name[idx+1:]
+			return local, uri == lexicon.NamespaceFn
+		}
+		return fc.Name, false
+	}
+	return fc.Name, isFnNamespacePrefix(fc.Prefix)
+}
+
 // predicateIsNonMotionless returns true if a predicate expression navigates
 // downward (uses child/descendant axes), uses last(), or uses position() in
 // a non-trivial way.
@@ -339,12 +361,13 @@ func predicateIsNonMotionlessWithStep(pred Expr, step *Step) bool {
 				return false
 			}
 		case FunctionCall:
-			if isFnNamespacePrefix(v.Prefix) && (v.Name == "last" || v.Name == lexicon.FnPosition) {
+			local, isFn := streamFnLocalName(v)
+			if isFn && (local == "last" || local == lexicon.FnPosition) {
 				nonMotionless = true
 				return false
 			}
-			if isFnNamespacePrefix(v.Prefix) {
-				switch v.Name {
+			if isFn {
+				switch local {
 				case "name", "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
 					"nilled", "has-children", "string-length", "current":
