@@ -525,6 +525,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, err
 	}
 
+	// Build the substitution-group membership map BEFORE resolving refs, because
+	// resolveRefs runs the UPA (cos-nonambig) check, which expands a content
+	// model's substitution-group head leaves to their members. A global element's
+	// substitutionGroup affiliation is fixed at read/include time (it is a
+	// top-level-only attribute resolved by resolveQName), so the map is fully
+	// determined here; this only pre-populates the membership map (and sorts it)
+	// and emits no diagnostics, leaving every error-reporting check (circularity,
+	// final, element-consistency) in its original order below.
+	c.buildSubstGroups()
+
 	// Second pass: resolve type references.
 	c.resolveRefs(ctx)
 
@@ -539,25 +549,17 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
 	c.checkNotationOnDeclarations(ctx)
 
-	// Build substitution group membership map and detect circular references.
-	for _, edecl := range c.schema.elements {
-		if edecl.SubstitutionGroup == (QName{}) {
-			continue
-		}
-		head := edecl.SubstitutionGroup
-		c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
-
-		// Check for circular substitution groups.
-		if c.filename != "" {
+	// Detect circular substitution-group references. The membership map itself was
+	// already built by buildSubstGroups (before resolveRefs) so UPA could see it;
+	// this only reports the circularity diagnostic, keeping its position in the
+	// error-ordering sequence unchanged.
+	if c.filename != "" {
+		for _, edecl := range c.schema.elements {
+			if edecl.SubstitutionGroup == (QName{}) {
+				continue
+			}
 			c.checkCircularSubstGroup(ctx, edecl)
 		}
-	}
-
-	// Sort substitution group members for deterministic error messages.
-	for _, members := range c.schema.substGroups {
-		sort.Slice(members, func(i, j int) bool {
-			return members[i].Name.Local < members[j].Name.Local
-		})
 	}
 
 	// Enforce final on type derivations.
@@ -596,6 +598,28 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	return c.schema, nil
+}
+
+// buildSubstGroups populates c.schema.substGroups, mapping each substitution-group
+// head QName to the global element declarations affiliated with it, sorted by
+// local name for deterministic downstream output. It is intentionally
+// side-effect-free with respect to diagnostics: it neither reports errors nor
+// reads resolved type information, so it can run early (before resolveRefs) to let
+// the UPA check expand substitution-group heads to their members. The companion
+// circularity, final, and element-consistency checks run later, unchanged.
+func (c *compiler) buildSubstGroups() {
+	for _, edecl := range c.schema.elements {
+		if edecl.SubstitutionGroup == (QName{}) {
+			continue
+		}
+		head := edecl.SubstitutionGroup
+		c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
+	}
+	for _, members := range c.schema.substGroups {
+		sort.Slice(members, func(i, j int) bool {
+			return members[i].Name.Local < members[j].Name.Local
+		})
+	}
 }
 
 // checkKeyRefRefers verifies that every xs:keyref/@refer names a key or unique
