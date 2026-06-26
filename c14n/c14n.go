@@ -64,11 +64,12 @@ func (c Canonicalizer) NodeSet(nodes []helium.Node) Canonicalizer {
 	return c
 }
 
-// StrictNodeSetXMLAttributes switches xml:base, xml:lang and xml:space handling
-// over a node set to the strict W3C Canonical XML reading.
+// StrictXMLAttributes switches xml:base, xml:lang and xml:space handling over a
+// node set to the strict W3C Canonical XML reading. It has no effect in
+// whole-document mode.
 //
-// The difference only matters for the unusual case where a rendered element's
-// own xml:base/xml:lang/xml:space attribute is excluded from the node set:
+// The behavioral difference shows up for a rendered element whose own
+// xml:base/xml:lang/xml:space attribute is excluded from the node set:
 //
 //   - Default (this option off): the element's own value is still emitted, and
 //     for xml:base it seeds the fixup. This matches libxml2 — and therefore the
@@ -81,9 +82,17 @@ func (c Canonicalizer) NodeSet(nodes []helium.Node) Canonicalizer {
 //     only when an omitted ancestor actually carries xml:base, per the letter of
 //     the W3C spec.
 //
+// Strict mode is also fail-closed on xml:base: a value that cannot be
+// canonicalized faithfully (a malformed URI reference, or a degenerate
+// empty-authority form such as "//", "///" or "urn://") makes Canonicalize
+// return an error instead of emitting best-effort bytes. The default mode stays
+// permissive and emits a best-effort result for such values, matching libxml2's
+// tolerance. Well-formed xml:base values (relative/absolute paths, http(s),
+// file and urn URIs, protocol-relative //host/path) behave identically in both.
+//
 // This option governs only that node-set xml:* behavior; it does not make the
 // package fully W3C-conformant in other respects.
-func (c Canonicalizer) StrictNodeSetXMLAttributes() Canonicalizer {
+func (c Canonicalizer) StrictXMLAttributes() Canonicalizer {
 	c = c.clone()
 	c.cfg.strictXMLAttrs = true
 	return c

@@ -752,7 +752,9 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 	case c.mode == C14N11:
 		c.processSimpleInheritable11(e, &entries, "lang")
 		c.processSimpleInheritable11(e, &entries, "space")
-		c.processXMLBase11(e, &entries)
+		if err := c.processXMLBase11(e, &entries); err != nil {
+			return err
+		}
 	}
 
 	sortAttributes(entries)
@@ -888,7 +890,7 @@ func (c *canonicalizer) processSimpleInheritable11(e *helium.Element, entries *[
 // xmlC14NFixupBaseAttr: the in-document xml:base values of the element and its
 // contiguous omitted ancestors are joined lexically (join-URI-References). No
 // external/retrieval base URI participates.
-func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortEntry) {
+func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortEntry) error {
 	ownAttr, hasOwn := xmlAttrOf(e, xmlBaseLocalName)
 
 	// xml:base values of contiguous omitted ancestors (inner→outer), stopping at
@@ -919,7 +921,7 @@ func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortE
 				c.setXMLBaseEntry(entries, v)
 			}
 		}
-		return
+		return nil
 	}
 
 	// Join chain, outermost→innermost: omitted-ancestor bases then the element's
@@ -934,11 +936,16 @@ func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortE
 	}
 
 	if len(chain) == 0 {
-		return
+		return nil
 	}
-	if res := reduceXMLBase(chain); res != "" {
+	res, faithful := reduceXMLBase(chain)
+	if !faithful && c.strict() {
+		return fmt.Errorf("c14n: xml:base on element %s cannot be canonicalized faithfully", e.Name())
+	}
+	if res != "" {
 		c.setXMLBaseEntry(entries, res)
 	}
+	return nil
 }
 
 // xmlBaseLocalName is the local name of the xml:base attribute.

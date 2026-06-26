@@ -62,8 +62,31 @@ func TestJoinURIReference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, joinURIReference(tt.base, tt.ref))
+			got, faithful := joinURIReference(tt.base, tt.ref)
+			require.Equal(t, tt.want, got)
+			require.True(t, faithful, "well-formed input must join faithfully")
 		})
+	}
+}
+
+func TestJoinURIReferenceUnfaithful(t *testing.T) {
+	// Degenerate empty-authority forms cannot be reproduced byte-for-byte.
+	cases := [][2]string{
+		{"//", "c"},
+		{"///", "c"},
+		{"urn://", "c"},
+		{"a/", "//"},  // empty-authority reference
+		{"a/", "///"}, // empty-authority reference
+	}
+	for _, c := range cases {
+		_, faithful := joinURIReference(c[0], c[1])
+		require.False(t, faithful, "join(%q,%q) should be flagged unfaithful", c[0], c[1])
+	}
+
+	// Well-formed empty-authority and protocol-relative forms stay faithful.
+	for _, c := range [][2]string{{"file:///a/b", "c"}, {"//host/p/", "c"}, {"http://h/", "c"}} {
+		_, faithful := joinURIReference(c[0], c[1])
+		require.True(t, faithful, "join(%q,%q) should be faithful", c[0], c[1])
 	}
 }
 
@@ -82,7 +105,8 @@ func TestReduceXMLBase(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, reduceXMLBase(tt.chain))
+			got, _ := reduceXMLBase(tt.chain)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

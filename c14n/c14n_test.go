@@ -443,7 +443,7 @@ func TestC14N11ExcludedOwnXMLBase(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(gotDefault), `xml:base="x"`, "libxml2 default emits the element's own xml:base, got: %s", string(gotDefault))
 
-	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
 	require.NoError(t, err)
 	require.NotContains(t, string(gotStrict), "xml:base", "strict mode omits an excluded own xml:base with no omitted-ancestor base, got: %s", string(gotStrict))
 }
@@ -465,7 +465,7 @@ func TestC14N11ExcludedOwnXMLLang(t *testing.T) {
 	require.Contains(t, string(gotDefault), `xml:lang="fr"`, "libxml2 default emits the element's own xml:lang, got: %s", string(gotDefault))
 	require.NotContains(t, string(gotDefault), `xml:lang="en"`, "the element's own xml:lang must block ancestor inheritance, got: %s", string(gotDefault))
 
-	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
 	require.NoError(t, err)
 	require.NotContains(t, string(gotStrict), "xml:lang", "strict mode omits an excluded own xml:lang (still blocking inheritance), got: %s", string(gotStrict))
 }
@@ -481,12 +481,12 @@ func TestC14N11StrictXMLBaseIncludesOwnValue(t *testing.T) {
 	require.NoError(t, err)
 	nodes := collectDescendantElements(t, doc)
 
-	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
 	require.NoError(t, err)
 	require.Contains(t, string(gotStrict), `xml:base="a/b"`, "strict join must include the element's own value, got: %s", string(gotStrict))
 }
 
-// TestC14N11StrictWholeDocumentUnaffected verifies the StrictNodeSetXMLAttributes
+// TestC14N11StrictWholeDocumentUnaffected verifies the StrictXMLAttributes
 // toggle does not change whole-document output (it governs node-set processing
 // only): an empty xml:base must be dropped in both default and strict, with no
 // node set.
@@ -498,10 +498,31 @@ func TestC14N11StrictWholeDocumentUnaffected(t *testing.T) {
 
 	gotDefault, err := c14n.NewCanonicalizer(c14n.C14N11).CanonicalizeTo(doc)
 	require.NoError(t, err)
-	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).StrictXMLAttributes().CanonicalizeTo(doc)
 	require.NoError(t, err)
 	require.Equal(t, string(gotDefault), string(gotStrict), "strict must not change whole-document output")
 	require.NotContains(t, string(gotStrict), "xml:base", "empty xml:base must be dropped, got: %s", string(gotStrict))
+}
+
+// TestC14N11StrictFailClosedXMLBase verifies that a degenerate xml:base on an
+// omitted ancestor (an empty-authority "//" that cannot be canonicalized
+// faithfully) is a best-effort no-error result in the default mode but an
+// operation failure under StrictXMLAttributes.
+func TestC14N11StrictFailClosedXMLBase(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="//"><child xml:base="x">t</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	nodes := collectDescendantElements(t, doc)
+
+	// Default (libxml2-compat): best-effort, no error.
+	_, err = c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err, "default mode must stay permissive")
+
+	// Strict: fail closed.
+	_, err = c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
+	require.Error(t, err, "strict mode must reject an un-canonicalizable xml:base")
+	require.Contains(t, err.Error(), "xml:base")
 }
 
 // TestC14N10ExcludedOwnXMLLang covers the C14N 1.0 inheritance-blocking
@@ -520,7 +541,7 @@ func TestC14N10ExcludedOwnXMLLang(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(gotDefault), `xml:lang="en"`, "libxml2 default imports the ancestor xml:lang, got: %s", string(gotDefault))
 
-	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
 	require.NoError(t, err)
 	require.NotContains(t, string(gotStrict), "xml:lang", "strict mode blocks inheritance via the excluded own xml:lang, got: %s", string(gotStrict))
 }

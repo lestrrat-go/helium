@@ -24,7 +24,13 @@ import (
 // "urn://"), a percent-encoded delimiter inside an authority, or a bare "//"
 // reference — where libxml2 itself is inconsistent. Such values never occur in
 // canonical signature input.
-func joinURIReference(base, ref string) string {
+// The returned bool reports whether the join could be performed faithfully. It
+// is false for inputs this port cannot reproduce libxml2 byte-for-byte — a
+// malformed URI reference, or a degenerate empty-authority form ("//", "///",
+// "urn://") — which never occur in a well-formed xml:base. Callers in
+// libxml2-compat mode ignore it (best-effort result); strict mode turns it into
+// an operation failure.
+func joinURIReference(base, ref string) (string, bool) {
 	// libxml2 appends "/" when the base's second-to-last character is '.', i.e.
 	// the base ends with ".." (or "x."), forcing the join to traverse upward.
 	// Replicated verbatim from xmlC14NFixupBaseAttr for byte-for-byte compat.
@@ -34,20 +40,20 @@ func joinURIReference(base, ref string) string {
 
 	refURL, err := url.Parse(ref)
 	if err != nil {
-		return ref
+		return ref, false
 	}
 	// Step 3: an absolute reference (carrying a scheme) wins outright.
 	if refURL.Scheme != "" {
-		return ref
+		return ref, true
 	}
 	// Opaque references aren't hierarchical; emit as-is.
 	if refURL.Opaque != "" {
-		return ref
+		return ref, true
 	}
 
 	baseURL, err := url.Parse(base)
 	if err != nil {
-		return ref
+		return ref, false
 	}
 	// Go parses a scheme-only base like "urn:base" with its payload in Opaque
 	// rather than Path; libxml2 treats that payload as the (decoded) path, so fold
@@ -67,6 +73,11 @@ func joinURIReference(base, ref string) string {
 	refHasAuthority := uriHasAuthority(ref)
 	refQuery, refHasQuery := refURL.RawQuery, refURL.RawQuery != "" || refURL.ForceQuery
 	refFrag, refHasFrag := refURL.EscapedFragment(), strings.Contains(ref, "#")
+
+	// A "//" authority marker with no host is degenerate. On the reference it is
+	// always unfaithful; on the base it is unfaithful unless a scheme and a
+	// non-empty path make it a valid empty-authority form like "file:///a".
+	faithful := !emptyAuthority(ref, refURL) && !degenerateBaseAuthority(base, baseURL, basePath)
 
 	var r resolvedURI
 	switch {
@@ -115,7 +126,7 @@ func joinURIReference(base, ref string) string {
 		r.fragment, r.hasFragment = refFrag, refHasFrag
 	}
 
-	return r.String()
+	return r.String(), faithful
 }
 
 // resolvedURI holds the components produced by joinURIReference. Presence flags
@@ -202,6 +213,19 @@ func uriHasAuthority(raw string) bool {
 		raw = raw[i+1:]
 	}
 	return strings.HasPrefix(raw, "//")
+}
+
+// emptyAuthority reports whether a URI reference carries a "//" authority marker
+// with no host or userinfo (e.g. "//", "///", "urn://", "//?q").
+func emptyAuthority(raw string, u *url.URL) bool {
+	return uriHasAuthority(raw) && u.Host == "" && u.User == nil
+}
+
+// degenerateBaseAuthority reports a base with an empty authority that cannot be
+// joined faithfully — i.e. one that is not a valid empty-authority form, which
+// requires both a scheme and a non-empty path (e.g. "file:///a").
+func degenerateBaseAuthority(base string, u *url.URL, path string) bool {
+	return emptyAuthority(base, u) && (u.Scheme == "" || path == "")
 }
 
 // authorityOf returns the userinfo+host authority string of a parsed URL.
@@ -333,11 +357,15 @@ func normalizeURIPath(path string) string {
 
 // reduceXMLBase folds a chain of xml:base values, ordered outermost to
 // innermost, into a single canonical value. Per C14N 1.1 the innermost value is
-// combined with the next-outer as base, and so on outward.
-func reduceXMLBase(chain []string) string {
+// combined with the next-outer as base, and so on outward. The bool is false if
+// any join in the chain could not be performed faithfully (see joinURIReference).
+func reduceXMLBase(chain []string) (string, bool) {
 	res := chain[len(chain)-1]
+	faithful := true
 	for i := len(chain) - 2; i >= 0; i-- {
-		res = joinURIReference(chain[i], res)
+		var ok bool
+		res, ok = joinURIReference(chain[i], res)
+		faithful = faithful && ok
 	}
-	return res
+	return res, faithful
 }

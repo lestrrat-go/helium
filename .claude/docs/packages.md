@@ -46,10 +46,10 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 
 - **NewCanonicalizer(Mode) → Canonicalizer** — create fluent builder for the given mode
-- Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), StrictNodeSetXMLAttributes()
+- Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), StrictXMLAttributes()
 - Terminal: **Canonicalize(*Document, io.Writer) → error**, **CanonicalizeTo(*Document) → ([]byte, error)**
 - C14N 1.1 xml:base is the lexical join (W3C §2.4 / libxml2 xmlC14NFixupBaseAttr) of in-document xml:base values — no external base URI. See `xmlbase.go` (joinURIReference).
-- StrictNodeSetXMLAttributes() opts into W3C-strict node-set xml:base/lang/space handling; default matches libxml2 (a rendered element's own excluded xml:* attribute is still emitted — XMLDSig digest interop).
+- StrictXMLAttributes() opts into W3C-strict node-set xml:base/lang/space handling; default matches libxml2 (a rendered element's own excluded xml:* attribute is still emitted — XMLDSig digest interop). Strict mode is also fail-closed on xml:base: a degenerate/un-canonicalizable value (malformed URI, empty-authority "//"/"///"/"urn://") errors out of Canonicalize, where default emits best-effort bytes.
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go`, `sort.go`, `escape.go`
 - Imports: helium
 
