@@ -1003,6 +1003,12 @@ func (v *validator) attributeMatches(pat *pattern, attr *helium.Attribute) bool 
 	if pat.nameClass != nil {
 		return nameClassMatches(pat.nameClass, localName, uri)
 	}
+	// Fail closed: an attribute pattern with no name class and no name/ns is
+	// malformed (parseAttribute should have poisoned it). Never treat it as a
+	// wildcard that matches any attribute.
+	if pat.name == "" && pat.ns == "" {
+		return false
+	}
 	if pat.name != "" && pat.name != localName {
 		return false
 	}

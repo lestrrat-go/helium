@@ -807,3 +807,51 @@ func TestForeignStructuralAttrIgnored(t *testing.T) {
 			"a foreign ann:name must not fail an otherwise valid grammar closed")
 	})
 }
+
+// TestNamelessAttributeIsCompileError covers RNG-006: an <attribute> with no
+// "name" attribute and no name-class child leaves nameClass nil and name/ns
+// empty, which made attributeMatches fall through to true and accept ANY
+// attribute (fail-open). Such an attribute must be a fatal compile error and
+// must install a never-matching name class so validation fails closed.
+func TestNamelessAttributeIsCompileError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("attribute with no name is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute><text/></attribute>
+</element>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"a nameless <attribute> must be a fatal compile error")
+	})
+
+	t.Run("default handler: nameless attribute does not match anything", func(t *testing.T) {
+		t.Parallel()
+		// On the DEFAULT compile path (no error collector) the fatal diagnostic is
+		// dropped, so the nameless attribute must still install a never-matching
+		// name class. Otherwise <attribute><text/></attribute> would have no name
+		// class and accept ANY attribute, spuriously validating <r secret="x"/>.
+		schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute><text/></attribute>
+</element>`
+
+		grammar := compileWithDefaultHandler(t, schema)
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<r secret="x"/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"a nameless attribute must not accept an arbitrary attribute")
+	})
+
+	t.Run("named attribute still compiles and validates", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="id"><text/></attribute>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a named <attribute> must compile cleanly")
+		require.NoError(t, validateWith(t, schema, `<r id="x"/>`),
+			"the named attribute must match a matching instance")
+	})
+}
