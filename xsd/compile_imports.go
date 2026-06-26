@@ -285,6 +285,14 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
 
+	// Snapshot the component-name sets BEFORE parsing so the delta records which
+	// components this included document contributes. A later xs:redefine of the
+	// same (already-loaded) document needs that set to know which components it
+	// may legally override.
+	beforeTypes := snapshotKeys(c.schema.types)
+	beforeGroups := snapshotKeys(c.schema.groups)
+	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
+
 	// Parse the included schema's declarations into the current compiler.
 	err = c.parseSchemaChildren(ctx, incRoot)
 
@@ -292,6 +300,15 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// transitive chain resolves (resolved relative to the included schema).
 	if err == nil {
 		err = c.processNestedIncludes(ctx, incRoot, path, location)
+	}
+
+	// Cache the redefinable component set this document contributed so a later
+	// xs:redefine of the same already-loaded document can validate its overrides.
+	if err == nil {
+		c.loadedRedefinable[path] = &redefinableSet{
+			keys:     c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups),
+			consumed: make(map[redefineKind]map[QName]struct{}),
+		}
 	}
 
 	// Restore form-qualified settings, defaults, and include file.
@@ -327,6 +344,35 @@ func newKeysSince[V any](m map[QName]V, before map[QName]struct{}) map[QName]str
 	return added
 }
 
+// computeRedefinableKeys builds the per-kind set of component names newly
+// registered (afterKeys - beforeKeys) by loading a schema document, splitting
+// the type names into simpleType/complexType via c.typeKinds. These are exactly
+// the components an xs:redefine of that document may override. It is computed
+// once when the document is first loaded (xs:include or xs:redefine) and cached
+// in c.loadedRedefinable, since the delta cannot be reconstructed once the
+// document's components are merged into the schema.
+func (c *compiler) computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups map[QName]struct{}) map[redefineKind]map[QName]struct{} {
+	newTypes := newKeysSince(c.schema.types, beforeTypes)
+	phaseASimpleTypes := make(map[QName]struct{})
+	phaseAComplexTypes := make(map[QName]struct{})
+	for qn := range newTypes {
+		switch c.typeKinds[qn] {
+		case redefineKindComplexType:
+			phaseAComplexTypes[qn] = struct{}{}
+		default:
+			// simpleType (and builtin/anySimpleType fallbacks) are treated as
+			// simple; only an xs:simpleType override may consume them.
+			phaseASimpleTypes[qn] = struct{}{}
+		}
+	}
+	return map[redefineKind]map[QName]struct{}{
+		redefineKindSimpleType:  phaseASimpleTypes,
+		redefineKindComplexType: phaseAComplexTypes,
+		redefineKindGroup:       newKeysSince(c.schema.groups, beforeGroups),
+		redefineKindAttrGroup:   newKeysSince(c.schema.attrGroups, beforeAttrGroups),
+	}
+}
+
 // loadRedefine loads a schema via xs:redefine and processes override children.
 // It works like xs:include (merging original declarations) but then applies
 // redefinitions for complexType, simpleType, group, and attributeGroup children.
@@ -341,21 +387,31 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// or an earlier xs:redefine of the same schema — must not silently drop its
 	// override children. Re-running Phase A would re-register the redefined
 	// schema's declarations (duplicate components) or recurse forever, so loading
-	// is correctly skipped; but the Phase-B overrides below depend on the Phase-A
-	// (after - before) component delta to identify which components belong to the
-	// redefined schema, and that delta cannot be reconstructed once the document
-	// is already merged. Repeated redefinition of an already-loaded schema is
-	// therefore reported as a schema error rather than being ignored (which would
-	// silently yield a schema missing the intended overrides).
+	// is correctly skipped; but XSD permits multiple xs:redefine of the same
+	// document (redefining disjoint components, or a no-op repeat), so the
+	// document path repeating is NOT itself an error. Process this redefine's
+	// override children against the cached Phase-A component set instead. The
+	// shared consumed set rejects only a TRUE duplicate — a component an earlier
+	// xs:redefine of the same document already redefined.
 	if _, seen := c.includeVisited[path]; seen {
-		displayLoc := location
-		if c.filename != "" {
-			displayLoc = schemaDisplayLoc(c.filename, location)
+		rs := c.loadedRedefinable[path]
+		var phaseAKeys, consumed map[redefineKind]map[QName]struct{}
+		if rs != nil {
+			phaseAKeys = rs.keys
+			consumed = rs.consumed
+		} else {
+			// The document was registered without a recorded redefinable set
+			// (e.g. the root schema seeded into includeVisited by CompileFile, or
+			// an imported schema's own seed). Nothing from it is overridable, so
+			// every override is reported as a duplicate by the override loop.
+			phaseAKeys = map[redefineKind]map[QName]struct{}{
+				redefineKindSimpleType:  {},
+				redefineKindComplexType: {},
+				redefineKindGroup:       {},
+				redefineKindAttrGroup:   {},
+			}
 		}
-		c.schemaError(ctx, schemaParserError(c.filename, redefineElem.Line(),
-			redefineElem.LocalName(), elemRedefine,
-			"The schema '"+displayLoc+"' was already loaded (via an earlier include or redefine); repeated redefinition of an already-loaded schema is not supported."))
-		return nil
+		return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, consumed)
 	}
 	c.includeVisited[path] = struct{}{}
 
@@ -437,43 +493,22 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return err
 	}
 
-	// Phase B: Process redefine children (overrides). Each override may replace
-	// the same-named component loaded in Phase A exactly once. Compute the
-	// Phase-A keys per kind as (afterKeys - beforeKeys) so the duplicate-name
-	// checks are suppressed only for the components actually loaded by the
-	// redefined schema, consumed once each — not globally and not for
-	// pre-existing main-schema components. An override that targets a name not
-	// loaded in Phase A, or repeats a name, is reported as a duplicate.
-	// Split the newly-loaded type keys by declared kind so a Phase-A simpleType
-	// is only redefinable by a simpleType override (and likewise for complex).
-	newTypes := newKeysSince(c.schema.types, beforeTypes)
-	phaseASimpleTypes := make(map[QName]struct{})
-	phaseAComplexTypes := make(map[QName]struct{})
-	for qn := range newTypes {
-		switch c.typeKinds[qn] {
-		case redefineKindComplexType:
-			phaseAComplexTypes[qn] = struct{}{}
-		default:
-			// simpleType (and builtin/anySimpleType fallbacks) are treated as
-			// simple; only an xs:simpleType override may consume them.
-			phaseASimpleTypes[qn] = struct{}{}
-		}
+	// Phase B: compute the redefinable component set as (afterKeys - beforeKeys)
+	// per kind — only the names ACTUALLY loaded by the redefined schema (not
+	// pre-existing main-schema components) may be overridden. Cache it keyed by
+	// the resolved document path so a later xs:redefine of this same document can
+	// validate its overrides against it (the delta cannot be recomputed once the
+	// components are merged), then process this redefine's overrides against it.
+	phaseAKeys := c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups)
+	rs := &redefinableSet{
+		keys:     phaseAKeys,
+		consumed: make(map[redefineKind]map[QName]struct{}),
 	}
-	phaseAKeys := map[redefineKind]map[QName]struct{}{
-		redefineKindSimpleType:  phaseASimpleTypes,
-		redefineKindComplexType: phaseAComplexTypes,
-		redefineKindGroup:       newKeysSince(c.schema.groups, beforeGroups),
-		redefineKindAttrGroup:   newKeysSince(c.schema.attrGroups, beforeAttrGroups),
-	}
-	c.redefine = &redefineState{
-		phaseAKeys: phaseAKeys,
-		seen:       make(map[redefineKind]map[QName]struct{}),
-	}
-	defer func() { c.redefine = nil }()
+	c.loadedRedefinable[path] = rs
 
-	// The override children below come from the REDEFINING (main) schema, not
-	// the redefined (base) schema loaded in Phase A. Restore c.includeFile to
-	// the redefining file's label so duplicate-override diagnostics report the
+	// The override children come from the REDEFINING (main) schema, not the
+	// redefined (base) schema loaded in Phase A. Restore c.includeFile to the
+	// redefining file's label so duplicate-override diagnostics report the
 	// correct source file and line; Phase A above needed the base label.
 	// Likewise restore the per-document defaults to the REDEFINING schema's
 	// values: override-local declarations must use the redefining schema's
@@ -484,6 +519,32 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
+
+	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
+}
+
+// processRedefineOverrides applies the override children of an xs:redefine
+// element against phaseAKeys, the component set loaded from the redefined
+// document. consumed, when non-nil, is the cross-redefine consumption set shared
+// with the document's redefinableSet cache, so a component already redefined by
+// an EARLIER xs:redefine of the same document is rejected as a duplicate. Each
+// accepted override replaces its same-named Phase-A component exactly once; an
+// override targeting a name absent from Phase A, repeated within this element,
+// or already consumed by an earlier redefine is reported as a duplicate. The
+// override children belong to the REDEFINING schema, so the caller must have
+// restored that schema's per-document defaults and include-file label first.
+func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}) error {
+	savedElemForm := c.schema.elemFormQualified
+	savedAttrForm := c.schema.attrFormQualified
+	savedBlockDefault := c.schema.blockDefault
+	savedFinalDefault := c.schema.finalDefault
+	savedIncludeFile := c.includeFile
+	c.redefine = &redefineState{
+		phaseAKeys: phaseAKeys,
+		seen:       make(map[redefineKind]map[QName]struct{}),
+		consumed:   consumed,
+	}
+	defer func() { c.redefine = nil }()
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -792,6 +853,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		maxImportDepth:           c.maxImportDepth,
 		includeVisited:           make(map[string]struct{}),
 		maxIncludeDepth:          c.maxIncludeDepth,
+		loadedRedefinable:        make(map[string]*redefinableSet),
 	}
 
 	// Seed the imported sub-compiler's circular-include guard with the imported
