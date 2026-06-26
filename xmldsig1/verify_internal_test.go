@@ -127,6 +127,8 @@ func TestParseSignatureElement(t *testing.T) {
 
 	t.Run("bad SignatureValue base64", func(t *testing.T) {
 		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
 			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
 			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
@@ -159,6 +161,40 @@ func TestParseSignedInfo(t *testing.T) {
 		err := parseSignedInfo(doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "SignatureMethod missing Algorithm")
+	})
+
+	// A SignedInfo with no CanonicalizationMethod is structurally invalid and
+	// must be rejected up front rather than parsing OK and failing later as an
+	// unsupported-algorithm error during canonicalization.
+	t.Run("missing CanonicalizationMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing CanonicalizationMethod")
+	})
+
+	// A SignedInfo with no SignatureMethod is structurally invalid and must be
+	// rejected up front rather than parsing OK and failing later (possibly only
+	// after key resolution) as an unsupported-algorithm error.
+	t.Run("missing SignatureMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing SignatureMethod")
 	})
 
 	t.Run("no Reference", func(t *testing.T) {
@@ -229,6 +265,32 @@ func TestParseReferenceElement(t *testing.T) {
 		doc := mustParse(t, r)
 		_, err := parseReferenceElement(doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
+	})
+
+	// A Reference with no DigestMethod is structurally invalid and must be
+	// rejected up front rather than parsing OK and failing later as an
+	// unsupported-digest error.
+	t.Run("missing DigestMethod", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing DigestMethod")
+	})
+
+	// A Reference with no DigestValue is structurally invalid and must be
+	// rejected up front rather than parsing OK and failing later as a digest
+	// mismatch (the empty digest never matches the recomputed one).
+	t.Run("missing DigestValue", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "missing DigestValue")
 	})
 
 	t.Run("with InclusiveNamespaces", func(t *testing.T) {

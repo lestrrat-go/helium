@@ -313,6 +313,20 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 		}
 	}
 
+	// SignedInfo's content model fixes CanonicalizationMethod and
+	// SignatureMethod at exactly one each, not merely at most one. Enforcing
+	// only "at most one" lets a SignedInfo missing either element parse OK and
+	// fail much later — as an unsupported-algorithm error, sometimes only after
+	// key resolution — instead of as a clean ErrInvalidSignature. Reject the
+	// absence here so a structurally invalid SignedInfo never reaches
+	// canonicalization or key resolution.
+	if !c14nSeen {
+		return fmt.Errorf("%w: missing CanonicalizationMethod", ErrInvalidSignature)
+	}
+	if !sigMethodSeen {
+		return fmt.Errorf("%w: missing SignatureMethod", ErrInvalidSignature)
+	}
+
 	// XML-Signature requires at least one Reference. A SignatureValue computed
 	// over a reference-free SignedInfo verifies cryptographically yet covers no
 	// document content, so accepting it would attest to nothing. Reject it.
@@ -417,6 +431,19 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 			}
 			ref.digestValue = decoded
 		}
+	}
+
+	// Reference's content model fixes DigestMethod and DigestValue at exactly
+	// one each, not merely at most one. Enforcing only "at most one" lets a
+	// Reference missing either element parse OK and fail much later — a missing
+	// DigestMethod surfaces as an unsupported-digest error and a missing
+	// DigestValue as a digest mismatch (the empty digest never matches) —
+	// instead of as a clean ErrInvalidSignature. Reject the absence here.
+	if !digestMethodSeen {
+		return ref, fmt.Errorf("%w: missing DigestMethod", ErrInvalidSignature)
+	}
+	if !digestValueSeen {
+		return ref, fmt.Errorf("%w: missing DigestValue", ErrInvalidSignature)
 	}
 	return ref, nil
 }
