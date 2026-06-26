@@ -112,6 +112,16 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 			if err != nil {
 				return "", err
 			}
+			if ent == nil {
+				// An undeclared parameter entity in a context with an external
+				// subset (or after a prior PE reference) is a validity error,
+				// not a fatal one: parseStringPEReference has already cleared
+				// pctx.valid and returns a nil entity with no error. It is not
+				// expanded. Skip it without dereferencing the nil entity,
+				// mirroring the '&' branch above and expandEntityValueForRefCheck.
+				s = s[width:]
+				continue
+			}
 			if err := pctx.entityCheck(ent, width); err != nil {
 				return "", err
 			}
