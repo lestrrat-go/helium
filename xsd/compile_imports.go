@@ -773,6 +773,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		maxIncludeDepth:          c.maxIncludeDepth,
 	}
 
+	// Seed the imported sub-compiler's circular-include guard with the imported
+	// schema's own resolved key, mirroring CompileFile's seeding of the top-level
+	// root. Without this, an imported schema that circularly includes back to its
+	// own root (import imp.xsd -> include inc.xsd -> include imp.xsd) re-parses
+	// imp.xsd and emits spurious duplicate-component errors.
+	impC.includeVisited[path] = struct{}{}
+
 	// Sub-compiler collects errors into its own collector so we can
 	// conditionally forward them. This matches libxml2's behavior of
 	// stopping error reporting after the first import failure.
