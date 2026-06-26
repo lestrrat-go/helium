@@ -1,7 +1,9 @@
 package relaxng_test
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/relaxng"
@@ -128,4 +130,98 @@ func TestNaiveGroupBacktrackingFlexKinds(t *testing.T) {
 			require.Error(t, verr)
 		})
 	}
+}
+
+// TestMultiFlexibleGroupBacktracking covers groups with two or more flexible
+// members (zeroOrMore/oneOrMore/optional) that must each yield content. The
+// backtracker must cascade reductions recursively so a second flexible member
+// does not re-grab content a later mandatory member needs. This exercises both
+// the naive-group path (backtrackGroupNaive) and the element-content path
+// (backtrackGroupFlexible).
+func TestMultiFlexibleGroupBacktracking(t *testing.T) {
+	t.Parallel()
+
+	naive := func(members string) string {
+		return `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><group>` +
+			members + `</group></start></grammar>`
+	}
+	content := func(members string) string {
+		return `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start>` +
+			`<element name="root"><group>` + members + `</group></element></start></grammar>`
+	}
+	root := `<element name="root"><empty/></element>`
+	a := `<element name="a"><empty/></element>`
+	z := func(p string) string { return `<zeroOrMore>` + p + `</zeroOrMore>` }
+	o := func(p string) string { return `<optional>` + p + `</optional>` }
+
+	cases := []struct {
+		name   string
+		schema string
+		doc    string
+		valid  bool
+	}{
+		// Naive path: two zeroOrMore both yield 0 so the mandatory member matches.
+		{"naive zz+m", naive(z(root) + z(root) + root), `<root/>`, true},
+		// Naive path: optional + zeroOrMore both yield 0 for the mandatory member.
+		{"naive oz+m", naive(o(root) + z(root) + root), `<root/>`, true},
+		// Element-content path: two zeroOrMore yield 0 so the mandatory a matches.
+		{"content zz+m", content(z(a) + z(a) + a), `<root><a/></root>`, true},
+		// Element-content path: with more content, the flexible members can still
+		// consume while leaving exactly one a for the mandatory member.
+		{"content zz+m many", content(z(a) + z(a) + a), `<root><a/><a/><a/></root>`, true},
+		// Guard against false-accept: no element for the mandatory member.
+		{"content zz+m empty rejects", content(z(a) + z(a) + a), `<root></root>`, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			grammar := compileGrammar(t, tc.schema)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.doc))
+			require.NoError(t, err)
+			verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+			if tc.valid {
+				require.NoError(t, verr, "%s should validate", tc.name)
+				return
+			}
+			require.Error(t, verr, "%s should be rejected", tc.name)
+		})
+	}
+}
+
+// TestMultiFlexibleGroupBacktrackingNotExponential guards against a re-introduced
+// algorithmic-complexity DoS: a group of N greedy zeroOrMore members followed by
+// a mandatory member, matched against M elements, drove the cascading backtracker
+// to O(M^N) before group-result memoization was added (N=9/M=25 took ~45s). With
+// memoization each distinct (child-range, input-position) subproblem is computed
+// once, so the same input validates near-instantly.
+func TestMultiFlexibleGroupBacktrackingNotExponential(t *testing.T) {
+	t.Parallel()
+
+	const N, M = 10, 30
+	a := `<element name="a"><empty/></element>`
+	var schema strings.Builder
+	schema.WriteString(`<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><element name="root"><group>`)
+	for range N {
+		schema.WriteString(`<zeroOrMore>` + a + `</zeroOrMore>`)
+	}
+	schema.WriteString(a + `</group></element></start></grammar>`)
+
+	var docStr strings.Builder
+	docStr.WriteString(`<root>`)
+	for range M {
+		docStr.WriteString(`<a/>`)
+	}
+	docStr.WriteString(`</root>`)
+
+	grammar := compileGrammar(t, schema.String())
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
+	require.NoError(t, err)
+
+	start := time.Now()
+	verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+	elapsed := time.Since(start)
+
+	require.NoError(t, verr, "group(zeroOrMore(a) x%d, a) over %d elements should validate", N, M)
+	require.Less(t, elapsed, 5*time.Second, "validation must not be exponential (took %s)", elapsed)
 }

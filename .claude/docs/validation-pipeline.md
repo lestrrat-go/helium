@@ -383,8 +383,22 @@ When mandatory group child fails:
 1. Check if element was consumed (structural vs content error)
 2. For each previous flexible child (zeroOrMore/oneOrMore/optional) from nearest to furthest:
    - Try iteration counts from minimum upward to greedy count
-   - Re-validate remaining children at each count
+   - Re-validate remaining children via the group routine (`validateGroupChildren` /
+     `validateGroupSeq`) so flexible members in the retry range can themselves
+     backtrack — this recovers groups with 2+ flexible members that must each
+     yield (e.g. `group(zeroOrMore(x), zeroOrMore(x), x)`)
    - Keep highest successful count (maximizes consumption — libxml2 semantics)
+
+The recursive retry would be exponential (`O(M^N)` for `N` flexible members over
+`M` elements) without memoization, since the cascading reductions re-explore
+overlapping subproblems. `validateGroupChildren`/`validateGroupSeq` therefore
+cache each call in `validator.groupMemo`, keyed by the inputs that fully determine
+the result (child-range start pattern + length, owning element, first remaining
+node + sequence length, packed `attrUsed`, `suppressDepth>0`, content-vs-naive
+discriminator). A hit reproduces the original call's effect exactly — resulting
+position, attribute usage, appended errors, return value — so memoization is sound
+(no valid document rejected) while collapsing the fan-out to polynomial. Regression
+guard: `TestMultiFlexibleGroupBacktrackingNotExponential`.
 
 Two parallel implementations share this strategy. `validateGroupContent` +
 `backtrackGroupFlexible` runs inside element bodies (threads attrs/attrUsed and
