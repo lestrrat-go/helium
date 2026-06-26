@@ -98,6 +98,30 @@ func TestSortInvalidStableRaisesXTDE0030(t *testing.T) {
 	require.ErrorContains(t, err, "XTDE0030")
 }
 
+// XSLT3-ADV-003: a NON-EMPTY atomic xsl:for-each (atomic-sequence sort path)
+// must validate its sort-key data-type and raise XTDE0030, not silently sort
+// the atomic items as text.
+func TestForEachAtomicInvalidDataTypeRaisesXTDE0030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="('b','a','c')">
+        <xsl:sort select="." data-type="bogus"/>
+        <xsl:value-of select="."/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE0030")
+}
+
 // ENG-004: xsl:perform-sort over an EMPTY sequence must still validate its
 // sort keys, so an invalid collation raises XTDE1035 even with no input.
 func TestPerformSortEmptyValidatesCollation(t *testing.T) {

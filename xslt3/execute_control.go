@@ -120,6 +120,13 @@ func (ec *execContext) execForEach(ctx context.Context, inst *forEachInst) error
 				return err
 			}
 		} else {
+			// Validate sort key attributes even when the selection is empty
+			// (XTDE0030); sortNodes does this internally, sortItems does not.
+			for _, sk := range inst.Sort {
+				if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
+					return err
+				}
+			}
 			seq, err = sortItems(ctx, ec, seq, inst.Sort)
 			if err != nil {
 				return err
