@@ -682,7 +682,15 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		if cfg.timing {
 			t0 = time.Now()
 		}
-		xiProc := xinclude.NewProcessor()
+		// xinclude.NewProcessor() now denies all filesystem access by default;
+		// the CLI processes user-supplied local files, so install the same
+		// permissive (or --path-rooted) FS the parser uses above to preserve the
+		// historical --xinclude behavior of reading includes off disk.
+		xiFS := iofsPermissiveRoot()
+		if dirs := c.pathDirs(cfg); len(dirs) > 0 {
+			xiFS = pathSearchFS{base: iofsPermissiveRoot(), dirs: dirs}
+		}
+		xiProc := xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(xiFS))
 		if cfg.noXIncNode {
 			xiProc = xiProc.NoXIncludeMarkers()
 		}

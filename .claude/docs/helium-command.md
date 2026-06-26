@@ -92,6 +92,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - `--xpath EXPR` → also sets `--noout`
 - `--pretty N>=1` → also sets `--format`
 - `--loaddtd` / `--dtdattr` / `--valid` / `--noent` → external-loading opt-in: each lifts the parser's default `BlockXXE` block and installs a permissive FS (or the `--path` search FS) so the requested external DTD/entity actually loads. Bare `lint` is safe-by-default (`NewParser` blocks external loading and uses a deny-all FS), matching the library.
+- `--xinclude` → `xinclude.NewProcessor()` now denies all FS access by default (safe-by-default, matching the library), so the CLI installs a permissive resolver (`Resolver(NewFSResolver(...))`) backed by the same permissive root — or the `--path` search FS — used by the parser, preserving the historical behavior of reading includes off disk.
 
 ### Output / Input Safety
 

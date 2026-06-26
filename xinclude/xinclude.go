@@ -101,10 +101,13 @@ func (p Processor) NoBaseFixup() Processor {
 	return p
 }
 
-// Resolver sets a custom resource resolver. When unset, an FS-backed
-// resolver opens any OS path verbatim via [os.Open], preserving
-// historical behavior. Callers handling untrusted documents should
-// supply a Resolver backed by a stricter [fs.FS] — see [NewFSResolver].
+// Resolver sets a custom resource resolver. When unset, the processor is
+// secure by default: it uses a deny-all resolver that refuses every
+// filesystem access, so untrusted input cannot disclose local files (mirrors
+// the deny-all default of [helium.NewParser]). To grant access, supply a
+// Resolver backed by a confined [fs.FS] — see [NewFSResolver], e.g.
+// NewFSResolver(fsys) with fsys from [os.Root.FS]. To restore the historical
+// behavior of opening any OS path, pass NewFSResolver([helium.PermissiveFS]()).
 func (p Processor) Resolver(r Resolver) Processor {
 	p = p.clone()
 	p.cfg.resolver = r
@@ -235,6 +238,8 @@ type processor struct {
 	maxIncludeSize  int
 	maxIncludeDepth int
 	parser          *helium.Parser
+	snapshot        *helium.Document // in-memory copy of the entry document for same-document XPointers
+	snapshotURI     string           // base URI the snapshot corresponds to
 	depth           int
 	count           int
 }
@@ -277,7 +282,24 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		txtCache:        make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
-		p.resolver = NewFSResolver(nil)
+		// Secure by default: an unset resolver denies all filesystem access
+		// (mirroring helium.NewParser()'s deny-all FS). Untrusted input cannot
+		// disclose local files via <xi:include href="/etc/passwd"/>. Callers
+		// opt back into host access with Resolver(NewFSResolver(helium.PermissiveFS()))
+		// or, preferably, a confined fs.FS (os.Root.FS).
+		p.resolver = NewFSResolver(iofs.DenyAll{})
+	}
+
+	// Capture a resolver-free snapshot of the entry document so top-level
+	// same-document XPointer references can be evaluated against the original
+	// infoset (before inclusions mutate the tree) without re-reading the base
+	// URI through the resolver. Only taken when such a reference is actually
+	// present, so documents without same-document XPointers pay no copy cost.
+	if doc := ownerDocument(node); doc != nil && hasSameDocumentXPointer(node) {
+		if snap := snapshotForXPointer(doc); snap != nil {
+			p.snapshot = snap
+			p.snapshotURI = p.baseURI
+		}
 	}
 
 	if err := p.processNode(ctx, node); err != nil {
@@ -384,19 +406,25 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 		if err != nil {
 			return p.handleFallback(inc, fmt.Errorf("xi:include: cannot resolve URI %q: %w", href, err))
 		}
-	} else if fragment != "" && p.baseURI != "" {
-		// href="#fragment" with base URI set → load document from base URI
-		resolved = p.baseURI
 	}
-	// else: href absent, xpointer only → same-document (resolved stays "")
+	// else: the href had no document part (a pure fragment such as href="#a", or
+	// the href attribute was absent and only an xpointer was given) → this is a
+	// same-document reference. Leave resolved empty so includeXMLWithXPointer
+	// takes the in-memory snapshot path rather than re-loading the base URI
+	// through the resolver — which, under the deny-all default resolver, would
+	// fail even though the target is the current document.
 
-	// Circular inclusion check key includes xpointer expression
+	// Circular inclusion check key includes xpointer expression. For a
+	// same-document reference (resolved == "") the key must also carry the
+	// current document identity (p.baseURI); otherwise every fragment-only
+	// include collapses to the literal "#xptr" and an included document's own
+	// same-document include would collide with the includer's.
 	circularKey := resolved
 	if xptrExpr != "" {
 		if resolved != "" {
 			circularKey = resolved + "#" + xptrExpr
 		} else {
-			circularKey = "#" + xptrExpr
+			circularKey = p.baseURI + "#" + xptrExpr
 		}
 	}
 	if p.expanding[circularKey] {
@@ -508,15 +536,27 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	var err error
 
 	if uri == "" {
-		// Same-document reference: evaluate against a fresh parse of the
-		// current document (via base URI) to avoid seeing nodes that were
-		// inserted by previous XInclude processing in this pass.
-		if p.baseURI != "" {
+		// Same-document reference. It must be evaluated against the original
+		// document infoset (before any nodes were inserted by earlier XInclude
+		// processing in this pass), but it needs no filesystem access, so it
+		// must NOT go through the resolver — doing so would re-load the base
+		// URI and fail under the deny-all default resolver.
+		//
+		// For a top-level same-document reference we use the in-memory snapshot
+		// of the entry document taken before processing began. Inside an
+		// included document (p.baseURI has been switched to that document's URI
+		// during recursion) the original bytes are available via loadXMLDoc's
+		// cache, so re-parse from there; this only reaches the resolver when an
+		// FS-backed resolver was already used to load that included document.
+		switch {
+		case p.snapshot != nil && p.baseURI == p.snapshotURI:
+			doc = p.snapshot
+		case p.baseURI != "":
 			doc, err = p.loadXMLDoc(ctx, p.baseURI, p.baseURI, true)
 			if err != nil {
 				return err
 			}
-		} else {
+		default:
 			doc = inc.OwnerDocument()
 		}
 	} else {
@@ -579,8 +619,10 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	p.replaceWithNodes(inc, copies)
 	p.count++
 
-	// Circular detection key
-	circularKey := "#" + xptrExpr
+	// Circular detection key. For a same-document reference (uri == "") the key
+	// carries the current document identity (p.baseURI) so it matches the key
+	// computed in processNode and does not collide across documents.
+	circularKey := p.baseURI + "#" + xptrExpr
 	if uri != "" {
 		circularKey = uri + "#" + xptrExpr
 	}
@@ -754,10 +796,10 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	// resolve through the SAME sandbox as XInclude itself, not the parser's
 	// default permissive filesystem. Otherwise an attacker-supplied included
 	// document could expand a SYSTEM entity (e.g. "/etc/passwd") off the host
-	// filesystem, bypassing a strict Resolver (XXE). For the default
-	// permissive resolver this is identical to the previous behavior; a custom
-	// (non-FS) resolver gets a deny-all FS so inner SYSTEM references cannot
-	// reach the host.
+	// filesystem, bypassing a strict Resolver (XXE). The default resolver is
+	// deny-all, so inner SYSTEM references are blocked unless the caller opts
+	// into an FS-backed resolver; a custom (non-FS) resolver gets a deny-all FS
+	// so inner SYSTEM references cannot reach the host.
 	//
 	// Detection uses the fsBacked capability interface rather than a concrete
 	// *fsResolver assertion so callers can wrap NewFSResolver (e.g. for
@@ -975,6 +1017,132 @@ func checkMultiRootInclusion(inc *helium.Element, nodes []helium.Node) error {
 		return fmt.Errorf("xi:include: would result in no root node")
 	}
 	return nil
+}
+
+// ownerDocument returns the document owning n, or n itself when n is a Document.
+func ownerDocument(n helium.Node) *helium.Document {
+	if n == nil {
+		return nil
+	}
+	if doc, ok := helium.AsNode[*helium.Document](n); ok {
+		return doc
+	}
+	return n.OwnerDocument()
+}
+
+// snapshotForXPointer builds the resolver-free, ID-preserving snapshot of the
+// entry document used to evaluate top-level same-document XPointer references
+// against the original infoset (before inclusions mutate the tree).
+//
+// helium.CopyDoc alone is insufficient: it reproduces the tree and the internal
+// DTD subset but drops the ID-resolution state that XPointer shorthand pointers
+// depend on (they resolve via Document.GetElementByID). Without carrying that
+// state a source parsed with SkipIDs(true) would wrongly START resolving
+// xml:id/ID attributes in the copy, and a source whose ids were declared in an
+// external DTD subset would resolve FEWER ids than the original. So the snapshot
+// additionally:
+//
+//   - carries the source's SkipIDs state (authoritative for GetElementByID), so
+//     a SkipIDs source yields a snapshot that resolves NO ids;
+//   - carries the source's external DTD subset (CopyDoc copies only the internal
+//     subset), which GetElementByID's lazy fallback consults for ID-typed
+//     attribute declarations;
+//   - rebuilds the copy's interned ID table by translating each source ID entry's
+//     element through the source->copy element correspondence, so a parsed
+//     source's ids resolve to the copy's elements rather than the source's.
+//
+// Returns nil when the copy fails; the caller then falls back to evaluating
+// against the live (possibly mutated) document.
+func snapshotForXPointer(doc *helium.Document) *helium.Document {
+	snap, err := helium.CopyDoc(doc)
+	if err != nil {
+		return nil
+	}
+
+	// Authoritative ID-skip state first: a SkipIDs source must resolve no ids in
+	// the snapshot either.
+	snap.SetSkipIDs(doc.SkipIDs())
+
+	// CopyDoc copies only the internal subset; carry the external subset too so
+	// the lazy GetElementByID fallback sees the same ID-typed ATTLIST decls.
+	helium.CopyExtSubset(doc, snap)
+
+	// Rebuild the interned ID table by element correspondence. Skip when the
+	// source skips ids (nothing resolves) or has no interned table (an API-built
+	// source relies on the lazy fallback, already reproduced via the DTD subsets).
+	srcIDs := doc.IDTable()
+	if doc.SkipIDs() || len(srcIDs) == 0 {
+		return snap
+	}
+
+	// CopyDoc reproduces the element spine 1:1 in document order, so a parallel
+	// pre-order walk of both trees yields the source->copy element correspondence.
+	var srcElems, cpElems []*helium.Element
+	collectElementsPreorder(doc, &srcElems)
+	collectElementsPreorder(snap, &cpElems)
+	if len(srcElems) != len(cpElems) {
+		// Defensive: shapes diverged unexpectedly; skip the rebuild rather than
+		// risk mismapping ids onto the wrong elements.
+		return snap
+	}
+	idx := make(map[*helium.Element]*helium.Element, len(srcElems))
+	for i := range srcElems {
+		idx[srcElems[i]] = cpElems[i]
+	}
+	for id, srcElem := range srcIDs {
+		if cp := idx[srcElem]; cp != nil {
+			snap.RegisterID(id, cp)
+		}
+	}
+	return snap
+}
+
+// collectElementsPreorder appends every element descendant of n (document order,
+// pre-order) to out. It descends only through element nodes — matching
+// helium.CopyDoc, which does not copy elements nested inside entity-reference
+// expansions — so the source and copy walks stay aligned.
+func collectElementsPreorder(n helium.Node, out *[]*helium.Element) {
+	for c := range helium.Children(n) {
+		if elem, ok := helium.AsNode[*helium.Element](c); ok {
+			*out = append(*out, elem)
+			collectElementsPreorder(elem, out)
+		}
+	}
+}
+
+// hasSameDocumentXPointer reports whether n or any descendant is an xi:include
+// that references the current document via an XPointer (no href, or an href
+// that is only a fragment). Used to decide whether a snapshot of the entry
+// document is needed before processing begins.
+func hasSameDocumentXPointer(n helium.Node) bool {
+	if isXInclude(n) {
+		if elem, ok := helium.AsNode[*helium.Element](n); ok && isSameDocumentInclude(elem) {
+			return true
+		}
+	}
+	for c := range helium.Children(n) {
+		if hasSameDocumentXPointer(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSameDocumentInclude reports whether elem is an xi:include whose target is
+// the current document: it has an XPointer (via the xpointer attribute or an
+// href fragment) and no document-selecting href.
+func isSameDocumentInclude(elem *helium.Element) bool {
+	href := getAttr(elem, "href")
+	xptr := getAttr(elem, "xpointer")
+	var fragment string
+	if idx := strings.IndexByte(href, '#'); idx >= 0 {
+		fragment = href[idx+1:]
+		href = href[:idx]
+	}
+	if href != "" {
+		return false
+	}
+	return xptr != "" || fragment != ""
 }
 
 func isXInclude(n helium.Node) bool {
@@ -1398,10 +1566,12 @@ func isFileURI(href string) bool {
 	return u.Scheme == lexicon.SchemeFile
 }
 
-// fsResolver resolves URIs by reading from an [fs.FS]. The default FS
-// is [iofs.PermissiveRoot] which opens any OS path verbatim; callers
-// handling untrusted input should construct one with a stricter fs.FS
-// via [NewFSResolver].
+// fsResolver resolves URIs by reading from an [fs.FS]. Passing a nil fsys to
+// [NewFSResolver] yields [iofs.PermissiveRoot], which opens any OS path
+// verbatim; callers handling untrusted input should construct one with a
+// stricter fs.FS via [NewFSResolver]. Note that a Processor with no resolver
+// configured does NOT use this permissive form — it denies all access (see
+// [Processor.Resolver]).
 type fsResolver struct {
 	fsys fs.FS
 }
