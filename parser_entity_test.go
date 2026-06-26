@@ -526,6 +526,64 @@ func TestExternalPublicParameterEntityCaptured(t *testing.T) {
 	require.Equal(t, "-//x//pe", ent.ExternalID(), "the public ID must be the external ID")
 }
 
+// TestExternalParameterEntityContentLoaded proves that referencing an external
+// SYSTEM parameter entity in the external subset actually loads its content and
+// applies the declarations it contains. The external PE pe.ent declares a general
+// entity; with external DTD loading enabled that entity must be registered,
+// proving the external PE content was pulled in and parsed (not silently dropped).
+func TestExternalParameterEntityContentLoaded(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		"pe.ent": {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ctrlOK := doc.GetEntity("ctrl")
+	require.True(t, ctrlOK, "control general entity must be stored, proving the external subset loaded")
+
+	ent, ok := doc.GetEntity("fromPE")
+	require.True(t, ok, "the general entity declared inside the external PE must be registered")
+	require.Equal(t, "loaded-from-external-pe", string(ent.Content()))
+}
+
+// TestExternalParameterEntityNotLoadedSecureDefault proves the secure default
+// (XXE blocked) loads no external parameter entity content: with the default
+// parser the external subset is not loaded at all, so the general entity declared
+// inside the external PE is absent. Behavior is unchanged from before the fix.
+func TestExternalParameterEntityNotLoadedSecureDefault(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		"pe.ent": {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ok := doc.GetEntity("fromPE")
+	require.False(t, ok, "secure default must not load external parameter entity content")
+}
+
 // TestEntityValueRefValidationIsSideEffectFree proves that the reference
 // validation in parseEntityValue does NOT perturb the entity-amplification
 // accounting. validateEntityValueRefs PE-expands the literal to scan for

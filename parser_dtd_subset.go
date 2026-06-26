@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
 )
@@ -541,6 +543,35 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			if err := pctx.warning(ctx, "Internal: %%%s; is not a parameter entity\n", name); err != nil {
 				return err
 			}
+		} else if etype == enum.ExternalParameterEntity {
+			// External parameter entity: the replacement text is the content of
+			// the referenced external resource, not inline text. Load it from
+			// the resolver (gated by the XXE secure default) and push the RAW
+			// bytes so the surrounding DTD declaration loop parses them — the
+			// same mechanism the external subset body uses. This must NOT go
+			// through decodeEntities like an internal PE: the loaded resource is
+			// a DTD fragment whose own references are resolved lexically during
+			// declaration parsing. When external loading is disabled the load
+			// returns empty content and behavior is unchanged (no input pushed).
+			ent, ok := entity.(*Entity)
+			if !ok {
+				return pctx.error(ctx, errors.New("internal: external parameter entity is not *helium.Entity"))
+			}
+			content, err := pctx.loadExternalParameterEntityContent(ctx, ent)
+			if err != nil {
+				return err
+			}
+			// Charge the loaded bytes (plus the per-reference fixed cost) against
+			// the amplification guard so a small DTD cannot reference a large
+			// external PE repeatedly to drive unbounded expansion.
+			if err := pctx.entityCheck(entity, len(content)); err != nil {
+				return pctx.error(ctx, err)
+			}
+			if len(content) > 0 {
+				pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(content)))
+			}
+			pctx.hasPERefs = true
+			return nil
 		} else {
 			// Capture the PE's replacement text once: Entity.Content()
 			// allocates a fresh []byte copy on every call, so we reuse this
@@ -576,4 +607,53 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 	}
 	pctx.hasPERefs = true
 	return nil
+}
+
+// loadExternalParameterEntityContent returns the replacement text of an external
+// parameter entity, loading it from the resolved external resource on first use
+// and caching it on the entity for subsequent references. External loading
+// honors the parser's secure-default gating: when XXE loading is disabled
+// (parseNoXXE) or the resolver declines to open the resource, nothing is loaded
+// and empty content is returned, leaving the caller's behavior unchanged. The
+// read is byte-capped (externalEntityMaxBytes) and the opened input is closed as
+// soon as the bounded read completes, mirroring parseExternalEntityPrivate.
+func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, error) {
+	if len(e.content) > 0 {
+		return []byte(e.content), nil
+	}
+	if pctx.options.IsSet(parseNoXXE) {
+		return nil, nil
+	}
+
+	var input sax.ParseInput
+	if s := pctx.sax; s != nil {
+		resolved, err := s.ResolveEntity(ctx, e.externalID, e.URI())
+		switch err {
+		case nil:
+			input = resolved
+		case sax.ErrHandlerUnspecified:
+		default:
+			return nil, pctx.error(ctx, err)
+		}
+	}
+	if input == nil {
+		return nil, nil
+	}
+
+	// Read through a bounded reader so an unbounded source cannot exhaust memory,
+	// and close the input immediately at the read boundary (not deferred) so an
+	// underlying OS resource is never held open for the lifetime of the parse.
+	content, exceeded, err := iolimit.ReadAll(input, externalEntityMaxBytes)
+	if c, ok := input.(io.Closer); ok {
+		_ = c.Close()
+	}
+	if err != nil {
+		return nil, pctx.error(ctx, fmt.Errorf("reading external parameter entity: %w", err))
+	}
+	if exceeded {
+		return nil, pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
+	}
+
+	e.content = string(content)
+	return content, nil
 }
