@@ -46,8 +46,12 @@ func TestJoinURIReference(t *testing.T) {
 		{"first-segment-survives-trailing-dotdot", "a/b/", "../..", "a/.."},
 		{"foo-bar-up-up", "foo/bar", pathUpUpX, pathUpX},
 		{"abc-up-up-d", "a/b/c/", "../../d", "a/d"},
-		// Percent-encoding is preserved (no decode round-trip).
-		{"percent-encoded-path", "a%20b/", "c", "a%20b/c"},
+		// A space round-trips to %20, but an encoded delimiter is decoded: libxml2
+		// unescapes the path, normalizes, then re-escapes.
+		{"space-roundtrips", "a%20b/", "c", "a%20b/c"},
+		{"encoded-slash-decoded", "a%2fb/", "c", "a/b/c"},
+		{"encoded-dot-decoded", "a%2Eb/", "c", "a.b/c"},
+		{"encoded-slash-dotdot", "%2F..%2Fx/", "c", "/x/c"},
 		// Empty-but-present authority (file:///) is preserved.
 		{"file-empty-authority", "file:///a/b", "c", "file:///a/c"},
 	}

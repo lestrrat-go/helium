@@ -41,7 +41,10 @@ func joinURIReference(base, ref string) string {
 		return ref
 	}
 
-	refPath := refURL.EscapedPath()
+	// Work on the decoded path (like libxml2, which unescapes on parse): an
+	// encoded delimiter such as %2F acts as "/", and %2E as ".". The result is
+	// re-escaped on output by resolvedURI.String.
+	refPath := refURL.Path
 	refHasAuthority := uriHasAuthority(ref)
 	refQuery, refHasQuery := refURL.RawQuery, refURL.RawQuery != "" || refURL.ForceQuery
 	refFrag, refHasFrag := refURL.EscapedFragment(), strings.Contains(ref, "#")
@@ -55,7 +58,7 @@ func joinURIReference(base, ref string) string {
 		r.scheme = baseURL.Scheme
 		r.hasAuthority = uriHasAuthority(base)
 		r.authority = authorityOf(baseURL)
-		r.path = baseURL.EscapedPath()
+		r.path = baseURL.Path
 		if refHasQuery {
 			r.query, r.hasQuery = refQuery, true
 		} else {
@@ -88,7 +91,7 @@ func joinURIReference(base, ref string) string {
 		r.scheme = baseURL.Scheme
 		r.hasAuthority = baseHasAuthority
 		r.authority = authorityOf(baseURL)
-		r.path = normalizeURIPath(mergePaths(baseURL.EscapedPath(), refPath, baseHasAuthority))
+		r.path = normalizeURIPath(mergePaths(baseURL.Path, refPath, baseHasAuthority))
 		r.query, r.hasQuery = refQuery, refHasQuery
 		r.fragment, r.hasFragment = refFrag, refHasFrag
 	}
@@ -120,7 +123,7 @@ func (r resolvedURI) String() string {
 		b.WriteString("//")
 		b.WriteString(r.authority)
 	}
-	b.WriteString(r.path)
+	b.WriteString(escapeURIPath(r.path))
 	if r.hasQuery {
 		b.WriteString("?")
 		b.WriteString(r.query)
@@ -130,6 +133,46 @@ func (r resolvedURI) String() string {
 		b.WriteString(r.fragment)
 	}
 	return b.String()
+}
+
+const uriHexUpper = "0123456789ABCDEF"
+
+// escapeURIPath re-escapes a decoded path with the exact character set libxml2's
+// xmlSaveUri keeps unescaped in a path: unreserved (alphanumerics and
+// "-_.!~*'()"), plus "/;@&=+$,". Every other byte becomes %XX (uppercase). This
+// mirrors libxml2's unescape-on-parse / escape-on-save round trip, so e.g. a
+// space round-trips to %20 while "/" and "." stay literal.
+func escapeURIPath(path string) string {
+	if !strings.ContainsFunc(path, func(r rune) bool { return r > 127 || !isPathSafe(byte(r)) }) {
+		return path
+	}
+	var b strings.Builder
+	b.Grow(len(path))
+	for i := range len(path) {
+		c := path[i]
+		if isPathSafe(c) {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(uriHexUpper[c>>4])
+		b.WriteByte(uriHexUpper[c&0x0f])
+	}
+	return b.String()
+}
+
+func isPathSafe(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	}
+	switch c {
+	case '-', '_', '.', '!', '~', '*', '\'', '(', ')': // unreserved marks
+		return true
+	case '/', ';', '@', '&', '=', '+', '$', ',': // path-allowed reserved
+		return true
+	}
+	return false
 }
 
 // uriHasAuthority reports whether a URI reference carries an authority ("//…"),
