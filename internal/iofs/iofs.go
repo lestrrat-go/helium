@@ -88,6 +88,14 @@ func FileURIToPath(ref string) (string, error) {
 		return "", fmt.Errorf("invalid file URI %q: no local path", ref)
 	}
 
+	// A "file:////server/share" URI parses to an empty host with a path that
+	// begins with "//"; on Windows filepath.FromSlash would turn that into a UNC
+	// path (\\server\share) reaching a remote SMB host, defeating the local-only
+	// policy. Reject the UNC form outright.
+	if strings.HasPrefix(u.Path, "//") {
+		return "", fmt.Errorf("UNC file URI %q is not a local path", ref)
+	}
+
 	return fileURIPathFor(runtime.GOOS, u.Path), nil
 }
 

@@ -358,6 +358,14 @@ func localFilePath(uri string) (string, error) {
 		return "", fmt.Errorf("unsupported file URI host %q: only local files are allowed", u.Host)
 	}
 
+	// A "file:////server/share" URI parses to an empty host with a path that
+	// begins with "//"; on Windows that path becomes a UNC path (\\server\share)
+	// reaching a remote SMB host, defeating the local-only policy. Reject the UNC
+	// form outright.
+	if strings.HasPrefix(u.Path, "//") {
+		return "", fmt.Errorf("unsupported UNC file URI %q: only local files are allowed", uri)
+	}
+
 	// u.Path is already percent-decoded by url.Parse.
 	return fileURIPathToLocal(u.Path, filepath.Separator == '\\'), nil
 }
