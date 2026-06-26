@@ -204,28 +204,46 @@ func nameClassContains(outer, inner *nameClass) bool {
 	case ncName:
 		return nameClassMatches(outer, inner.name, inner.ns)
 	case ncNsName:
-		return nameClassCoversNS(outer, inner.ns)
+		// inner = nsName(inner.ns) minus inner.except, so outer need only cover
+		// the names inner actually matches — namespace inner.ns with inner.except
+		// removed — NOT all of inner.ns. Threading inner.except lets an outer
+		// nsName/anyName carrying its OWN finite except still contain inner.
+		return nameClassCoversNSExcept(outer, inner.ns, inner.except)
 	case ncAnyName:
 		return nameClassCoversAll(outer)
 	}
 	return false
 }
 
-// nameClassCoversNS reports whether outer certainly matches every name in
-// namespace ns. A finite set of ncName leaves can never cover an infinite
-// namespace, so only an except-free anyName, a matching except-free nsName, or
-// a choice containing one of those qualifies.
-func nameClassCoversNS(outer *nameClass, ns string) bool {
+// nameClassCoversNSExcept reports whether outer certainly matches every name in
+// namespace ns that is NOT matched by innerExcept (i.e. outer ⊇ nsName(ns)
+// except innerExcept). A finite set of ncName leaves can never cover an
+// (infinite) namespace, so only an anyName/nsName whose own except is itself
+// contained by innerExcept, or a choice containing one of those, qualifies.
+// When innerExcept is nil this reduces to "outer covers every name in ns".
+func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass) bool {
 	if outer == nil {
 		return false
 	}
 	switch outer.kind {
 	case ncAnyName:
-		return outer.except == nil
+		// anyName except outer.except covers (ns \ innerExcept) iff every name
+		// outer.except removes is already removed by innerExcept.
+		if outer.except == nil {
+			return true
+		}
+		return nameClassContains(innerExcept, outer.except)
 	case ncNsName:
-		return outer.ns == ns && outer.except == nil
+		if outer.ns != ns {
+			return false
+		}
+		if outer.except == nil {
+			return true
+		}
+		return nameClassContains(innerExcept, outer.except)
 	case ncChoice:
-		return nameClassCoversNS(outer.left, ns) || nameClassCoversNS(outer.right, ns)
+		return nameClassCoversNSExcept(outer.left, ns, innerExcept) ||
+			nameClassCoversNSExcept(outer.right, ns, innerExcept)
 	}
 	return false
 }

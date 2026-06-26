@@ -104,4 +104,62 @@ func TestNameClassOverlapExceptChoice(t *testing.T) {
 		require.NotEmpty(t, compile(t, schema),
 			"anyName-except{foo} still overlaps nsName(X) on every other name in X and must conflict")
 	})
+
+	// anyName except (nsName(X) except name(foo)) excludes every name in X but
+	// foo, so within X it matches ONLY foo. nsName(X) except name(foo) matches
+	// every name in X but foo. The two are disjoint (no shared name) and must
+	// compile — the excluded class carries its own finite except, which the
+	// containment check must recurse into rather than bail on.
+	t.Run("disjoint anyName-except-nsName-except vs nsName-except compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except>
+            <nsName ns="http://example.com/X">
+              <except><name ns="http://example.com/X">foo</name></except>
+            </nsName>
+          </except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X">
+          <except><name ns="http://example.com/X">foo</name></except>
+        </nsName>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"anyName except (nsName(X) except foo) and nsName(X) except foo share no name and must not conflict")
+	})
+
+	// anyName except (nsName(X) except name(foo)) matches only foo within X.
+	// nsName(X) except name(bar) matches every name in X but bar, which INCLUDES
+	// foo (foo != bar). They share foo@X, genuinely overlap, and must conflict.
+	t.Run("genuinely overlapping anyName-except-nsName-except vs nsName-except errors", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except>
+            <nsName ns="http://example.com/X">
+              <except><name ns="http://example.com/X">foo</name></except>
+            </nsName>
+          </except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X">
+          <except><name ns="http://example.com/X">bar</name></except>
+        </nsName>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"both classes match foo@X and must conflict")
+	})
 }
