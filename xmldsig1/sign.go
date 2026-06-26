@@ -23,6 +23,12 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 		return err
 	}
 
+	// Reject invalid transform pipelines before building or mutating any nodes,
+	// so a rejected pipeline leaves the input tree untouched.
+	if err := preflightSignerTransforms(cfg); err != nil {
+		return err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return err
@@ -76,6 +82,13 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	// content into the <Object>, so a rejected default-SHA-1 request leaves the
 	// input nodes unmoved and the input tree untouched.
 	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
+	}
+
+	// Reject invalid transform pipelines before building nodes or moving caller
+	// content into the <Object>, so a rejected pipeline leaves the input nodes
+	// unmoved and the input tree untouched.
+	if err := preflightSignerTransforms(cfg); err != nil {
 		return nil, err
 	}
 
@@ -136,6 +149,11 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 
 	// Reject weak (SHA-1) algorithms before building or mutating any nodes.
 	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
+	}
+
+	// Reject invalid transform pipelines before building or mutating any nodes.
+	if err := preflightSignerTransforms(cfg); err != nil {
 		return nil, err
 	}
 
@@ -238,15 +256,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	// would. The output begins as a node-set; an octet-producing c14n transform
 	// ends the pipeline, and when no c14n transform is configured the default
 	// node-set->octet conversion is inclusive Canonical XML 1.0.
-	steps := make([]transformStep, len(ref.Transforms))
-	for i, t := range ref.Transforms {
-		step := transformStep{algorithm: t.URI()}
-		if exc, ok := t.(excC14NTransform); ok {
-			step.prefixes = exc.prefixes
-		}
-		steps[i] = step
-	}
-	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(steps)
+	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(transformSteps(ref))
 	if err != nil {
 		return err
 	}

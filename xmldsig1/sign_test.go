@@ -156,6 +156,42 @@ func TestSign(t *testing.T) {
 		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
 	})
 
+	// invalid transform pipeline on enveloping is preflighted: a transform list
+	// rejected by resolveTransformPipeline (here Enveloped ordered after a c14n
+	// transform) must return ErrUnsupportedTransform WITHOUT moving the caller's
+	// content into an <Object> or otherwise mutating the input document.
+	t.Run("invalid transform pipeline leaves caller DOM unchanged", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		before, err := helium.WriteString(doc)
+		require.NoError(t, err)
+
+		payload := doc.CreateElement("Payload")
+		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#d1",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				// c14n transform produces octets; the trailing Enveloped is
+				// ordered after canonicalization and is rejected.
+				Transforms: []xmldsig1.Transform{xmldsig1.ExcC14NTransform(), xmldsig1.Enveloped()},
+			})
+
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, xmldsig1.ErrUnsupportedTransform)
+		require.Nil(t, sigElem)
+
+		// The caller's payload was never moved into an <Object>.
+		require.Nil(t, payload.Parent())
+		// The input document is byte-for-byte unchanged (no Signature added).
+		require.Nil(t, findSignatureElement(doc.DocumentElement()))
+		after, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, before, after)
+	})
+
 	// external reference rejected drives resolveReference's external-URI
 	// (non-fragment) rejection branch.
 	t.Run("external reference rejected", func(t *testing.T) {

@@ -64,6 +64,37 @@ type transformStep struct {
 	prefixes  []string
 }
 
+// transformSteps converts a ReferenceConfig's typed Transform list into the
+// algorithm-agnostic steps consumed by resolveTransformPipeline, so the signing
+// preflight and the per-reference digest path interpret a transform list
+// identically.
+func transformSteps(ref ReferenceConfig) []transformStep {
+	steps := make([]transformStep, len(ref.Transforms))
+	for i, t := range ref.Transforms {
+		step := transformStep{algorithm: t.URI()}
+		if exc, ok := t.(excC14NTransform); ok {
+			step.prefixes = exc.prefixes
+		}
+		steps[i] = step
+	}
+	return steps
+}
+
+// preflightSignerTransforms validates every Reference's transform pipeline
+// BEFORE any DOM mutation or node moves. Every sign entry point calls this
+// first so that a rejected pipeline (an unsupported transform, or a transform
+// ordered after canonicalization) returns its error without moving caller
+// content into an <Object>, adding a Signature element, or otherwise mutating
+// the input tree.
+func preflightSignerTransforms(cfg *signerConfig) error {
+	for _, ref := range cfg.references {
+		if _, _, _, err := resolveTransformPipeline(transformSteps(ref)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // resolveTransformPipeline interprets an ordered XMLDSig Reference transform
 // list and returns the effective canonicalization method, its
 // inclusive-namespace prefixes, and whether an enveloped-signature transform is
