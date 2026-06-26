@@ -28,7 +28,12 @@ type parseConfig struct {
 	// match (e.g. "&ampZ", the "amp" prefix resolving with "Z" echoed) — is exempt
 	// only when its whole consumed run ("&" + name) fits the cap; over the cap it
 	// hard-fails with ErrContentSizeExceeded and emits NOTHING, uniformly across
-	// the short within-lookahead path and the saturated ambiguous path. Zero
+	// the short within-lookahead path and the saturated ambiguous path. Under
+	// noBlanks (StripBlanks) the soft cap on normal data-state text also has a
+	// hard-fail case: a run is suppressed only when entirely whitespace, so the
+	// scanner cannot flush a run whose leading whitespace prefix reaches the cap
+	// with more whitespace beyond it without buffering unbounded to decide
+	// significance — such a run fails with ErrContentSizeExceeded. Zero
 	// selects defaultMaxContentSize. It
 	// guards against unbounded memory growth on a gigantic or unterminated section.
 	maxContentSize int

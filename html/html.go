@@ -125,6 +125,18 @@ func (p Parser) Strict(v bool) Parser {
 // this size before its terminator fails the parse with [ErrContentSizeExceeded]
 // rather than emitting a truncated node.
 //
+// StripBlanks exception: under [Parser.StripBlanks](true) the soft cap on
+// normal data-state text has one HARD-fail case. A text run is suppressed only
+// when EVERY byte is whitespace, a decision that cannot be made until the run's
+// first non-whitespace byte (or its end) is seen. The scanner therefore refuses
+// to flush a run whose leading whitespace prefix alone reaches the cap with yet
+// more whitespace beyond it, because doing so would require buffering the run
+// unbounded to learn whether it is significant. Such a run fails the parse with
+// [ErrContentSizeExceeded] rather than parsing successfully. Once a
+// non-whitespace byte is seen the run is known significant and is chunked
+// normally (its leading whitespace, including the whole first non-whitespace
+// rune even when the cap splits it, rides along in the first chunk).
+//
 // A value <= 0 selects the default (16 MiB).
 //
 // Default: 16 MiB.

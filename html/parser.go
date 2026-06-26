@@ -542,7 +542,7 @@ func (p *parser) parse(ctx context.Context) error {
 				_ = p.cur.Advance(1)
 			}
 		} else {
-			p.parseCharacters()
+			p.parseCharacters(ctx)
 		}
 	}
 
@@ -882,7 +882,7 @@ func (p *parser) parseDoctype() {
 }
 
 // parseCharacters parses character data (text content).
-func (p *parser) parseCharacters() {
+func (p *parser) parseCharacters(ctx context.Context) {
 	// Collect text up to the next '<' or '&'.
 	// We need to split at whitespace→non-whitespace boundaries when inside
 	// <head> so that whitespace is emitted in <head> and non-whitespace
@@ -924,6 +924,7 @@ func (p *parser) parseCharacters() {
 	// elsewhere.
 	noBlanks := p.cfg.noBlanks
 	sawNonWS := false
+	firstNWS := -1
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -937,6 +938,9 @@ func (p *parser) parseCharacters() {
 		}
 		if !isWhitespaceByte(b) {
 			sawNonWS = true
+			if firstNWS < 0 {
+				firstNWS = n
+			}
 		}
 		n++
 		if n < limit {
@@ -974,6 +978,21 @@ func (p *parser) parseCharacters() {
 	// A cap-truncated run may land mid-rune; back off to a whole-rune boundary
 	// so the emitted chunk is valid UTF-8.
 	n = p.clampTextChunkToRune(n, limit)
+
+	// Under noBlanks, clamping must not reduce a run already known significant
+	// to a whitespace-only prefix. When the cap falls inside the FIRST
+	// non-whitespace rune (e.g. " é" under MaxContentSize(1)), clampTextChunkToRune
+	// backs n off to the whitespace boundary before that rune, leaving an
+	// all-whitespace chunk that emitCharacters then suppresses — dropping the
+	// significant leading whitespace. Extend the chunk to cover that whole first
+	// non-whitespace rune so the leading whitespace rides along with it and the
+	// chunk is no longer all-whitespace.
+	if noBlanks && firstNWS >= 0 && n <= firstNWS {
+		n = firstNWS + 1
+		for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
+			n++
+		}
+	}
 
 	if n > 0 {
 		text := p.cur.PeekString(n)
@@ -1019,9 +1038,13 @@ func (p *parser) parseCharacters() {
 		return
 	}
 
-	// Handle entity references in character data
+	// Handle entity references in character data. Use the cap-aware variant so a
+	// long unresolved named/numeric reference is bounded (named via a fixed
+	// lookahead, numeric via chunked digit consumption) exactly like the
+	// RCDATA path, instead of buffering the whole run through unbounded
+	// parseWhile scans.
 	if !p.cur.Done() && p.cur.Peek() == '&' {
-		p.parseCharRef()
+		p.parseCharRefBounded(ctx, p.cfg.contentLimit())
 	}
 }
 
@@ -1141,44 +1164,6 @@ func (p *parser) scanNumericCharRef() (codepoint int, haveDigits bool) {
 	return codepoint, haveDigits
 }
 
-// parseCharRef handles entity references (&name; or &#num; or &#xhex;).
-// Emits the resolved value as a Characters SAX event (entity splitting behavior).
-func (p *parser) parseCharRef() {
-	// Entity content is non-whitespace — ensure implied elements
-	p.htmlStartCharData()
-
-	_ = p.cur.Advance(1) // skip '&'
-
-	if p.cur.Peek() == '#' {
-		codepoint, haveDigits := p.scanNumericCharRef()
-		p.emitNumericCharRef(codepoint, haveDigits)
-		return
-	}
-
-	// Named entity
-	name := p.parseWhile(isAlphanumeric)
-	hasSemicolon := false
-	if p.cur.Peek() == ';' {
-		hasSemicolon = true
-		_ = p.cur.Advance(1)
-	}
-
-	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
-		_ = p.emitCharacters([]byte(val))
-		if remainder != "" {
-			_ = p.emitCharacters([]byte(remainder))
-		}
-		return
-	}
-
-	// Unknown entity — emit as literal text
-	text := "&" + name
-	if hasSemicolon {
-		text += ";"
-	}
-	_ = p.emitCharacters([]byte(text))
-}
-
 // maxEntityNameLen is one past the length of the longest named HTML entity
 // ("CounterClockwiseContourIntegral", 31 chars). An alphanumeric run reaching
 // this length cannot match any known entity, so the char-ref scan can stop and
@@ -1192,11 +1177,11 @@ const maxEntityNameLen = 32
 const saturatedCharRefChunk = 4096
 
 // parseCharRefBounded handles an entity reference inside cap-aware content
-// (RCDATA: title/textarea) where the surrounding text is flushed to SAX in
-// chunks no larger than limit. It makes the SAME entity-resolution decisions as
-// parseCharRef — numeric references (including overlong/leading-zero/overflow
-// runs) normalize to their HTML5 output (U+FFFD on overflow/invalid), and named
-// references resolve identically including legacy-prefix matching.
+// (the normal data state and RCDATA: title/textarea) where the surrounding
+// text is flushed to SAX in chunks no larger than limit. Numeric references
+// (including overlong/leading-zero/overflow runs) normalize to their HTML5
+// output (U+FFFD on overflow/invalid), and named references resolve including
+// legacy-prefix matching.
 //
 // Memory AND bytes-read work are kept bounded by two independent budgets:
 //
@@ -1281,7 +1266,8 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	}
 
 	// The lookahead SATURATES when the alphanumeric run reaches the fixed window
-	// AND keeps going. parseCharRef scans the WHOLE run before deciding, so its
+	// AND keeps going. The reference algorithm scans the WHOLE run before
+	// deciding, so its
 	// resolveNamedEntity sees the full (over-long) name; a long ';'-terminated
 	// name is NOT legacy-prefix-resolved (that loop is gated on !hasSemicolon),
 	// and an over-long no-semicolon name resolves only its longest legacy prefix.
@@ -1368,7 +1354,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 // overflowed the fixed maxEntityNameLen lookahead window: head holds the first
 // maxEntityNameLen bytes already CONSUMED and the run is known to continue. Such
 // a run can never match a KNOWN entity (the longest is 31 chars), so the only
-// resolution parseCharRef could ever apply to it is a legacy-prefix match — and
+// resolution the reference algorithm could ever apply to it is a legacy-prefix match — and
 // that applies ONLY when the run is NOT ';'-terminated (resolveNamedEntity gates
 // its prefix loop on !hasSemicolon). The two interpretations differ:
 //
@@ -1376,8 +1362,8 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 //     within head, ≤6 chars) and emit the unmatched remainder (rest of head plus
 //     the alphanumeric tail) as ordinary text. If head has no legacy prefix the
 //     whole run is an unresolved literal (see below).
-//   - ';'-terminated: an over-long UNKNOWN name. parseCharRef does NOT
-//     legacy-resolve it; the WHOLE run plus ';' is an unresolved literal.
+//   - ';'-terminated: an over-long UNKNOWN name. The reference algorithm does
+//     NOT legacy-resolve it; the WHOLE run plus ';' is an unresolved literal.
 //
 // Because the two interpretations EMIT DIFFERENT bytes, nothing may be emitted
 // before the ';'-vs-not decision is final — an optimistic legacy emit followed by
@@ -1463,7 +1449,8 @@ func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, 
 		_ = p.cur.Advance(1)
 	}
 
-	// No ';' and head legacy-resolves: mirror parseCharRef's no-semicolon
+	// No ';' and head legacy-resolves: mirror the reference algorithm's
+	// no-semicolon
 	// legacy-prefix path. The run fit the cap, so emit the resolution + head's
 	// leftover + the spooled tail as ordinary text. Only now, with ';' ruled out,
 	// does emission begin, so nothing was emitted prematurely.
