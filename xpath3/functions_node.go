@@ -825,7 +825,16 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	ec := getFnContext(ctx)
 	var nodes []helium.Node
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	walkErr := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+		// Honor context cancellation and the established op-limit on every
+		// visited node so a large document cannot run unbounded.
+		if ec != nil {
+			if err := ec.countOps(ctx, 1); err != nil {
+				return err
+			}
+		} else if err := ctx.Err(); err != nil {
+			return err
+		}
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
@@ -865,6 +874,9 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return nil
 	}))
+	if walkErr != nil {
+		return nil, walkErr
+	}
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
