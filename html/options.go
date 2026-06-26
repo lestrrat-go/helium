@@ -10,7 +10,8 @@ type parseConfig struct {
 	// fatal parse error. Default false preserves libxml2-style tolerance.
 	strict bool
 	// maxContentSize bounds, in bytes, the size of a single content section.
-	// For raw-text/RCDATA/plaintext it is an approximate soft cap: content is
+	// For normal data-state text and raw-text/RCDATA/plaintext it is an
+	// approximate soft cap: content is
 	// flushed to SAX in chunks targeting this size, but a chunk may slightly
 	// exceed it because an indivisible token (a whole multi-byte UTF-8 rune, or
 	// a resolved character reference) is never split — a single rune larger than
@@ -34,7 +35,8 @@ type parseConfig struct {
 }
 
 // defaultMaxContentSize is the default content cap, used when maxContentSize is
-// 0. Raw-text/RCDATA/plaintext content is delivered to SAX in chunks targeting
+// 0. Normal data-state text and raw-text/RCDATA/plaintext content is delivered
+// to SAX in chunks targeting
 // this size (an indivisible token may push a chunk slightly over); comments/PIs
 // exceeding it fail the parse. Either way a section with gigabytes of data (or
 // one that never terminates) is bounded in memory.

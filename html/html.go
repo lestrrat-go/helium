@@ -91,13 +91,14 @@ func (p Parser) Strict(v bool) Parser {
 
 // MaxContentSize bounds, in bytes, the size of a single content section.
 //
-// For raw-text (script/style), RCDATA (title/textarea), and plaintext content
-// it bounds the streaming scanner's per-chunk working set: the parser flushes
-// accumulated content to SAX in temporary chunks that target this size, so the
-// scanner's own peak memory stays bounded even for a gigantic or unterminated
-// section, which still parses successfully. A chunk may slightly exceed the cap
-// because an indivisible token is never split: a whole multi-byte UTF-8 rune (or
-// a resolved character reference) is always emitted intact, so a single rune
+// For normal data-state text (ordinary element content), raw-text
+// (script/style), RCDATA (title/textarea), and plaintext content it bounds the
+// streaming scanner's per-chunk working set: the parser flushes accumulated
+// content to SAX in temporary chunks that target this size, so the scanner's
+// own peak memory stays bounded even for a gigantic or unterminated section,
+// which still parses successfully. A chunk may slightly exceed the cap because
+// an indivisible token is never split: a whole multi-byte UTF-8 rune (or a
+// resolved character reference) is always emitted intact, so a single rune
 // larger than the cap is emitted whole. An unresolved RCDATA named-reference
 // literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
 // ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
