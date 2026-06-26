@@ -11,12 +11,14 @@
 //
 // # Security
 //
-// Included documents are parsed with their own inner parser, confined to the
-// resolver's filesystem (see [Processor.Resolver]); supply a confined resolver
-// for untrusted input. The default resolver opens any OS path
-// ([NewFSResolver](nil)); when processing untrusted input, supply a confined
-// resolver via [Processor.Resolver] / [NewFSResolver] (e.g. backed by
-// [os.Root.FS]).
+// The processor is secure by default: with no resolver configured it denies
+// all filesystem access, so untrusted input cannot disclose local files via an
+// xi:include (mirroring the deny-all default of [helium.NewParser]). Included
+// documents are parsed with their own inner parser, confined to the resolver's
+// filesystem (see [Processor.Resolver]). To grant access, supply a resolver via
+// [Processor.Resolver] / [NewFSResolver] backed by a confined [fs.FS] (e.g.
+// [os.Root.FS]); to restore the historical behavior of opening any OS path,
+// pass NewFSResolver([helium.PermissiveFS]()).
 //
 // # Builder Design
 //

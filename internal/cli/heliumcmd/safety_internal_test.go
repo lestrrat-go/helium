@@ -60,6 +60,29 @@ func TestLocalFilePath(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "scheme")
 	})
+	// "file:////server/share/x" parses to an empty host with path
+	// "//server/share/x"; on Windows that becomes the UNC path
+	// \\server\share\x, reaching a remote SMB host despite the local-only
+	// policy. It must be rejected on every platform.
+	t.Run("UNC file URI rejected", func(t *testing.T) {
+		_, err := localFilePath("file:////server/share/mod.xsl")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "UNC")
+	})
+	// url.Parse percent-decodes u.Path, so a "%5C"/"%5c" encoded backslash
+	// decodes to "/\server/share" which still becomes the UNC path
+	// \\server\share on Windows. These encoded forms must be rejected too.
+	for _, uri := range []string{
+		"file:///%5Cserver/share/mod.xsl",
+		"file:///%5cserver/share/mod.xsl",
+		"file:///%5C%5Cserver/share/mod.xsl",
+	} {
+		t.Run("encoded-backslash UNC rejected: "+uri, func(t *testing.T) {
+			_, err := localFilePath(uri)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "UNC")
+		})
+	}
 	t.Run("file URI drive letter on Windows", func(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			t.Skip("Windows-specific drive-letter handling")

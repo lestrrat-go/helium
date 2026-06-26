@@ -92,6 +92,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - `--xpath EXPR` → also sets `--noout`
 - `--pretty N>=1` → also sets `--format`
 - `--loaddtd` / `--dtdattr` / `--valid` / `--noent` → external-loading opt-in: each lifts the parser's default `BlockXXE` block and installs a permissive FS (or the `--path` search FS) so the requested external DTD/entity actually loads. Bare `lint` is safe-by-default (`NewParser` blocks external loading and uses a deny-all FS), matching the library.
+- `--xinclude` → `xinclude.NewProcessor()` now denies all FS access by default (safe-by-default, matching the library), so the CLI installs a permissive resolver (`Resolver(NewFSResolver(...))`) backed by the same permissive root — or the `--path` search FS — used by the parser, preserving the historical behavior of reading includes off disk.
 
 ### Output / Input Safety
 
@@ -154,8 +155,9 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 - Schema path mandatory positional arg
 - `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched; over-cap fails the parse (`ExitErr`)
-- Grammar compiled once with `relaxng.NewCompiler().CompileFile()`
-- Each XML input parsed with `helium.NewParser()` + validated with `relaxng.NewValidator(grammar).Validate()`
+- Grammar compiled once with `relaxng.NewCompiler().FS(helium.PermissiveFS()).Label(schema).ErrorHandler(...).CompileFile(ctx, schema)`; `FS(helium.PermissiveFS())` opts back into host-filesystem loading for `include`/`externalRef` (the compiler's FS now defaults to deny-all), mirroring `lint`/`xslt`; a `compileErrorHandler` streams compilation diagnostics (file/line/detail) to stderr and records whether any FATAL diagnostic was seen
+- The RELAX NG compiler may return a non-nil grammar with a nil error (a poisoned `notAllowed` grammar) on a fatal diagnostic; the CLI folds that into a failure (`errSchemaCompilation`) when the handler saw a fatal diagnostic, so it never validates against a bad grammar. Compilation failure → `ExitSchemaComp`
+- Each XML input parsed with `helium.NewParser()` (file inputs get `.BaseURI(name)`) + validated with `relaxng.NewValidator(grammar).Label(name).ErrorHandler(...).Validate(ctx, doc)`, diagnostics streamed to stderr via a `writerErrorHandler`
 
 ## `helium schematron validate`
 
@@ -175,11 +177,12 @@ Primary file: `internal/cli/heliumcmd/xslt.go`
 
 - Usage: `helium xslt [options] STYLESHEET [XMLfiles ...]`
 - Stylesheet path mandatory positional arg
-- Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().URIResolver(fileResolver{}).Compile()`
+- Stylesheet parsed with the secure `helium.NewParser()` default (no external DTD/entity loading, deny-all FS) — a hostile stylesheet cannot read local files via a SYSTEM entity. `SubstituteEntities(true)` IS enabled by default so the stylesheet's INTERNAL-subset general entities expand (xslt3 only compiles text/CDATA in sequence constructors, so an unexpanded `EntityRefNode` would silently drop the value); `BlockXXE`/`LoadExternalDTD(false)` still block external content, mirroring xslt3's own secure parser (`xslt3/xslt3.go`). External loading is opt-in via `--noent` (substitutes external entities) and/or `--loaddtd` (`LoadExternalDTD`), mirroring `helium lint`'s flag names. `--loaddtd` on its own loads the external DTD subset WITHOUT substituting its general entities (the internal-substitution default is suppressed for `--loaddtd`-without-`--noent`). When opted in, the parser's `BlockXXE` is lifted and the FS is `confinedDirFS` rooted at the **stylesheet's own directory** (not a raw permissive root), so an attacker-controlled SYSTEM identifier (`/etc/passwd`, `../../secret`) still cannot exfiltrate files outside that directory. Compiled once with `xslt3.NewCompiler().URIResolver(fileResolver{}).Compile()`
 - A filesystem `URIResolver` is installed so local `xsl:include`/`xsl:import` modules load (the compiler default-denies module loading without one)
 - `fileResolver.Resolve` accepts plain relative/absolute paths AND `file:` URIs (`localFilePath` in `safety.go`): a `file:` URI is parsed, only an empty or `localhost` host is accepted, the path is percent-decoded (and de-slashed before a Windows drive letter); any other scheme (`http`/`https`/...) is rejected so the resolver never reaches the network. A bare Windows drive path (`C:\...`) is not mistaken for a scheme.
 - Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
-- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--max-input-bytes N`, `--max-depth N`, `--version`
+- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--noent`, `--loaddtd`, `--timing`, `--max-input-bytes N`, `--max-depth N`, `--version`
+- `--noent` / `--loaddtd` → stylesheet-parser external-loading opt-in (off by default): each lifts the parser's default `BlockXXE` and installs `confinedDirFS` (stylesheet directory only). They affect ONLY the stylesheet parse; the source-document parser is always the plain secure `NewParser()` default
 - `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited) and applies to BOTH the stylesheet parser and the source-document parser; when absent, the `NewParser` default is left untouched
 - Parameters passed via `inv.GlobalParameters()`
 - Same output safety as `helium lint`: `--output` is rejected when it matches an input or the stylesheet, or when combined with `--noout`; close errors fold into the exit status; inputs are read under the `--max-input-bytes` cap

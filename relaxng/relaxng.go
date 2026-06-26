@@ -18,6 +18,9 @@ type compileConfig struct {
 	fsys         fs.FS          // filesystem for loading include/externalRef targets
 	parser       *helium.Parser // parser governing schema-document parse policy
 	errorHandler helium.ErrorHandler
+	// maxResourceBytes caps the bytes read from a single include/externalRef
+	// target. Zero means the package default (defaultMaxResourceBytes).
+	maxResourceBytes int
 }
 
 type validateConfig struct {
@@ -66,8 +69,13 @@ func (c Compiler) BaseDir(dir string) Compiler {
 }
 
 // FS sets the [fs.FS] used to load schemas referenced by include and
-// externalRef during compilation. A nil value restores the default,
-// which opens any path supplied to the compiler via [os.Open].
+// externalRef during compilation.
+//
+// The default (and what a nil value restores) is a deny-all FS that refuses
+// every open: a compiler from [NewCompiler] loads no include/externalRef target
+// from the host filesystem, so an untrusted schema cannot disclose host files.
+// To opt into host access, pass [helium.PermissiveFS] (any os.Open path) or —
+// preferably — a confined [fs.FS] rooted at a trusted directory.
 //
 // Note: the names handed to the FS are built with [filepath.Join] from
 // [Compiler.BaseDir] and the include href, so they may be absolute and
@@ -80,9 +88,20 @@ func (c Compiler) BaseDir(dir string) Compiler {
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {
-		fsys = iofs.PermissiveRoot{}
+		fsys = iofs.DenyAll{}
 	}
 	c.cfg.fsys = fsys
+	return c
+}
+
+// MaxResourceBytes sets the maximum number of bytes read from a single schema
+// resource pulled in via include or externalRef. A resource larger than the cap
+// fails to load with a compile error. A value <= 0 restores the package default
+// (10 MiB). The cap bounds memory consumed when loading schemas through a
+// permissive [Compiler.FS].
+func (c Compiler) MaxResourceBytes(n int) Compiler {
+	c = c.clone()
+	c.cfg.maxResourceBytes = n
 	return c
 }
 

@@ -714,7 +714,14 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 // ScanCharDataSlice scans XML character data with EOL normalization, appending
 // to dst. Returns the grown slice and the number of bytes consumed. The caller takes
 // ownership of the returned slice. Does NOT consume — call AdvanceFast after.
-func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
+//
+// When maxBytes > 0 the scan stops once that many input bytes have been
+// consumed (always on a UTF-8 character boundary; a single rune wider than
+// maxBytes is still returned whole so progress is guaranteed). This bounds both
+// the returned slice and the cursor's internal buffer, letting callers deliver a
+// long delimiter-free run in fixed-size chunks instead of materializing it all.
+// maxBytes <= 0 means unbounded (scan the whole run up to the next delimiter).
+func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int) ([]byte, int) {
 	if c.fillBuffer(1) != nil {
 		return dst, 0
 	}
@@ -724,10 +731,21 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 	dlen := len(data)
 
 	for off < dlen {
+		if maxBytes > 0 && off >= maxBytes {
+			break
+		}
 		runLen := scanSafeCharDataASCII(data[off:dlen])
+		if maxBytes > 0 && off+runLen > maxBytes {
+			// Cap the ASCII run at the byte budget. ASCII bytes are single-byte,
+			// so this never splits a multi-byte character.
+			runLen = maxBytes - off
+		}
 		if runLen > 0 {
 			dst = append(dst, data[off:off+runLen]...)
 			off += runLen
+		}
+		if maxBytes > 0 && off >= maxBytes {
+			break
 		}
 		if off >= dlen {
 			if c.fillBuffer(off+1) != nil {
@@ -789,6 +807,12 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 			break
 		}
 		if !xmlchar.IsChar(r) {
+			break
+		}
+		if maxBytes > 0 && off > 0 && off+w > maxBytes {
+			// Adding this rune would exceed the byte budget; stop on the
+			// character boundary. off > 0 guarantees progress for a lone rune
+			// wider than maxBytes (it is returned whole on the next call).
 			break
 		}
 		dst = append(dst, data[off:off+w]...)

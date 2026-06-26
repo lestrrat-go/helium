@@ -1764,3 +1764,25 @@ func TestExpression_StreamInfo_SnapshotIsolation(t *testing.T) {
 	require.True(t, fresh.UsedFunctions["count"])
 	require.NotContains(t, fresh.UsedFunctions, "bogus")
 }
+
+// An EQName-spelled fn:position()/fn:last() in a predicate must classify the
+// same as the unprefixed spelling for streamability (HasNonMotionlessPred) and
+// must be recorded in UsedFunctions under its local name.
+func TestExpression_StreamInfo_EQNameFunction(t *testing.T) {
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+
+	for _, fn := range []string{"position", "last"} {
+		plain, err := xpath3.NewCompiler().Compile(`a[` + fn + `()=1]`)
+		require.NoError(t, err)
+		eqname, err := xpath3.NewCompiler().Compile(`a[Q{` + fnNS + `}` + fn + `()=1]`)
+		require.NoError(t, err)
+
+		require.True(t, plain.StreamInfo().HasNonMotionlessPred,
+			"plain %s() predicate must be non-motionless", fn)
+		require.Equal(t, plain.StreamInfo().HasNonMotionlessPred,
+			eqname.StreamInfo().HasNonMotionlessPred,
+			"EQName Q{...}%s() must classify same as plain %s()", fn, fn)
+		require.True(t, eqname.StreamInfo().UsedFunctions[fn],
+			"EQName Q{...}%s() must be recorded under local name %q", fn, fn)
+	}
+}

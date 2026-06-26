@@ -440,7 +440,7 @@ func evalPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	// However, when the filter is an ordering function (reverse, sort),
 	// preserve the explicit ordering and only deduplicate.
 	var deduped []helium.Node
-	if filterPreservesOrder(e.Filter) {
+	if filterPreservesOrder(ctx, ec, e.Filter) {
 		deduped, err = ixpath.DeduplicateNodesPreserveOrder(result, ec.maxNodes)
 	} else {
 		deduped, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
@@ -479,7 +479,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 		result = append(result, subNodes...)
 	}
 	var deduped []helium.Node
-	if e.PreserveOrder {
+	if filterPreservesOrder(ctx, ec, e.OrderFilter) {
 		deduped, err = ixpath.DeduplicateNodesPreserveOrder(result, ec.maxNodes)
 	} else {
 		deduped, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
@@ -494,19 +494,28 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	return seq, nil
 }
 
-// filterPreservesOrder returns true if the filter expression is a function
-// call that explicitly controls sequence order (reverse, sort). In these
-// cases, a subsequent path step (/@attr) should preserve the caller's
+// filterPreservesOrder returns true if the filter expression is a call to the
+// built-in fn:reverse or fn:sort, which explicitly control sequence order. In
+// these cases, a subsequent path step (/@attr) should preserve the caller's
 // ordering rather than re-sorting into document order.
-func filterPreservesOrder(e Expr) bool {
+//
+// The decision is made against the runtime function resolver so that a rebound
+// "fn" prefix or a user function overriding the built-in is not mistaken for
+// the order-controlling built-in. (Do not use the lexical streamability helper
+// StreamFnLocalName here — that is a static spelling check, not a binding.)
+func filterPreservesOrder(ctx context.Context, ec *evalContext, e Expr) bool {
 	fc, ok := e.(FunctionCall)
 	if !ok {
 		return false
 	}
-	if fc.Prefix != "" {
+	r, err := resolveFunctionInfo(ctx, ec, fc.Prefix, fc.Name, len(fc.Args))
+	if err != nil {
 		return false
 	}
-	return fc.Name == "reverse" || fc.Name == "sort"
+	if !r.isBuiltin || r.uri != NSFn {
+		return false
+	}
+	return r.name == "reverse" || r.name == "sort"
 }
 
 // evalPathStepExpr evaluates E1/E2 where E2 is a non-axis expression.
@@ -550,12 +559,19 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 				return nil, fmt.Errorf("XPTY0018: path expression result contains a mix of nodes and non-nodes")
 			}
 			hasNonNodes = true
-			allItems = append(allItems, seqMaterialize(r)...)
+			// Accumulate through the bounded helper so maxNodes / OpLimit /
+			// cancellation are enforced on the atomic branch just as they are on
+			// the node branch below; otherwise a per-node right expression such as
+			// (1 to 10000000) could grow allItems past ec.maxNodes unbounded.
+			allItems, err = appendBoundedSeq(ctx, ec, allItems, r, ec.maxNodes)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	if hasNodes {
-		if filterPreservesOrder(e.Left) {
+		if filterPreservesOrder(ctx, ec, e.Left) {
 			allNodes, err = ixpath.DeduplicateNodesPreserveOrder(allNodes, ec.maxNodes)
 		} else {
 			allNodes, err = ixpath.DeduplicateNodes(allNodes, ec.docOrder, ec.maxNodes)

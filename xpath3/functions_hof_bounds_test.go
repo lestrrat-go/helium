@@ -1128,3 +1128,44 @@ func TestMapFindDeepNesting(t *testing.T) {
 		require.Equal(t, 1, res.Sequence().Len())
 	})
 }
+
+// TestSequenceConcatHonorsNodeSetLimit proves that evalSequenceExpr concatenates
+// its operands through appendBoundedSeq: each range operand is individually
+// capped, but the aggregate must still trip ErrNodeSetLimit. Before the fix the
+// concatenation used a raw append that bypassed maxNodes, so K capped operands
+// could materialize K*N items past the configured limit.
+func TestSequenceConcatHonorsNodeSetLimit(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+	// Each operand (1 to 600) is under the limit; two of them exceed it.
+	compiled, err := xpath3.NewCompiler().Compile(`(1 to 600, 1 to 600)`)
+	require.NoError(t, err)
+
+	var evalErr error
+	require.NotPanics(t, func() {
+		_, evalErr = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			MaxNodesForTesting(limit).
+			Evaluate(t.Context(), compiled, nil)
+	})
+	require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+}
+
+// TestSequenceConcatHonorsOpLimit proves that the concatenation in
+// evalSequenceExpr charges an op per appended item, so a sequence of operands
+// whose total length exceeds OpLimit aborts with ErrOpLimit (and, by extension,
+// honors context cancellation) rather than running unbounded.
+func TestSequenceConcatHonorsOpLimit(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := xpath3.NewCompiler().Compile(`(1 to 600, 1 to 600)`)
+	require.NoError(t, err)
+
+	var evalErr error
+	require.NotPanics(t, func() {
+		_, evalErr = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			OpLimit(1000).
+			Evaluate(t.Context(), compiled, nil)
+	})
+	require.ErrorIs(t, evalErr, xpath3.ErrOpLimit)
+}

@@ -380,6 +380,13 @@ func TestXIncludeBasicXML(t *testing.T) {
 	require.True(t, found, "included <chapter> element not found")
 }
 
+func TestXIncludeProcessTreeNilNode(t *testing.T) {
+	t.Parallel()
+	count, err := xinclude.NewProcessor().ProcessTree(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
+}
+
 func TestXIncludeText(t *testing.T) {
 	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -1108,6 +1115,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, procErr := xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1161,6 +1169,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, err = xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1197,6 +1206,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", tc.name)
 
 			_, err = xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1713,8 +1723,8 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	t.Parallel()
 
 	// Write a real include target and reference it via an absolute file:// URI.
-	// The default permissive resolver must convert the URI to an OS path rather
-	// than handing "file:/..." to os.Open verbatim.
+	// The permissive resolver must convert the URI to an OS path rather than
+	// handing "file:/..." to os.Open verbatim.
 	dir := t.TempDir()
 	target := filepath.Join(dir, "inc.xml")
 	require.NoError(t, os.WriteFile(target, []byte(`<loaded>FromFileURI</loaded>`), 0o600))
@@ -1726,6 +1736,7 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	</root>`, fileURI))
 
 	count, err := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
@@ -1771,6 +1782,7 @@ func TestXIncludeFileURINestedExternalDTD(t *testing.T) {
 	</root>`, fileURI))
 
 	count, err := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
@@ -1799,6 +1811,200 @@ func TestXIncludeFileURINonLocalHost(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "non-local file URI host",
 		"expected explicit non-local host rejection, got: %v", err)
+}
+
+// TestXIncludeDenyAllDefault verifies the secure-by-default contract: a
+// Processor with no resolver configured must NOT read local files, so untrusted
+// input cannot disclose them via an xi:include. Supplying an explicit
+// permissive resolver opts back into host access.
+func TestXIncludeDenyAllDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secret := filepath.Join(dir, "secret.txt")
+	const secretContent = "TOP SECRET CONTENTS"
+	require.NoError(t, os.WriteFile(secret, []byte(secretContent), 0o600))
+
+	mainDoc := func() *helium.Document {
+		return parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include parse="text" href="%s"/>
+		</root>`, secret))
+	}
+
+	t.Run("default resolver denies local file disclosure", func(t *testing.T) {
+		t.Parallel()
+		doc := mainDoc()
+		_, err := xinclude.NewProcessor().
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.Error(t, err, "default processor must not read local files")
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.NotContains(t, s, secretContent,
+			"secret file contents must not leak into the document")
+	})
+
+	t.Run("explicit permissive resolver opts back in", func(t *testing.T) {
+		t.Parallel()
+		doc := mainDoc()
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Contains(t, s, secretContent,
+			"explicit permissive resolver must read the file")
+	})
+}
+
+// TestXIncludeSameDocumentXPointerNoResolver verifies that a same-document
+// XPointer reference (no href) succeeds under the deny-all default resolver
+// even when a BaseURI is configured: it needs no filesystem access and must
+// not be re-loaded through the resolver.
+func TestXIncludeSameDocumentXPointerNoResolver(t *testing.T) {
+	t.Parallel()
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source><item>hello</item></source>
+		<target><xi:include xpointer="xpointer(//item)"/></target>
+	</root>`)
+
+	count, err := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err, "same-document XPointer must not require the resolver")
+	require.Equal(t, 1, count)
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Contains(t, s, "<target><item>hello</item></target>",
+		"same-document XPointer must copy the referenced node")
+}
+
+// TestXIncludeShorthandPointerDefaultResolver verifies that a same-document
+// shorthand pointer (href="#a", which selects an element by ID) succeeds under
+// the deny-all default resolver even when a BaseURI is configured: the bare
+// fragment has no document part, so it must be evaluated against the in-memory
+// snapshot rather than re-loaded through the (deny-all) resolver.
+func TestXIncludeShorthandPointerDefaultResolver(t *testing.T) {
+	t.Parallel()
+
+	t.Run("xml:id", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<source><item xml:id="a">hello</item></source>
+			<target><xi:include href="#a"/></target>
+		</root>`)
+
+		count, err := xinclude.NewProcessor().
+			BaseURI("main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err, `href="#a" is a same-document reference and must not go through the resolver`)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Equal(t, 2, strings.Count(s, "hello"),
+			"the shorthand pointer must copy the xml:id-selected element into target")
+	})
+
+	t.Run("internal DTD ID rebuild", func(t *testing.T) {
+		t.Parallel()
+		// An internal-subset ATTLIST ID populates the document's interned ID
+		// table; the snapshot must rebuild that table mapped onto its own copied
+		// elements so GetElementByID (and thus the shorthand pointer) resolves.
+		doc := parseXML(t, `<!DOCTYPE root [
+			<!ATTLIST item id ID #IMPLIED>
+		]>
+		<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<source><item id="a">hello</item></source>
+			<target><xi:include href="#a"/></target>
+		</root>`)
+		require.NotEmpty(t, doc.IDTable(), "internal DTD ID should be interned")
+
+		count, err := xinclude.NewProcessor().
+			BaseURI("main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Equal(t, 2, strings.Count(s, "hello"),
+			"the snapshot's rebuilt ID table must resolve the shorthand pointer")
+	})
+}
+
+// TestXIncludeShorthandPointerSkipIDs verifies that the same-document snapshot
+// honors the source document's SkipIDs state: a source parsed with SkipIDs(true)
+// resolves NO ids, so a shorthand pointer must resolve nothing in the snapshot
+// too — it must NOT start resolving xml:id in the copy (which the previous
+// helium.CopyDoc-based snapshot would wrongly do).
+func TestXIncludeShorthandPointerSkipIDs(t *testing.T) {
+	t.Parallel()
+
+	src := `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source><item xml:id="a">hello</item></source>
+		<target><xi:include href="#a"/></target>
+	</root>`
+	doc, err := helium.NewParser().SkipIDs(true).Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.True(t, doc.SkipIDs())
+	require.Nil(t, doc.GetElementByID("a"), "SkipIDs source must resolve no ids")
+
+	count, perr := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, perr)
+	require.Equal(t, 1, count, "the include resolves to nothing and is removed")
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Equal(t, 1, strings.Count(s, "hello"),
+		"SkipIDs snapshot must not resolve the shorthand pointer, leaving target empty")
+}
+
+// TestXIncludeSameDocumentFragmentNotCrossDocumentCircular verifies that a
+// fragment-only same-document include is keyed by the current document identity,
+// not the literal "#xptr". A root href="#a" selects a subtree containing an
+// external include of inc.xml, and inc.xml carries its OWN href="#a"; the
+// included document's same-document reference must NOT be falsely rejected as
+// circular just because it shares the fragment text with the includer.
+func TestXIncludeSameDocumentFragmentNotCrossDocumentCircular(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source xml:id="a"><xi:include href="inc.xml"/></source>
+		<target><xi:include href="#a"/></target>
+	</root>`
+	const inc = `<incroot xmlns:xi="http://www.w3.org/2001/XInclude">
+		<data xml:id="a">world</data>
+		<ref><xi:include href="#a"/></ref>
+	</incroot>`
+	incFS := fstest.MapFS{"inc.xml": &fstest.MapFile{Data: []byte(inc)}}
+
+	doc := parseXML(t, main)
+	count, err := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		Resolver(xinclude.NewFSResolver(incFS)).
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err, `inc.xml's own href="#a" must not be flagged circular against the root href="#a"`)
+	require.Greater(t, count, 0)
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Contains(t, s, "world",
+		"the included document's same-document reference must resolve")
 }
 
 // TestXIncludeParserInjection verifies that a parser injected via

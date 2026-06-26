@@ -120,8 +120,12 @@ func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int 
 	// (file/line/detail) reach stderr before the summary error, rather than
 	// being discarded.
 	ceh := &compileErrorHandler{w: c.stderr}
+	// The xsd compiler now denies nested-schema FS access by default; the CLI is
+	// a trusted local tool, so restore permissive host access for
+	// xs:include/xs:import/xs:redefine.
 	schema, err := xsd.NewCompiler().
 		Label(cfg.schemaFile).
+		FS(iofsPermissiveRoot()).
 		ErrorHandler(ceh).
 		CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {

@@ -221,11 +221,14 @@ HTML encoding detection over a stream (`wrapReaderForHTML`) peeks the first 1024
 
 `deliverCharacters()` splits data into chunks respecting UTF-8 boundaries:
 - Walk back from chunk boundary to find UTF-8 rune start
+- If a single rune is wider than the buffer size (e.g. `CharBufferSize(1)` over multibyte text), the backward walk reaches offset 0; rather than split the rune into invalid UTF-8 fragments, it walks FORWARD to the next rune boundary and delivers that one rune whole (over budget)
 - Deliver chunks via SAX Characters callback
 
-Controlled by `Parser.SetCharBufferSize(size)`.
+Controlled by `Parser.CharBufferSize(size)`.
 
-For the UTF-8 cursor fast path, character-data scanners now continue across reader chunk boundaries before classifying the text run. This preserves CRLF normalization and prevents whitespace-only content from being split into mixed `Characters` / `IgnorableWhitespace` events at buffer edges.
+For the UTF-8 cursor fast path, character-data scanners normally continue across reader chunk boundaries before classifying the text run. This preserves CRLF normalization and prevents whitespace-only content from being split into mixed `Characters` / `IgnorableWhitespace` events at buffer edges.
+
+**Bounded char-data scan for streaming SAX consumers.** When `CharBufferSize(size)` is set (`size > 0`) AND no DOM is being built (a custom SAX handler replaced the default `TreeBuilder`, so `pctx.treeBuilder == nil`), `parseCharDataContent` delegates to `parseCharDataChunkedSAX`, which scans and delivers a delimiter-free run in `size`-byte chunks instead of materializing the whole run first. This bounds BOTH the reusable `charBuf` and the `UTF8Cursor`'s internal read buffer (the single-shot scanner never advances `bufpos` mid-run, so `fillBuffer` would otherwise grow it to the full run length). `UTF8Cursor.ScanCharDataSlice(dst, maxBytes)` takes a byte budget: `maxBytes > 0` stops the scan on a UTF-8 boundary once that many input bytes are consumed (a lone rune wider than `maxBytes` is still returned whole to guarantee progress); `maxBytes <= 0` is the unbounded default. Context cancellation is checked between chunks. Blank-vs-text classification must match the single-shot path, which classifies the WHOLE run as one unit (`<root>  text</root>` is character data, leading blanks included; `<root>   </root>` is ignorable whitespace) — so the chunked path must NOT emit any `IgnorableWhitespace` event until the whole run is proven blank (an early per-chunk `IgnorableWhitespace` that a later non-blank byte contradicts cannot be taken back). Two cases keep this bounded without the whole-run lookahead `areBlanksBytes` needs (it peeks for the end-of-run delimiter only the final chunk can see): contextual eligibility (`whitespaceContextIgnorable` — `xml:space`, node stack, mixed-content model) is decided once; when it is false (whitespace non-ignorable here) the run is character data regardless of bytes and is streamed in fixed-size chunks via `streamCharDataChunks` (covers the unbounded-text DoS in those contexts). When it is true the leading blank run is accumulated while every byte seen is whitespace; the first non-blank byte proves character data and flushes the accumulated prefix plus the rest as `Characters` (then streams the tail), while a run that stays blank to its end is delivered as `IgnorableWhitespace` — EXCEPT an over-budget blank run. Because the buffered blank prefix would otherwise grow without bound, a still-blank prefix that exceeds the pending-whitespace budget (`blankBudget`, floored at `minPendingBlankBytes`) is, as a **documented policy**, reclassified and delivered as `Characters` rather than `IgnorableWhitespace`, keeping memory bounded; only abnormally large pure-blank runs hit this — realistic indentation is far below the budget and stays `IgnorableWhitespace`. The realistic huge run (non-blank text) commits to `Characters` on its first chunk and never accumulates; a pathological multi-megabyte run of pure whitespace is bounded by this policy, because it cannot be classified as ignorable without seeing its end. The DOM/`TreeBuilder` path stays single-shot because it classifies the whole run to drive whitespace stripping, and the DOM holds the full text node anyway. Misplaced `]]>`, control-char, and EOF handling are unchanged: the chunked loop yields control at the delimiter and the next `parseContent` dispatch re-enters char-data parsing, surfacing the same error as the single-shot path.
 
 ## UTF-8 Parser Fast Paths
 
@@ -250,9 +253,15 @@ When a UTF-8 fast path has already proven the consumed bytes contain no newlines
 
 After parsing start tag:
 1. Look up DTD defaults for element
-2. Apply default `xmlns="..."` first (namespace in scope)
-3. Apply default `xmlns:prefix="..."` next
+2. Apply default `xmlns="..."` first (namespace in scope) — only if the default
+   namespace was NOT explicitly declared on the same start tag
+3. Apply default `xmlns:prefix="..."` next — only if that prefix (including the
+   reserved `xml` prefix) was NOT explicitly declared on the same start tag
 4. Apply remaining defaults (skip if explicit attr exists)
+
+Explicit namespace declarations on the start tag always win over DTD ATTLIST
+defaults; a defaulted `xmlns`/`xmlns:prefix` is applied only when the prefix is
+otherwise undeclared on that element.
 
 ## Recovery Mode (RecoverOnError)
 
@@ -316,13 +325,13 @@ cancellation which returns a nil document and the context error).
 
 The HTML parser bounds the streaming scanner's working set with `Parser.MaxContentSize` (config field `parseConfig.maxContentSize`; effective value via `contentLimit()`, which substitutes `defaultMaxContentSize` = 16 MiB when ≤ 0). The cap has two distinct meanings depending on whether the construct is chunkable.
 
-### Soft cap (chunkable content): raw-text / RCDATA / plaintext
+### Soft cap (chunkable content): normal data-state text / raw-text / RCDATA / plaintext
 
-Raw-text (`script`/`style`/`iframe`/`xmp`, `parseRawContent`), RCDATA (`title`/`textarea`, `parseRCDATAContent`), and plaintext (`parsePlaintext`) are delivered to SAX in chunks **targeting** `contentLimit()` bytes — the scanner never buffers a whole gigantic or unterminated section. The cap is a SOFT target, not a hard limit: a section larger than the cap still parses successfully, just in multiple chunks.
+Normal data-state character data (`parseCharacters`), raw-text (`script`/`style`/`iframe`/`xmp`, `parseRawContent`), RCDATA (`title`/`textarea`, `parseRCDATAContent`), and plaintext (`parsePlaintext`) are delivered to SAX in chunks **targeting** `contentLimit()` bytes — the scanner never buffers a whole gigantic or unterminated section. The cap is a SOFT target, not a hard limit: a section larger than the cap still parses successfully, just in multiple chunks.
 
 - **UTF-8-aware chunk boundaries**: a chunk boundary never splits a multi-byte rune.
   - `parseRawContent`/`parsePlaintext` accumulate whole tokens into a `bytes.Buffer` and flush (clone-then-Reset) before a token would push the buffer past the cap; a whole rune is read via `peekRuneToken` and appended as one indivisible token, so a rune (or complete `U+FFFD`) is never split. A single token larger than the cap is emitted whole as its own chunk.
-  - `parseRCDATAContent` caps the plain-text run at the limit, then backs the byte index off `isUTF8Continuation` bytes to the last whole-rune boundary; a lone rune larger than the cap is extended (not split) so a partial rune is never emitted.
+  - `parseCharacters`/`parseRCDATAContent` cap the plain-text run at the limit, then call `clampTextChunkToRune` to back the byte index off `isUTF8Continuation` bytes to the last whole-rune boundary; a lone rune larger than the cap is extended (not split) so a partial rune is never emitted. `parseCharacters` returns after each capped chunk and the main `parse()` loop re-enters it for the remainder. (Before this fix, normal data-state text was the one unbounded path: a long delimiter-free run was buffered whole.)
 
 ### Hard cap (indivisible content): comments / bogus comments / PIs
 
@@ -330,7 +339,20 @@ Raw-text (`script`/`style`/`iframe`/`xmp`, `parseRawContent`), RCDATA (`title`/`
 
 ### fatalErr / ErrContentSizeExceeded surfacing
 
-`parser.fatalErr` is set by a sub-parser on an unrecoverable condition (over-cap indivisible construct, or an over-cap unresolved RCDATA char-ref literal). The main `parse()` loop checks `p.fatalErr` at the top of each iteration AND after the loop, returning it (wrapping `ErrContentSizeExceeded`, matchable with `errors.Is`). `parseRCDATAContent` returns immediately after `parseCharRefBounded` sets `fatalErr` so the main loop surfaces it rather than running on.
+`parser.fatalErr` is set by a sub-parser on an unrecoverable condition (over-cap indivisible construct, or an over-cap unresolved char-ref literal). `parseCharRefBounded` is shared by the normal data state (`parseCharacters`) and RCDATA (`parseRCDATAContent`), so the over-cap unresolved char-ref fatal covers normal data-state text too, not just RCDATA. The main `parse()` loop checks `p.fatalErr` at the top of each iteration AND after the loop, returning it (wrapping `ErrContentSizeExceeded`, matchable with `errors.Is`). `parseRCDATAContent` returns immediately after `parseCharRefBounded` sets `fatalErr` so the main loop surfaces it rather than running on; `parseCharacters` calls it as its last action and returns, so the main loop surfaces the error on the next iteration.
+
+### Leading-whitespace deferral (significance + implied-`<body>` insertion)
+
+Two normal data-state decisions can only be made once a run's first non-whitespace byte is seen, and `MaxContentSize` chunking would otherwise commit a leading whitespace prefix too early:
+
+1. **Whitespace-significance** (`noBlanks`/StripBlanks): a run is stripped only when EVERY byte is whitespace, so a leading whitespace prefix must not be suppressed on its own.
+2. **Implied-`<body>` insertion**: a run containing non-whitespace triggers `htmlStartCharData` (opening the implied `<body>`); emitting the leading whitespace before that runs would land it under `<html>` while the following text lands under `<body>`, splitting one logical run across two parents.
+
+Both are centralized in the single chokepoint `emitCharacters` via the `parser.pendingWS` buffer. A still-undecided leading whitespace prefix is **deferred** into `pendingWS` (helper `deferPendingWS`) instead of being emitted; char-data tokens (`&` entity, real `NUL`→`U+FFFD`, lone non-markup `<`) are folded into the SAME run and do not flush it. When the first non-whitespace byte arrives, `emitCharacters` sets `curTextRunSignificant`, calls `flushPendingWS` (after the caller has established the insertion target), then emits the byte. When the run ends all-whitespace — the main `parse()` loop dispatches a real markup tag, or EOF — `flushPendingWSRunEnd` strips it under `noBlanks`, drops it before the root element, or emits it under the current element. Whitespace in `<head>` (target already correct), before the root element (ignorable), or inside raw-text/RCDATA elements (always kept) is committed directly and never enters the buffer.
+
+`pendingWS` is bounded by `contentLimit()`: a leading whitespace prefix that reaches the cap before any non-whitespace byte establishes significance HARD-FAILS in `deferPendingWS` with a wrapped `ErrContentSizeExceeded` (set on `fatalErr`) rather than buffering unbounded — the same over-cap policy indivisible constructs use. This applies under both `StripBlanks` and the default (a 16 MiB+ contiguous whitespace prefix before any text is pathological).
+
+Run significance (`parser.curTextRunSignificant`) is SET in `emitCharacters` on **any** non-whitespace emit — plain text chunk, resolved or unresolved char-ref / numeric-ref output, `U+FFFD`, or a lone literal `<` — and RESET only when the main loop dispatches a real markup tag. A char-ref and a lone `<` belong to the same run and never reset it, so significance established by entity output or a literal `<` keeps the run's later whitespace chunks from being suppressed.
 
 ### Context cancellation in the bounded scanners
 
