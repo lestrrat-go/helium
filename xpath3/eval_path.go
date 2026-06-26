@@ -105,7 +105,15 @@ func evalSequenceExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(seq)...)
+		// Concatenate through appendBoundedSeq so maxNodes / OpLimit /
+		// cancellation fire across the aggregate. Each operand is itself capped,
+		// but the concatenation is not, so a sequence of K capped range operands
+		// (1 to N, 1 to N, ...) would otherwise materialize K*N items past the
+		// configured limit.
+		result, err = appendBoundedSeq(ctx, ec, result, seq, ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
