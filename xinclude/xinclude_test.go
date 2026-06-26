@@ -1749,6 +1749,75 @@ func TestXIncludeMaxIncludeSize(t *testing.T) {
 	})
 }
 
+// sizedResolver returns a fixed-size blob of 'x' bytes for every href, modeling
+// many distinct includes that each stay under the per-resource cap.
+type sizedResolver struct{ size int }
+
+func (r sizedResolver) Resolve(string, string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader(strings.Repeat("x", r.size))), nil
+}
+
+func TestXIncludeAggregateCap(t *testing.T) {
+	t.Parallel()
+
+	// MaxIncludeSize(1024) sets the per-resource cap to 1 KiB, which makes the
+	// aggregate bound 100*1024 = 102400 bytes. Each include returns 700 bytes —
+	// under the per-resource cap — so a few hundred of them exceed the aggregate
+	// without any single oversized resource and without large test data.
+	const blob = 700
+
+	buildDoc := func(t *testing.T, n int, sameHref bool) *helium.Document {
+		t.Helper()
+		var b strings.Builder
+		b.WriteString(`<root xmlns:xi="http://www.w3.org/2001/XInclude">`)
+		for i := range n {
+			if sameHref {
+				b.WriteString(`<xi:include href="blob.txt" parse="text"/>`)
+			} else {
+				fmt.Fprintf(&b, `<xi:include href="blob-%d.txt" parse="text"/>`, i)
+			}
+		}
+		b.WriteString(`</root>`)
+		return parseXML(t, b.String())
+	}
+
+	t.Run("many distinct sub-cap includes exceed aggregate", func(t *testing.T) {
+		t.Parallel()
+		doc := buildDoc(t, 200, false) // 200*700 = 140000 > 102400
+		_, err := xinclude.NewProcessor().
+			Resolver(sizedResolver{size: blob}).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("one cached resource reused past aggregate", func(t *testing.T) {
+		t.Parallel()
+		// Same href fetched once then re-materialized per occurrence: the
+		// per-resource cap never trips, but the aggregate guard counts every reuse.
+		doc := buildDoc(t, 200, true)
+		_, err := xinclude.NewProcessor().
+			Resolver(sizedResolver{size: blob}).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("normal small document under aggregate succeeds", func(t *testing.T) {
+		t.Parallel()
+		doc := buildDoc(t, 10, false) // 10*700 = 7000 < 102400
+		count, err := xinclude.NewProcessor().
+			Resolver(sizedResolver{size: blob}).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 10, count)
+	})
+}
+
 func TestXIncludeFileURIHref(t *testing.T) {
 	t.Parallel()
 
