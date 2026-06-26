@@ -321,6 +321,63 @@ func TestTinyChunkLeadingSpaceImpliedBody(t *testing.T) {
 		"the space and 'a' must form one run under the implied <body>")
 }
 
+func TestTinyChunkLoneLtImpliedBody(t *testing.T) {
+	// Regression: a lone '<' (non-markup character data) must establish the
+	// insertion target via htmlStartCharData BEFORE it is emitted. For
+	// `<html> < b</html>` under MaxContentSize(1) the leading space, the '<', and
+	// " b" form ONE logical run; all must land under the implied <body>. Previously
+	// the lone '<' emit path skipped htmlStartCharData, so the deferred leading
+	// space and the '<' were flushed under <html> while " b" opened <body> and
+	// landed there — splitting one run across parents.
+	const input = `<html> < b</html>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	require.NoError(t, html.NewParser().MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax))
+	require.Equal(t, " < b", string(collected))
+
+	doc, err := html.NewParser().MaxContentSize(1).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	htmlEl := doc.FirstChild()
+	require.NotNil(t, htmlEl)
+	require.Equal(t, "html", htmlEl.Name())
+	first := htmlEl.FirstChild()
+	require.NotNil(t, first)
+	require.Equal(t, "body", first.Name(),
+		"the leading space and '<' must not be emitted under <html> before <body> is implied")
+	require.Equal(t, " < b", string(first.Content()),
+		"the space, '<', and ' b' must form one run under the implied <body>")
+}
+
+func TestDefaultModeOverCapSpacesSoftCap(t *testing.T) {
+	// Regression: with StripBlanks OFF and the insertion target already established
+	// (inside <p>), ordinary data-state whitespace must stream in MaxContentSize
+	// chunks under the SOFT cap — never deferred and never hard-failed. Previously
+	// the pendingWS chokepoint deferred ALL non-head leading whitespace, so an
+	// over-cap run of spaces wrongly tripped ErrContentSizeExceeded.
+	spaces := strings.Repeat(" ", 50)
+	input := `<p>` + spaces + `</p>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	err := html.NewParser().
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err,
+		"default-mode over-cap whitespace must stream under the soft cap, not hard-fail")
+	require.Equal(t, spaces, string(collected),
+		"all whitespace must be delivered as chunked Characters")
+}
+
 func TestStripBlanksTinyChunkLeadingSpaceBeforeCharData(t *testing.T) {
 	// Regression: a leading whitespace prefix followed by a char-data token (an
 	// entity, or a non-markup lone '<') must NOT be flushed/stripped before the

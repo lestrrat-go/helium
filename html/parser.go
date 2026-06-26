@@ -70,9 +70,13 @@ type parser struct {
 	// ('&', NUL, lone '<') do NOT flush it — they are folded into the same run. The
 	// buffer is bounded by the content cap: a whitespace prefix that overruns the
 	// cap before any significance is known hard-fails with ErrContentSizeExceeded
-	// rather than buffering unbounded. In <head> and before the root element, and
-	// inside raw-text/RCDATA elements, whitespace is committed directly (its target
-	// is already fixed or it is ignorable), so it never enters this buffer.
+	// rather than buffering unbounded. Whitespace is only deferred while a decision
+	// is genuinely pending: under StripBlanks (significance undecided) or before the
+	// body subtree is entered (implied-<body> insertion undecided). With StripBlanks
+	// OFF and the insertion target already established, in <head>, before the root
+	// element, and inside raw-text/RCDATA elements, whitespace is committed directly
+	// (its target is already fixed, it is ignorable, or it is significant under the
+	// soft cap), so it never enters this buffer.
 	pendingWS []byte
 
 	// locator for SetDocumentLocator
@@ -593,7 +597,15 @@ func (p *parser) parse(ctx context.Context) error {
 					p.parseStartTag(ctx)
 				}
 			} else {
-				// Lone '<' — emit as character data; part of the current text run.
+				// Lone '<' — ordinary character data, part of the current text run.
+				// Like the other non-whitespace emit paths (plain text, char-refs,
+				// U+FFFD), establish the insertion target FIRST via htmlStartCharData
+				// so this run's leading whitespace (held in pendingWS) and the '<' land
+				// under the SAME element, then emit. Without it, for `<html> < b` the
+				// leading space and '<' would flush under the pre-body target while the
+				// following non-whitespace opens the implied <body>, splitting one
+				// logical run across parents.
+				p.htmlStartCharData()
 				_ = p.emitCharacters([]byte("<"))
 				_ = p.cur.Advance(1)
 			}
@@ -1623,22 +1635,36 @@ func (p *parser) emitCharacters(data []byte) error {
 			return err
 		}
 	} else if !p.curTextRunSignificant && !p.inRawTextElement() {
-		// All-whitespace data whose run significance / insertion target is not yet
-		// established.
+		// All-whitespace data whose run significance / insertion target may not yet
+		// be established.
 		switch {
 		case !p.sawRoot:
 			// Whitespace before the root element is ignorable; drop it.
 			return nil
-		case p.currentName() != elemHead:
-			// Defer until the first non-whitespace byte fixes significance and the
-			// implied-<body> insertion target.
+		case p.currentName() == elemHead:
+			// Inside <head> the insertion target is already correct. StripBlanks still
+			// strips a whitespace-only run; otherwise fall out of the switch and emit
+			// it under <head>.
+			if p.cfg.noBlanks {
+				return nil
+			}
+		case p.cfg.noBlanks || p.mode < insertInBody:
+			// Significance or insertion is genuinely UNDECIDED, so defer. Under
+			// StripBlanks a whitespace-only run is stripped, but a following
+			// non-whitespace byte makes this leading whitespace significant. And
+			// before the body subtree is entered (mode < insertInBody) the next
+			// non-whitespace byte would open the implied <body> via htmlStartCharData,
+			// so emitting now would split one logical run across parents. deferPendingWS
+			// hard-fails an over-cap undecidable whitespace prefix rather than buffering
+			// unbounded.
 			return p.deferPendingWS(data)
-		case p.cfg.noBlanks:
-			// Inside <head>: the target is already correct, but StripBlanks still
-			// strips a whitespace-only run.
-			return nil
 		}
-		// Inside <head> without StripBlanks: fall through and emit under <head>.
+		// Reaching here means either inside <head> without StripBlanks, or StripBlanks
+		// is OFF and the insertion target is already established (the body subtree has
+		// been entered). The whitespace is significant and lands in the current element
+		// regardless of what follows, so emit it immediately under the SOFT cap — no
+		// deferral, no undecidable-whitespace hard-fail. This is the normal data-state
+		// text path, e.g. <p> + over-cap spaces + </p>.
 	}
 	if bytes.ContainsRune(data, '\uFFFD') {
 		if p.encodingError {
