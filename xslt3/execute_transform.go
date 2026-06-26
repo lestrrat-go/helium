@@ -831,6 +831,9 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// ov folds in the default xsl:output base via evalResultDocOutputDef, so
 		// this is the effective allow-duplicate-names for the primary output.
 		outDef.AllowDuplicateNames = ov.AllowDuplicateNames
+		// Likewise, ov folds in the default xsl:output base, so this is the
+		// effective undeclare-prefixes for the primary output.
+		outDef.UndeclarePrefixes = ov.UndeclarePrefixes
 	}
 
 	if cfg != nil {

@@ -480,6 +480,59 @@ func TestResultDocumentPrimaryJSONAllowDuplicateNamesDefaultOutput(t *testing.T)
 		"duplicate JSON keys must be accepted when the default xsl:output sets allow-duplicate-names=yes, even for a bare result-document")
 }
 
+// Secondary equivalent of TestResultDocumentPrimaryJSONAllowDuplicateNamesDefaultOutput:
+// a bare SECONDARY xsl:result-document (href, no format, no serialization
+// attributes of its own) must still honor a stylesheet-level
+// <xsl:output method="json" allow-duplicate-names="yes"/>. Pre-fix
+// buildEffectiveOutputDef left base empty when there was no named format and no
+// parameter-document, so the SERE0022 dup-key check saw allow-duplicate-names=false
+// and wrongly rejected duplicate keys the default output permitted.
+func TestResultDocumentSecondaryJSONAllowDuplicateNamesDefaultOutput(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+                xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:output method="json" allow-duplicate-names="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document href="out.json">
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	collector := &resultDocCollect{docs: map[string]*helium.Document{}}
+	_, err := ss.Transform(parseTransformSource(t)).
+		ResultDocumentHandler(collector).
+		Do(t.Context())
+	require.NoError(t, err,
+		"duplicate JSON keys must be accepted when the default xsl:output sets allow-duplicate-names=yes, even for a bare secondary result-document")
+}
+
+// A primary xsl:result-document undeclare-prefixes="{...}" AVT that resolves to
+// true must reach the effective output definition. Pre-fix undeclare-prefixes was
+// validated as a boolean serialization attribute at compile time but never
+// compiled into an AVT, never evaluated, and never copied into the merged output
+// def, so a dynamic value was silently ignored.
+func TestResultDocumentPrimaryUndeclarePrefixesAVT(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document undeclare-prefixes="{true()}">
+      <out/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err,
+		"a primary result-document undeclare-prefixes AVT resolving to true must not fail")
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od)
+	require.True(t, od.UndeclarePrefixes,
+		"the primary result-document undeclare-prefixes override must reach the effective output def")
+}
+
 // An xsl:result-document with a CONSTANT (non-AVT) invalid allow-duplicate-names
 // value must be rejected at compile time with SEPM0016, like every other boolean
 // serialization attribute. (Regression: allow-duplicate-names was missing from

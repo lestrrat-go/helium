@@ -368,6 +368,7 @@ type resultDocumentInst struct {
 	HTMLVersion             *avt
 	IncludeContentType      *avt
 	AllowDuplicateNames     *avt
+	UndeclarePrefixes       *avt
 	EscapeURIAttributes     *avt
 	JSONNodeOutputMethodAVT *avt       // json-node-output-method avt
 	NormalizationForm       *avt       // normalization-form avt

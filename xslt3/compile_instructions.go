@@ -790,6 +790,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			{paramHTMLVersion, &inst.HTMLVersion},
 			{paramIncludeContentType, &inst.IncludeContentType},
 			{paramAllowDuplicateNames, &inst.AllowDuplicateNames},
+			{paramUndeclarePrefixes, &inst.UndeclarePrefixes},
 			{paramEscapeURIAttributes, &inst.EscapeURIAttributes},
 			{paramJSONNodeOutputMethod, &inst.JSONNodeOutputMethodAVT},
 			{paramNormalizationForm, &inst.NormalizationForm},

@@ -69,6 +69,7 @@ func TestResultDocumentInvalidBooleanAVTRaisesSEPM0016(t *testing.T) {
 		{name: "include-content-type", attr: `include-content-type="{'bogus'}"`},
 		{name: "escape-uri-attributes", attr: `escape-uri-attributes="{'bogus'}"`},
 		{name: "omit-xml-declaration", attr: `omit-xml-declaration="{'bogus'}"`},
+		{name: "undeclare-prefixes", attr: `undeclare-prefixes="{'bogus'}"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ss := compileStylesheetString(t, `

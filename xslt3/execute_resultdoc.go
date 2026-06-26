@@ -971,7 +971,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
 		inst.MediaType != nil || inst.HTMLVersion != nil || inst.IncludeContentType != nil ||
-		inst.AllowDuplicateNames != nil ||
+		inst.AllowDuplicateNames != nil || inst.UndeclarePrefixes != nil ||
 		inst.JSONNodeOutputMethodAVT != nil || inst.NormalizationForm != nil ||
 		ec.getParamDocOutputDef(inst) != nil ||
 		inst.ItemSeparatorSet || inst.BuildTree != nil
@@ -1126,6 +1126,13 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		}
 		base.AllowDuplicateNames = b
 	}
+	if inst.UndeclarePrefixes != nil {
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.UndeclarePrefixes, paramUndeclarePrefixes)
+		if err != nil {
+			return nil, err
+		}
+		base.UndeclarePrefixes = b
+	}
 	if inst.EscapeURIAttributes != nil {
 		b, err := ec.evalBoolSerializationAVT(ctx, inst.EscapeURIAttributes, paramEscapeURIAttributes)
 		if err != nil {
@@ -1178,13 +1185,28 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *resultDocumentInst, formatName, method string) (*OutputDef, error) {
 	var base OutputDef
 	// Start with parameter-document defaults (lowest priority).
-	if pd := ec.getParamDocOutputDef(inst); pd != nil {
-		base = *cloneOutputDef(pd)
+	paramDocOD := ec.getParamDocOutputDef(inst)
+	if paramDocOD != nil {
+		base = *cloneOutputDef(paramDocOD)
 	}
 	// Named format overrides parameter-document.
 	if formatName != "" {
 		if fmtDef, ok := ec.effectiveOutputs()[formatName]; ok {
 			base = *cloneOutputDef(fmtDef)
+		}
+	} else if paramDocOD == nil {
+		// No named format and no parameter-document: fold in the unnamed default
+		// xsl:output so a secondary result-document with no local serialization
+		// attributes still inherits the stylesheet defaults (e.g.
+		// method="json" allow-duplicate-names="yes"). This mirrors
+		// evalResultDocOutputDef's default-folding; without it the SERE0022
+		// dup-key check below would see a hard-false allow-duplicate-names and
+		// wrongly reject duplicate JSON keys the default output permits. When
+		// evalResultDocOutputDef returns a non-nil overrides def (hasAny or a
+		// named format), it already folded the default in and base is replaced
+		// below; this branch only matters when overrides is nil.
+		if defDef, ok := ec.effectiveOutputs()[""]; ok {
+			base = *cloneOutputDef(defDef)
 		}
 	}
 	if base.Method == "" && method != "" {
