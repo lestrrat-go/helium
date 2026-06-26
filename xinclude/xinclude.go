@@ -309,14 +309,6 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 }
 
 func (p *processor) processNode(ctx context.Context, n helium.Node) error {
-	maxDepth := p.maxIncludeDepth
-	if maxDepth <= 0 {
-		maxDepth = defaultMaxIncludeDepth
-	}
-	if p.depth > maxDepth {
-		return fmt.Errorf("xi:include: maximum include depth (%d) exceeded", maxDepth)
-	}
-
 	// Repeatedly collect and process xi:include elements at this level.
 	// Fallback processing may insert new xi:include elements as siblings,
 	// so we loop until no more are found.
@@ -356,6 +348,18 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 }
 
 func (p *processor) processInclude(ctx context.Context, inc *helium.Element) error {
+	// Reject before fetching/splicing the resource so an over-limit include
+	// never retrieves or processes its target. Expanding this include nests its
+	// content one level deeper (p.depth+1), so maxDepth is the actual ceiling on
+	// nesting depth.
+	maxDepth := p.maxIncludeDepth
+	if maxDepth <= 0 {
+		maxDepth = defaultMaxIncludeDepth
+	}
+	if p.depth+1 > maxDepth {
+		return fmt.Errorf("xi:include: maximum include depth (%d) exceeded", maxDepth)
+	}
+
 	if err := validateIncludeChildren(inc); err != nil {
 		return err
 	}

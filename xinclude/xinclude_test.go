@@ -864,6 +864,36 @@ func TestXIncludeMaxIncludeDepth(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "maximum include depth (40) exceeded")
 	})
+
+	t.Run("chain exactly at the limit is accepted, one deeper is rejected without fetching", func(t *testing.T) {
+		t.Parallel()
+		// includeChainResolver(n) nests `n+1` levels: root -> level0 -> ... ->
+		// level(n) leaf, so the leaf content sits at nesting depth n+1.
+
+		// Exactly at the limit: maxDepth=3 admits a leaf at depth 3.
+		okCount, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(2)).
+			MaxIncludeDepth(3).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.NoError(t, err)
+		require.Positive(t, okCount)
+
+		// One deeper: the include that would push past the limit must be
+		// rejected before its target is ever resolved/fetched.
+		resolver := &countingResolver{inner: includeChainResolver(3)}
+		_, err = xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeDepth(3).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum include depth (3) exceeded")
+		require.Zero(t, resolver.calls["level3.xml"], "over-limit resource must not be fetched")
+		require.Positive(t, resolver.calls["level2.xml"], "in-limit resources are fetched")
+	})
 }
 
 func TestXIncludeSameURLTwice(t *testing.T) {
