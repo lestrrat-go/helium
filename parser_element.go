@@ -172,6 +172,9 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 		}
 		return nil
 	}
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: only the xml prefix may be bound to the reserved XML namespace", prefix))
+	}
 	if prefix == lexicon.PrefixXMLNS {
 		return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
 	}

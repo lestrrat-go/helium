@@ -326,6 +326,50 @@ func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
 		require.NotNil(t, root)
 		require.Empty(t, root.URI())
 	})
+
+	t.Run("literal non-xml prefix bound to reserved XML namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Only the xml prefix may bind the reserved XML namespace URI; a
+		// literal xmlns:p declaration of it must be rejected.
+		xml := `<r xmlns:p="http://www.w3.org/XML/1998/namespace"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("DTD default non-xml prefix bound to reserved XML namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Same constraint via the DTD-defaulting path.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "http://www.w3.org/XML/1998/namespace">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("literal xmlns:xml bound to reserved XML namespace is allowed", func(t *testing.T) {
+		t.Parallel()
+		// The xml prefix may explicitly bind its reserved namespace URI.
+		xml := `<r xmlns:xml="http://www.w3.org/XML/1998/namespace" xml:lang="en"/>`
+
+		p := helium.NewParser()
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		var lang *helium.Attribute
+		for _, a := range root.Attributes() {
+			if a.Name() == "xml:lang" {
+				lang = a
+				break
+			}
+		}
+		require.NotNil(t, lang)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
+	})
 }
 
 func TestGetAttribute(t *testing.T) {
