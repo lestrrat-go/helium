@@ -175,6 +175,29 @@ func TestOptionsNoBlanks(t *testing.T) {
 		"non-whitespace text should be preserved")
 }
 
+func TestOptionsNoBlanksTinyChunkPreservesLeadingSpace(t *testing.T) {
+	// Regression: chunking normal data-state text at MaxContentSize must not
+	// suppress significant leading whitespace under StripBlanks. With a tiny
+	// cap, " a" would otherwise split into a whitespace-only chunk (wrongly
+	// stripped) and "a". The run as a whole is not all-whitespace, so the
+	// leading space must be preserved.
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+
+	input := `<p> a</p>`
+	err := html.NewParser().
+		StripBlanks(true).
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err)
+	require.Equal(t, " a", string(collected),
+		"significant leading whitespace must survive tiny-chunk StripBlanks")
+}
+
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &html.SAXCallbacks{}

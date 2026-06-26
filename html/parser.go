@@ -908,6 +908,14 @@ func (p *parser) parseCharacters() {
 	// raw-text/RCDATA/plaintext already bound memory this way; the normal data
 	// state was the lone unbounded path.
 	limit := p.cfg.contentLimit()
+	// Blank-stripping (StripBlanks/noBlanks) decides whether a text node is
+	// significant by inspecting the WHOLE logical run: a run is suppressed only
+	// when every byte is whitespace. Capping the run at MaxContentSize here would
+	// split a run like " a" into a leading whitespace-only chunk and "a"; the
+	// whitespace chunk would then be suppressed independently by emitCharacters,
+	// dropping significant leading whitespace. When noBlanks is active, read the
+	// whole run so the run-level decision stays correct.
+	capChunk := !p.cfg.noBlanks
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -920,7 +928,7 @@ func (p *parser) parseCharacters() {
 			break
 		}
 		n++
-		if n >= limit {
+		if capChunk && n >= limit {
 			break
 		}
 	}
