@@ -127,6 +127,10 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 		}
 	}
 
+	if ek.CipherValue == nil {
+		return nil, fmt.Errorf("%w: EncryptedKey missing CipherData/CipherValue", ErrMalformedEncrypted)
+	}
+
 	return ek, nil
 }
 
@@ -160,21 +164,35 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	return em, nil
 }
 
+// parseCipherData parses a CipherData element. Per the XML-Enc schema,
+// CipherData is a choice of exactly one CipherValue or one CipherReference.
+// Only CipherValue is supported here; a second CipherValue (or none) is
+// schema-invalid and rejected at parse rather than silently using the first.
 func parseCipherData(elem *helium.Element) ([]byte, error) {
+	var decoded []byte
+	var seenCipherValue bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
-		if isXMLEncElem(e, "CipherValue") {
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
-			if err != nil {
-				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
-			}
-			return decoded, nil
+		if !isXMLEncElem(e, "CipherValue") {
+			continue
 		}
+		if seenCipherValue {
+			return nil, fmt.Errorf("%w: duplicate CipherValue", ErrMalformedEncrypted)
+		}
+		seenCipherValue = true
+		d, err := xmlbase64.DecodeString(domutil.TextContent(e))
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
+		}
+		decoded = d
 	}
-	return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	if !seenCipherValue {
+		return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	}
+	return decoded, nil
 }
 
 // isElemNS reports whether e has the given local name and one of the

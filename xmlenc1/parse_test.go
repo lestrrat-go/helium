@@ -31,6 +31,28 @@ func TestParse(t *testing.T) {
 			_, err := xmlenc1.ParseEncryptedDataForTest(elem)
 			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 		})
+
+		t.Run("duplicate CipherValue", func(t *testing.T) {
+			// CipherData is a choice of exactly one CipherValue (or one
+			// CipherReference); two CipherValue children are schema-invalid
+			// and must be rejected at parse rather than silently using the
+			// first.
+			doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"><xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue><xenc:CipherValue>BBBB</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`)
+			elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
+			require.True(t, ok)
+			_, err := xmlenc1.ParseEncryptedDataForTest(elem)
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		})
+
+		t.Run("EncryptedKey missing CipherData", func(t *testing.T) {
+			// An EncryptedKey carried in KeyInfo with no CipherData/CipherValue
+			// must be rejected at parse, not deferred to a later crypto error.
+			doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:KeyInfo><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`"/></xenc:EncryptedKey></ds:KeyInfo><xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`)
+			elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
+			require.True(t, ok)
+			_, err := xmlenc1.ParseEncryptedDataForTest(elem)
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		})
 	})
 
 	t.Run("encryption method missing algorithm", func(t *testing.T) {
