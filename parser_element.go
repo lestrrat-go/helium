@@ -144,6 +144,25 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 	s := pctx.sax
 	limit := pctx.charBufferSize
 	first := true
+
+	// Classifying the run as ignorable whitespace vs. character data must stay
+	// consistent across all of its chunks: otherwise <root>    </root> with a
+	// tiny buffer would deliver one whitespace chunk as Characters and the next
+	// identical chunk as IgnorableWhitespace, because areBlanksBytes peeks for
+	// the end-of-run delimiter that is only in view on the final chunk.
+	//
+	// Bounded memory rules out the whole-run lookahead the single-shot path
+	// uses, so instead the context-only eligibility is decided once and
+	// blankness is tracked incrementally: while every byte seen so far is
+	// whitespace the run is delivered as IgnorableWhitespace, and the first
+	// non-blank byte permanently downgrades the remainder to Characters. A
+	// fully-blank run is therefore delivered entirely as IgnorableWhitespace
+	// (one classification, matching the single-shot path); a run that turns out
+	// to contain text delivers its leading whitespace as IgnorableWhitespace
+	// and the rest as Characters. Already-delivered leading whitespace is not
+	// retroactively reclassified — that would require the unbounded lookahead
+	// this path exists to avoid.
+	blank := pctx.whitespaceContextIgnorable()
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -170,12 +189,14 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 		// Keep the grown buffer for the next chunk/call.
 		pctx.charBuf = data
 
+		if blank && !allBlankBytes(data) {
+			blank = false
+		}
+
 		// Each chunk is at most charBufferSize bytes, so deliverCharacters
-		// emits it in a single callback. Classification is per-chunk; for a
-		// streaming SAX consumer this only changes which handler (Characters vs
-		// IgnorableWhitespace) receives the bytes, never whether they arrive.
+		// emits it in a single callback.
 		handler := s.Characters
-		if pctx.areBlanksBytes(data, false) {
+		if blank {
 			handler = s.IgnorableWhitespace
 		}
 		if err := pctx.deliverCharacters(ctx, handler, data); err != nil {

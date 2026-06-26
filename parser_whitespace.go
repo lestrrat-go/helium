@@ -85,3 +85,38 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 
 	return true
 }
+
+// whitespaceContextIgnorable reports whether, given only the current parse
+// context (xml:space, the node stack, and the mixed-content model), an
+// all-whitespace character-data run at this position would be reported as
+// ignorable whitespace rather than character data.
+//
+// Unlike areBlanksBytes it omits the byte-level blankness test and the
+// cursor lookahead at the end of the run, so it can be evaluated once for a
+// run that is delivered in streaming chunks (where the end-of-run delimiter is
+// not yet in view). For the cursorless (pure-SAX) case it returns true rather
+// than peeking for the trailing delimiter; the chunked caller compensates by
+// tracking blankness incrementally.
+func (ctx *parserCtx) whitespaceContextIgnorable() bool {
+	if ctx.spaceTab[len(ctx.spaceTab)-1] == 1 {
+		return false
+	}
+	if ctx.peekNode() == nil {
+		return false
+	}
+	if ctx.doc != nil {
+		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
+		return !ok
+	}
+	return true
+}
+
+// allBlankBytes reports whether every byte of s is XML whitespace.
+func allBlankBytes(s []byte) bool {
+	for _, b := range s {
+		if !isBlankCh(rune(b)) {
+			return false
+		}
+	}
+	return true
+}

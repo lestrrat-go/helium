@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -3085,12 +3084,16 @@ func TestParserCharBufferSizeAffectsParse(t *testing.T) {
 
 // genCharDataReader lazily produces "<root>" + n copies of fill + "</root>"
 // without ever holding the whole payload in memory, so the parser's own
-// character-data buffering is the only large allocation under test.
+// character-data buffering is the only large allocation under test. It records
+// the cumulative number of payload bytes it has handed out in nread, which the
+// memory-bounds test samples at the first SAX callback to prove the parser
+// streams rather than draining the whole run before delivering anything.
 type genCharDataReader struct {
 	prefix []byte
 	fill   byte
 	remain int
 	suffix []byte
+	nread  int
 }
 
 func (r *genCharDataReader) Read(p []byte) (int, error) {
@@ -3116,6 +3119,7 @@ func (r *genCharDataReader) Read(p []byte) (int, error) {
 	if n == 0 {
 		return 0, io.EOF
 	}
+	r.nread += n
 	return n, nil
 }
 
@@ -3123,22 +3127,34 @@ func (r *genCharDataReader) Read(p []byte) (int, error) {
 // delimiter-free character-data run delivered to a streaming SAX consumer is
 // scanned and delivered in bounded chunks rather than materialized whole. Before
 // the fix the entire run was buffered (in charBuf and the cursor's internal
-// buffer) before the first chunk was delivered, so peak heap held the whole run.
+// buffer) before the first chunk was delivered.
+//
+// Rather than sampling a global heap signal (non-deterministic, especially
+// under t.Parallel), this instruments the reader: the parser pulls bytes from r
+// on demand, so the count of bytes read at the first SAX callback shows whether
+// delivery began before the whole payload was drained. A streaming parser fires
+// the first callback after reading only a bounded prefix (one cursor buffer ≈
+// 8 KiB), far short of the multi-megabyte run; the pre-fix whole-run buffering
+// would have drained nearly all of it first.
 func TestParserCharBufferSizeBoundsCharDataMemory(t *testing.T) {
 	t.Parallel()
 
 	const fillBytes = 32 << 20 // 32 MiB delimiter-free run
 	const bufSize = 8192
 
-	var chunkCount, total, maxChunk int
-	var heapAtFirstChunk uint64
+	r := &genCharDataReader{
+		prefix: []byte("<root>"),
+		fill:   'a',
+		remain: fillBytes,
+		suffix: []byte("</root>"),
+	}
+
+	var chunkCount, total, maxChunk, readAtFirstChunk int
 
 	handler := sax.New()
 	record := func(_ context.Context, ch []byte) error {
 		if chunkCount == 0 {
-			var ms runtime.MemStats
-			runtime.ReadMemStats(&ms)
-			heapAtFirstChunk = ms.HeapAlloc
+			readAtFirstChunk = r.nread
 		}
 		chunkCount++
 		total += len(ch)
@@ -3148,18 +3164,6 @@ func TestParserCharBufferSizeBoundsCharDataMemory(t *testing.T) {
 	handler.SetOnCharacters(sax.CharactersFunc(record))
 	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(record))
 
-	var ms runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&ms)
-	baseHeap := ms.HeapAlloc
-
-	r := &genCharDataReader{
-		prefix: []byte("<root>"),
-		fill:   'a',
-		remain: fillBytes,
-		suffix: []byte("</root>"),
-	}
-
 	p := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize)
 	_, err := p.ParseReader(context.Background(), r)
 	require.NoError(t, err)
@@ -3168,12 +3172,82 @@ func TestParserCharBufferSizeBoundsCharDataMemory(t *testing.T) {
 	require.LessOrEqual(t, maxChunk, bufSize, "no chunk exceeds the configured buffer size")
 	require.Greater(t, chunkCount, 1, "the run is delivered in multiple chunks")
 
-	var growth uint64
-	if heapAtFirstChunk > baseHeap {
-		growth = heapAtFirstChunk - baseHeap
+	// The first callback must fire before the whole run has been read; a bound
+	// well below the payload (yet generously above one cursor buffer) proves the
+	// scan buffer stays bounded instead of materializing the whole run first.
+	require.Less(t, readAtFirstChunk, 1<<20,
+		"streaming must deliver the first chunk after reading only a bounded prefix; read %d bytes first", readAtFirstChunk)
+}
+
+// TestParserCharBufferSizeConsistentWhitespaceClassification pins the chunked
+// streaming-SAX path's whitespace classification. The single-shot path can look
+// over the whole run to decide ignorable-whitespace vs. character data, but the
+// chunked path delivers in bounded pieces and cannot. To keep the classification
+// consistent across a run it tracks blankness incrementally: a run is reported as
+// ignorable whitespace while every byte seen so far is blank, and the first
+// non-blank byte permanently downgrades the remainder to characters.
+//
+// This guards against the earlier per-chunk classification, where the same blank
+// run could arrive as Characters then IgnorableWhitespace under a tiny buffer
+// because the blank test peeked for the end-of-run delimiter only the final chunk
+// could see.
+func TestParserCharBufferSizeConsistentWhitespaceClassification(t *testing.T) {
+	t.Parallel()
+
+	type event struct {
+		ignorable bool
+		content   string
 	}
-	require.Less(t, growth, uint64(8<<20),
-		"char-data scan buffer must stay bounded; heap grew %d bytes by the first chunk", growth)
+
+	run := func(src string, bufSize int) []event {
+		var events []event
+		handler := sax.New()
+		handler.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: false, content: string(ch)})
+			return nil
+		}))
+		handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: true, content: string(ch)})
+			return nil
+		}))
+		_, err := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize).
+			Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		return events
+	}
+
+	concat := func(events []event) string {
+		var b strings.Builder
+		for _, e := range events {
+			b.WriteString(e.content)
+		}
+		return b.String()
+	}
+
+	t.Run("all-whitespace run stays ignorable across chunks", func(t *testing.T) {
+		t.Parallel()
+		events := run("<root>        </root>", 2)
+		require.Greater(t, len(events), 1, "the tiny buffer must split the run")
+		require.Equal(t, "        ", concat(events), "every whitespace byte is delivered")
+		for _, e := range events {
+			require.True(t, e.ignorable, "a fully-blank run must classify every chunk as ignorable whitespace")
+		}
+	})
+
+	t.Run("run that turns non-blank never reverts to ignorable", func(t *testing.T) {
+		t.Parallel()
+		events := run("<root>      text</root>", 2)
+		require.Equal(t, "      text", concat(events), "every character byte is delivered")
+		seenChars := false
+		for _, e := range events {
+			if !e.ignorable {
+				seenChars = true
+				continue
+			}
+			require.False(t, seenChars, "ignorable whitespace must not follow characters; classification only downgrades")
+		}
+		require.True(t, seenChars, "a run containing text must deliver characters")
+	})
 }
 
 // nopCatalog is a CatalogResolver that never resolves anything. It exists only
