@@ -124,6 +124,49 @@ func TestVerifyLineWrapped(t *testing.T) {
 	})
 }
 
+// TestVerifyRejectsInclusiveNamespacesOnNonExclusiveSignedInfoC14N is the
+// end-to-end (public Verify) counterpart to the internal
+// TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N. It guards against the
+// runtime path accepting an ec:InclusiveNamespaces PrefixList on a
+// non-exclusive SignedInfo CanonicalizationMethod (here C14N 1.1). Because
+// canonicalize() only honors that PrefixList for exclusive c14n, a
+// non-exclusive method declaring it would otherwise canonicalize SignedInfo
+// differently from what the signer declared, so it must be rejected fail-closed
+// before any key resolution or signature check. This exercises the public
+// Verifier.Verify entry point — not just the internal parseSignedInfo — so the
+// gating is proven on the real code path.
+func TestVerifyRejectsInclusiveNamespacesOnNonExclusiveSignedInfoC14N(t *testing.T) {
+	key := generateRSAKey(t)
+	for _, alg := range []string{
+		xmldsig1.C14N10,
+		xmldsig1.C14N10Comments,
+		xmldsig1.C14N11URI,
+		xmldsig1.C14N11Comments,
+	} {
+		t.Run(alg, func(t *testing.T) {
+			sig := `<ds:Signature xmlns:ds="` + xmldsig1.NamespaceDSig + `">` +
+				`<ds:SignedInfo>` +
+				`<ds:CanonicalizationMethod Algorithm="` + alg + `">` +
+				`<ec:InclusiveNamespaces xmlns:ec="` + xmldsig1.ExcC14N10 + `" PrefixList="extra"/>` +
+				`</ds:CanonicalizationMethod>` +
+				`<ds:SignatureMethod Algorithm="` + xmldsig1.AlgRSASHA256 + `"/>` +
+				`<ds:Reference URI="">` +
+				`<ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>` +
+				`<ds:DigestValue>AA==</ds:DigestValue>` +
+				`</ds:Reference>` +
+				`</ds:SignedInfo>` +
+				`<ds:SignatureValue>AA==</ds:SignatureValue>` +
+				`</ds:Signature>`
+			doc := mustParseXML(t, `<root>`+sig+`</root>`)
+			verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+			_, err := verifier.Verify(t.Context(), doc)
+			require.ErrorIs(t, err, xmldsig1.ErrUnsupportedTransform,
+				"ec:InclusiveNamespaces on non-exclusive SignedInfo c14n must be rejected via public Verify")
+			require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
+		})
+	}
+}
+
 // findSignatureElement walks the tree and returns the first ds:Signature
 // element, or nil if none is present.
 func findSignatureElement(root helium.Node) *helium.Element {
