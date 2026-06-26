@@ -25,7 +25,7 @@ type canonicalizerCfg struct {
 	nodeSet           []helium.Node
 	nodeSetSet        bool // true once NodeSet was explicitly configured (even if empty)
 	inclusivePrefixes []string
-	baseURI           string
+	strictXMLAttrs    bool
 }
 
 // Canonicalizer configures XML canonicalization. It is a value-style
@@ -64,12 +64,37 @@ func (c Canonicalizer) NodeSet(nodes []helium.Node) Canonicalizer {
 	return c
 }
 
-// BaseURI specifies the document's base URI. This is needed for
-// C14N 1.1 xml:base fixup when using node-set filtering. If not provided,
-// xml:base fixup uses an empty base.
-func (c Canonicalizer) BaseURI(uri string) Canonicalizer {
+// StrictXMLAttributes switches xml:base, xml:lang and xml:space handling over a
+// node set to the strict W3C Canonical XML reading. It has no effect in
+// whole-document mode.
+//
+// The behavioral difference shows up for a rendered element whose own
+// xml:base/xml:lang/xml:space attribute is excluded from the node set:
+//
+//   - Default (this option off): the element's own value is still emitted, and
+//     for xml:base it seeds the fixup. This matches libxml2 — and therefore the
+//     canonical bytes produced by the libxml2/OpenSSL-based XML Signature stacks
+//     that dominate in the wild — so a digest computed here verifies against
+//     them. Interoperability with those implementations, not the test oracle, is
+//     why it is the default.
+//   - Strict (this option on): such an excluded attribute is not emitted (it
+//     still blocks inheritance from omitted ancestors), and xml:base fixup runs
+//     only when an omitted ancestor actually carries xml:base, per the letter of
+//     the W3C spec.
+//
+// Strict mode is also fail-closed on xml:base: a value that cannot be
+// canonicalized faithfully (a malformed URI reference, or a degenerate
+// empty-authority form such as "//", "///" or "urn://") makes Canonicalize
+// return an error instead of emitting best-effort bytes. The default mode stays
+// permissive and emits a best-effort result for such values, matching libxml2's
+// tolerance. Well-formed xml:base values (relative/absolute paths, http(s),
+// file and urn URIs, protocol-relative //host/path) behave identically in both.
+//
+// This option governs only that node-set xml:* behavior; it does not make the
+// package fully W3C-conformant in other respects.
+func (c Canonicalizer) StrictXMLAttributes() Canonicalizer {
 	c = c.clone()
-	c.cfg.baseURI = uri
+	c.cfg.strictXMLAttrs = true
 	return c
 }
 
@@ -95,7 +120,7 @@ func (c Canonicalizer) Canonicalize(doc *helium.Document, out io.Writer) error {
 		out:  out,
 	}
 	can.withComments = cfg.withComments
-	can.baseURI = cfg.baseURI
+	can.strictXMLAttrs = cfg.strictXMLAttrs
 	if cfg.nodeSetSet {
 		can.nodeSet = make(map[helium.Node]struct{}, len(cfg.nodeSet))
 		for _, n := range cfg.nodeSet {
