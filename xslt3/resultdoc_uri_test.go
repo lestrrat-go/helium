@@ -340,3 +340,92 @@ func TestResultDocumentNestedDuplicateRelativeVsAbsoluteFileURI(t *testing.T) {
 	require.Error(t, err, "nested relative and absolute file: hrefs denoting the same file must collide")
 	require.Contains(t, err.Error(), "XTDE1490")
 }
+
+// XSLT3-ADV-001: every error-prone serialization AVT on xsl:result-document must
+// be evaluated in the preflight, even when it is the ONLY serialization attribute
+// present. Previously media-type, html-version, include-content-type,
+// allow-duplicate-names and output-version were absent from the preflight
+// `hasAny` gate (or never evaluated), so when one of them was the sole
+// serialization attribute the gate short-circuited and a failing AVT (e.g.
+// {1 idiv 0}) was silently swallowed: the body emitted output with err=nil.
+func TestResultDocumentSerializationAVTErrorPropagates(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		attr string
+	}{
+		{"media-type", `media-type="{1 idiv 0}"`},
+		{"output-version", `output-version="{1 idiv 0}"`},
+		{"html-version", `html-version="{1 idiv 0}"`},
+		{"include-content-type", `include-content-type="{1 idiv 0}"`},
+		{"allow-duplicate-names", `allow-duplicate-names="{1 idiv 0}"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document `+tc.attr+`><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+			_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+			require.Error(t, err, "a dynamic error in the %s AVT must not be swallowed", tc.name)
+			require.True(t, strings.Contains(err.Error(), "idiv") || strings.Contains(err.Error(), "FOAR0001") ||
+				strings.Contains(err.Error(), "division") || strings.Contains(err.Error(), "zero"),
+				"error should reflect the division-by-zero dynamic error, got: %v", err)
+		})
+	}
+}
+
+// XSLT3-ADV-001: a primary xsl:result-document whose serialization AVT raises a
+// dynamic error must fail in the preflight, BEFORE any primary output is emitted,
+// so an enclosing xsl:catch can write the sole primary result document with no
+// partial <a/> left behind. This must hold for the AVTs that were previously
+// missing from the preflight gate (media-type / output-version shown here).
+func TestResultDocumentSerializationAVTErrorObservableInTryCatch(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		attr string
+	}{
+		{"media-type", `media-type="{1 idiv 0}"`},
+		{"output-version", `output-version="{1 idiv 0}"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document `+tc.attr+`><a/></xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+			out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+			require.NoError(t, err, "the caught primary result-document must succeed without a spurious conflict")
+			require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
+			require.NotContains(t, out, "<a/>", "the failed primary result document must not leave partial output behind")
+		})
+	}
+}
+
+// XSLT3-ADV-001: output-version supplied as a valid AVT on a primary
+// xsl:result-document must reach the effective output definition. Pre-fix the
+// output-version AVT was never evaluated/applied, so the override was dropped.
+func TestResultDocumentPrimaryOutputVersionAVTApplied(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document method="xml" output-version="{concat('1','.','1')}"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err)
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od, "resolved output def must be populated after Do")
+	require.Equal(t, "1.1", od.Version,
+		"the primary result-document's output-version AVT override must reach the effective output def")
+}

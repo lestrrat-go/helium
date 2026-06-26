@@ -722,15 +722,14 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 		// Validate JSON duplicate keys (SERE0022) when allow-duplicate-names is not "yes".
 		if effectiveMethod == methodJSON {
-			allowDupes := false // default: allow-duplicate-names=no per XSLT 3.0 §20
-			if inst.AllowDuplicateNames != nil {
-				adnVal, adnErr := inst.AllowDuplicateNames.evaluate(ctx, ec.contextNode)
-				if adnErr == nil {
-					adnVal = strings.TrimSpace(adnVal)
-					if adnVal == lexicon.ValueYes || adnVal == lexicon.ValueTrue || adnVal == "1" {
-						allowDupes = true
-					}
-				}
+			// allow-duplicate-names defaults to "no" per XSLT 3.0 §20. The value
+			// (including the result-document AVT and any named-format/default
+			// xsl:output base) was already evaluated up front in the preflight via
+			// evalResultDocOutputDef; reuse it so a failing AVT was surfaced there
+			// rather than silently swallowed here.
+			allowDupes := false
+			if primaryOverrides != nil {
+				allowDupes = primaryOverrides.AllowDuplicateNames
 			}
 			if !allowDupes {
 				if err := validateJSONItems(bufFrame.pendingItems); err != nil {
@@ -910,6 +909,8 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
+		inst.MediaType != nil || inst.HTMLVersion != nil || inst.IncludeContentType != nil ||
+		inst.AllowDuplicateNames != nil ||
 		inst.JSONNodeOutputMethodAVT != nil || inst.NormalizationForm != nil ||
 		ec.getParamDocOutputDef(inst) != nil ||
 		inst.ItemSeparatorSet || inst.BuildTree != nil
@@ -1005,6 +1006,13 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		}
 		base.Encoding = strings.TrimSpace(v)
 	}
+	if inst.OutputVersion != nil {
+		v, err := evalAVT(inst.OutputVersion)
+		if err != nil {
+			return nil, err
+		}
+		base.Version = strings.TrimSpace(v)
+	}
 	if inst.ByteOrderMark != nil {
 		v, err := evalAVT(inst.ByteOrderMark)
 		if err != nil {
@@ -1054,6 +1062,15 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		}
 		b, _ := parseXSDBool(strings.TrimSpace(v))
 		base.IncludeContentType = &b
+	}
+	if inst.AllowDuplicateNames != nil {
+		v, err := evalAVT(inst.AllowDuplicateNames)
+		if err != nil {
+			return nil, err
+		}
+		if b, ok := parseXSDBool(strings.TrimSpace(v)); ok {
+			base.AllowDuplicateNames = b
+		}
 	}
 	if inst.EscapeURIAttributes != nil {
 		v, err := evalAVT(inst.EscapeURIAttributes)
