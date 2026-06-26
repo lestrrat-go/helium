@@ -550,7 +550,14 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 				return nil, fmt.Errorf("XPTY0018: path expression result contains a mix of nodes and non-nodes")
 			}
 			hasNonNodes = true
-			allItems = append(allItems, seqMaterialize(r)...)
+			// Accumulate through the bounded helper so maxNodes / OpLimit /
+			// cancellation are enforced on the atomic branch just as they are on
+			// the node branch below; otherwise a per-node right expression such as
+			// (1 to 10000000) could grow allItems past ec.maxNodes unbounded.
+			allItems, err = appendBoundedSeq(ctx, ec, allItems, r, ec.maxNodes)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

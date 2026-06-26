@@ -54,7 +54,7 @@ Lowering is structural for non-trivial nodes: recursive children usually become 
 ## Evaluation Rules by Expr Type
 
 ### SequenceExpr (comma)
-Evaluate each item, concatenate sequences.
+Evaluate each item, concatenate sequences through `appendBoundedSeq` so the aggregate honors `maxNodes` / OpLimit / cancellation (each operand is individually capped, but the concatenation must be bounded too).
 
 ### LocationPath
 1. Start: root node (absolute) or context node (relative)

@@ -1039,7 +1039,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			var importSchemas []*xsd.Schema
 			for _, sp := range tc.ImportSchemaPaths {
 				schemaPath := w3cResolvePath(sp)
-				schema, schemaErr := xsd.NewCompiler().CompileFile(t.Context(), schemaPath)
+				// Trusted committed W3C fixtures; their nested
+				// xs:include/xs:import targets live next to the schema (e.g.
+				// schema066.xsd includes schema066a.xsd). The xsd compiler now
+				// denies nested-schema FS access by default, so opt back into
+				// host access here.
+				schema, schemaErr := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(t.Context(), schemaPath)
 				if schemaErr != nil {
 					t.Fatalf("compile import schema %q: %v", sp, schemaErr)
 				}
@@ -1283,7 +1288,10 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// Load source document schema if specified by the test case.
 	if tc.SourceSchemaPath != "" {
 		schemaPath := w3cResolvePath(tc.SourceSchemaPath)
-		schema, schemaErr := xsd.NewCompiler().CompileFile(ctx, schemaPath)
+		// Trusted committed W3C fixtures whose nested xs:include/xs:import
+		// targets live next to the schema; the xsd compiler now denies
+		// nested-schema FS access by default, so opt back into host access.
+		schema, schemaErr := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(ctx, schemaPath)
 		if schemaErr != nil {
 			t.Fatalf("compile source schema %q: %v", schemaPath, schemaErr)
 		}
