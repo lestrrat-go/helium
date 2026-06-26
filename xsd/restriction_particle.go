@@ -296,6 +296,16 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 				return false
 			}
+			// An explicit empty derived sequence (<xs:sequence/>, no emitting
+			// particles) restricts the base all to empty content. That is valid iff
+			// the base all PARTICLE itself is emptiable (e.g. minOccurs="0") —
+			// semantically the same empty-content restriction the derivedMG==nil path
+			// handles. recurseAll would instead wrongly demand every base all CHILD be
+			// individually emptiable, ignoring that an optional base all particle
+			// accepts zero elements even when its members are required.
+			if particleEmitsNothing(r) {
+				return particleEmptiable(b)
+			}
 			return recurseAll(ctx, rg.Particles, bg.Particles)
 		}
 		// choice:sequence, choice:all, all:sequence, all:choice — no derivation

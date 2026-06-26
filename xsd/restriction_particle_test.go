@@ -1256,6 +1256,56 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	t.Run("accepts empty sequence restricting optional all", func(t *testing.T) {
+		t.Parallel()
+		// Base all is OPTIONAL (minOccurs="0") with required members a,b, so it
+		// accepts empty content; derived restricts it to an explicit empty
+		// <xs:sequence/>. recurseAll must NOT demand each base all child be
+		// individually emptiable — the base all PARTICLE is emptiable, so empty
+		// content is a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all minOccurs="0">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects empty sequence restricting required all", func(t *testing.T) {
+		t.Parallel()
+		// Base all is REQUIRED (default minOccurs="1") with required members a,b, so
+		// it is NOT emptiable; restricting it to an explicit empty <xs:sequence/>
+		// drops required content — not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
 	t.Run("rejects value-space-different fixed restriction", func(t *testing.T) {
 		t.Parallel()
 		// Base element a fixed="1" (xs:integer); derived fixed="2" — a different
