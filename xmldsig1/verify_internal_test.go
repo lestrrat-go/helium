@@ -15,6 +15,10 @@ import (
 
 const dsigNS = NamespaceDSig
 
+// payloadURI is the same-document Reference URI used by the signer-driven tests
+// below, all of which sign a <data Id="payload"> element.
+const payloadURI = "#payload"
+
 // findChild returns the first child element of parent with the given local
 // name, failing the test if none is found.
 func findChild(t *testing.T, parent *helium.Element, name string) *helium.Element {
@@ -168,6 +172,42 @@ func TestParseSignedInfo(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "no Reference")
 	})
+
+	// A second CanonicalizationMethod makes the c14n algorithm ambiguous; the
+	// schema fixes its cardinality at one, so it must be rejected rather than
+	// accepted last-one-wins.
+	t.Run("duplicate CanonicalizationMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + C14N10 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple CanonicalizationMethod")
+	})
+
+	// A second SignatureMethod makes the signature algorithm ambiguous.
+	t.Run("duplicate SignatureMethod", func(t *testing.T) {
+		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgRSASHA256 + `"/>` +
+			`<ds:SignatureMethod xmlns:ds="` + dsigNS + `" Algorithm="` + AlgECDSASHA256 + `"/>` +
+			`<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference></ds:SignedInfo>`
+		doc := mustParse(t, si)
+		var parsed parsedSignature
+		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple SignatureMethod")
+	})
 }
 
 func TestParseReferenceElement(t *testing.T) {
@@ -207,6 +247,53 @@ func TestParseReferenceElement(t *testing.T) {
 		require.Len(t, ref.transforms, 1)
 		require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
 	})
+
+	// A second DigestMethod makes the digest algorithm ambiguous.
+	t.Run("duplicate DigestMethod", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA512 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple DigestMethod")
+	})
+
+	// Two DigestValue children (the core of DSIG-004): even when the second
+	// matches the recomputed digest, the ambiguous schema-invalid Reference
+	// must be rejected rather than accepted last-one-wins.
+	t.Run("duplicate DigestValue", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">BB==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple DigestValue")
+	})
+
+	// At most one Transforms element is permitted; two would let extra
+	// transforms accumulate and silently change the canonical input.
+	t.Run("duplicate Transforms", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
+			`</ds:Transforms>` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + C14N10 + `"/>` +
+			`</ds:Transforms>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Contains(t, err.Error(), "multiple Transforms")
+	})
 }
 
 // TestEmptyReferencesRejected guards against a SignedInfo that carries zero
@@ -230,7 +317,7 @@ func TestEmptyReferencesRejected(t *testing.T) {
 	sigElem, err := NewSigner().
 		SignatureAlgorithm(AlgRSASHA256).
 		Reference(ReferenceConfig{
-			URI:             "#payload",
+			URI:             payloadURI,
 			DigestAlgorithm: DigestSHA256,
 			Transforms:      []Transform{ExcC14NTransform()},
 		}).
@@ -270,6 +357,62 @@ func TestEmptyReferencesRejected(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidSignature)
 	require.True(t, strings.Contains(err.Error(), "Reference"),
 		"error should mention the missing Reference: %v", err)
+}
+
+// TestDuplicateDigestValueRejected is the end-to-end form of DSIG-004: a
+// SignedInfo whose Reference carries two DigestValue children must be rejected
+// even when the document is otherwise a perfectly valid signature. The attack
+// is built with full key control: sign normally, append a second (matching)
+// DigestValue to the Reference, then recompute a valid SignatureValue over the
+// now-ambiguous SignedInfo. Last-one-wins parsing would accept it; a conforming
+// verifier must reject the schema-invalid duplicate.
+func TestDuplicateDigestValueRejected(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><data Id="payload">secret</data></root>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadURI,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Sanity: the freshly produced signature verifies before tampering.
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.NoError(t, err)
+
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	reference := findChild(t, signedInfo, "Reference")
+	digestValue := findChild(t, reference, "DigestValue")
+
+	// Append an identical second DigestValue so the Reference now has two.
+	dup, err := helium.CopyNode(digestValue, doc)
+	require.NoError(t, err)
+	dupElem, ok := helium.AsNode[*helium.Element](dup)
+	require.True(t, ok)
+	require.NoError(t, reference.AddChild(dupElem))
+	require.Equal(t, 2, countChildren(reference, "DigestValue"))
+
+	// Recompute a valid SignatureValue over the now-ambiguous SignedInfo.
+	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+	require.NoError(t, err)
+	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
+	require.NoError(t, err)
+
+	sigValueElem := findChild(t, sigElem, "SignatureValue")
+	setText(t, sigValueElem, base64.StdEncoding.EncodeToString(sigBytes))
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.Error(t, err, "signature with duplicate DigestValue must be rejected")
+	require.ErrorIs(t, err, ErrInvalidSignature)
+	require.Contains(t, err.Error(), "multiple DigestValue")
 }
 
 // TestVerifyLineWrappedDigestValue ensures a DigestValue carrying embedded
@@ -336,7 +479,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadURI,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -396,7 +539,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadURI,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -452,7 +595,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadURI,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
