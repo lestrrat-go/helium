@@ -264,8 +264,71 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		}
 		return true
 	default:
-		// Mixed/unsupported compositor combination — conservatively accept.
-		return true
+		// Remaining mixed-compositor pairs: choice:sequence, choice:all,
+		// all:sequence, all:choice, and sequence:all. XSD §3.9.6 (Particle Valid
+		// (Restriction)) defines a group:group derivation rule ONLY for matching
+		// compositors (Recurse/RecurseLax), for a derived sequence against a base
+		// choice (MapAndSum, handled above), and for a derived sequence against a
+		// base all (RecurseUnordered). The other four pairs have NO derivation rule
+		// and are invalid restrictions.
+		//
+		// Before rejecting, fold away "pointless" single-emitting-child wrappers on
+		// either side and re-dispatch: a group with exactly one emitting member is
+		// equivalent to that member, so e.g. choice(a) restricting sequence(a) is a
+		// valid (element-to-element) restriction once both pointless wrappers are
+		// removed. Only re-dispatch when a reduction actually made progress, so the
+		// recursion terminates.
+		rr := reduceSingletonGroup(r)
+		bb := reduceSingletonGroup(b)
+		if rr != r || bb != b {
+			return particleValidRestriction(ctx, rr, bb)
+		}
+		// sequence:all is RecurseUnordered (a valid derivation). Implementing the
+		// full unordered mapping is out of scope here; conservatively accept it
+		// rather than risk a false rejection.
+		if rg.Compositor == CompositorSequence && bg.Compositor == CompositorAll {
+			return true
+		}
+		// choice:sequence, choice:all, all:sequence, all:choice — no derivation
+		// rule, reject.
+		return false
+	}
+}
+
+// reduceSingletonGroup folds a "pointless" model-group particle — one whose term
+// is a model group with exactly one element-emitting member — down to that single
+// member, repeatedly, combining the nesting occurrence ranges. A group that emits
+// via exactly one member admits precisely what that member admits (repeated per
+// group occurrence), so the wrapper compositor is irrelevant to the content
+// model. Returning the original particle unchanged when no reduction applies lets
+// callers detect "no progress" via pointer identity. Non-emitting members are
+// dropped before counting, so a prohibited sibling never blocks the reduction.
+func reduceSingletonGroup(p *Particle) *Particle {
+	for {
+		mg, ok := p.Term.(*ModelGroup)
+		if !ok {
+			return p
+		}
+		var only *Particle
+		count := 0
+		for _, child := range mg.Particles {
+			if particleEmitsNothing(child) {
+				continue
+			}
+			count++
+			if count > 1 {
+				break
+			}
+			only = child
+		}
+		if count != 1 {
+			return p
+		}
+		p = &Particle{
+			MinOccurs: mulOccurs(p.MinOccurs, only.MinOccurs),
+			MaxOccurs: mulOccurs(p.MaxOccurs, only.MaxOccurs),
+			Term:      only.Term,
+		}
 	}
 }
 
