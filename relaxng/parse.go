@@ -1487,15 +1487,29 @@ func (c *compiler) addSchemaError(ctx context.Context, node *helium.Element, msg
 	c.errorCount++
 }
 
-// hasDataContent checks if any pattern in the slice is a data/value/list pattern.
+// hasDataContent checks if any pattern in the slice contains a data/value/list
+// pattern in the current content context.
 func hasDataContent(pats []*pattern) bool {
-	for _, p := range pats {
-		switch p.kind {
-		case patternData, patternValue, patternList:
-			return true
-		}
+	return slices.ContainsFunc(pats, containsData)
+}
+
+// containsData reports whether p contributes data/value/list content to the
+// enclosing element's content context. Like containsElement it recurses through
+// composite patterns (group, interleave, choice, optional, repetition, ...) so
+// data wrapped in a <group> is detected, but it stops at element and attribute
+// boundaries: data inside a nested <element> or <attribute> belongs to that
+// node's own content context, not the current one.
+func containsData(p *pattern) bool {
+	if p == nil {
+		return false
 	}
-	return false
+	switch p.kind {
+	case patternData, patternValue, patternList:
+		return true
+	case patternElement, patternAttribute:
+		return false
+	}
+	return slices.ContainsFunc(p.children, containsData)
 }
 
 // hasElementContent checks if any pattern in the slice contains an element pattern.
