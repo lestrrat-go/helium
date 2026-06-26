@@ -144,7 +144,8 @@ func TestCompile_CircularInclude_RelativeURLLocalBase(t *testing.T) {
 // BaseDir would double the prefix ("schemas/schemas/main.xsd"), miss the cycle,
 // and re-parse the root into spurious duplicate components. The seed must equal
 // the key the nested back-reference computes ("schemas/main.xsd"), which it does
-// because rootSchemaKey joins only the basename of doc.URL() onto BaseDir.
+// because rootSchemaKey recognizes doc.URL() already sits under BaseDir and seeds
+// it unchanged rather than re-joining it onto BaseDir.
 func TestCompile_CircularInclude_AlreadyResolvedURLLocalBase(t *testing.T) {
 	const ns = "urn:c"
 
@@ -177,6 +178,50 @@ func TestCompile_CircularInclude_AlreadyResolvedURLLocalBase(t *testing.T) {
 		FS(fsys).
 		Compile(t.Context(), doc)
 	require.NoError(t, err, "circular include with an already-BaseDir-relative URL must not double-resolve and must compile cleanly")
+	require.NotNil(t, schema)
+}
+
+// The Compile path must close the cycle when doc.URL() sits NESTED under BaseDir
+// by more than one segment ("schemas/root/main.xsd" under BaseDir("schemas")).
+// A nested include's back-reference resolves its relative schemaLocation against
+// the including schema's base dir, landing on the root's FULL resolved key
+// "schemas/root/main.xsd" — NOT "schemas/main.xsd". Seeding the guard from only
+// doc.URL()'s basename joined onto BaseDir would drop the "root/" segment, miss
+// the back-reference, and re-parse the root into spurious duplicate components.
+func TestCompile_CircularInclude_NestedUnderBaseDir(t *testing.T) {
+	const ns = "urn:c"
+
+	mainBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="` + ns + `" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="root/inc.xsd"/>
+  <xs:element name="root" type="t:LeafType"/>
+</xs:schema>`)
+	incBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="main.xsd"/>
+  <xs:complexType name="LeafType">
+    <xs:sequence>
+      <xs:element name="x" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+
+	fsys := uriReadFS{
+		"schemas/root/main.xsd": mainBytes,
+		"schemas/root/inc.xsd":  incBytes,
+	}
+
+	// doc.URL() is nested two segments under BaseDir: "schemas/root/main.xsd"
+	// while BaseDir is "schemas". The root's include of "root/inc.xsd" resolves
+	// to "schemas/root/inc.xsd"; inc's back-include of "main.xsd" resolves to
+	// "schemas/root/main.xsd", which the seed must match exactly.
+	doc, err := helium.NewParser().BaseURI("schemas/root/main.xsd").Parse(t.Context(), mainBytes)
+	require.NoError(t, err)
+	require.Equal(t, "schemas/root/main.xsd", doc.URL())
+
+	schema, err := xsd.NewCompiler().
+		BaseDir("schemas").
+		FS(fsys).
+		Compile(t.Context(), doc)
+	require.NoError(t, err, "circular include with a doc URL nested under BaseDir must not drop directory segments and must compile cleanly")
 	require.NotNil(t, schema)
 }
 
