@@ -262,6 +262,70 @@ func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
 		require.NotNil(t, lang)
 		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
 	})
+
+	t.Run("conflicting DTD default xmlns:xml is rejected without explicit decl", func(t *testing.T) {
+		t.Parallel()
+		// No explicit xmlns:xml on the tag. A DTD-defaulted xmlns:xml that maps
+		// the reserved xml prefix to the wrong URI must be rejected before it is
+		// pushed; otherwise xml:lang would resolve through "urn:dtd" instead of
+		// the reserved XML namespace.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA "urn:dtd">]>` +
+			`<r xml:lang="en"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("well-formed DTD default xmlns:xml keeps the implicit XML namespace", func(t *testing.T) {
+		t.Parallel()
+		// A DTD-defaulted xmlns:xml that maps to the correct URI must not shadow
+		// the implicit reserved binding; xml:lang stays in the XML namespace.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA "http://www.w3.org/XML/1998/namespace">]>` +
+			`<r xml:lang="en"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		var lang *helium.Attribute
+		for _, a := range root.Attributes() {
+			if a.Name() == "xml:lang" {
+				lang = a
+				break
+			}
+		}
+		require.NotNil(t, lang)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
+	})
+
+	t.Run("DTD default xmlns:xmlns is rejected", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xmlns CDATA "urn:dtd">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("DTD default prefixed xmlns with empty URI creates no binding", func(t *testing.T) {
+		t.Parallel()
+		// An empty default value is never registered as an attribute default
+		// (mirrors libxml2: empty defaults are not applied), so the empty-URI
+		// case cannot reach the defaulting path and no namespace is pushed.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Empty(t, root.URI())
+	})
 }
 
 func TestGetAttribute(t *testing.T) {
