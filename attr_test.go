@@ -194,7 +194,11 @@ func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
 
 	t.Run("explicit prefixed xmlns wins over DTD default", func(t *testing.T) {
 		t.Parallel()
-		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "urn:dtd">]><p:r xmlns:p="urn:explicit"/>`
+		// The ATTLIST must be declared for the qualified element name "p:r"
+		// (the DTD-default lookup key for prefixed elements is the literal
+		// "prefix:local"); otherwise the default never applies and the test
+		// would pass regardless of the fix.
+		xml := `<!DOCTYPE p:r [<!ATTLIST p:r xmlns:p CDATA "urn:dtd">]><p:r xmlns:p="urn:explicit"/>`
 
 		p := helium.NewParser().DefaultDTDAttributes(true)
 		doc, err := p.Parse(t.Context(), []byte(xml))
@@ -208,6 +212,19 @@ func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
 	t.Run("DTD default applies when no explicit declaration", func(t *testing.T) {
 		t.Parallel()
 		xml := `<!DOCTYPE r [<!ATTLIST r xmlns CDATA "urn:dtd">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "urn:dtd", root.URI())
+	})
+
+	t.Run("prefixed DTD default applies when no explicit declaration", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE p:r [<!ATTLIST p:r xmlns:p CDATA "urn:dtd">]><p:r/>`
 
 		p := helium.NewParser().DefaultDTDAttributes(true)
 		doc, err := p.Parse(t.Context(), []byte(xml))
