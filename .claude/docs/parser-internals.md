@@ -316,13 +316,13 @@ cancellation which returns a nil document and the context error).
 
 The HTML parser bounds the streaming scanner's working set with `Parser.MaxContentSize` (config field `parseConfig.maxContentSize`; effective value via `contentLimit()`, which substitutes `defaultMaxContentSize` = 16 MiB when ≤ 0). The cap has two distinct meanings depending on whether the construct is chunkable.
 
-### Soft cap (chunkable content): raw-text / RCDATA / plaintext
+### Soft cap (chunkable content): normal data-state text / raw-text / RCDATA / plaintext
 
-Raw-text (`script`/`style`/`iframe`/`xmp`, `parseRawContent`), RCDATA (`title`/`textarea`, `parseRCDATAContent`), and plaintext (`parsePlaintext`) are delivered to SAX in chunks **targeting** `contentLimit()` bytes — the scanner never buffers a whole gigantic or unterminated section. The cap is a SOFT target, not a hard limit: a section larger than the cap still parses successfully, just in multiple chunks.
+Normal data-state character data (`parseCharacters`), raw-text (`script`/`style`/`iframe`/`xmp`, `parseRawContent`), RCDATA (`title`/`textarea`, `parseRCDATAContent`), and plaintext (`parsePlaintext`) are delivered to SAX in chunks **targeting** `contentLimit()` bytes — the scanner never buffers a whole gigantic or unterminated section. The cap is a SOFT target, not a hard limit: a section larger than the cap still parses successfully, just in multiple chunks.
 
 - **UTF-8-aware chunk boundaries**: a chunk boundary never splits a multi-byte rune.
   - `parseRawContent`/`parsePlaintext` accumulate whole tokens into a `bytes.Buffer` and flush (clone-then-Reset) before a token would push the buffer past the cap; a whole rune is read via `peekRuneToken` and appended as one indivisible token, so a rune (or complete `U+FFFD`) is never split. A single token larger than the cap is emitted whole as its own chunk.
-  - `parseRCDATAContent` caps the plain-text run at the limit, then backs the byte index off `isUTF8Continuation` bytes to the last whole-rune boundary; a lone rune larger than the cap is extended (not split) so a partial rune is never emitted.
+  - `parseCharacters`/`parseRCDATAContent` cap the plain-text run at the limit, then call `clampTextChunkToRune` to back the byte index off `isUTF8Continuation` bytes to the last whole-rune boundary; a lone rune larger than the cap is extended (not split) so a partial rune is never emitted. `parseCharacters` returns after each capped chunk and the main `parse()` loop re-enters it for the remainder. (Before this fix, normal data-state text was the one unbounded path: a long delimiter-free run was buffered whole.)
 
 ### Hard cap (indivisible content): comments / bogus comments / PIs
 

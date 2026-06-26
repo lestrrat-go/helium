@@ -902,6 +902,12 @@ func (p *parser) parseCharacters() {
 		return
 	}
 
+	// Cap the run at the content limit so one huge delimiter-free text span is
+	// emitted in bounded chunks instead of being buffered whole; the main parse
+	// loop re-enters parseCharacters for the remainder. Comments/PIs and
+	// raw-text/RCDATA/plaintext already bound memory this way; the normal data
+	// state was the lone unbounded path.
+	limit := p.cfg.contentLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -914,7 +920,13 @@ func (p *parser) parseCharacters() {
 			break
 		}
 		n++
+		if n >= limit {
+			break
+		}
 	}
+	// A cap-truncated run may land mid-rune; back off to a whole-rune boundary
+	// so the emitted chunk is valid UTF-8.
+	n = p.clampTextChunkToRune(n, limit)
 
 	if n > 0 {
 		text := p.cur.PeekString(n)
@@ -943,7 +955,11 @@ func (p *parser) parseCharacters() {
 				break
 			}
 			n++
+			if n >= limit {
+				break
+			}
 		}
+		n = p.clampTextChunkToRune(n, limit)
 		if n > 0 {
 			text := p.cur.PeekString(n)
 			_ = p.cur.Advance(n)
@@ -1811,6 +1827,30 @@ func isUTF8Continuation(b byte) bool {
 	return b&0xC0 == 0x80
 }
 
+// clampTextChunkToRune adjusts a text-run length scanned up to the content cap
+// so a chunk flushed at the cap never splits a multi-byte UTF-8 sequence. When
+// the run reached the cap (n >= limit) it backs n off to the last whole-rune
+// boundary; if the run begins with a single rune larger than the cap it extends
+// n forward to cover that rune whole rather than emitting a partial rune. A run
+// shorter than the cap (stopped at a real delimiter) is returned unchanged.
+func (p *parser) clampTextChunkToRune(n, limit int) int {
+	if n < limit {
+		return n
+	}
+	for n > 0 && isUTF8Continuation(p.cur.PeekAt(n)) {
+		n--
+	}
+	if n == 0 {
+		// A lone rune exceeds the cap. Extend to cover it whole so a partial
+		// rune is never emitted.
+		n = limit
+		for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
+			n++
+		}
+	}
+	return n
+}
+
 // parseRCDATAContent parses RCDATA content (title, textarea).
 // Like raw text but entities are expanded.
 func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
@@ -1880,23 +1920,9 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 				}
 			}
 			// The cap may land mid-rune. Back off to the last whole-rune
-			// boundary so the emitted chunk is valid UTF-8 — but only while a
-			// complete rune still precedes the boundary. If the run begins with
-			// a single rune that is itself larger than the cap, keep extending
-			// until that rune is whole rather than splitting it.
-			if n >= limit {
-				for n > 0 && isUTF8Continuation(p.cur.PeekAt(n)) {
-					n--
-				}
-				if n == 0 {
-					// A lone rune exceeds the cap. Extend to cover it whole so a
-					// partial rune is never emitted.
-					n = limit
-					for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
-						n++
-					}
-				}
-			}
+			// boundary so the emitted chunk is valid UTF-8 (extending a lone
+			// over-cap rune to cover it whole).
+			n = p.clampTextChunkToRune(n, limit)
 			if n > 0 {
 				text := p.cur.PeekString(n)
 				_ = p.cur.Advance(n)
