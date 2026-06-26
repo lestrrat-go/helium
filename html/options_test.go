@@ -248,6 +248,44 @@ func TestOptionsNoBlanksTinyChunkWhitespaceAcrossChunks(t *testing.T) {
 	}
 }
 
+func TestOptionsNoBlanksTinyChunkSignificanceAcrossEmbeds(t *testing.T) {
+	// Run significance must be remembered across EVERY non-whitespace emit path,
+	// not just plain text chunks. A char-ref (entity output) and a lone literal
+	// '<' are part of the SAME normal-data text run; once any of them has emitted
+	// non-whitespace, a later over-cap whitespace chunk must NOT hard-fail and
+	// must NOT be suppressed. Under StripBlanks+MaxContentSize(1) these inputs
+	// previously hard-failed with ErrContentSizeExceeded because the flag was
+	// cleared before char-ref / lone-'<' resolution and never re-marked.
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "entity-then-ws-text", input: `<p>a&amp;  b</p>`, want: "a&  b"},
+		{name: "entity-only-then-ws-text", input: `<p>&amp;  b</p>`, want: "&  b"},
+		{name: "lone-lt-then-ws-text", input: `<p>a<  b</p>`, want: "a<  b"},
+		{name: "lone-lt-only-then-ws-text", input: `<p><  b</p>`, want: "<  b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+
+			err := html.NewParser().
+				StripBlanks(true).
+				MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax)
+			require.NoError(t, err,
+				"a run made significant by entity/lone-'<' output must not hard-fail on later whitespace")
+			require.Equal(t, tc.want, string(collected),
+				"whitespace following entity/lone-'<' output must survive across chunks")
+		})
+	}
+}
+
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &html.SAXCallbacks{}

@@ -35,18 +35,24 @@ type parser struct {
 
 	// curTextRunSignificant carries whitespace-significance across the capped
 	// chunks of a SINGLE normal data-state text run under StripBlanks/noBlanks.
-	// A run is the maximal sequence of normal-text chunks parseCharacters emits
-	// between markup and entities. Because MaxContentSize makes the parser
-	// re-enter parseCharacters once per chunk, run-local scan state (sawNonWS)
-	// is lost between chunks; this persistent flag remembers that a
-	// non-whitespace byte has already been emitted in the current run. Once set
-	// it BYPASSES whitespace suppression (so a trailing/interior whitespace
-	// chunk of a known-significant run still emits) and the undecidable-
-	// whitespace hard-fail (so a later whitespace chunk never aborts). It is
-	// RESET when the run ends: the main loop clears it before dispatching to
-	// markup, and parseCharacters clears it before resolving an entity. The
-	// hard-fail therefore only fires for a run whose leading whitespace prefix
-	// overruns the cap BEFORE any non-whitespace byte is seen.
+	// A run is the maximal sequence of character data — plain text, entity /
+	// numeric char-ref output, and lone literal '<' — between two real markup
+	// tags. Because MaxContentSize makes the parser re-enter parseCharacters once
+	// per chunk, run-local scan state (sawNonWS) is lost between chunks; this
+	// persistent flag remembers that a non-whitespace byte has already been
+	// emitted somewhere in the current run. Once set it BYPASSES whitespace
+	// suppression (so a trailing/interior whitespace chunk of a known-significant
+	// run still emits) and the undecidable-whitespace hard-fail (so a later
+	// whitespace chunk never aborts).
+	//
+	// It is SET in exactly one place — emitCharacters, on any non-whitespace emit
+	// — so EVERY emit path (text chunks, resolved/unresolved char-refs, U+FFFD,
+	// lone '<') marks the run uniformly. It is RESET in exactly one place: the
+	// main parse loop, immediately before dispatching to a real markup tag
+	// (start/end tag, comment, DOCTYPE, bogus comment, PI). A char-ref and a lone
+	// '<' are part of the same run and never reset it. The hard-fail therefore
+	// only fires for a run whose leading whitespace prefix overruns the cap BEFORE
+	// any non-whitespace byte — text or entity output — is seen.
 	curTextRunSignificant bool
 
 	// locator for SetDocumentLocator
@@ -536,11 +542,15 @@ func (p *parser) parse(ctx context.Context) error {
 			break
 		}
 		if p.cur.Peek() == '<' {
-			// Markup ends the current normal-text run; forget its significance.
-			p.curTextRunSignificant = false
+			// Only an actual markup-tag dispatch ends the current normal-data text
+			// run and forgets its significance. A lone '<' that is not markup is
+			// ordinary character data belonging to the SAME run, so it must NOT
+			// reset the flag (emitCharacters re-marks the run via the '<' byte).
 			if p.cur.PeekAt(1) == '/' {
+				p.curTextRunSignificant = false
 				p.parseEndTag()
 			} else if p.cur.PeekAt(1) == '!' {
+				p.curTextRunSignificant = false
 				if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
 					p.parseComment(ctx)
 				} else if p.hasPrefixFold("<!DOCTYPE") {
@@ -551,11 +561,13 @@ func (p *parser) parse(ctx context.Context) error {
 				}
 			} else if p.cur.PeekAt(1) == '?' {
 				// Processing instruction — in HTML mode, treated as comment
+				p.curTextRunSignificant = false
 				p.parsePI(ctx)
 			} else if isASCIIAlpha(p.cur.PeekAt(1)) {
+				p.curTextRunSignificant = false
 				p.parseStartTag(ctx)
 			} else {
-				// Lone '<' — emit as character data
+				// Lone '<' — emit as character data; part of the current text run.
 				_ = p.emitCharacters([]byte("<"))
 				_ = p.cur.Advance(1)
 			}
@@ -916,8 +928,7 @@ func (p *parser) parseCharacters(ctx context.Context) {
 	if !p.cur.Done() && p.cur.Peek() == 0 {
 		_ = p.cur.Advance(1)
 		p.htmlStartCharData()
-		// U+FFFD is non-whitespace: the run is now known significant.
-		p.curTextRunSignificant = true
+		// U+FFFD is non-whitespace; emitCharacters marks the run significant.
 		_ = p.emitCharacters([]byte("�"))
 		return
 	}
@@ -948,11 +959,14 @@ func (p *parser) parseCharacters(ctx context.Context) {
 	// CURRENT chunk; a run like "a " or "a  b" at MaxContentSize(1) would emit "a"
 	// in one call and then re-enter with nothing but whitespace, losing the fact
 	// that the run is already significant. The parser-level curTextRunSignificant
-	// flag remembers this for the rest of the run: when set it lets later
-	// whitespace chunks emit (instead of being suppressed) and disarms the
-	// hard-fail. It is reset when the run ends (markup or entity), so the hard-fail
-	// still fires for a run whose leading whitespace prefix overruns the cap before
-	// any non-whitespace byte has been seen anywhere in the run.
+	// flag remembers this for the rest of the run: it is SET by emitCharacters on
+	// any non-whitespace emit (plain text, resolved/unresolved char-ref output,
+	// U+FFFD, lone '<') and, once set, lets later whitespace chunks emit (instead
+	// of being suppressed) and disarms the hard-fail. A char-ref does NOT end the
+	// run; only a real markup tag does, and only that RESETS the flag (in the main
+	// parse loop). The hard-fail therefore still fires for a run whose leading
+	// whitespace prefix overruns the cap before ANY non-whitespace byte — text or
+	// entity output — has appeared anywhere in the run.
 	noBlanks := p.cfg.noBlanks
 	sawNonWS := false
 	firstNWS := -1
@@ -1034,9 +1048,6 @@ func (p *parser) parseCharacters(ctx context.Context) {
 		textBytes := []byte(text)
 		if !isAllWhitespace(textBytes) {
 			p.htmlStartCharData()
-			// This chunk carries a non-whitespace byte: mark the whole run
-			// significant so its later all-whitespace chunks are not suppressed.
-			p.curTextRunSignificant = true
 		}
 		// Suppress whitespace before the root element has been seen
 		if !p.sawRoot && isAllWhitespace(textBytes) {
@@ -1069,7 +1080,6 @@ func (p *parser) parseCharacters(ctx context.Context) {
 			textBytes := []byte(text)
 			if !isAllWhitespace(textBytes) {
 				p.htmlStartCharData()
-				p.curTextRunSignificant = true
 			}
 			_ = p.emitCharacters(textBytes)
 		}
@@ -1082,9 +1092,11 @@ func (p *parser) parseCharacters(ctx context.Context) {
 	// RCDATA path, instead of buffering the whole run through unbounded
 	// parseWhile scans.
 	if !p.cur.Done() && p.cur.Peek() == '&' {
-		// An entity ends the current normal-text run; forget its significance so
-		// the run that follows the reference is judged on its own bytes.
-		p.curTextRunSignificant = false
+		// A char-ref is part of the SAME normal-data text run, not a boundary:
+		// significance must NOT be reset here. If the reference resolves to (or
+		// emits a literal containing) non-whitespace, emitCharacters re-marks the
+		// run significant; an all-whitespace resolution leaves it unchanged. Only a
+		// real markup tag (handled in the main parse loop) ends the run.
 		p.parseCharRefBounded(ctx, p.cfg.contentLimit())
 	}
 }
@@ -1628,6 +1640,18 @@ func (p *parser) emitError(msg string, args ...any) error {
 // When noBlanks is set, whitespace-only data is suppressed unless
 // inside a raw-text element (script, style, etc.).
 func (p *parser) emitCharacters(data []byte) error {
+	// Single chokepoint for normal-data-state run significance: ANY non-whitespace
+	// character data — a plain text chunk, a resolved entity / numeric char-ref,
+	// an unresolved char-ref literal, a U+FFFD replacement, or a lone literal '<'
+	// — marks the current text run significant. Every emit path flows through here,
+	// so later all-whitespace chunks of the same run are not suppressed and the
+	// over-cap undecidable-whitespace hard-fail in parseCharacters is disarmed.
+	// The flag is RESET only when a real markup tag is dispatched in the main
+	// parse loop (start/end tag, comment, DOCTYPE, bogus comment, PI); it is never
+	// cleared by a char-ref or a lone '<', which are part of the same run.
+	if !isAllWhitespace(data) {
+		p.curTextRunSignificant = true
+	}
 	if p.cfg.noBlanks && isAllWhitespace(data) && !p.curTextRunSignificant {
 		if !p.inRawTextElement() {
 			return nil
