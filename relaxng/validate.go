@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -2187,30 +2186,33 @@ func validateWithParams(text, typeName string, params []*param) int {
 				return -1
 			}
 		case "length":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			// The bound is compile-time validated as an xs:nonNegativeInteger and
+			// parsed width-safely (big.Int) so a huge-but-valid bound is compared
+			// faithfully rather than overflowing int into a reject-all.
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
 			length, ok := facetLength(text, typeName)
-			if !ok || length != n {
+			if !ok || big.NewInt(int64(length)).Cmp(n) != 0 {
 				return -1
 			}
 		case "minLength":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
 			length, ok := facetLength(text, typeName)
-			if !ok || length < n {
+			if !ok || big.NewInt(int64(length)).Cmp(n) < 0 {
 				return -1
 			}
 		case "maxLength":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
 			length, ok := facetLength(text, typeName)
-			if !ok || length > n {
+			if !ok || big.NewInt(int64(length)).Cmp(n) > 0 {
 				return -1
 			}
 		case "minInclusive":
@@ -2236,7 +2238,7 @@ func validateWithParams(text, typeName string, params []*param) int {
 			// validation, so count its significant digits and reject when they exceed
 			// the bound. The bound is parsed with big.Int so an arbitrarily large
 			// xs:positiveInteger does not overflow into a reject-all.
-			n, ok := parseDigitFacetBound(p.value)
+			n, ok := parseNonNegFacetBound(p.value)
 			if !ok || !value.IsDecimalFamily(typeName) {
 				return -1
 			}
@@ -2244,7 +2246,7 @@ func validateWithParams(text, typeName string, params []*param) int {
 				return -1
 			}
 		case "fractionDigits":
-			n, ok := parseDigitFacetBound(p.value)
+			n, ok := parseNonNegFacetBound(p.value)
 			if !ok || !value.IsDecimalFamily(typeName) {
 				return -1
 			}
@@ -2310,15 +2312,16 @@ func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) b
 	return accept(cmp)
 }
 
-// parseDigitFacetBound parses a totalDigits/fractionDigits facet bound into a
+// parseNonNegFacetBound parses an integer facet bound — totalDigits,
+// fractionDigits, or the length family (length/minLength/maxLength) — into a
 // big.Int. The bound is compile-time validated (checkDataFacets) as a valid
-// xs:positiveInteger (totalDigits) or xs:nonNegativeInteger (fractionDigits),
-// so by the time validation runs it is a well-formed integer lexical with only
-// XSD whitespace; it is normalized (XSD collapse — NOT Go's unicode-space
-// trimming, which would accept NBSP) before parsing. A big.Int is used rather
-// than strconv.Atoi so an arbitrarily large bound is compared faithfully instead
-// of overflowing int and collapsing into a reject-all.
-func parseDigitFacetBound(s string) (*big.Int, bool) {
+// xs:positiveInteger (totalDigits) or xs:nonNegativeInteger (fractionDigits and
+// the length facets), so by the time validation runs it is a well-formed integer
+// lexical with only XSD whitespace; it is normalized (XSD collapse — NOT Go's
+// unicode-space trimming, which would accept NBSP) before parsing. A big.Int is
+// used rather than strconv.Atoi so an arbitrarily large bound is compared
+// faithfully instead of overflowing int and collapsing into a reject-all.
+func parseNonNegFacetBound(s string) (*big.Int, bool) {
 	n, ok := new(big.Int).SetString(value.Normalize(s, "nonNegativeInteger"), 10)
 	return n, ok
 }

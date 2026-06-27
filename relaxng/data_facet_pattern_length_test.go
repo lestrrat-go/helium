@@ -94,3 +94,98 @@ func TestDataLengthFacetApplicability(t *testing.T) {
 			"length facet on xs:hexBinary must compile")
 	})
 }
+
+// TestDataLengthFacetBoundValidity covers RNG-104+105 r2: a length/minLength/
+// maxLength bound must be a valid xs:nonNegativeInteger, validated at COMPILE
+// time with XSD lexical/whitespace rules (not Go's strconv.Atoi + TrimSpace).
+// A negative bound, an NBSP-padded bound, or any non-integer bound is a compile
+// error; and a huge-but-valid bound must NOT overflow int into a reject-all.
+func TestDataLengthFacetBoundValidity(t *testing.T) {
+	t.Parallel()
+
+	const xsd = `datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"`
+
+	mk := func(facet, bound string) string {
+		return `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0" ` + xsd + `>
+  <data type="string"><param name="` + facet + `">` + bound + `</param></data>
+</element>`
+	}
+
+	t.Run("negative minLength is a compile error", func(t *testing.T) {
+		t.Parallel()
+		// Without bound validation, "-1" compiled and then accepted EVERY value
+		// (length >= -1 always holds), silently disabling the facet.
+		require.NotEmpty(t, compileErrorsFor(t, mk("minLength", "-1")),
+			`minLength="-1" must be a compile error, not an accept-all facet`)
+	})
+
+	t.Run("negative length is a compile error", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, compileErrorsFor(t, mk("length", "-2")),
+			`length="-2" must be a compile error`)
+	})
+
+	t.Run("negative maxLength is a compile error", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, compileErrorsFor(t, mk("maxLength", "-1")),
+			`maxLength="-1" must be a compile error`)
+	})
+
+	t.Run("NBSP-padded bound is a compile error", func(t *testing.T) {
+		t.Parallel()
+		// U+00A0 (NBSP) is NOT XSD whitespace, so it is not collapsed away: the
+		// bound is not a valid xs:nonNegativeInteger. Go's TrimSpace would strip
+		// it and Atoi would accept the digits, which is wrong XSD handling.
+		require.NotEmpty(t, compileErrorsFor(t, mk("minLength", " 3")),
+			"NBSP-padded bound must be a compile error")
+	})
+
+	t.Run("fractional bound is a compile error", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, compileErrorsFor(t, mk("maxLength", "3.0")),
+			`maxLength="3.0" must be a compile error`)
+	})
+
+	t.Run("non-digit bound is a compile error", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, compileErrorsFor(t, mk("length", "abc")),
+			`length="abc" must be a compile error`)
+	})
+
+	t.Run("XSD-whitespace-padded bound compiles", func(t *testing.T) {
+		t.Parallel()
+		// Leading/trailing XSD whitespace (here a newline + spaces) IS collapsed,
+		// so the bound is the valid xs:nonNegativeInteger "3".
+		require.Empty(t, compileErrorsFor(t, mk("length", "\n  3  ")),
+			"XSD-whitespace-padded bound must compile")
+	})
+
+	t.Run("huge maxLength does not reject valid short values", func(t *testing.T) {
+		t.Parallel()
+		// A bound far beyond int range must compare width-safely: parsing it with
+		// strconv.Atoi overflows and (depending on platform) flips the facet into
+		// a reject-all. A 3-char value must still satisfy this enormous maxLength.
+		huge := "99999999999999999999999999999999999999"
+		require.NoError(t, validateWith(t, mk("maxLength", huge), `<r>abc</r>`),
+			"a huge but valid maxLength must accept a short value, not reject-all")
+	})
+
+	t.Run("huge minLength still rejects short values", func(t *testing.T) {
+		t.Parallel()
+		huge := "99999999999999999999999999999999999999"
+		require.Error(t, validateWith(t, mk("minLength", huge), `<r>abc</r>`),
+			"a huge minLength must reject a short value")
+	})
+
+	t.Run("normal bound still enforces length", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateWith(t, mk("length", "3"), `<r>abc</r>`),
+			`length="3" must accept a 3-char value`)
+		require.Error(t, validateWith(t, mk("length", "3"), `<r>ab</r>`),
+			`length="3" must reject a 2-char value`)
+		require.NoError(t, validateWith(t, mk("minLength", "2"), `<r>abc</r>`),
+			`minLength="2" must accept a 3-char value`)
+		require.Error(t, validateWith(t, mk("maxLength", "2"), `<r>abc</r>`),
+			`maxLength="2" must reject a 3-char value`)
+	})
+}

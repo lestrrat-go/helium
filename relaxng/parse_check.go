@@ -240,6 +240,17 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 			// facet-applicability rules so RELAX NG and XSD agree.
 			if !value.LengthApplicable(typeName) {
 				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the datatype '%s'", p.name, typeName))
+				continue
+			}
+			// The bound must itself be a valid xs:nonNegativeInteger. Validate here
+			// with XSD whitespace/lexical rules (value.Normalize collapses only XSD
+			// whitespace — NOT Go's TrimSpace, which would accept NBSP — and
+			// value.ValidateBuiltin enforces the digit lexical and the >=0 range), so
+			// an out-of-space bound (negative, fractional, non-digit, NBSP-padded)
+			// is a fatal compile error rather than being parsed leniently at
+			// validation time and turning the facet into a no-op or reject-all.
+			if value.ValidateBuiltin(value.Normalize(p.value, "nonNegativeInteger"), "nonNegativeInteger") != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid 'nonNegativeInteger'", p.value, p.name))
 			}
 		case "minInclusive", "maxInclusive", "minExclusive", "maxExclusive":
 			if !value.Orderable(typeName) {

@@ -464,7 +464,14 @@ the string-derived family, the binary types, anyURI, QName and NOTATION
 (`value.LengthApplicable` in `internal/xsd/value`, shared with relaxng; xsd's
 `check_facets.go` keeps an equivalent table);
 a length facet on a numeric, boolean or date/time datatype is rejected at COMPILE
-time by `checkDataFacets`.
+time by `checkDataFacets`. Each length bound is itself COMPILE-validated as an
+`xs:nonNegativeInteger` (XSD-collapse normalized, NOT Go `TrimSpace`) so a
+negative, fractional, non-digit, or NBSP-padded bound is a fatal schema error
+rather than a facet that silently accepts every value (`minLength="-1"`) or whose
+bound is leniently trimmed. At validation `validateWithParams` parses the bound
+with `math/big` (`parseNonNegFacetBound`) and compares against `facetLength` via
+`big.Int.Cmp`, so a huge-but-valid `maxLength` cannot overflow `int` into a
+reject-all.
 
 **Pattern facet.** The `pattern` facet is an XSD/XPath regular expression matched
 through the shared XSD-regex engine (`internal/xsdregex`, the same translator
@@ -484,17 +491,19 @@ for two valid ORDERED operands that are genuinely indeterminate (e.g. mixed-time
 `xs:dateTime`), matching XSD semantics — but a NaN operand is the exception: an
 `xs:float`/`xs:double` NaN instance value OR NaN bound is excluded by the bounding
 facets (`value.IsFloatNaN`), so the facet FAILS rather than slipping through. The
-digit-facet bounds are parsed with `math/big` (`parseDigitFacetBound`, normalizing
-via the XSD collapse whiteSpace facet — NOT Go's `strconv.Atoi`+`strings.TrimSpace`,
-which trims NBSP and overflows large bounds into a reject-all). Facet APPLICABILITY
+digit- and length-facet bounds are parsed with `math/big` (`parseNonNegFacetBound`,
+normalizing via the XSD collapse whiteSpace facet — NOT Go's
+`strconv.Atoi`+`strings.TrimSpace`, which trims NBSP and overflows large bounds
+into a reject-all). Facet APPLICABILITY
 and bound LEXICAL VALIDITY are enforced at COMPILE time by `checkDataFacets`
 (`parse_check.go`, run from the `patternData` case of
 `checkPattern`): an ordering facet on a non-ordered datatype (`!value.Orderable`)
 or with an invalid bound, a digit facet on a non-decimal datatype, a length facet
 on a non-string-derived datatype (`!value.LengthApplicable`), an uncompilable
-`pattern`, and a digit-facet
+`pattern`, a digit-facet
 bound that is not a valid `xs:positiveInteger` (`totalDigits`) /
-`xs:nonNegativeInteger` (`fractionDigits`) — including an NBSP-padded or
+`xs:nonNegativeInteger` (`fractionDigits`), and a length-facet bound that is not a
+valid `xs:nonNegativeInteger` — including an NBSP-padded or
 out-of-range bound — are fatal
 schema errors — which makes the whole grammar unmatchable (`compileSchema`
 replaces `start` with `notAllowed`). `effectiveXSDDatatype` resolves the `<data>`
