@@ -196,27 +196,29 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 	var encodingErr bool
 	var encErrLine, encErrCol int
 	var detectedEnc string
-	if !utf8.Valid(normalized) {
-		if declaredCharsetIsUTF8(normalized) {
-			raw := normalized
-			var invBytes invalidByteInfo
-			normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
-			if encodingErr {
-				encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
-			}
-		} else {
-			// Assume Latin-1/Windows-1252 encoding and convert to UTF-8,
-			// matching libxml2's default behavior for non-UTF-8 documents.
-			// Distinguish explicit charset=iso-8859-1 from auto-detected:
-			// - "ISO-8859-1": strict output with &#N; for runes > 0xFF
-			// - "Windows-1252": Win-1252 reverse mapping for output
-			if declaredCharsetIsLatin1(normalized) {
-				detectedEnc = encISO88591
-			} else {
-				detectedEnc = encWindows1252
-			}
-			normalized = latin1ToUTF8(normalized)
+	switch {
+	case declaredCharsetIsLatin1(normalized):
+		// An explicit charset=iso-8859-1 commits to Latin-1 BEFORE the utf8.Valid
+		// check below: a declared Latin-1 document whose bytes happen to be valid
+		// UTF-8 must still decode as Latin-1, exactly as the streaming ParseReader
+		// path (which routes a declared Latin-1 head straight to latin1Reader)
+		// does. Without this hoist the two APIs would diverge on such an input.
+		detectedEnc = encISO88591
+		normalized = latin1ToUTF8(normalized)
+	case utf8.Valid(normalized):
+		// Already valid UTF-8 with no Latin-1 declaration: parse as-is.
+	case declaredCharsetIsUTF8(normalized):
+		raw := normalized
+		var invBytes invalidByteInfo
+		normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
+		if encodingErr {
+			encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
 		}
+	default:
+		// Undeclared non-UTF-8: assume Windows-1252 and convert to UTF-8,
+		// matching libxml2's default behavior for non-UTF-8 documents.
+		detectedEnc = encWindows1252
+		normalized = latin1ToUTF8(normalized)
 	}
 
 	p := &parser{
@@ -238,7 +240,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 // entire []byte), this chains io.Reader wrappers for newline normalization
 // and encoding conversion, feeding the result directly into the cursor.
 func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg parseConfig) *parser {
-	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r)
+	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r, cfg.contentLimit())
 
 	p := &parser{
 		cur:               strcursor.NewUTF8Cursor(wrapped),

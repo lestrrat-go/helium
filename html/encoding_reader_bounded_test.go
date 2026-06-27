@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testDeferredCap is a small explicit bound for the deferred reader's undecided
+// buffer so these unit tests stay fast. In production the bound is the parser's
+// configured content limit (parseConfig.contentLimit(), 16 MiB by default).
+const testDeferredCap = 1 << 20 // 1 MiB
+
 // countingASCIIReader yields pure-ASCII bytes ('a') up to remaining, recording
 // the total number of bytes it has actually handed out. It models a long (here
 // finite, to keep the test bounded even against a buggy whole-buffer code path)
@@ -35,7 +40,7 @@ func (r *countingASCIIReader) Read(p []byte) (int, error) {
 
 // TestDeferredLatin1ReaderBoundedBufferingFailsClosed guards the memory bound:
 // an undeclared all-valid-UTF-8 (ASCII) stream that never reveals its encoding
-// must not be buffered without limit. Once deferredLatin1MaxBuffer bytes have
+// must not be buffered without limit. Once testDeferredCap bytes have
 // been seen with no non-UTF-8 byte and no EOF, the exact UTF-8-vs-Latin-1
 // decision still cannot be made, so the reader FAILS CLOSED with a bounded-input
 // error (ErrContentSizeExceeded) instead of committing to UTF-8 (which could
@@ -46,14 +51,14 @@ func TestDeferredLatin1ReaderBoundedBufferingFailsClosed(t *testing.T) {
 
 	const sourceSize = 32 << 20 // 32 MiB of pure ASCII
 	src := &countingASCIIReader{remaining: sourceSize}
-	dr := newDeferredLatin1Reader(src)
+	dr := newDeferredLatin1Reader(src, testDeferredCap)
 
 	buf := make([]byte, 8192)
 	n, err := dr.Read(buf)
 	require.ErrorIs(t, err, ErrContentSizeExceeded,
 		"an undeclared stream that stays valid UTF-8 past the cap must fail closed")
 	require.Zero(t, n, "no irreversible output may be emitted on the fail-closed path")
-	require.LessOrEqual(t, src.total, deferredLatin1MaxBuffer+8192,
+	require.LessOrEqual(t, src.total, testDeferredCap+8192,
 		"the reader must stop near the cap, not buffer the whole stream")
 }
 
@@ -63,9 +68,9 @@ func TestDeferredLatin1ReaderBoundedBufferingFailsClosed(t *testing.T) {
 func TestDeferredLatin1ReaderUnderCapDeliversAllUTF8(t *testing.T) {
 	t.Parallel()
 
-	const sourceSize = deferredLatin1MaxBuffer / 2 // settles at EOF below the cap
+	const sourceSize = testDeferredCap / 2 // settles at EOF below the cap
 	src := &countingASCIIReader{remaining: sourceSize}
-	dr := newDeferredLatin1Reader(src)
+	dr := newDeferredLatin1Reader(src, testDeferredCap)
 
 	out, err := io.ReadAll(dr)
 	require.NoError(t, err)
@@ -86,7 +91,7 @@ func TestDeferredLatin1ReaderUnderCapDeliversAllUTF8(t *testing.T) {
 func TestDeferredLatin1ReaderOverCapThenHighByteErrors(t *testing.T) {
 	t.Parallel()
 
-	const prefixSize = deferredLatin1MaxBuffer + 4096 // past the buffering cap
+	const prefixSize = testDeferredCap + 4096 // past the buffering cap
 	var src bytes.Buffer
 	src.Grow(prefixSize + 8)
 	for range prefixSize {
@@ -95,7 +100,7 @@ func TestDeferredLatin1ReaderOverCapThenHighByteErrors(t *testing.T) {
 	src.WriteByte(0x93) // lone Windows-1252 byte: invalid UTF-8
 	src.WriteByte('z')
 
-	dr := newDeferredLatin1Reader(bytes.NewReader(src.Bytes()))
+	dr := newDeferredLatin1Reader(bytes.NewReader(src.Bytes()), testDeferredCap)
 
 	out, err := io.ReadAll(dr)
 	require.ErrorIs(t, err, ErrContentSizeExceeded,
@@ -107,7 +112,7 @@ func TestDeferredLatin1ReaderOverCapThenHighByteErrors(t *testing.T) {
 
 // TestDeferredLatin1ReaderInvalidByteAtCapBoundary covers the boundary case
 // where a GENUINE non-UTF-8 byte lands exactly at the buffering cap:
-// deferredLatin1MaxBuffer-1 ASCII bytes followed by a single invalid byte (a
+// testDeferredCap-1 ASCII bytes followed by a single invalid byte (a
 // lone Windows-1252 byte such as 0x93 or 0x80). Such a byte is a "full"
 // RuneError of size 1, not a truncated trailing rune, so the reader must
 // reinterpret the WHOLE buffer as Windows-1252 (matching the in-memory []byte
@@ -121,13 +126,13 @@ func TestDeferredLatin1ReaderInvalidByteAtCapBoundary(t *testing.T) {
 		t.Run(fmt.Sprintf("byte_%#02x", bad), func(t *testing.T) {
 			t.Parallel()
 
-			src := make([]byte, deferredLatin1MaxBuffer)
+			src := make([]byte, testDeferredCap)
 			for i := range src {
 				src[i] = 'a'
 			}
 			src[len(src)-1] = bad // invalid byte exactly at the cap boundary
 
-			dr := newDeferredLatin1Reader(bytes.NewReader(src))
+			dr := newDeferredLatin1Reader(bytes.NewReader(src), testDeferredCap)
 			out, err := io.ReadAll(dr)
 			require.NoError(t, err, "a genuine high byte at the cap settles the encoding, not a fail-close")
 			require.NotContains(t, out, bad, "raw invalid byte must never leak as UTF-8")

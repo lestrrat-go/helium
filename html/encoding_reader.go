@@ -361,30 +361,32 @@ func (sr *utf8SanitizeReader) trackByte(b byte) {
 //     buffered prefix (and the remainder of the stream) as Latin-1/Windows-1252,
 //     exactly as the []byte path would.
 //
-// deferredLatin1MaxBuffer caps how many undecided UTF-8-valid bytes the
-// deferred reader buffers before it must reach a decision. It is far larger than
-// the 1024-byte charset sniff window (so a real document's first non-UTF-8 byte
-// is virtually always seen first and the libxml2-quirk decision is preserved)
-// yet bounded, so an endless all-valid stream cannot be buffered without limit.
-const deferredLatin1MaxBuffer = 1 << 20 // 1 MiB
-
+// The undecided UTF-8-valid prefix is buffered only up to maxBuffer bytes before
+// the reader must reach a decision. That bound is the parser's CONFIGURED content
+// limit ([Parser.MaxContentSize] / parseConfig.contentLimit(), 16 MiB by default)
+// — the same limit the rest of the parser already enforces, so a legitimate
+// multi-megabyte ASCII/UTF-8 document under that limit parses normally while an
+// endless all-valid stream still cannot be buffered without limit.
+//
 // The detected encoding name is reported lazily via detectedEncoding once the
 // switch happens.
 //
 // Buffering is bounded and fails closed: deferring until EOF would buffer an
 // endless all-valid stream whole, defeating streaming and the parser's content
-// caps (an unbounded-memory DoS). If deferredLatin1MaxBuffer bytes are seen with
-// no non-UTF-8 byte, the exact encoding decision still cannot be made within the
-// memory bound — a later high byte would flip the WHOLE document to Latin-1
-// (matching the []byte path), while EOF-while-valid would keep it UTF-8 — so the
-// reader returns a bounded-input error (ErrContentSizeExceeded) rather than
-// committing to one interpretation and risking silently mis-decoded SAX/DOM
-// output that diverges from Parse([]byte). Real (finite) documents that declare
-// or stay in a single encoding settle their encoding far below this cap and are
-// unaffected; only a pathological undeclared stream that stays valid UTF-8 past
-// the cap is rejected, fail-closed, instead of producing different text.
+// caps (an unbounded-memory DoS). If maxBuffer bytes are seen with no non-UTF-8
+// byte, the exact encoding decision still cannot be made within the memory bound
+// — a later high byte would flip the WHOLE document to Latin-1 (matching the
+// []byte path), while EOF-while-valid would keep it UTF-8 — so the reader returns
+// a bounded-input error (ErrContentSizeExceeded) rather than committing to one
+// interpretation and risking silently mis-decoded SAX/DOM output that diverges
+// from Parse([]byte). Real (finite) documents that declare or stay in a single
+// encoding settle their encoding far below this cap and are unaffected; only a
+// pathological undeclared stream that stays valid UTF-8 past the cap is rejected,
+// fail-closed, instead of producing different text.
 type deferredLatin1Reader struct {
 	r io.Reader
+
+	maxBuffer int // bound on the undecided pending buffer (parseConfig.contentLimit())
 
 	pending []byte // undecided raw bytes buffered while still valid UTF-8
 	out     []byte // converted output ready to consume
@@ -410,9 +412,13 @@ type deferredLatin1Reader struct {
 // newDeferredLatin1Reader builds the deferred reader for an UNDECLARED stream.
 // Its lazy Latin-1 interpretation is always Windows-1252 (a declared
 // charset=iso-8859-1 takes the immediate latin1Reader path in wrapReaderForHTML
-// and never reaches here).
-func newDeferredLatin1Reader(r io.Reader) *deferredLatin1Reader {
-	return &deferredLatin1Reader{r: r}
+// and never reaches here). maxBuffer bounds the undecided pending buffer; a value
+// <= 0 falls back to defaultMaxContentSize.
+func newDeferredLatin1Reader(r io.Reader, maxBuffer int) *deferredLatin1Reader {
+	if maxBuffer <= 0 {
+		maxBuffer = defaultMaxContentSize
+	}
+	return &deferredLatin1Reader{r: r, maxBuffer: maxBuffer}
 }
 
 // detectedEncoding returns the encoding name once a non-UTF-8 byte has forced
@@ -543,10 +549,11 @@ func (dr *deferredLatin1Reader) decide() bool {
 	// EOF-while-valid would keep it UTF-8. We cannot make that exact decision
 	// within the memory bound, so rather than commit to a UTF-8 interpretation and
 	// risk silently mis-decoding later bytes (diverging from Parse([]byte)), we
-	// reject the stream with a bounded-input error. A real document that declares
-	// or stays in a single encoding settles far below the cap and is unaffected.
-	if len(dr.pending) >= deferredLatin1MaxBuffer {
-		dr.capErr = fmt.Errorf("undeclared HTML stream stayed valid UTF-8 for %d bytes without settling its encoding: %w", deferredLatin1MaxBuffer, ErrContentSizeExceeded)
+	// reject the stream with a bounded-input error. The bound is the parser's
+	// configured content limit, so a real document under that limit settles far
+	// below the cap and is unaffected.
+	if len(dr.pending) >= dr.maxBuffer {
+		dr.capErr = fmt.Errorf("undeclared HTML stream stayed valid UTF-8 for %d bytes without settling its encoding: %w", dr.maxBuffer, ErrContentSizeExceeded)
 		dr.pending = nil
 		return true
 	}
@@ -680,7 +687,10 @@ func isIncompleteTrailingRune(tail []byte) bool {
 // the sanitizer (non-nil only for the charset=utf-8 path, for error position
 // queries), and the deferred Latin-1 reader (non-nil only for the undeclared
 // path, queried after parsing for the lazily-detected encoding name).
-func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *deferredLatin1Reader) {
+//
+// maxBuffer bounds the undeclared deferred reader's undecided buffer; callers
+// pass the parser's configured content limit (parseConfig.contentLimit()).
+func wrapReaderForHTML(r io.Reader, maxBuffer int) (io.Reader, string, *utf8SanitizeReader, *deferredLatin1Reader) {
 	// Read up to 1024 bytes for charset detection.
 	//
 	// We cannot use io.ReadFull here: it only reports an error when it reads
@@ -783,6 +793,6 @@ func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *de
 	// the detection window, so defer the decision: stay UTF-8 until a non-UTF-8
 	// byte appears, then interpret the remainder as Windows-1252 (matching the
 	// whole-document []byte parse path).
-	dr := newDeferredLatin1Reader(normalized)
+	dr := newDeferredLatin1Reader(normalized, maxBuffer)
 	return dr, "", nil, dr
 }
