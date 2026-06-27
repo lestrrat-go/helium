@@ -97,6 +97,7 @@ type execContext struct {
 	temporaryOutputDepth         int                           // >0 when inside a temporary output state (XTDE1480)
 	primaryClaimedImplicitly     bool                          // true when implicit content has been written to primary output
 	staticBaseURIOverride        string                        // non-empty when xml:base on an LRE overrides the template's base URI
+	staticBaseURIPinned          bool                          // true while evaluating a global var/param body: base is pinned to the declaration site, never the current template
 	currentOutputURI             string                        // current output URI for current-output-uri() function
 	inPatternMatch               bool                          // true during pattern matching (current-output-uri() returns empty)
 	patternNamespaces            map[string]string             // the matching pattern's lexical xmlns snapshot (prefix→URI) during pattern matching

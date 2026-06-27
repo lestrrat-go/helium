@@ -1,6 +1,7 @@
 package xslt3_test
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -57,6 +58,77 @@ func TestEvaluateUnparsedTextResolvesAgainstTemplateBase(t *testing.T) {
 	require.True(t, dynResolver.seen(wantURI),
 		"xsl:evaluate dynamic unparsed-text must resolve to %q like the static call; got %v",
 		wantURI, dynResolver.requests)
+}
+
+// fixedBasePackageResolver serves a single package source under a fixed module
+// base URI (systemId). The base URI lets the test prove a package global
+// resolves resources against the package's declaration/module base.
+type fixedBasePackageResolver struct {
+	source  string
+	baseURI string
+}
+
+func (r fixedBasePackageResolver) ResolvePackage(_ string, _ string) (io.ReadCloser, string, error) {
+	return io.NopCloser(strings.NewReader(r.source)), r.baseURI, nil
+}
+
+// evaluateGlobalVarPackageSource declares a PUBLIC global variable whose body
+// runs xsl:evaluate(unparsed-text(...)). The variable has no xml:base, so its
+// declaration-site base is the package module base. Because it is a package
+// component it is NOT eagerly evaluated; it is computed lazily on first
+// reference, which happens from inside the using stylesheet's template (whose
+// xml:base differs from the package base).
+const evaluateGlobalVarPackageSource = `<?xml version="1.0"?>
+<xsl:package name="http://example.com/pkg" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:variable name="g" visibility="public">
+    <xsl:evaluate xpath="'unparsed-text(&quot;data.txt&quot;)'"/>
+  </xsl:variable>
+</xsl:package>`
+
+// evaluateGlobalVarUsingStylesheet references the package's public $g from a
+// template carrying its own xml:base, so the lazily-evaluated package global is
+// triggered while a DIFFERENT template base is current.
+const evaluateGlobalVarUsingStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="http://example.com/pkg"/>
+  <xsl:template match="/" xml:base="sub/">
+    <out><xsl:value-of select="$g"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// TestEvaluateInLazyGlobalVarResolvesAgainstModuleBase proves a dynamic XPath
+// evaluated by xsl:evaluate inside a LAZILY-evaluated global variable body
+// resolves a relative fn:unparsed-text href against the global's
+// declaration/module base, not the template that happened to trigger the lazy
+// evaluation. Before the fix the lazy global cleared the static-base-URI
+// override to "", so the dynamic evaluation fell through to the currently
+// executing template's xml:base and missed the resolver.
+func TestEvaluateInLazyGlobalVarResolvesAgainstModuleBase(t *testing.T) {
+	// The package global's declaration site is the package module base
+	// "mem://lib/lib.xsl"; "data.txt" must resolve to the package directory,
+	// NOT the using template's xml:base ("mem://using/sub/").
+	const moduleURI = "mem://lib/data.txt"
+	const templateURI = "mem://using/sub/data.txt"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(evaluateGlobalVarUsingStylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().
+		BaseURI("mem://using/main.xsl").
+		PackageResolver(fixedBasePackageResolver{source: evaluateGlobalVarPackageSource, baseURI: "mem://lib/lib.xsl"}).
+		Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	resolver := &recordingURIResolver{files: map[string][]byte{moduleURI: []byte("payload")}}
+	out, err := ss.Transform(parseTransformSource(t)).URIResolver(resolver).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>payload</out>")
+	require.True(t, resolver.seen(moduleURI),
+		"lazy global-body xsl:evaluate unparsed-text must resolve against the package module base %q; got %v",
+		moduleURI, resolver.requests)
+	require.False(t, resolver.seen(templateURI),
+		"must NOT resolve against the referencing template's xml:base %q; got %v",
+		templateURI, resolver.requests)
 }
 
 // evaluateCodepointsStylesheet maps an XML 1.1 restricted character (U+0001),
