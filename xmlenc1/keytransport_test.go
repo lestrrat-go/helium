@@ -109,6 +109,51 @@ func TestRSAOAEP(t *testing.T) {
 		require.Len(t, nodes, 1)
 	})
 
+	t.Run("oaep11 absent MGF defaults to SHA-1 not digest", func(t *testing.T) {
+		// W3C xmlenc-core1 §5.5.2: an absent xenc11:MGF defaults to MGF1
+		// with SHA-1, INDEPENDENT of DigestMethod. A no-MGF ciphertext must
+		// therefore interoperate with explicit MGFSHA1 semantics even when
+		// the label digest is SHA-256 (it must NOT use a SHA-256 MGF).
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+
+		encryptor := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA256).
+			RecipientPublicKey(&key.PublicKey)
+
+		_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		// No MGF element must be serialized when none was requested.
+		xml, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, xml, xmlenc1.DigestSHA256)
+		require.NotContains(t, xml, "MGF")
+
+		// Inject an explicit MGF1-SHA-1 element into the EncryptionMethod.
+		// Because the absent-MGF default is SHA-1, decryption under explicit
+		// MGFSHA1 must succeed. Had the default been the SHA-256 digest, the
+		// MGF1 hashes would mismatch and decryption would fail.
+		mgfElem := `<xenc11:MGF xmlns:xenc11="` + xmlenc1.NamespaceXMLEnc11 + `" Algorithm="` + xmlenc1.MGFSHA1 + `"/>`
+		tampered := strings.Replace(xml, "</xenc:EncryptionMethod>", mgfElem+"</xenc:EncryptionMethod>", 1)
+		require.NotEqual(t, xml, tampered)
+
+		tdoc := mustParseXML(t, tampered)
+		edNode := findEncryptedData(t, tdoc.DocumentElement())
+		require.NotNil(t, edNode)
+
+		decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+		nodes, err := decryptor.Decrypt(t.Context(), edNode)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+
+		s, err := helium.WriteString(nodes[0])
+		require.NoError(t, err)
+		require.Contains(t, s, "user@example.com")
+	})
+
 	t.Run("decrypt unsupported digest errors", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)

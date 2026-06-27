@@ -91,8 +91,9 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 
 	// Resolve the MGF1 hash. The legacy RSAOAEP (rsa-oaep-mgf1p) URI fixes
 	// MGF1 to SHA-1; an explicit MGF URI is not permitted for it. The
-	// RSAOAEP11 URI carries an explicit MGF; when absent it defaults to the
-	// label digest (crypto/rsa's MGFHash==Hash semantics).
+	// RSAOAEP11 URI carries an explicit MGF; when absent it defaults to
+	// MGF1 with SHA-1 per W3C xmlenc-core1 §5.5.2, INDEPENDENT of the
+	// DigestMethod (a distinct DigestMethod is still honored via OAEPOptions).
 	var mgfHash crypto.Hash
 	switch algorithm {
 	case RSAOAEP:
@@ -105,8 +106,11 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 	default: // RSAOAEP11, which carries an explicit MGF.
 		switch mgf {
 		case "":
-			// Default the MGF1 hash to the label digest.
-			mgfHash = digestHash
+			// W3C xmlenc-core1 §5.5.2: an absent MGF defaults to MGF1
+			// with SHA-1, independent of the DigestMethod. Conforming
+			// implementations assume SHA-1 MGF when no MGF is present,
+			// so defaulting to digestHash here would break interop.
+			mgfHash = crypto.SHA1
 		case MGFSHA1:
 			mgfHash = crypto.SHA1
 		case MGFSHA256:
