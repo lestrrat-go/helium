@@ -641,10 +641,22 @@ func isPubidChar(r rune) bool {
 // verbatim so errors.Is keeps matching and a cancelled parse is not disguised as
 // a malformed external ID.
 func (pctx *parserCtx) externalIDLiteralError(ctx context.Context, err error, fallback string) error {
+	return pctx.preserveLimitOrAbort(ctx, err, errors.New(fallback))
+}
+
+// preserveLimitOrAbort returns err verbatim when it is a resource-limit failure
+// (ErrNodeContentTooLarge) or a parse-abort (context cancellation / deadline /
+// StopParser) so errors.Is keeps matching and a cancelled parse is not disguised
+// as a generic decl error; otherwise it substitutes fallback (a domain-specific
+// "value/ID required" sentinel for a genuine missing/empty literal). Used both by
+// parseExternalID's own literal-scan call sites and by parseEntityDecl, which
+// must not REPLACE an over-cap external SYSTEM/PUBLIC literal error from
+// parseExternalID with a generic ErrValueRequired.
+func (pctx *parserCtx) preserveLimitOrAbort(ctx context.Context, err, fallback error) error {
 	if errors.Is(err, ErrNodeContentTooLarge) || isParseAbort(err) {
 		return pctx.error(ctx, err)
 	}
-	return pctx.error(ctx, errors.New(fallback))
+	return pctx.error(ctx, fallback)
 }
 
 // parseExternalID parses an ExternalID [75] or, when strict is false, a

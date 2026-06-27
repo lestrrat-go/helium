@@ -108,6 +108,55 @@ func TestMaxNodeContentSizeExternalIDLiteral(t *testing.T) {
 	})
 }
 
+// TestMaxNodeContentSizeExternalEntityDeclLiteral guards the SYSTEM/PUBLIC
+// literal scanners reached through an external ENTITY declaration in the
+// internal subset (parseEntityDecl -> parseExternalID). A giant system or public
+// literal in an external general or parameter entity declaration must fail closed
+// with the per-node content cap rather than buffering unbounded; the generic
+// "value required" message must not mask the resource-limit error.
+func TestMaxNodeContentSizeExternalEntityDeclLiteral(t *testing.T) {
+	t.Parallel()
+
+	const limit = 64
+	body := strings.Repeat("a", 200)
+
+	cases := []struct {
+		name string
+		doc  string
+	}{
+		{
+			name: "external general entity SYSTEM over-cap",
+			doc:  `<!DOCTYPE r [<!ENTITY e SYSTEM "` + body + `">]><r/>`,
+		},
+		{
+			name: "external parameter entity SYSTEM over-cap",
+			doc:  `<!DOCTYPE r [<!ENTITY % e SYSTEM "` + body + `">]><r/>`,
+		},
+		{
+			name: "external parameter entity PUBLIC over-cap system literal",
+			doc:  `<!DOCTYPE r [<!ENTITY % e PUBLIC "pub" "` + body + `">]><r/>`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+" (Parse)", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().
+				MaxNodeContentSize(limit).
+				Parse(t.Context(), []byte(tc.doc))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+		})
+
+		t.Run(tc.name+" (ParseReader)", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().
+				MaxNodeContentSize(limit).
+				ParseReader(t.Context(), strings.NewReader(tc.doc))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+		})
+	}
+}
+
 // stoppableEBCDICEntityReader serves a finite EBCDIC head ending in an open
 // entity-value literal (<!ENTITY e "), then an endless run of an EBCDIC filler
 // byte that never reaches EOF, modeling a hostile never-ending internal-DTD

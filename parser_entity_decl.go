@@ -522,7 +522,10 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 			// EntityDecl in that order.
 			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
-				return pctx.error(ctx, ErrValueRequired)
+				// Preserve a resource-limit (ErrNodeContentTooLarge) or
+				// parse-abort error verbatim; only an empty/missing literal
+				// falls back to the generic ErrValueRequired.
+				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -559,7 +562,10 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		} else {
 			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
-				return pctx.error(ctx, ErrValueRequired)
+				// Preserve a resource-limit (ErrNodeContentTooLarge) or
+				// parse-abort error verbatim; only an empty/missing literal
+				// falls back to the generic ErrValueRequired.
+				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
 			}
 
 			if literal != "" {
