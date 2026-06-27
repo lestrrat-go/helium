@@ -156,6 +156,25 @@ type ElementDecl struct {
 	BlockSet bool // true if block was explicitly set (even to empty)
 	Final    FinalFlags
 	FinalSet bool // true if final was explicitly set (even to empty)
+	// Alternatives is the XSD 1.1 conditional-type-assignment {type table}: the
+	// ordered xs:alternative children. At validation (when no xsi:type is present)
+	// the governing type is the one selected by the first alternative whose @test
+	// is true, or a testless default; empty when the declaration has none.
+	Alternatives []*TypeAlternative
+}
+
+// TypeAlternative is one XSD 1.1 <xs:alternative> in an element declaration's
+// conditional type assignment. Test is the XPath 3.1 condition (empty for the
+// final, testless default alternative); Type is the governing type selected when
+// the test holds. It mirrors Assertion's capture pattern.
+type TypeAlternative struct {
+	Test       string
+	Namespaces map[string]string  // prefix → URI from the schema document
+	Line       int                // source line of the xs:alternative element
+	Source     string             // source filename of the declaring schema document
+	TypeName   QName              // the @type reference (resolved into Type during resolveRefs)
+	Type       *TypeDef           // resolved governing type
+	compiled   *xpath3.Expression // pre-compiled @test; nil for a testless default (or compile failure)
 }
 
 // IDCKind describes the kind of identity constraint.

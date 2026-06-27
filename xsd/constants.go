@@ -13,6 +13,7 @@ const typeAnyType = "anyType"
 
 const (
 	elemAll            = "all"
+	elemAlternative    = "alternative" // XSD 1.1: xs:alternative (conditional type assignment)
 	elemAnnotation     = "annotation"
 	elemAny            = "any"
 	elemAnyAttribute   = "anyAttribute"

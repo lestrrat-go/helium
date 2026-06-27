@@ -239,6 +239,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		// The host declaration was already recorded during the initial scan above
 		// (before any early return). Nothing to record here.
 		td := effectiveDeclType(actualDecl, vc.schema)
+		td = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, td)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
 		if xsiErr != nil {
 			contentErr = xsiErr
@@ -372,6 +373,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// The host declaration was already recorded during the initial match scan
 		// above (before any early return). Nothing to record here.
 		declType := effectiveDeclType(actualDecl, vc.schema)
+		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType)
 		if xsiErr != nil {
 			contentErr = xsiErr
@@ -684,6 +686,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 			continue
 		}
 		td := effectiveDeclType(edecl, vc.schema)
+		td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
 		if xsiErr != nil {
 			contentErr = xsiErr

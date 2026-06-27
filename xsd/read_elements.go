@@ -309,6 +309,9 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		return nil, err
 	}
 	decl.IDCs = c.parseIDConstraints(ctx, elem)
+	if c.version == Version11 {
+		decl.Alternatives = c.parseTypeAlternatives(ctx, elem)
+	}
 	return decl, nil
 }
 
