@@ -494,7 +494,7 @@ func TestExternalSystemParameterEntityCaptured(t *testing.T) {
 	ent, ok := doc.GetParameterEntity("pe")
 	require.True(t, ok, "external SYSTEM parameter entity must be registered")
 	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
-	require.Equal(t, "pe.ent", ent.SystemID(), "the SYSTEM literal must be recorded as the system ID")
+	require.Equal(t, peSystemID, ent.SystemID(), "the SYSTEM literal must be recorded as the system ID")
 	require.Empty(t, ent.ExternalID(), "a SYSTEM declaration has no public ID")
 }
 
@@ -522,7 +522,7 @@ func TestExternalPublicParameterEntityCaptured(t *testing.T) {
 	ent, ok := doc.GetParameterEntity("pe")
 	require.True(t, ok, "external PUBLIC parameter entity must be registered")
 	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
-	require.Equal(t, "pe.ent", ent.SystemID(), "the system literal must be the system ID")
+	require.Equal(t, peSystemID, ent.SystemID(), "the system literal must be the system ID")
 	require.Equal(t, "-//x//pe", ent.ExternalID(), "the public ID must be the external ID")
 }
 
@@ -539,7 +539,7 @@ func TestExternalParameterEntityContentLoaded(t *testing.T) {
 			`<!ENTITY ctrl "control">` + "\n" +
 				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
 				`%pe;`)},
-		"pe.ent": {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+		peSystemID: {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
 	}
 	const input = `<?xml version="1.0"?>` + "\n" +
 		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
@@ -571,7 +571,7 @@ func TestExternalParameterEntityNotLoadedSecureDefault(t *testing.T) {
 			`<!ENTITY ctrl "control">` + "\n" +
 				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
 				`%pe;`)},
-		"pe.ent": {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+		peSystemID: {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
 	}
 	const input = `<?xml version="1.0"?>` + "\n" +
 		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
@@ -681,6 +681,112 @@ func TestExternalParameterEntityInEntityValueSecureDefault(t *testing.T) {
 
 	_, ok := doc.GetEntity("g")
 	require.False(t, ok, "secure default must not load the external subset or its PE-referencing entity value")
+}
+
+// TestExternalParameterEntitySelfRecursionRejected proves that a self-recursive
+// external parameter entity is rejected with a recursion error rather than
+// pushing cursors until the entity-amplification ceiling trips (or OOM): pe.ent's
+// replacement text references the very PE that loaded it, so the active-PE guard
+// must fail the parse the moment the nested "%pe;" is seen.
+func TestExternalParameterEntitySelfRecursionRejected(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`%pe;`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	_, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err, "self-recursive external parameter entity must be rejected")
+	require.Contains(t, err.Error(), "references itself",
+		"rejection must be the recursion guard, not an amplification/ceiling trip")
+}
+
+// peCatalog resolves the external PE's system ID to a DIFFERENT URI than the
+// entity's declared one, modeling the catalog/custom-resolver case where
+// input.URI() (the URI actually opened) differs from the entity's URI().
+type peCatalog struct{ from, to string }
+
+func (c peCatalog) Resolve(_ context.Context, _, sysID string) string {
+	if sysID == c.from {
+		return c.to
+	}
+	return ""
+}
+func (c peCatalog) ResolveURI(_ context.Context, _ string) string { return "" }
+
+// TestExternalParameterEntityValueFirstResolvedURICached proves that when an
+// external PE is loaded FIRST through a general entity's value (caching its
+// content), a later top-level "%pe;" parses the cached bytes against the URI the
+// bytes were ACTUALLY loaded from — the catalog-resolved "sub/pe.ent" — not the
+// entity's declared "pe.ent". A relative SYSTEM id inside the PE ("leaf.ent")
+// must therefore resolve to "sub/leaf.ent". Before the resolved-URI cache fix the
+// cached path returned e.URI() ("pe.ent"), wrongly resolving leaf to "leaf.ent".
+func TestExternalParameterEntityValueFirstResolvedURICached(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`<!ENTITY g "%pe;">` + "\n" +
+				`%pe;`)},
+		"sub/pe.ent": {Data: []byte(`<!ENTITY leaf SYSTEM "leaf.ent">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		Catalog(peCatalog{from: peSystemID, to: "sub/pe.ent"}).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("leaf")
+	require.True(t, ok, "general entity declared inside the cached external PE must be registered")
+	require.Equal(t, "sub/leaf.ent", ent.URI(),
+		"cached external PE must resolve relative IDs against the URI it was actually loaded from")
+}
+
+// TestExternalParameterEntityWithTextDecl proves that an external parameter
+// entity whose replacement text begins with a TextDecl
+// ("<?xml ... encoding=...?>") is parsed: the TextDecl is consumed before the
+// declaration loop instead of being rejected as a processing instruction.
+func TestExternalParameterEntityWithTextDecl(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
+			`<!ENTITY td "from-textdecl-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("td")
+	require.True(t, ok, "entity declared after a TextDecl in an external PE must be registered")
+	require.Equal(t, "from-textdecl-pe", string(ent.Content()),
+		"external PE beginning with a TextDecl must parse its declarations")
 }
 
 // TestEntityValueRefValidationIsSideEffectFree proves that the reference

@@ -557,9 +557,26 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			if !ok {
 				return pctx.error(ctx, errors.New("internal: external parameter entity is not *helium.Entity"))
 			}
+			// Reject a self/mutually recursive external PE BEFORE loading or
+			// pushing: while a PE's replacement text is being parsed its input is
+			// still on the stack (externalPEActive), so a nested "%pe;" to the same
+			// entity would otherwise keep pushing cursors until the amplification
+			// ceiling trips. A counter check fails closed and reports a parse error
+			// instead. Internal PEs are guarded separately by the decode-depth cap.
+			if pctx.externalPEActive(ent) {
+				return pctx.error(ctx, fmt.Errorf("parse error: external parameter entity %%%s; references itself", name))
+			}
 			content, peURI, err := pctx.loadExternalParameterEntityContent(ctx, ent)
 			if err != nil {
 				return err
+			}
+			// An external parsed entity may begin with a TextDecl
+			// ("<?xml ... encoding=...?>"); consume it (and decode per its declared
+			// encoding) before the declaration loop sees the bytes, else "<?xml" is
+			// wrongly rejected as a PI. Mirrors the external general entity path.
+			content, err = pctx.decodeExternalPEContent(ctx, content)
+			if err != nil {
+				return pctx.error(ctx, err)
 			}
 			// Charge the loaded bytes (plus the per-reference fixed cost) against
 			// the amplification guard so a small DTD cannot reference a large
@@ -572,8 +589,9 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				// text is parsed, so a relative system ID in a declaration INSIDE
 				// the PE (e.g. <!ENTITY e SYSTEM "leaf.ent"> in sub/pe.ent)
 				// resolves against the PE's location, not the containing DTD. The
-				// override is restored when this pushed cursor is popped.
-				pctx.pushInputWithBaseURI(strcursor.NewByteCursor(bytes.NewReader(content)), peURI)
+				// override (and the active-recursion mark) is cleared when this
+				// pushed cursor is popped.
+				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(content)), peURI, ent)
 			}
 			pctx.hasPERefs = true
 			return nil
@@ -624,7 +642,11 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 // soon as the bounded read completes, mirroring parseExternalEntityPrivate.
 func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, string, error) {
 	if len(e.content) > 0 {
-		return []byte(e.content), e.URI(), nil
+		// Return the URI the bytes were ORIGINALLY loaded from (cached on first
+		// load), not e.URI(): the first load may have used a catalog/custom-resolver
+		// URI, and relative system IDs inside the cached PE must resolve against
+		// that same base regardless of which reference triggered the load first.
+		return []byte(e.content), e.resolvedURI, nil
 	}
 	if pctx.options.IsSet(parseNoXXE) {
 		return nil, "", nil
@@ -669,5 +691,57 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	}
 
 	e.content = string(content)
+	e.resolvedURI = uri
 	return content, uri, nil
+}
+
+// decodeExternalPEContent consumes an OPTIONAL TextDecl at the start of an
+// external parameter entity's replacement text and returns the post-TextDecl
+// bytes decoded to UTF-8. An external parsed entity may begin with
+// "<?xml version=... encoding=...?>"; pushed raw, the DTD declaration loop would
+// reject the "<?xml" as a processing instruction (a PI target may not be "xml"),
+// so the TextDecl must be stripped here and any declared encoding honored — the
+// same treatment parseExternalEntityPrivate gives an external general entity.
+// When no TextDecl is present the content is returned unchanged. Only the
+// ASCII-compatible TextDecl shape is handled (the DTD-fragment case in scope);
+// a non-ASCII-leading encoding is left to the caller's raw push.
+func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []byte) ([]byte, error) {
+	if len(content) == 0 {
+		return content, nil
+	}
+	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(content))) {
+		return content, nil
+	}
+
+	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
+	// declared encoding switches only this sub-cursor. Inherit the parent's
+	// options (encoding-ignore policy) and additionally allow version-optional
+	// pseudo-attributes: a TextDecl's VersionInfo is optional (EncodingDecl is
+	// required), which the strict XMLDecl parser would otherwise reject.
+	sub := &parserCtx{}
+	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
+		return nil, err
+	}
+	defer func() { _ = sub.release() }()
+	sub.options = pctx.options
+	sub.options.Set(parseLenientXMLDecl)
+
+	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
+		if err := sub.parseXMLDecl(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := sub.switchEncoding(); err != nil {
+		return nil, err
+	}
+
+	cur := sub.getCursor()
+	if cur == nil {
+		return nil, nil
+	}
+	rest, err := io.ReadAll(cur.Unused())
+	if err != nil {
+		return nil, err
+	}
+	return rest, nil
 }
