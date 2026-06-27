@@ -343,6 +343,12 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 		// String value space equals the whitespace-processed lexical space; not
 		// value-comparable via value.Compare, so the caller compares lexically.
 		return lexicon.TypeString, false, true
+	case lexicon.TypeDateTimeStamp:
+		// XSD 1.1 subtype of xs:dateTime; compares in the dateTime value space.
+		return "dateTime", true, true
+	case lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration:
+		// XSD 1.1 subtypes of xs:duration; compare in the duration value space.
+		return "duration", true, true
 	default:
 		// Remaining comparable primitives (boolean, float, double, date/time
 		// family, binary) are gated on the same allowlist the enumeration path uses.

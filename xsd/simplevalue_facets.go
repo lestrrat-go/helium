@@ -101,6 +101,8 @@ var enumValueSpaceTypes = map[string]struct{}{
 	// Date/time/duration.
 	"dateTime": {}, "date": {}, "time": {}, "duration": {},
 	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+	// XSD 1.1 date/time/duration subtypes (compared in their primitive value space).
+	lexicon.TypeDateTimeStamp: {}, lexicon.TypeDayTimeDuration: {}, lexicon.TypeYearMonthDuration: {},
 	// Binary (compared by decoded octets, not lexical text).
 	"hexBinary": {}, "base64Binary": {},
 }
