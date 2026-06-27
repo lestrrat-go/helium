@@ -401,7 +401,11 @@ func (inv Invocation) GlobalContextSelect(expr string) Invocation {
 // [ErrResourceTooLarge] when the cap is exceeded.
 //
 // A value of 0 inherits the cap configured on the Compiler (or the
-// [MaxResourceBytes] default); a negative value disables the bound.
+// [MaxResourceBytes] default); a negative value disables the bound. The same
+// cap also bounds xsl:analyze-string match enumeration: an empty- or
+// near-empty-matching regex over a large input is rejected with
+// [ErrResourceTooLarge] once the running match count exceeds the cap, so the
+// work stays bounded regardless of input size.
 //
 // The XPath built-ins fn:unparsed-text, fn:unparsed-text-lines, and
 // fn:json-doc read through the xpath3 layer rather than the XSLT loader: they

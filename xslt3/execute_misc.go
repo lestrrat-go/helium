@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -84,13 +85,88 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	// Zero-length matches are handled by advancing past each one to avoid
 	// infinite loops (see below).
 
-	// Find all matches.
-	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0
-	// which raised XTDE1150). We handle them by advancing past each
-	// zero-length match to avoid infinite loops.
-	matches, err := re.FindAllSubmatchIndex(input, -1)
-	if err != nil {
-		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", err)
+	// Bound the number of matches against the execution resource budget. An
+	// empty- or near-empty-matching regex matches at every character boundary,
+	// so an N-byte input yields ~N matches; accumulating every match (e.g. via
+	// FindAllSubmatchIndex) would amplify a bounded input string into millions
+	// of match/segment allocations and exhaust memory before a cancelled
+	// context can intervene. The streamable paths enumerate one match at a time
+	// and the per-resource byte cap (MaxResourceBytes; <0 selects unbounded)
+	// caps how many they will surface; the default cap is far above any
+	// legitimate match count, so valid inputs are unaffected. A leading-context
+	// pattern that cannot stream is additionally bounded by xpath3's own, much
+	// smaller, full-context allocation ceiling, which surfaces as
+	// xpath3.ErrRegexMatchLimit (handled below).
+	maxMatches := -1
+	if limit := resolveResourceLimit(ec.resourceLimit()); limit >= 0 {
+		maxMatches = max(clampInt64ToInt(limit), 1)
+	}
+
+	// findLimit caps how many matches EachSubmatchIndex may produce. The callback
+	// rejects once it observes match maxMatches+1, so the enumeration must be able
+	// to surface that one extra match; passing maxMatches+1 lets the callback see
+	// it. A non-positive maxMatches (unbounded cap) and an int overflow both fall
+	// back to -1 (no enumeration limit).
+	findLimit := -1
+	if maxMatches >= 0 {
+		if n := maxMatches + 1; n > 0 {
+			findLimit = n
+		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// First pass: count the alternating non-match/match segments so
+	// position()/last() inside the bodies see the right focus, streaming the
+	// matches one at a time via EachSubmatchIndex so live memory stays bounded
+	// regardless of input size. The match-count ceiling is enforced DURING
+	// enumeration — an over-budget input is rejected after maxMatches+1 matches
+	// without ever materializing a slice proportional to the match count. In
+	// XSLT 3.0 zero-length matches are allowed (unlike XSLT 2.0's XTDE1150);
+	// EachSubmatchIndex advances past each one.
+	totalSegments := 0
+	matchCount := 0
+	pos := 0
+	var earlyErr error
+	countErr := re.EachSubmatchIndex(input, findLimit, func(m []int) bool {
+		if err := ctx.Err(); err != nil {
+			earlyErr = err
+			return false
+		}
+		matchCount++
+		if maxMatches >= 0 && matchCount > maxMatches {
+			earlyErr = dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more than %d matches, exceeding the configured resource limit", maxMatches)
+			return false
+		}
+		if m[0] > pos {
+			totalSegments++
+		}
+		totalSegments++
+		pos = m[1]
+		return true
+	})
+	if earlyErr != nil {
+		return earlyErr
+	}
+	if countErr != nil {
+		// A leading-context pattern (^ with the m flag, \b, ...) can't be
+		// streamed, so xpath3 materializes its matches in one bounded pass and
+		// reports ErrRegexMatchLimit when the input would exceed the safe
+		// allocation ceiling. Surface that as the same resource-exhaustion
+		// condition as the running match-count cap above (XTDE1140 +
+		// ErrResourceTooLarge) so xsl:catch can match on $err:code and callers
+		// can detect it via errors.Is.
+		if errors.Is(countErr, xpath3.ErrRegexMatchLimit) {
+			return dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more matches than the safe resource limit allows: %v", countErr)
+		}
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", countErr)
+	}
+	if pos < len(input) {
+		totalSegments++
 	}
 
 	// Save and restore context state
@@ -109,62 +185,74 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		ec.regexGroups = savedGroups
 	}()
 
-	// Build segments: alternating non-match/match segments
-	type segment struct {
-		text    string
-		isMatch bool
-		groups  []string // captured groups (only for matches)
+	segIdx := 0
+	// runSegment sets the focus for one segment and executes its body.
+	runSegment := func(text string, body []instruction, groups []string) error {
+		segIdx++
+		ec.position = segIdx
+		ec.size = totalSegments
+		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: text}
+		ec.contextNode = nil
+		ec.currentNode = nil
+		ec.regexGroups = groups
+		for _, bodyInst := range body {
+			if err := ec.executeInstruction(ctx, bodyInst); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	var segments []segment
-	pos := 0
-	for _, m := range matches {
+
+	// Second pass: re-stream the matches and execute each segment's body as its
+	// span is discovered. Like the count pass, matches are never accumulated.
+	pos = 0
+	var execErr error
+	execIterErr := re.EachSubmatchIndex(input, findLimit, func(m []int) bool {
+		if err := ctx.Err(); err != nil {
+			execErr = err
+			return false
+		}
 		start, end := m[0], m[1]
 		if start > pos {
-			segments = append(segments, segment{text: input[pos:start], isMatch: false})
+			if err := runSegment(input[pos:start], inst.NonMatchingBody, nil); err != nil {
+				execErr = err
+				return false
+			}
 		}
-		// Collect captured groups
-		var groups []string
-		groups = append(groups, input[start:end]) // group 0 = full match
+		// Collect captured groups (group 0 = full match).
+		groups := make([]string, 0, len(m)/2)
+		groups = append(groups, input[start:end])
 		for g := 1; g < len(m)/2; g++ {
 			gs, ge := m[2*g], m[2*g+1]
 			if gs < 0 || ge < 0 {
 				groups = append(groups, "")
-			} else {
-				groups = append(groups, input[gs:ge])
+				continue
 			}
+			groups = append(groups, input[gs:ge])
 		}
-		segments = append(segments, segment{text: input[start:end], isMatch: true, groups: groups})
+		if err := runSegment(input[start:end], inst.MatchingBody, groups); err != nil {
+			execErr = err
+			return false
+		}
 		pos = end
+		return true
+	})
+	if execErr != nil {
+		return execErr
+	}
+	if execIterErr != nil {
+		if errors.Is(execIterErr, xpath3.ErrRegexMatchLimit) {
+			return dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more matches than the safe resource limit allows: %v", execIterErr)
+		}
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", execIterErr)
 	}
 	if pos < len(input) {
-		segments = append(segments, segment{text: input[pos:], isMatch: false})
-	}
-
-	// Set size = total number of segments
-	totalSegments := len(segments)
-
-	// Execute appropriate body for each segment
-	for i, seg := range segments {
-		ec.position = i + 1
-		ec.size = totalSegments
-		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: seg.text}
-		ec.contextNode = nil
-		ec.currentNode = nil
-
-		if seg.isMatch {
-			ec.regexGroups = seg.groups
-			for _, bodyInst := range inst.MatchingBody {
-				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-					return err
-				}
-			}
-		} else {
-			ec.regexGroups = nil
-			for _, bodyInst := range inst.NonMatchingBody {
-				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-					return err
-				}
-			}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := runSegment(input[pos:], inst.NonMatchingBody, nil); err != nil {
+			return err
 		}
 	}
 
