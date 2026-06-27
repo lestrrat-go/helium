@@ -584,6 +584,105 @@ func TestExternalParameterEntityNotLoadedSecureDefault(t *testing.T) {
 	require.False(t, ok, "secure default must not load external parameter entity content")
 }
 
+// TestExternalParameterEntityNestedRelativeBaseURI proves that a relative system
+// ID in a declaration INSIDE an external parameter entity resolves against the
+// PE's OWN location, not the containing DTD. d.dtd declares a PE at "sub/pe.ent"
+// and references it; sub/pe.ent declares a general entity "e" with a relative
+// SYSTEM id "leaf.ent". With baseURI scoped to the PE while its replacement text
+// is parsed, e must resolve to "sub/leaf.ent" (sibling of pe.ent), NOT "leaf.ent"
+// (sibling of d.dtd).
+//
+// The leading control general entity sidesteps a SEPARATE pre-existing parser
+// bug (present on main, orthogonal to base-URI scoping): a parameter-entity
+// declaration as the VERY FIRST declaration of an external subset fails with
+// "space required". The control entity keeps this regression focused on scoping.
+func TestExternalParameterEntityNestedRelativeBaseURI(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "sub/pe.ent">` + "\n" +
+				`%pe;`)},
+		"sub/pe.ent": {Data: []byte(`<!ENTITY e SYSTEM "leaf.ent">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("e")
+	require.True(t, ok, "general entity declared inside the external PE must be registered")
+	require.Equal(t, "sub/leaf.ent", ent.URI(),
+		"relative system ID inside the external PE must resolve against the PE's own location")
+}
+
+// TestExternalParameterEntityInEntityValueLoaded proves that an external
+// parameter entity referenced inside a general entity's VALUE is loaded and
+// expanded regardless of whether the PE was ever referenced at the top level of
+// the DTD first. The external subset declares "%p;" (SYSTEM "value.ent") and a
+// general entity g whose value is "%p;" — WITHOUT any top-level "%p;" reference
+// that would otherwise be what first caches p's content. g's expanded value must
+// equal value.ent's content, proving the load happens through the centralized
+// PE-replacement path rather than depending on reference order.
+//
+// The leading control general entity sidesteps the same separate pre-existing
+// first-declaration bug noted on TestExternalParameterEntityNestedRelativeBaseURI.
+func TestExternalParameterEntityInEntityValueLoaded(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % p SYSTEM "value.ent">` + "\n" +
+				`<!ENTITY g "%p;">`)},
+		"value.ent": {Data: []byte(`expanded-from-external-pe`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("g")
+	require.True(t, ok, "general entity g must be registered")
+	require.Equal(t, "expanded-from-external-pe", string(ent.Content()),
+		"external PE referenced in an entity value must be loaded and expanded regardless of reference order")
+}
+
+// TestExternalParameterEntityInEntityValueSecureDefault proves the secure
+// default does NOT load an external PE referenced inside an entity value: with
+// the default parser the external subset is not loaded at all, so g is absent.
+func TestExternalParameterEntityInEntityValueSecureDefault(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % p SYSTEM "value.ent">` + "\n" +
+				`<!ENTITY g "%p;">`)},
+		"value.ent": {Data: []byte(`expanded-from-external-pe`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ok := doc.GetEntity("g")
+	require.False(t, ok, "secure default must not load the external subset or its PE-referencing entity value")
+}
+
 // TestEntityValueRefValidationIsSideEffectFree proves that the reference
 // validation in parseEntityValue does NOT perturb the entity-amplification
 // accounting. validateEntityValueRefs PE-expands the literal to scan for

@@ -136,6 +136,18 @@ type parserCtx struct {
 	charBuf          []byte            // reusable buffer for parseCharDataContent
 	attrBuf          []attrData        // reusable attribute scratch buffer for start-tag parsing
 	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
+	baseURIScopes    []baseURIScope    // per-input baseURI overrides (restored when the input is popped)
+}
+
+// baseURIScope records the baseURI to restore when a particular pushed input
+// (its cursor) is popped from the input stack. It is used to scope pctx.baseURI
+// to an external parameter entity's own resolved URI while that entity's
+// replacement text is being parsed, so relative system IDs in declarations
+// INSIDE the entity resolve against the entity's location rather than the
+// containing DTD.
+type baseURIScope struct {
+	input   any
+	baseURI string
 }
 
 type parserCtxKey struct{}
@@ -286,6 +298,24 @@ func (ctx *parserCtx) pushInput(in any) {
 	ctx.cachedCursor = nil // invalidate cache
 }
 
+// pushInputWithBaseURI pushes a new input AND scopes pctx.baseURI to baseURI
+// while that input is on the stack. The previous baseURI is restored when this
+// exact input is popped (popInput), so the override lasts precisely as long as
+// the pushed cursor is being consumed — even though the cursor is drained later
+// by the surrounding declaration loop rather than within the call that pushed it.
+// An empty baseURI is treated as "no override" (the input is pushed normally),
+// because clobbering baseURI to "" would break relative resolution rather than
+// help it.
+func (ctx *parserCtx) pushInputWithBaseURI(in any, baseURI string) {
+	if baseURI == "" {
+		ctx.pushInput(in)
+		return
+	}
+	ctx.baseURIScopes = append(ctx.baseURIScopes, baseURIScope{input: in, baseURI: ctx.baseURI})
+	ctx.baseURI = baseURI
+	ctx.pushInput(in)
+}
+
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	cur, ok := ctx.inputTab.PeekOne().(*strcursor.ByteCursor)
 	if !ok {
@@ -348,7 +378,15 @@ func (ctx *parserCtx) cursorDecodeErr() error {
 
 func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
 	ctx.cachedCursor = nil // invalidate cache
-	return ctx.inputTab.Pop()
+	popped := ctx.inputTab.Pop()
+	// Restore any baseURI override scoped to this exact input (see
+	// pushInputWithBaseURI). Inputs are popped strictly LIFO, so the override —
+	// if any — for the popped input is the top of the scope stack.
+	if n := len(ctx.baseURIScopes); n > 0 && ctx.baseURIScopes[n-1].input == popped {
+		ctx.baseURI = ctx.baseURIScopes[n-1].baseURI
+		ctx.baseURIScopes = ctx.baseURIScopes[:n-1]
+	}
+	return popped
 }
 
 func (ctx *parserCtx) currentInputID() any {

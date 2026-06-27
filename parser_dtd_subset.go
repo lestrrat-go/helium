@@ -557,7 +557,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			if !ok {
 				return pctx.error(ctx, errors.New("internal: external parameter entity is not *helium.Entity"))
 			}
-			content, err := pctx.loadExternalParameterEntityContent(ctx, ent)
+			content, peURI, err := pctx.loadExternalParameterEntityContent(ctx, ent)
 			if err != nil {
 				return err
 			}
@@ -568,7 +568,12 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 			if len(content) > 0 {
-				pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(content)))
+				// Scope baseURI to the PE's OWN resolved URI while its replacement
+				// text is parsed, so a relative system ID in a declaration INSIDE
+				// the PE (e.g. <!ENTITY e SYSTEM "leaf.ent"> in sub/pe.ent)
+				// resolves against the PE's location, not the containing DTD. The
+				// override is restored when this pushed cursor is popped.
+				pctx.pushInputWithBaseURI(strcursor.NewByteCursor(bytes.NewReader(content)), peURI)
 			}
 			pctx.hasPERefs = true
 			return nil
@@ -617,12 +622,12 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 // and empty content is returned, leaving the caller's behavior unchanged. The
 // read is byte-capped (externalEntityMaxBytes) and the opened input is closed as
 // soon as the bounded read completes, mirroring parseExternalEntityPrivate.
-func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, error) {
+func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, string, error) {
 	if len(e.content) > 0 {
-		return []byte(e.content), nil
+		return []byte(e.content), e.URI(), nil
 	}
 	if pctx.options.IsSet(parseNoXXE) {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	var input sax.ParseInput
@@ -633,11 +638,20 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 			input = resolved
 		case sax.ErrHandlerUnspecified:
 		default:
-			return nil, pctx.error(ctx, err)
+			return nil, "", pctx.error(ctx, err)
 		}
 	}
 	if input == nil {
-		return nil, nil
+		return nil, "", nil
+	}
+
+	// The resolved input carries the URI actually opened (a catalog-resolved URI
+	// or the entity's resolved system URI), which is the correct base for
+	// relative system IDs in declarations inside this PE. Fall back to the
+	// entity's declared URI when the resolver did not supply one.
+	uri := input.URI()
+	if uri == "" {
+		uri = e.URI()
 	}
 
 	// Read through a bounded reader so an unbounded source cannot exhaust memory,
@@ -648,12 +662,12 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 		_ = c.Close()
 	}
 	if err != nil {
-		return nil, pctx.error(ctx, fmt.Errorf("reading external parameter entity: %w", err))
+		return nil, "", pctx.error(ctx, fmt.Errorf("reading external parameter entity: %w", err))
 	}
 	if exceeded {
-		return nil, pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
+		return nil, "", pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
 	}
 
 	e.content = string(content)
-	return content, nil
+	return content, uri, nil
 }
