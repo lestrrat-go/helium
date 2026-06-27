@@ -868,6 +868,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	eval = eval.
 		CurrentTime(ec.currentTime).
 		ImplicitTimezone(ec.currentTime.Location()).
+		AllowXML11Chars().
 		TraceWriter(ec.traceWriter)
 	if resolver := ec.collectionResolver(); resolver != nil {
 		eval = eval.CollectionResolver(resolver)
@@ -914,8 +915,8 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		if baseURI != "" {
 			eval = eval.BaseURI(ensureFileURI(baseURI))
 		}
-	} else if ec.stylesheet.baseURI != "" {
-		eval = eval.BaseURI(ensureFileURI(ec.stylesheet.baseURI))
+	} else if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
+		eval = eval.BaseURI(ensureFileURI(baseURI))
 	}
 
 	// Default collation
