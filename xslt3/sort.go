@@ -67,6 +67,13 @@ type sortValue struct {
 	str      string
 	num      float64
 	typeName string // original XSD type name (for XTDE1030 checking)
+	// atom carries the original atomized value (when hasAtom is true) so the
+	// XTDE1030 type-consistency check can probe true XPath comparability via
+	// xpath3.ValueCompare rather than comparing raw type names. Numeric/date
+	// pre-conversion to num is independent of this — atom always reflects the
+	// untouched source type for the consistency gate.
+	atom    xpath3.AtomicValue
+	hasAtom bool
 }
 
 // resolvedLevel holds the fully resolved configuration for one sort level.
@@ -88,8 +95,6 @@ type keyed1[T any] struct {
 	key   sortValue
 	index int
 }
-
-func (k keyed1[T]) keyType() string { return k.key.typeName }
 
 // keyedN pairs a value with pre-extracted typed sort keys and original index.
 type keyedN[T any] struct {
@@ -311,87 +316,74 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 	return nil
 }
 
-// sortKeyFamily returns a family name for type compatibility checking.
-// All numeric types belong to the "numeric" family and are mutually comparable.
-func sortKeyFamily(tn string) string {
-	switch tn {
-	case xpath3.TypeInteger, xpath3.TypeDecimal, xpath3.TypeFloat, xpath3.TypeDouble,
-		xpath3.TypeLong, xpath3.TypeInt, xpath3.TypeShort, xpath3.TypeByte,
-		xpath3.TypeUnsignedLong, xpath3.TypeUnsignedInt, xpath3.TypeUnsignedShort, xpath3.TypeUnsignedByte,
-		xpath3.TypeNonNegativeInteger, xpath3.TypeNonPositiveInteger,
-		xpath3.TypePositiveInteger, xpath3.TypeNegativeInteger:
-		return "numeric"
-	}
-	return tn
+// sortKeyTypesComparable reports whether two atomic sort-key values are mutually
+// comparable under XPath value-comparison semantics, reusing xpath3.ValueCompare
+// as the orderability oracle instead of comparing raw type names. Equality
+// definedness is the family-membership test: two values share a comparison
+// family iff `eq` is defined between them. This honors the repo's XSD 1.1 model
+// automatically — xs:dateTimeStamp ⊂ xs:dateTime, xs:anyURI/xs:string, the
+// numeric family, and untypedAtomic-as-string are all mutually comparable —
+// while genuinely incomparable families (e.g. xs:date vs xs:integer) remain so.
+func sortKeyTypesComparable(a, b xpath3.AtomicValue) bool {
+	_, err := xpath3.ValueCompare(xpath3.TokenEq, a, b)
+	return err == nil
 }
 
-// checkSortKeyTypeConsistency raises XTDE1030 if sort keys have incompatible types.
-// For example, mixing xs:untypedAtomic with xs:date is invalid because they
-// can't be compared using the lt operator without explicit casting.
-// All numeric types (integer, decimal, float, double, etc.) are mutually compatible.
-func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) error {
-	var firstNonString string
-	var firstFamily string
-	for _, e := range entries {
-		tn := e.keyType()
-		if tn == "" || tn == xpath3.TypeString || tn == xpath3.TypeUntypedAtomic {
+// validateSortLevelTypes is the SINGLE per-level XTDE1030 validation routine
+// shared by both the single-key and multi-key sort paths. It raises XTDE1030
+// when the values for one sort level have mutually incomparable atomic types.
+//
+// Levels with an explicit data-type="text" (every value is stringified) or
+// data-type="number" (every value is cast to xs:double) make mixed original
+// atomic types trivially comparable, so the check is skipped entirely for them.
+// Only default-data-type levels (dataTypeAuto / dataTypeNumberAuto) compare
+// values by their own atomic types and need the consistency check.
+func validateSortLevelTypes(values []sortValue, mode dataTypeMode) error {
+	if mode == dataTypeText || mode == dataTypeNumber {
+		return nil
+	}
+	var ref *xpath3.AtomicValue
+	for i := range values {
+		v := &values[i]
+		if !v.hasAtom {
 			continue
 		}
-		// xs:duration is only partially ordered and cannot be used as a sort key
-		if tn == xpath3.TypeDuration {
+		// xs:duration is only partially ordered and cannot be used as a sort key.
+		if v.atom.TypeName == xpath3.TypeDuration {
 			return dynamicError(errCodeXTDE1030,
-				"sort keys of type %s are only partially ordered", tn)
+				"sort keys of type %s are only partially ordered", xpath3.TypeDuration)
 		}
-		fam := sortKeyFamily(tn)
-		if firstNonString == "" {
-			firstNonString = tn
-			firstFamily = fam
-		} else if firstFamily != fam {
+		if ref == nil {
+			ref = &v.atom
+			continue
+		}
+		if !sortKeyTypesComparable(*ref, v.atom) {
 			return dynamicError(errCodeXTDE1030,
-				"sort keys have incompatible types: %s and %s", firstNonString, tn)
-		}
-	}
-	// If we have a non-string type AND string/untypedAtomic types, they're incompatible
-	if firstNonString != "" {
-		for _, e := range entries {
-			tn := e.keyType()
-			if tn == xpath3.TypeUntypedAtomic || tn == xpath3.TypeString {
-				return dynamicError(errCodeXTDE1030,
-					"sort keys have incompatible types: %s and %s", firstNonString, tn)
-			}
+				"sort keys have incompatible types: %s and %s", ref.TypeName, v.atom.TypeName)
 		}
 	}
 	return nil
 }
 
-// keyedNLevel adapts one sort level of a multi-key entry to the keyType()
-// interface consumed by checkSortKeyTypeConsistency.
-type keyedNLevel struct{ typeName string }
+// validateSortKeyTypes1 routes a single-key sort's values through the shared
+// per-level validator.
+func validateSortKeyTypes1[T any](entries []keyed1[T], mode dataTypeMode) error {
+	values := make([]sortValue, len(entries))
+	for i := range entries {
+		values[i] = entries[i].key
+	}
+	return validateSortLevelTypes(values, mode)
+}
 
-func (k keyedNLevel) keyType() string { return k.typeName }
-
-// checkSortKeysTypeConsistencyN applies checkSortKeyTypeConsistency to each of
-// the nLevels sort keys in a multi-key sort, raising XTDE1030 if any single
-// key's values are of mutually incomparable types across the sequence. Mirrors
-// the per-key check the single-key sort paths run; the multi-key paths must
-// validate each key in turn rather than skip the check entirely.
-//
-// Only levels with the DEFAULT data type (no explicit data-type attribute, i.e.
-// dataTypeAuto / dataTypeNumberAuto) compare values by their own atomic types
-// and therefore need the cross-value consistency check. Levels with an explicit
-// data-type="text" stringify every value, and data-type="number" casts every
-// value to xs:double, so mixed original atomic types are always comparable and
-// the check is skipped for them.
-func checkSortKeysTypeConsistencyN[T any](entries keyedSlice[T], dtModes []dataTypeMode) error {
-	views := make([]keyedNLevel, len(entries))
+// validateSortKeyTypesN routes each level of a multi-key sort through the shared
+// per-level validator.
+func validateSortKeyTypesN[T any](entries keyedSlice[T], dtModes []dataTypeMode) error {
+	values := make([]sortValue, len(entries))
 	for level, m := range dtModes {
-		if m == dataTypeText || m == dataTypeNumber {
-			continue
-		}
 		for i := range entries {
-			views[i] = keyedNLevel{typeName: entries[i].keys[level].typeName}
+			values[i] = entries[i].keys[level]
 		}
-		if err := checkSortKeyTypeConsistency(views); err != nil {
+		if err := validateSortLevelTypes(values, m); err != nil {
 			return err
 		}
 	}
@@ -531,20 +523,25 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		if *dtMode == dataTypeNumberAuto {
 			// Auto-detected numeric: preserve date/time ordering.
 			sv := extractNumericSortValue(seq, result.StringValue(), false, implicitTZ)
-			// Preserve original type name for XTDE1030 checking
+			// Preserve original type/atom for XTDE1030 checking
 			if seqLen == 1 {
 				if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
 					sv.typeName = av.TypeName
+					sv.atom = av
+					sv.hasAtom = true
 				}
 			}
 			return sv, nil
 		}
 
 		sv := sortValue{kind: sortValueText, str: result.StringValue()}
+		var keyAtom xpath3.AtomicValue
+		var haveAtom bool
 		if seqLen == 1 {
 			switch v := seq.Get(0).(type) {
 			case xpath3.AtomicValue:
 				sv.typeName = v.TypeName
+				keyAtom, haveAtom = v, true
 				if *dtMode == dataTypeAuto && v.IsNumeric() {
 					*dtMode = dataTypeNumberAuto
 				}
@@ -587,9 +584,15 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 				// Atomize to get the typed value for type consistency checks
 				if av, err := xpath3.AtomizeItem(v); err == nil {
 					sv.typeName = av.TypeName
+					keyAtom, haveAtom = av, true
 				}
 			}
 		}
+		// Carry the original atom for the XTDE1030 consistency gate. The
+		// duration/date branches above rebuild sv as a numeric value but the
+		// gate must still see the untouched source type, so set it last.
+		sv.atom = keyAtom
+		sv.hasAtom = haveAtom
 		return sv, nil
 	}
 
@@ -639,7 +642,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 				if d.Negative {
 					f = -f
 				}
-				sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}
+				sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName, atom: av, hasAtom: true}
 				*dtMode = dataTypeNumberAuto
 			}
 		}
@@ -864,7 +867,7 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *s
 	}
 
 	// XTDE1030: check for incompatible or non-orderable sort key types.
-	if err := checkSortKeyTypeConsistency(entries); err != nil {
+	if err := validateSortKeyTypes1(entries, dtMode); err != nil {
 		return nil, err
 	}
 
@@ -929,7 +932,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 	}
 
 	// XTDE1030: check for heterogeneous sort key types that can't be compared.
-	if err := checkSortKeyTypeConsistency(entries); err != nil {
+	if err := validateSortKeyTypes1(entries, dtMode); err != nil {
 		return nil, err
 	}
 
@@ -979,7 +982,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 	}
 
 	// XTDE1030: validate each sort key's type consistency across the sequence.
-	if err := checkSortKeysTypeConsistencyN(entries, dtModes); err != nil {
+	if err := validateSortKeyTypesN(entries, dtModes); err != nil {
 		return nil, err
 	}
 
@@ -1041,7 +1044,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	}
 
 	// XTDE1030: validate each sort key's type consistency across the sequence.
-	if err := checkSortKeysTypeConsistencyN(entries, dtModes); err != nil {
+	if err := validateSortKeyTypesN(entries, dtModes); err != nil {
 		return nil, err
 	}
 
@@ -1080,7 +1083,8 @@ func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *so
 		return nil, err
 	}
 
-	if err := checkSortKeyTypeConsistency(entries); err != nil {
+	// XTDE1030: check for incompatible or non-orderable sort key types.
+	if err := validateSortKeyTypes1(entries, dtMode); err != nil {
 		return nil, err
 	}
 
@@ -1122,7 +1126,7 @@ func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKe
 	}
 
 	// XTDE1030: validate each sort key's type consistency across the sequence.
-	if err := checkSortKeysTypeConsistencyN(entries, dtModes); err != nil {
+	if err := validateSortKeyTypesN(entries, dtModes); err != nil {
 		return nil, err
 	}
 

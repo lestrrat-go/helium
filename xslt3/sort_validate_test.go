@@ -248,6 +248,118 @@ func TestMultiKeySortTextSecondKeyMixedTypesNoError(t *testing.T) {
 	require.Contains(t, result, "<out")
 }
 
+// XSLT3-102 r3: a SINGLE-key sort with explicit data-type="text" stringifies
+// every value, so mutually incomparable original atomic types (xs:date vs
+// xs:integer) are perfectly valid and must NOT raise XTDE1030. The single-key
+// path must skip the type-consistency check for explicit text levels exactly
+// like the multi-key path does.
+func TestSingleKeyTextSortMixedTypesNoError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="if (@t='d') then xs:date(@v) else xs:integer(@v)" data-type="text"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item t="d" v="2020-01-01"/><item t="n" v="5"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "<out")
+}
+
+// XSLT3-102 r3: a default-data-type sort mixing xs:dateTimeStamp and xs:dateTime
+// must NOT raise XTDE1030. In the repo's XSD 1.1 model xs:dateTimeStamp is a
+// subtype of xs:dateTime and the two are mutually comparable with the value
+// comparison `lt`/`eq` operators, so the consistency check must accept them
+// rather than rejecting on raw type-name inequality.
+func TestSingleKeySortDateTimeStampDateTimeNoError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="if (@t='s') then xs:dateTimeStamp(@v) else xs:dateTime(@v)"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item t="s" v="2020-01-01T00:00:00Z"/><item t="d" v="2019-06-01T12:00:00"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "2019-06-01T12:00:00")
+}
+
+// XSLT3-102 r3: a default-data-type sort mixing xs:anyURI and xs:string must NOT
+// raise XTDE1030. Both belong to the string comparison family and are mutually
+// comparable, so the consistency check must accept them.
+func TestSingleKeySortAnyURIStringNoError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="if (@t='u') then xs:anyURI(@v) else string(@v)"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item t="s" v="zebra"/><item t="u" v="apple"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "<out")
+}
+
+// XSLT3-102 r3: a default-data-type single-key sort mixing genuinely
+// incomparable atomic types (xs:date vs xs:integer, different orderability
+// families) must still raise XTDE1030.
+func TestSingleKeySortIncompatibleTypesRaisesXTDE1030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="if (@t='d') then xs:date(@v) else xs:integer(@v)"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item t="d" v="2020-01-01"/><item t="n" v="5"/></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE1030")
+}
+
 // XSLT3-102 r2: likewise, a SECONDARY sort key with explicit data-type="number"
 // casts every value to xs:double, so mixed original atomic types (xs:date vs
 // xs:integer here, which belong to different orderability families) are
