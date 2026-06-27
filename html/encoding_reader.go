@@ -138,6 +138,13 @@ type utf8SanitizeReader struct {
 	out    []byte // sanitized output ready to consume
 	outPos int
 
+	// readErr is a sticky non-EOF error returned by the underlying reader. An
+	// io.Reader may return n > 0 together with a non-EOF error in a single Read;
+	// surfacing it before the converted output drains would truncate the stream.
+	// We remember it and surface it only once all buffered sanitized output has
+	// been delivered.
+	readErr error
+
 	// Error tracking: position of first invalid byte (after newline normalization).
 	hasError bool
 	errLine  int
@@ -173,6 +180,16 @@ func (sr *utf8SanitizeReader) Read(p []byte) (int, error) {
 		return n, nil
 	}
 
+	// Buffered output is fully drained. A sticky non-EOF error recorded with an
+	// earlier chunk of data surfaces here, now that all of that chunk's
+	// converted bytes have been delivered — never before, or the tail of the
+	// sanitized stream would be lost.
+	if sr.readErr != nil {
+		e := sr.readErr
+		sr.readErr = nil
+		return 0, e
+	}
+
 	// Read more raw data. Keep any trailing partial UTF-8 from previous read.
 	leftover := sr.rawLen - sr.rawPos
 	if leftover > 0 {
@@ -184,7 +201,22 @@ func (sr *utf8SanitizeReader) Read(p []byte) (int, error) {
 	n, err := sr.r.Read(sr.raw[sr.rawLen:])
 	sr.rawLen += n
 
+	// An io.Reader may return n > 0 together with a non-EOF error. Remember the
+	// error as sticky and process the bytes we did get; surface it only after
+	// the converted output drains. For the partial-rune logic below, any error
+	// (EOF or otherwise) means no further bytes are coming, so a truncated
+	// trailing rune is genuinely invalid rather than merely incomplete.
+	eof := err != nil
+	if err != nil && err != io.EOF {
+		sr.readErr = err
+	}
+
 	if sr.rawLen == 0 {
+		if sr.readErr != nil {
+			e := sr.readErr
+			sr.readErr = nil
+			return 0, e
+		}
 		return 0, err
 	}
 
@@ -209,7 +241,7 @@ func (sr *utf8SanitizeReader) Read(p []byte) (int, error) {
 		if r == utf8.RuneError && size <= 1 {
 			// Could be a genuine error or an incomplete sequence at end of buffer.
 			// If we're at the end of the buffer and more data may come, keep it as leftover.
-			if i+utf8.UTFMax > len(data) && err == nil {
+			if i+utf8.UTFMax > len(data) && !eof {
 				// Partial sequence at end — keep as leftover for next read.
 				sr.rawPos = i
 				sr.rawLen = len(data)
@@ -241,17 +273,31 @@ func (sr *utf8SanitizeReader) Read(p []byte) (int, error) {
 	}
 
 	if len(sr.out) == 0 {
+		if sr.readErr != nil {
+			e := sr.readErr
+			sr.readErr = nil
+			return 0, e
+		}
 		return 0, err
 	}
 
 	written := copy(p, sr.out[sr.outPos:])
 	sr.outPos += written
-	if sr.outPos >= len(sr.out) {
+	drained := sr.outPos >= len(sr.out)
+	if drained {
 		sr.out = sr.out[:0]
 		sr.outPos = 0
 	}
 
-	return written, err
+	// Surface an end condition only once all of this chunk's converted output
+	// has been delivered. If output remains buffered, defer EOF/error until the
+	// next call drains it. A sticky non-EOF error is always deferred to the next
+	// call (where the drain check at the top re-surfaces it) so the caller can
+	// never stop on the error with bytes still pending.
+	if drained && sr.readErr == nil && err == io.EOF {
+		return written, io.EOF
+	}
+	return written, nil
 }
 
 func (sr *utf8SanitizeReader) trackByte(b byte) {
@@ -444,11 +490,17 @@ func (dr *deferredLatin1Reader) decide() bool {
 		}
 		r, size := utf8.DecodeRune(data[i:])
 		if r == utf8.RuneError && size <= 1 {
-			// Incomplete sequence at the tail and more data may still come:
-			// the scanned prefix holds no genuine non-UTF-8 byte, so stop
-			// scanning and let the bounded-buffer / EOF logic below settle it
-			// (keeps buffering unless we already hit EOF or the cap).
-			if i+utf8.UTFMax > len(data) && !dr.eof {
+			// A decode failure here is either a genuinely invalid byte or a
+			// multibyte rune merely truncated by the end of the buffer. Defer
+			// ONLY for a truly incomplete trailing rune — one whose continuation
+			// bytes have not all arrived yet (!utf8.FullRune). A genuine invalid
+			// byte (a lone continuation byte such as 0x80/0x93, or a lead byte
+			// with a bad continuation) is a "full" RuneError of size 1 and must
+			// switch to Latin-1 right here, BEFORE the cap check below — otherwise
+			// an invalid byte landing at the commit boundary would be flushed
+			// verbatim as UTF-8 instead of flipping the whole buffer to
+			// Windows-1252 the way the in-memory []byte path does.
+			if !dr.eof && !utf8.FullRune(data[i:]) {
 				break
 			}
 			// Genuine non-UTF-8 byte: reinterpret the ENTIRE buffer (from the
@@ -511,29 +563,12 @@ func (dr *deferredLatin1Reader) decide() bool {
 // non-UTF-8 byte in an undeclared >1 MiB-valid stream never leaks raw into
 // SAX/DOM.
 func (dr *deferredLatin1Reader) fillUTF8(p []byte) (int, error) {
-	// A sticky non-EOF error recorded on an earlier read that also returned
-	// bytes has now drained: surface it without re-reading the source.
-	if dr.readErr != nil {
-		e := dr.readErr
-		dr.readErr = nil
-		return 0, e
-	}
-
-	n, err := dr.sanitizer.Read(p)
-	// io.Reader may deliver data together with a non-EOF error. Remember it as
-	// sticky and return the bytes first; surface the error once they drain.
-	if err != nil && err != io.EOF {
-		dr.readErr = err
-	}
-	if n > 0 {
-		return n, nil
-	}
-	if dr.readErr != nil {
-		e := dr.readErr
-		dr.readErr = nil
-		return 0, e
-	}
-	return 0, err
+	// The sanitizer owns sticky-error/drain ordering: it never surfaces a
+	// non-EOF read error while it still holds buffered converted output, so a
+	// late underlying error (delivered together with data, possibly with more
+	// sanitized bytes still buffered inside the sanitizer) cannot truncate the
+	// committed UTF-8 stream. Delegate to it directly.
+	return dr.sanitizer.Read(p)
 }
 
 // splitTrailingPartialRune splits b into a complete-UTF-8 prefix and a trailing
