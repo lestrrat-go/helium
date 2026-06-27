@@ -789,6 +789,94 @@ func TestExternalParameterEntityWithTextDecl(t *testing.T) {
 		"external PE beginning with a TextDecl must parse its declarations")
 }
 
+// TestExternalParameterEntityInEntityValueStripsTextDecl proves that when an
+// external parameter entity whose replacement text begins with a TextDecl is
+// referenced inside a GENERAL entity's value ("<!ENTITY g "%p;">"), the stored
+// value of g is the PE's POST-TextDecl bytes only — the leading
+// "<?xml ... encoding=...?>" must NOT be embedded into g. The decode is
+// centralized at the shared load/cache chokepoint, so the entity-value
+// expansion path and the top-level "%pe;" path both see the stripped bytes.
+func TestExternalParameterEntityInEntityValueStripsTextDecl(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % p SYSTEM "value.ent">` + "\n" +
+				`<!ENTITY g "%p;">`)},
+		"value.ent": {Data: []byte(`<?xml version="1.0" encoding="UTF-8"?>` +
+			`post-textdecl-value`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("g")
+	require.True(t, ok, "general entity g must be registered")
+	require.Equal(t, "post-textdecl-value", string(ent.Content()),
+		"external PE referenced in an entity value must contribute only its post-TextDecl bytes, not the TextDecl itself")
+}
+
+// TestExternalParameterEntityVersionOnlyTextDeclRejected proves that an external
+// parameter entity whose replacement text begins with a version-only
+// declaration ("<?xml version="1.0"?>") is rejected: a TextDecl REQUIRES an
+// EncodingDecl, so a version-only declaration is not a valid TextDecl and must
+// not be leniently accepted.
+func TestExternalParameterEntityVersionOnlyTextDeclRejected(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<?xml version="1.0"?>` + "\n" +
+			`<!ENTITY td "x">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	_, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err,
+		"a version-only declaration is not a valid TextDecl (encoding is required) and must be rejected")
+}
+
+// TestExternalParameterEntityStandaloneTextDeclRejected proves that an external
+// parameter entity whose replacement text begins with a declaration carrying a
+// 'standalone' pseudo-attribute is rejected: a TextDecl does not permit a
+// StandaloneDecl, so such a declaration is malformed and must not be leniently
+// accepted.
+func TestExternalParameterEntityStandaloneTextDeclRejected(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n" +
+			`<!ENTITY td "x">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	_, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err,
+		"a TextDecl carrying a standalone pseudo-attribute is malformed and must be rejected")
+}
+
 // TestEntityValueRefValidationIsSideEffectFree proves that the reference
 // validation in parseEntityValue does NOT perturb the entity-amplification
 // accounting. validateEntityValueRefs PE-expands the literal to scan for

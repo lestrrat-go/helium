@@ -566,17 +566,15 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			if pctx.externalPEActive(ent) {
 				return pctx.error(ctx, fmt.Errorf("parse error: external parameter entity %%%s; references itself", name))
 			}
+			// loadExternalParameterEntityContent already strips and decodes any
+			// leading TextDecl ("<?xml ... encoding=...?>") at the shared
+			// load/cache chokepoint, so the bytes returned here are the
+			// post-TextDecl replacement text ready for the declaration loop — the
+			// "<?xml" is never seen as a stray PI, and the entity-value expansion
+			// path sees the identical decoded bytes.
 			content, peURI, err := pctx.loadExternalParameterEntityContent(ctx, ent)
 			if err != nil {
 				return err
-			}
-			// An external parsed entity may begin with a TextDecl
-			// ("<?xml ... encoding=...?>"); consume it (and decode per its declared
-			// encoding) before the declaration loop sees the bytes, else "<?xml" is
-			// wrongly rejected as a PI. Mirrors the external general entity path.
-			content, err = pctx.decodeExternalPEContent(ctx, content)
-			if err != nil {
-				return pctx.error(ctx, err)
 			}
 			// Charge the loaded bytes (plus the per-reference fixed cost) against
 			// the amplification guard so a small DTD cannot reference a large
@@ -690,6 +688,20 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 		return nil, "", pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
 	}
 
+	// Strip and decode any leading TextDecl ("<?xml ... encoding=...?>") HERE, at
+	// the single shared load/cache chokepoint, so EVERY consumer of an external
+	// PE's replacement text — the top-level "%pe;" declaration loop AND the
+	// entity-value expansion path (parameterEntityReplacement →
+	// decodeEntitiesInternal / expandEntityValueForRefCheck) — sees the same
+	// post-TextDecl bytes regardless of reference order. Caching the decoded
+	// bytes means a later reference (from either path) reuses them consistently,
+	// instead of one path getting raw bytes that embed the TextDecl into a
+	// general entity's stored value.
+	content, err = pctx.decodeExternalPEContent(ctx, content)
+	if err != nil {
+		return nil, "", err
+	}
+
 	e.content = string(content)
 	e.resolvedURI = uri
 	return content, uri, nil
@@ -715,19 +727,19 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []by
 
 	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
 	// declared encoding switches only this sub-cursor. Inherit the parent's
-	// options (encoding-ignore policy) and additionally allow version-optional
-	// pseudo-attributes: a TextDecl's VersionInfo is optional (EncodingDecl is
-	// required), which the strict XMLDecl parser would otherwise reject.
+	// options (encoding-ignore policy). The TextDecl grammar is enforced by
+	// parseTextDecl: VersionInfo is optional, EncodingDecl is REQUIRED, and no
+	// StandaloneDecl is permitted — a version-only or standalone-bearing
+	// declaration is rejected rather than leniently accepted.
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
-	sub.options.Set(parseLenientXMLDecl)
 
 	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
-		if err := sub.parseXMLDecl(ctx); err != nil {
+		if err := sub.parseTextDecl(ctx); err != nil {
 			return nil, err
 		}
 	}
