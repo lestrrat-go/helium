@@ -100,3 +100,61 @@ func TestVersion11BuiltinTypes(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 }
+
+// TestVersion11UnionActiveMember covers the XSD-version threading through union
+// active-member resolution (fixedUnionActiveMember): a 1.1-only lexical form
+// ("+INF" for xs:double) appearing inside a union fixed-value or enumeration
+// literal must be accepted under 1.1 — not rejected because the throwaway
+// validation context built during active-member resolution defaulted to
+// Version10. The union excludes xs:string so "+INF" is not trivially valid as a
+// string member; in 1.0 "+INF" is valid against neither member, so the instance
+// is rejected.
+func TestVersion11UnionActiveMember(t *testing.T) {
+	const schemaFixed = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" fixed="+INF">
+    <xs:simpleType>
+      <xs:union memberTypes="xs:double xs:date"/>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	const schemaEnum = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="xs:double xs:date"/>
+        </xs:simpleType>
+        <xs:enumeration value="+INF"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("1.1 union fixed value +INF accepts instance +INF", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaFixed, `<v>+INF</v>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("1.0 union fixed value +INF rejects instance +INF", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaFixed, `<v>+INF</v>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.1 union enumeration +INF accepts instance +INF", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaEnum, `<v>+INF</v>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("1.0 union enumeration +INF rejects instance +INF", func(t *testing.T) {
+		t.Parallel()
+		// In 1.0 "+INF" is valid against neither union member, so the enumeration
+		// literal is rejected at compile time; the schema does not accept "+INF".
+		schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaEnum))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), schemaDOC)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+}

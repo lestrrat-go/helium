@@ -204,7 +204,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		// fallback on a string leaf.
 		memberLocal := ""
 		memberWS := resolveWhiteSpace(cur)
-		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur)); active != nil {
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), vc.version); active != nil {
 			memberLocal = builtinBaseLocal(active)
 			memberWS = resolveWhiteSpace(active)
 		}
@@ -261,7 +261,7 @@ func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string
 		if i < len(td.Facets.EnumerationNS) {
 			enumNS = td.Facets.EnumerationNS[i]
 		}
-		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS) {
+		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.version) {
 			return nil
 		}
 	}
@@ -441,7 +441,7 @@ func checkListEnumeration(ctx context.Context, value string, valueNS map[string]
 		if i < len(fs.EnumerationNS) {
 			enumNS = fs.EnumerationNS[i]
 		}
-		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS) {
+		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.version) {
 			return nil
 		}
 	}
