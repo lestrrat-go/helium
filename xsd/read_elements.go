@@ -701,6 +701,12 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
 	if name == "" {
+		// @name is required (XSD Structures 3.11.2 / src-identity-constraint).
+		// libxml2 reports the missing attribute and drops the constraint; an
+		// absent name previously compiled clean and silently discarded the
+		// constraint with no diagnostic.
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The attribute 'name' is required but missing.")
 		return nil
 	}
 	// Source pins the filename of the schema document that declares this
@@ -738,6 +744,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// so a malformed field XPath is reported against the right element.
 	var selectorLine int
 	var fieldLines []int
+	var selectorSeen bool
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -750,10 +757,25 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 		case isXSDElement(ce, elemSelector):
 			idc.Selector = getAttr(ce, attrXPath)
 			selectorLine = ce.Line()
+			selectorSeen = true
 		case isXSDElement(ce, elemField):
 			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
 			fieldLines = append(fieldLines, ce.Line())
 		}
+	}
+
+	// Structural requirements (XSD Structures 3.11.1 / src-identity-constraint):
+	// a constraint MUST have exactly one <selector> and at least one <field>.
+	// Absence previously compiled clean and produced a no-op constraint that
+	// never fired at validation time. Mirror libxml2: a missing <selector> is the
+	// first missing-child error (it short-circuits the field check), otherwise a
+	// present selector with no <field> is a content error.
+	if !selectorSeen {
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"A child element is missing.")
+	} else if len(idc.Fields) == 0 {
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The content is not valid. Expected is (annotation?, (selector, field+)).")
 	}
 
 	// Pre-compile selector XPath expression. A malformed selector XPath is a
@@ -821,6 +843,29 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		ns = defNS
 	}
 	return QName{Local: refer, NS: ns}, false
+}
+
+// idcElemName maps an IDC kind to its XSD element local name, used as the
+// canonical element name in compile-time diagnostics.
+func idcElemName(kind IDCKind) string {
+	switch kind {
+	case IDCKey:
+		return elemKey
+	case IDCKeyRef:
+		return elemKeyRef
+	default:
+		return elemUnique
+	}
+}
+
+// reportIDCStructureError reports a malformed identity-constraint declaration
+// (missing required @name, <selector>, or <field>) as a fatal schema
+// compilation error, matching libxml2's src-identity-constraint diagnostics.
+func (c *compiler) reportIDCStructureError(ctx context.Context, kind IDCKind, line int, local, msg string) {
+	if c.filename == "" {
+		return
+	}
+	c.schemaError(ctx, schemaParserError(c.filename, line, local, idcElemName(kind), msg))
 }
 
 // reportIDCXPathError reports a malformed identity-constraint selector/field
