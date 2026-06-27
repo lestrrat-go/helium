@@ -521,20 +521,35 @@ func extractMetaCharset(data []byte) string {
 			// part of the value, not the tag terminator, so a naive IndexByte
 			// would truncate the tag before charset= and miss the declaration.
 			gt := metaTagEnd(tag)
-			if gt >= 0 {
-				tag = tag[:gt]
+			if gt < 0 {
+				// No terminating unquoted '>' within the prescan window: the
+				// tag is cut off by the window end. Per WHATWG, running out of
+				// bytes aborts the prescan — a declaration severed by the
+				// window must NOT count, so do not parse the truncated tag.
+				return ""
 			}
+			tag = tag[:gt]
 			if cs := metaCharsetFromTag(tag); cs != "" {
 				return cs
-			}
-			if gt < 0 {
-				return ""
 			}
 			i += gt + 1
 			continue
 		}
-		// Any other tag, markup declaration, or PI: step over it to its first
-		// unquoted '>' (a quoted '>' in an attribute is not the terminator).
+		// End tag, processing instruction, or markup declaration (</..., <?...,
+		// <!... other than the <!-- comment handled above): per WHATWG these are
+		// skipped to the next RAW '>'. Quotes are NOT significant inside them, so
+		// the quote-aware scan must NOT be used — a stray quote inside one could
+		// otherwise enter quote state and swallow a later genuine <meta charset=>.
+		if nextB == '/' || nextB == '!' || nextB == '?' {
+			rel := bytes.IndexByte(lower[i:], '>')
+			if rel < 0 {
+				return ""
+			}
+			i += rel + 1
+			continue
+		}
+		// Any other start tag (<name ...>): step over it to its first UNQUOTED
+		// '>' (a '>' inside a quoted attribute value is not the terminator).
 		gt := metaTagEnd(lower[i:])
 		if gt < 0 {
 			return ""
@@ -590,13 +605,27 @@ func metaCharsetFromTag(tag []byte) string {
 	// needPragma: 0 = unset (no candidate yet), 1 = content candidate (needs the
 	// content-type pragma), 2 = charset attribute (trusted unconditionally).
 	needPragma := 0
+	// WHATWG keeps a list of attribute names already seen on this element and
+	// IGNORES any duplicate name (first occurrence wins). Without this, a later
+	// duplicate would override an earlier one — e.g.
+	// `<meta charset=utf-8 charset=iso-8859-1>` would wrongly commit to Latin-1
+	// and corrupt valid UTF-8.
+	var seen map[string]struct{}
 	for {
 		name, value, next, ok := metaNextAttr(tag, pos)
 		if !ok {
 			break
 		}
 		pos = next
-		switch string(name) {
+		nm := string(name)
+		if _, dup := seen[nm]; dup {
+			continue
+		}
+		if seen == nil {
+			seen = make(map[string]struct{}, 4)
+		}
+		seen[nm] = struct{}{}
+		switch nm {
 		case "http-equiv":
 			if string(value) == "content-type" {
 				gotPragma = true

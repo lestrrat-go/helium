@@ -142,6 +142,131 @@ func TestExtractMetaCharset_LiteralLessThan(t *testing.T) {
 	}
 }
 
+// extractMetaCharset must honor the WHATWG seen-attribute-name list: a DUPLICATE
+// attribute name on the same <meta> element is IGNORED (first occurrence wins).
+// Without this, `<meta charset=utf-8 charset=iso-8859-1>` would let the later
+// charset override the earlier one and wrongly commit to Latin-1, corrupting a
+// valid UTF-8 document (the eager encoding commit overrides utf8.Valid).
+// (Regression: PR #821 / HTML-101 prescan-complete.)
+func TestExtractMetaCharset_DuplicateAttr(t *testing.T) {
+	t.Parallel()
+
+	const (
+		iso  = "iso-8859-1"
+		utf8 = "utf-8"
+	)
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "duplicate-charset-first-wins-utf8",
+			in:   `<meta charset=utf-8 charset=iso-8859-1>`,
+			want: utf8,
+		},
+		{
+			name: "duplicate-charset-first-wins-iso",
+			in:   `<meta charset=iso-8859-1 charset=utf-8>`,
+			want: iso,
+		},
+		{
+			name: "duplicate-http-equiv-second-ignored",
+			// The first http-equiv is not content-type, so the pragma is never
+			// set; the duplicate content-type http-equiv is ignored, so the
+			// content charset stays untrusted and is dropped.
+			in:   `<meta http-equiv=refresh http-equiv=content-type content="text/html; charset=iso-8859-1">`,
+			want: "",
+		},
+		{
+			name: "duplicate-content-first-wins",
+			in:   `<meta http-equiv=content-type content="text/html; charset=utf-8" content="text/html; charset=iso-8859-1">`,
+			want: "utf-8",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, extractMetaCharset([]byte(tc.in)))
+		})
+	}
+}
+
+// extractMetaCharset must ABORT when a <meta> tag has no terminating unquoted '>'
+// inside the prescan window. Per WHATWG, running out of bytes ends the prescan,
+// so a declaration severed by the 1024-byte window (or by truncated input) must
+// NOT be parsed from the cut-off tag. Otherwise a partially-buffered
+// `<meta charset=iso-8859-1` would be trusted and wrongly commit to Latin-1.
+// (Regression: PR #821 / HTML-101 prescan-complete.)
+func TestExtractMetaCharset_UnterminatedTag(t *testing.T) {
+	t.Parallel()
+
+	const iso = "iso-8859-1"
+	t.Run("truncated meta with no closing gt", func(t *testing.T) {
+		t.Parallel()
+		require.Empty(t, extractMetaCharset([]byte(`<meta charset=iso-8859-1`)))
+	})
+
+	t.Run("closing gt pushed past the 1024-byte window", func(t *testing.T) {
+		t.Parallel()
+		// The charset sits inside the window but the tag's '>' is past byte 1024,
+		// so the prescan runs out of bytes before the tag terminates.
+		doc := []byte(`<meta charset="iso-8859-1" ` + strings.Repeat("x", 1100) + `>`)
+		require.Empty(t, extractMetaCharset(doc))
+	})
+
+	t.Run("terminated meta is still honored", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, iso, extractMetaCharset([]byte(`<meta charset=iso-8859-1>`)))
+	})
+}
+
+// extractMetaCharset must skip an end tag, processing instruction, or markup
+// declaration to the next RAW '>': quotes are NOT significant inside </...>,
+// <?...>, or <!...> constructs. A quote-aware scan would enter quote state on a
+// stray quote inside one and swallow every later '>', missing a genuine
+// <meta charset=...> that follows. (Regression: PR #821 / HTML-101 prescan-complete.)
+func TestExtractMetaCharset_RawCloseForNonStartTags(t *testing.T) {
+	t.Parallel()
+
+	const iso = "iso-8859-1"
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "pi-with-stray-quote",
+			in:   `<?x "?><meta charset=iso-8859-1>`,
+			want: iso,
+		},
+		{
+			name: "markup-decl-with-stray-quote",
+			in:   `<!x "><meta charset=iso-8859-1>`,
+			want: iso,
+		},
+		{
+			name: "end-tag-with-stray-quote",
+			in:   `</p "><meta charset=iso-8859-1>`,
+			want: iso,
+		},
+		{
+			name: "doctype-with-stray-quote",
+			in:   `<!doctype "html"><meta charset="iso-8859-1">`,
+			want: iso,
+		},
+		{
+			name: "comment-with-stray-quote",
+			in:   `<!-- " --><meta charset=iso-8859-1>`,
+			want: iso,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, extractMetaCharset([]byte(tc.in)))
+		})
+	}
+}
+
 // extractMetaCharset must inspect ONLY the first 1024 raw bytes, and must do so
 // without lowercasing the whole document. newParser calls this (via
 // declaredCharsetIs{Latin1,UTF8}) ahead of utf8.Valid on every in-memory

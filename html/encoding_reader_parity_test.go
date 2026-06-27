@@ -295,6 +295,50 @@ func TestDeclaredCharsetDetectedFromRawBytesParity(t *testing.T) {
 		"both APIs must report the same encoding for a meta past raw byte 1024")
 }
 
+// TestDuplicateCharsetFirstWinsParity guards the WHATWG seen-attribute-name rule
+// in the meta prescan: a DUPLICATE attribute name is ignored (first wins). A
+// `<meta charset=utf-8 charset=iso-8859-1>` element therefore declares UTF-8, NOT
+// Latin-1. Without the rule the later charset would override the earlier one and
+// both APIs would commit to Latin-1, corrupting the valid-UTF-8 body (café →
+// cafÃ©). Both Parse and ParseReader must keep the document UTF-8 and agree.
+func TestDuplicateCharsetFirstWinsParity(t *testing.T) {
+	t.Parallel()
+
+	// The whole document is valid UTF-8 ("caf" + the UTF-8 é sequence). The first
+	// charset (utf-8) wins, so neither API may reinterpret the bytes as Latin-1.
+	doc := []byte("<html><head><meta charset=utf-8 charset=iso-8859-1></head><body><p>caf\xC3\xA9</p></body></html>")
+	require.True(t, utf8.Valid(doc), "test input must be valid UTF-8 as a whole")
+
+	serialize := func(d *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, html.NewWriter().WriteTo(&buf, d))
+		return buf.String()
+	}
+	textOf := func(d *helium.Document) string {
+		var text bytes.Buffer
+		for n := range helium.Descendants(d) {
+			if tx, ok := n.(*helium.Text); ok {
+				text.Write(tx.Content())
+			}
+		}
+		return text.String()
+	}
+
+	bytesDoc, err := html.NewParser().Parse(t.Context(), doc)
+	require.NoError(t, err)
+	require.NotEqual(t, "ISO-8859-1", bytesDoc.Encoding(),
+		"a duplicate charset must not override the first; the document stays UTF-8")
+	require.Contains(t, textOf(bytesDoc), "é",
+		"the bytes 0xC3 0xA9 must stay one UTF-8 rune, not decode as Latin-1 Ã©")
+
+	readerDoc, err := html.NewParser().ParseReader(t.Context(), bytes.NewReader(doc))
+	require.NoError(t, err)
+	require.Equal(t, serialize(bytesDoc), serialize(readerDoc),
+		"Parse([]byte) and ParseReader must agree for a duplicate-charset meta tag")
+	require.Equal(t, bytesDoc.Encoding(), readerDoc.Encoding(),
+		"both APIs must report the same encoding for a duplicate-charset meta tag")
+}
+
 // TestParseReaderRuneStraddlesSniffBoundary guards against misclassifying a
 // fully-valid UTF-8 document as Latin-1/Windows-1252 when a multibyte rune
 // straddles the 1024-byte charset sniff boundary.
