@@ -242,10 +242,109 @@ func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass
 		}
 		return nameClassContains(innerExcept, outer.except)
 	case ncChoice:
-		return nameClassCoversNSExcept(outer.left, ns, innerExcept) ||
-			nameClassCoversNSExcept(outer.right, ns, innerExcept)
+		// A single branch may cover ns\innerExcept on its own...
+		if nameClassCoversNSExcept(outer.left, ns, innerExcept) ||
+			nameClassCoversNSExcept(outer.right, ns, innerExcept) {
+			return true
+		}
+		// ...or the branches may cover it only by UNION. e.g.
+		// (nsName(X) except foo) | name(foo) covers all of nsName(X): the
+		// nsName branch matches everything in X but foo, and a sibling branch
+		// fills the foo gap.
+		return choiceCoversNSByUnion(outer, ns, innerExcept)
 	}
 	return false
+}
+
+// choiceCoversNSByUnion reports whether the UNION of a choice's branches
+// certainly matches every name in namespace ns that innerExcept does not
+// remove. It handles the disjoint-union case nameClassCoversNSExcept's
+// branch-by-branch test misses: one branch is nsName(ns) minus a FINITE set of
+// names, and sibling branches match each of those removed names. Soundness
+// rests on the gap being finitely enumerable — if the nsName branch's own
+// except is not a finite set of ncName leaves, no claim is made.
+func choiceCoversNSByUnion(choice *nameClass, ns string, innerExcept *nameClass) bool {
+	for _, branch := range flattenChoiceBranches(choice) {
+		if branch.kind != ncNsName || branch.ns != ns {
+			continue
+		}
+		if branch.except == nil {
+			return true
+		}
+		gap, ok := collectFiniteNames(branch.except)
+		if !ok {
+			// The branch removes an infinite/unknown set; the gap cannot be
+			// enumerated, so coverage cannot be claimed soundly.
+			continue
+		}
+		covered := true
+		for _, n := range gap {
+			if n.ns != ns {
+				// A name outside ns the branch excludes is irrelevant: the
+				// nsName branch never matched it within ns anyway.
+				continue
+			}
+			if innerExcept != nil && nameClassMatches(innerExcept, n.name, n.ns) {
+				// innerExcept already removes this name, so it need not be
+				// covered.
+				continue
+			}
+			// Some OTHER branch must match the gap name; the nsName branch
+			// itself excludes it by construction.
+			if !nameClassMatches(choice, n.name, n.ns) {
+				covered = false
+				break
+			}
+		}
+		if covered {
+			return true
+		}
+	}
+	return false
+}
+
+// ncQName is a fully-qualified name (local + namespace) used when enumerating a
+// finite name set out of a name class.
+type ncQName struct {
+	name string
+	ns   string
+}
+
+// collectFiniteNames returns the finite set of names a name class matches, or
+// ok=false when the class is not a finite union of ncName leaves (i.e. it
+// contains an nsName/anyName/ncNoMatch and so matches an infinite or
+// indeterminate set).
+func collectFiniteNames(nc *nameClass) ([]ncQName, bool) {
+	if nc == nil {
+		return nil, true
+	}
+	switch nc.kind {
+	case ncName:
+		return []ncQName{{name: nc.name, ns: nc.ns}}, true
+	case ncChoice:
+		left, ok := collectFiniteNames(nc.left)
+		if !ok {
+			return nil, false
+		}
+		right, ok := collectFiniteNames(nc.right)
+		if !ok {
+			return nil, false
+		}
+		return append(left, right...), true
+	}
+	return nil, false
+}
+
+// flattenChoiceBranches collapses a (possibly nested) ncChoice tree into its
+// leaf branches.
+func flattenChoiceBranches(nc *nameClass) []*nameClass {
+	if nc == nil {
+		return nil
+	}
+	if nc.kind != ncChoice {
+		return []*nameClass{nc}
+	}
+	return append(flattenChoiceBranches(nc.left), flattenChoiceBranches(nc.right)...)
 }
 
 // nameClassCoversAll reports whether outer certainly matches every possible

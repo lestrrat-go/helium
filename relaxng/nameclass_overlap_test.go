@@ -162,4 +162,64 @@ func TestNameClassOverlapExceptChoice(t *testing.T) {
 		require.NotEmpty(t, compile(t, schema),
 			"both classes match foo@X and must conflict")
 	})
+
+	// The excluded class covers a whole namespace by UNION, not by any single
+	// branch: (nsName(X) except foo) | name(foo) together match every name in X.
+	// So anyName except that choice matches NO name in X and is disjoint from
+	// nsName(X). The containment check must account for the union, not test each
+	// branch for full coverage independently.
+	t.Run("disjoint anyName-except-union-choice vs nsName compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except>
+            <choice>
+              <nsName ns="http://example.com/X">
+                <except><name ns="http://example.com/X">foo</name></except>
+              </nsName>
+              <name ns="http://example.com/X">foo</name>
+            </choice>
+          </except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X"/>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"(nsName(X) except foo) | name(foo) covers all of X by union, so anyName-except-it is disjoint from nsName(X)")
+	})
+
+	// Same shape but the union LEAVES A GAP: the choice is only
+	// (nsName(X) except foo), with no sibling filling foo. So anyName-except-it
+	// matches foo@X, which nsName(X) also matches — a genuine overlap.
+	t.Run("genuinely overlapping anyName-except-partial-union vs nsName errors", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except>
+            <choice>
+              <nsName ns="http://example.com/X">
+                <except><name ns="http://example.com/X">foo</name></except>
+              </nsName>
+              <name ns="http://example.com/X">bar</name>
+            </choice>
+          </except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X"/>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"the union leaves foo@X uncovered, so anyName-except-it matches foo@X and overlaps nsName(X)")
+	})
 }
