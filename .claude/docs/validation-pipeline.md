@@ -461,7 +461,8 @@ names/libraries fail rather than matching by raw equality.
 for XSD list builtins (`NMTOKENS`/`IDREFS`/`ENTITIES`), and decoded OCTET count
 for binary (`hexBinary`/`base64Binary`). The length facets are APPLICABLE only to
 the string-derived family, the binary types, anyURI, QName and NOTATION
-(`value.LengthApplicable`, the shared single-source set in `internal/xsd/value`);
+(`value.LengthApplicable` in `internal/xsd/value`, shared with relaxng; xsd's
+`check_facets.go` keeps an equivalent table);
 a length facet on a numeric, boolean or date/time datatype is rejected at COMPILE
 time by `checkDataFacets`.
 
