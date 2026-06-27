@@ -34,6 +34,19 @@ func clampInt64ToInt(n int64) int {
 	return int(n)
 }
 
+// clampMatchCap caps a non-negative xsl:analyze-string match limit at
+// math.MaxInt-1 so a subsequent one-over-budget probe (cap+1) cannot overflow
+// into a negative request. A negative cap means "unbounded" and is returned
+// unchanged. A negative request to regexp's FindAllSubmatchIndex means
+// "match unbounded", so letting cap+1 wrap negative would silently defeat the
+// cap for resource limits raised above math.MaxInt.
+func clampMatchCap(maxMatches int) int {
+	if maxMatches < 0 {
+		return maxMatches
+	}
+	return min(maxMatches, math.MaxInt-1)
+}
+
 // secureXMLParser returns the base parser for an xslt3-internal parse of
 // externally-sourced XML (resolver/HTTP-fetched stylesheet modules, schema
 // documents, and runtime documents).

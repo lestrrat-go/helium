@@ -96,6 +96,12 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	if limit := resolveResourceLimit(ec.resourceLimit()); limit >= 0 {
 		maxMatches = max(clampInt64ToInt(limit), 1)
 	}
+	// Cap the limit so the one-over-budget probe (maxMatches+1, below) cannot
+	// overflow into a negative findN. A resource limit raised above math.MaxInt
+	// makes clampInt64ToInt return math.MaxInt; maxMatches+1 would then wrap to
+	// math.MinInt, and FindAllSubmatchIndex treats a negative n as "unbounded",
+	// silently defeating the cap. clampMatchCap keeps the value positive.
+	maxMatches = clampMatchCap(maxMatches)
 
 	if err := ctx.Err(); err != nil {
 		return err
@@ -107,6 +113,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	// silently truncated.
 	findN := maxMatches
 	if maxMatches >= 0 {
+		// maxMatches is already clamped to math.MaxInt-1, so +1 stays positive.
 		findN = maxMatches + 1
 	}
 	matches, err := re.FindAllSubmatchIndex(input, findN)
