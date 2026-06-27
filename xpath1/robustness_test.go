@@ -205,4 +205,35 @@ func TestNodeSetComparisonBounded(t *testing.T) {
 		_, err := xpath1.NewEvaluator().OpLimit(1_000_000).Evaluate(ctx, compiled, doc)
 		require.ErrorIs(t, err, context.Canceled)
 	})
+
+	// The comparison path itself owns the string-value work: the right-hand
+	// node-set comes from a custom function rather than a location path, so
+	// eval()'s top-level cancellation check runs (uncancelled) BEFORE the
+	// operands are evaluated. The function cancels the context as a side effect
+	// just before handing back the node-set, so the cancellation is honored
+	// only if compareNodeSet itself consults the context before materializing
+	// right-hand string values. Before the lazy-materialization fix, the
+	// compare eagerly built every right-hand string value with no context check
+	// and returned a boolean, ignoring the cancellation.
+	t.Run("comparison owns cancellation bound", func(t *testing.T) {
+		rightPath, err := xpath1.Compile("/root/b")
+		require.NoError(t, err)
+		rhs, err := xpath1.NewEvaluator().Evaluate(t.Context(), rightPath, doc)
+		require.NoError(t, err)
+		require.Equal(t, xpath1.NodeSetResult, rhs.Type)
+		require.Len(t, rhs.NodeSet, n)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		boom := xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+			// Cancel just before the comparison consumes the node-set.
+			cancel()
+			return rhs, nil
+		})
+
+		expr, err := xpath1.Compile("/root/a[1] = boom()")
+		require.NoError(t, err)
+
+		_, err = xpath1.NewEvaluator().Function("boom", boom).Evaluate(ctx, expr, doc)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }

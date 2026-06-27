@@ -471,21 +471,26 @@ func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNode
 		if len(leftNodes) == 0 || len(right.NodeSet) == 0 {
 			return false, nil
 		}
-		// Pre-compute string values for the right-hand node-set to
-		// avoid recomputing them for every left-hand node.
-		rightVals := make([]string, len(right.NodeSet))
-		for i, rn := range right.NodeSet {
-			rightVals[i] = ixpath.StringValue(rn)
+		// Honor a context cancelled before the comparison begins so no
+		// string-value work runs after cancellation, even when the first pair
+		// would otherwise match and return before the periodic re-check below.
+		if err := ctx.Err(); err != nil {
+			return false, err
 		}
-		// Charge one op per actual string comparison and re-check
-		// cancellation in bounded chunks, so even a lopsided 1xM (or NxM)
-		// compare trips ErrOpLimit / context cancellation mid-loop instead of
-		// running the whole inner row unchecked.
+		// Compute each right-hand node's string value LAZILY, caching it on
+		// first use, and charge an op + honor cancellation BEFORE materializing
+		// it. Eagerly pre-filling every right-hand string value would do O(m)
+		// uncharged work up front, so a lopsided 1xM compare whose first pair
+		// matches could escape the op limit / cancellation entirely. Charging
+		// per comparison and only materializing on demand bounds the work as it
+		// happens.
+		rightVals := make([]string, len(right.NodeSet))
+		rightComputed := make([]bool, len(right.NodeSet))
 		const cancelCheckEvery = 1024
 		sinceCheck := 0
 		for _, ln := range leftNodes {
 			lv := ixpath.StringValue(ln)
-			for _, rv := range rightVals {
+			for i, rn := range right.NodeSet {
 				if err := ec.countOps(1); err != nil {
 					return false, err
 				}
@@ -496,7 +501,11 @@ func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNode
 						return false, err
 					}
 				}
-				if compareStrings(op, lv, rv) {
+				if !rightComputed[i] {
+					rightVals[i] = ixpath.StringValue(rn)
+					rightComputed[i] = true
+				}
+				if compareStrings(op, lv, rightVals[i]) {
 					return true, nil
 				}
 			}
