@@ -114,7 +114,14 @@ func (p Parser) Strict(v bool) Parser {
 // run (e.g. "&amp" followed by a long alphanumeric tail) both hard-fail rather
 // than emit a partial resolution.
 //
-// This bounds only the streaming scanner / SAX chunk size. DOM construction via
+// MaxContentSize also bounds the undecided-encoding deferred prefix: an
+// undeclared-charset [Parser.ParseReader] or push stream whose bytes keep
+// proving valid UTF-8 buffers undecided only up to this cap, and an over-cap
+// undecided-encoding stream is rejected with [ErrContentSizeExceeded] rather
+// than committing to a single Latin-1/UTF-8 interpretation.
+//
+// Otherwise this bounds only the streaming scanner / SAX chunk size. DOM
+// construction via
 // [Parser.Parse] necessarily merges every chunk back into the document tree
 // (treeBuilder.AppendText), so the resulting [helium.Document] still retains the
 // full content; MaxContentSize does not make DOM parsing memory-bounded for
