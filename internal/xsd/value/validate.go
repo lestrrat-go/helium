@@ -52,10 +52,23 @@ func ValidateBuiltin(value, builtinLocal string, version Version) error {
 		return validateFloat(value, version)
 	case "dateTime":
 		return validateDateTime(value, version)
+	case lexicon.TypeDateTimeStamp:
+		return validateDateTimeStamp(value, version)
 	case "time":
 		return validateTime(value)
 	case "duration":
 		return validateDuration(value)
+	case lexicon.TypeDayTimeDuration:
+		return validateDayTimeDuration(value)
+	case lexicon.TypeYearMonthDuration:
+		return validateYearMonthDuration(value)
+	case lexicon.TypeAnyAtomicType:
+		// xs:anyAtomicType is abstract: it has no direct lexical constraints (its
+		// abstractness is enforced where types are used, not here).
+		return nil
+	case lexicon.TypeError:
+		// xs:error has an empty value space: no literal is ever valid.
+		return fmt.Errorf("xs:error has an empty value space")
 	case "gYear":
 		return validateGYear(value, version)
 	case "gYearMonth":
@@ -480,6 +493,50 @@ func validateDuration(value string) error {
 		}
 	}
 	return nil
+}
+
+// dateTimeStampRegex matches xs:dateTimeStamp (XSD 1.1): an xs:dateTime whose
+// explicitTimezone is "required", i.e. the timezone designator is mandatory
+// (the tzSuffix group is not optional).
+var dateTimeStampRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
+
+// validateDateTimeStamp validates xs:dateTimeStamp: an xs:dateTime value that
+// must carry a timezone. Year-0000 gating follows the dateTime rules.
+func validateDateTimeStamp(value string, version Version) error {
+	if !dateTimeStampRegex.MatchString(value) {
+		return fmt.Errorf("invalid dateTimeStamp")
+	}
+	return validateDateTime(value, version)
+}
+
+// dayTimeDurationRegex matches xs:dayTimeDuration (XSD 1.1): a duration with
+// only day and time components (no year or month). At least one component must
+// be present.
+var dayTimeDurationRegex = regexp.MustCompile(`^-?P(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$`)
+
+func validateDayTimeDuration(value string) error {
+	if !dayTimeDurationRegex.MatchString(value) {
+		return fmt.Errorf("invalid dayTimeDuration")
+	}
+	// Reuse the shared duration body checks (at least one component, no dangling
+	// 'T'); they additionally reject "P"/"PT".
+	return validateDuration(value)
+}
+
+// yearMonthDurationRegex matches xs:yearMonthDuration (XSD 1.1): a duration with
+// only year and month components (no day or time). At least one component must
+// be present.
+var yearMonthDurationRegex = regexp.MustCompile(`^-?P(\d+Y)?(\d+M)?$`)
+
+func validateYearMonthDuration(value string) error {
+	if !yearMonthDurationRegex.MatchString(value) {
+		return fmt.Errorf("invalid yearMonthDuration")
+	}
+	// "P" with no component is invalid.
+	if value == "P" || value == "-P" {
+		return fmt.Errorf("invalid yearMonthDuration")
+	}
+	return validateDuration(value)
 }
 
 // gYearRegex matches xs:gYear.

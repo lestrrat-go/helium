@@ -71,3 +71,32 @@ func TestVersionToggle(t *testing.T) {
 		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML, instanceINF))
 	})
 }
+
+// TestVersion11BuiltinTypes verifies the XSD 1.1-only built-in datatypes are
+// registered (and resolve) only in 1.1 mode, and validate per their lexical
+// space.
+func TestVersion11BuiltinTypes(t *testing.T) {
+	const schemaDTS = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:dateTimeStamp"/>
+</xs:schema>`
+
+	t.Run("1.1 resolves xs:dateTimeStamp and validates", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaDTS, `<v>2020-01-01T00:00:00Z</v>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("1.1 rejects xs:dateTimeStamp without timezone", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaDTS, `<v>2020-01-01T00:00:00</v>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.0 fails to compile a schema referencing xs:dateTimeStamp", func(t *testing.T) {
+		t.Parallel()
+		schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaDTS))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Compile(t.Context(), schemaDOC)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+}

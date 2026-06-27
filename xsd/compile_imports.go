@@ -937,7 +937,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		impC.schema.finalDefault = parseFinalFlags(v)
 	}
 
-	registerBuiltinTypes(impC.schema)
+	registerBuiltinTypes(impC.schema, impC.version)
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err

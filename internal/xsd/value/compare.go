@@ -76,8 +76,10 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareFloat(a, b, true)
 	case lexicon.TypeDouble:
 		return compareFloat(a, b, false)
-	case "dateTime":
-		return compareDateTime(a, b, builtinLocal)
+	case "dateTime", lexicon.TypeDateTimeStamp:
+		// xs:dateTimeStamp is a subtype of xs:dateTime; compare in the dateTime
+		// value space.
+		return compareDateTime(a, b, "dateTime")
 	case "date":
 		return compareDate(a, b, builtinLocal)
 	case builtinTime:
@@ -92,7 +94,9 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareGDay(a, b, builtinLocal)
 	case "gMonthDay":
 		return compareGMonthDay(a, b, builtinLocal)
-	case "duration":
+	case "duration", lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration:
+		// xs:dayTimeDuration and xs:yearMonthDuration are subtypes of xs:duration;
+		// compare in the duration value space.
 		return compareDuration(a, b)
 	case "hexBinary":
 		return compareHexBinary(a, b)
@@ -158,6 +162,9 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		return canonicalFloatKey(s, 64)
 	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
 		return canonicalDateTimeKey(trimXSDSpace(s), builtinLocal)
+	case lexicon.TypeDateTimeStamp:
+		// xs:dateTimeStamp canonicalizes in the xs:dateTime value space.
+		return canonicalDateTimeKey(trimXSDSpace(s), "dateTime")
 	case "hexBinary":
 		trimmed := trimXSDSpace(s)
 		if ValidateBuiltin(trimmed, "hexBinary", Version11) != nil {
@@ -181,7 +188,9 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// Stable byte key so whitespace-distinct forms ("YWJj"/"YW Jj")
 		// canonicalize equal; hex of the decoded octets is a canonical encoding.
 		return hex.EncodeToString(decoded), true
-	case "duration":
+	case "duration", lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration:
+		// xs:dayTimeDuration / xs:yearMonthDuration canonicalize in the xs:duration
+		// value space (they are valid xs:duration lexicals).
 		trimmed := trimXSDSpace(s)
 		// Validate against the strict xs:duration lexical space before the lenient
 		// parseXSDDurationValue below, so CanonicalKey never canonicalizes a value

@@ -520,7 +520,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	// Register built-in types.
-	registerBuiltinTypes(c.schema)
+	registerBuiltinTypes(c.schema, c.version)
 
 	// First pass: collect all named types and global elements.
 	if err := c.parseSchemaChildren(ctx, root); err != nil {
@@ -1051,7 +1051,7 @@ func parseOccurs(s string, defaultVal int) int {
 	return n
 }
 
-func registerBuiltinTypes(s *Schema) {
+func registerBuiltinTypes(s *Schema, version Version) {
 	builtins := []string{
 		"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
 		lexicon.TypeInteger, lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger,
@@ -1082,4 +1082,26 @@ func registerBuiltinTypes(s *Schema) {
 		}
 		s.types[qn] = td
 	}
+	if version == Version11 {
+		registerBuiltinTypes11(s)
+	}
+}
+
+// registerBuiltinTypes11 registers the XSD 1.1-only built-in datatypes. They are
+// added only in 1.1 mode so a 1.0 schema referencing e.g. xs:dateTimeStamp still
+// fails to resolve the type. BaseType links each new type to its primitive base
+// so derivation checks (isDerivedFrom, xsi:type) treat it as a subtype.
+func registerBuiltinTypes11(s *Schema) {
+	builtin := func(local string) *TypeDef {
+		return s.types[QName{Local: local, NS: lexicon.NamespaceXSD}]
+	}
+	add := func(local string, base *TypeDef) {
+		qn := QName{Local: local, NS: lexicon.NamespaceXSD}
+		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: base}
+	}
+	add(lexicon.TypeDateTimeStamp, builtin(lexicon.TypeDateTime))
+	add(lexicon.TypeDayTimeDuration, builtin(lexicon.TypeDuration))
+	add(lexicon.TypeYearMonthDuration, builtin(lexicon.TypeDuration))
+	add(lexicon.TypeAnyAtomicType, builtin("anySimpleType"))
+	add(lexicon.TypeError, builtin("anySimpleType"))
 }

@@ -61,3 +61,50 @@ func TestValidateBuiltinVersion(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateBuiltin11Types covers the lexical spaces of the XSD 1.1-only
+// built-in datatypes. These are pure lexical checks at the value layer; the xsd
+// registry gates their availability by version. All cases use non-zero years, so
+// the version argument is immaterial here.
+func TestValidateBuiltin11Types(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		value    string
+		typeName string
+		valid    bool
+	}{
+		// xs:dateTimeStamp: xs:dateTime with a REQUIRED timezone.
+		{"dateTimeStamp with Z", "2020-01-01T00:00:00Z", lexicon.TypeDateTimeStamp, true},
+		{"dateTimeStamp with offset", "2020-01-01T00:00:00+05:00", lexicon.TypeDateTimeStamp, true},
+		{"dateTimeStamp without tz", "2020-01-01T00:00:00", lexicon.TypeDateTimeStamp, false},
+		// xs:dayTimeDuration: only D/H/M/S components.
+		{"dayTimeDuration P1DT2H", "P1DT2H", lexicon.TypeDayTimeDuration, true},
+		{"dayTimeDuration PT5M", "PT5M", lexicon.TypeDayTimeDuration, true},
+		{"dayTimeDuration with year", "P1Y", lexicon.TypeDayTimeDuration, false},
+		{"dayTimeDuration empty", "P", lexicon.TypeDayTimeDuration, false},
+		// xs:yearMonthDuration: only Y/M components.
+		{"yearMonthDuration P1Y2M", "P1Y2M", lexicon.TypeYearMonthDuration, true},
+		{"yearMonthDuration P3M", "P3M", lexicon.TypeYearMonthDuration, true},
+		{"yearMonthDuration with day", "P1D", lexicon.TypeYearMonthDuration, false},
+		{"yearMonthDuration empty", "P", lexicon.TypeYearMonthDuration, false},
+		// xs:anyAtomicType: abstract, no direct lexical constraint.
+		{"anyAtomicType anything", "anything", lexicon.TypeAnyAtomicType, true},
+		// xs:error: empty value space — nothing is valid.
+		{"error empty string", "", lexicon.TypeError, false},
+		{"error any value", "x", lexicon.TypeError, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := value.ValidateBuiltin(tt.value, tt.typeName, value.Version11)
+			if tt.valid {
+				require.NoError(t, err, "%s should accept %q", tt.typeName, tt.value)
+			} else {
+				require.Error(t, err, "%s should reject %q", tt.typeName, tt.value)
+			}
+		})
+	}
+}
