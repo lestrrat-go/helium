@@ -85,59 +85,174 @@ func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what Substi
 	return
 }
 
-func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, what SubstitutionType, depth int) (string, error) {
-	if depth > 40 {
-		return "", errors.New("entity loop (depth > 40)")
-	}
+// entityDecodeSink is the output target for decodeEntitiesToSink. The string
+// path (decodeEntitiesInternal) accumulates into a pooled buffer; the
+// attribute-value path streams directly into the attribute buffer through the
+// node-content cap so an over-cap expansion fails DURING decode instead of being
+// fully materialized first. count() reports the running output length so a
+// nested expansion's contributed size can be measured for entityCheck without
+// materializing the nested replacement string.
+type entityDecodeSink interface {
+	writeByte(context.Context, byte) error
+	write(context.Context, []byte) error
+	writeString(context.Context, string) error
+	writeRune(context.Context, rune) error
+	count() int
+}
 
+// entityStringSink accumulates decoded output into a buffer and returns it as a
+// string. It imposes no cap (the historical decodeEntities behavior) and ignores
+// the context.
+type entityStringSink struct {
+	buf *bytes.Buffer
+}
+
+func (s *entityStringSink) writeByte(_ context.Context, b byte) error {
+	return s.buf.WriteByte(b)
+}
+
+func (s *entityStringSink) write(_ context.Context, p []byte) error {
+	_, err := s.buf.Write(p)
+	return err
+}
+
+func (s *entityStringSink) writeString(_ context.Context, p string) error {
+	_, err := s.buf.WriteString(p)
+	return err
+}
+
+func (s *entityStringSink) writeRune(_ context.Context, r rune) error {
+	_, err := s.buf.WriteRune(r)
+	return err
+}
+
+func (s *entityStringSink) count() int { return s.buf.Len() }
+
+// attrEntitySink streams decoded entity-replacement bytes into an attribute
+// buffer, applying attribute-value whitespace normalization (TAB/CR/LF -> space)
+// and enforcing the node-content cap on every byte. Because the cap is checked
+// before each append, an over-cap expansion (e.g. <r a="&big;"/> with
+// SubstituteEntities, or a forced-replacement namespace attr xmlns:x="&big;")
+// fails with ErrNodeContentTooLarge as soon as the running total would exceed
+// the remaining budget, never materializing the full replacement first.
+type attrEntitySink struct {
+	pctx *parserCtx
+	b    *bytes.Buffer
+}
+
+func (s *attrEntitySink) writeByte(ctx context.Context, by byte) error {
+	switch by {
+	case 0xD, 0xA, 0x9:
+		by = 0x20
+	}
+	return s.pctx.writeAttrByte(ctx, s.b, by)
+}
+
+func (s *attrEntitySink) write(ctx context.Context, p []byte) error {
+	for i := range p {
+		if err := s.writeByte(ctx, p[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *attrEntitySink) writeString(ctx context.Context, p string) error {
+	for i := range len(p) {
+		if err := s.writeByte(ctx, p[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *attrEntitySink) writeRune(ctx context.Context, r rune) error {
+	// A sub-0x80 rune may be a TAB/CR/LF char ref that must normalize to space,
+	// so route it through writeByte. A multi-byte rune never contains a
+	// 0x09/0x0A/0x0D byte, so writeAttrRune (cap-enforced, no normalization) is
+	// correct and avoids a re-encode.
+	if r < 0x80 {
+		return s.writeByte(ctx, byte(r))
+	}
+	return s.pctx.writeAttrRune(ctx, s.b, r)
+}
+
+func (s *attrEntitySink) count() int { return s.b.Len() }
+
+func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, what SubstitutionType, depth int) (string, error) {
 	out := bufferPool.Get()
 	defer releaseBuffer(out)
+
+	sink := &entityStringSink{buf: out}
+	if err := pctx.decodeEntitiesToSink(ctx, s, what, depth, sink); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+// decodeEntitiesToSink performs the entity-substitution decode, writing every
+// output byte through sink. It is the shared core of the string-returning
+// decodeEntitiesInternal and the bounded attribute-value path: the only
+// difference between the two is the sink. A nested expansion's contributed size
+// is measured as the sink's count() delta across the recursive call (equal to
+// len(rep) in the old string-only code), so amplification accounting is
+// unchanged.
+func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what SubstitutionType, depth int, sink entityDecodeSink) error {
+	if depth > 40 {
+		return errors.New("entity loop (depth > 40)")
+	}
 
 	for len(s) > 0 {
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
 			val, width, err := parseStringCharRef(s)
 			if err != nil {
-				return "", err
+				return err
 			}
-			out.WriteRune(val)
+			if err := sink.writeRune(ctx, val); err != nil {
+				return err
+			}
 			s = s[width:]
 		} else if s[0] == '&' && what&SubstituteRef == SubstituteRef {
 			ent, width, err := pctx.parseStringEntityRef(ctx, s)
 			if err != nil {
-				return "", err
+				return err
 			}
 			if ent == nil {
-				_, _ = out.Write(s[:width])
+				if err := sink.write(ctx, s[:width]); err != nil {
+					return err
+				}
 				s = s[width:]
 				continue
 			}
 			if err := pctx.entityCheck(ent, 0); err != nil {
-				return "", err
+				return err
 			}
 
 			if ent.EntityType() == enum.InternalPredefinedEntity {
 				if len(ent.Content()) == 0 {
-					return "", errors.New("predefined entity has no content")
+					return errors.New("predefined entity has no content")
 				}
-				_, _ = out.Write(ent.Content())
+				if err := sink.write(ctx, ent.Content()); err != nil {
+					return err
+				}
 			} else if len(ent.Content()) != 0 {
-				rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), what, depth+1)
-				if err != nil {
-					return "", err
+				before := sink.count()
+				if err := pctx.decodeEntitiesToSink(ctx, ent.Content(), what, depth+1, sink); err != nil {
+					return err
 				}
-				if err := pctx.entityCheck(ent, len(rep)); err != nil {
-					return "", err
+				if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
+					return err
 				}
-
-				_, _ = out.WriteString(rep)
 			} else {
-				_, _ = out.WriteString(ent.Name())
+				if err := sink.writeString(ctx, ent.Name()); err != nil {
+					return err
+				}
 			}
 			s = s[width:]
 		} else if s[0] == '%' && what&SubstitutePERef == SubstitutePERef {
 			ent, width, err := pctx.parseStringPEReference(ctx, s)
 			if err != nil {
-				return "", err
+				return err
 			}
 			if ent == nil {
 				// An undeclared parameter entity in a context with an external
@@ -150,33 +265,34 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 				// (entityCheck tolerates a nil ent) so an unresolved PE ref can't
 				// be used to dodge the amplification/ceiling limits.
 				if err := pctx.entityCheck(ent, width); err != nil {
-					return "", err
+					return err
 				}
 				s = s[width:]
 				continue
 			}
 			if err := pctx.entityCheck(ent, width); err != nil {
-				return "", err
+				return err
 			}
 			peContent, err := pctx.parameterEntityReplacement(ctx, ent)
 			if err != nil {
-				return "", err
+				return err
 			}
-			rep, err := pctx.decodeEntitiesInternal(ctx, peContent, what, depth+1)
-			if err != nil {
-				return "", err
+			before := sink.count()
+			if err := pctx.decodeEntitiesToSink(ctx, peContent, what, depth+1, sink); err != nil {
+				return err
 			}
-			if err := pctx.entityCheck(ent, len(rep)); err != nil {
-				return "", err
+			if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
+				return err
 			}
-			_, _ = out.WriteString(rep)
 			s = s[width:]
 		} else {
-			_ = out.WriteByte(s[0])
+			if err := sink.writeByte(ctx, s[0]); err != nil {
+				return err
+			}
 			s = s[1:]
 		}
 	}
-	return out.String(), nil
+	return nil
 }
 
 func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, error) {

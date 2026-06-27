@@ -660,13 +660,23 @@ func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool
 // Returns the value string and byte count, or ("", 0) if the value contains
 // entities or special characters that require the slow path.
 // Does NOT consume — caller must call Advance(nBytes) after.
-func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
+//
+// When maxBytes > 0 the scan bails (returning "", 0) once it has consumed more
+// than maxBytes input bytes, so a giant value falls back to the slow path,
+// which enforces the node-content cap and reports the error. This bounds the
+// cursor's internal buffer growth instead of materializing the whole value.
+// maxBytes <= 0 means unbounded.
+func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int) {
 	if c.fillBuffer(1) != nil {
 		return "", 0
 	}
 
 	off := 0
 	for {
+		if maxBytes > 0 && off > maxBytes {
+			// Over the caller's byte budget — defer to the slow path.
+			return "", 0
+		}
 		if c.bufpos+off >= c.buflen {
 			if c.fillBuffer(off+1) != nil {
 				return "", 0

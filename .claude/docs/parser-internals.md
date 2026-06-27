@@ -245,9 +245,10 @@ For the UTF-8 cursor fast path, character-data scanners normally continue across
 
 ## Indivisible-Content Cap (`MaxNodeContentSize`)
 
-A CDATA section, comment body, processing-instruction body, and character-data
-run each map to a single SAX event / DOM node and cannot be chunked, so a giant
-one on untrusted input is a memory-amplification DoS. `parserCtx.maxNodeContent`
+A CDATA section, comment body, processing-instruction body, character-data
+run, and attribute value each map to a single SAX event / DOM node and cannot
+be chunked, so a giant one on untrusted input is a memory-amplification DoS.
+`parserCtx.maxNodeContent`
 caps the byte size of any single such run (`Parser.MaxNodeContentSize(int)`; `0` =
 `DefaultMaxNodeContentSize` 10 MiB, applied by `NewParser`; negative = unlimited;
 resolved via `resolveLimit`). Over-cap fails the parse with
@@ -268,6 +269,41 @@ hard content cap:
   a multi-byte rune straddles the boundary, so a truncated run is never
   delivered. `ScanCharDataInto` gained a `maxBytes int` parameter (output-byte
   budget) across all three cursor implementations and the interface.
+- `parseAttributeValueInternal` (`parser_element.go`) caps attribute values
+  both ways. The `ScanSimpleAttrValue` fast path takes `nodeContentScanBudget()`
+  (= `maxNodeContent + utf8.UTFMax`) as a `maxBytes` argument, bounding the
+  cursor buffer instead of materializing the whole value. Because the budget
+  runs `utf8.UTFMax` past the cap, a successful scan can return a `nBytes`
+  slightly over the cap; the fast path therefore re-checks
+  `nodeContentTooLong(nBytes)` (strict-greater) BEFORE `AdvanceFast` and returns
+  `ErrNodeContentTooLarge` directly, so a `cap+1..cap+UTFMax`-byte value is
+  rejected and not accepted by the fast path. A value the scan cannot settle
+  within the budget returns `nBytes == 0` and falls back to the slow
+  accumulating path, which routes EVERY write into its buffer through the
+  bounded helpers `writeAttrString`/`writeAttrByte`/`writeAttrRune`
+  (`parserctx.go`). Each helper checks the would-be length
+  (`nodeContentTooLong(b.Len() + len(write))`, strict-greater) BEFORE the copy
+  and returns `ErrNodeContentTooLarge` if it would exceed. This bounds all slow-
+  path write paths uniformly — literal text, predefined-entity replacement,
+  char-ref output, AND the non-substituted general-entity branch
+  (`"&"`+`ent.name`+`";"`), whose long entity name under `MaxNameLength(-1)`
+  would otherwise be copied unbounded in a single loop iteration before the next
+  cap check (the round-3 hole this design closes).
+- The `SubstituteEntities`/forced-namespace entity-replacement branch does NOT
+  first materialize the decoded replacement and then copy it: `decodeEntities`
+  was refactored into `decodeEntitiesToSink` (`parser_entity_decl.go`), which
+  streams every output byte through an `entityDecodeSink`. The attribute path
+  uses an `attrEntitySink` that normalizes attribute whitespace (TAB/CR/LF ->
+  space) and writes each byte via `writeAttrByte`, so an over-cap expansion
+  (`<r a="&big;"/>` with SubstituteEntities, or `xmlns:x="&big;"`) fails DURING
+  decode the instant the running total would exceed the remaining attr-buffer
+  budget — never building the full expansion first (the round-4 hole this closes;
+  the prior `decodeEntities` -> `rep` -> byte loop materialized it whole).
+  `decodeEntitiesInternal` (the string-returning decode used everywhere else)
+  shares the same core via an `entityStringSink`; a nested expansion's
+  contributed size for `entityCheck` amplification accounting is the sink's
+  `count()` delta across the recursive call (equal to the old `len(rep)`), so
+  amplification behavior is unchanged.
 - Entity-expansion sub-parses inherit the cap via `inheritNestedParserState`.
 - The bounded streaming SAX char-data path (`parseCharDataChunkedSAX`, used when
   `CharBufferSize > 0` and no DOM is built) is EXEMPT from the char-data cap: it

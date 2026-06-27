@@ -623,10 +623,19 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		}
 	}
 
-	// Deep-copy result nodes into the target document
+	// Deep-copy result nodes into the target document. Each selected node is
+	// deep-copied, and an xpointer can select up to the xpath node-set limit,
+	// so over a source with many nested same-name elements (e.g. xpointer(//a))
+	// the copies are O(n^2) the source size — far larger than the bytes READ
+	// from the source. Charge the estimated copy footprint against the aggregate
+	// bound BEFORE each copy so the same guard that bounds bytes read also bounds
+	// nodes copied, failing fast instead of materializing unboundedly.
 	targetDoc := inc.OwnerDocument()
 	var copies []helium.Node
 	for _, n := range nodes {
+		if err := p.accountIncludedBytes(uri, subtreeCopyCost(n)); err != nil {
+			return err
+		}
 		c, copyErr := helium.CopyNode(n, targetDoc)
 		if copyErr != nil {
 			return fmt.Errorf("xi:include: copy failed: %w", copyErr)
@@ -841,6 +850,86 @@ func (p *processor) accountIncludedBytes(uri string, n int) error {
 		return fmt.Errorf("xi:include: aggregate size including %q exceeds maximum: %w", uri, ErrIncludeTooLarge)
 	}
 	return nil
+}
+
+// copiedNodeOverhead is a conservative per-node byte estimate of a DOM node's
+// in-memory footprint (struct fields and pointers), added on top of its textual
+// content so that the byte-denominated aggregate bound also meaningfully limits
+// the number of nodes a deep copy materializes.
+const copiedNodeOverhead = 64
+
+// subtreeCopyCost estimates, in bytes, the memory a deep copy of n materializes:
+// copiedNodeOverhead plus the textual length of every node in the subtree
+// (descendants and an element's attributes) AND the namespace objects that
+// helium.CopyNode allocates. It walks the SOURCE subtree — reading
+// already-resident memory — so the estimate is charged BEFORE the copy is
+// allocated. Container nodes' Content() is NOT used (it aggregates all
+// descendants, which would make the walk itself O(n^2)); only the leaf
+// text-bearing nodes contribute content length.
+//
+// Namespaces must be counted because CopyNode's over-declare path
+// (deepCopier.bindNamespacesOverDeclare) allocates a fresh Namespace object for
+// every nsDefs declaration, one more for the element's active namespace, and one
+// additional over-declared object when that active namespace's prefix was not
+// among the declarations; copyAttributes allocates one per namespaced attribute.
+// Without this, a namespace-heavy nested source could stay under the per-include
+// byte cap while xpointer(//a) multiplied copied namespace objects across
+// overlapping subtrees, bypassing the aggregate materialization bound.
+func subtreeCopyCost(n helium.Node) int {
+	var total int
+	_ = helium.Walk(n, helium.NodeWalkerFunc(func(node helium.Node) error {
+		total += copiedNodeOverhead
+		switch node.Type() {
+		case helium.ElementNode:
+			elem, ok := node.(*helium.Element)
+			if !ok {
+				return nil
+			}
+			total += len(elem.Name())
+			decls := elem.Namespaces()
+			for _, ns := range decls {
+				total += namespaceCopyCost(ns)
+			}
+			if ns := elem.Namespace(); ns != nil {
+				// SetActiveNamespace always allocates the active namespace object.
+				total += namespaceCopyCost(ns)
+				// CopyNode over-declares the active namespace too when its prefix
+				// is not already declared and its URI is non-empty.
+				if ns.URI() != "" && !nsPrefixDeclared(decls, ns.Prefix()) {
+					total += namespaceCopyCost(ns)
+				}
+			}
+			for _, a := range elem.Attributes() {
+				total += copiedNodeOverhead + len(a.Name()) + len(a.Value())
+				if a.URI() != "" {
+					// copyAttributes allocates a Namespace object per namespaced attr.
+					total += copiedNodeOverhead + len(a.Prefix()) + len(a.URI())
+				}
+			}
+		case helium.TextNode, helium.CDATASectionNode, helium.CommentNode, helium.ProcessingInstructionNode:
+			total += len(node.Content())
+		}
+		return nil
+	}))
+	return total
+}
+
+// namespaceCopyCost is the estimated footprint of one copied Namespace object:
+// the per-node overhead plus its prefix and URI strings.
+func namespaceCopyCost(ns *helium.Namespace) int {
+	return copiedNodeOverhead + len(ns.Prefix()) + len(ns.URI())
+}
+
+// nsPrefixDeclared reports whether prefix appears among the given namespace
+// declarations, mirroring the declaredPrefixes set in
+// deepCopier.bindNamespacesOverDeclare.
+func nsPrefixDeclared(decls []*helium.Namespace, prefix string) bool {
+	for _, ns := range decls {
+		if ns.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {

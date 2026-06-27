@@ -328,6 +328,16 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	}
 	if cfg != nil && cfg.baseOutputURI != "" {
 		ec.currentOutputURI = cfg.baseOutputURI
+		// The principal result tree always exists and its URI is the base output
+		// URI, so reserve the canonical form of that URI up front. A secondary
+		// xsl:result-document whose href resolves to it denotes the SAME final
+		// result tree and must raise XTDE1490. Canonicalize with the SAME resolver
+		// the secondary duplicate key uses (canonicalResultURIKey) so a relative
+		// secondary href and the equivalent absolute one both match this seed.
+		// The primary output itself keys on the "" sentinel, so this distinct
+		// canonical key never makes the primary collide with itself.
+		ec.canonicalPrimaryURI = canonicalResultURIKey(cfg.baseOutputURI, "")
+		ec.usedResultURIs[ec.canonicalPrimaryURI] = struct{}{}
 	}
 	// Make the transform config (and thus its URIResolver) available before
 	// any runtime resource loading. initGlobalVars also assigns this; setting

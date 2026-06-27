@@ -272,25 +272,56 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		// base all (RecurseUnordered). The other four pairs have NO derivation rule
 		// and are invalid restrictions.
 		//
-		// Before rejecting, fold away "pointless" single-emitting-child wrappers on
-		// either side and re-dispatch: a group with exactly one emitting member is
-		// equivalent to that member, so e.g. choice(a) restricting sequence(a) is a
-		// valid (element-to-element) restriction once both pointless wrappers are
-		// removed. Only re-dispatch when a reduction actually made progress, so the
-		// recursion terminates.
+		// sequence:all is RecurseUnordered (XSD §3.9.6): a derived SEQUENCE
+		// restricting a base ALL. Order is irrelevant in the base all, so each
+		// derived sequence particle must map to a DISTINCT base all particle it
+		// validly restricts, and every base particle left unmapped must be
+		// emptiable. This is exactly the all→all distinct-mapping (recurseAll) — the
+		// derived side being ordered does not further constrain the unordered base —
+		// so reuse it after checking the group occurrence range. A derived sequence
+		// that adds/renames a particle (no distinct base counterpart) or drops a
+		// required base member is rejected.
+		//
+		// Handle this BEFORE reduceSingletonGroup: a SINGLETON derived sequence
+		// (e.g. sequence(a?) over base all(a?, b?)) must be mapped member-by-member
+		// through recurseAll against the base all's children. Folding it to a bare
+		// element first would route it to elementRestrictsGroup, which compares the
+		// lone element against every base all child and over-rejects a valid
+		// RecurseUnordered restriction that simply leaves an emptiable base member
+		// unmatched.
+		if rg.Compositor == CompositorSequence && bg.Compositor == CompositorAll {
+			// An explicit empty derived sequence (<xs:sequence/>, no emitting
+			// particles) restricts the base all to empty content. That is valid iff
+			// the base all PARTICLE itself is emptiable (e.g. minOccurs="0") —
+			// semantically the same empty-content restriction the derivedMG==nil path
+			// handles. This shortcut is checked BEFORE the occurrence-range subset:
+			// a non-emitting derived particle admits no content, so its raw group
+			// occurrence is irrelevant (e.g. <xs:sequence maxOccurs="2"/> still emits
+			// nothing). Gating it behind occurrenceValidRestriction would false-reject
+			// a valid empty-language restriction whose raw occurrence is not a subset
+			// of the base all's. recurseAll would instead wrongly demand every base
+			// all CHILD be individually emptiable, ignoring that an optional base all
+			// particle accepts zero elements even when its members are required.
+			if particleEmitsNothing(r) {
+				return particleEmptiable(b)
+			}
+			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+				return false
+			}
+			return recurseAll(ctx, rg.Particles, bg.Particles)
+		}
+		// Remaining mixed pairs: choice:sequence, choice:all, all:sequence,
+		// all:choice — no §3.9.6 derivation rule. Before rejecting, fold away
+		// "pointless" single-emitting-child wrappers on either side and re-dispatch:
+		// a group with exactly one emitting member is equivalent to that member, so
+		// e.g. choice(a) restricting sequence(a) is a valid (element-to-element)
+		// restriction once both pointless wrappers are removed. Only re-dispatch when
+		// a reduction actually made progress, so the recursion terminates.
 		rr := reduceSingletonGroup(r)
 		bb := reduceSingletonGroup(b)
 		if rr != r || bb != b {
 			return particleValidRestriction(ctx, rr, bb)
 		}
-		// sequence:all is RecurseUnordered (a valid derivation). Implementing the
-		// full unordered mapping is out of scope here; conservatively accept it
-		// rather than risk a false rejection.
-		if rg.Compositor == CompositorSequence && bg.Compositor == CompositorAll {
-			return true
-		}
-		// choice:sequence, choice:all, all:sequence, all:choice — no derivation
-		// rule, reject.
 		return false
 	}
 }

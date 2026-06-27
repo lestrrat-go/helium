@@ -98,6 +98,7 @@ type execContext struct {
 	primaryClaimedImplicitly     bool                          // true when implicit content has been written to primary output
 	staticBaseURIOverride        string                        // non-empty when xml:base on an LRE overrides the template's base URI
 	currentOutputURI             string                        // current output URI for current-output-uri() function
+	canonicalPrimaryURI          string                        // canonical principal (base) output URI, tracked separately from the "" primary sentinel; seeded into usedResultURIs so a secondary href resolving to it raises XTDE1490
 	inPatternMatch               bool                          // true during pattern matching (current-output-uri() returns empty)
 	patternNamespaces            map[string]string             // the matching pattern's lexical xmlns snapshot (prefix→URI) during pattern matching
 	patternMatchErr              error                         // non-nil if a fatal error occurred during pattern matching

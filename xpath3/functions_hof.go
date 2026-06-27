@@ -31,6 +31,21 @@ func fnMaxNodes(ec *evalContext) int {
 	return ec.maxNodes
 }
 
+// fnRemainingOps reports the op budget still available to this evaluation and
+// whether a budget is in force. bounded is false when no OpLimit is configured
+// (opLimit <= 0) or the function runs outside an evaluation (ec == nil); the
+// returned count is meaningless in that case. A negative remainder (the budget
+// is already exhausted) is clamped to 0. Built-ins that produce a slice up
+// front use this to cap production at the EFFECTIVE budget actually in force,
+// not just maxNodes, so a small OpLimit does not first materialize a slice
+// proportional to the input before the op charge rejects it.
+func fnRemainingOps(ec *evalContext) (remaining int, bounded bool) {
+	if ec == nil || ec.opLimit <= 0 || ec.opCount == nil {
+		return 0, false
+	}
+	return max(ec.opLimit-*ec.opCount, 0), true
+}
+
 // fnCountOp charges one operation against the evaluation's op-counter and
 // honors context cancellation. It is a no-op (other than the cancellation
 // check) when called outside an evaluation. Accumulating built-ins call it once

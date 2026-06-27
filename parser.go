@@ -415,10 +415,11 @@ func (p Parser) MaxContentModelDepth(n int) Parser {
 }
 
 // MaxNodeContentSize sets the maximum size, in bytes, of a single indivisible
-// content run: a CDATA section, comment body, processing-instruction body, or
-// character-data run. Each maps to a single SAX event / DOM node and cannot be
-// chunked, so an oversized one on untrusted input is a memory-amplification
-// vector. The cap fires during accumulation — the parse fails with
+// content run: a CDATA section, comment body, processing-instruction body,
+// character-data run, or attribute value. Each maps to a single SAX event / DOM
+// node (or attribute) and cannot be chunked, so an oversized one on untrusted
+// input is a memory-amplification vector. The cap fires during accumulation —
+// the parse fails with
 // [ErrNodeContentTooLarge] the moment a run exceeds it, before the whole run is
 // buffered. A value of zero (the default) uses [DefaultMaxNodeContentSize]
 // (10 MiB); a negative value removes the limit. Removing the limit lets a
