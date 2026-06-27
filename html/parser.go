@@ -998,6 +998,13 @@ func (p *parser) parseStartTag(ctx context.Context) {
 	_ = p.cur.Advance(1) // skip '<'
 
 	name := p.parseName()
+	// An over-cap tag name is an unrecoverable hard-cap failure, not a merely
+	// invalid name: parseName set fatalErr and returned "". Return BEFORE the
+	// name == "" text fallback so we never publish a stray '<' text node ahead of
+	// the fatal. The main loop surfaces fatalErr.
+	if p.fatalErr != nil {
+		return
+	}
 	if name == "" {
 		// Not a valid tag, emit '<' as text
 		_ = p.emitCharacters([]byte("<"))
@@ -1064,6 +1071,12 @@ func (p *parser) parseEndTag() {
 	_ = p.cur.Advance(2) // skip '</'
 
 	name := p.parseName()
+	// An over-cap end-tag name set fatalErr. Return IMMEDIATELY, before the
+	// "skip to '>'" loop below, so an unterminated abusive stream is not drained
+	// (read/work bound) before the main loop surfaces the fatal.
+	if p.fatalErr != nil {
+		return
+	}
 	name = strings.ToLower(name)
 
 	// Detect malformed end tag: characters like '<' after the tag name
@@ -1304,6 +1317,14 @@ func (p *parser) parseDoctype() {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
 		systemID = p.parseQuotedString()
+	}
+
+	// An over-cap external/system literal (or name/whitespace) set fatalErr.
+	// Return BEFORE the "skip to '>'" drain loop and the InternalSubset SAX emit
+	// so an unterminated abusive DOCTYPE is not drained and no partial subset is
+	// published; the main loop surfaces the fatal.
+	if p.fatalErr != nil {
+		return
 	}
 
 	// Skip to '>'
@@ -2808,11 +2829,21 @@ func (p *parser) parseQuotedString() string {
 	}
 	quote := p.cur.Peek()
 	_ = p.cur.Advance(1)
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || b == quote {
 			break
+		}
+		// A DOCTYPE PUBLIC/SYSTEM literal maps to a single InternalSubset SAX
+		// argument and cannot be chunked, so bound the unbounded PeekAt scan as a
+		// HARD cap (see scanTokenLimit): an unterminated huge literal must not grow
+		// the cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails. parseDoctype checks fatalErr and stops.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("doctype literal exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
