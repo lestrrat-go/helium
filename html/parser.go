@@ -114,8 +114,14 @@ type parser struct {
 	// deferredEncoding is non-nil when streaming an undeclared-charset
 	// document whose encoding (UTF-8 vs Windows-1252) can only be decided
 	// once a non-UTF-8 byte is seen. It is queried after parsing for the
-	// final detected encoding name.
+	// final detected encoding name, and during parsing for a post-commit
+	// invalid byte that its internal sanitizer replaced with U+FFFD.
 	deferredEncoding *deferredLatin1Reader
+
+	// deferredEncErrEmitted guards against re-emitting the encoding-error
+	// diagnostic for the deferred reader: its sanitizer's error state is sticky,
+	// so without this every later U+FFFD-bearing chunk would fire the error again.
+	deferredEncErrEmitted bool
 
 	// fatalSAXErr is set by handleSAXErr when cfg.strict is true and a SAX
 	// callback returns a non-ErrHandlerUnspecified error. parse() surfaces
@@ -208,9 +214,9 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 			// - "ISO-8859-1": strict output with &#N; for runes > 0xFF
 			// - "Windows-1252": Win-1252 reverse mapping for output
 			if declaredCharsetIsLatin1(normalized) {
-				detectedEnc = "ISO-8859-1"
+				detectedEnc = encISO88591
 			} else {
-				detectedEnc = "Windows-1252"
+				detectedEnc = encWindows1252
 			}
 			normalized = latin1ToUTF8(normalized)
 		}
@@ -1792,6 +1798,20 @@ func (p *parser) emitCharacters(data []byte) error {
 				p.locator.overLine = 0
 				p.locator.overCol = 0
 				p.encodingSanitizer = nil
+			}
+		} else if p.deferredEncoding != nil && !p.deferredEncErrEmitted {
+			// Deferred undeclared-charset streaming path: once the reader commits
+			// to UTF-8 at the bounded prefix, a later invalid byte is sanitized to
+			// U+FFFD inside the deferred reader. Surface the same diagnostic the
+			// declared-UTF-8 sanitizer path emits. Position is relative to the
+			// commit boundary (best-effort for this >1 MiB-valid divergence case).
+			if hasErr, line, col := p.deferredEncoding.encodingError(); hasErr {
+				p.locator.overLine = line
+				p.locator.overCol = col
+				_ = p.emitError("Invalid bytes in character encoding")
+				p.locator.overLine = 0
+				p.locator.overCol = 0
+				p.deferredEncErrEmitted = true
 			}
 		}
 	}

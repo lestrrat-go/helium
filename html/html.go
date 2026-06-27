@@ -168,12 +168,15 @@ func (p Parser) parseConfig() parseConfig {
 // encoding detection and normalization wrappers.
 //
 // Whether the input is processed incrementally depends on its encoding. Once a
-// streamable encoding is determined - either declared (BOM or meta charset) or
-// detected as a genuine non-UTF-8 byte sequence - bytes are converted and
-// consumed incrementally. However, an input with no declared encoding that
-// turns out to be valid UTF-8 cannot be distinguished from a Latin-1/Windows
-// -1252 stream until end of input, so it is buffered to EOF before being
-// flushed. This matches the materialization behavior of Parse with a []byte.
+// streamable encoding is determined - either declared (BOM, meta charset=utf-8,
+// or meta charset=iso-8859-1) or detected as a genuine non-UTF-8 byte sequence -
+// bytes are converted and consumed incrementally. An input with no declared
+// encoding that keeps proving valid UTF-8 cannot yet be distinguished from a
+// Latin-1/Windows-1252 stream, so it is buffered while undecided; this matches
+// the materialization behavior of Parse with a []byte. To keep memory bounded,
+// that buffering is capped (~1 MiB): once a cap's worth of bytes has been seen
+// with no non-UTF-8 byte the reader commits to UTF-8 and streams the remainder,
+// sanitizing any later invalid byte to U+FFFD rather than buffering to EOF.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
 	tb := newTreeBuilder()
 	hp := newParserFromReader(ctx, r, tb, p.parseConfig())
@@ -255,11 +258,13 @@ func (sp saxParser) ParseReader(ctx context.Context, r io.Reader) (*helium.Docum
 // than 1024 bytes is buffered until [PushParser.Close], and larger inputs
 // only parse progressively once those first 1024 bytes have arrived.
 // Streaming after the prescan applies when an encoding is declared or
-// detected (charset=utf-8, or a non-UTF-8 head routed to Latin-1). An input
-// with no charset declaration whose bytes keep proving valid UTF-8 stays
-// undecided and continues to buffer until [PushParser.Close]/EOF, because
-// a later non-UTF-8 byte would force the whole prefix to be reinterpreted as
-// Latin-1/Windows-1252.
+// detected (charset=utf-8, charset=iso-8859-1, or a non-UTF-8 head routed to
+// Latin-1). An input with no charset declaration whose bytes keep proving valid
+// UTF-8 stays undecided and continues to buffer (because a later non-UTF-8 byte
+// would force the whole prefix to be reinterpreted as Windows-1252), but only up
+// to a bounded prefix (~1 MiB): once that cap is reached with no non-UTF-8 byte
+// the reader commits to UTF-8 and resumes streaming, sanitizing any later invalid
+// byte to U+FFFD instead of buffering to [PushParser.Close]/EOF.
 // Call [PushParser.Close] to signal end-of-input and retrieve the
 // parsed Document.
 type PushParser = push.Parser[*helium.Document]
@@ -269,8 +274,9 @@ type PushParser = push.Parser[*helium.Document]
 // via [PushParser.Push] or [PushParser.Write]; parsing becomes progressive
 // only AFTER the initial 1024-byte (or EOF) charset prescan buffers its
 // head AND a streamable encoding has been settled. An undeclared input that
-// keeps proving valid UTF-8 stays undecided and buffers until
-// [PushParser.Close]/EOF. The completed Document is returned once
+// keeps proving valid UTF-8 stays undecided and buffers up to a bounded prefix
+// (~1 MiB), then commits to UTF-8 and resumes streaming (sanitizing any later
+// invalid byte to U+FFFD). The completed Document is returned once
 // [PushParser.Close] is called.
 func (p Parser) NewPushParser(ctx context.Context) *PushParser {
 	return push.New[*helium.Document](ctx, p)

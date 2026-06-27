@@ -149,3 +149,83 @@ func TestParseReaderAllValidUTF8StaysUTF8(t *testing.T) {
 	require.NotContains(t, readerDoc.Encoding(), "1252")
 	require.NotContains(t, readerDoc.Encoding(), "8859")
 }
+
+// TestParseReaderDeclaredLatin1PastCapStaysISO88591 guards that an explicit
+// charset=iso-8859-1 declaration streams straight through the Latin-1 reader and
+// is NOT routed through the deferred/bounded path. The first high byte (0xE9 =
+// 'é' in ISO-8859-1) lands well past the deferred reader's 1 MiB commit cap: if
+// the declared stream went through that path, the cap would commit it to UTF-8
+// and sanitize the 0xE9 to U+FFFD, discarding the declared encoding. A declared
+// encoding must decode faithfully regardless of how far in its first high byte
+// appears.
+func TestParseReaderDeclaredLatin1PastCapStaysISO88591(t *testing.T) {
+	t.Parallel()
+
+	var b bytes.Buffer
+	b.WriteString("<html><head><meta charset=iso-8859-1></head><body><p>")
+	for b.Len() < (1<<20)+4096 { // past the deferred reader's 1 MiB commit cap
+		b.WriteByte('a')
+	}
+	b.WriteByte(0xE9) // 'é' in ISO-8859-1
+	b.WriteString("</p></body></html>")
+
+	doc, err := html.NewParser().ParseReader(t.Context(), bytes.NewReader(b.Bytes()))
+	require.NoError(t, err)
+	require.Equal(t, "ISO-8859-1", doc.Encoding(),
+		"a declared charset=iso-8859-1 stream must report ISO-8859-1, not commit to UTF-8")
+
+	var text bytes.Buffer
+	for n := range helium.Descendants(doc) {
+		if t, ok := n.(*helium.Text); ok {
+			text.Write(t.Content())
+		}
+	}
+	require.Contains(t, text.String(), "é",
+		"the late 0xE9 must decode as ISO-8859-1 'é' (UTF-8 in the DOM)")
+	require.NotContains(t, text.String(), "�",
+		"a declared Latin-1 byte must never be sanitized to U+FFFD")
+}
+
+// TestParseReaderDeferredCommitInvalidByteRaisesEncodingError covers the
+// post-commit sanitizer path: an UNDECLARED stream that stays valid UTF-8 past
+// the deferred reader's 1 MiB cap (so the reader commits to UTF-8) and THEN
+// carries a raw non-UTF-8 byte. The byte is sanitized to U+FFFD, and the parser
+// must raise the same "Invalid bytes in character encoding" SAX diagnostic the
+// declared-UTF-8 sanitizer path emits — not silently swallow it.
+func TestParseReaderDeferredCommitInvalidByteRaisesEncodingError(t *testing.T) {
+	t.Parallel()
+
+	var b bytes.Buffer
+	b.WriteString("<html><body><p>")
+	for b.Len() < (1<<20)+4096 { // commit to UTF-8 at the 1 MiB cap
+		b.WriteByte('a')
+	}
+	b.WriteByte(0x93) // lone Windows-1252 byte: invalid UTF-8, post-commit
+	b.WriteString("z</p></body></html>")
+
+	var chars bytes.Buffer
+	var sawEncodingError bool
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(data []byte) error {
+		chars.Write(data)
+		return nil
+	}))
+	sax.SetOnError(html.ErrorFunc(func(err error) error {
+		if err != nil && err.Error() == "Invalid bytes in character encoding" {
+			sawEncodingError = true
+		}
+		return nil
+	}))
+
+	pp := html.NewParser().NewSAXPushParser(t.Context(), sax)
+	require.NoError(t, pp.Push(b.Bytes()))
+	_, err := pp.Close()
+	require.NoError(t, err)
+
+	require.True(t, sawEncodingError,
+		"a post-commit invalid byte must raise the encoding-error diagnostic")
+	require.Contains(t, chars.String(), "�",
+		"the post-commit invalid byte must be sanitized to U+FFFD")
+	require.NotContains(t, chars.String(), "\x93",
+		"the raw invalid byte must never leak into SAX char data")
+}

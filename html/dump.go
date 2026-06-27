@@ -70,9 +70,9 @@ func (d *htmlDumper) dumpDocument(out io.Writer, doc *helium.Document) error {
 	// runes > 0xFF); strict=false for auto-detected Win-1252 (raw bytes).
 	enc := doc.Encoding()
 	switch enc {
-	case "ISO-8859-1":
+	case encISO88591:
 		out = &latin1EncodingWriter{w: out, strict: true}
-	case "Windows-1252":
+	case encWindows1252:
 		out = &latin1EncodingWriter{w: out, strict: false}
 	}
 

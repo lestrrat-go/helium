@@ -6,6 +6,14 @@ import (
 	"unicode/utf8"
 )
 
+// Encoding names reported for non-UTF-8 HTML input. ISO-8859-1 is selected only
+// by an explicit charset declaration; Windows-1252 is the auto-detected default
+// for an undeclared non-UTF-8 stream (matching libxml2's HTML behavior).
+const (
+	encISO88591    = "ISO-8859-1"
+	encWindows1252 = "Windows-1252"
+)
+
 // errReader always returns its stored error (and no bytes). It is used to
 // re-deliver a non-EOF read error that arrived together with peeked bytes
 // during charset detection, so the error is not lost once the buffered bytes
@@ -322,10 +330,14 @@ type deferredLatin1Reader struct {
 	readErr error
 }
 
-func newDeferredLatin1Reader(r io.Reader, encOnHit string) *deferredLatin1Reader {
+// newDeferredLatin1Reader builds the deferred reader for an UNDECLARED stream.
+// Its lazy Latin-1 interpretation is always Windows-1252 (a declared
+// charset=iso-8859-1 takes the immediate latin1Reader path in wrapReaderForHTML
+// and never reaches here).
+func newDeferredLatin1Reader(r io.Reader) *deferredLatin1Reader {
 	return &deferredLatin1Reader{
 		r:        r,
-		encOnHit: encOnHit,
+		encOnHit: encWindows1252,
 	}
 }
 
@@ -333,6 +345,20 @@ func newDeferredLatin1Reader(r io.Reader, encOnHit string) *deferredLatin1Reader
 // the reader into Latin-1 mode, or "" while the stream is still pure UTF-8.
 func (dr *deferredLatin1Reader) detectedEncoding() string {
 	return dr.enc
+}
+
+// encodingError reports whether a post-commit invalid byte was sanitized to
+// U+FFFD after the reader committed to UTF-8 at the bounded prefix, and the
+// line/col (relative to the commit boundary) of the first such byte. It returns
+// (false, 0, 0) when no commit/sanitizer is in play — a pure-UTF-8 stream or one
+// that switched to Latin-1, neither of which sanitizes. The parser queries this
+// so a late invalid byte raises the same "Invalid bytes in character encoding"
+// SAX diagnostic the declared-UTF-8 sanitizer path emits.
+func (dr *deferredLatin1Reader) encodingError() (bool, int, int) {
+	if dr.sanitizer == nil {
+		return false, 0, 0
+	}
+	return dr.sanitizer.EncodingError()
 }
 
 func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
@@ -732,9 +758,9 @@ func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *de
 	if n > 0 && headHasGenuineInvalidUTF8(head) {
 		// Non-UTF-8 detected in the head. Check if charset is declared.
 		if !declaredCharsetIsUTF8(head) {
-			enc := "Windows-1252"
+			enc := encWindows1252
 			if declaredCharsetIsLatin1(head) {
-				enc = "ISO-8859-1"
+				enc = encISO88591
 			}
 			return &latin1Reader{r: normalized, enc: enc}, enc, nil, nil
 		}
@@ -750,16 +776,22 @@ func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *de
 		return san, "", san, nil
 	}
 
-	// Head is valid UTF-8 (or empty) and not declared as charset=utf-8. The
-	// document may still turn out to be Latin-1/Windows-1252 past the
-	// detection window, so defer the decision: stay UTF-8 until a non-UTF-8
-	// byte appears, then interpret the remainder as Latin-1 (matching the
-	// whole-document []byte parse path). An explicit charset=iso-8859-1
-	// selects strict ISO-8859-1; otherwise auto-detected Windows-1252.
-	encOnHit := "Windows-1252"
+	// An explicit charset=iso-8859-1 is a DECLARED encoding: commit to Latin-1
+	// immediately rather than routing through the deferred/bounded path. The
+	// deferred path is only for UNDECLARED streams; sending a declared Latin-1
+	// stream through it lets the 1 MiB commit cap wrongly settle a valid
+	// ISO-8859-1 document (ASCII head, first high byte past the cap) as UTF-8,
+	// emitting U+FFFD and leaving the encoding unreported. latin1Reader streams
+	// the whole document as ISO-8859-1 with no buffering and no cap.
 	if declaredCharsetIsLatin1(head) {
-		encOnHit = "ISO-8859-1"
+		return &latin1Reader{r: normalized, enc: encISO88591}, encISO88591, nil, nil
 	}
-	dr := newDeferredLatin1Reader(normalized, encOnHit)
+
+	// Head is valid UTF-8 (or empty) and not declared as charset=utf-8 or
+	// charset=iso-8859-1. The document may still turn out to be Windows-1252 past
+	// the detection window, so defer the decision: stay UTF-8 until a non-UTF-8
+	// byte appears, then interpret the remainder as Windows-1252 (matching the
+	// whole-document []byte parse path).
+	dr := newDeferredLatin1Reader(normalized)
 	return dr, "", nil, dr
 }

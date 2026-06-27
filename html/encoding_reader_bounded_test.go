@@ -40,7 +40,7 @@ func TestDeferredLatin1ReaderBoundedBuffering(t *testing.T) {
 
 	const sourceSize = 32 << 20 // 32 MiB of pure ASCII
 	src := &countingASCIIReader{remaining: sourceSize}
-	dr := newDeferredLatin1Reader(src, "Windows-1252")
+	dr := newDeferredLatin1Reader(src)
 
 	buf := make([]byte, 8192)
 	n, err := dr.Read(buf)
@@ -62,7 +62,7 @@ func TestDeferredLatin1ReaderCommittedPassthroughDeliversAll(t *testing.T) {
 
 	const sourceSize = 4 << 20 // larger than the internal cap to force a commit
 	src := &countingASCIIReader{remaining: sourceSize}
-	dr := newDeferredLatin1Reader(src, "Windows-1252")
+	dr := newDeferredLatin1Reader(src)
 
 	out, err := io.ReadAll(dr)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestDeferredLatin1ReaderSanitizesPostCommitInvalidByte(t *testing.T) {
 	src.WriteByte(0x93) // lone Windows-1252 byte: invalid UTF-8
 	src.WriteByte('z')
 
-	dr := newDeferredLatin1Reader(bytes.NewReader(src.Bytes()), "Windows-1252")
+	dr := newDeferredLatin1Reader(bytes.NewReader(src.Bytes()))
 
 	out, err := io.ReadAll(dr)
 	require.NoError(t, err)
