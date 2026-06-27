@@ -1310,6 +1310,34 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	t.Run("accepts empty sequence with non-subset occurrence restricting optional all", func(t *testing.T) {
+		t.Parallel()
+		// Base all is OPTIONAL (minOccurs="0"), so it accepts empty content; the
+		// derived empty <xs:sequence maxOccurs="2"/> still emits nothing — its raw
+		// group occurrence (1..2) is NOT a subset of the base all's (0..1), but a
+		// non-emitting derived particle admits no content, so the occurrence interplay
+		// is irrelevant. The empty-content shortcut (accept iff the base all particle
+		// is emptiable) must be evaluated BEFORE the occurrence-range check, so this
+		// valid empty-language restriction is not false-rejected.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all minOccurs="0">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence maxOccurs="2"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("rejects empty sequence restricting required all", func(t *testing.T) {
 		t.Parallel()
 		// Base all is REQUIRED (default minOccurs="1") with required members a,b, so

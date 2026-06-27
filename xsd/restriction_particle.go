@@ -290,18 +290,23 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		// RecurseUnordered restriction that simply leaves an emptiable base member
 		// unmatched.
 		if rg.Compositor == CompositorSequence && bg.Compositor == CompositorAll {
-			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
-				return false
-			}
 			// An explicit empty derived sequence (<xs:sequence/>, no emitting
 			// particles) restricts the base all to empty content. That is valid iff
 			// the base all PARTICLE itself is emptiable (e.g. minOccurs="0") —
 			// semantically the same empty-content restriction the derivedMG==nil path
-			// handles. recurseAll would instead wrongly demand every base all CHILD be
-			// individually emptiable, ignoring that an optional base all particle
-			// accepts zero elements even when its members are required.
+			// handles. This shortcut is checked BEFORE the occurrence-range subset:
+			// a non-emitting derived particle admits no content, so its raw group
+			// occurrence is irrelevant (e.g. <xs:sequence maxOccurs="2"/> still emits
+			// nothing). Gating it behind occurrenceValidRestriction would false-reject
+			// a valid empty-language restriction whose raw occurrence is not a subset
+			// of the base all's. recurseAll would instead wrongly demand every base
+			// all CHILD be individually emptiable, ignoring that an optional base all
+			// particle accepts zero elements even when its members are required.
 			if particleEmitsNothing(r) {
 				return particleEmptiable(b)
+			}
+			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+				return false
 			}
 			return recurseAll(ctx, rg.Particles, bg.Particles)
 		}
