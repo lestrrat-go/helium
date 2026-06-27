@@ -10,6 +10,12 @@ Go and grew broader native Go APIs and features along the way.
 
 The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexical form for xs:double and xs:float, and xs:dateTimeStamp is a recognized type. QT3 tests with `dependency type="xsd-version" value="1.0"` are skipped.
 
+## XSD — Version Toggle
+
+The xsd package defaults to **XSD 1.0** and treats 1.1 as **opt-in** via `Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"` hint on the root `<xs:schema>` when no explicit version is set). The resolved version is frozen onto the compiled `Schema` so the `Validator` applies the same semantics. 1.0 stays the default so existing behavior and goldens are unchanged.
+
+Implemented in 1.1 mode so far: the 1.1-only lexical forms (`+INF` for xs:double/xs:float; year `0000` on the date types — both gated in `internal/xsd/value` via a `value.Version` argument; relaxng is pinned to `value.Version10`) and the 1.1 built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration, xs:anyAtomicType, xs:error). **Not yet implemented** (planned, gated behind the same toggle): assertions, conditional type assignment, open content, relaxed wildcards/UPA/all, `xs:override`, the general user-declarable `explicitTimezone` facet, and `vc:typeAvailable`/`vc:facetAvailable` conditional pruning. Do NOT assume these work in 1.1 mode yet.
+
 ## XSLT 3.0 — Conformance Scope
 
 The xslt3 package targets **Basic XSLT 3.0** conformance (W3C spec Section 27). The spec defines 8 conformance levels; only "Basic XSLT Processor" is required. The remaining 7 are optional features:
