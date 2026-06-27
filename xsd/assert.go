@@ -40,6 +40,13 @@ func (c *compiler) parseAssert(ctx context.Context, elem *helium.Element) *Asser
 		}
 		return nil
 	}
+	if err := compiled.Validate(a.Namespaces); err != nil {
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAssert,
+				fmt.Sprintf("The XPath expression '%s' of the assertion has an unbound namespace prefix: %v.", test, err)))
+		}
+		return nil
+	}
 	a.compiled = compiled
 	return a
 }

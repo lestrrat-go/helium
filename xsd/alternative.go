@@ -82,6 +82,13 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 			}
 			return nil
 		}
+		if err := compiled.Validate(alt.Namespaces); err != nil {
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+					fmt.Sprintf("The XPath expression '%s' of the type alternative has an unbound namespace prefix: %v.", test, err)))
+			}
+			return nil
+		}
 		alt.compiled = compiled
 	}
 	return alt
