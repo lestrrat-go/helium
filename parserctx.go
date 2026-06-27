@@ -383,6 +383,39 @@ func (ctx *parserCtx) nodeContentTooLong(n int) bool {
 	return ctx.maxNodeContent > 0 && n > ctx.maxNodeContent
 }
 
+// writeAttrString appends s to the attribute-value buffer, enforcing the
+// node-content cap BEFORE the copy so no attribute write path (entity-reference
+// name, predefined-entity replacement, char-ref output, or literal text) can
+// grow the buffer past the cap. Returns ErrNodeContentTooLarge if the append
+// would exceed the cap. Exactly the cap is accepted (strict-greater).
+func (ctx *parserCtx) writeAttrString(c context.Context, b *bytes.Buffer, s string) error {
+	if ctx.nodeContentTooLong(b.Len() + len(s)) {
+		return ctx.error(c, ErrNodeContentTooLarge)
+	}
+	_, _ = b.WriteString(s)
+	return nil
+}
+
+// writeAttrByte appends a single byte to the attribute-value buffer with the
+// same pre-write cap enforcement as writeAttrString.
+func (ctx *parserCtx) writeAttrByte(c context.Context, b *bytes.Buffer, by byte) error {
+	if ctx.nodeContentTooLong(b.Len() + 1) {
+		return ctx.error(c, ErrNodeContentTooLarge)
+	}
+	_ = b.WriteByte(by)
+	return nil
+}
+
+// writeAttrRune appends a rune to the attribute-value buffer with the same
+// pre-write cap enforcement as writeAttrString.
+func (ctx *parserCtx) writeAttrRune(c context.Context, b *bytes.Buffer, r rune) error {
+	if ctx.nodeContentTooLong(b.Len() + utf8.RuneLen(r)) {
+		return ctx.error(c, ErrNodeContentTooLarge)
+	}
+	_, _ = b.WriteRune(r)
+	return nil
+}
+
 // nodeContentScanBudget returns the byte budget to hand a bounded char-data
 // scan so it stops just past the cap (cap + utf8.UTFMax guarantees a run longer
 // than the cap is detected even when a multi-byte rune straddles the boundary).

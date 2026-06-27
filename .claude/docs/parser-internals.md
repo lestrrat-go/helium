@@ -264,17 +264,26 @@ hard content cap:
   delivered. `ScanCharDataInto` gained a `maxBytes int` parameter (output-byte
   budget) across all three cursor implementations and the interface.
 - `parseAttributeValueInternal` (`parser_element.go`) caps attribute values
-  both ways: the slow accumulating path checks `nodeContentTooLong(b.Len())` at
-  the top of its scan loop (strict-greater). The `ScanSimpleAttrValue` fast path
-  takes `nodeContentScanBudget()` (= `maxNodeContent + utf8.UTFMax`) as a
-  `maxBytes` argument, bounding the cursor buffer instead of materializing the
-  whole value. Because the budget runs `utf8.UTFMax` past the cap, a successful
-  scan can return a `nBytes` slightly over the cap; the fast path therefore
-  re-checks `nodeContentTooLong(nBytes)` (strict-greater) BEFORE `AdvanceFast`
-  and returns `ErrNodeContentTooLarge` directly, so a `cap+1..cap+UTFMax`-byte
-  value is rejected and not accepted by the fast path. A value the scan cannot
-  settle within the budget returns `nBytes == 0` and falls back to the slow
-  accumulating path.
+  both ways. The `ScanSimpleAttrValue` fast path takes `nodeContentScanBudget()`
+  (= `maxNodeContent + utf8.UTFMax`) as a `maxBytes` argument, bounding the
+  cursor buffer instead of materializing the whole value. Because the budget
+  runs `utf8.UTFMax` past the cap, a successful scan can return a `nBytes`
+  slightly over the cap; the fast path therefore re-checks
+  `nodeContentTooLong(nBytes)` (strict-greater) BEFORE `AdvanceFast` and returns
+  `ErrNodeContentTooLarge` directly, so a `cap+1..cap+UTFMax`-byte value is
+  rejected and not accepted by the fast path. A value the scan cannot settle
+  within the budget returns `nBytes == 0` and falls back to the slow
+  accumulating path, which routes EVERY write into its buffer through the
+  bounded helpers `writeAttrString`/`writeAttrByte`/`writeAttrRune`
+  (`parserctx.go`). Each helper checks the would-be length
+  (`nodeContentTooLong(b.Len() + len(write))`, strict-greater) BEFORE the copy
+  and returns `ErrNodeContentTooLarge` if it would exceed. This bounds all slow-
+  path write paths uniformly — literal text, predefined-entity replacement,
+  char-ref output, the `SubstituteEntities`/forced-namespace entity-replacement
+  byte loop, AND the non-substituted general-entity branch
+  (`"&"`+`ent.name`+`";"`), whose long entity name under `MaxNameLength(-1)`
+  would otherwise be copied unbounded in a single loop iteration before the next
+  cap check (the round-3 hole this design closes).
 - Entity-expansion sub-parses inherit the cap via `inheritNestedParserState`.
 - The bounded streaming SAX char-data path (`parseCharDataChunkedSAX`, used when
   `CharBufferSize > 0` and no DOM is built) is EXEMPT from the char-data cap: it

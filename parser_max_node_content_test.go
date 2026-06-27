@@ -270,4 +270,21 @@ func TestMaxNodeContentSizeAttrEntityReplacement(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, d)
 	})
+
+	t.Run("unresolved entity reference with long name over cap fails", func(t *testing.T) {
+		t.Parallel()
+		// Non-substituted general-entity branch: with SubstituteEntities(false)
+		// (the default) a declared entity reference is copied literally as
+		// "&"+ent.name+";" into the attribute buffer. A very long entity name
+		// under MaxNameLength(-1) must trip ErrNodeContentTooLarge before the
+		// whole reference is copied, not after.
+		longName := strings.Repeat("e", 4096)
+		in := []byte(`<!DOCTYPE r [<!ENTITY ` + longName + ` "x">]>` +
+			`<r a="&` + longName + `;"/>`)
+		_, err := helium.NewParser().
+			MaxNameLength(-1).
+			MaxNodeContentSize(64).
+			Parse(t.Context(), in)
+		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+	})
 }

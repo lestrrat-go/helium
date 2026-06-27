@@ -843,14 +843,14 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	b := bufferPool.Get()
 	defer releaseBuffer(b)
 
+	// Every write into b goes through writeAttr{String,Byte,Rune}, which
+	// enforce the node-content cap BEFORE the copy. This bounds the value
+	// during accumulation (so a giant attribute fails before its closing quote
+	// is reached, matching CDATA/PI/comment) AND closes the whole class of
+	// single-iteration over-cap writes — most importantly the non-substituted
+	// entity-reference branch, which copies "&"+ent.name+";" in one step and
+	// would otherwise be unbounded for a long entity name under MaxNameLength(-1).
 	for {
-		// Enforce the node-content cap during accumulation so a giant
-		// attribute value fails before its closing quote is reached, rather
-		// than after buffering the whole value (matches CDATA/PI/comment).
-		if pctx.nodeContentTooLong(b.Len()) {
-			err = pctx.error(ctx, ErrNodeContentTooLarge)
-			return
-		}
 		c := cur.PeekRune()
 		if (qch != 0x0 && c == rune(qch)) || c == '<' {
 			break
@@ -883,9 +883,13 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 				}
 
 				if r == '&' && !pctx.replaceEntities {
-					_, _ = b.WriteString("&#38;")
+					if err = pctx.writeAttrString(ctx, b, "&#38;"); err != nil {
+						return
+					}
 				} else {
-					_, _ = b.WriteRune(r)
+					if err = pctx.writeAttrRune(ctx, b, r); err != nil {
+						return
+					}
 				}
 			} else {
 				var ent *Entity
@@ -901,9 +905,13 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 
 				if ent.entityType == enum.InternalPredefinedEntity {
 					if ent.content == "&" && !pctx.replaceEntities {
-						_, _ = b.WriteString("&#38;")
+						if err = pctx.writeAttrString(ctx, b, "&#38;"); err != nil {
+							return
+						}
 					} else {
-						_, _ = b.WriteString(ent.content)
+						if err = pctx.writeAttrString(ctx, b, ent.content); err != nil {
+							return
+						}
 					}
 				} else if pctx.replaceEntities {
 					var rep string
@@ -919,18 +927,16 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					// let an over-cap entity expansion (e.g. <r a="&big;"/> with
 					// SubstituteEntities, or a forced-replacement namespace attr
 					// xmlns:x="&big;") be buffered before ErrNodeContentTooLarge
-					// is returned. Check before each byte so the running total
-					// can never exceed the cap.
+					// is returned. writeAttrByte checks before each byte so the
+					// running total can never exceed the cap.
 					for i := range len(rep) {
-						if pctx.nodeContentTooLong(b.Len()) {
-							err = pctx.error(ctx, ErrNodeContentTooLarge)
-							return
-						}
-						switch rep[i] {
+						by := rep[i]
+						switch by {
 						case 0xD, 0xA, 0x9:
-							_ = b.WriteByte(0x20)
-						default:
-							_ = b.WriteByte(rep[i])
+							by = 0x20
+						}
+						if err = pctx.writeAttrByte(ctx, b, by); err != nil {
+							return
 						}
 					}
 				} else {
@@ -938,15 +944,28 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						_, _ = pctx.decodeEntities(ctx, ent.Content(), SubstituteRef)
 						ent.checked = 2
 					}
-					_, _ = b.WriteString("&")
-					_, _ = b.WriteString(ent.name)
-					_, _ = b.WriteString(";")
+					// Route the unresolved reference through the bounded helper:
+					// a declared entity with a very long name under
+					// MaxNameLength(-1) would otherwise copy "&"+ent.name+";"
+					// unbounded in this single iteration before the next cap
+					// check.
+					if err = pctx.writeAttrString(ctx, b, "&"); err != nil {
+						return
+					}
+					if err = pctx.writeAttrString(ctx, b, ent.name); err != nil {
+						return
+					}
+					if err = pctx.writeAttrString(ctx, b, ";"); err != nil {
+						return
+					}
 				}
 			}
 		case 0x20, 0xD, 0xA, 0x9:
 			if b.Len() > 0 || !normalize {
 				if !normalize || !inSpace {
-					b.WriteByte(0x20)
+					if err = pctx.writeAttrByte(ctx, b, 0x20); err != nil {
+						return
+					}
 				}
 				inSpace = true
 			}
@@ -958,7 +977,9 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 			// Write the raw decoded bytes (dw wide) so a real U+FFFD round-trips
 			// intact; WriteRune(c) would re-encode RuneError and utf8.RuneLen(c)
 			// would be -1, advancing too few bytes.
-			b.WriteString(cur.PeekString(dw))
+			if err = pctx.writeAttrString(ctx, b, cur.PeekString(dw)); err != nil {
+				return
+			}
 			if err := cur.Advance(dw); err != nil {
 				return "", 0, err
 			}
