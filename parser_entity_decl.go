@@ -509,7 +509,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 			// declaration carries no public ID, so guarding on the public ID would
 			// drop every SYSTEM parameter entity), and pass publicID/systemID to
 			// EntityDecl in that order.
-			literal, uri, err = pctx.parseExternalID(ctx)
+			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
 				return pctx.error(ctx, ErrValueRequired)
 			}
@@ -546,7 +546,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				}
 			}
 		} else {
-			literal, uri, err = pctx.parseExternalID(ctx)
+			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
 				return pctx.error(ctx, ErrValueRequired)
 			}

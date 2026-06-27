@@ -464,7 +464,7 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
-	systemID, publicID, err := pctx.parseExternalID(ctx)
+	systemID, publicID, err := pctx.parseExternalID(ctx, false)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
@@ -577,7 +577,13 @@ func isPubidChar(r rune) bool {
 	return false
 }
 
-func (pctx *parserCtx) parseExternalID(ctx context.Context) (string, string, error) {
+// parseExternalID parses an ExternalID [75] or, when strict is false, a
+// NotationDecl PublicID [83]. ExternalID's PUBLIC form requires "S
+// SystemLiteral" after the PubidLiteral; NotationDecl's PublicID form permits
+// PUBLIC with only the PubidLiteral. Pass strict=true for every ExternalID
+// production (DOCTYPE external subset, entity declarations) and strict=false
+// only for NotationDecl.
+func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string, string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
 		return "", "", pctx.error(ctx, errNoCursor)
@@ -612,12 +618,23 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context) (string, string, err
 		if err != nil {
 			return "", "", pctx.error(ctx, errors.New("public ID required"))
 		}
-		if !isBlankByte(cur.Peek()) {
-			return "", publicID, nil
-		}
-		pctx.skipBlanks(ctx)
-		if c := cur.Peek(); c != '\'' && c != '"' {
-			return "", publicID, nil
+		if strict {
+			// ExternalID [75]: "S SystemLiteral" is mandatory after the
+			// PubidLiteral, so a space (then the SystemLiteral below) is required.
+			if !isBlankByte(cur.Peek()) {
+				return "", "", pctx.error(ctx, ErrSpaceRequired)
+			}
+			pctx.skipBlanks(ctx)
+		} else {
+			// NotationDecl PublicID [83]: the SystemLiteral is optional, so return
+			// the PubidLiteral alone when no quoted SystemLiteral follows.
+			if !isBlankByte(cur.Peek()) {
+				return "", publicID, nil
+			}
+			pctx.skipBlanks(ctx)
+			if c := cur.Peek(); c != '\'' && c != '"' {
+				return "", publicID, nil
+			}
 		}
 		uri, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parseSystemLiteral(ctx, qch)

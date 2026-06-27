@@ -303,3 +303,48 @@ func TestDTDDeclarationNodeWrappers(t *testing.T) {
 		_ = ent.Replace()
 	})
 }
+
+// TestExternalIDPublicSystemLiteral covers XML 1.0 [75] ExternalID: the PUBLIC
+// form requires a following SystemLiteral, whereas NotationDecl [83] PublicID
+// permits PUBLIC with only a PubidLiteral.
+func TestExternalIDPublicSystemLiteral(t *testing.T) {
+	t.Parallel()
+
+	t.Run("doctype PUBLIC without system literal rejected", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r PUBLIC "-//Example//DTD//EN">
+<r/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "PUBLIC ExternalID without a SystemLiteral must be rejected")
+	})
+
+	t.Run("doctype PUBLIC with system literal accepted", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r PUBLIC "-//Example//DTD//EN" "example.dtd">
+<r/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "a complete PUBLIC ExternalID must parse")
+	})
+
+	t.Run("notation PUBLIC without system literal accepted", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r [
+  <!NOTATION n PUBLIC "-//Example//Notation//EN">
+]>
+<r/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "NotationDecl PublicID form must remain accepted")
+	})
+}

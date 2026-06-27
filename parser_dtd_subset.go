@@ -29,7 +29,7 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 	pctx.intSubName = name
 
 	pctx.skipBlanks(ctx)
-	u, eid, err := pctx.parseExternalID(ctx)
+	u, eid, err := pctx.parseExternalID(ctx, true)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
