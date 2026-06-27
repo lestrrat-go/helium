@@ -18,6 +18,11 @@ type Entity struct {
 	externalID string          // external identifier for PUBLIC
 	systemID   string          // URI for a SYSTEM or PUBLIC entity
 	uri        string          // the full URI as computed
+	// resolvedURI is the URI an external parameter entity's content was actually
+	// loaded from (a catalog/custom-resolver URI or the entity's resolved system
+	// URI), cached alongside `content` so a later reference parses the cached
+	// bytes against the SAME base the first load used — not the declared URI().
+	resolvedURI string
 	// owner      bool       // does the entity own children
 	checked      int   // was the entity content checked
 	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)

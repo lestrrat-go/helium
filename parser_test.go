@@ -1130,6 +1130,10 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 // by the external-subset parser tests in this package.
 const dtdSystemID = "d.dtd"
 
+// peSystemID is the external parameter-entity SYSTEM identifier (and MapFS
+// filename) shared by the external-PE parser tests in this package.
+const peSystemID = "pe.ent"
+
 func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
 	t.Parallel()
 

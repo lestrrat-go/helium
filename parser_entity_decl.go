@@ -15,6 +15,33 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 )
 
+// parameterEntityReplacement returns the replacement text of a resolved
+// parameter entity. For an EXTERNAL parameter entity the replacement text is the
+// content of the referenced external resource, which is loaded on demand through
+// loadExternalParameterEntityContent (XXE-gated, byte-capped, cached on the
+// entity). For an internal parameter entity it is the stored Content().
+//
+// This is the single chokepoint so a PE reference that appears inside an entity
+// value (decodeEntitiesInternal) or in the entity-value reference syntax check
+// (expandEntityValueForRefCheck) expands an external PE the same way and
+// regardless of reference order, instead of seeing an empty Content() until the
+// top-level parsePEReference happens to load and cache it first. When external
+// loading is disabled (secure default: parseNoXXE, or the resolver declines) the
+// load returns empty, so the result is the same empty replacement text as before
+// — no behavior change in secure mode.
+func (pctx *parserCtx) parameterEntityReplacement(ctx context.Context, ent sax.Entity) ([]byte, error) {
+	if ent.EntityType() == enum.ExternalParameterEntity {
+		if he, ok := ent.(*Entity); ok {
+			content, _, err := pctx.loadExternalParameterEntityContent(ctx, he)
+			if err != nil {
+				return nil, err
+			}
+			return content, nil
+		}
+	}
+	return ent.Content(), nil
+}
+
 func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
@@ -246,8 +273,12 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 			if err := pctx.entityCheck(ent, width); err != nil {
 				return err
 			}
+			peContent, err := pctx.parameterEntityReplacement(ctx, ent)
+			if err != nil {
+				return err
+			}
 			before := sink.count()
-			if err := pctx.decodeEntitiesToSink(ctx, ent.Content(), what, depth+1, sink); err != nil {
+			if err := pctx.decodeEntitiesToSink(ctx, peContent, what, depth+1, sink); err != nil {
 				return err
 			}
 			if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
@@ -394,8 +425,14 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 				// brought in by the PE becomes a literal '&' that can combine
 				// with surrounding text into a general reference. General
 				// references (&Name;) in the replacement text are left intact for
-				// the subsequent scan.
-				rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), SubstitutePERef, depth+1)
+				// the subsequent scan. An external PE's replacement text is loaded
+				// on demand (parameterEntityReplacement) so the check sees the same
+				// bytes regardless of reference order.
+				peContent, err := pctx.parameterEntityReplacement(ctx, ent)
+				if err != nil {
+					return nil, err
+				}
+				rep, err := pctx.decodeEntitiesInternal(ctx, peContent, SubstitutePERef, depth+1)
 				if err != nil {
 					return nil, err
 				}

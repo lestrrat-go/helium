@@ -494,7 +494,7 @@ func TestExternalSystemParameterEntityCaptured(t *testing.T) {
 	ent, ok := doc.GetParameterEntity("pe")
 	require.True(t, ok, "external SYSTEM parameter entity must be registered")
 	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
-	require.Equal(t, "pe.ent", ent.SystemID(), "the SYSTEM literal must be recorded as the system ID")
+	require.Equal(t, peSystemID, ent.SystemID(), "the SYSTEM literal must be recorded as the system ID")
 	require.Empty(t, ent.ExternalID(), "a SYSTEM declaration has no public ID")
 }
 
@@ -522,8 +522,359 @@ func TestExternalPublicParameterEntityCaptured(t *testing.T) {
 	ent, ok := doc.GetParameterEntity("pe")
 	require.True(t, ok, "external PUBLIC parameter entity must be registered")
 	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
-	require.Equal(t, "pe.ent", ent.SystemID(), "the system literal must be the system ID")
+	require.Equal(t, peSystemID, ent.SystemID(), "the system literal must be the system ID")
 	require.Equal(t, "-//x//pe", ent.ExternalID(), "the public ID must be the external ID")
+}
+
+// TestExternalParameterEntityContentLoaded proves that referencing an external
+// SYSTEM parameter entity in the external subset actually loads its content and
+// applies the declarations it contains. The external PE pe.ent declares a general
+// entity; with external DTD loading enabled that entity must be registered,
+// proving the external PE content was pulled in and parsed (not silently dropped).
+func TestExternalParameterEntityContentLoaded(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ctrlOK := doc.GetEntity("ctrl")
+	require.True(t, ctrlOK, "control general entity must be stored, proving the external subset loaded")
+
+	ent, ok := doc.GetEntity("fromPE")
+	require.True(t, ok, "the general entity declared inside the external PE must be registered")
+	require.Equal(t, "loaded-from-external-pe", string(ent.Content()))
+}
+
+// TestExternalParameterEntityNotLoadedSecureDefault proves the secure default
+// (XXE blocked) loads no external parameter entity content: with the default
+// parser the external subset is not loaded at all, so the general entity declared
+// inside the external PE is absent. Behavior is unchanged from before the fix.
+func TestExternalParameterEntityNotLoadedSecureDefault(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ok := doc.GetEntity("fromPE")
+	require.False(t, ok, "secure default must not load external parameter entity content")
+}
+
+// TestExternalParameterEntityNestedRelativeBaseURI proves that a relative system
+// ID in a declaration INSIDE an external parameter entity resolves against the
+// PE's OWN location, not the containing DTD. d.dtd declares a PE at "sub/pe.ent"
+// and references it; sub/pe.ent declares a general entity "e" with a relative
+// SYSTEM id "leaf.ent". With baseURI scoped to the PE while its replacement text
+// is parsed, e must resolve to "sub/leaf.ent" (sibling of pe.ent), NOT "leaf.ent"
+// (sibling of d.dtd).
+//
+// The leading control general entity sidesteps a SEPARATE pre-existing parser
+// bug (present on main, orthogonal to base-URI scoping): a parameter-entity
+// declaration as the VERY FIRST declaration of an external subset fails with
+// "space required". The control entity keeps this regression focused on scoping.
+func TestExternalParameterEntityNestedRelativeBaseURI(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "sub/pe.ent">` + "\n" +
+				`%pe;`)},
+		"sub/pe.ent": {Data: []byte(`<!ENTITY e SYSTEM "leaf.ent">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("e")
+	require.True(t, ok, "general entity declared inside the external PE must be registered")
+	require.Equal(t, "sub/leaf.ent", ent.URI(),
+		"relative system ID inside the external PE must resolve against the PE's own location")
+}
+
+// TestExternalParameterEntityInEntityValueLoaded proves that an external
+// parameter entity referenced inside a general entity's VALUE is loaded and
+// expanded regardless of whether the PE was ever referenced at the top level of
+// the DTD first. The external subset declares "%p;" (SYSTEM "value.ent") and a
+// general entity g whose value is "%p;" — WITHOUT any top-level "%p;" reference
+// that would otherwise be what first caches p's content. g's expanded value must
+// equal value.ent's content, proving the load happens through the centralized
+// PE-replacement path rather than depending on reference order.
+//
+// The leading control general entity sidesteps the same separate pre-existing
+// first-declaration bug noted on TestExternalParameterEntityNestedRelativeBaseURI.
+func TestExternalParameterEntityInEntityValueLoaded(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % p SYSTEM "value.ent">` + "\n" +
+				`<!ENTITY g "%p;">`)},
+		"value.ent": {Data: []byte(`expanded-from-external-pe`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("g")
+	require.True(t, ok, "general entity g must be registered")
+	require.Equal(t, "expanded-from-external-pe", string(ent.Content()),
+		"external PE referenced in an entity value must be loaded and expanded regardless of reference order")
+}
+
+// TestExternalParameterEntityInEntityValueSecureDefault proves the secure
+// default does NOT load an external PE referenced inside an entity value: with
+// the default parser the external subset is not loaded at all, so g is absent.
+func TestExternalParameterEntityInEntityValueSecureDefault(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % p SYSTEM "value.ent">` + "\n" +
+				`<!ENTITY g "%p;">`)},
+		"value.ent": {Data: []byte(`expanded-from-external-pe`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ok := doc.GetEntity("g")
+	require.False(t, ok, "secure default must not load the external subset or its PE-referencing entity value")
+}
+
+// TestExternalParameterEntitySelfRecursionRejected proves that a self-recursive
+// external parameter entity is rejected with a recursion error rather than
+// pushing cursors until the entity-amplification ceiling trips (or OOM): pe.ent's
+// replacement text references the very PE that loaded it, so the active-PE guard
+// must fail the parse the moment the nested "%pe;" is seen.
+func TestExternalParameterEntitySelfRecursionRejected(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`%pe;`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	_, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err, "self-recursive external parameter entity must be rejected")
+	require.Contains(t, err.Error(), "references itself",
+		"rejection must be the recursion guard, not an amplification/ceiling trip")
+}
+
+// peCatalog resolves the external PE's system ID to a DIFFERENT URI than the
+// entity's declared one, modeling the catalog/custom-resolver case where
+// input.URI() (the URI actually opened) differs from the entity's URI().
+type peCatalog struct{ from, to string }
+
+func (c peCatalog) Resolve(_ context.Context, _, sysID string) string {
+	if sysID == c.from {
+		return c.to
+	}
+	return ""
+}
+func (c peCatalog) ResolveURI(_ context.Context, _ string) string { return "" }
+
+// TestExternalParameterEntityValueFirstResolvedURICached proves that when an
+// external PE is loaded FIRST through a general entity's value (caching its
+// content), a later top-level "%pe;" parses the cached bytes against the URI the
+// bytes were ACTUALLY loaded from — the catalog-resolved "sub/pe.ent" — not the
+// entity's declared "pe.ent". A relative SYSTEM id inside the PE ("leaf.ent")
+// must therefore resolve to "sub/leaf.ent". Before the resolved-URI cache fix the
+// cached path returned e.URI() ("pe.ent"), wrongly resolving leaf to "leaf.ent".
+func TestExternalParameterEntityValueFirstResolvedURICached(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`<!ENTITY g "%pe;">` + "\n" +
+				`%pe;`)},
+		"sub/pe.ent": {Data: []byte(`<!ENTITY leaf SYSTEM "leaf.ent">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		Catalog(peCatalog{from: peSystemID, to: "sub/pe.ent"}).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("leaf")
+	require.True(t, ok, "general entity declared inside the cached external PE must be registered")
+	require.Equal(t, "sub/leaf.ent", ent.URI(),
+		"cached external PE must resolve relative IDs against the URI it was actually loaded from")
+}
+
+// TestExternalParameterEntityWithTextDecl proves that an external parameter
+// entity whose replacement text begins with a TextDecl
+// ("<?xml ... encoding=...?>") is parsed: the TextDecl is consumed before the
+// declaration loop instead of being rejected as a processing instruction.
+func TestExternalParameterEntityWithTextDecl(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
+			`<!ENTITY td "from-textdecl-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("td")
+	require.True(t, ok, "entity declared after a TextDecl in an external PE must be registered")
+	require.Equal(t, "from-textdecl-pe", string(ent.Content()),
+		"external PE beginning with a TextDecl must parse its declarations")
+}
+
+// TestExternalParameterEntityInEntityValueStripsTextDecl proves that when an
+// external parameter entity whose replacement text begins with a TextDecl is
+// referenced inside a GENERAL entity's value ("<!ENTITY g "%p;">"), the stored
+// value of g is the PE's POST-TextDecl bytes only — the leading
+// "<?xml ... encoding=...?>" must NOT be embedded into g. The decode is
+// centralized at the shared load/cache chokepoint, so the entity-value
+// expansion path and the top-level "%pe;" path both see the stripped bytes.
+func TestExternalParameterEntityInEntityValueStripsTextDecl(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % p SYSTEM "value.ent">` + "\n" +
+				`<!ENTITY g "%p;">`)},
+		"value.ent": {Data: []byte(`<?xml version="1.0" encoding="UTF-8"?>` +
+			`post-textdecl-value`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("g")
+	require.True(t, ok, "general entity g must be registered")
+	require.Equal(t, "post-textdecl-value", string(ent.Content()),
+		"external PE referenced in an entity value must contribute only its post-TextDecl bytes, not the TextDecl itself")
+}
+
+// TestExternalParameterEntityVersionOnlyTextDeclRejected proves that an external
+// parameter entity whose replacement text begins with a version-only
+// declaration ("<?xml version="1.0"?>") is rejected: a TextDecl REQUIRES an
+// EncodingDecl, so a version-only declaration is not a valid TextDecl and must
+// not be leniently accepted.
+func TestExternalParameterEntityVersionOnlyTextDeclRejected(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<?xml version="1.0"?>` + "\n" +
+			`<!ENTITY td "x">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	_, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err,
+		"a version-only declaration is not a valid TextDecl (encoding is required) and must be rejected")
+}
+
+// TestExternalParameterEntityStandaloneTextDeclRejected proves that an external
+// parameter entity whose replacement text begins with a declaration carrying a
+// 'standalone' pseudo-attribute is rejected: a TextDecl does not permit a
+// StandaloneDecl, so such a declaration is malformed and must not be leniently
+// accepted.
+func TestExternalParameterEntityStandaloneTextDeclRejected(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+				`%pe;`)},
+		peSystemID: {Data: []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n" +
+			`<!ENTITY td "x">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	_, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err,
+		"a TextDecl carrying a standalone pseudo-attribute is malformed and must be rejected")
 }
 
 // TestEntityValueRefValidationIsSideEffectFree proves that the reference

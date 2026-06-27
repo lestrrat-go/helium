@@ -136,6 +136,35 @@ type parserCtx struct {
 	charBuf          []byte            // reusable buffer for parseCharDataContent
 	attrBuf          []attrData        // reusable attribute scratch buffer for start-tag parsing
 	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
+	baseURIScopes    []baseURIScope    // per-input baseURI overrides (restored when the input is popped)
+	// externalPEScopes records, per pushed external parameter-entity input, the
+	// entity whose replacement text the input holds. activeExternalPECount is the
+	// set of external PEs currently on the input stack (count per entity, to
+	// tolerate the same PE legitimately appearing at sibling positions). Together
+	// they reject a self/mutually recursive external PE before it can drive
+	// unbounded cursor pushes into the amplification ceiling. The active mark is
+	// cleared when the pushed input is popped (popInput), mirroring baseURIScopes.
+	externalPEScopes      []externalPEScope
+	activeExternalPECount map[*Entity]int
+}
+
+// baseURIScope records the baseURI to restore when a particular pushed input
+// (its cursor) is popped from the input stack. It is used to scope pctx.baseURI
+// to an external parameter entity's own resolved URI while that entity's
+// replacement text is being parsed, so relative system IDs in declarations
+// INSIDE the entity resolve against the entity's location rather than the
+// containing DTD.
+type baseURIScope struct {
+	input   any
+	baseURI string
+}
+
+// externalPEScope records which external parameter entity a pushed input belongs
+// to, so its active mark can be cleared when that exact input is popped (strictly
+// LIFO, like baseURIScope).
+type externalPEScope struct {
+	input  any
+	entity *Entity
 }
 
 type parserCtxKey struct{}
@@ -286,6 +315,43 @@ func (ctx *parserCtx) pushInput(in any) {
 	ctx.cachedCursor = nil // invalidate cache
 }
 
+// pushInputWithBaseURI pushes a new input AND scopes pctx.baseURI to baseURI
+// while that input is on the stack. The previous baseURI is restored when this
+// exact input is popped (popInput), so the override lasts precisely as long as
+// the pushed cursor is being consumed — even though the cursor is drained later
+// by the surrounding declaration loop rather than within the call that pushed it.
+// An empty baseURI is treated as "no override" (the input is pushed normally),
+// because clobbering baseURI to "" would break relative resolution rather than
+// help it.
+func (ctx *parserCtx) pushInputWithBaseURI(in any, baseURI string) {
+	if baseURI == "" {
+		ctx.pushInput(in)
+		return
+	}
+	ctx.baseURIScopes = append(ctx.baseURIScopes, baseURIScope{input: in, baseURI: ctx.baseURI})
+	ctx.baseURI = baseURI
+	ctx.pushInput(in)
+}
+
+// pushExternalPEInput pushes an external parameter entity's replacement text
+// (scoping baseURI to its resolved URI) AND records the entity as active so a
+// nested reference to the same PE — while its earlier input is still being
+// drained — is detected as recursion. The active mark is cleared in popInput.
+func (ctx *parserCtx) pushExternalPEInput(in any, baseURI string, ent *Entity) {
+	ctx.pushInputWithBaseURI(in, baseURI)
+	if ctx.activeExternalPECount == nil {
+		ctx.activeExternalPECount = make(map[*Entity]int)
+	}
+	ctx.activeExternalPECount[ent]++
+	ctx.externalPEScopes = append(ctx.externalPEScopes, externalPEScope{input: in, entity: ent})
+}
+
+// externalPEActive reports whether the given external parameter entity is
+// currently on the input stack (its replacement text is being parsed).
+func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
+	return ctx.activeExternalPECount[ent] > 0
+}
+
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	cur, ok := ctx.inputTab.PeekOne().(*strcursor.ByteCursor)
 	if !ok {
@@ -348,7 +414,26 @@ func (ctx *parserCtx) cursorDecodeErr() error {
 
 func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
 	ctx.cachedCursor = nil // invalidate cache
-	return ctx.inputTab.Pop()
+	popped := ctx.inputTab.Pop()
+	// Restore any baseURI override scoped to this exact input (see
+	// pushInputWithBaseURI). Inputs are popped strictly LIFO, so the override —
+	// if any — for the popped input is the top of the scope stack.
+	if n := len(ctx.baseURIScopes); n > 0 && ctx.baseURIScopes[n-1].input == popped {
+		ctx.baseURI = ctx.baseURIScopes[n-1].baseURI
+		ctx.baseURIScopes = ctx.baseURIScopes[:n-1]
+	}
+	// Clear the active mark for an external parameter entity whose pushed input is
+	// being popped (strictly LIFO, like the baseURI scope above), so a later
+	// sibling reference to the same PE is not mistaken for recursion.
+	if n := len(ctx.externalPEScopes); n > 0 && ctx.externalPEScopes[n-1].input == popped {
+		ent := ctx.externalPEScopes[n-1].entity
+		ctx.externalPEScopes = ctx.externalPEScopes[:n-1]
+		ctx.activeExternalPECount[ent]--
+		if ctx.activeExternalPECount[ent] <= 0 {
+			delete(ctx.activeExternalPECount, ent)
+		}
+	}
+	return popped
 }
 
 func (ctx *parserCtx) currentInputID() any {
