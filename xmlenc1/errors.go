@@ -15,6 +15,13 @@ var (
 	// ErrMissingKey is returned when no decryption key is available.
 	ErrMissingKey = errors.New("xmlenc1: no decryption key available")
 
+	// ErrTooManyEncryptedKeys is returned when an EncryptedData carries more
+	// EncryptedKey candidates than the Decryptor's effective limit (see
+	// Decryptor.MaxEncryptedKeys and DefaultMaxEncryptedKeys). Each candidate
+	// would force a full RSA trial-decrypt, so an unbounded count is a CPU
+	// amplification (DoS) vector; the cap is enforced before any crypto runs.
+	ErrTooManyEncryptedKeys = errors.New("xmlenc1: too many EncryptedKey candidates")
+
 	// ErrInvalidPadding is returned when PKCS#7 padding is invalid.
 	ErrInvalidPadding = errors.New("xmlenc1: invalid PKCS#7 padding")
 

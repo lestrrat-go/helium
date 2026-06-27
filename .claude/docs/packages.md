@@ -331,8 +331,9 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   - `BlockAlgorithm(uri)`, `AllowLegacyCBC(bool)`, `KeyTransportAlgorithm(uri)`, `RecipientPublicKey(key)`, `SessionKey(key)`, `KeyWrapAlgorithm(uri)`, `KeyEncryptionKey(kek)`, `OAEPDigest(uri)`, `OAEPMGF(uri)`, `OAEPParams(params)` — builder methods
   - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)` — terminal methods
 - **NewDecryptor() → Decryptor** — create fluent builder for decryption
-  - `PrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `AllowUnauthenticatedCBC(bool)` — builder methods
+  - `PrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `AllowUnauthenticatedCBC(bool)`, `MaxEncryptedKeys(n)` — builder methods
   - `Decrypt(ctx, elem)` — terminal method
+- `Decryptor.MaxEncryptedKeys(n)` caps trial-decrypted `<EncryptedKey>` candidates (DoS guard): zero → `DefaultMaxEncryptedKeys` (100), negative → unlimited; over-cap fails with `ErrTooManyEncryptedKeys` before any RSA op. The candidate loop also polls `ctx.Err()` between candidates
 - Block encryption: AES-128/256-CBC, AES-128/256-GCM
 - Secure by default: unset `BlockAlgorithm` → `DefaultBlockAlgorithm` (AES-256-GCM). Selecting a CBC block algorithm for **encryption** requires `Encryptor.AllowLegacyCBC(true)`, else `ErrCBCEncryptionRequiresOptIn`. **Decryption** of CBC requires `Decryptor.AllowUnauthenticatedCBC(true)`, else `ErrCBCRequiresOptIn`
 - Key transport: RSA-OAEP (1.0 + 1.1 with configurable digest/MGF)
