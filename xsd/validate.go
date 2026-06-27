@@ -720,6 +720,16 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 func (vc *validationContext) validateContentByType(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	switch td.ContentType {
 	case ContentTypeEmpty:
+		// XSD 1.1 §3.4.2.3.3: an empty explicit content type plus effective open
+		// content (mode != none) becomes element-only with an empty particle plus
+		// the open content, so extra wildcard-matched children are admitted.
+		if vc.version == Version11 && td.OpenContent != nil {
+			mg := td.ContentModel
+			if mg == nil {
+				mg = &ModelGroup{Compositor: CompositorSequence, MinOccurs: 1, MaxOccurs: 1}
+			}
+			return vc.validateContentModelOpen(ctx, elem, mg, td.OpenContent)
+		}
 		return vc.validateEmptyContent(ctx, elem)
 	case ContentTypeSimple:
 		return vc.validateSimpleContent(ctx, elem, edecl, td)
