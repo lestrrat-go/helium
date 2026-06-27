@@ -63,6 +63,53 @@ func TestIncludeOverrideContentTypeCheck(t *testing.T) {
 			"an overridden (dead) define's content-type-bad element must not be checked; got: %s", got)
 	})
 
+	t.Run("overridden define's dead nested-grammar scope is not checked", func(t *testing.T) {
+		t.Parallel()
+		// c.rng defines x whose body wraps a NESTED <grammar> carrying a
+		// content-type-BAD define. Parsing x pushes that nested grammar onto the
+		// append-only scope list before main.rng OVERRIDES x (deleting it from the
+		// live scope). The nested-grammar scope is now DEAD — unreachable from the
+		// live start — so its bad define must NOT be content-type checked. Seeding
+		// the check from every append-only scope, rather than from the live start
+		// graph, wrongly flags it.
+		badNested := `<element name="x">` +
+			`<grammar ` + ns + `>` +
+			`<start><element name="inner"><text/></element></start>` +
+			`<define name="bad"><element name="y"><group><data type="string"/>` +
+			`<element name="child"><text/></element></group></element></define>` +
+			`</grammar>` +
+			`</element>`
+
+		c := `<?xml version="1.0"?>
+<grammar ` + ns + `>
+  <define name="x">` + badNested + `</define>
+</grammar>`
+
+		b := `<?xml version="1.0"?>
+<grammar ` + ns + `>
+  <include href="c.rng"/>
+</grammar>`
+
+		main := `<?xml version="1.0"?>
+<grammar ` + ns + `>
+  <include href="b.rng">
+    <define name="x">` + goodElement + `</define>
+  </include>
+  <start>
+    <element name="root"><ref name="x"/></element>
+  </start>
+</grammar>`
+
+		fsys := fstest.MapFS{
+			testMainRNGPath: &fstest.MapFile{Data: []byte(main)},
+			"schemas/b.rng": &fstest.MapFile{Data: []byte(b)},
+			"schemas/c.rng": &fstest.MapFile{Data: []byte(c)},
+		}
+		got := compileIncludeErrors(t, fsys)
+		require.Empty(t, got,
+			"a dead nested-grammar scope under an overridden define must not be content-type checked; got: %s", got)
+	})
+
 	t.Run("overriding content-type-bad define is checked", func(t *testing.T) {
 		t.Parallel()
 		// Mirror image: the nested include contributes a VALID x, and the outer

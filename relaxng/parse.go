@@ -1535,24 +1535,20 @@ func groupableContentTypes(a, b rngContentType) bool {
 // a content-type error. A <choice> of those same patterns is NOT an error: its
 // branches are independent alternatives that never coexist.
 //
-// The live element bodies are gathered by walking the resolved start pattern and
-// every define still present in each grammar scope after include-override
-// deletion/resolution (collectLiveElements, following resolved refs under a
-// cycle guard). Walking the live grammar — rather than a parse-time append-only
-// list of every parsed <element> — ensures a define removed or replaced by an
-// <include> override is NOT checked, while the define that replaced it IS.
+// The live element bodies are gathered by walking ONLY from the resolved start
+// pattern (collectLiveElements, following resolved refs under a cycle guard),
+// reaching every <element> reachable through the live start/define graph —
+// including those inside referenced defines and nested grammars. Seeding from the
+// start alone, rather than from every append-only c.scopes entry, is what keeps a
+// removed/overridden define out of the check: a nested-grammar scope created
+// while parsing a define that an <include> override later deletes stays in
+// c.scopes forever, but is unreachable from the live start, so its (now dead)
+// content is no longer wrongly flagged. The define that REPLACED an overridden
+// one is reachable from start and so IS checked.
 func (c *compiler) checkContentTypes(ctx context.Context, startPat *pattern) {
 	walkVisited := make(map[*pattern]struct{})
 	var elems []*pattern
 	c.collectLiveElements(startPat, walkVisited, &elems)
-	for _, scope := range c.scopes {
-		for name, entry := range scope.defines {
-			if name == "##start" {
-				continue
-			}
-			c.collectLiveElements(entry.pattern, walkVisited, &elems)
-		}
-	}
 
 	for _, ep := range elems {
 		visited := make(map[*pattern]struct{})
@@ -1644,6 +1640,19 @@ func (c *compiler) contentTypeOf(p *pattern, visited map[*pattern]struct{}) (rng
 		// contributes the simple content-type to the enclosing element.
 		return ctSimple, true
 	case patternRef, patternParentRef:
+		// A reference contributes the content-type of its TARGET define body, not
+		// the unconditional complex() the RELAX NG §7.2 table assigns to <ref>.
+		// That table is stated for the FULLY SIMPLIFIED grammar, in which every
+		// define wraps a single <element> (so every ref is complex). helium (like
+		// libxml2) does not run that simplification, so a ref may resolve to an
+		// attribute-only/empty/data define; following the ref to its actual
+		// content-type is what matches libxml2: a ref to a group-of-attributes is
+		// EMPTY and groups with simple <value> content (e.g. libvirt.rng's
+		// ostypehvm), while a ref to <data> is SIMPLE and is correctly rejected
+		// when grouped with sibling <element> content. (Confirmed against
+		// xmllint --relaxng: both schemas behave exactly this way.) Do NOT change
+		// this to a flat complex() — it both over-rejects real schemas and
+		// under-rejects ref-to-data mixed with elements.
 		if p.resolved == nil {
 			return ctEmpty, true
 		}
