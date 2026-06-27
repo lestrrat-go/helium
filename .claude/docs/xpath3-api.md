@@ -135,6 +135,34 @@ func (r Result) StringValue() string                  // XPath string value of t
 func (r Result) Copy() Result                          // deep copy with independent backing (see Reuse)
 ```
 
+## Regex
+
+Compiled XPath/XML Schema regex, exported for reuse by other packages (notably
+xslt3's `xsl:analyze-string`). Flags follow the F&O spec: `i` (case-insensitive),
+`m` (multi-line), `s` (dot-all), `x` (free-spacing), `q` (literal).
+
+```go
+func CompileRegex(pattern, flags string) (*Regex, error)
+
+func (r *Regex) MatchString(s string) (bool, error)
+func (r *Regex) FindAllSubmatchIndex(s string, n int) ([][]int, error) // n<0 = unlimited
+func (r *Regex) EachSubmatchIndex(s string, fn func(m []int) bool) error
+```
+
+- `FindAllSubmatchIndex` returns every match, each a flat slice of `(start, end)`
+  byte-index pairs for the full match and each capture group (unmatched group =
+  `-1, -1`); `nil` means no match.
+- `EachSubmatchIndex` **streams** the same successive matches one at a time,
+  calling `fn` once per match with the same per-match layout. The slice handed to
+  `fn` is valid only for that call — copy it to retain it. Iteration stops early
+  (returning `nil`) as soon as `fn` returns false. Unlike `FindAllSubmatchIndex`,
+  matches are produced incrementally and never accumulated, so live memory stays
+  bounded regardless of match count; this lets a caller enforce a match-count
+  budget or honor a cancelled context DURING enumeration. Leading-context
+  patterns (e.g. a multi-line `^`, which matches at every line start) stream
+  through a regexp2 twin so the anchor stays correct without first materializing
+  a match slice proportional to the input size.
+
 ## Configuration types & resolvers
 
 Evaluation is configured exclusively through the `Evaluator` fluent setters

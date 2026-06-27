@@ -28,6 +28,16 @@ func TestRegexEachSubmatchIndexParity(t *testing.T) {
 		{name: "anchored end", pattern: "a$", input: "aaa"},
 		{name: "capturing groups", pattern: "(a)(b)?", input: "abac"},
 		{name: "word", pattern: "\\c+", input: "foo bar baz"},
+		// Leading-context (full-context) patterns: these stream through the
+		// regexp2 twin and must match std's FindAll exactly. A multi-line "^"
+		// matches at every line start (the amplification vector), so it exercises
+		// the streamed-with-context path, including empty matches.
+		{name: "multiline anchor", pattern: "^", flags: "m", input: "a\nb\nc"},
+		{name: "multiline anchor empty lines", pattern: "^", flags: "m", input: "\n\n\n"},
+		{name: "multiline anchor trailing newline", pattern: "^", flags: "m", input: "x\n"},
+		{name: "multiline anchor capture", pattern: "(^)", flags: "m", input: "a\nb"},
+		{name: "multiline anchored line", pattern: "^\\c*", flags: "m", input: "ab\ncd\n"},
+		{name: "multiline anchored empty line", pattern: "^$", flags: "m", input: "a\n\nb"},
 		// Backreference forces the regexp2 backtracking engine.
 		{name: "backref backtrack", pattern: "(a)\\1", input: "aa-aa-b-aa"},
 	} {
@@ -74,5 +84,29 @@ func TestRegexEachSubmatchIndexEarlyStopIsBounded(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, budget+1, visited,
 			"early-stop must bound enumeration to the budget, independent of input size %d", size)
+	}
+}
+
+// A leading-context (full-context) anchor like a multi-line "^" matches at every
+// line start, so an input of N newlines yields ~N matches. The full-context path
+// must still honor the caller's early stop BEFORE enumerating (and allocating)
+// work proportional to the match count — otherwise the cap is defeated.
+func TestRegexEachSubmatchIndexMultilineAnchorIsBounded(t *testing.T) {
+	t.Parallel()
+
+	re, err := xpath3.CompileRegex("^", "m")
+	require.NoError(t, err)
+
+	const budget = 100
+	for _, lines := range []int{1_000, 100_000} {
+		input := strings.Repeat("\n", lines)
+		visited := 0
+		err := re.EachSubmatchIndex(input, func(_ []int) bool {
+			visited++
+			return visited <= budget // stop one past the budget
+		})
+		require.NoError(t, err)
+		require.Equal(t, budget+1, visited,
+			"multiline-anchor early-stop must bound enumeration to the budget, independent of line count %d", lines)
 	}
 }

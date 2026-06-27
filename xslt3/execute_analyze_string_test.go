@@ -77,6 +77,46 @@ func TestAnalyzeStringEmptyMatchIsCapped(t *testing.T) {
 		"the analyze-string cap breach is a runtime (dynamic) error")
 }
 
+// A multi-line "^" (flags="m") is a leading-context anchor that matches at every
+// line start, so an input of N newlines yields ~N matches. Unlike "x*", this
+// pattern streams through the regexp2 full-context twin; the cap must still be
+// enforced DURING enumeration (before allocating work proportional to the match
+// count) rather than after materializing every line-start match.
+func TestAnalyzeStringMultilineAnchorIsCapped(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
+		`<xsl:template match="/"><out>` +
+		`<xsl:analyze-string select="string(.)" regex="^" flags="m">` +
+		`<xsl:matching-substring><m/></xsl:matching-substring>` +
+		`<xsl:non-matching-substring><n><xsl:value-of select="."/></n></xsl:non-matching-substring>` +
+		`</xsl:analyze-string>` +
+		`</out></xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	// A long run of newlines: each line start is a (zero-length) match, so the
+	// match count grows with the input far past the cap below.
+	source, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<doc>`+strings.Repeat("\n", 5000)+`</doc>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(source).
+		MaxResourceBytes(1000).
+		Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"a multiline-anchor xsl:analyze-string over a large input must honor the resource cap")
+	require.ErrorIs(t, err, xslt3.ErrDynamicError,
+		"the analyze-string cap breach is a runtime (dynamic) error")
+}
+
 // A cancelled context is honored promptly by xsl:analyze-string rather than
 // running its per-segment loop to completion.
 func TestAnalyzeStringHonorsCancelledContext(t *testing.T) {

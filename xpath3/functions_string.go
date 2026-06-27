@@ -1085,8 +1085,15 @@ type compiledXPathRegex struct {
 	// whose truth depends on input to the LEFT of the current scan position.
 	// Such patterns cannot be streamed by advancing an offset over s[pos:]
 	// (slicing makes those assertions see a false "start of input"), so
-	// eachStdSubmatchIndex falls back to the exact accumulating scan for them.
+	// eachStdSubmatchIndex streams them through stdFullCtx instead.
 	stdNeedsFullContext bool
+	// stdFullCtx is a regexp2 compilation (RE2-compatible options) of the same
+	// pattern as std, used ONLY to stream leading-context patterns one match at
+	// a time: regexp2's FindNextMatch resumes against the original string, so
+	// ^/\A/\b context stays correct without slicing, and matches are produced
+	// incrementally instead of all-at-once. nil if the regexp2 compile failed,
+	// in which case eachStdSubmatchIndex falls back to an accumulating scan.
+	stdFullCtx *regexp2.Regexp
 }
 
 // patternNeedsFullContext reports whether the RE2 pattern contains a
@@ -1300,13 +1307,18 @@ func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, fn func([]int) bo
 // The streaming loop advances an offset and matches against s[pos:]; that is
 // exact for patterns without a leading-context assertion. Patterns that DO have
 // one (^, \A, \b, \B) would see a spurious "start of input" at every slice
-// boundary, so they fall back to the accumulating scan, which is exact. Such
-// assertions inherently gate the positions a match may occur at, so they cannot
-// produce the zero-width-match-at-every-character amplification that the
-// streaming path exists to bound; the unbounded vector (an empty- or
-// near-empty-matching, assertion-free regex) always takes the streaming path.
+// boundary, so they are streamed through a regexp2 twin instead (stdFullCtx),
+// whose FindNextMatch resumes against the original string and therefore keeps
+// the leading-context semantics correct — while still producing one match at a
+// time so the cap/cancellation is observed before allocating proportional to
+// the match count. (A multi-line ^ over a giant run of newlines is exactly such
+// an amplification vector.) Only if the regexp2 twin failed to compile do we
+// fall back to the exact-but-accumulating std scan.
 func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, fn func([]int) bool) error {
 	if r.stdNeedsFullContext {
+		if r.stdFullCtx != nil {
+			return r.eachRegexp2SubmatchIndex(r.stdFullCtx, s, true, fn)
+		}
 		for _, m := range r.std.FindAllStringSubmatchIndex(s, -1) {
 			if !fn(m) {
 				return nil
@@ -1360,15 +1372,36 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, fn func([]int) bool)
 }
 
 // eachBacktrackSubmatchIndex is the regexp2 (backtracking-engine) counterpart
-// of eachStdSubmatchIndex: it walks matches via FindNextMatch, which the engine
-// resumes against the original string (preserving anchor/boundary context),
-// yielding one match at a time.
+// of eachStdSubmatchIndex for patterns that genuinely require regexp2
+// (backreferences, character-class subtraction, large quantifiers). It streams
+// via the engine's native FindNextMatch semantics, so no empty-match dedup is
+// applied — those patterns are expected to follow regexp2's own iteration.
 func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, fn func([]int) bool) error {
+	return r.eachRegexp2SubmatchIndex(r.backtrack, s, false, fn)
+}
+
+// eachRegexp2SubmatchIndex streams matches from a regexp2 engine one match at a
+// time via FindNextMatch (which resumes against the original string, preserving
+// leading-context assertions), converting regexp2's rune indices to byte
+// offsets and stopping early when fn returns false. Because matches are produced
+// incrementally and never accumulated, a caller can enforce a budget or honor a
+// cancelled context DURING enumeration.
+//
+// When dedupEmpty is true it applies Go regexp's allMatches rule — dropping an
+// empty match whose start coincides with the previous match's end — so the
+// streamed sequence is identical to regexp.FindAllStringSubmatchIndex for
+// RE2-equivalent patterns (regexp2 emits the extra empty-after-non-empty matches
+// that std collapses). The genuine-backtracking path passes false to keep
+// regexp2's native semantics.
+func (r *compiledXPathRegex) eachRegexp2SubmatchIndex(re *regexp2.Regexp, s string, dedupEmpty bool, fn func([]int) bool) error {
 	offsets := runeByteOffsets(s)
-	match, err := r.findStringMatch(s)
+	match, err := withSpuriousTimeoutRetry(re.MatchTimeout, func() (*regexp2.Match, error) {
+		return re.FindStringMatch(s)
+	})
 	if err != nil {
 		return err
 	}
+	prevMatchEnd := -1
 	for match != nil {
 		groups := match.Groups()
 		entry := make([]int, 0, len(groups)*2)
@@ -1381,10 +1414,15 @@ func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, fn func([]int)
 			end := offsets[group.Index+group.Length]
 			entry = append(entry, start, end)
 		}
-		if !fn(entry) {
+		accept := !dedupEmpty || entry[1] != entry[0] || entry[0] != prevMatchEnd
+		prevMatchEnd = entry[1]
+		if accept && !fn(entry) {
 			return nil
 		}
-		match, err = r.findNextMatch(match)
+		cur := match
+		match, err = withSpuriousTimeoutRetry(re.MatchTimeout, func() (*regexp2.Match, error) {
+			return re.FindNextMatch(cur)
+		})
 		if err != nil {
 			return err
 		}
@@ -1555,12 +1593,26 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
+	needsFullContext := patternNeedsFullContext(pattern)
 	compiled := &compiledXPathRegex{
 		std:                 re,
 		unicodeTable:        simpleTable,
 		negated:             simpleNegated,
 		isSimple:            simpleOk,
-		stdNeedsFullContext: patternNeedsFullContext(pattern),
+		stdNeedsFullContext: needsFullContext,
+	}
+	if needsFullContext {
+		// Compile a regexp2 twin (same RE2-compatible options) so that the
+		// streaming match path can resume against the original string and honor
+		// leading-context assertions without slicing. A compile failure leaves
+		// stdFullCtx nil; eachStdSubmatchIndex then falls back to the exact (but
+		// accumulating) std scan, so correctness never depends on this succeeding.
+		if re2, err := regexp2.Compile(pattern, re2Opts); err == nil {
+			if t := DefaultRegexMatchTimeout; t > 0 {
+				re2.MatchTimeout = t
+			}
+			compiled.stdFullCtx = re2
+		}
 	}
 	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
 	return actual, nil
