@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 	"github.com/lestrrat-go/helium/xpath1"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // QName represents a namespace-qualified name.
@@ -186,6 +187,20 @@ type IDConstraint struct {
 	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
 }
 
+// Assertion is an XSD 1.1 xs:assert constraint on a complex type: an XPath 3.1
+// expression (the @test) evaluated against the element being validated. The
+// element is valid against the assertion only if the test's effective boolean
+// value is true. It mirrors IDConstraint's capture pattern: the lexical test,
+// the in-scope namespace bindings from the schema document, source line/file for
+// diagnostics, and the pre-compiled expression.
+type Assertion struct {
+	Test       string
+	Namespaces map[string]string  // prefix → URI from the schema document
+	Line       int                // source line of the xs:assert element
+	Source     string             // source filename of the declaring schema document
+	compiled   *xpath3.Expression // pre-compiled @test; nil if the expression failed to compile
+}
+
 // DerivationKind describes how a type is derived from its base.
 type DerivationKind int
 
@@ -221,7 +236,8 @@ type TypeDef struct {
 	MemberTypes  []*TypeDef // for union types: the member type definitions
 	Abstract     bool
 	Final        FinalFlags
-	FinalSet     bool // true if final was explicitly set (even to empty)
+	FinalSet     bool         // true if final was explicitly set (even to empty)
+	Assertions   []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
 }
 
 // FacetSet holds facet constraints for a simple type restriction.

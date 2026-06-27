@@ -16,6 +16,8 @@ const (
 	elemAnnotation     = "annotation"
 	elemAny            = "any"
 	elemAnyAttribute   = "anyAttribute"
+	elemAssert         = "assert"    // XSD 1.1: xs:assert on complex types
+	elemAssertion      = "assertion" // XSD 1.1: xs:assertion facet on simple types
 	elemAppinfo        = "appinfo"
 	elemAttribute      = "attribute"
 	elemAttributeGroup = "attributeGroup"
@@ -70,6 +72,7 @@ const (
 	attrSource               = "source"
 	attrSubstitutionGroup    = "substitutionGroup"
 	attrTargetNamespace      = "targetNamespace"
+	attrTest                 = "test" // XSD 1.1: xs:assert/xs:assertion test expression
 	attrType                 = "type"
 	attrUse                  = "use"
 	attrXPath                = "xpath"
