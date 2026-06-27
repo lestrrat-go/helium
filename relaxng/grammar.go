@@ -1,5 +1,7 @@
 package relaxng
 
+import "github.com/lestrrat-go/helium/internal/xsdregex"
+
 // Grammar is a compiled RELAX NG schema, analogous to [xsd.Schema].
 // (libxml2: xmlRelaxNGPtr)
 type Grammar struct {
@@ -70,6 +72,14 @@ type dataType struct {
 type param struct {
 	name  string
 	value string
+
+	// compiledPattern is the XSD-regex compilation of a "pattern" facet's value,
+	// populated once at compile time (checkDataFacets) so validation reuses it
+	// instead of recompiling per value. patternChecked guards that one-time work
+	// (and its error report) against a data pattern reached more than once through
+	// shared <ref> definitions.
+	compiledPattern *xsdregex.Regexp
+	patternChecked  bool
 }
 
 // nameClassKind enumerates name class types.

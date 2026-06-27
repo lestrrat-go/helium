@@ -6,6 +6,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 // ruleFlags tracks ancestor context for forbidden-pattern-nesting checks.
@@ -216,6 +217,30 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 	}
 	for _, p := range pat.params {
 		switch p.name {
+		case "pattern":
+			// The pattern facet is an XSD/XPath regular expression. Compile it once
+			// with the shared XSD-regex engine (xsdregex) so XSD-only constructs (\i,
+			// \c, \p{...}, character-class subtraction, …) are honoured and an invalid
+			// pattern is a fatal schema error rather than a silent runtime no-op or a
+			// false rejection. The compilation is cached on the param for validation.
+			if p.patternChecked {
+				continue
+			}
+			p.patternChecked = true
+			re, err := xsdregex.Compile(p.value)
+			if err != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet 'pattern' is not a valid regular expression", p.value))
+				continue
+			}
+			p.compiledPattern = re
+		case "length", "minLength", "maxLength":
+			// Length facets apply only to string-derived, binary, anyURI, QName and
+			// NOTATION datatypes (value.LengthApplicable). Applying one to a numeric,
+			// boolean or date/time datatype is a schema error, mirroring XSD's
+			// facet-applicability rules so RELAX NG and XSD agree.
+			if !value.LengthApplicable(typeName) {
+				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the datatype '%s'", p.name, typeName))
+			}
 		case "minInclusive", "maxInclusive", "minExclusive", "maxExclusive":
 			if !value.Orderable(typeName) {
 				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the non-ordered datatype '%s'", p.name, typeName))

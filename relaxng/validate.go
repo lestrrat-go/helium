@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 // validator holds state during document validation.
@@ -2157,10 +2157,13 @@ func validateXSDType(typeName, text string, params []*param) int {
 // the shared XSD value engine (value.Compare) so RELAX NG and XSD agree on the
 // value space (e.g. xs:integer "5" really is less than "10"); and the digit
 // facets (totalDigits, fractionDigits) are measured via value.CountTotalDigits/
-// CountFractionDigits on the xs:decimal family. Facet applicability — an ordering
-// facet on a non-ordered type, a digit facet on a non-decimal type, and bound
-// validity — is enforced at compile time (checkDataFacets), so the grammar is
-// already unmatchable when an inapplicable facet is present. Any other param name
+// CountFractionDigits on the xs:decimal family; and the pattern facet is matched
+// through the shared XSD-regex engine (xsdregex) so XSD-only constructs (\i, \c,
+// \p{...}, …) are honoured. Facet applicability — an ordering facet on a
+// non-ordered type, a digit facet on a non-decimal type, a length facet on a
+// non-string-derived type, and bound/pattern validity — is enforced at compile
+// time (checkDataFacets), so the grammar is already unmatchable when an
+// inapplicable or invalid facet is present. Any other param name
 // — enumeration, whiteSpace, or an unknown facet — is unsupported and fails
 // closed: it cannot be silently accepted, which would let a <data> match values
 // the facet was meant to reject.
@@ -2168,8 +2171,19 @@ func validateWithParams(text, typeName string, params []*param) int {
 	for _, p := range params {
 		switch p.name {
 		case "pattern":
-			matched, err := regexp.MatchString("^(?:"+p.value+")$", text)
-			if err != nil || !matched {
+			// The pattern facet is an XSD/XPath regular expression, anchored to the
+			// whole value. Use the compilation cached at compile time (checkDataFacets);
+			// fall back to compiling here for robustness if it was not pre-compiled. A
+			// pattern that cannot compile fails closed.
+			re := p.compiledPattern
+			if re == nil {
+				compiled, err := xsdregex.Compile(p.value)
+				if err != nil {
+					return -1
+				}
+				re = compiled
+			}
+			if !re.MatchString(text) {
 				return -1
 			}
 		case "length":

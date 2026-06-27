@@ -459,7 +459,20 @@ names/libraries fail rather than matching by raw equality.
 `length` as well as `minLength`/`maxLength`, computing length by datatype via
 `facetLength`: rune count for string-family types, XML-whitespace token COUNT
 for XSD list builtins (`NMTOKENS`/`IDREFS`/`ENTITIES`), and decoded OCTET count
-for binary (`hexBinary`/`base64Binary`).
+for binary (`hexBinary`/`base64Binary`). The length facets are APPLICABLE only to
+the string-derived family, the binary types, anyURI, QName and NOTATION
+(`value.LengthApplicable`, the shared single-source set in `internal/xsd/value`);
+a length facet on a numeric, boolean or date/time datatype is rejected at COMPILE
+time by `checkDataFacets`.
+
+**Pattern facet.** The `pattern` facet is an XSD/XPath regular expression matched
+through the shared XSD-regex engine (`internal/xsdregex`, the same translator
+`xsd` and `xpath3` use), NOT Go's `regexp` — so XSD-only constructs (`\i`/`\c`
+name-class shorthands, `\p{...}` blocks, character-class subtraction) are honoured
+rather than false-rejected. `checkDataFacets` compiles the pattern once at compile
+time (caching the `*xsdregex.Regexp` on the `param`, guarded by `patternChecked`
+against shared-`<ref>` re-visits); an invalid pattern is a fatal schema error, and
+`validateWithParams` reuses the cached compilation (whole-value anchored).
 
 **Ordering / digit facets.** `validateWithParams` also enforces the range facets
 (`min`/`maxInclusive`, `min`/`maxExclusive`) via `facetOrderingOK` (shared
@@ -476,7 +489,9 @@ which trims NBSP and overflows large bounds into a reject-all). Facet APPLICABIL
 and bound LEXICAL VALIDITY are enforced at COMPILE time by `checkDataFacets`
 (`parse_check.go`, run from the `patternData` case of
 `checkPattern`): an ordering facet on a non-ordered datatype (`!value.Orderable`)
-or with an invalid bound, a digit facet on a non-decimal datatype, and a digit-facet
+or with an invalid bound, a digit facet on a non-decimal datatype, a length facet
+on a non-string-derived datatype (`!value.LengthApplicable`), an uncompilable
+`pattern`, and a digit-facet
 bound that is not a valid `xs:positiveInteger` (`totalDigits`) /
 `xs:nonNegativeInteger` (`fractionDigits`) — including an NBSP-padded or
 out-of-range bound — are fatal
