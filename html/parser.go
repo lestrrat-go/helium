@@ -2580,11 +2580,21 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 
 // parseName parses an HTML tag name (letters, digits, colons, hyphens).
 func (p *parser) parseName() string {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || !isNameChar(b) {
 			break
+		}
+		// A tag name is part of an indivisible start/end-tag event and cannot be
+		// chunked, so bound the unbounded PeekAt scan as a HARD cap (see
+		// scanTokenLimit): a gigantic (e.g. unterminated) name must not grow the
+		// cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("tag name exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2650,11 +2660,19 @@ func (p *parser) parseAttributes() []Attribute {
 // Uses negative-logic terminators: any character that is not a terminator
 // is accepted, matching HTML's liberal attribute name rules.
 func (p *parser) parseAttrName() string {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || isWhitespaceByte(b) || b == '>' || b == '/' || b == '=' || b == '"' || b == '\'' || b == '<' {
 			break
+		}
+		// An attribute name is part of an indivisible start-tag event and cannot
+		// be chunked, so bound the unbounded PeekAt scan as a HARD cap (see
+		// scanTokenLimit). Exactly limit bytes are accepted; the limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("attribute name exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2856,10 +2874,20 @@ func (p *parser) parseWhileMaxErr(pred func(byte) bool, limit int) (string, erro
 
 // skipWhitespace skips whitespace characters.
 func (p *parser) skipWhitespace() {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b != ' ' && b != '\t' && b != '\n' && b != '\r' && b != '\f' {
+			break
+		}
+		// skipWhitespace runs only in tag context (between attributes / around the
+		// tag close), so a multi-megabyte whitespace run is pathological. Bound the
+		// unbounded PeekAt scan as a HARD cap (see scanTokenLimit) so it cannot grow
+		// the cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("whitespace run exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
 			break
 		}
 		n++
