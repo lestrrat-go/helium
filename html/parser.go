@@ -488,6 +488,21 @@ func extractMetaCharset(data []byte) string {
 			i++
 			continue
 		}
+		// Mirror the main parser's char-data rule (parser.go ~888): a '<' begins
+		// markup ONLY when the byte after it is '/', '!', '?', or an ASCII letter.
+		// Any other following byte makes the '<' literal character data (e.g.
+		// `< " >` or `<x="...`). Treat it as char data — advance exactly ONE byte
+		// WITHOUT entering the quote-aware tag-skip below. Otherwise a stray
+		// non-markup '<' carrying a quote could put metaTagEnd into quote state and
+		// swallow a later genuine <meta charset=...> tag, missing the declaration.
+		var nextB byte
+		if i+1 < n {
+			nextB = lower[i+1]
+		}
+		if nextB != '/' && nextB != '!' && nextB != '?' && !isASCIIAlpha(nextB) {
+			i++
+			continue
+		}
 		// Comment: skip past the closing "-->".
 		if bytes.HasPrefix(lower[i:], []byte("<!--")) {
 			end := bytes.Index(lower[i+4:], []byte("-->"))

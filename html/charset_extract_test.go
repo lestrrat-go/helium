@@ -92,6 +92,56 @@ func TestExtractMetaCharset_QuotedGT(t *testing.T) {
 	}
 }
 
+// extractMetaCharset must mirror the main parser's char-data rule: a '<' begins
+// markup ONLY when the byte after it is '/', '!', '?', or an ASCII letter. A
+// literal non-tag '<' (e.g. `< " >` or `<x="...`) is ordinary character data and
+// must be stepped over as a single byte WITHOUT entering the quote-aware tag-skip.
+// Otherwise a stray '<' carrying a quote would put the scanner into quote state,
+// make it ignore every later '>' (including the real tag terminator), and swallow
+// a genuine <meta charset=...> that follows — missing the declaration.
+// (Regression: PR #821 / HTML-101 final.)
+func TestExtractMetaCharset_LiteralLessThan(t *testing.T) {
+	t.Parallel()
+
+	const iso = "iso-8859-1"
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "quote-bearing-non-tag-before-meta",
+			in:   `< " ><meta charset=iso-8859-1>`,
+			want: iso,
+		},
+		{
+			name: "lt-equals-quote-before-meta",
+			in:   `< x="><meta charset="iso-8859-1">`,
+			want: iso,
+		},
+		{
+			name: "lt-digit-before-meta",
+			in:   `a < 3 && 4 > b <meta charset='iso-8859-1'>`,
+			want: iso,
+		},
+		{
+			name: "lt-space-before-meta",
+			in:   `< not a tag <meta charset=iso-8859-1>`,
+			want: iso,
+		},
+		{
+			name: "trailing-lone-lt",
+			in:   `<meta charset=iso-8859-1><`,
+			want: iso,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, extractMetaCharset([]byte(tc.in)))
+		})
+	}
+}
+
 // extractMetaCharset must inspect ONLY the first 1024 raw bytes, and must do so
 // without lowercasing the whole document. newParser calls this (via
 // declaredCharsetIs{Latin1,UTF8}) ahead of utf8.Valid on every in-memory

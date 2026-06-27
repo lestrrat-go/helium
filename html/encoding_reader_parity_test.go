@@ -170,6 +170,70 @@ func TestDeclaredLatin1QuotedGTInMetaParity(t *testing.T) {
 	}
 }
 
+// TestDeclaredLatin1LiteralLessThanBeforeMetaParity guards the meta-prescan
+// against a literal non-tag '<' that appears before a real <meta charset=...>
+// within the first 1024 bytes. A '<' begins markup only when the byte after it is
+// '/', '!', '?', or an ASCII letter; `< " >` or `<x="` is character data. A scan
+// that treated such a '<' as a tag and entered quote state on its '"' would ignore
+// every later '>' and swallow the genuine <meta charset=iso-8859-1>, decoding the
+// valid-UTF-8 bytes as UTF-8 instead of declared Latin-1. The prescan must mirror
+// the main parser's char-data rule, so both Parse and ParseReader honor iso-8859-1.
+func TestDeclaredLatin1LiteralLessThanBeforeMetaParity(t *testing.T) {
+	t.Parallel()
+
+	serialize := func(d *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, html.NewWriter().WriteTo(&buf, d))
+		return buf.String()
+	}
+	textOf := func(d *helium.Document) string {
+		var text bytes.Buffer
+		for n := range helium.Descendants(d) {
+			if tx, ok := n.(*helium.Text); ok {
+				text.Write(tx.Content())
+			}
+		}
+		return text.String()
+	}
+
+	for _, tc := range []struct {
+		name string
+		head string
+	}{
+		{
+			name: "quote-bearing-non-tag",
+			head: `< " ><meta charset="iso-8859-1">`,
+		},
+		{
+			name: "lt-equals-quote",
+			head: `< x="><meta charset=iso-8859-1>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The whole document is valid UTF-8 ("caf" + the UTF-8 é sequence),
+			// yet it declares iso-8859-1, so both APIs must decode as Latin-1.
+			doc := []byte("<html><head>" + tc.head + "</head><body><p>caf\xC3\xA9</p></body></html>")
+			require.True(t, utf8.Valid(doc), "test input must be valid UTF-8 as a whole")
+
+			bytesDoc, err := html.NewParser().Parse(t.Context(), doc)
+			require.NoError(t, err)
+			require.Equal(t, "ISO-8859-1", bytesDoc.Encoding(),
+				"a literal non-tag '<' before charset= must not hide the iso-8859-1 declaration")
+			require.Contains(t, textOf(bytesDoc), "Ã©",
+				"the bytes 0xC3 0xA9 must decode as two Latin-1 chars, not one UTF-8 rune")
+
+			readerDoc, err := html.NewParser().ParseReader(t.Context(), bytes.NewReader(doc))
+			require.NoError(t, err)
+			require.Equal(t, serialize(bytesDoc), serialize(readerDoc),
+				"Parse([]byte) and ParseReader must agree for a literal-'<'-before-meta doc")
+			require.Equal(t, bytesDoc.Encoding(), readerDoc.Encoding(),
+				"both APIs must report the same declared ISO-8859-1 encoding")
+		})
+	}
+}
+
 // TestDeclaredCharsetDetectedFromRawBytesParity guards the Parse-vs-ParseReader
 // charset-detection window against newline normalization. Parse([]byte) must
 // detect the declared charset from the RAW input (first 1024 raw bytes), exactly
