@@ -3032,6 +3032,43 @@ func TestParseReaderEBCDICNestedLargeEntityNotFalselyAmplified(t *testing.T) {
 		"ParseReader output must match Parse([]byte) for a nested large-entity EBCDIC doc")
 }
 
+// TestParseReaderEBCDICAmplificationAttackStillRejected confirms the
+// inputSize-vs-consumed fix did NOT reopen the entity-amplification DoS over the
+// streaming EBCDIC reader path. The fix divides sizeentcopy by the real
+// consumed-byte count so a large entity referenced ONCE passes; an actual attack
+// (a modestly sized entity referenced MANY times) expands far beyond the
+// amplification factor of the real document size and must STILL be rejected,
+// exactly as Parse([]byte) rejects it. The per-node cap is disabled so the
+// failure is attributable to the amplification guard, not the node-content cap.
+func TestParseReaderEBCDICAmplificationAttackStillRejected(t *testing.T) {
+	t.Parallel()
+
+	// ~250 KB entity referenced 30 times: the document is ~250 KB on disk but
+	// expands to ~7.5 MB, well past 5x the real consumed size, so the
+	// amplification-ratio guard must fire (and not the 1 GB hard ceiling).
+	body := strings.Repeat("A", 250_000)
+	refs := strings.Repeat("&a;", 30)
+	xml := fmt.Sprintf(`<?xml version="1.0" encoding="IBM037"?><!DOCTYPE root [<!ENTITY a "%s">]><root>%s</root>`, body, refs)
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	// Parse([]byte) baseline: the attack must be rejected.
+	_, err = helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).Parse(t.Context(), ebcdic)
+	require.Error(t, err, "Parse([]byte) must reject an EBCDIC entity-amplification attack")
+	require.Contains(t, err.Error(), "amplification",
+		"Parse([]byte) must reject via the amplification guard")
+
+	// ParseReader (unknown source size) must STILL reject it: the consumed-byte
+	// divisor reflects the real (small) document, so the ratio guard fires.
+	_, err = helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.Error(t, err, "ParseReader must reject an EBCDIC entity-amplification attack")
+	require.Contains(t, err.Error(), "amplification",
+		"ParseReader must reject via the amplification guard, not silently accept the DoS")
+}
+
 // TestParseReaderEBCDICSmallDocUnderCap confirms the streaming EBCDIC reader
 // path parses a normal, small EBCDIC document identically to Parse([]byte).
 func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {
