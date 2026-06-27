@@ -130,6 +130,13 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 		if vc.version == Version11 && p < len(children) {
 			child := children[p]
 			// Pass 1: branches that match the current child via an element leaf.
+			// Element-over-wildcard precedence COMMITS: if any branch consumes the
+			// current child via an element leaf as its first consuming term, the
+			// choice MUST use an element-first branch for this child and MUST NOT
+			// fall back to a wildcard branch — even if the chosen element branch
+			// then fails structurally or by content. Otherwise a skip wildcard
+			// would false-accept a child a typed element is responsible for.
+			var elemFirst *Particle
 			for _, particle := range mg.Particles {
 				if !particleConsumesViaElement(particle, child, vc.schema) {
 					continue
@@ -137,8 +144,28 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 				if consumed, ok := matchAt(particle, p); ok {
 					return consumed, true
 				}
+				if elemFirst == nil {
+					elemFirst = particle
+				}
 			}
-			// Pass 2: fall back to any matching branch (wildcard leaves).
+			if elemFirst != nil {
+				// No element-first branch matched fully. Surface the first
+				// element-first branch's real failure (with error reporting)
+				// instead of falling back to a wildcard branch.
+				consumed, err := vc.matchParticle(ctx, parent, elemFirst, children, p, false)
+				if err != nil {
+					contentErr = err
+				}
+				if consumed > 0 {
+					return consumed, true
+				}
+				if contentErr == nil {
+					contentErr = fmt.Errorf("element content does not match")
+				}
+				return 0, false
+			}
+			// Pass 2: no element-first branch for this child, so a wildcard branch
+			// may consume it.
 			for _, particle := range mg.Particles {
 				if consumed, ok := matchAt(particle, p); ok {
 					return consumed, true
@@ -610,16 +637,28 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 		if vc.version == Version11 && p < len(children) {
 			child := children[p]
 			// Pass 1: branches that match the current child via an element leaf.
+			// Mirror matchChoice: element-over-wildcard precedence COMMITS, so if
+			// any branch is element-first for this child the lookahead must reflect
+			// that branch's success/failure and MUST NOT fall back to a wildcard
+			// branch.
+			hasElemFirst := false
 			for _, particle := range mg.Particles {
 				if !particleConsumesViaElement(particle, child, vc.schema) {
 					continue
 				}
+				hasElemFirst = true
 				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
 				if err == nil && consumed > 0 {
 					return consumed, true
 				}
 			}
-			// Pass 2: fall back to any matching branch (wildcard leaves).
+			if hasElemFirst {
+				// An element-first branch is required for this child but none
+				// matched; do not fall back to a wildcard branch.
+				return 0, false
+			}
+			// Pass 2: no element-first branch for this child, so a wildcard branch
+			// may consume it.
 			for _, particle := range mg.Particles {
 				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
 				if err == nil && consumed > 0 {

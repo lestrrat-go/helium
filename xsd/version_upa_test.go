@@ -230,3 +230,69 @@ func TestVersion11WildcardPrecedenceNestedLeading(t *testing.T) {
 		require.NoError(t, validate(t, schema, `<root><other/><a>5</a></root>`))
 	})
 }
+
+// TestVersion11WildcardPrecedenceCommit verifies that once a choice selects an
+// element-first branch for a child it COMMITS to that branch and does NOT fall
+// back to a wildcard branch when the element branch later fails — structurally
+// or by content. The element branch here is sequence(a:int, b:int); the first
+// child <a> selects it, and its failure (bad content and/or missing b) must NOT
+// be rescued by the skip wildcard (XSD11-001, commit-no-fallback case).
+func TestVersion11WildcardPrecedenceCommit(t *testing.T) {
+	// Branch 1 is sequence(element a:int, element b:int); branch 2 is a skip
+	// wildcard. For a first <a>, branch 1 is element-first and is selected. If
+	// branch 1 then fails (a's value is not an int, and/or b is missing), the
+	// choice must report that failure rather than letting the wildcard swallow
+	// <a> and false-accept the document.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:sequence>
+          <xs:element name="a" type="xs:int"/>
+          <xs:element name="b" type="xs:int"/>
+        </xs:sequence>
+        <xs:any processContents="skip"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	compile := func(t *testing.T) *xsd.Schema {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		return schema
+	}
+
+	validate := func(t *testing.T, schema *xsd.Schema, instance string) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), doc)
+	}
+
+	t.Run("committed element branch failure is not rescued by the wildcard", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		// <a> selects the element-first sequence branch; its content is not an int
+		// and b is missing, so the document must be rejected — the skip wildcard
+		// must NOT fall back to swallow <a>.
+		err := validate(t, schema, `<root><a>not-int</a></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("valid element branch accepted", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		require.NoError(t, validate(t, schema, `<root><a>1</a><b>2</b></root>`))
+	})
+
+	t.Run("unknown element still matched by the wildcard branch", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		// <other/> has no element-first candidate, so the wildcard branch applies.
+		require.NoError(t, validate(t, schema, `<root><other/></root>`))
+	})
+}
