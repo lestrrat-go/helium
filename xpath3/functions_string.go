@@ -1305,6 +1305,17 @@ func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn fun
 	return r.eachBacktrackSubmatchIndex(s, limit, fn)
 }
 
+// maxFullContextMatches bounds the single FindAllStringSubmatchIndex pass used
+// for a leading-context RE2 pattern that cannot be streamed (see
+// eachStdSubmatchIndex). Such a pattern must materialize its matches in one
+// shot, so without a ceiling a near-empty-matching pattern (e.g. `^` with the
+// `m` flag) over a large input would allocate one match record per input
+// position. This caps that allocation to a sane, fixed size that is far below
+// any byte-budget-derived limit a caller might pass: a pattern producing more
+// full-context matches than this is rejected with [ErrRegexMatchLimit] rather
+// than silently truncated or allowed to allocate proportionally to the input.
+const maxFullContextMatches = 1 << 20 // ~1M match records
+
 // eachStdSubmatchIndex ports the standard library's regexp.allMatches loop
 // (its successive-match + empty-match advancement rules) so that the streamed
 // match sequence is identical to std.FindAllStringSubmatchIndex, while
@@ -1314,20 +1325,15 @@ func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn fun
 // exact for patterns without a leading-context assertion. Patterns that DO have
 // one (^, \A, \b, \B) would see a spurious "start of input" at every slice
 // boundary, so they are matched against the WHOLE string by Go's RE2 engine via
-// FindAllStringSubmatchIndex. That call is the only one that accumulates, so the
-// caller-supplied limit is passed straight through: with limit = cap+1 it
-// allocates at most cap+1 matches (bounded by the resource cap, not by the input
-// match count — a multi-line ^ over a giant run of newlines is exactly such an
-// amplification vector), while staying linear on RE2 so a valid backtracking-
-// shaped pattern like ^(a+)+b never runs on a backtracking engine.
+// FindAllStringSubmatchIndex. That call is the only one that accumulates, so it
+// is bounded to maxFullContextMatches records rather than to the caller's
+// (possibly byte-budget-sized) limit; an input that exceeds that ceiling is
+// rejected with [ErrRegexMatchLimit] instead of allocating one match per input
+// position. RE2 stays linear, so a valid backtracking-shaped pattern like
+// ^(a+)+b never runs on a backtracking engine.
 func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([]int) bool) error {
 	if r.stdNeedsFullContext {
-		for _, m := range r.std.FindAllStringSubmatchIndex(s, limit) {
-			if !fn(m) {
-				return nil
-			}
-		}
-		return nil
+		return r.eachStdFullContext(s, limit, fn)
 	}
 
 	end := len(s)
@@ -1374,6 +1380,49 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([
 			if limit > 0 && produced >= limit {
 				return nil
 			}
+		}
+	}
+	return nil
+}
+
+// eachStdFullContext handles the leading-context branch of eachStdSubmatchIndex:
+// a pattern whose zero-width assertions depend on input to the left of the scan
+// position cannot be streamed by slicing, so its matches are produced by a
+// single FindAllStringSubmatchIndex pass over the whole string. To keep that
+// one accumulating pass from amplifying a bounded input into a match record per
+// position, the pass is capped at maxFullContextMatches independently of the
+// caller's limit (which may be derived from a large byte budget). When the
+// caller's own limit is the smaller bound, it governs and the caller observes
+// the overflow itself; when this function's ceiling is the binding bound and it
+// is exceeded, the input is rejected with [ErrRegexMatchLimit] rather than
+// silently truncated. Each surviving match is handed to fn one at a time, so a
+// caller checking a cancelled context inside fn observes it between matches.
+func (r *compiledXPathRegex) eachStdFullContext(s string, limit int, fn func([]int) bool) error {
+	// ceiling is the largest number of matches we will materialize. The internal
+	// allocation bound (maxFullContextMatches) is the default; a smaller caller
+	// limit takes precedence and lets the caller enforce its own budget (in which
+	// case we honor the public limit contract exactly — produce at most `limit`).
+	ceiling := maxFullContextMatches
+	internalBound := true
+	if limit > 0 && limit <= ceiling {
+		ceiling = limit
+		internalBound = false
+	}
+	// When our own ceiling is binding, request one extra so "exactly at the
+	// ceiling" is distinguishable from "over the ceiling"; when the caller's
+	// limit is binding, request exactly that many. Either way the allocation is
+	// bounded to maxFullContextMatches+1 records, never to the input match count.
+	n := ceiling
+	if internalBound {
+		n = ceiling + 1
+	}
+	matches := r.std.FindAllStringSubmatchIndex(s, n)
+	if internalBound && len(matches) > ceiling {
+		return ErrRegexMatchLimit
+	}
+	for _, m := range matches {
+		if !fn(m) {
+			return nil
 		}
 	}
 	return nil

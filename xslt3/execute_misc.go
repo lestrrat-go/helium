@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -89,9 +90,13 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	// so an N-byte input yields ~N matches; accumulating every match (e.g. via
 	// FindAllSubmatchIndex) would amplify a bounded input string into millions
 	// of match/segment allocations and exhaust memory before a cancelled
-	// context can intervene. The per-resource byte cap (MaxResourceBytes; <0
-	// selects unbounded) doubles as a match-count ceiling. The default cap is
-	// far above any legitimate match count, so valid inputs are unaffected.
+	// context can intervene. The streamable paths enumerate one match at a time
+	// and the per-resource byte cap (MaxResourceBytes; <0 selects unbounded)
+	// caps how many they will surface; the default cap is far above any
+	// legitimate match count, so valid inputs are unaffected. A leading-context
+	// pattern that cannot stream is additionally bounded by xpath3's own, much
+	// smaller, full-context allocation ceiling, which surfaces as
+	// xpath3.ErrRegexMatchLimit (handled below).
 	maxMatches := -1
 	if limit := resolveResourceLimit(ec.resourceLimit()); limit >= 0 {
 		maxMatches = max(clampInt64ToInt(limit), 1)
@@ -99,10 +104,9 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 
 	// findLimit caps how many matches EachSubmatchIndex may produce. The callback
 	// rejects once it observes match maxMatches+1, so the enumeration must be able
-	// to surface that one extra match; passing maxMatches+1 keeps a leading-context
-	// pattern's single bounded FindAll pass allocating at most the budget rather
-	// than one entry per input match. A non-positive maxMatches (unbounded cap) and
-	// an int overflow both fall back to -1 (no enumeration limit).
+	// to surface that one extra match; passing maxMatches+1 lets the callback see
+	// it. A non-positive maxMatches (unbounded cap) and an int overflow both fall
+	// back to -1 (no enumeration limit).
 	findLimit := -1
 	if maxMatches >= 0 {
 		if n := maxMatches + 1; n > 0 {
@@ -133,7 +137,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		}
 		matchCount++
 		if maxMatches >= 0 && matchCount > maxMatches {
-			earlyErr = dynamicErrorCause("", ErrResourceTooLarge,
+			earlyErr = dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
 				"xsl:analyze-string produced more than %d matches, exceeding the configured resource limit", maxMatches)
 			return false
 		}
@@ -148,6 +152,17 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		return earlyErr
 	}
 	if countErr != nil {
+		// A leading-context pattern (^ with the m flag, \b, ...) can't be
+		// streamed, so xpath3 materializes its matches in one bounded pass and
+		// reports ErrRegexMatchLimit when the input would exceed the safe
+		// allocation ceiling. Surface that as the same resource-exhaustion
+		// condition as the running match-count cap above (XTDE1140 +
+		// ErrResourceTooLarge) so xsl:catch can match on $err:code and callers
+		// can detect it via errors.Is.
+		if errors.Is(countErr, xpath3.ErrRegexMatchLimit) {
+			return dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more matches than the safe resource limit allows: %v", countErr)
+		}
 		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", countErr)
 	}
 	if pos < len(input) {
@@ -226,6 +241,10 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		return execErr
 	}
 	if execIterErr != nil {
+		if errors.Is(execIterErr, xpath3.ErrRegexMatchLimit) {
+			return dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more matches than the safe resource limit allows: %v", execIterErr)
+		}
 		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", execIterErr)
 	}
 	if pos < len(input) {

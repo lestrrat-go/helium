@@ -114,6 +114,33 @@ func TestRegexEachSubmatchIndexMultilineAnchorIsBounded(t *testing.T) {
 	}
 }
 
+// A leading-context pattern cannot stream on RE2 and is materialized in one
+// FindAll pass. With an uncapped (or larger-than-ceiling) limit, that pass must
+// NOT allocate one record per input position: it is bounded to an internal
+// allocation ceiling, and an input that exceeds the ceiling is rejected with
+// ErrRegexMatchLimit before any match is delivered (rather than silently
+// truncated or allowed to amplify a bounded input into millions of records).
+func TestRegexEachSubmatchIndexFullContextCeilingIsBounded(t *testing.T) {
+	t.Parallel()
+
+	re, err := xpath3.CompileRegex("^", "m")
+	require.NoError(t, err)
+
+	// A multi-line "^" matches at every line start, so N newlines yield N+1
+	// matches. Exceed the internal ceiling (1<<20) so the uncapped enumeration is
+	// rejected instead of materializing a record per line start.
+	input := strings.Repeat("\n", (1<<20)+16)
+	visited := 0
+	err = re.EachSubmatchIndex(input, -1, func(_ []int) bool {
+		visited++
+		return true
+	})
+	require.ErrorIs(t, err, xpath3.ErrRegexMatchLimit,
+		"a full-context pattern over the allocation ceiling must be rejected, not materialized")
+	require.Zero(t, visited,
+		"the ceiling breach must be reported before any match is delivered")
+}
+
 // The public limit contract (regex.go) must hold uniformly across all three
 // enumeration paths: the ordinary RE2 streaming offset-loop, the full-context
 // RE2 FindAll path, and the regexp2 backtracking path. A non-positive limit

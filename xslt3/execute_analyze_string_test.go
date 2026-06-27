@@ -117,6 +117,46 @@ func TestAnalyzeStringMultilineAnchorIsCapped(t *testing.T) {
 		"the analyze-string cap breach is a runtime (dynamic) error")
 }
 
+// An xsl:analyze-string resource-cap breach must be a catchable dynamic error
+// carrying a concrete, non-empty $err:code (XTDE1140), so an xsl:catch can match
+// on it. A breach reported with an empty code would leave $err:code empty and
+// defeat code-specific catch matching.
+func TestAnalyzeStringCapBreachCarriesCatchableCode(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0"` +
+		` xmlns:xsl="http://www.w3.org/1999/XSL/Transform"` +
+		` xmlns:err="http://www.w3.org/2005/xqt-errors">` +
+		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
+		`<xsl:template match="/"><out>` +
+		`<xsl:try>` +
+		`<xsl:analyze-string select="string(.)" regex="x*">` +
+		`<xsl:matching-substring><m/></xsl:matching-substring>` +
+		`<xsl:non-matching-substring><n/></xsl:non-matching-substring>` +
+		`</xsl:analyze-string>` +
+		`<xsl:catch><code><xsl:value-of select="local-name-from-QName($err:code)"/></code></xsl:catch>` +
+		`</xsl:try>` +
+		`</out></xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(source).
+		MaxResourceBytes(1000).
+		Serialize(t.Context())
+	require.NoError(t, err, "the analyze-string cap breach must be catchable, not propagate")
+	require.Contains(t, result, "<code>XTDE1140</code>",
+		"$err:code must carry the concrete XTDE1140 code so xsl:catch can match it")
+}
+
 // A cancelled context is honored promptly by xsl:analyze-string rather than
 // running its per-segment loop to completion.
 func TestAnalyzeStringHonorsCancelledContext(t *testing.T) {
