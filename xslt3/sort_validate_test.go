@@ -360,6 +360,99 @@ func TestSingleKeySortIncompatibleTypesRaisesXTDE1030(t *testing.T) {
 	require.ErrorContains(t, err, "XTDE1030")
 }
 
+// XSLT3-102 r4: a default-data-type SINGLE-key sort mixing xs:yearMonthDuration
+// and xs:dayTimeDuration must raise XTDE1030. The two duration subtypes define
+// `eq` but NOT `lt` (ordering between them is XPTY0004), so the orderability
+// gate must reject them. Pre-fix this slipped through an equality-based oracle
+// and the values were silently mashed into one numeric domain (months vs
+// seconds) and sorted nonsensically.
+func TestSingleKeySortMixedDurationsRaisesXTDE1030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="if (@t='y') then xs:yearMonthDuration(@v) else xs:dayTimeDuration(@v)"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item t="y" v="P1Y"/><item t="d" v="P400D"/></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE1030")
+}
+
+// XSLT3-102 r4: a default-data-type MULTI-key sort whose SECONDARY key mixes
+// xs:yearMonthDuration and xs:dayTimeDuration must raise XTDE1030 for the same
+// reason as the single-key case: ordering across the two duration subtypes is
+// undefined (XPTY0004), so the orderability gate must reject them.
+func TestMultiKeySortMixedDurationsRaisesXTDE1030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="@g"/>
+        <xsl:sort select="if (@t='y') then xs:yearMonthDuration(@v) else xs:dayTimeDuration(@v)"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item g="x" t="y" v="P1Y"/><item g="x" t="d" v="P400D"/></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE1030")
+}
+
+// XSLT3-102 r4: a no-`select` BODY xsl:sort whose sequence-constructor key
+// yields mutually incomparable atomic types across the sequence (xs:date for
+// one item, xs:integer for another) must raise XTDE1030. Pre-fix the body path
+// failed to record the original atomized value, so the per-level type gate
+// (which skips values lacking an atom) silently bypassed the check.
+func TestBodySortMixedIncomparableTypesRaisesXTDE1030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort>
+          <xsl:choose>
+            <xsl:when test="@t='d'"><xsl:sequence select="xs:date(@v)"/></xsl:when>
+            <xsl:otherwise><xsl:sequence select="xs:integer(@v)"/></xsl:otherwise>
+          </xsl:choose>
+        </xsl:sort>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item t="d" v="2020-01-01"/><item t="n" v="5"/></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE1030")
+}
+
 // XSLT3-102 r2: likewise, a SECONDARY sort key with explicit data-type="number"
 // casts every value to xs:double, so mixed original atomic types (xs:date vs
 // xs:integer here, which belong to different orderability families) are
