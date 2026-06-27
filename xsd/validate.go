@@ -369,6 +369,13 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // member's value.
 func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
 	for _, member := range members {
+		// This helper is reached only from fixed-value and enumeration comparison,
+		// which lack a version source, so the throwaway context defaults to
+		// Version10 (strict). The instance value itself is already validated under
+		// the schema's real version on the main path; the only Phase-1 gap is a
+		// 1.1-only lexical form (e.g. "+INF") appearing INSIDE a union fixed-value
+		// or enumeration literal, which a later phase can tighten by threading the
+		// version through the comparison helpers.
 		vc := &validationContext{
 			errorHandler:  helium.NilErrorHandler{},
 			suppressDepth: 1,
@@ -422,6 +429,7 @@ func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedN
 
 type validationContext struct {
 	schema        *Schema
+	version       Version // XSD spec version governing version-sensitive lexical rules
 	cfg           *validateConfig
 	filename      string
 	errorHandler  helium.ErrorHandler
@@ -452,8 +460,13 @@ type pendingKeyRef struct {
 }
 
 func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
+	var version Version
+	if schema != nil {
+		version = schema.version
+	}
 	return &validationContext{
 		schema:         schema,
+		version:        version,
 		cfg:            cfg,
 		filename:       filename,
 		errorHandler:   handler,
@@ -510,6 +523,8 @@ func (td *TypeDef) Validate(ctx context.Context, value string, nsMap map[string]
 	if td.ContentType != ContentTypeSimple {
 		return fmt.Errorf("type %q is not a simple type", typeQualifiedName(td))
 	}
+	// Standalone simple-type validation has no schema context, so it applies the
+	// default (Version10) lexical rules.
 	vc := &validationContext{
 		errorHandler: helium.NilErrorHandler{},
 	}

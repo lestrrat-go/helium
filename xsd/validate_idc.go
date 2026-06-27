@@ -540,6 +540,11 @@ func unionActiveMember(ctx context.Context, raw string, fieldNode helium.Node, t
 // context so QName/NOTATION facets (e.g. enumerations of prefixed names) resolve
 // against the same bindings the instance value uses.
 func typeAcceptsValue(ctx context.Context, td *TypeDef, raw string, fieldNode helium.Node) bool {
+	// IDC field-type resolution has no version source here, so the throwaway
+	// context defaults to Version10 (strict). The field value is already validated
+	// under the schema's real version on the main path; the only Phase-1 gap is a
+	// 1.1-only lexical form (e.g. "+INF") in an IDC field whose type is a
+	// float/date union, which a later phase can tighten.
 	vc := &validationContext{
 		errorHandler:  helium.NilErrorHandler{},
 		suppressDepth: 1,

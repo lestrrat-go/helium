@@ -122,11 +122,18 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 
 // validBuiltinOperands reports whether both lexicals pass the strict lexical
 // space (ValidateBuiltin) for builtinLocal, after trimming XSD whitespace only.
+//
+// Comparison and canonicalization run on values the caller has already validated
+// under the schema's actual XSD version, so the lexical guards here use Version11
+// (the most permissive space). A value that is invalid under XSD 1.0 (e.g.
+// "+INF") never reaches this path in 1.0 mode, so the permissive check cannot
+// admit anything the version-specific validation already rejected. All the other
+// ValidateBuiltin guards in this file pass Version11 for the same reason.
 func validBuiltinOperands(a, b, builtinLocal string) bool {
-	if ValidateBuiltin(trimXSDSpace(a), builtinLocal) != nil {
+	if ValidateBuiltin(trimXSDSpace(a), builtinLocal, Version11) != nil {
 		return false
 	}
-	return ValidateBuiltin(trimXSDSpace(b), builtinLocal) == nil
+	return ValidateBuiltin(trimXSDSpace(b), builtinLocal, Version11) == nil
 }
 
 // CanonicalKey maps a lexical value to a value-space canonical string for the
@@ -138,7 +145,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 	switch builtinLocal {
 	case "boolean":
 		trimmed := trimXSDSpace(s)
-		if ValidateBuiltin(trimmed, "boolean") != nil {
+		if ValidateBuiltin(trimmed, "boolean", Version11) != nil {
 			return trimmed, false
 		}
 		if trimmed == "true" || trimmed == "1" {
@@ -153,7 +160,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		return canonicalDateTimeKey(trimXSDSpace(s), builtinLocal)
 	case "hexBinary":
 		trimmed := trimXSDSpace(s)
-		if ValidateBuiltin(trimmed, "hexBinary") != nil {
+		if ValidateBuiltin(trimmed, "hexBinary", Version11) != nil {
 			return trimmed, false
 		}
 		decoded, err := hex.DecodeString(trimmed)
@@ -164,7 +171,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		return hex.EncodeToString(decoded), true
 	case "base64Binary":
 		trimmed := trimXSDSpace(s)
-		if ValidateBuiltin(trimmed, "base64Binary") != nil {
+		if ValidateBuiltin(trimmed, "base64Binary", Version11) != nil {
 			return trimmed, false
 		}
 		decoded, ok := decodeBase64Binary(trimmed)
@@ -179,7 +186,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// Validate against the strict xs:duration lexical space before the lenient
 		// parseXSDDurationValue below, so CanonicalKey never canonicalizes a value
 		// the validator rejects.
-		if ValidateBuiltin(trimmed, "duration") != nil {
+		if ValidateBuiltin(trimmed, "duration", Version11) != nil {
 			return trimmed, false
 		}
 		d, ok := parseXSDDurationValue(trimmed)
@@ -204,7 +211,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// Validate strictly (lexical space + range for bounded subtypes) before
 		// canonicalizing, so e.g. "1.0"/integer, "2147483648"/int and "1/2"/
 		// decimal yield ok=false rather than a spurious canonical key.
-		if ValidateBuiltin(trimmed, builtinLocal) != nil {
+		if ValidateBuiltin(trimmed, builtinLocal, Version11) != nil {
 			return trimmed, false
 		}
 		r, ok := new(big.Rat).SetString(trimmed)
@@ -241,7 +248,7 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	// Validate against the strict xs:float/xs:double lexical space first: the
 	// lenient parseXSDFloat (and Go's strconv.ParseFloat) accept spellings such
 	// as "Inf" that are not valid XSD lexical forms.
-	if ValidateBuiltin(trimmed, lexicon.TypeDouble) != nil {
+	if ValidateBuiltin(trimmed, lexicon.TypeDouble, Version11) != nil {
 		return trimmed, false
 	}
 	f, ok := parseXSDFloat(trimmed)
@@ -356,10 +363,10 @@ func Normalize(s, builtinLocal string) string {
 // junk), so the compareX functions call this first to guarantee Compare never
 // accepts a value the validation path rejects.
 func validDateTimeOperands(a, b, builtinLocal string) bool {
-	if ValidateBuiltin(a, builtinLocal) != nil {
+	if ValidateBuiltin(a, builtinLocal, Version11) != nil {
 		return false
 	}
-	return ValidateBuiltin(b, builtinLocal) == nil
+	return ValidateBuiltin(b, builtinLocal, Version11) == nil
 }
 
 func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
@@ -367,7 +374,7 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	// parseXSD* parsing below, so CanonicalKey never canonicalizes a date/time
 	// value that ValidateBuiltin would reject (bad timezone, out-of-range
 	// month/day, leap-day, trailing junk).
-	if ValidateBuiltin(s, builtinLocal) != nil {
+	if ValidateBuiltin(s, builtinLocal, Version11) != nil {
 		return s, false
 	}
 	var dt xsdDateTime

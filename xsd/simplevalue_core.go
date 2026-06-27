@@ -10,14 +10,24 @@ import (
 	valuepkg "github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
-// validateBuiltinValue validates a value against a builtin XSD type's lexical space.
-func validateBuiltinValue(v, builtinLocal string) error {
-	return valuepkg.ValidateBuiltin(v, builtinLocal)
+// valueVersion maps the xsd package's Version to the internal value package's
+// equivalent, so the lexical validators apply the matching 1.0-vs-1.1 rules.
+func valueVersion(v Version) valuepkg.Version {
+	if v == Version11 {
+		return valuepkg.Version11
+	}
+	return valuepkg.Version10
 }
 
-// validateQName validates a QName value.
+// validateBuiltinValue validates a value against a builtin XSD type's lexical space.
+func validateBuiltinValue(v, builtinLocal string, version Version) error {
+	return valuepkg.ValidateBuiltin(v, builtinLocal, valueVersion(version))
+}
+
+// validateQName validates a QName value. xs:QName has no version-sensitive
+// lexical rules, so the version is immaterial here.
 func validateQName(v string) error {
-	return valuepkg.ValidateBuiltin(v, "QName")
+	return valuepkg.ValidateBuiltin(v, "QName", valuepkg.Version10)
 }
 
 // languageRegex matches the lexical space of xs:language (RFC 3066).
@@ -110,7 +120,7 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	builtinLocal := builtinBaseLocal(td)
 
 	// Validate against the builtin type's lexical space.
-	if err := validateBuiltinValue(trimmed, builtinLocal); err != nil {
+	if err := validateBuiltinValue(trimmed, builtinLocal, vc.version); err != nil {
 		typeName := typeDisplayName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
 		vc.reportValidityError(ctx, filename, line, elemName, msg)

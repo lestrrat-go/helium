@@ -14,6 +14,11 @@ const (
 	// NamespaceXSI is the XML Schema instance namespace.
 	NamespaceXSI = "http://www.w3.org/2001/XMLSchema-instance"
 
+	// NamespaceXSDVersioning is the XML Schema 1.1 version-control namespace,
+	// used for vc:minVersion/vc:maxVersion (and vc:*Available) conditional-
+	// inclusion hints on schema documents.
+	NamespaceXSDVersioning = "http://www.w3.org/2007/XMLSchema-versioning"
+
 	// NamespaceFn is the XPath 3.1 standard function namespace.
 	NamespaceFn = "http://www.w3.org/2005/xpath-functions"
 

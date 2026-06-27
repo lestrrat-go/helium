@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"sort"
 	"strconv"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
@@ -15,6 +16,7 @@ import (
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
+	version Version        // XSD specification version targeted by this compilation
 	baseDir string         // directory of the schema file, for resolving relative paths
 	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
 	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
@@ -486,6 +488,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		}
 	}
 
+	// Resolve the effective XSD version: an explicit Compiler.Version() wins;
+	// otherwise a vc:minVersion="1.1" hint on the root <xs:schema> upgrades to
+	// 1.1. The resolved version is frozen onto the Schema so the Validator
+	// applies the same version-specific semantics without a separate knob.
+	c.version = resolveVersion(cfg, root)
+	c.schema.version = c.version
+
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
@@ -916,6 +925,34 @@ func getAttr(elem *helium.Element, name string) string {
 		return ""
 	}
 	return attr.Value()
+}
+
+// getAttrNS reads an attribute by namespace URI and local name, returning "" if
+// absent.
+func getAttrNS(elem *helium.Element, ns, name string) string {
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ns})
+	if !ok {
+		return ""
+	}
+	return attr.Value()
+}
+
+// resolveVersion determines the effective XSD specification version for a
+// compilation. An explicit Compiler.Version() (cfg.versionSet) always wins.
+// Otherwise a vc:minVersion="1.1" (or higher) hint on the root <xs:schema>
+// upgrades to 1.1; absent any hint, the default is Version10. vc:maxVersion is
+// not consulted for processor selection — it gates per-element conditional
+// inclusion (deferred), not the overall version.
+func resolveVersion(cfg *compileConfig, root *helium.Element) Version {
+	if cfg != nil && cfg.versionSet {
+		return cfg.version
+	}
+	if v := getAttrNS(root, lexicon.NamespaceXSDVersioning, "minVersion"); v != "" {
+		if minVer, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && minVer >= 1.1 {
+			return Version11
+		}
+	}
+	return Version10
 }
 
 // parseBlockFlags parses a block attribute value into BlockFlags.

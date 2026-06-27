@@ -865,9 +865,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		return nil
 	}
 
-	// Create a temporary compiler for the imported schema.
+	// Create a temporary compiler for the imported schema. The imported schema is
+	// compiled under the importing schema's effective XSD version.
 	impC := &compiler{
 		schema: &Schema{
+			version:     c.version,
 			elements:    make(map[QName]*ElementDecl),
 			types:       make(map[QName]*TypeDef),
 			groups:      make(map[QName]*ModelGroup),
@@ -875,6 +877,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
+		version:                  c.version,
 		baseDir:                  schemaBaseDir(path),
 		fsys:                     c.fsys,
 		parser:                   c.parser,
