@@ -253,10 +253,14 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		if au.Default == nil {
+		// A use inherits the declaration's value constraint ONLY when it has no
+		// LOCAL value constraint of its own. A local 'default' must not be
+		// overwritten by — nor silently absorb — the declaration's 'fixed': the
+		// use's effective constraint stays its local 'default', so a derived use
+		// like <xs:attribute ref="t:a" default="2"/> does NOT satisfy a base
+		// 'fixed' constraint (au-props-correct.2 / derivation-ok-restriction).
+		if au.Default == nil && au.Fixed == nil {
 			au.Default = ga.Default
-		}
-		if au.Fixed == nil {
 			au.Fixed = ga.Fixed
 			au.FixedNS = ga.FixedNS
 		}

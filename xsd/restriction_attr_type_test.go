@@ -284,6 +284,56 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	t.Run("rejects ref with local default against inherited base fixed", func(t *testing.T) {
+		t.Parallel()
+		// Global @t:a is fixed="1". The base type references it (inheriting the
+		// fixed constraint); the derived restriction references it again but with a
+		// LOCAL default="2". A 'default' does NOT satisfy a base 'fixed' constraint
+		// (it would admit values other than the fixed one), and the use's local
+		// default must not silently absorb the declaration's inherited fixed value.
+		// Must be rejected.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute ref="t:a"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute ref="t:a" default="2"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), fixedInconsistent)
+	})
+
+	t.Run("accepts ref with matching local fixed against inherited base fixed", func(t *testing.T) {
+		t.Parallel()
+		// Same setup, but the derived restriction references @t:a with a LOCAL
+		// fixed="1" matching the inherited base fixed value — a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute ref="t:a"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute ref="t:a" fixed="1"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("rejects builtin list type restricted by an atomic type", func(t *testing.T) {
 		t.Parallel()
 		// Base @a is xs:IDREFS (a builtin LIST type); the derived restriction
