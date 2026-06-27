@@ -47,37 +47,11 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (
 	if cur == nil {
 		return "", pctx.error(ctx, errNoCursor)
 	}
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
-	off := 0
-	for {
-		b := cur.PeekAt(off)
-		if b == 0 || b == qch {
-			break
-		}
-		if b < 0x80 {
-			if !isChar(rune(b)) {
-				break
-			}
-			buf.WriteByte(b)
-			off++
-			continue
-		}
-		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isCharWidth(r, w) {
-			break
-		}
-		buf.WriteRune(r)
-		off += w
-	}
-	if off > 0 {
-		if err := cur.Advance(off); err != nil {
-			return "", pctx.error(ctx, err)
-		}
-		return buf.String(), nil
-	}
-	return "", nil
+	// The entity value is an indivisible content run; scanQuotedLiteral bounds it
+	// by the node-content cap and advances in chunks so an unbounded literal (e.g.
+	// over an EBCDIC ParseReader stream) fails closed with ErrNodeContentTooLarge
+	// instead of growing memory before any per-node cap fires.
+	return pctx.scanQuotedLiteral(ctx, cur, qch, false)
 }
 
 func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what SubstitutionType) (ret string, err error) {

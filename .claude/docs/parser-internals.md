@@ -246,8 +246,9 @@ For the UTF-8 cursor fast path, character-data scanners normally continue across
 ## Indivisible-Content Cap (`MaxNodeContentSize`)
 
 A CDATA section, comment body, processing-instruction body, character-data
-run, and attribute value each map to a single SAX event / DOM node and cannot
-be chunked, so a giant one on untrusted input is a memory-amplification DoS.
+run, attribute value, internal-DTD entity-value literal, and SYSTEM/PUBLIC
+external-ID literal each map to a single SAX event / DOM node / stored value and
+cannot be chunked, so a giant one on untrusted input is a memory-amplification DoS.
 `parserCtx.maxNodeContent`
 caps the byte size of any single such run (`Parser.MaxNodeContentSize(int)`; `0` =
 `DefaultMaxNodeContentSize` 10 MiB, applied by `NewParser`; negative = unlimited;
@@ -260,6 +261,26 @@ hard content cap:
   `buf.Len()` at the top of their scan loop and bail the moment the accumulated
   output exceeds the cap (strict-greater: exactly the cap is accepted). This also
   bounds `cur.PeekAt(off)` growth (and thus the cursor buffer).
+- `parseEntityValueInternal` (`parser_entity_decl.go`) and
+  `parseSystemLiteral` / `parsePubidLiteral` (`parser_dtd_attr.go`) — all three
+  quoted-literal scanners reachable from an internal DTD (which parses by
+  default) — share `scanQuotedLiteral` (`parser_dtd_attr.go`). It advances the
+  cursor in fixed-size `literalScanChunk` (4096-byte) chunks instead of peeking an
+  ever-growing `off` then a single `Advance`, checks `ctx` between chunks, and
+  enforces the cap on `buf.Len()` after each chunk (strict-greater). This bounds
+  BOTH the output buffer and the cursor's PeekAt buffer to ~cap+one chunk, so an
+  unbounded entity value / system / public literal — including an unterminated one
+  over an EBCDIC `ParseReader` stream (which streams through the normal cursor
+  pipeline) — fails closed with `ErrNodeContentTooLarge` before any per-node cap
+  could be bypassed, making the `parser.go` "EBCDIC streams bounded by parser
+  caps" claim true for these DTD-reachable paths. `HasByteAt` distinguishes a
+  clean unterminated-literal EOF (returned for the caller's closing-quote check)
+  from a cursor read error such as a push-stream cancel (surfaced). A non-literal
+  byte ends the scan WITHOUT error, matching the prior unbounded scanners. The
+  SYSTEM/PUBLIC call sites in `parseExternalID` route the scan error through
+  `externalIDLiteralError`, which preserves `ErrNodeContentTooLarge` and
+  parse-abort errors verbatim (so `errors.Is` keeps matching) instead of masking
+  them with the generic "system URI required" / "public ID required" message.
 - `parseCharDataContent` (`parser_element.go`) bounds the scan itself: it passes
   `nodeContentScanBudget()` (= `maxNodeContent + utf8.UTFMax`, or 0 when
   unlimited) as the `maxBytes` argument to `UTF8Cursor.ScanCharDataSlice` (fast
