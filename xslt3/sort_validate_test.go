@@ -189,3 +189,32 @@ func TestSortInvalidDataTypeRaisesXTDE0030(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "XTDE0030")
 }
+
+// XSLT3-102: in a multi-key xsl:sort, a SECONDARY sort key whose atomic values
+// are of mutually incomparable types across the sorted sequence (here xs:date
+// vs xs:integer) must raise XTDE1030, just as the single-key path does. The
+// primary key is uniform so the failure can only come from the second key.
+func TestMultiKeySortIncompatibleSecondKeyRaisesXTDE1030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="@g"/>
+        <xsl:sort select="if (@t='d') then xs:date(@v) else xs:integer(@v)"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item g="x" t="d" v="2020-01-01"/><item g="x" t="n" v="5"/></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE1030")
+}

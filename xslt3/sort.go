@@ -364,6 +364,30 @@ func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) e
 	return nil
 }
 
+// keyedNLevel adapts one sort level of a multi-key entry to the keyType()
+// interface consumed by checkSortKeyTypeConsistency.
+type keyedNLevel struct{ typeName string }
+
+func (k keyedNLevel) keyType() string { return k.typeName }
+
+// checkSortKeysTypeConsistencyN applies checkSortKeyTypeConsistency to each of
+// the nLevels sort keys in a multi-key sort, raising XTDE1030 if any single
+// key's values are of mutually incomparable types across the sequence. Mirrors
+// the per-key check the single-key sort paths run; the multi-key paths must
+// validate each key in turn rather than skip the check entirely.
+func checkSortKeysTypeConsistencyN[T any](entries keyedSlice[T], nLevels int) error {
+	views := make([]keyedNLevel, len(entries))
+	for level := range nLevels {
+		for i := range entries {
+			views[i] = keyedNLevel{typeName: entries[i].keys[level].typeName}
+		}
+		if err := checkSortKeyTypeConsistency(views); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // isValidSortDataType reports whether s is a permitted xsl:sort data-type
 // value: "text", "number", or a QName denoting a non-absent namespace
 // (a prefixed lexical QName or an EQName Q{uri}local). The effect of a QName
@@ -944,6 +968,11 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 		entries[i] = keyedN[helium.Node]{item: node, keys: keys, index: i}
 	}
 
+	// XTDE1030: validate each sort key's type consistency across the sequence.
+	if err := checkSortKeysTypeConsistencyN(entries, len(sortKeys)); err != nil {
+		return nil, err
+	}
+
 	rs, err := buildResolvedSort(ctx, ec, sortKeys)
 	if err != nil {
 		return nil, err
@@ -999,6 +1028,11 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 			return nil, err
 		}
 		entries[i] = keyedN[xpath3.Item]{item: item, keys: keys, index: i}
+	}
+
+	// XTDE1030: validate each sort key's type consistency across the sequence.
+	if err := checkSortKeysTypeConsistencyN(entries, len(sortKeys)); err != nil {
+		return nil, err
 	}
 
 	rs, err := buildResolvedSort(ctx, ec, sortKeys)
@@ -1074,6 +1108,11 @@ func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKe
 		entries[i] = keyedN[fegGroup]{item: groups[i], keys: keys, index: i}
 		return nil
 	}); err != nil {
+		return nil, err
+	}
+
+	// XTDE1030: validate each sort key's type consistency across the sequence.
+	if err := checkSortKeysTypeConsistencyN(entries, len(sortKeys)); err != nil {
 		return nil, err
 	}
 
