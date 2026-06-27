@@ -373,16 +373,27 @@ func (sr *utf8SanitizeReader) trackByte(b byte) {
 //
 // Buffering is bounded and fails closed: deferring until EOF would buffer an
 // endless all-valid stream whole, defeating streaming and the parser's content
-// caps (an unbounded-memory DoS). If maxBuffer bytes are seen with no non-UTF-8
-// byte, the exact encoding decision still cannot be made within the memory bound
-// — a later high byte would flip the WHOLE document to Latin-1 (matching the
-// []byte path), while EOF-while-valid would keep it UTF-8 — so the reader returns
-// a bounded-input error (ErrContentSizeExceeded) rather than committing to one
-// interpretation and risking silently mis-decoded SAX/DOM output that diverges
-// from Parse([]byte). Real (finite) documents that declare or stay in a single
-// encoding settle their encoding far below this cap and are unaffected; only a
-// pathological undeclared stream that stays valid UTF-8 past the cap is rejected,
-// fail-closed, instead of producing different text.
+// caps (an unbounded-memory DoS). The bound is enforced at the cap BOUNDARY,
+// independent of the reader's chunk sizes: each undecided read is limited to the
+// remaining cap so the pending buffer never grows past maxBuffer, and the
+// encoding decision is made on the first maxBuffer bytes alone. Once exactly
+// maxBuffer valid-UTF-8 bytes have buffered with no non-UTF-8 byte, a single
+// one-byte EOF probe distinguishes the two legitimate outcomes:
+//   - the stream ends right at the cap → the whole prefix is valid UTF-8, so it
+//     is accepted and flushed as UTF-8; or
+//   - at least one more byte follows → the exact encoding decision cannot be
+//     made within the memory bound (a later high byte would flip the WHOLE
+//     document to Latin-1 per the []byte path, while EOF-while-valid would keep
+//     it UTF-8), so the reader returns a bounded-input error
+//     (ErrContentSizeExceeded) rather than committing to one interpretation and
+//     risking silently mis-decoded SAX/DOM output that diverges from
+//     Parse([]byte). The probed byte's value is irrelevant — its mere presence
+//     means input ran past the cap.
+//
+// Real (finite) documents that declare or stay in a single encoding settle their
+// encoding far below this cap and are unaffected; only a pathological undeclared
+// stream that stays valid UTF-8 past the cap is rejected, fail-closed, instead of
+// producing different text.
 type deferredLatin1Reader struct {
 	r io.Reader
 
@@ -397,8 +408,9 @@ type deferredLatin1Reader struct {
 	enc      string // encoding name reported after switching
 
 	// capErr is the sticky bounded-input error returned once the undecided
-	// (all-valid-UTF-8) prefix reaches deferredLatin1MaxBuffer without settling
-	// the encoding. The reader fails closed here rather than committing to UTF-8.
+	// (all-valid-UTF-8) prefix fills maxBuffer and a one-byte EOF probe proves
+	// more input follows. The reader fails closed here rather than committing to
+	// UTF-8.
 	capErr error
 
 	// readErr is a sticky non-EOF error returned by the underlying reader. An
@@ -469,26 +481,71 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 			return 0, io.EOF
 		}
 
-		// Undecided: read more raw bytes and buffer them while they remain
-		// valid UTF-8. Emit nothing until the decision is forced.
-		var buf [4096]byte
-		n, err := dr.r.Read(buf[:])
-		dr.pending = append(dr.pending, buf[:n]...)
+		// Undecided. Never buffer past maxBuffer while the encoding is still
+		// unsettled: bound each read to the remaining cap so the pending buffer
+		// can never grow beyond maxBuffer. This makes the cap boundary
+		// chunk-INDEPENDENT — an invalid byte that lands past the cap can no
+		// longer be scanned into the buffer and retroactively flip an over-cap
+		// prefix to Latin-1; the cap decision is made on the first maxBuffer
+		// bytes alone, regardless of how the reader chunked its output.
+		remaining := dr.maxBuffer - len(dr.pending)
+		if remaining > 0 {
+			var buf [4096]byte
+			toRead := len(buf)
+			if toRead > remaining {
+				toRead = remaining
+			}
+			n, err := dr.r.Read(buf[:toRead])
+			dr.pending = append(dr.pending, buf[:n]...)
+			switch {
+			case err == io.EOF:
+				dr.eof = true
+			case err != nil:
+				// A non-EOF error. io.Reader allows returning n > 0 alongside an
+				// error, so keep any bytes we just buffered and remember the error
+				// as sticky; treat the stream as ended and deliver buffered output
+				// first, surfacing the error only after it drains.
+				dr.readErr = err
+				dr.eof = true
+			}
+
+			// Re-evaluate the buffered bytes; decide() makes output available
+			// once it can (at the first invalid byte, or at EOF). When it stays
+			// undecided we loop to read more.
+			dr.decide()
+			continue
+		}
+
+		// The undecided prefix has filled EXACTLY maxBuffer bytes with no
+		// boundary-invalid byte. Settling the encoding would require buffering a
+		// byte past the cap, so probe a single byte to tell the two cases apart
+		// without ever reading further:
+		//   - the stream ends exactly at the cap (valid UTF-8) → accept and
+		//     flush the prefix as UTF-8; or
+		//   - at least one more byte follows → fail closed
+		//     (ErrContentSizeExceeded), independent of the late byte's value.
+		var probe [1]byte
+		n, err := dr.r.Read(probe[:])
+		if n > 0 {
+			// More than maxBuffer bytes and still undecided: fail closed rather
+			// than commit to a UTF-8 interpretation a later high byte could
+			// contradict. The probed byte is discarded unread, not buffered.
+			dr.capErr = fmt.Errorf("undeclared HTML stream stayed valid UTF-8 for %d bytes without settling its encoding: %w", dr.maxBuffer, ErrContentSizeExceeded)
+			dr.pending = nil
+			return 0, dr.capErr
+		}
 		switch {
+		case err == nil:
+			// No byte and no error: a misbehaving reader made no progress. Loop
+			// to probe again rather than spin, matching the chunk-read path.
+			continue
 		case err == io.EOF:
+			// Stream ended exactly at the cap with everything valid UTF-8.
 			dr.eof = true
-		case err != nil:
-			// A non-EOF error. io.Reader allows returning n > 0 alongside an
-			// error, so keep any bytes we just buffered and remember the error
-			// as sticky; treat the stream as ended and deliver buffered output
-			// first, surfacing the error only after it drains.
+		default:
 			dr.readErr = err
 			dr.eof = true
 		}
-
-		// Re-evaluate the buffered bytes; decide() makes output available once
-		// it can (at the first invalid byte, or at EOF). When it stays
-		// undecided we loop to read more.
 		dr.decide()
 	}
 }
@@ -535,7 +592,9 @@ func (dr *deferredLatin1Reader) decide() bool {
 	}
 
 	// No genuine non-UTF-8 byte found. If the stream is exhausted, the whole
-	// document is valid UTF-8: flush it unchanged.
+	// document is valid UTF-8: flush it unchanged. This includes the exact-cap
+	// case (pending == maxBuffer) once Read's one-byte EOF probe has confirmed
+	// the stream ended right at the cap.
 	if dr.eof {
 		dr.out = dr.pending
 		dr.outPos = 0
@@ -543,22 +602,10 @@ func (dr *deferredLatin1Reader) decide() bool {
 		return true
 	}
 
-	// Bounded buffering, fail closed: a cap's worth of bytes has been seen with no
-	// non-UTF-8 byte, yet the encoding still is not settled — a later high byte
-	// would flip the WHOLE document to Latin-1 (matching the []byte path), while
-	// EOF-while-valid would keep it UTF-8. We cannot make that exact decision
-	// within the memory bound, so rather than commit to a UTF-8 interpretation and
-	// risk silently mis-decoding later bytes (diverging from Parse([]byte)), we
-	// reject the stream with a bounded-input error. The bound is the parser's
-	// configured content limit, so a real document under that limit settles far
-	// below the cap and is unaffected.
-	if len(dr.pending) >= dr.maxBuffer {
-		dr.capErr = fmt.Errorf("undeclared HTML stream stayed valid UTF-8 for %d bytes without settling its encoding: %w", dr.maxBuffer, ErrContentSizeExceeded)
-		dr.pending = nil
-		return true
-	}
-
-	// Otherwise keep buffering.
+	// Still undecided and under the cap: keep buffering. The cap boundary itself
+	// is enforced by Read — which bounds each read to the remaining cap and, once
+	// pending fills maxBuffer, does a one-byte EOF probe to decide between
+	// accept-at-EOF and fail-closed — so decide never has to reject here.
 	return false
 }
 

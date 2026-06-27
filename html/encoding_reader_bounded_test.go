@@ -145,6 +145,55 @@ func TestDeferredLatin1ReaderInvalidByteAtCapBoundary(t *testing.T) {
 	}
 }
 
+// TestDeferredLatin1ReaderCapBoundaryIsChunkIndependent guards the chunk-
+// dependence bug: with a NON-4096-aligned cap (5000), an undeclared stream of
+// 6000 ASCII bytes followed by a lone Windows-1252 byte must FAIL CLOSED, not
+// switch to Windows-1252. The earlier code appended a whole 4096-byte chunk and
+// scanned the entire pending buffer, so the high byte at offset 6000 was scanned
+// in past the 5000-byte cap and wrongly flipped the over-cap prefix to Latin-1.
+// The boundary must be decided on the first maxBuffer bytes alone, regardless of
+// how the reader chunks its output.
+func TestDeferredLatin1ReaderCapBoundaryIsChunkIndependent(t *testing.T) {
+	t.Parallel()
+
+	const cap5000 = 5000 // deliberately not a multiple of the 4096 read chunk
+	src := make([]byte, 6000, 6001)
+	for i := range src {
+		src[i] = 'a'
+	}
+	src = append(src, 0x93) // lone Windows-1252 byte, well past the cap
+
+	dr := newDeferredLatin1Reader(bytes.NewReader(src), cap5000)
+	out, err := io.ReadAll(dr)
+	require.ErrorIs(t, err, ErrContentSizeExceeded,
+		"valid UTF-8 past a non-aligned cap must fail closed, not switch to Latin-1")
+	require.Empty(t, dr.detectedEncoding(),
+		"the reader must never commit to Windows-1252 on the fail-closed path")
+	require.NotContains(t, out, byte(0x93), "the over-cap high byte must never be read or leak")
+}
+
+// TestDeferredLatin1ReaderExactCapValidUTF8Accepted verifies the boundary's
+// accept side: an undeclared stream of EXACTLY maxBuffer valid-UTF-8 bytes
+// followed by EOF settles as UTF-8 and delivers every byte. The one-byte EOF
+// probe confirms the stream ended right at the cap, so it is accepted rather than
+// rejected as if more bytes might still follow. Uses a non-4096-aligned cap.
+func TestDeferredLatin1ReaderExactCapValidUTF8Accepted(t *testing.T) {
+	t.Parallel()
+
+	const cap5000 = 5000
+	src := make([]byte, cap5000)
+	for i := range src {
+		src[i] = 'a'
+	}
+
+	dr := newDeferredLatin1Reader(bytes.NewReader(src), cap5000)
+	out, err := io.ReadAll(dr)
+	require.NoError(t, err, "exactly maxBuffer valid UTF-8 bytes then EOF must be accepted")
+	require.Len(t, out, cap5000, "every byte of the exact-cap stream must be delivered")
+	require.True(t, utf8.Valid(out), "output must be well-formed UTF-8")
+	require.Empty(t, dr.detectedEncoding(), "an all-UTF-8 exact-cap stream must not switch to Latin-1")
+}
+
 // dataErrReader returns a scripted prefix of ASCII bytes, then on a single later
 // Read delivers a final chunk of converted-able bytes together with a non-EOF
 // error (which io.Reader explicitly permits), then keeps reporting the error.
