@@ -585,3 +585,117 @@ func TestMultiKeySortNumberSecondKeyMixedTypesNoError(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, result, "<out")
 }
+
+// XSLT3-102 r6: a default single-key sort whose keys are schema/type-annotated
+// xs:dayTimeDuration NODES must order by the TYPED VALUE, not by the string. A
+// node key is atomized for the XTDE1030 gate, but pre-r6 the atomized typed
+// value was NOT fed through the same auto numeric/duration promotion that an
+// atomic singleton receives: fillSingletonSortValue only recorded the node's
+// type, leaving sv as text, and extractNumericSortValue (the NumberAuto branch)
+// only converted already-atomic items. So a typed duration node sorted by its
+// lexical string. Document order PT3H,PT1H,PT20H sorts lexically as
+// PT1H<PT20H<PT3H but by value as PT1H<PT3H<PT20H.
+func TestSingleKeySortDurationNodeOrdersByValue(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <xsl:variable name="ds" as="element()*">
+      <xsl:for-each select="root/item">
+        <xsl:element name="d" type="xs:dayTimeDuration"><xsl:value-of select="@v"/></xsl:element>
+      </xsl:for-each>
+    </xsl:variable>
+    <out>
+      <xsl:for-each select="$ds">
+        <xsl:sort select="."/>
+        <xsl:value-of select="."/><xsl:text>|</xsl:text>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="PT3H"/><item v="PT1H"/><item v="PT20H"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	// Value order, not lexical PT1H|PT20H|PT3H.
+	require.Contains(t, result, ">PT1H|PT3H|PT20H|<")
+}
+
+// XSLT3-102 r6: same typed-node value-ordering requirement applied to a
+// SECONDARY (multi-key) sort level. With a uniform primary key every record
+// ties on level 1, so the typed xs:dayTimeDuration NODE secondary level must
+// break the tie by typed value. Pre-r6 the secondary level compared the nodes
+// by their lexical strings (PT1H<PT20H<PT3H) instead of by value
+// (PT1H<PT3H<PT20H).
+func TestMultiKeySortDurationNodeSecondaryOrdersByValue(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <xsl:variable name="ds" as="element()*">
+      <xsl:for-each select="root/item">
+        <xsl:element name="d" type="xs:dayTimeDuration"><xsl:value-of select="@v"/></xsl:element>
+      </xsl:for-each>
+    </xsl:variable>
+    <out>
+      <xsl:for-each select="$ds">
+        <xsl:sort select="'k'"/>
+        <xsl:sort select="."/>
+        <xsl:value-of select="."/><xsl:text>|</xsl:text>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="PT3H"/><item v="PT1H"/><item v="PT20H"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, ">PT1H|PT3H|PT20H|<")
+}
+
+// XSLT3-102 r6: a default sort level flipped to auto-number mode by an earlier
+// ATOMIC date item must still sort later schema-typed xs:date NODES by their
+// typed value, not as NaN. Pre-r6 the dataTypeNumberAuto branch ran the node
+// through extractNumericSortValue, which only converts already-atomic items, so
+// the node fell back to parsing its lexical string ("2019-01-01") to a number →
+// NaN, and every date node sorted ahead of the atomic key. The mixed sequence
+// puts the atomic xs:date('2000-06-15') first (flipping the level to
+// number-auto) followed by the typed date nodes; correct value order is
+// 2000-06-15 < 2010 < 2019 < 2021.
+func TestNumberAutoDateNodeOrdersByValue(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <xsl:variable name="dn" as="element()*">
+      <xsl:for-each select="root/item">
+        <xsl:element name="d" type="xs:date"><xsl:value-of select="@v"/></xsl:element>
+      </xsl:for-each>
+    </xsl:variable>
+    <xsl:variable name="mixed" as="item()*" select="(xs:date('2000-06-15'), $dn)"/>
+    <out>
+      <xsl:for-each select="$mixed">
+        <xsl:sort select="."/>
+        <xsl:value-of select="."/><xsl:text>|</xsl:text>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="2019-01-01"/><item v="2021-01-01"/><item v="2010-01-01"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, ">2000-06-15|2010-01-01|2019-01-01|2021-01-01|<")
+}
