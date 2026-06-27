@@ -699,3 +699,96 @@ func TestNumberAutoDateNodeOrdersByValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, result, ">2000-06-15|2010-01-01|2019-01-01|2021-01-01|<")
 }
+
+// XSLT3-102 r7: a default single-key sort whose keys are SCHEMA-DERIVED date
+// NODES (a type derived from xs:date) must order by the TYPED date value, not as
+// text. The XTDE1030 validation gate already accepts such derived types (it
+// promotes via xpath3.ValueCompare/PromoteSchemaType), but pre-r7 the
+// comparison-value conversion switched on the EXACT TypeName, so a derived date
+// fell through to a text sort. BCE years discriminate text from value order:
+// lexically "-0044-01-01" < "-0100-01-01" (3rd digit 0<1), but chronologically
+// 100 BCE precedes 44 BCE, so the value order reverses the text order.
+func TestSingleKeySortDerivedDateNodeOrdersByValue(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:import-schema>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+      <xs:simpleType name="myDate">
+        <xs:restriction base="xs:date"/>
+      </xs:simpleType>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/">
+    <xsl:variable name="ds" as="element()*">
+      <xsl:for-each select="root/item">
+        <xsl:element name="d" type="myDate">
+          <xsl:attribute name="o" select="@v"/>
+          <xsl:value-of select="@v"/>
+        </xsl:element>
+      </xsl:for-each>
+    </xsl:variable>
+    <out>
+      <xsl:for-each select="$ds">
+        <xsl:sort select="."/>
+        <xsl:value-of select="@o"/><xsl:text>|</xsl:text>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="-0044-01-01"/><item v="-0100-01-01"/><item v="0050-01-01"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	// Chronological value order, NOT the lexical text order
+	// (-0044-01-01|-0100-01-01|0050-01-01).
+	require.Contains(t, result, ">-0100-01-01|-0044-01-01|0050-01-01|<")
+}
+
+// XSLT3-102 r7: same schema-derived xs:date value-ordering requirement applied to
+// a SECONDARY (multi-key) sort level. With a uniform primary key every record ties
+// on level 1, so the derived-date secondary level must break the tie by typed
+// value. Pre-r7 it compared by text, giving the reversed BCE order.
+func TestMultiKeySortDerivedDateNodeSecondaryOrdersByValue(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:import-schema>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+      <xs:simpleType name="myDate">
+        <xs:restriction base="xs:date"/>
+      </xs:simpleType>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/">
+    <xsl:variable name="ds" as="element()*">
+      <xsl:for-each select="root/item">
+        <xsl:element name="d" type="myDate">
+          <xsl:attribute name="o" select="@v"/>
+          <xsl:value-of select="@v"/>
+        </xsl:element>
+      </xsl:for-each>
+    </xsl:variable>
+    <out>
+      <xsl:for-each select="$ds">
+        <xsl:sort select="'k'"/>
+        <xsl:sort select="."/>
+        <xsl:value-of select="@o"/><xsl:text>|</xsl:text>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="-0044-01-01"/><item v="-0100-01-01"/><item v="0050-01-01"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, ">-0100-01-01|-0044-01-01|0050-01-01|<")
+}

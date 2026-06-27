@@ -521,6 +521,13 @@ func fillSingletonSortValue(sv *sortValue, item xpath3.Item, dtMode *dataTypeMod
 // make every such key compare as "" under text comparison. The atom is recorded
 // by the caller either way so the XTDE1030 orderability gate still sees the true
 // source type.
+//
+// The orderable-type detection is BaseType-AWARE: a schema-derived
+// date/time/duration is recognized and rewritten by value, mirroring what the
+// XTDE1030 gate accepts. It delegates to atomicToNumericSortValue, which resolves
+// the built-in primitive through PromoteSchemaType; a plain numeric reaches here
+// only after the IsNumeric flip + early return, so this delegation never touches
+// numerics (those stay text and are converted later by convertAutoNumeric).
 func applyAutoSortPromotion(sv *sortValue, av xpath3.AtomicValue, dtMode *dataTypeMode, implicitTZ *time.Location) {
 	sv.typeName = av.TypeName
 	if *dtMode == dataTypeAuto && av.IsNumeric() {
@@ -529,31 +536,8 @@ func applyAutoSortPromotion(sv *sortValue, av xpath3.AtomicValue, dtMode *dataTy
 	if *dtMode != dataTypeAuto {
 		return
 	}
-	// Duration types: use numeric comparison based on total months or seconds.
-	if av.TypeName == xpath3.TypeYearMonthDuration || av.TypeName == xpath3.TypeDayTimeDuration {
-		d := av.DurationVal()
-		f := float64(d.Months)
-		if av.TypeName == xpath3.TypeDayTimeDuration {
-			f = d.Seconds
-		}
-		if d.Negative {
-			f = -f
-		}
-		*sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}
-		*dtMode = dataTypeNumberAuto
-	}
-	// Date/time types: use Unix seconds for numeric comparison.
-	switch av.TypeName {
-	case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate:
-		t := xpath3.ApplyImplicitTZ(av.TimeVal(), implicitTZ)
-		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
-		*sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}
-		*dtMode = dataTypeNumberAuto
-	case xpath3.TypeTime:
-		// xs:time comparison uses reference date 1972-12-31 per F&O §10.4.4
-		t := xpath3.TimeToReferenceDateTime(xpath3.ApplyImplicitTZ(av.TimeVal(), implicitTZ))
-		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
-		*sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}
+	if nv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
+		*sv = nv
 		*dtMode = dataTypeNumberAuto
 	}
 }
@@ -758,6 +742,16 @@ func parseToNumericSortValue(s string) sortValue {
 // for types that support ordering: numeric, duration, date/time.
 // implicitTZ is used for xs:time values that lack an explicit timezone;
 // pass nil to fall back to the system local timezone.
+//
+// It is BaseType-AWARE: a schema-derived atomic (a user-defined TypeName whose
+// built-in BaseType is a numeric/date/time/duration primitive) is converted by
+// its typed value, not skipped. This keeps the comparison-value conversion
+// consistent with the XTDE1030 validation gate, which accepts derived types via
+// xpath3.ValueCompare (itself promoting through PromoteSchemaType). The original
+// av.TypeName is preserved on the returned sortValue so the gate still sees the
+// untouched source type. Numerics are already BaseType-aware via IsNumeric/
+// ToFloat64; the date/time/duration branches resolve the primitive type through
+// PromoteSchemaType before switching on it.
 func atomicToNumericSortValue(av xpath3.AtomicValue, implicitTZ *time.Location) (sortValue, bool) {
 	if av.IsNumeric() {
 		f := av.ToFloat64()
@@ -766,29 +760,32 @@ func atomicToNumericSortValue(av xpath3.AtomicValue, implicitTZ *time.Location) 
 		}
 		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
 	}
-	switch av.TypeName {
+	// Resolve a schema-derived date/time/duration to its built-in primitive so the
+	// switch matches a derived type, then preserve the original TypeName below.
+	prim := xpath3.PromoteSchemaType(av)
+	switch prim.TypeName {
 	case xpath3.TypeYearMonthDuration:
-		d := av.DurationVal()
+		d := prim.DurationVal()
 		f := float64(d.Months)
 		if d.Negative {
 			f = -f
 		}
 		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
 	case xpath3.TypeDayTimeDuration:
-		d := av.DurationVal()
+		d := prim.DurationVal()
 		f := d.Seconds
 		if d.Negative {
 			f = -f
 		}
 		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
 	case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate:
-		t := av.TimeVal()
+		t := prim.TimeVal()
 		t = xpath3.ApplyImplicitTZ(t, implicitTZ)
 		// Use Unix seconds + fractional nanoseconds to avoid int64 overflow for large years
 		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
 		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
 	case xpath3.TypeTime:
-		t := av.TimeVal()
+		t := prim.TimeVal()
 		// xs:time comparison uses reference date 1972-12-31 per F&O §10.4.4
 		t = xpath3.TimeToReferenceDateTime(xpath3.ApplyImplicitTZ(t, implicitTZ))
 		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
