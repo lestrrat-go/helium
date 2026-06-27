@@ -133,10 +133,16 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	em := &EncryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
-	if !ok {
-		return nil, fmt.Errorf("%w: EncryptionMethod missing Algorithm", ErrMalformedEncrypted)
+	if !ok || alg == "" {
+		return nil, fmt.Errorf("%w: EncryptionMethod missing/empty Algorithm", ErrMalformedEncrypted)
 	}
 	em.Algorithm = alg
+
+	// Enforce at-most-one cardinality on the optional sub-elements,
+	// mirroring the duplicate-EncryptionMethod/CipherData guards in the
+	// parent parsers. Boolean sentinels are used because an empty
+	// attribute/text value is otherwise ambiguous.
+	var seenDigestMethod, seenMGF, seenOAEPParams bool
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
@@ -145,10 +151,22 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 		}
 		switch {
 		case isDSigElem(e, "DigestMethod"):
+			if seenDigestMethod {
+				return nil, fmt.Errorf("%w: duplicate DigestMethod", ErrMalformedEncrypted)
+			}
+			seenDigestMethod = true
 			em.DigestMethod, _ = e.GetAttribute("Algorithm")
 		case isMGFElem(e):
+			if seenMGF {
+				return nil, fmt.Errorf("%w: duplicate MGF", ErrMalformedEncrypted)
+			}
+			seenMGF = true
 			em.MGFAlgorithm, _ = e.GetAttribute("Algorithm")
 		case isXMLEncElem(e, "OAEPparams"):
+			if seenOAEPParams {
+				return nil, fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
+			}
+			seenOAEPParams = true
 			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
