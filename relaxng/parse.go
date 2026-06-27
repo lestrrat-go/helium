@@ -57,6 +57,20 @@ type compiler struct {
 	// scopes holds every grammar scope ever created (kept alive after pop) so
 	// the post-parse passes can enumerate all defines across nested grammars.
 	scopes []*grammarScope
+	// contentTypeChecks records every <element> pattern whose content must be
+	// checked for the RELAX NG data/element content-type restriction. The check
+	// runs AFTER resolveScopedRefs so the classifier can follow ref/parentRef
+	// into their resolved define bodies (data hidden behind a <ref> must still be
+	// detected).
+	contentTypeChecks []contentTypeCheck
+}
+
+// contentTypeCheck pairs an <element> pattern with its source node so the
+// data/element content-type restriction can be re-evaluated after scoped refs
+// are resolved, while still reporting against the original element node.
+type contentTypeCheck struct {
+	pat  *pattern
+	node *helium.Element
 }
 
 // pendingRef is a ref/parentRef node awaiting compile-time resolution against
@@ -152,6 +166,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// the entire grammar tree (including nested grammars and forward-declared
 	// defines) has been parsed.
 	c.resolveScopedRefs(ctx)
+	c.checkContentTypes(ctx)
 	c.checkRefCycles(ctx)
 
 	c.grammar.start = startPat
@@ -957,21 +972,17 @@ attrConflictDone:
 		c.addSchemaError(ctx, node, "xmlRelaxNGParseElement: element has no content")
 	}
 
-	// Check: content type error (mixing data/value with element/group patterns)
-	if hasDataContent(contentChildren) && hasElementContent(contentChildren) {
-		eName := p.name
-		if eName == "" && p.nameClass != nil {
-			eName = p.nameClass.name
-		}
-		c.addSchemaError(ctx, node, fmt.Sprintf("Element %s has a content type error", eName))
-	}
-
 	// Wrap content
 	if len(contentChildren) > 1 {
 		p.children = []*pattern{{kind: patternGroup, children: contentChildren}}
 	} else if len(contentChildren) == 1 {
 		p.children = contentChildren
 	}
+
+	// Defer the data/element content-type check until after scoped refs are
+	// resolved: data/value/list content may be hidden behind a <ref>/<parentRef>
+	// whose resolved target is not known at parse time.
+	c.contentTypeChecks = append(c.contentTypeChecks, contentTypeCheck{pat: p, node: node})
 
 	return p
 }
@@ -1487,19 +1498,41 @@ func (c *compiler) addSchemaError(ctx context.Context, node *helium.Element, msg
 	c.errorCount++
 }
 
+// checkContentTypes enforces the RELAX NG data/element content-type restriction
+// (data/value/list content may not be mixed with element content in the same
+// element's content context). It runs AFTER resolveScopedRefs so the classifier
+// can follow <ref>/<parentRef> into their resolved define bodies — data hidden
+// behind a ref must still be detected.
+func (c *compiler) checkContentTypes(ctx context.Context) {
+	for _, chk := range c.contentTypeChecks {
+		if hasDataContent(chk.pat.children) && hasElementContent(chk.pat.children) {
+			eName := chk.pat.name
+			if eName == "" && chk.pat.nameClass != nil {
+				eName = chk.pat.nameClass.name
+			}
+			c.addSchemaError(ctx, chk.node, fmt.Sprintf("Element %s has a content type error", eName))
+		}
+	}
+}
+
 // hasDataContent checks if any pattern in the slice contains a data/value/list
 // pattern in the current content context.
 func hasDataContent(pats []*pattern) bool {
-	return slices.ContainsFunc(pats, containsData)
+	visited := make(map[*pattern]struct{})
+	return slices.ContainsFunc(pats, func(p *pattern) bool {
+		return containsData(p, visited)
+	})
 }
 
 // containsData reports whether p contributes data/value/list content to the
 // enclosing element's content context. Like containsElement it recurses through
 // composite patterns (group, interleave, choice, optional, repetition, ...) so
-// data wrapped in a <group> is detected, but it stops at element and attribute
-// boundaries: data inside a nested <element> or <attribute> belongs to that
-// node's own content context, not the current one.
-func containsData(p *pattern) bool {
+// data wrapped in a <group> is detected, and it follows <ref>/<parentRef>
+// through their compile-time-resolved define body (with visited guarding
+// against cycles) so data hidden behind a reference is detected too. It stops at
+// element and attribute boundaries: data inside a nested <element> or
+// <attribute> belongs to that node's own content context, not the current one.
+func containsData(p *pattern, visited map[*pattern]struct{}) bool {
 	if p == nil {
 		return false
 	}
@@ -1508,23 +1541,54 @@ func containsData(p *pattern) bool {
 		return true
 	case patternElement, patternAttribute:
 		return false
+	case patternRef, patternParentRef:
+		return followsResolved(p, visited, containsData)
 	}
-	return slices.ContainsFunc(p.children, containsData)
+	return slices.ContainsFunc(p.children, func(child *pattern) bool {
+		return containsData(child, visited)
+	})
 }
 
 // hasElementContent checks if any pattern in the slice contains an element pattern.
 func hasElementContent(pats []*pattern) bool {
-	return slices.ContainsFunc(pats, containsElement)
+	visited := make(map[*pattern]struct{})
+	return slices.ContainsFunc(pats, func(p *pattern) bool {
+		return containsElement(p, visited)
+	})
 }
 
-func containsElement(p *pattern) bool {
+// containsElement mirrors containsData for element content: it recurses through
+// composite patterns and follows <ref>/<parentRef> through their resolved define
+// body (visited-guarded), stopping at attribute boundaries.
+func containsElement(p *pattern, visited map[*pattern]struct{}) bool {
 	if p == nil {
 		return false
 	}
-	if p.kind == patternElement {
+	switch p.kind {
+	case patternElement:
 		return true
+	case patternAttribute:
+		return false
+	case patternRef, patternParentRef:
+		return followsResolved(p, visited, containsElement)
 	}
-	return slices.ContainsFunc(p.children, containsElement)
+	return slices.ContainsFunc(p.children, func(child *pattern) bool {
+		return containsElement(child, visited)
+	})
+}
+
+// followsResolved descends a ref/parentRef into its compile-time-resolved define
+// body, using visited to break reference cycles. An unresolved ref (resolved is
+// nil) contributes nothing.
+func followsResolved(p *pattern, visited map[*pattern]struct{}, fn func(*pattern, map[*pattern]struct{}) bool) bool {
+	if p.resolved == nil {
+		return false
+	}
+	if _, seen := visited[p.resolved]; seen {
+		return false
+	}
+	visited[p.resolved] = struct{}{}
+	return fn(p.resolved, visited)
 }
 
 // resolveQName resolves a QName from a schema element, returning the local name

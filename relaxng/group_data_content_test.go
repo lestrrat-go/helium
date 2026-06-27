@@ -70,6 +70,68 @@ func TestGroupDataContentTypeError(t *testing.T) {
 			"data-only content with no element content must compile")
 	})
 
+	t.Run("data behind a ref mixed with element content is rejected", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <ref name="d"/>
+      <element name="child"><text/></element>
+    </element>
+  </start>
+  <define name="d"><data type="string"/></define>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"data referenced via <ref> mixed with element content must be a content-type error")
+	})
+
+	t.Run("data behind a parentRef mixed with element content is rejected", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <grammar>
+        <start>
+          <element name="inner">
+            <parentRef name="d"/>
+            <element name="child"><text/></element>
+          </element>
+        </start>
+      </grammar>
+    </element>
+  </start>
+  <define name="d"><data type="string"/></define>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"data referenced via <parentRef> mixed with element content must be a content-type error")
+	})
+
+	t.Run("element behind a ref mixed with data is rejected", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <data type="string"/>
+      <ref name="d"/>
+    </element>
+  </start>
+  <define name="d"><element name="child"><text/></element></define>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"element referenced via <ref> mixed with data content must be a content-type error")
+	})
+
+	t.Run("element-only behind a ref compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <ref name="d"/>
+      <element name="child"><text/></element>
+    </element>
+  </start>
+  <define name="d"><element name="other"><text/></element></define>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"a ref resolving to an element contributes element content, not data; must compile")
+	})
+
 	t.Run("element content with attribute data compiles", func(t *testing.T) {
 		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>
