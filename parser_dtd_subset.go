@@ -257,14 +257,13 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 					return ErrConditionalSectionNotFinished
 				}
 
-				n := 0
-				for b := sec.PeekAt(n); isBlankByte(b) && !sec.Done(); b = sec.PeekAt(n) {
-					n++
-				}
-				if n > 0 {
-					if err := sec.Advance(n); err != nil {
-						return err
-					}
+				// Bounded blank skip (NOT skipBlanks, which would consume a
+				// "%pe;" reference without expanding it). skipBlankRun only
+				// advances over whitespace, so it is safe here and caps an
+				// oversized blank run inside the section with
+				// ErrNodeContentTooLarge.
+				if _, err := pctx.skipBlankRun(ctx, sec); err != nil {
+					return err
 				}
 
 				if sec.Done() {
@@ -404,16 +403,13 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	}
 
 	// Blank-only skip (see method doc): advance over whitespace, leaving "%" for
-	// parsePEReference. Do NOT route through skipBlanks here.
+	// parsePEReference. Do NOT route through skipBlanks here (it would consume a
+	// "%pe;" reference without expanding it). skipBlankRun only advances over
+	// whitespace, so it is safe here and caps an oversized blank run with
+	// ErrNodeContentTooLarge instead of buffering it unbounded.
 	if c := pctx.getCursor(); c != nil {
-		n := 0
-		for b := c.PeekAt(n); isBlankByte(b) && !c.Done(); b = c.PeekAt(n) {
-			n++
-		}
-		if n > 0 {
-			if err := c.Advance(n); err != nil {
-				return false, err
-			}
+		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
+			return false, err
 		}
 	}
 

@@ -322,15 +322,24 @@ skip therefore advances in fixed-size chunks (`blankScanChunk`, 4096) via the
 shared `skipBlankRun(ctx, cur)` helper — scanning at most one chunk ahead with
 `PeekAt` then `Advance`-ing it, so the cursor buffer stays bounded instead of
 growing with the run — and checks `ctx.Err()` between chunks. The total run is
-capped by `blankRunLimit()` (= `maxNodeContent` when set, else
-`DefaultMaxNodeContentSize` 10 MiB — no public knob is added); an over-cap run
-records the sticky `parserCtx.blankRunErr` (`ErrNodeContentTooLarge`,
-`errors.Is`-matchable) and stops. Once `blankRunErr` is set, `skipBlanks`/
-`skipBlankBytes` short-circuit (consume no more whitespace) so no loop can spin
-advancing over the unbounded tail. `parseMisc` (prolog/epilogue loop) and
-`parseDocument` (the pre-root skip) surface `blankRunErr` via `ctx.error`; the
-XML-declaration and DTD-subset paths terminate on their own error/non-progress
-guards because the bounded cursor stops advancing.
+capped by `blankRunLimit()` (= the resolved `maxNodeContent`): a positive value
+caps the run, and `0` — the unlimited sentinel `resolveLimit` produces from
+`MaxNodeContentSize(-1)` — disables the blank-run cap exactly as it disables the
+node-content cap. `NewParser` applies `DefaultMaxNodeContentSize` (10 MiB), so a
+blank run is bounded by default and only an explicit `MaxNodeContentSize(-1)`
+lifts it (trusted input only). An over-cap run returns `ErrNodeContentTooLarge`;
+the `skipBlanks`/`skipBlankBytes` wrappers record it on the sticky
+`parserCtx.blankRunErr` (`errors.Is`-matchable) and stop. Once `blankRunErr` is
+set, `skipBlanks`/`skipBlankBytes` short-circuit (consume no more whitespace) so
+no loop can spin advancing over the unbounded tail. `parseMisc`
+(prolog/epilogue loop) and `parseDocument` (the pre-root skip) surface
+`blankRunErr` via `ctx.error`. The DTD external-subset declaration loop and
+INCLUDE conditional sections (`parser_dtd_subset.go`) call `skipBlankRun`
+DIRECTLY — not `skipBlanks`, whose `handlePEReference` would consume a `%pe;`
+reference without expanding its replacement text — and return its
+`(bool, error)` result so an over-cap blank run there also fails with
+`ErrNodeContentTooLarge`. The XML-declaration path terminates on its own
+error/non-progress guard because the bounded cursor stops advancing.
 
 **Read-error disambiguation in the blank scan (push-cancel safety).** When a
 chunk scan stops short of `blankScanChunk`, a `PeekAt` of 0 at the stop position

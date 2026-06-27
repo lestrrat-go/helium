@@ -421,9 +421,15 @@ func (p Parser) MaxContentModelDepth(n int) Parser {
 // input is a memory-amplification vector. The cap fires during accumulation —
 // the parse fails with
 // [ErrNodeContentTooLarge] the moment a run exceeds it, before the whole run is
-// buffered. A value of zero (the default) uses [DefaultMaxNodeContentSize]
-// (10 MiB); a negative value removes the limit. Removing the limit lets a
-// hostile document drive unbounded memory use, so do so only for trusted input.
+// buffered. The same cap also bounds a single contiguous run of XML whitespace
+// (a blank skip — in the prolog/epilogue, between declarations in an external
+// DTD subset, or inside an INCLUDE conditional section), since an unbounded
+// whitespace run would otherwise grow the cursor buffer without limit; an
+// over-cap blank run likewise fails with [ErrNodeContentTooLarge]. A value of
+// zero (the default) uses [DefaultMaxNodeContentSize] (10 MiB); a negative value
+// removes both the node-content and the blank-run limit. Removing the limit lets
+// a hostile document drive unbounded memory use, so do so only for trusted
+// input.
 //
 // A streaming SAX consumer that configured [Parser.SetCharBufferSize] receives
 // character data in bounded chunks and is not subject to this cap (its memory is

@@ -3985,6 +3985,49 @@ func TestParseOverCapWhitespaceInDeclAndDTD(t *testing.T) {
 	}
 }
 
+// TestParseOverCapWhitespaceInExternalSubset pins the blank-run cap on the two
+// external-subset blank skips that intentionally bypass skipBlanks to preserve
+// %pe; expansion: the declaration-step skip (parseExternalSubsetDeclStep) and
+// the INCLUDE-terminator skip (parseConditionalSections). Both now route through
+// skipBlankRun, so an over-cap contiguous whitespace run in either position must
+// fail with ErrNodeContentTooLarge instead of forcing the cursor to buffer the
+// whole run.
+func TestParseOverCapWhitespaceInExternalSubset(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ws.dtd">
+<r/>`
+
+	cases := map[string]string{
+		// Whitespace between two declarations in the external subset, consumed by
+		// parseExternalSubsetDeclStep's blank-only skip.
+		"external subset declaration step": "<!ELEMENT r EMPTY>" + blanks + "<!ATTLIST r x CDATA 'd'>",
+		// Whitespace just before the INCLUDE section's "]]>" terminator, consumed
+		// by parseConditionalSections's section-cursor blank skip.
+		"include section terminator": "<![INCLUDE[<!ELEMENT r EMPTY>" + blanks + "]]>",
+	}
+
+	for name, dtd := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+			p := helium.NewParser().
+				BlockXXE(false).
+				LoadExternalDTD(true).
+				DefaultDTDAttributes(true).
+				MaxNodeContentSize(limit).
+				FS(fsys)
+			_, err := p.Parse(t.Context(), []byte(input))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+				"over-cap whitespace in %s must surface ErrNodeContentTooLarge", name)
+		})
+	}
+}
+
 // blockUntilCancelledBlankReader serves a fixed head, then (on the first read
 // past the head) signals it has reached the trailing whitespace run and blocks
 // until the test cancels the context, after which it streams ASCII spaces

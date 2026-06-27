@@ -33,15 +33,14 @@ type blankScanner interface {
 
 // blankRunLimit returns the maximum number of contiguous whitespace bytes a
 // single blank-skip is allowed to consume before the run is treated as a
-// memory-amplification DoS. It reuses the node-content cap when one is in
-// effect; when node content is unconfigured/unlimited it still falls back to
-// DefaultMaxNodeContentSize so a blank run is never truly unbounded (no public
-// knob is added).
+// memory-amplification DoS. It reuses the resolved node-content cap
+// (pctx.maxNodeContent): a positive value caps the run, and 0 (the unlimited
+// sentinel that resolveLimit produces from MaxNodeContentSize(-1)) disables the
+// blank-run cap just as it disables the node-content cap. NewParser applies
+// DefaultMaxNodeContentSize, so a blank run is bounded by default; only an
+// explicit MaxNodeContentSize(-1) lifts it (trusted input only).
 func (pctx *parserCtx) blankRunLimit() int {
-	if pctx.maxNodeContent > 0 {
-		return pctx.maxNodeContent
-	}
-	return DefaultMaxNodeContentSize
+	return pctx.maxNodeContent
 }
 
 // skipBlankRun advances cur past a run of XML whitespace in bounded chunks,
