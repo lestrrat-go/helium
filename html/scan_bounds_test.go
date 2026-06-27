@@ -148,6 +148,54 @@ func TestOverCapEndTagNameDoesNotDrainStream(t *testing.T) {
 		"over-cap end-tag name must not drain the trailing stream (read %d bytes)", r.pos)
 }
 
+// TestOverCapEndTagWhitespaceFailsClosed verifies that intra-tag whitespace
+// AFTER an end-tag name is HARD-capped like every other intra-tag whitespace
+// run, matching the documented contract on Parser.MaxContentSize /
+// ErrContentSizeExceeded. The post-name whitespace in parseEndTag was previously
+// drained by the unbounded "skip to '>'" loop, so `</p` + an over-cap whitespace
+// run + `>` parsed successfully — an unbounded-scan DoS. It must now fail with
+// ErrContentSizeExceeded. A normal end tag with a few trailing spaces still
+// parses fine.
+func TestOverCapEndTagWhitespaceFailsClosed(t *testing.T) {
+	overWS := strings.Repeat(" ", scanTokenCeiling+8)
+
+	t.Run("over_cap_fails", func(t *testing.T) {
+		input := "<p>x</p" + overWS + ">"
+		_, err := html.NewParser().Parse(t.Context(), []byte(input))
+		require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+			"over-cap end-tag whitespace must fail with ErrContentSizeExceeded")
+	})
+
+	t.Run("normal_trailing_spaces_ok", func(t *testing.T) {
+		_, err := html.NewParser().Parse(t.Context(), []byte("<p>x</p   >"))
+		require.NoError(t, err,
+			"an end tag with a few trailing spaces must still parse")
+	})
+}
+
+// TestOverCapEndTagWhitespaceDoesNotDrainStream verifies that the over-cap
+// end-tag whitespace fatal surfaces PROMPTLY on a streaming reader: parseEndTag
+// must check fatalErr right after the bounded skipWhitespace and return BEFORE
+// the "skip to '>'" drain loop. Otherwise the drain loop would keep reading
+// (there is no '>' until far past the cap) and pull the entire abusive trailing
+// stream. The trailing junk after the over-cap whitespace must never be read.
+// (countingReader and metaUTF8 are shared with rawtext_bounds_test.go.)
+func TestOverCapEndTagWhitespaceDoesNotDrainStream(t *testing.T) {
+	overWS := strings.Repeat(" ", scanTokenCeiling+8)
+	trailing := strings.Repeat("a", scanTokenCeiling)
+	// A declared charset=utf-8 forces the streaming sanitize-reader path so the
+	// parser pulls bytes on demand and the read count distinguishes a prompt
+	// fail from a full drain of the trailing stream.
+	input := metaUTF8 + "<p>x</p" + overWS + trailing
+	r := &countingReader{data: []byte(input)}
+
+	_, err := html.NewParser().ParseReader(t.Context(), r)
+	require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+		"over-cap end-tag whitespace must fail with ErrContentSizeExceeded")
+	require.Less(t, r.pos, scanTokenCeiling+scanTokenCeiling/2,
+		"over-cap end-tag whitespace must not drain the trailing stream (read %d bytes)", r.pos)
+}
+
 // TestOverCapStartTagNameEmitsNoStrayText verifies that an over-cap start-tag
 // name fails closed WITHOUT first publishing a stray '<' text node. A hard-cap
 // failure must not produce partial SAX output before the fatal propagates.

@@ -1091,6 +1091,19 @@ func (p *parser) parseEndTag() {
 		}
 	}
 
+	// Bound the post-name intra-tag whitespace with the same HARD-capped
+	// skipWhitespace the rest of the tag lexer uses, BEFORE the unbounded
+	// "skip to '>'" drain loop below. Otherwise `</p` + an over-cap whitespace
+	// run + `>` would be drained byte-by-byte without limit (an unbounded-scan
+	// DoS), contradicting the documented intra-tag-whitespace hard cap. An
+	// over-cap run sets fatalErr; check it and return PROMPTLY so an abusive
+	// unterminated stream is not drained before the main loop surfaces the fatal
+	// (mirrors the parseStartTag / parseDoctype fatal-check pattern).
+	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
+
 	// Skip to closing '>'
 	for !p.cur.Done() && p.cur.Peek() != '>' {
 		_ = p.cur.Advance(1)
