@@ -1063,7 +1063,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).
 			if tdOK && attrTD.ContentType == ContentTypeSimple {
-				if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
+				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -1198,7 +1198,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := attrTD.Validate(ctx, value, collectNSContext(elem)); err != nil {
+		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)
