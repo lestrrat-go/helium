@@ -4065,6 +4065,52 @@ func TestParseOverCapWhitespaceInExternalSubset(t *testing.T) {
 	}
 }
 
+// TestParseOverCapWhitespaceInConditionalSectionHeader pins the blank-run cap on
+// the conditional-section HEADER whitespace skips in parseConditionalSections:
+// after "<![", after the INCLUDE keyword, and after the IGNORE keyword. These
+// positions route through skipBlanks (which records ErrNodeContentTooLarge in
+// pctx.blankRunErr but returns the conditional-section sentinel), and that
+// sentinel was previously TOLERATED by the top-level external-subset loop —
+// silently downgrading a resource-limit violation to "stop parsing the subset".
+// Each over-cap run in the header must instead fail closed with
+// ErrNodeContentTooLarge. Distinct from over-limit whitespace inside the INCLUDE
+// body / before its terminator (covered by TestParseOverCapWhitespaceInExternalSubset).
+func TestParseOverCapWhitespaceInConditionalSectionHeader(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ws.dtd">
+<r/>`
+
+	cases := map[string]string{
+		// Whitespace immediately after "<![", before the INCLUDE keyword.
+		"after open bracket": "<![" + blanks + "INCLUDE[<!ELEMENT r EMPTY>]]>",
+		// Whitespace after the INCLUDE keyword, before its "[".
+		"after include keyword": "<![INCLUDE" + blanks + "[<!ELEMENT r EMPTY>]]>",
+		// Whitespace after the IGNORE keyword, before its "[".
+		"after ignore keyword": "<!ELEMENT r EMPTY><![IGNORE" + blanks + "[ <!ELEMENT q EMPTY> ]]>",
+	}
+
+	for name, dtd := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+			p := helium.NewParser().
+				BlockXXE(false).
+				LoadExternalDTD(true).
+				DefaultDTDAttributes(true).
+				MaxNodeContentSize(limit).
+				FS(fsys)
+			_, err := p.Parse(t.Context(), []byte(input))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+				"over-cap whitespace %s must surface ErrNodeContentTooLarge (not be tolerated as a conditional-section sentinel)", name)
+		})
+	}
+}
+
 // blockUntilCancelledBlankReader serves a fixed head, then (on the first read
 // past the head) signals it has reached the trailing whitespace run and blocks
 // until the test cancels the context, after which it streams ASCII spaces
