@@ -13,6 +13,15 @@ import (
 //
 // The greedy matching approach assumes UPA-compliant (deterministic) content
 // models, which is enforced at compile time by checkUPA in check_upa.go.
+//
+// LIMITATION (XSD 1.1 element-over-wildcard precedence): the choice case
+// (matchChoice/tryMatchChoice) gives non-wildcard particles precedence over a
+// wildcard in 1.1, so a wildcard declared before an element cannot steal that
+// element's child. The sequence case is NOT yet handled here: because sequence
+// matching is position-based and greedy (no backtracking), a minOccurs=0
+// wildcard preceding an element can still greedily consume a child the element
+// declaration should validate. Fixing it safely requires lookahead/backtracking
+// across particles; left as a remaining limitation.
 func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
 	startPos := pos
 
@@ -97,17 +106,47 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 
 	var contentErr error
 
+	matchAt := func(particle *Particle, p int) (int, bool) {
+		consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+		if err != nil || consumed == 0 {
+			return 0, false
+		}
+		// Now validate matched content with error reporting.
+		actualConsumed, actualErr := vc.matchParticle(ctx, parent, particle, children, p, false)
+		if actualErr != nil {
+			contentErr = actualErr
+		}
+		return actualConsumed, true
+	}
+
 	matchOnce := func(p int) (int, bool) {
-		// First find a structurally matching particle.
-		for _, particle := range mg.Particles {
-			consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
-			if err == nil && consumed > 0 {
-				// Now validate matched content with error reporting.
-				actualConsumed, actualErr := vc.matchParticle(ctx, parent, particle, children, p, false)
-				if actualErr != nil {
-					contentErr = actualErr
+		// First find a structurally matching particle that consumes a child.
+		// In XSD 1.1, non-wildcard particles take precedence over wildcard
+		// particles (element-over-wildcard precedence): a wildcard declared
+		// before an element must not steal a child the element declaration is
+		// responsible for validating. XSD 1.0 uses pure declaration order.
+		if vc.version == Version11 {
+			for _, particle := range mg.Particles {
+				if isWildcardParticle(particle) {
+					continue
 				}
-				return actualConsumed, true
+				if consumed, ok := matchAt(particle, p); ok {
+					return consumed, true
+				}
+			}
+			for _, particle := range mg.Particles {
+				if !isWildcardParticle(particle) {
+					continue
+				}
+				if consumed, ok := matchAt(particle, p); ok {
+					return consumed, true
+				}
+			}
+		} else {
+			for _, particle := range mg.Particles {
+				if consumed, ok := matchAt(particle, p); ok {
+					return consumed, true
+				}
 			}
 		}
 		// Try zero-length matches.
@@ -559,10 +598,36 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 		// matchChoice. An earlier optional branch can match zero-length, but a
 		// later branch may be the one that actually consumes the current child;
 		// returning the zero-length match first would leave that child stranded.
-		for _, particle := range mg.Particles {
-			consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
-			if err == nil && consumed > 0 {
-				return consumed, true
+		//
+		// In XSD 1.1, non-wildcard particles take precedence over wildcard
+		// particles (element-over-wildcard precedence) so a wildcard declared
+		// before an element does not steal the element's child. XSD 1.0 uses
+		// pure declaration order.
+		if vc.version == Version11 {
+			for _, particle := range mg.Particles {
+				if isWildcardParticle(particle) {
+					continue
+				}
+				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+				if err == nil && consumed > 0 {
+					return consumed, true
+				}
+			}
+			for _, particle := range mg.Particles {
+				if !isWildcardParticle(particle) {
+					continue
+				}
+				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+				if err == nil && consumed > 0 {
+					return consumed, true
+				}
+			}
+		} else {
+			for _, particle := range mg.Particles {
+				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+				if err == nil && consumed > 0 {
+					return consumed, true
+				}
 			}
 		}
 		// Fall back to a zero-length (optional) branch.
@@ -869,6 +934,12 @@ func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string 
 		names = append(names, elementDisplayForExpected(m))
 	}
 	return names
+}
+
+// isWildcardParticle reports whether a particle's term is an xs:any wildcard.
+func isWildcardParticle(p *Particle) bool {
+	_, ok := p.Term.(*Wildcard)
+	return ok
 }
 
 // sequenceHasWildcard returns true if any particle in the model group is a wildcard.

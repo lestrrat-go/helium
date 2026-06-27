@@ -51,3 +51,58 @@ func TestVersion11UPAWeakening(t *testing.T) {
 		require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), doc))
 	})
 }
+
+// TestVersion11WildcardPrecedence verifies that in XSD 1.1 a non-wildcard
+// element particle takes precedence over a wildcard particle declared BEFORE it
+// in a choice, so a skip wildcard preceding an element cannot steal a child the
+// element declaration must validate (XSD11-001).
+func TestVersion11WildcardPrecedence(t *testing.T) {
+	// The skip wildcard is declared BEFORE the typed element. Under naive
+	// declaration-order matching the wildcard would match <a> and the xs:int
+	// element declaration would never run, false-accepting "not-int".
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:any processContents="skip"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	compile := func(t *testing.T) *xsd.Schema {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		return schema
+	}
+
+	validate := func(t *testing.T, schema *xsd.Schema, instance string) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), doc)
+	}
+
+	t.Run("element declaration wins over preceding wildcard (invalid value rejected)", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		err := validate(t, schema, `<root><a>not-int</a></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("element declaration wins over preceding wildcard (valid value accepted)", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		require.NoError(t, validate(t, schema, `<root><a>5</a></root>`))
+	})
+
+	t.Run("unknown element still matches the wildcard", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		require.NoError(t, validate(t, schema, `<root><other/></root>`))
+	})
+}
