@@ -97,6 +97,35 @@ func TestDoctypeQuotedLiteralOverCapFails(t *testing.T) {
 	}
 }
 
+// TestDoctypeLiteralEmbeddedNULOverCapFails verifies that an embedded real NUL
+// byte inside a DOCTYPE PUBLIC/SYSTEM literal does NOT terminate the scan early
+// and bypass the hard cap. parseQuotedString must distinguish a genuine NUL
+// content byte (HasByteAt true, PeekAt 0) from true end-of-input — like the
+// comment/PI scanners — so an unterminated over-cap literal whose tail begins
+// with a NUL still fails closed with ErrContentSizeExceeded rather than exiting
+// the scanner early (leaving fatalErr unset) and emitting a partial subset.
+func TestDoctypeLiteralEmbeddedNULOverCapFails(t *testing.T) {
+	over := "\x00" + strings.Repeat("a", scanTokenCeiling+8)
+
+	testCases := []struct {
+		name  string
+		input string
+	}{
+		// Unterminated SYSTEM literal with a leading NUL then a huge tail.
+		{name: "system", input: `<!DOCTYPE html SYSTEM "` + over},
+		// Unterminated PUBLIC literal (first of two quoted strings).
+		{name: "public", input: `<!DOCTYPE html PUBLIC "` + over},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := html.NewParser().Parse(t.Context(), []byte(tc.input))
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"over-cap DOCTYPE literal with embedded NUL must fail with ErrContentSizeExceeded")
+		})
+	}
+}
+
 // TestOverCapEndTagNameDoesNotDrainStream verifies that an over-cap end-tag
 // name surfaces its ErrContentSizeExceeded fatal PROMPTLY rather than first
 // draining the remainder of an abusive stream in the "skip to '>'" loop. The

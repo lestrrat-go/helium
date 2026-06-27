@@ -2865,9 +2865,14 @@ func (p *parser) parseQuotedString() string {
 	_ = p.cur.Advance(1)
 	limit := p.cfg.scanTokenLimit()
 	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 || b == quote {
+	// HasByteAt in the loop condition distinguishes EOF from a real NUL byte:
+	// PeekAt returns 0 for both, so a NUL inside the literal must NOT be mistaken
+	// for end-of-input — doing so would exit the scan early WITHOUT setting
+	// fatalErr and bypass the hard cap (letting parseDoctype drain an unterminated
+	// abusive literal and emit a partial subset). A NUL counts as content, like
+	// the comment/PI scanners.
+	for p.cur.HasByteAt(n) {
+		if p.cur.PeekAt(n) == quote {
 			break
 		}
 		// A DOCTYPE PUBLIC/SYSTEM literal maps to a single InternalSubset SAX
