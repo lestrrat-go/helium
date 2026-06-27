@@ -20,6 +20,15 @@ const blankScanChunk = 4096
 type blankScanner interface {
 	PeekAt(int) byte
 	Advance(int) error
+	// HasByteAt reports whether a byte is present at the given offset, letting
+	// the scan tell a real non-blank byte (PeekAt may report 0 for a NUL) from an
+	// exhausted buffer where the scan ran out of input.
+	HasByteAt(int) bool
+	// Err exposes the cursor's sticky read/decode error so the scan can tell a
+	// clean end-of-input apart from a read failure that also leaves PeekAt at 0 —
+	// most importantly a push-stream Read returning context.Canceled when
+	// cancellation unblocks a pending wait.
+	Err() error
 }
 
 // blankRunLimit returns the maximum number of contiguous whitespace bytes a
@@ -53,26 +62,46 @@ func (pctx *parserCtx) skipBlankRun(ctx context.Context, cur blankScanner) (bool
 		for i < blankScanChunk && isBlankByte(cur.PeekAt(i)) {
 			i++
 		}
-		if i == 0 {
-			return advanced, nil
+		if i > 0 {
+			total += i
+			if limit > 0 && total > limit {
+				return advanced, ErrNodeContentTooLarge
+			}
+			// Advance consumes the bytes just scanned. It cannot normally fail
+			// here (the scan already buffered them via PeekAt), but a read error
+			// that slips through is surfaced rather than swallowed so the parse
+			// aborts instead of re-scanning the same bytes forever.
+			if err := cur.Advance(i); err != nil {
+				return advanced, err
+			}
+			advanced = true
 		}
-		total += i
-		if limit > 0 && total > limit {
-			return advanced, ErrNodeContentTooLarge
+		// A full chunk may be followed by more blanks, so loop to scan again.
+		if i == blankScanChunk {
+			continue
 		}
-		// Advance consumes the bytes just scanned. It cannot normally fail here
-		// (the scan already buffered them via PeekAt), but a read error that
-		// slips through is surfaced rather than swallowed so the parse aborts
-		// instead of re-scanning the same bytes forever.
-		if err := cur.Advance(i); err != nil {
-			return advanced, err
+		// The scan stopped short of a full chunk: the run ends at the current
+		// position. PeekAt reporting 0 there is ambiguous — a genuine non-blank
+		// byte (possibly a real NUL) versus an exhausted buffer. When no byte is
+		// present (HasByteAt is false) the scan ran out of input; if the cursor
+		// also recorded a sticky read error, a read FAILED rather than the stream
+		// ending cleanly — most importantly a push-stream Read returning
+		// context.Canceled when cancellation unblocks a pending wait. Surface that
+		// error (and any pending ctx error) so callers propagate cancellation
+		// instead of synthesizing a syntax error ("blank needed after '<?xml'").
+		// The HasByteAt guard is essential: a reader may return its final bytes
+		// together with a non-EOF error, and those buffered bytes must still be
+		// parsed before the error surfaces — the error is withheld while real
+		// input remains at the scan position.
+		if !cur.HasByteAt(0) {
+			if err := cur.Err(); err != nil {
+				return advanced, err
+			}
+			if err := ctx.Err(); err != nil {
+				return advanced, err
+			}
 		}
-		advanced = true
-		// A partial chunk means we stopped on a non-blank byte (or EOF); the
-		// run is over. A full chunk may continue, so loop to scan more.
-		if i < blankScanChunk {
-			return advanced, nil
-		}
+		return advanced, nil
 	}
 }
 

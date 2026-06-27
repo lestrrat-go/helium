@@ -332,6 +332,25 @@ advancing over the unbounded tail. `parseMisc` (prolog/epilogue loop) and
 XML-declaration and DTD-subset paths terminate on their own error/non-progress
 guards because the bounded cursor stops advancing.
 
+**Read-error disambiguation in the blank scan (push-cancel safety).** When a
+chunk scan stops short of `blankScanChunk`, a `PeekAt` of 0 at the stop position
+is ambiguous: a genuine non-blank byte (possibly a real NUL), a clean EOF, OR a
+recorded read failure — most importantly a push-stream `Read` that returned
+`context.Canceled` when cancellation unblocked its pending wait, which the cursor
+stores as a sticky `Err()`. `skipBlankRun` therefore consults `HasByteAt(0)`
+(present byte vs. exhausted buffer) and, when no byte is present, surfaces
+`cur.Err()` (then any pending `ctx.Err()`) through `blankRunErr` so the cursor's
+read failure propagates as cancellation instead of letting a caller synthesize a
+syntax error (e.g. `parseXMLDecl`'s "blank needed after '<?xml'"); `errorAtLevel`
+prefers `blankRunErr` over the synthesized error. The `HasByteAt` guard is
+essential: a reader may return its final bytes together with a non-EOF error, and
+those buffered bytes must still be parsed before the error surfaces — so the
+error is withheld while real input remains at the scan position. Both
+`*strcursor.ByteCursor` (XML-declaration/DTD byte path) and the `strcursor.Cursor`
+interface (post-`switchEncoding` rune path) expose `Err()` and `HasByteAt(int)`
+for this; the local `blankScanner` interface in `parser_whitespace.go` requires
+both.
+
 ## UTF-8 Parser Fast Paths
 
 The parser has several ASCII/UTF-8 fast paths that bypass more general rune-by-rune logic when the input shape is already known:
