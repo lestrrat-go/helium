@@ -37,6 +37,7 @@ type compiler struct {
 	parser                    *helium.Parser      // injected base parser governing parse policy (nil = hardened default)
 	baseURI                   string
 	moduleKey                 string
+	moduleRoot                *helium.Element // embedded (fragment-selected) module root; descendant xml:base walks stop here. nil = stop before the document element
 	resolver                  URIResolver
 	packageResolver           PackageResolver
 	maxResourceBytes          int64                      // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
