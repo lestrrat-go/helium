@@ -57,20 +57,13 @@ type compiler struct {
 	// scopes holds every grammar scope ever created (kept alive after pop) so
 	// the post-parse passes can enumerate all defines across nested grammars.
 	scopes []*grammarScope
-	// contentTypeChecks records every <element> pattern whose content must be
-	// checked for the RELAX NG data/element content-type restriction. The check
-	// runs AFTER resolveScopedRefs so the classifier can follow ref/parentRef
-	// into their resolved define bodies (data hidden behind a <ref> must still be
-	// detected).
-	contentTypeChecks []contentTypeCheck
-}
-
-// contentTypeCheck pairs an <element> pattern with its source node so the
-// data/element content-type restriction can be re-evaluated after scoped refs
-// are resolved, while still reporting against the original element node.
-type contentTypeCheck struct {
-	pat  *pattern
-	node *helium.Element
+	// elementNodes maps every parsed <element> pattern to its source node so the
+	// RELAX NG §7.2 content-type check can report against the original element
+	// node. The check itself walks the LIVE grammar (start pattern plus the
+	// post-override scope.defines), not this map, so an element removed or
+	// replaced by an <include> override is never checked even though its node is
+	// still recorded here.
+	elementNodes map[*pattern]*helium.Element
 }
 
 // pendingRef is a ref/parentRef node awaiting compile-time resolution against
@@ -166,7 +159,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// the entire grammar tree (including nested grammars and forward-declared
 	// defines) has been parsed.
 	c.resolveScopedRefs(ctx)
-	c.checkContentTypes(ctx)
+	c.checkContentTypes(ctx, startPat)
 	c.checkRefCycles(ctx)
 
 	c.grammar.start = startPat
@@ -979,10 +972,14 @@ attrConflictDone:
 		p.children = contentChildren
 	}
 
-	// Defer the data/element content-type check until after scoped refs are
-	// resolved: data/value/list content may be hidden behind a <ref>/<parentRef>
-	// whose resolved target is not known at parse time.
-	c.contentTypeChecks = append(c.contentTypeChecks, contentTypeCheck{pat: p, node: node})
+	// Record this element's source node for the deferred §7.2 content-type check
+	// (run after scoped refs are resolved over the live grammar). Reporting needs
+	// the original node; whether this element is actually checked depends on it
+	// still being reachable from the live grammar after include overrides.
+	if c.elementNodes == nil {
+		c.elementNodes = make(map[*pattern]*helium.Element)
+	}
+	c.elementNodes[p] = node
 
 	return p
 }
@@ -1529,25 +1526,77 @@ func groupableContentTypes(a, b rngContentType) bool {
 }
 
 // checkContentTypes enforces the RELAX NG §7.2 content-type constraints on every
-// <element> body recorded during parsing. It runs AFTER resolveScopedRefs so the
-// content-type of data/value/list/element content hidden behind a
+// <element> body reachable in the LIVE grammar. It runs AFTER resolveScopedRefs
+// so the content-type of data/value/list/element content hidden behind a
 // <ref>/<parentRef> is resolved through the define body. A body whose
 // content-type cannot be derived — a <group>/<interleave> mixing simple
 // (data/value/list) content with element/text (complex) content, two simple
 // values grouped together, or a <oneOrMore>/<zeroOrMore> of simple content — is
 // a content-type error. A <choice> of those same patterns is NOT an error: its
 // branches are independent alternatives that never coexist.
-func (c *compiler) checkContentTypes(ctx context.Context) {
-	for _, chk := range c.contentTypeChecks {
-		visited := make(map[*pattern]struct{})
-		if _, ok := c.contentTypeOfSeq(chk.pat.children, visited); !ok {
-			eName := chk.pat.name
-			if eName == "" && chk.pat.nameClass != nil {
-				eName = chk.pat.nameClass.name
+//
+// The live element bodies are gathered by walking the resolved start pattern and
+// every define still present in each grammar scope after include-override
+// deletion/resolution (collectLiveElements, following resolved refs under a
+// cycle guard). Walking the live grammar — rather than a parse-time append-only
+// list of every parsed <element> — ensures a define removed or replaced by an
+// <include> override is NOT checked, while the define that replaced it IS.
+func (c *compiler) checkContentTypes(ctx context.Context, startPat *pattern) {
+	walkVisited := make(map[*pattern]struct{})
+	var elems []*pattern
+	c.collectLiveElements(startPat, walkVisited, &elems)
+	for _, scope := range c.scopes {
+		for name, entry := range scope.defines {
+			if name == "##start" {
+				continue
 			}
-			c.addSchemaError(ctx, chk.node, fmt.Sprintf("Element %s has a content type error", eName))
+			c.collectLiveElements(entry.pattern, walkVisited, &elems)
 		}
 	}
+
+	for _, ep := range elems {
+		visited := make(map[*pattern]struct{})
+		if _, ok := c.contentTypeOfSeq(ep.children, visited); ok {
+			continue
+		}
+		eName := ep.name
+		if eName == "" && ep.nameClass != nil {
+			eName = ep.nameClass.name
+		}
+		msg := fmt.Sprintf("Element %s has a content type error", eName)
+		if node := c.elementNodes[ep]; node != nil {
+			c.addSchemaError(ctx, node, msg)
+			continue
+		}
+		c.addBareSchemaError(ctx, msg)
+	}
+}
+
+// collectLiveElements walks a live pattern tree, appending every reachable
+// <element> pattern (each once) to out. It descends into children, attribute
+// patterns, and resolved <ref>/<parentRef> targets, using walkVisited (keyed by
+// pattern pointer) both to dedupe shared/recursively-referenced element patterns
+// and to terminate reference cycles. Element bodies ARE descended (to find
+// nested elements), but the per-element body content-type classification stops
+// at element boundaries on its own.
+func (c *compiler) collectLiveElements(p *pattern, walkVisited map[*pattern]struct{}, out *[]*pattern) {
+	if p == nil {
+		return
+	}
+	if _, seen := walkVisited[p]; seen {
+		return
+	}
+	walkVisited[p] = struct{}{}
+	if p.kind == patternElement {
+		*out = append(*out, p)
+	}
+	for _, ch := range p.children {
+		c.collectLiveElements(ch, walkVisited, out)
+	}
+	for _, a := range p.attrs {
+		c.collectLiveElements(a, walkVisited, out)
+	}
+	c.collectLiveElements(p.resolved, walkVisited, out)
 }
 
 // contentTypeOfSeq combines a sequence of sibling patterns as an implicit
