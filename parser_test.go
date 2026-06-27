@@ -2988,6 +2988,50 @@ func TestParseReaderEBCDICLargeEntityNotFalselyAmplified(t *testing.T) {
 		"ParseReader output must match Parse([]byte) for a large-entity EBCDIC doc")
 }
 
+// TestParseReaderEBCDICNestedLargeEntityNotFalselyAmplified guards the nested
+// entity sub-parse path. When a large entity is reached INDIRECTLY through
+// another entity's replacement text (&wrap; -> &big;), the inner &big; expansion
+// runs in a nested parser context. That nested context copied inputSize from the
+// parent (the bounded EBCDIC sniff prefix) but, before this fix, did NOT carry
+// the live ebcdicConsumed byte-counter, so the amplification-ratio guard divided
+// by the prefix length and falsely rejected a document Parse([]byte) accepts.
+// Propagating ebcdicConsumed through inheritNestedParserState fixes it.
+func TestParseReaderEBCDICNestedLargeEntityNotFalselyAmplified(t *testing.T) {
+	t.Parallel()
+
+	// Entity content just over the 1 MiB ratio-check baseline, referenced once
+	// through a wrapping entity so the expansion happens inside a nested context.
+	bigContent := strings.Repeat("A", 1_500_000)
+	xml := fmt.Sprintf(`<?xml version="1.0" encoding="IBM037"?><!DOCTYPE root [<!ENTITY big "%s"><!ENTITY wrap "&big;">]><root>&wrap;</root>`, bigContent)
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// Baseline: Parse([]byte) accepts it (inputSize == len(ebcdic)). Disable the
+	// per-node cap so the 1.5 MiB text node is not what trips — this test is about
+	// the amplification guard inside the nested entity context.
+	bytesDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must accept a nested large EBCDIC entity referenced once")
+	want := serialize(bytesDoc)
+
+	// ParseReader (unknown source size) must match: the nested context's
+	// amplification guard must use the real consumed-byte count, not the
+	// sniff-prefix length.
+	readerDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err,
+		"ParseReader must accept the same nested large-entity EBCDIC document as Parse([]byte)")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a nested large-entity EBCDIC doc")
+}
+
 // TestParseReaderEBCDICSmallDocUnderCap confirms the streaming EBCDIC reader
 // path parses a normal, small EBCDIC document identically to Parse([]byte).
 func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {

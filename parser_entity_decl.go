@@ -678,10 +678,20 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 // elemDepth, so element nesting that crosses an entity-expansion boundary keeps
 // accumulating against the same limit rather than restarting at 0.
 //
-// It does NOT touch newctx.doc, newctx.external, or the amplification counters
-// (sizeentcopy/inputSize/maxAmpl); those are handled by the caller because their
-// lifecycle (document swap, external flag, write-back on return) differs between
-// the two paths.
+// It does NOT touch newctx.doc, newctx.external, or the per-context amplification
+// counters (sizeentcopy/inputSize/maxAmpl); those are handled by the caller
+// because their lifecycle (document swap, external flag, write-back on return)
+// differs between the two paths.
+//
+// It DOES carry the ebcdicConsumed pointer, because that is a SHARED live
+// byte-counter over the underlying EBCDIC stream (not a per-context value): on
+// the EBCDIC ParseReader path inputSize was seeded only from the bounded sniff
+// prefix, so entityCheckLimits compares the amplification budget against this
+// live consumed-byte count instead. A nested entity sub-parse must see the same
+// pointer or an internal entity referenced from entity replacement text would be
+// falsely rejected as amplification (its newctx.inputSize is the parent's prefix
+// size while the real document bytes were already consumed at the top level). It
+// is nil on every non-EBCDIC path.
 func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.sax = pctx.sax
 	newctx.treeBuilder = pctx.treeBuilder
@@ -707,6 +717,11 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	// crosses the entity boundary keeps counting toward MaxDepth.
 	newctx.maxElemDepth = pctx.maxElemDepth
 	newctx.elemDepth = pctx.elemDepth
+	// Carry the shared live EBCDIC consumed-byte counter so the amplification
+	// guard inside a nested entity sub-parse compares against the real document
+	// size, not the bounded sniff prefix that seeded newctx.inputSize. nil except
+	// on the EBCDIC ParseReader path.
+	newctx.ebcdicConsumed = pctx.ebcdicConsumed
 	// Inherit the parent's security/resolution policy so any external reference
 	// reached while expanding this replacement text honors the same FS sandbox,
 	// catalog, and base URI as the top-level parse rather than falling back to
