@@ -1068,6 +1068,12 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	if c.baseURI != "" {
 		eval = eval.BaseURI(ensureFileURI(c.baseURI))
 	}
+	// Route compile-time doc()/doc-available() in use-when through the same
+	// resolver that loads stylesheet modules, so a root use-when can probe for a
+	// resource relative to the module's effective static base.
+	if c.resolver != nil {
+		eval = eval.URIResolver(xpathURIResolverAdapter{c.resolver})
+	}
 	return eval
 }
 

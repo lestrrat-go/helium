@@ -15,6 +15,18 @@ type URIResolver interface {
 	Resolve(uri string) (io.ReadCloser, error)
 }
 
+// xpathURIResolverAdapter adapts a compile-time xslt3 URIResolver (method
+// Resolve) to the xpath3.URIResolver interface (method ResolveURI), so a
+// compile-time use-when expression that calls doc-available()/doc() retrieves
+// resources through the same resolver that loads stylesheet modules.
+type xpathURIResolverAdapter struct {
+	r URIResolver
+}
+
+func (a xpathURIResolverAdapter) ResolveURI(uri string) (io.ReadCloser, error) {
+	return a.r.Resolve(uri)
+}
+
 // PackageResolver resolves package name URIs to file paths or readers.
 // Used during compilation when xsl:use-package is encountered.
 type PackageResolver interface {

@@ -265,9 +265,15 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 	}
 
 	// Check use-when on the included/imported stylesheet's root element.
-	// If use-when evaluates to false, skip the entire module.
+	// If use-when evaluates to false, skip the entire module. Evaluate against
+	// the module's effective static base (its root xml:base folded into the
+	// module URI) so doc-available()/doc() in the root use-when resolve like the
+	// module's own globals, not the including module's base.
 	if uw := getAttr(root, xslAttrUseWhen); uw != "" {
+		savedBase := c.baseURI
+		c.baseURI = moduleEffectiveBaseURI(root, uri)
 		include, err := c.evaluateUseWhen(ctx, uw)
+		c.baseURI = savedBase
 		if err != nil {
 			return nil, err
 		}
@@ -684,6 +690,14 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
+	// Fold the module root's xml:base into the effective static base URI so this
+	// module's root use-when, globals, and templates resolve relative references
+	// against the declaration-site base (matching the main module's compile()
+	// handling), not the bare module URI. moduleDocs stays keyed on the
+	// unmodified uri. Set this BEFORE the root use-when check so doc-available()/
+	// doc() in the root use-when resolve against the module's effective base.
+	c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
+
 	// Check use-when on the imported/included stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module.
 	if uw := getAttr(importedRoot, xslAttrUseWhen); uw != "" {
@@ -737,12 +751,6 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 			c.stylesheet.inputTypeAnnotations = importedITA
 		}
 	}
-
-	// Fold the module root's xml:base into the effective static base URI so
-	// this module's globals/templates resolve relative references against the
-	// declaration-site base (matching the main module's compile() handling),
-	// not the bare module URI. moduleDocs stays keyed on the unmodified uri.
-	c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
 
 	if isImport {
 		// For imports: the imported stylesheet gets current (lower) precedence.
