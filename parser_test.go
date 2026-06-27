@@ -4111,6 +4111,81 @@ func TestParseOverCapWhitespaceInConditionalSectionHeader(t *testing.T) {
 	}
 }
 
+// TestParseReaderEBCDICOverCapWhitespaceInExternalSubset proves the
+// external-subset blank-run cap holds regardless of how the MAIN document is
+// delivered: an EBCDIC document fed through ParseReader, whose external subset
+// (loaded from the fs.FS) carries an over-cap contiguous whitespace run between
+// declarations, must still fail closed with ErrNodeContentTooLarge instead of
+// letting the external-subset declaration step buffer the whole run. The same
+// EBCDIC bytes via Parse([]byte) must fail identically — parity between the two
+// entry points.
+func TestParseReaderEBCDICOverCapWhitespaceInExternalSubset(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+	dtd := "<!ELEMENT r EMPTY>" + blanks + "<!ATTLIST r x CDATA 'd'>"
+
+	const decl = `<?xml version="1.0" encoding="IBM037"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "ws.dtd">` + "\n" + `<r/>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(decl))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	newParser := func() helium.Parser {
+		return helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			MaxNodeContentSize(limit).
+			FS(fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}})
+	}
+
+	_, rerr := newParser().ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.ErrorIs(t, rerr, helium.ErrNodeContentTooLarge,
+		"over-cap external-subset whitespace must surface ErrNodeContentTooLarge via ParseReader/EBCDIC")
+
+	_, berr := newParser().Parse(t.Context(), ebcdic)
+	require.ErrorIs(t, berr, helium.ErrNodeContentTooLarge,
+		"the same EBCDIC bytes via Parse([]byte) must fail identically")
+}
+
+// TestExternalSubsetPEReferenceAfterWhitespaceStillExpands guards the property
+// the blank-run cap MUST NOT break: the external-subset declaration step uses a
+// blank-ONLY skip (skipBlankRun) precisely so a "%pe;" reference that follows
+// whitespace is left for parsePEReference to expand, rather than being consumed
+// by skipBlanks/handlePEReference without pushing its replacement text. With a
+// non-trivial (but under-cap) whitespace run before "%pe;", the PE must still
+// expand and its declarations apply — here a general entity declared inside the
+// PE is registered.
+func TestExternalSubsetPEReferenceAfterWhitespaceStillExpands(t *testing.T) {
+	t.Parallel()
+
+	ws := strings.Repeat(" ", 2048)
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + ws + `%pe;`)},
+		peSystemID: {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		MaxNodeContentSize(4096).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "under-cap whitespace before %%pe; must not break parsing")
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("fromPE")
+	require.True(t, ok, "the PE following whitespace must still expand and register its declarations")
+	require.Equal(t, "loaded-from-external-pe", string(ent.Content()))
+}
+
 // blockUntilCancelledBlankReader serves a fixed head, then (on the first read
 // past the head) signals it has reached the trailing whitespace run and blocks
 // until the test cancels the context, after which it streams ASCII spaces
