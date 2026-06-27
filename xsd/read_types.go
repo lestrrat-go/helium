@@ -281,6 +281,8 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
+		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
 	}
 
@@ -449,6 +451,8 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
+		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
 	}
 	return nil
@@ -600,6 +604,8 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
+		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
 	}
 	return nil

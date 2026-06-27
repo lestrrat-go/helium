@@ -753,6 +753,11 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 			// misses xsi:type overrides on descendants.
 			return vc.annotateAnyTypeChildren(ctx, elem)
 		}
+		// XSD 1.1 open content admits extra wildcard-matched children beyond the
+		// declared model (interleaved or as a suffix).
+		if vc.version == Version11 && td.OpenContent != nil {
+			return vc.validateContentModelOpen(ctx, elem, td.ContentModel, td.OpenContent)
+		}
 		return vc.validateContentModel(ctx, elem, td.ContentModel)
 	}
 	return nil
