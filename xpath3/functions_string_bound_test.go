@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -85,4 +86,44 @@ func TestAnalyzeString_LargeCancellable(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Less(t, ctx.calls, n,
 		"analyze-string must bail on cancellation, not emit an element per match")
+}
+
+// Finding XPATH3-102 (r2): rejecting on the op-limit is not enough — the match
+// enumeration itself must STREAM so it never materializes the full O(matches)
+// index slice up front. With a tight OpLimit over millions of matches the call
+// must reject after charging ~OpLimit ops while allocating only a small bounded
+// amount of memory, far below the tens of MB a FindAllStringSubmatchIndex over
+// every match would need. Measuring the TotalAlloc delta proves the up-front
+// match slice is gone: a pre-fix build that enumerates all matches first blows
+// well past this ceiling regardless of where the op charge later fires.
+func TestAnalyzeString_LargeOpLimitedDoesNotMaterializeAllMatches(t *testing.T) {
+	const n = 4_000_000
+	doc := mustParseXML(t, "<root/>")
+
+	compiled, err := xpath3.NewCompiler().Compile("analyze-string($s, 'a')")
+	require.NoError(t, err)
+
+	input := strings.Repeat("a", n)
+
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(map[string]xpath3.Sequence{"s": xpath3.SingleString(input)}).
+		OpLimit(1000).
+		Evaluate(t.Context(), compiled, doc)
+	require.ErrorIs(t, err, xpath3.ErrOpLimit)
+
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+
+	// FindAllStringSubmatchIndex over n single-char matches materializes an
+	// [][]int with n entries (each a 2-int slice) — at least n*(24+16) bytes,
+	// > 150MB for n=4M. Streaming and stopping at the OpLimit allocates only the
+	// ~1000 result elements, well under this 32MB ceiling.
+	const ceiling = 32 << 20
+	delta := after.TotalAlloc - before.TotalAlloc
+	require.Less(t, delta, uint64(ceiling),
+		"analyze-string must stream matches, not materialize the full O(matches) index slice; allocated %d bytes over %d matches", delta, n)
 }
