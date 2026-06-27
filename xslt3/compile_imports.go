@@ -271,7 +271,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 	// module's own globals, not the including module's base.
 	if uw := getAttr(root, xslAttrUseWhen); uw != "" {
 		savedBase := c.baseURI
-		c.baseURI = moduleEffectiveBaseURI(root, uri)
+		c.baseURI = rootUseWhenBaseURI(root, uri)
 		include, err := c.evaluateUseWhen(ctx, uw)
 		c.baseURI = savedBase
 		if err != nil {
@@ -504,6 +504,24 @@ func moduleEffectiveBaseURI(root *helium.Element, uri string) string {
 	return uri
 }
 
+// rootUseWhenBaseURI computes the static base URI for evaluating a module
+// root's use-when expression. Unlike module globals/templates (which get a
+// later stylesheetBaseURI ancestor walk), a root use-when is evaluated with no
+// such later walk, so this is the only place its xml:base can be applied.
+//
+// For a DOCUMENT root the module URI already carries the effective base via
+// moduleEffectiveBaseURI. For an EMBEDDED root (selected by fragment, whose
+// parent is another element), moduleEffectiveBaseURI deliberately returns the
+// bare URI to avoid double-counting in the later child walk — but the root
+// use-when has no later walk, so apply the full ancestor walk here, which
+// folds in the embedded root's own xml:base.
+func rootUseWhenBaseURI(root *helium.Element, uri string) string {
+	if _, isDoc := root.Parent().(*helium.Document); isDoc {
+		return moduleEffectiveBaseURI(root, uri)
+	}
+	return stylesheetBaseURI(root, uri)
+}
+
 func stylesheetBaseURI(n helium.Node, fallback string) string {
 	base := fallback
 	var bases []string
@@ -691,17 +709,23 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	}
 
 	// Fold the module root's xml:base into the effective static base URI so this
-	// module's root use-when, globals, and templates resolve relative references
-	// against the declaration-site base (matching the main module's compile()
-	// handling), not the bare module URI. moduleDocs stays keyed on the
-	// unmodified uri. Set this BEFORE the root use-when check so doc-available()/
-	// doc() in the root use-when resolve against the module's effective base.
+	// module's globals and templates resolve relative references against the
+	// declaration-site base (matching the main module's compile() handling), not
+	// the bare module URI. moduleDocs stays keyed on the unmodified uri. The root
+	// use-when below uses rootUseWhenBaseURI on top of this.
 	c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
 
 	// Check use-when on the imported/included stylesheet's root element.
-	// If use-when evaluates to false, skip the entire module.
+	// If use-when evaluates to false, skip the entire module. Evaluate it under
+	// rootUseWhenBaseURI: for an embedded (fragment-selected) root that base
+	// folds in the embedded root's xml:base, which the bare module-level
+	// moduleEffectiveBaseURI above intentionally omits (no later walk applies to
+	// the root use-when).
 	if uw := getAttr(importedRoot, xslAttrUseWhen); uw != "" {
+		savedUseWhenBase := c.baseURI
+		c.baseURI = rootUseWhenBaseURI(importedRoot, uri)
 		include, err := c.evaluateUseWhen(ctx, uw)
+		c.baseURI = savedUseWhenBase
 		if err != nil {
 			return err
 		}

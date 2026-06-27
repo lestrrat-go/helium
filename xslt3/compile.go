@@ -1074,6 +1074,12 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	if c.resolver != nil {
 		eval = eval.URIResolver(xpathURIResolverAdapter{c.resolver})
 	}
+	// Honor the compiler's per-resource read cap on compile-time doc() /
+	// doc-available() (and any other bounded XPath built-in) so a root use-when
+	// probing a resource obeys Compiler.MaxResourceBytes, matching the runtime
+	// evaluator. resolveResourceLimit maps the xslt3 0-means-default convention
+	// onto the concrete xpath3 limit.
+	eval = eval.MaxResourceBytes(resolveResourceLimit(c.maxResourceBytes))
 	return eval
 }
 
