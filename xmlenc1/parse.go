@@ -127,6 +127,10 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 		}
 	}
 
+	if ek.CipherValue == nil {
+		return nil, fmt.Errorf("%w: EncryptedKey missing CipherData/CipherValue", ErrMalformedEncrypted)
+	}
+
 	return ek, nil
 }
 
@@ -160,21 +164,45 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	return em, nil
 }
 
+// parseCipherData parses a CipherData element. Per the XML-Enc schema,
+// CipherData is a choice of EXACTLY ONE CipherValue or one CipherReference.
+// A second choice member of either kind (CipherValue+CipherValue,
+// CipherValue+CipherReference, CipherReference+CipherValue, or two
+// CipherReferences) is schema-invalid and rejected at parse rather than
+// silently using the first. CipherReference (indirect cipher text fetched
+// via a URI plus transforms) is not supported by helium and is rejected
+// explicitly; ignoring it would both lose data and defeat the
+// exactly-one-choice rule.
 func parseCipherData(elem *helium.Element) ([]byte, error) {
+	var decoded []byte
+	var seenChoice bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
-		if isXMLEncElem(e, "CipherValue") {
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+		switch {
+		case isXMLEncElem(e, "CipherValue"):
+			if seenChoice {
+				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+			}
+			seenChoice = true
+			d, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
 			}
-			return decoded, nil
+			decoded = d
+		case isXMLEncElem(e, "CipherReference"):
+			if seenChoice {
+				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+			}
+			return nil, fmt.Errorf("%w: CipherReference is not supported", ErrMalformedEncrypted)
 		}
 	}
-	return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	if !seenChoice {
+		return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	}
+	return decoded, nil
 }
 
 // isElemNS reports whether e has the given local name and one of the
