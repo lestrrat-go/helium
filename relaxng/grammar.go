@@ -218,9 +218,10 @@ func nameClassContains(outer, inner *nameClass) bool {
 // nameClassCoversNSExcept reports whether outer certainly matches every name in
 // namespace ns that is NOT matched by innerExcept (i.e. outer ⊇ nsName(ns)
 // except innerExcept). A finite set of ncName leaves can never cover an
-// (infinite) namespace, so only an anyName/nsName whose own except is itself
-// contained by innerExcept, or a choice containing one of those, qualifies.
-// When innerExcept is nil this reduces to "outer covers every name in ns".
+// (infinite) namespace, so only an anyName/nsName whose own except removes
+// nothing from ns that innerExcept does not already remove, or a choice
+// containing one of those, qualifies. When innerExcept is nil this reduces to
+// "outer covers every name in ns".
 func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass) bool {
 	if outer == nil {
 		return false
@@ -228,11 +229,13 @@ func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass
 	switch outer.kind {
 	case ncAnyName:
 		// anyName except outer.except covers (ns \ innerExcept) iff every name
-		// outer.except removes is already removed by innerExcept.
+		// IN ns that outer.except removes is already removed by innerExcept.
+		// Names outer.except removes OUTSIDE ns are irrelevant — outer never
+		// needed to match them within ns — so only outer.except ∩ ns matters.
 		if outer.except == nil {
 			return true
 		}
-		return nameClassContains(innerExcept, outer.except)
+		return nameClassCoversWithinNS(innerExcept, outer.except, ns)
 	case ncNsName:
 		if outer.ns != ns {
 			return false
@@ -240,7 +243,7 @@ func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass
 		if outer.except == nil {
 			return true
 		}
-		return nameClassContains(innerExcept, outer.except)
+		return nameClassCoversWithinNS(innerExcept, outer.except, ns)
 	case ncChoice:
 		// A single branch may cover ns\innerExcept on its own...
 		if nameClassCoversNSExcept(outer.left, ns, innerExcept) ||
@@ -252,6 +255,44 @@ func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass
 		// nsName branch matches everything in X but foo, and a sibling branch
 		// fills the foo gap.
 		return choiceCoversNSByUnion(outer, ns, innerExcept)
+	}
+	return false
+}
+
+// nameClassCoversWithinNS reports whether cover certainly matches every name in
+// namespace ns that sub matches — i.e. cover ⊇ (sub ∩ ns). Names sub matches
+// OUTSIDE ns are ignored: when establishing that an outer class covers
+// nsName(ns) minus some except, an excluded name in a DIFFERENT namespace can
+// never have been in ns to begin with, so it does not need to be re-covered.
+// This is what makes e.g. anyName except (nsName(X) except name(Y:foo)) cover
+// nsName(X): within X, the inner except removes nothing (Y:foo ∉ X), so the
+// excluded class is all of X and the anyName matches no name in X. Conservative:
+// returns true only when coverage within ns is certain.
+func nameClassCoversWithinNS(cover, sub *nameClass, ns string) bool {
+	if sub == nil {
+		// sub matches nothing, so there is nothing in ns to cover.
+		return true
+	}
+	switch sub.kind {
+	case ncChoice:
+		return nameClassCoversWithinNS(cover, sub.left, ns) &&
+			nameClassCoversWithinNS(cover, sub.right, ns)
+	case ncName:
+		if sub.ns != ns {
+			// A single name outside ns is not part of sub ∩ ns.
+			return true
+		}
+		return cover != nil && nameClassMatches(cover, sub.name, sub.ns)
+	case ncNsName:
+		if sub.ns != ns {
+			// sub matches only its own namespace, which is not ns.
+			return true
+		}
+		// sub ∩ ns = nsName(ns) minus sub.except; cover must cover that.
+		return nameClassCoversNSExcept(cover, ns, sub.except)
+	case ncAnyName:
+		// sub ∩ ns = nsName(ns) minus sub.except; cover must cover that.
+		return nameClassCoversNSExcept(cover, ns, sub.except)
 	}
 	return false
 }

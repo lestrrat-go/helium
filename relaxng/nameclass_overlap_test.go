@@ -222,4 +222,33 @@ func TestNameClassOverlapExceptChoice(t *testing.T) {
 		require.NotEmpty(t, compile(t, schema),
 			"the union leaves foo@X uncovered, so anyName-except-it matches foo@X and overlaps nsName(X)")
 	})
+
+	// anyName except (nsName(X) except name(Y:foo)): the inner except removes
+	// name(foo) in a DIFFERENT namespace Y, which is never in X anyway, so within
+	// X the excluded class is ALL of X. The anyName therefore matches no name in
+	// X and is disjoint from nsName(X). The containment check must restrict the
+	// excluded class to the target namespace and ignore the irrelevant Y:foo,
+	// rather than demanding nsName(X) cover it.
+	t.Run("disjoint anyName-except-nsName-except-foreign-name vs nsName compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except>
+            <nsName ns="http://example.com/X">
+              <except><name ns="http://example.com/Y">foo</name></except>
+            </nsName>
+          </except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X"/>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"name(Y:foo) is outside X, so within X the excluded class is all of X and anyName-except-it is disjoint from nsName(X)")
+	})
 }
