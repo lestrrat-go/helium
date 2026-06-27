@@ -88,6 +88,37 @@ func TestCyclicSimpleTypeTerminates(t *testing.T) {
   <xs:element name="root" type="listOfCyclic"/>
 </xs:schema>`,
 		},
+		{
+			// Reaches resolveWhiteSpace/validateValue via checkAttrUseConstraints
+			// during resolveRefs, i.e. BEFORE checkCircularSimpleTypes runs — the
+			// attribute-default path that previously hung on the cyclic type.
+			name: "cyclic type on attribute default",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="cA">
+    <xs:restriction base="cB"/>
+  </xs:simpleType>
+  <xs:simpleType name="cB">
+    <xs:restriction base="cA"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="cA" default="x"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name: "cyclic type on element fixed",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="fA">
+    <xs:restriction base="fB"/>
+  </xs:simpleType>
+  <xs:simpleType name="fB">
+    <xs:restriction base="fA"/>
+  </xs:simpleType>
+  <xs:element name="root" type="fA" fixed="x"/>
+</xs:schema>`,
+		},
 	}
 
 	for _, tc := range cases {

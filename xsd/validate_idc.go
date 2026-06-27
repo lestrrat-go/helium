@@ -687,7 +687,7 @@ func hostType(host *helium.Element, hostDecl *ElementDecl, schema *Schema) *Type
 // content model (walking the base-type chain), resolving substitution-group
 // members through global declarations as a fallback.
 func childElemDecl(td *TypeDef, qn QName, schema *Schema) *ElementDecl {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if decl := findElemDeclInGroup(cur.ContentModel, qn); decl != nil {
 			return decl
 		}
@@ -722,7 +722,7 @@ func findElemDeclInGroup(mg *ModelGroup, qn QName) *ElementDecl {
 // attrUseType walks a complex type's base chain to find the declared type of an
 // attribute use matching the given QName.
 func attrUseType(td *TypeDef, aqn QName, schema *Schema) *TypeDef {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		for _, au := range cur.Attributes {
 			if au.Name != aqn {
 				continue

@@ -1354,7 +1354,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 	if base.Name.Local == typeAnyType && base.Name.NS == lexicon.NamespaceXSD {
 		return true
 	}
-	for cur := derived.BaseType; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(derived.BaseType) {
 		if cur == base {
 			return true
 		}
@@ -1483,7 +1483,7 @@ func xsdTypeName(td *TypeDef) string {
 		return "Q{}" + td.Name.Local
 	}
 	// Anonymous type: walk up the base type chain to find a named type.
-	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td.BaseType) {
 		if cur.Name.NS == lexicon.NamespaceXSD {
 			return "xs:" + cur.Name.Local
 		}

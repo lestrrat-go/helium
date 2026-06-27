@@ -16,7 +16,7 @@ func baseFacets(td *TypeDef) *FacetSet {
 	if td.BaseType == nil {
 		return nil
 	}
-	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td.BaseType) {
 		if cur.Facets != nil {
 			return cur.Facets
 		}
@@ -790,7 +790,7 @@ func typeHasQNameNotationCarrierVisit(td *TypeDef, visited map[*TypeDef]struct{}
 // hasEffectiveEnumeration reports whether td or any of its base types along the
 // restriction chain carries an enumeration facet.
 func hasEffectiveEnumeration(td *TypeDef) bool {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if cur.Facets != nil && len(cur.Facets.Enumeration) > 0 {
 			return true
 		}

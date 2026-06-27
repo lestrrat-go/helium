@@ -69,7 +69,7 @@ func (c *compiler) parseAssert(ctx context.Context, elem *helium.Element) *Asser
 // element subtree.
 func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	var firstErr error
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		for _, a := range cur.Assertions {
 			if a.compiled == nil {
 				continue
