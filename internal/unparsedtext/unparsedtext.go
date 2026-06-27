@@ -146,6 +146,20 @@ func LoadTextLines(ctx context.Context, cfg *Config, href, encoding string) ([]s
 	return SplitLines(text), nil
 }
 
+// LoadTextLinesBounded behaves like LoadTextLines but stops splitting once
+// limit+1 lines have been produced (limit <= 0 imposes no bound). The returned
+// bool reports whether the resource contained more than limit lines, so a caller
+// enforcing a line-count cap can reject an over-cap resource without ever
+// building the full line slice — LoadTextLines would split every line up front.
+func LoadTextLinesBounded(ctx context.Context, cfg *Config, href, encoding string, limit int) ([]string, bool, error) {
+	text, err := LoadText(ctx, cfg, href, encoding)
+	if err != nil {
+		return nil, false, err
+	}
+	lines, truncated := SplitLinesBounded(text, limit)
+	return lines, truncated, nil
+}
+
 // IsAvailable returns true if LoadText would succeed for the given href
 // and encoding.
 func IsAvailable(ctx context.Context, cfg *Config, href, encoding string) bool {
@@ -476,6 +490,52 @@ func SplitLines(text string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+// SplitLinesBounded splits text into lines following the same rules as
+// SplitLines (CRLF and CR normalize to LF; a trailing newline does not yield an
+// extra empty final line), but stops as soon as limit+1 lines have been produced
+// when limit > 0. The returned bool reports whether text contained more than
+// limit lines (collection was truncated at limit+1). This lets a caller reject
+// an over-cap resource without materializing the full line slice. A limit <= 0
+// imposes no bound and collects every line. Unlike SplitLines it does not first
+// build a fully normalized copy of text; it streams lines directly so an
+// over-cap resource stops early.
+func SplitLinesBounded(text string, limit int) ([]string, bool) {
+	var lines []string
+	var cur strings.Builder
+	// emit records the current segment as a line and reports whether the line
+	// count has now exceeded limit.
+	emit := func() bool {
+		lines = append(lines, cur.String())
+		cur.Reset()
+		return limit > 0 && len(lines) > limit
+	}
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\r':
+			if emit() {
+				return lines, true
+			}
+			if i+1 < len(text) && text[i+1] == '\n' {
+				i++
+			}
+		case '\n':
+			if emit() {
+				return lines, true
+			}
+		default:
+			cur.WriteByte(text[i])
+		}
+	}
+	// The segment after the last newline is a line only when non-empty; an empty
+	// trailing segment is the dropped extra line a trailing newline would create.
+	if cur.Len() > 0 {
+		if emit() {
+			return lines, true
+		}
+	}
+	return lines, false
 }
 
 // ValidateXMLChars checks that the string contains only valid XML 1.0

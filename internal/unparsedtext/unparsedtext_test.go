@@ -59,6 +59,45 @@ func TestSplitLines(t *testing.T) {
 	}
 }
 
+// SplitLinesBounded must agree with SplitLines whenever the line count stays
+// within the limit, and must stop early (without producing every line) when the
+// input exceeds it.
+func TestSplitLinesBounded(t *testing.T) {
+	t.Run("matches SplitLines within and at the limit", func(t *testing.T) {
+		// limit 0 (unbounded) and a generous limit must both reproduce SplitLines.
+		inputs := []string{
+			"", "hello", "a\nb\n", "a\r\nb\r\n", "a\rb\r",
+			"a\r\nb\rc\nd\n", "a\nb", "a\n\nb\n", "\n", "\r\n", "\r",
+			"a\n\n\n",
+		}
+		for _, in := range inputs {
+			want := unparsedtext.SplitLines(in)
+			for _, limit := range []int{0, len(want), len(want) + 5} {
+				got, truncated := unparsedtext.SplitLinesBounded(in, limit)
+				require.False(t, truncated, "input %q limit %d", in, limit)
+				require.Equal(t, want, got, "input %q limit %d", in, limit)
+			}
+		}
+	})
+
+	t.Run("stops early when over the limit", func(t *testing.T) {
+		const lines = 1000
+		const limit = 20
+
+		var b strings.Builder
+		for range lines {
+			b.WriteString("line\n")
+		}
+
+		got, truncated := unparsedtext.SplitLinesBounded(b.String(), limit)
+		require.True(t, truncated)
+		// It must stop as soon as limit+1 lines prove the input is over-cap, never
+		// building the full 1000-line slice.
+		require.LessOrEqual(t, len(got), limit+1)
+		require.Less(t, len(got), lines)
+	})
+}
+
 func TestValidateXMLChars(t *testing.T) {
 	tests := []struct {
 		name    string
