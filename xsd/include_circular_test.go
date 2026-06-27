@@ -3,7 +3,9 @@ package xsd_test
 import (
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -55,6 +57,62 @@ func TestCompileFile_CircularInclude(t *testing.T) {
 	schema, err := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(t.Context(), mainPath)
 	require.NoError(t, err, "circular include back to the root schema must compile without duplicate-component errors")
 	require.NotNil(t, schema)
+}
+
+// A malformed identity-constraint declared in an INCLUDED schema must be reported
+// under the INCLUDED schema's filename (where its line number is meaningful), not
+// the INCLUDING schema's. reportIDCStructureError previously used c.filename (the
+// top-level file) instead of c.diagSource() (the currently-included file), so an
+// included malformed IDC was cited under main.xsd with inc.xsd's line.
+func TestCompileFile_IncludedMalformedIDCFilename(t *testing.T) {
+	const ns = "urn:t"
+
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "main.xsd")
+	incPath := filepath.Join(dir, "inc.xsd")
+	require.NoError(t, os.WriteFile(mainPath, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="`+ns+`" targetNamespace="`+ns+`">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:element name="root" type="t:RootType"/>
+</xs:schema>`), 0o600))
+	// inc.xsd hosts an element whose xs:key puts <field> before <selector> — an
+	// order violation in (annotation?, (selector, field+)).
+	require.NoError(t, os.WriteFile(incPath, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="`+ns+`">
+  <xs:element name="host">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="k"><xs:field xpath="@id"/><xs:selector xpath="item"/></xs:key>
+  </xs:element>
+  <xs:complexType name="RootType">
+    <xs:sequence>
+      <xs:element ref="host"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`), 0o600))
+
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, err := xsd.NewCompiler().Label("main.xsd").FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), mainPath)
+	require.Error(t, err, "malformed included IDC must fail compilation")
+	_ = collector.Close()
+
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+		b.WriteString("\n")
+	}
+	errs := b.String()
+	// The include's display location is path.Join(dir(main label), "inc.xsd"); the
+	// main label has no directory, so it is the bare "inc.xsd".
+	incLabel := path.Join(path.Dir("main.xsd"), "inc.xsd")
+	require.Contains(t, errs, incLabel+":1", "malformed IDC must be cited under the included schema's filename")
+	require.Contains(t, errs, "The content is not valid. Expected is (annotation?, (selector, field+)).")
+	require.NotContains(t, errs, "main.xsd:", "must not be cited under the including schema's filename")
 }
 
 // The resolver/in-memory Compile path (no filesystem root path, e.g. xslt3

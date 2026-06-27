@@ -73,4 +73,63 @@ func TestMalformedIDConstraint(t *testing.T) {
 		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
 		require.Contains(t, errs, "The attribute 'name' is required but missing.")
 	})
+
+	t.Run("field before selector rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:field xpath="@id"/><xs:selector xpath="item"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "The content is not valid. Expected is (annotation?, (selector, field+)).")
+	})
+
+	t.Run("duplicate selector rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:selector xpath="item"/><xs:selector xpath="item"/><xs:field xpath="@id"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "The content is not valid. Expected is (annotation?, (selector, field+)).")
+	})
+
+	t.Run("unexpected xsd child rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:selector xpath="item"/><xs:field xpath="@id"/><xs:attribute name="x"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "The content is not valid. Expected is (annotation?, (selector, field+)).")
+	})
+
+	t.Run("selector without xpath rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:selector/><xs:field xpath="@id"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "Element '{http://www.w3.org/2001/XMLSchema}selector': The attribute 'xpath' is required but missing.")
+	})
+
+	t.Run("selector with empty xpath rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:selector xpath=""/><xs:field xpath="@id"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "Element '{http://www.w3.org/2001/XMLSchema}selector': The attribute 'xpath' is required but missing.")
+	})
+
+	t.Run("field without xpath rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:selector xpath="item"/><xs:field/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "Element '{http://www.w3.org/2001/XMLSchema}field': The attribute 'xpath' is required but missing.")
+	})
+
+	t.Run("annotation before selector compiles clean", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:annotation><xs:documentation>doc</xs:documentation></xs:annotation>` +
+			`<xs:selector xpath="item"/><xs:field xpath="@id"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Empty(t, errs, "a leading annotation is permitted by (annotation?, (selector, field+))")
+	})
+
+	t.Run("annotation after selector rejected", func(t *testing.T) {
+		t.Parallel()
+		idc := `<xs:key name="k"><xs:selector xpath="item"/>` +
+			`<xs:annotation><xs:documentation>doc</xs:documentation></xs:annotation>` +
+			`<xs:field xpath="@id"/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "The content is not valid. Expected is (annotation?, (selector, field+)).")
+	})
 }
