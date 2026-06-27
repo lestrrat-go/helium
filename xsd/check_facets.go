@@ -511,10 +511,12 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 // "no circular type definitions" rule). Such a schema is invalid, and several
 // variety-walking compile checks (and resolveVariety/resolveItemType base
 // walks) would otherwise recurse forever on it; reporting it here surfaces the
-// real error before those walks run.
-func (c *compiler) checkCircularSimpleTypes(ctx context.Context) {
+// real error before those walks run. It returns true when at least one circular
+// type was found, so the caller can stop before the (not fully cycle-guarded)
+// downstream checks walk the broken type graph.
+func (c *compiler) checkCircularSimpleTypes(ctx context.Context) bool {
 	if c.filename == "" {
-		return
+		return false
 	}
 
 	type entry struct {
@@ -538,10 +540,12 @@ func (c *compiler) checkCircularSimpleTypes(ctx context.Context) {
 		return entries[i].src.ordinal < entries[j].src.ordinal
 	})
 
+	found := false
 	for _, e := range entries {
 		if !simpleTypeReachesSelf(e.td) {
 			continue
 		}
+		found = true
 		component := e.td.Name.Local
 		if component == "" || e.src.isLocal {
 			component = "local simple type"
@@ -549,6 +553,7 @@ func (c *compiler) checkCircularSimpleTypes(ctx context.Context) {
 		c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
 			"Circular definition of the simple type; a type must not be a member, item, or base type of itself."))
 	}
+	return found
 }
 
 // simpleTypeReachesSelf reports whether start is reachable from itself by

@@ -551,13 +551,19 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Second pass: resolve type references.
 	c.resolveRefs(ctx)
 
+	// Reject circular simple-type definitions (a union/list/restriction that
+	// reaches itself) BEFORE any check that walks the variety/base chain. A
+	// cyclic type is fatally broken, and the downstream facet, enumeration, and
+	// NOTATION checks repeatedly walk BaseType/ItemType/MemberTypes; several of
+	// those walks are not cycle-guarded, so a cyclic type must be removed from
+	// consideration up front. When a cycle is found the schema cannot be
+	// meaningfully compiled further, so report it and stop here.
+	if c.checkCircularSimpleTypes(ctx) {
+		return nil, ErrCompilationFailed
+	}
+
 	// Check facet consistency after refs are resolved (base types are available).
 	c.checkFacetConsistency(ctx)
-
-	// Reject circular simple-type definitions (a union/list/restriction that
-	// reaches itself). This must run before the variety-walking checks below,
-	// which would otherwise recurse forever on a cyclic union member or base.
-	c.checkCircularSimpleTypes(ctx)
 
 	// Validate QName/NOTATION enumeration literal prefixes (and the NOTATION
 	// no-enumeration rule) now that base types are resolved.

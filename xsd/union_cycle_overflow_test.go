@@ -2,20 +2,29 @@ package xsd_test
 
 import (
 	"testing"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
 
-// TestSelfReferentialUnionNoOverflow is a regression test for a stack overflow
-// in the NOTATION-carrier / QName-carrier compile-time checks. A union whose
-// memberTypes referenced itself (directly or transitively) sent the recursive
-// member walk into infinite recursion and crashed the process with
-// "fatal error: stack overflow". A genuinely circular union member is an invalid
-// schema, so Compile must terminate and report ErrCompilationFailed rather than
-// crash.
-func TestSelfReferentialUnionNoOverflow(t *testing.T) {
+// TestCyclicSimpleTypeTerminates is a regression test for infinite recursion /
+// hangs triggered by cyclic simple-type definitions. Two distinct defects are
+// covered:
+//
+//   - A union whose memberTypes referenced itself (directly or transitively)
+//     sent the NOTATION/QName carrier walk into infinite recursion and crashed
+//     with "fatal error: stack overflow".
+//   - A restriction-base cycle (A restricts B, B restricts A) or a list-item
+//     cycle spun forever inside resolveRefs → resolveVariety/resolveItemType,
+//     which walk the BaseType chain.
+//
+// All of these are invalid schemas, so Compile must terminate and report
+// ErrCompilationFailed rather than crash or hang. Each case runs under a
+// watchdog so the test FAILS (instead of hanging the suite) if the loop ever
+// regresses.
+func TestCyclicSimpleTypeTerminates(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -43,6 +52,42 @@ func TestSelfReferentialUnionNoOverflow(t *testing.T) {
   <xs:element name="root" type="unionA"/>
 </xs:schema>`,
 		},
+		{
+			name: "restriction base cycle",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="rA">
+    <xs:restriction base="rB"/>
+  </xs:simpleType>
+  <xs:simpleType name="rB">
+    <xs:restriction base="rA"/>
+  </xs:simpleType>
+  <xs:element name="root" type="rA"/>
+</xs:schema>`,
+		},
+		{
+			name: "list item cycle",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="listA">
+    <xs:list itemType="listB"/>
+  </xs:simpleType>
+  <xs:simpleType name="listB">
+    <xs:list itemType="listA"/>
+  </xs:simpleType>
+  <xs:element name="root" type="listA"/>
+</xs:schema>`,
+		},
+		{
+			name: "list of self-referential union",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="cyclicUnion">
+    <xs:union memberTypes="cyclicUnion xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="listOfCyclic">
+    <xs:list itemType="cyclicUnion"/>
+  </xs:simpleType>
+  <xs:element name="root" type="listOfCyclic"/>
+</xs:schema>`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -52,10 +97,22 @@ func TestSelfReferentialUnionNoOverflow(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.schema))
 			require.NoError(t, err)
 
-			// Must not crash with a stack overflow; a circular union member type is
-			// an invalid schema, so compilation must fail with ErrCompilationFailed.
-			_, err = xsd.NewCompiler().Compile(t.Context(), doc)
-			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+			// Run Compile under a watchdog: if the cyclic-type guards regress and
+			// the walk loops forever, the watchdog fires and the test FAILS quickly
+			// instead of hanging the whole suite.
+			done := make(chan error, 1)
+			go func() {
+				_, cerr := xsd.NewCompiler().Compile(t.Context(), doc)
+				done <- cerr
+			}()
+
+			select {
+			case cerr := <-done:
+				// A circular simple type is an invalid schema.
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed)
+			case <-time.After(10 * time.Second):
+				t.Fatal("Compile did not terminate: cyclic simple-type guard regressed")
+			}
 		})
 	}
 }

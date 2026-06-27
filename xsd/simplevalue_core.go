@@ -143,14 +143,28 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 }
 
-// resolveUnionMembers walks up the base type chain to find the union's member types.
+// resolveUnionMembers walks up the base type chain to find the union's member
+// types. The slow/fast pointers (Floyd's cycle detection) terminate the walk on
+// a cyclic BaseType chain — an invalid schema that resolveRefs may reach before
+// checkCircularSimpleTypes reports it — instead of looping forever.
 func resolveUnionMembers(td *TypeDef) []*TypeDef {
-	cur := td
-	for cur != nil {
-		if len(cur.MemberTypes) > 0 {
-			return cur.MemberTypes
+	slow := td
+	for fast := td; fast != nil; {
+		if len(fast.MemberTypes) > 0 {
+			return fast.MemberTypes
 		}
-		cur = cur.BaseType
+		fast = fast.BaseType
+		if fast == nil {
+			break
+		}
+		if len(fast.MemberTypes) > 0 {
+			return fast.MemberTypes
+		}
+		fast = fast.BaseType
+		slow = slow.BaseType
+		if fast == slow {
+			break
+		}
 	}
 	return nil
 }
@@ -284,12 +298,25 @@ func unionTypeDisplayName(td *TypeDef) string {
 // resolveVariety returns the effective variety of a type, walking through
 // restriction derivations to find the underlying variety.
 func resolveVariety(td *TypeDef) TypeVariety {
-	cur := td
-	for cur != nil {
-		if cur.Variety != TypeVarietyAtomic {
-			return cur.Variety
+	// Floyd's cycle detection (see resolveUnionMembers) keeps the walk finite on
+	// a cyclic BaseType chain, returning the atomic default rather than looping.
+	slow := td
+	for fast := td; fast != nil; {
+		if fast.Variety != TypeVarietyAtomic {
+			return fast.Variety
 		}
-		cur = cur.BaseType
+		fast = fast.BaseType
+		if fast == nil {
+			break
+		}
+		if fast.Variety != TypeVarietyAtomic {
+			return fast.Variety
+		}
+		fast = fast.BaseType
+		slow = slow.BaseType
+		if fast == slow {
+			break
+		}
 	}
 	return TypeVarietyAtomic
 }
@@ -372,24 +399,50 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 
 // resolveItemType walks the type chain to find the item type for a list type.
 func resolveItemType(td *TypeDef) *TypeDef {
-	cur := td
-	for cur != nil {
-		if cur.ItemType != nil {
-			return cur.ItemType
+	// Floyd's cycle detection (see resolveUnionMembers) keeps the walk finite on
+	// a cyclic BaseType chain, returning nil rather than looping.
+	slow := td
+	for fast := td; fast != nil; {
+		if fast.ItemType != nil {
+			return fast.ItemType
 		}
-		cur = cur.BaseType
+		fast = fast.BaseType
+		if fast == nil {
+			break
+		}
+		if fast.ItemType != nil {
+			return fast.ItemType
+		}
+		fast = fast.BaseType
+		slow = slow.BaseType
+		if fast == slow {
+			break
+		}
 	}
 	return nil
 }
 
 // builtinBaseLocal returns the local name of the builtin XSD base type.
 func builtinBaseLocal(td *TypeDef) string {
-	cur := td
-	for cur != nil {
-		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
-			return cur.Name.Local
+	// Floyd's cycle detection (see resolveUnionMembers) keeps the walk finite on
+	// a cyclic BaseType chain, returning "" rather than looping.
+	slow := td
+	for fast := td; fast != nil; {
+		if fast.Name.NS == lexicon.NamespaceXSD && fast.Name.Local != "" {
+			return fast.Name.Local
 		}
-		cur = cur.BaseType
+		fast = fast.BaseType
+		if fast == nil {
+			break
+		}
+		if fast.Name.NS == lexicon.NamespaceXSD && fast.Name.Local != "" {
+			return fast.Name.Local
+		}
+		fast = fast.BaseType
+		slow = slow.BaseType
+		if fast == slow {
+			break
+		}
 	}
 	return ""
 }
