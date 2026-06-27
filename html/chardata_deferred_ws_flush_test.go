@@ -14,15 +14,15 @@ import (
 // current chunk's encoding-error check ran, so the "Invalid bytes in character
 // encoding" diagnostic for the U+FFFD that triggered the flush was lost.
 //
-// Input shape: a charset=utf-8 declaration plus an invalid 0xFF byte tucked inside
-// a COMMENT (so it sets the document-wide encoding-error flag without ever flowing
-// through emitCharacters); a deferred leading space after <html> (mode <
-// insertInBody); and a NUL that breaks the whitespace run so the NUL-derived U+FFFD
-// arrives as the SOLE char-data chunk. That single chunk both flushes the pending
-// space AND is the only place the encoding-error check can fire — if the flush
-// short-circuits, the diagnostic is lost for good.
+// Input shape: a real <meta charset=utf-8> declaration plus an invalid 0xFF byte
+// tucked inside a COMMENT (so it sets the document-wide encoding-error flag
+// without ever flowing through emitCharacters); a deferred leading space after
+// <html> (mode < insertInBody); and a NUL that breaks the whitespace run so the
+// NUL-derived U+FFFD arrives as the SOLE char-data chunk. That single chunk both
+// flushes the pending space AND is the only place the encoding-error check can
+// fire — if the flush short-circuits, the diagnostic is lost for good.
 func TestDeferredWhitespaceFlush_NoCharactersHandler_StillRunsEncodingCheck(t *testing.T) {
-	input := []byte("<!-- charset=utf-8 \xFF --><html> \x00</html>")
+	input := []byte("<meta charset=utf-8><!-- \xFF --><html> \x00</html>")
 
 	var sawEncodingError bool
 	sax := &html.SAXCallbacks{}

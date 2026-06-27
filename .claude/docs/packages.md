@@ -206,7 +206,7 @@ HTML 4.01 parser producing helium DOM or SAX events.
 - **Write(io.Writer, Node) → error** — serialize with default settings
 - **WriteString(Node) → (string, error)** — serialize to string with default settings
 - Auto-closing, void elements, implicit html/head/body insertion
-- Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8
+- Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8. `ParseReader`/push path: an UNDECLARED stream that keeps proving valid UTF-8 is deferred (buffered) until a non-UTF-8 byte flips the whole prefix to Windows-1252; that undecided prefix is BOUNDED at the configured `MaxContentSize` (16 MiB default), capped chunk-independently — valid UTF-8 ending at/below the cap is accepted (one-byte EOF probe), but the cap filling with more bytes still to come fails closed with `ErrContentSizeExceeded` (`encoding_reader.go`)
 - Entity resolution: 2125 WHATWG + 106 legacy HTML4; legacy entities work without `;`
 - Files: `html.go` (API), `parser.go`, `entities.go`, `elements.go`, `dump.go` (serializer), `tree.go` (DOM builder), `sax.go`
 - Imports: helium, sax/

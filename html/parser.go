@@ -114,7 +114,10 @@ type parser struct {
 	// deferredEncoding is non-nil when streaming an undeclared-charset
 	// document whose encoding (UTF-8 vs Windows-1252) can only be decided
 	// once a non-UTF-8 byte is seen. It is queried after parsing for the
-	// final detected encoding name.
+	// final detected encoding name. (An undeclared stream that stays valid
+	// UTF-8 past the buffering cap fails closed with a bounded-input error
+	// rather than committing to UTF-8, so the deferred reader never emits a
+	// sanitized U+FFFD of its own.)
 	deferredEncoding *deferredLatin1Reader
 
 	// fatalSAXErr is set by handleSAXErr when cfg.strict is true and a SAX
@@ -187,33 +190,46 @@ func (l *parserLocator) GetPublicID() string { return "" }
 func (l *parserLocator) GetSystemID() string { return "" }
 
 func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
+	// Detect the declared charset from the RAW input (before newline
+	// normalization), bounded to the first 1024 raw bytes by extractMetaCharset.
+	// The streaming ParseReader/push path prescans the first 1024 RAW bytes
+	// (wrapReaderForHTML reads its sniff window straight off the reader, BEFORE
+	// chaining the newlineNormReader), so Parse must detect against the same raw
+	// window. Detecting against `normalized` instead would let a CRLF-heavy head
+	// (each \r\n collapsing to \n) pull a <meta charset=...> that sits PAST raw
+	// byte 1024 INTO the post-normalization window — Parse would honor a
+	// declaration that ParseReader/push never sees, a parity divergence.
+	declared := extractMetaCharset(input)
+
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
 	var encodingErr bool
 	var encErrLine, encErrCol int
 	var detectedEnc string
-	if !utf8.Valid(normalized) {
-		if declaredCharsetIsUTF8(normalized) {
-			raw := normalized
-			var invBytes invalidByteInfo
-			normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
-			if encodingErr {
-				encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
-			}
-		} else {
-			// Assume Latin-1/Windows-1252 encoding and convert to UTF-8,
-			// matching libxml2's default behavior for non-UTF-8 documents.
-			// Distinguish explicit charset=iso-8859-1 from auto-detected:
-			// - "ISO-8859-1": strict output with &#N; for runes > 0xFF
-			// - "Windows-1252": Win-1252 reverse mapping for output
-			if declaredCharsetIsLatin1(normalized) {
-				detectedEnc = "ISO-8859-1"
-			} else {
-				detectedEnc = "Windows-1252"
-			}
-			normalized = latin1ToUTF8(normalized)
+	switch {
+	case declared == "iso-8859-1":
+		// An explicit charset=iso-8859-1 commits to Latin-1 BEFORE the utf8.Valid
+		// check below: a declared Latin-1 document whose bytes happen to be valid
+		// UTF-8 must still decode as Latin-1, exactly as the streaming ParseReader
+		// path (which routes a declared Latin-1 head straight to latin1Reader)
+		// does. Without this hoist the two APIs would diverge on such an input.
+		detectedEnc = encISO88591
+		normalized = latin1ToUTF8(normalized)
+	case utf8.Valid(normalized):
+		// Already valid UTF-8 with no Latin-1 declaration: parse as-is.
+	case declared == "utf-8":
+		raw := normalized
+		var invBytes invalidByteInfo
+		normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
+		if encodingErr {
+			encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
 		}
+	default:
+		// Undeclared non-UTF-8: assume Windows-1252 and convert to UTF-8,
+		// matching libxml2's default behavior for non-UTF-8 documents.
+		detectedEnc = encWindows1252
+		normalized = latin1ToUTF8(normalized)
 	}
 
 	p := &parser{
@@ -235,7 +251,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 // entire []byte), this chains io.Reader wrappers for newline normalization
 // and encoding conversion, feeding the result directly into the cursor.
 func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg parseConfig) *parser {
-	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r)
+	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r, cfg.contentLimit())
 
 	p := &parser{
 		cur:               strcursor.NewUTF8Cursor(wrapped),
@@ -381,11 +397,14 @@ func isASCIIWhitespace(b byte) bool {
 // may be wrapped in single or double quotes, or left unquoted (terminated by
 // whitespace or ";").
 func extractDeclaredCharset(data []byte) string {
-	lower := bytes.ToLower(data)
-	// Limit scan to the first 1024 bytes (charset should appear early).
-	if len(lower) > 1024 {
-		lower = lower[:1024]
+	// Bound to the first 1024 RAW bytes BEFORE case folding so the lowercase
+	// copy is never larger than the prescan window — folding the whole input
+	// just to inspect its head would allocate proportional to the document
+	// (and bytes.ToLower can expand invalid UTF-8). The charset appears early.
+	if len(data) > 1024 {
+		data = data[:1024]
 	}
+	lower := bytes.ToLower(data)
 	const key = "charset"
 	from := 0
 	for {
@@ -436,17 +455,284 @@ func extractDeclaredCharset(data []byte) string {
 	}
 }
 
-// declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
-// <meta charset="utf-8"> declaration, returning true if found.
-func declaredCharsetIsUTF8(data []byte) bool {
-	return extractDeclaredCharset(data) == "utf-8"
+// extractMetaCharset scans the input for a charset declared by a REAL HTML
+// <meta> element — either <meta charset=...> or a <meta http-equiv=...
+// content="...; charset=..."> — within the first 1024 bytes, returning the
+// declared encoding name lowercased, or "" if none is found.
+//
+// This honors ONLY an actual meta element: a "charset=iso-8859-1" string that
+// merely appears in ordinary text, an HTML comment, or a script does NOT count.
+// Within a genuine <meta ...> tag it further honors only a real declaration per
+// WHATWG (metaCharsetFromTag): a `charset` attribute, or a `content` attribute's
+// charset when paired with `http-equiv="content-type"`. A `charset=` token in any
+// other attribute (data-charset, name, a non-pragma content value, ...) is
+// ignored. This precision matters because the eager Latin-1/UTF-8 encoding commit
+// overrides utf8.Valid — a false positive there would corrupt a valid UTF-8
+// document (café → cafÃ©). It mirrors the WHATWG "prescan a byte stream to
+// determine its encoding" algorithm: comments are skipped, other tags are stepped
+// over, and charset extraction parses the attributes of a genuine <meta ...> tag.
+func extractMetaCharset(data []byte) string {
+	// Bound to the first 1024 RAW bytes BEFORE case folding. newParser calls
+	// this (via declaredCharsetIs{Latin1,UTF8}) ahead of utf8.Valid on every
+	// in-memory Parse([]byte), so lowercasing the whole document just to look
+	// at its head would allocate proportional to the input on the hot path
+	// (and bytes.ToLower can expand invalid UTF-8). The work is bounded to the
+	// prescan window regardless of input size.
+	if len(data) > 1024 {
+		data = data[:1024]
+	}
+	lower := bytes.ToLower(data)
+	n := len(lower)
+	for i := 0; i < n; {
+		if lower[i] != '<' {
+			i++
+			continue
+		}
+		// Mirror the main parser's char-data rule (parser.go ~888): a '<' begins
+		// markup ONLY when the byte after it is '/', '!', '?', or an ASCII letter.
+		// Any other following byte makes the '<' literal character data (e.g.
+		// `< " >` or `<x="...`). Treat it as char data — advance exactly ONE byte
+		// WITHOUT entering the quote-aware tag-skip below. Otherwise a stray
+		// non-markup '<' carrying a quote could put metaTagEnd into quote state and
+		// swallow a later genuine <meta charset=...> tag, missing the declaration.
+		var nextB byte
+		if i+1 < n {
+			nextB = lower[i+1]
+		}
+		if nextB != '/' && nextB != '!' && nextB != '?' && !isASCIIAlpha(nextB) {
+			i++
+			continue
+		}
+		// Comment: skip past the closing "-->".
+		if bytes.HasPrefix(lower[i:], []byte("<!--")) {
+			end := bytes.Index(lower[i+4:], []byte("-->"))
+			if end < 0 {
+				return ""
+			}
+			i += 4 + end + 3
+			continue
+		}
+		// <meta followed by ASCII whitespace or '/': inspect its attributes only.
+		if i+5 <= n && bytes.Equal(lower[i+1:i+5], []byte("meta")) &&
+			(i+5 == n || isASCIIWhitespace(lower[i+5]) || lower[i+5] == '/') {
+			tag := lower[i:]
+			// Bound the tag at its first UNQUOTED '>'. A '>' inside a quoted
+			// attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) is
+			// part of the value, not the tag terminator, so a naive IndexByte
+			// would truncate the tag before charset= and miss the declaration.
+			gt := metaTagEnd(tag)
+			if gt < 0 {
+				// No terminating unquoted '>' within the prescan window: the
+				// tag is cut off by the window end. Per WHATWG, running out of
+				// bytes aborts the prescan — a declaration severed by the
+				// window must NOT count, so do not parse the truncated tag.
+				return ""
+			}
+			tag = tag[:gt]
+			if cs := metaCharsetFromTag(tag); cs != "" {
+				return cs
+			}
+			i += gt + 1
+			continue
+		}
+		// End tag, processing instruction, or markup declaration (</..., <?...,
+		// <!... other than the <!-- comment handled above): per WHATWG these are
+		// skipped to the next RAW '>'. Quotes are NOT significant inside them, so
+		// the quote-aware scan must NOT be used — a stray quote inside one could
+		// otherwise enter quote state and swallow a later genuine <meta charset=>.
+		if nextB == '/' || nextB == '!' || nextB == '?' {
+			rel := bytes.IndexByte(lower[i:], '>')
+			if rel < 0 {
+				return ""
+			}
+			i += rel + 1
+			continue
+		}
+		// Any other start tag (<name ...>): step over it to its first UNQUOTED
+		// '>' (a '>' inside a quoted attribute value is not the terminator).
+		gt := metaTagEnd(lower[i:])
+		if gt < 0 {
+			return ""
+		}
+		i += gt + 1
+	}
+	return ""
 }
 
-// declaredCharsetIsLatin1 scans the raw input bytes for an explicit
-// charset=iso-8859-1 declaration. This distinguishes documents that
-// declare ISO-8859-1 from those that are just auto-detected as non-UTF-8.
+// metaTagEnd returns the index of the byte that terminates the tag starting at
+// tag[0] (its first UNQUOTED '>'), or -1 if no unquoted '>' is present. It
+// tracks single/double quote state while scanning so a '>' that sits inside a
+// quoted attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) does not
+// prematurely terminate the tag. The scan stays within the caller's bounded
+// prescan window.
+func metaTagEnd(tag []byte) int {
+	var quote byte // 0 = unquoted, '"' or '\'' inside a value
+	for j := range tag {
+		c := tag[j]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			quote = c
+		case '>':
+			return j
+		}
+	}
+	return -1
+}
+
+// metaCharsetFromTag applies the WHATWG meta-element prescan attribute rules to
+// the (already lowercased) bytes of a single tag that begins with "<meta". It
+// parses the tag's attributes and returns a declared encoding ONLY when it comes
+// from a real `charset` attribute, or from a `content` attribute paired with an
+// `http-equiv="content-type"` attribute on the same element. A `charset=` token
+// appearing in any other attribute (data-charset, name, a non-pragma content
+// value, ...) is ignored. Returns "" when no qualifying declaration is present.
+//
+// This mirrors the WHATWG "prescan a byte stream" per-meta decision: track a
+// candidate charset, whether a content-type pragma was seen (gotPragma), and
+// whether the candidate requires that pragma to be trusted (needPragma). A
+// `charset` attribute is always trusted; a `content` charset is trusted only when
+// the pragma is also present.
+func metaCharsetFromTag(tag []byte) string {
+	pos := len("<meta")
+	var charset string
+	gotPragma := false
+	// needPragma: 0 = unset (no candidate yet), 1 = content candidate (needs the
+	// content-type pragma), 2 = charset attribute (trusted unconditionally).
+	needPragma := 0
+	// WHATWG keeps a list of attribute names already seen on this element and
+	// IGNORES any duplicate name (first occurrence wins). Without this, a later
+	// duplicate would override an earlier one — e.g.
+	// `<meta charset=utf-8 charset=iso-8859-1>` would wrongly commit to Latin-1
+	// and corrupt valid UTF-8.
+	var seen map[string]struct{}
+	for {
+		name, value, next, ok := metaNextAttr(tag, pos)
+		if !ok {
+			break
+		}
+		pos = next
+		nm := string(name)
+		if _, dup := seen[nm]; dup {
+			continue
+		}
+		if seen == nil {
+			seen = make(map[string]struct{}, 4)
+		}
+		seen[nm] = struct{}{}
+		switch nm {
+		case "http-equiv":
+			if string(value) == "content-type" {
+				gotPragma = true
+			}
+		case "content":
+			if charset == "" {
+				if cs := extractDeclaredCharset(value); cs != "" {
+					charset = cs
+					needPragma = 1
+				}
+			}
+		case "charset":
+			if len(value) > 0 {
+				charset = string(value)
+				needPragma = 2
+			}
+		}
+	}
+	if needPragma == 0 {
+		return ""
+	}
+	if needPragma == 1 && !gotPragma {
+		return ""
+	}
+	return charset
+}
+
+// metaNextAttr implements the WHATWG "get an attribute" sub-algorithm of the meta
+// prescan over the (already lowercased) tag bytes starting at pos. It returns the
+// next attribute's name and value (sub-slices of tag; value is nil when the
+// attribute has no value), the position to resume scanning, and ok=false when no
+// further attribute is present. Quote-aware: a quoted value runs to its matching
+// quote; an unquoted value runs to ASCII whitespace or the tag-end '>'.
+func metaNextAttr(tag []byte, pos int) (name, value []byte, next int, ok bool) {
+	n := len(tag)
+	// Skip leading ASCII whitespace and '/' separators.
+	for pos < n && (isASCIIWhitespace(tag[pos]) || tag[pos] == '/') {
+		pos++
+	}
+	if pos >= n || tag[pos] == '>' {
+		return nil, nil, pos, false
+	}
+	// Read the attribute name. A '=' terminates the name only when the name is
+	// non-empty (a leading '=' is part of the name, per WHATWG).
+	nameStart := pos
+	for pos < n {
+		c := tag[pos]
+		if c == '=' && pos > nameStart {
+			break
+		}
+		if isASCIIWhitespace(c) || c == '/' || c == '>' {
+			break
+		}
+		pos++
+	}
+	name = tag[nameStart:pos]
+	// Skip whitespace between the name and a possible '='.
+	for pos < n && isASCIIWhitespace(tag[pos]) {
+		pos++
+	}
+	if pos >= n || tag[pos] != '=' {
+		return name, nil, pos, true
+	}
+	pos++ // consume '='
+	// Skip whitespace after '='.
+	for pos < n && isASCIIWhitespace(tag[pos]) {
+		pos++
+	}
+	if pos >= n || tag[pos] == '>' {
+		return name, nil, pos, true
+	}
+	if q := tag[pos]; q == '"' || q == '\'' {
+		pos++
+		valStart := pos
+		for pos < n && tag[pos] != q {
+			pos++
+		}
+		value = tag[valStart:pos]
+		if pos < n {
+			pos++ // consume the closing quote
+		}
+		return name, value, pos, true
+	}
+	valStart := pos
+	for pos < n && !isASCIIWhitespace(tag[pos]) && tag[pos] != '>' {
+		pos++
+	}
+	return name, tag[valStart:pos], pos, true
+}
+
+// declaredCharsetIsUTF8 reports whether a real <meta> element declares utf-8.
+// It uses extractMetaCharset (a precise meta-element prescan), NOT a loose
+// charset= scan, because its callers eagerly commit to the encoding and override
+// utf8.Valid.
+func declaredCharsetIsUTF8(data []byte) bool {
+	return extractMetaCharset(data) == "utf-8"
+}
+
+// declaredCharsetIsLatin1 reports whether a real <meta> element declares
+// iso-8859-1. This distinguishes documents that genuinely declare ISO-8859-1
+// from those that are just auto-detected as non-UTF-8. It uses extractMetaCharset
+// (a precise meta-element prescan), NOT a loose charset= scan, because its
+// callers eagerly commit to Latin-1 and override utf8.Valid — trusting a stray
+// "charset=iso-8859-1" in text/comment/script would corrupt a valid UTF-8
+// document.
 func declaredCharsetIsLatin1(data []byte) bool {
-	return extractDeclaredCharset(data) == "iso-8859-1"
+	return extractMetaCharset(data) == "iso-8859-1"
 }
 
 // hasPrefixFold checks if the current input starts with the given prefix
@@ -1794,6 +2080,10 @@ func (p *parser) emitCharacters(data []byte) error {
 				p.encodingSanitizer = nil
 			}
 		}
+		// The deferred undeclared-charset reader never produces a sanitized U+FFFD
+		// of its own: it stays pure UTF-8, switches the whole buffer to Latin-1, or
+		// fails closed at the buffering cap. So a U+FFFD reaching here on that path
+		// is genuine document content, not an encoding error — no diagnostic.
 	}
 	return p.sax.Characters(data)
 }

@@ -34,7 +34,12 @@ type parseConfig struct {
 	// hard-fail case: a run is suppressed only when entirely whitespace, so the
 	// scanner cannot flush a run whose leading whitespace prefix reaches the cap
 	// with more whitespace beyond it without buffering unbounded to decide
-	// significance — such a run fails with ErrContentSizeExceeded. Zero
+	// significance — such a run fails with ErrContentSizeExceeded. It also bounds
+	// the undecided-encoding deferred prefix: an undeclared-charset ParseReader or
+	// push stream that keeps proving valid UTF-8 buffers undecided only up to this
+	// cap, and an over-cap undecided-encoding stream is rejected with
+	// ErrContentSizeExceeded rather than committing to a Latin-1/UTF-8
+	// interpretation. Zero
 	// selects defaultMaxContentSize. It
 	// guards against unbounded memory growth on a gigantic or unterminated section.
 	maxContentSize int

@@ -44,6 +44,16 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // unbounded to learn its significance or parent — such a run fails rather than
 // parsing successfully. Default-mode whitespace with a fixed insertion target and
 // no StripBlanks stays a soft-cap stream and never hits this case.
+//
+// Lastly, [Parser.ParseReader] returns it for an UNDECLARED-charset stream whose
+// bytes stay valid UTF-8 past the configured [Parser.MaxContentSize] (16 MiB by
+// default) without ever revealing their encoding. Such a stream cannot be
+// committed to UTF-8 within the memory bound — a later non-UTF-8 byte would flip
+// the whole document to Windows-1252 (matching [Parser.Parse]) while EOF would
+// keep it UTF-8 — so rather than buffer it unbounded or risk a silently
+// mis-decoded result that diverges from the in-memory path, the reader fails
+// closed with this error. A stream that declares its charset, or that settles its
+// encoding (reaches EOF or a non-UTF-8 byte) below the limit, is unaffected.
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 
 // DocumentLocator is an alias for [sax.DocumentLocator].
