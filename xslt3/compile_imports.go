@@ -493,9 +493,40 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 			base = v
 			continue
 		}
-		base = helium.BuildURI(v, base)
+		resolved := helium.BuildURI(v, base)
+		// Per RFC 3986, resolving a directory-denoting reference (one that ends
+		// in '/', or whose last segment is "." / "..") yields a base that itself
+		// names a directory and so ends in '/'. helium.BuildURI strips that
+		// trailing slash, which would make a directory base such as the result of
+		// xml:base=".." ("…/tests/fn/") indistinguishable from a stylesheet FILE
+		// base ("…/tests/fn") — so a later sibling reference resolved through
+		// documentBaseDir (path.Dir) would drop the real "fn" segment. Restore the
+		// RFC-correct trailing slash so the directory form is preserved.
+		if resolved != "" && refDenotesDirectory(v) && !strings.HasSuffix(resolved, "/") {
+			resolved += "/"
+		}
+		base = resolved
 	}
 	return base
+}
+
+// refDenotesDirectory reports whether a URI reference names a directory rather
+// than a file, i.e. resolving it per RFC 3986 produces a base ending in '/'. A
+// reference denotes a directory when it ends in '/' or its last path segment is
+// "." or ".." (a pure dot-segment that resolves to the containing directory).
+func refDenotesDirectory(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	if strings.HasSuffix(ref, "/") {
+		return true
+	}
+	seg := ref
+	if i := strings.IndexAny(seg, "?#"); i >= 0 {
+		seg = seg[:i]
+	}
+	last := path.Base(seg)
+	return last == "." || last == ".."
 }
 
 func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href string, isImport bool) error {

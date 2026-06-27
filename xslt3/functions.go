@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -691,16 +692,19 @@ func splitURIFragment(uri string) (string, string) {
 // "mem://pkg/doc.xml".
 //
 // For a genuine local filesystem base the containing directory is derived with
-// [baseURIDir] / [uripath.LocalBaseDir] forward-slash semantics (so the result
-// uses '/' on every OS; on Windows filepath.Dir would emit '\' and corrupt the
-// later slash-based join). LocalBaseDir — unlike a bare path.Dir — treats a
-// directory-form base correctly: a trailing-slash base ("…/tests/fn/", as an
-// xml:base=".." override resolves to) or a dot-less last segment names a
-// directory and is kept, whereas a file-form base ("…/main.xsl") has its last
-// segment dropped. A bare path.Dir over a directory-form base would wrongly
-// remove a real path segment ("…/tests/fn/" -> "…/tests"), so a sibling
-// reference resolved against an xml:base / xsl:evaluate base-uri override would
-// land one directory too high.
+// path.Dir over the forward-slash-normalized base ([uripath.ToSlash]) — the
+// SAME derivation compile-time module resolution uses for a local baseURI (see
+// resolveModuleHref in compile_imports.go), so a relative reference resolves to
+// the same directory whether the surrounding expression is compiled statically
+// or evaluated dynamically. A Compiler.BaseURI / stylesheet FILE base such as
+// "/styles/main" is treated as a file path: its last segment is dropped
+// ("/styles"), so doc("data.xml") lands at "/styles/data.xml". A genuine
+// directory-form base (a trailing-slash path such as "…/tests/fn/", as an
+// xml:base=".." override resolves to) is still handled correctly: path.Dir
+// collapses the trailing slash and keeps the directory ("…/tests/fn/" ->
+// "…/tests/fn"). Forward-slash semantics keep the result '/'-separated on every
+// OS (on Windows filepath.Dir would emit '\' and corrupt the later slash-based
+// join).
 func documentBaseDir(base string) string {
 	if base == "" {
 		return ""
@@ -708,7 +712,7 @@ func documentBaseDir(base string) string {
 	if xsd.URIScheme(base) != "" {
 		return base
 	}
-	return baseURIDir(base)
+	return path.Dir(uripath.ToSlash(base))
 }
 
 // baseURIDir extracts the directory from a local-filesystem base URI in

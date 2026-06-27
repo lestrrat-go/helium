@@ -340,3 +340,36 @@ func TestEvaluateCodepointsToStringAllowsXML11(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, dynOut, "<out>1</out>")
 }
+
+// localFileBaseDocStylesheet calls doc() on a relative href so the resolved URI
+// depends entirely on how the engine derives the document base directory from a
+// local (no-scheme) Compiler.BaseURI.
+const localFileBaseDocStylesheet = `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out><xsl:value-of select="string(doc('data.xml')/data/@v)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// TestDocResolvesAgainstLocalFileBase pins the runtime document-base derivation
+// for a LOCAL (extensionless) stylesheet FILE base to the same file-path
+// semantics compile-time module resolution uses (path.Dir over the slashed
+// base). Compiler.BaseURI("/styles/main") is a FILE path, so doc("data.xml")
+// must resolve to its SIBLING "/styles/data.xml" — not to "/styles/main/data.xml"
+// as a directory-treating heuristic would wrongly produce.
+func TestDocResolvesAgainstLocalFileBase(t *testing.T) {
+	const wantURI = "/styles/data.xml"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(localFileBaseDocStylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI("/styles/main").Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	resolver := &recordingURIResolver{files: map[string][]byte{wantURI: []byte(`<data v="payload"/>`)}}
+	out, err := ss.Transform(parseTransformSource(t)).URIResolver(resolver).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>payload</out>")
+	require.True(t, resolver.seen(wantURI),
+		"doc() against local file base /styles/main must resolve to %q; got %v",
+		wantURI, resolver.requests)
+}
