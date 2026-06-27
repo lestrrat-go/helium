@@ -275,18 +275,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 // validateContentModelTop validates children against a model group, checking
 // that ALL children are consumed. This is the top-level entry point.
 func (vc *validationContext) validateContentModelTop(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) error {
-	var consumed int
-	var err error
-
-	switch mg.Compositor {
-	case CompositorSequence:
-		consumed, err = vc.matchSequence(ctx, parent, mg, children, 0)
-	case CompositorChoice:
-		consumed, err = vc.matchChoice(ctx, parent, mg, children, 0)
-	case CompositorAll:
-		consumed, err = vc.matchAll(ctx, parent, mg, children, 0)
-	}
-
+	consumed, err := vc.matchContentModel(ctx, parent, mg, children)
 	if err != nil {
 		return err
 	}
@@ -299,6 +288,22 @@ func (vc *validationContext) validateContentModelTop(ctx context.Context, parent
 	}
 
 	return nil
+}
+
+// matchContentModel matches children against the top-level model group from
+// position 0 and returns how many were consumed (it does NOT report leftover
+// children — callers that require full consumption do so themselves). Used by
+// validateContentModelTop and by the XSD 1.1 open-content suffix path.
+func (vc *validationContext) matchContentModel(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) (int, error) {
+	switch mg.Compositor {
+	case CompositorSequence:
+		return vc.matchSequence(ctx, parent, mg, children, 0)
+	case CompositorChoice:
+		return vc.matchChoice(ctx, parent, mg, children, 0)
+	case CompositorAll:
+		return vc.matchAll(ctx, parent, mg, children, 0)
+	}
+	return 0, nil
 }
 
 // matchParticle matches a particle against children[pos:], returning how many

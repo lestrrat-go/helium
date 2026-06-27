@@ -257,6 +257,24 @@ type TypeDef struct {
 	Final        FinalFlags
 	FinalSet     bool         // true if final was explicitly set (even to empty)
 	Assertions   []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
+	OpenContent  *OpenContent // XSD 1.1 xs:openContent (nil = none)
+}
+
+// OpenContentMode is the XSD 1.1 xs:openContent mode.
+type OpenContentMode int
+
+// OpenContentMode values.
+const (
+	OpenContentInterleave OpenContentMode = iota // open wildcard elements may be interleaved with the declared content (default)
+	OpenContentSuffix                            // open wildcard elements may appear only after the declared content
+)
+
+// OpenContent is an XSD 1.1 xs:openContent: an element wildcard that admits extra
+// child elements beyond the declared content model, either interleaved among it
+// or as a suffix. mode="none" is represented by a nil *OpenContent on the type.
+type OpenContent struct {
+	Mode     OpenContentMode
+	Wildcard *Wildcard // the xs:any wildcard governing the open content
 }
 
 // FacetSet holds facet constraints for a simple type restriction.
