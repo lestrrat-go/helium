@@ -91,6 +91,17 @@ func TestParseECKeyValueErrors(t *testing.T) {
 		require.Contains(t, err.Error(), "missing NamedCurve")
 	})
 
+	// only NamedCurve (no PublicKey point) must be rejected as an incomplete
+	// ECKeyValue rather than yielding a partial key with a nil point.
+	t.Run("named curve without public key", func(t *testing.T) {
+		elem := ecElem(t, `<dsig11:NamedCurve xmlns:dsig11="`+NamespaceDSig11+`" URI="urn:oid:1.2.840.10045.3.1.7"/>`)
+		var data KeyInfoData
+		err := parseECKeyValue(elem, &data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Nil(t, data.ECKeyValue,
+			"an ECKeyValue without a PublicKey point must not produce a partial key")
+	})
+
 	// invalid point covers the invalid-point branch: a valid curve but a
 	// PublicKey blob that does not unmarshal to a point.
 	t.Run("invalid point", func(t *testing.T) {
@@ -133,6 +144,27 @@ func TestParseRSAKeyValue(t *testing.T) {
 		var data KeyInfoData
 		err := parseRSAKeyValue(d.DocumentElement(), &data)
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	})
+
+	// only Exponent (no Modulus) must be rejected as an incomplete RSAKeyValue
+	// rather than yielding a partial key with a nil modulus.
+	t.Run("exponent without modulus", func(t *testing.T) {
+		d := mustParse(t, `<ds:RSAKeyValue xmlns:ds="`+NamespaceDSig+`"><ds:Exponent xmlns:ds="`+NamespaceDSig+`">AQAB</ds:Exponent></ds:RSAKeyValue>`)
+		var data KeyInfoData
+		err := parseRSAKeyValue(d.DocumentElement(), &data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Nil(t, data.RSAKeyValue,
+			"an RSAKeyValue without a Modulus must not produce a partial key")
+	})
+
+	// only Modulus (no Exponent) must likewise be rejected.
+	t.Run("modulus without exponent", func(t *testing.T) {
+		d := mustParse(t, `<ds:RSAKeyValue xmlns:ds="`+NamespaceDSig+`"><ds:Modulus xmlns:ds="`+NamespaceDSig+`">AQAB</ds:Modulus></ds:RSAKeyValue>`)
+		var data KeyInfoData
+		err := parseRSAKeyValue(d.DocumentElement(), &data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Nil(t, data.RSAKeyValue,
+			"an RSAKeyValue without an Exponent must not produce a partial key")
 	})
 }
 
@@ -185,13 +217,14 @@ func TestParseForeignChild(t *testing.T) {
 	})
 
 	// rsa key value child covers parseRSAKeyValue's foreign-namespace child
-	// continue branch.
+	// continue branch: the foreign Modulus is skipped, leaving an incomplete
+	// RSAKeyValue that must be rejected rather than emitted as a partial key.
 	t.Run("rsa key value child", func(t *testing.T) {
 		doc := mustParse(t, `<ds:RSAKeyValue xmlns:ds="`+NamespaceDSig+`"><evil:Modulus xmlns:evil="urn:evil">AQAB</evil:Modulus></ds:RSAKeyValue>`)
 		var data KeyInfoData
-		require.NoError(t, parseRSAKeyValue(doc.DocumentElement(), &data))
-		require.NotNil(t, data.RSAKeyValue)
-		require.Nil(t, data.RSAKeyValue.Modulus) // foreign Modulus was skipped
+		err := parseRSAKeyValue(doc.DocumentElement(), &data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Nil(t, data.RSAKeyValue) // foreign Modulus was skipped -> incomplete
 	})
 
 	// key info child covers parseKeyInfo's continue branch for a foreign-namespace

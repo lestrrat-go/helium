@@ -300,6 +300,13 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 			kv.Exponent = int(exp.Int64())
 		}
 	}
+	// An RSAKeyValue requires BOTH Modulus and Exponent (XML-Signature core).
+	// Refuse to emit a partial key (e.g. Exponent-only, or a Modulus whose
+	// element was skipped as a foreign-namespace look-alike): such material must
+	// never reach the KeySource.
+	if kv.Modulus == nil || kv.Exponent == 0 {
+		return fmt.Errorf("%w: RSAKeyValue requires both Modulus and Exponent", ErrInvalidKeyInfo)
+	}
 	data.RSAKeyValue = kv
 	return nil
 }
@@ -340,6 +347,12 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 				return fmt.Errorf("%w: invalid EC public key point", ErrInvalidKeyInfo)
 			}
 		}
+	}
+	// An ECKeyValue requires both the NamedCurve and the PublicKey point
+	// (XML-Signature 1.1). Refuse to emit a partial key (e.g. NamedCurve-only):
+	// such material must never reach the KeySource.
+	if kv.Curve == nil || kv.X == nil || kv.Y == nil {
+		return fmt.Errorf("%w: ECKeyValue requires both NamedCurve and PublicKey", ErrInvalidKeyInfo)
 	}
 	data.ECKeyValue = kv
 	return nil
