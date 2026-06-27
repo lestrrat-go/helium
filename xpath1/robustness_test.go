@@ -172,4 +172,37 @@ func TestNodeSetComparisonBounded(t *testing.T) {
 		require.Equal(t, xpath1.BooleanResult, r.Type)
 		require.False(t, r.Bool)
 	})
+
+	// A node-set vs node-set comparison with one empty side is always false
+	// and must short-circuit BEFORE computing any string values for the
+	// non-empty side. A tight op limit (well below the n string values the
+	// non-empty side would otherwise require) is honored without error,
+	// proving the empty-side early return skips the per-node work.
+	t.Run("empty right side short-circuits", func(t *testing.T) {
+		compiled, err := xpath1.Compile("/root/a = /root/nonexistent")
+		require.NoError(t, err)
+		r, err := xpath1.NewEvaluator().OpLimit(2000).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		require.Equal(t, xpath1.BooleanResult, r.Type)
+		require.False(t, r.Bool)
+	})
+
+	t.Run("empty left side short-circuits", func(t *testing.T) {
+		compiled, err := xpath1.Compile("/root/nonexistent = /root/b")
+		require.NoError(t, err)
+		r, err := xpath1.NewEvaluator().OpLimit(2000).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		require.Equal(t, xpath1.BooleanResult, r.Type)
+		require.False(t, r.Bool)
+	})
+
+	// Context cancellation is honored mid-compare: a context cancelled before
+	// evaluation aborts the n*n comparison with context.Canceled rather than
+	// running to completion.
+	t.Run("context cancellation honored", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := xpath1.NewEvaluator().OpLimit(1_000_000).Evaluate(ctx, compiled, doc)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }

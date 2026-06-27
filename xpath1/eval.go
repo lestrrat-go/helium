@@ -463,23 +463,39 @@ func compareResults(ctx context.Context, ec *evalContext, op TokenType, left, ri
 // compareNodeSet handles comparisons where the left operand is a node-set.
 func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNodes []helium.Node, right *Result) (bool, error) {
 	if right.Type == NodeSetResult {
+		// A node-set vs node-set general comparison is always false when
+		// either side is empty: there is no pair of nodes to compare. Return
+		// before doing any per-node string-value work (which would otherwise
+		// be O(n) or O(m) with a zero op charge, escaping the op-limit and
+		// cancellation bound).
+		if len(leftNodes) == 0 || len(right.NodeSet) == 0 {
+			return false, nil
+		}
 		// Pre-compute string values for the right-hand node-set to
 		// avoid recomputing them for every left-hand node.
 		rightVals := make([]string, len(right.NodeSet))
 		for i, rn := range right.NodeSet {
 			rightVals[i] = ixpath.StringValue(rn)
 		}
+		// Charge one op per actual string comparison and re-check
+		// cancellation in bounded chunks, so even a lopsided 1xM (or NxM)
+		// compare trips ErrOpLimit / context cancellation mid-loop instead of
+		// running the whole inner row unchecked.
+		const cancelCheckEvery = 1024
+		sinceCheck := 0
 		for _, ln := range leftNodes {
-			if err := ctx.Err(); err != nil {
-				return false, err
-			}
-			// Each left node compares against every right value: charge
-			// the whole inner row so the O(n*m) loop cannot run unbounded.
-			if err := ec.countOps(len(rightVals)); err != nil {
-				return false, err
-			}
 			lv := ixpath.StringValue(ln)
 			for _, rv := range rightVals {
+				if err := ec.countOps(1); err != nil {
+					return false, err
+				}
+				sinceCheck++
+				if sinceCheck >= cancelCheckEvery {
+					sinceCheck = 0
+					if err := ctx.Err(); err != nil {
+						return false, err
+					}
+				}
 				if compareStrings(op, lv, rv) {
 					return true, nil
 				}
