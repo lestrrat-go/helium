@@ -772,4 +772,57 @@ func TestRestrictionAttrType(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), fixedInconsistent)
 	})
+
+	t.Run("accepts prohibited ref with differing local fixed (no au component)", func(t *testing.T) {
+		t.Parallel()
+		// Global t:a is fixed="1". The derived restriction marks the inherited
+		// attribute use as use="prohibited" with a differing local fixed="2".
+		// Per XSD 1.0 §3.2.2 a prohibited ref corresponds to NO attribute-use
+		// component — the attribute is removed — so its harmless local 'fixed'
+		// must NOT be compared with the referenced global declaration's 'fixed'
+		// (au-props-correct.3 does not apply). This must compile clean.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute ref="t:a"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute ref="t:a" use="prohibited" fixed="2"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects prohibited ref carrying a default (default requires use=optional)", func(t *testing.T) {
+		t.Parallel()
+		// Distinct compile-time rule: 'default' requires use="optional", so a
+		// prohibited ref carrying a 'default' is still a schema error regardless
+		// of the global's value constraint. Skipping au-props-correct.3 for a
+		// prohibited ref must NOT also waive this rule.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute ref="t:a"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute ref="t:a" use="prohibited" default="x"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema),
+			"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present.")
+	})
 }

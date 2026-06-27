@@ -266,6 +266,17 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if !ok {
 			continue
 		}
+		// A use="prohibited" ref corresponds to NO attribute-use component (XSD 1.0
+		// §3.2.2): the attribute is REMOVED, so its (harmless) local fixed/default is
+		// never compared with the referenced global's 'fixed' (au-props-correct.3
+		// does not apply) and it inherits no value constraint. A prohibited ref needs
+		// only its QName as an internal blocker — to forbid the attribute — so skip
+		// it here. (The distinct compile-time rule that 'default' requires
+		// use="optional" is enforced separately in checkAttributeUse and still
+		// rejects a prohibited ref carrying a default.)
+		if au.Prohibited {
+			continue
+		}
 		// au-props-correct.3: if the referenced global declaration carries a
 		// 'fixed' value constraint and this use declares its OWN value constraint,
 		// the use's constraint must ALSO be 'fixed' and value-equal to the
