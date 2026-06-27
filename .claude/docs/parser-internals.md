@@ -279,11 +279,25 @@ hard content cap:
   (`nodeContentTooLong(b.Len() + len(write))`, strict-greater) BEFORE the copy
   and returns `ErrNodeContentTooLarge` if it would exceed. This bounds all slow-
   path write paths uniformly — literal text, predefined-entity replacement,
-  char-ref output, the `SubstituteEntities`/forced-namespace entity-replacement
-  byte loop, AND the non-substituted general-entity branch
+  char-ref output, AND the non-substituted general-entity branch
   (`"&"`+`ent.name`+`";"`), whose long entity name under `MaxNameLength(-1)`
   would otherwise be copied unbounded in a single loop iteration before the next
   cap check (the round-3 hole this design closes).
+- The `SubstituteEntities`/forced-namespace entity-replacement branch does NOT
+  first materialize the decoded replacement and then copy it: `decodeEntities`
+  was refactored into `decodeEntitiesToSink` (`parser_entity_decl.go`), which
+  streams every output byte through an `entityDecodeSink`. The attribute path
+  uses an `attrEntitySink` that normalizes attribute whitespace (TAB/CR/LF ->
+  space) and writes each byte via `writeAttrByte`, so an over-cap expansion
+  (`<r a="&big;"/>` with SubstituteEntities, or `xmlns:x="&big;"`) fails DURING
+  decode the instant the running total would exceed the remaining attr-buffer
+  budget — never building the full expansion first (the round-4 hole this closes;
+  the prior `decodeEntities` -> `rep` -> byte loop materialized it whole).
+  `decodeEntitiesInternal` (the string-returning decode used everywhere else)
+  shares the same core via an `entityStringSink`; a nested expansion's
+  contributed size for `entityCheck` amplification accounting is the sink's
+  `count()` delta across the recursive call (equal to the old `len(rep)`), so
+  amplification behavior is unchanged.
 - Entity-expansion sub-parses inherit the cap via `inheritNestedParserState`.
 - The bounded streaming SAX char-data path (`parseCharDataChunkedSAX`, used when
   `CharBufferSize > 0` and no DOM is built) is EXEMPT from the char-data cap: it

@@ -914,30 +914,21 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						}
 					}
 				} else if pctx.replaceEntities {
-					var rep string
-					rep, err = pctx.decodeEntities(ctx, ent.Content(), SubstituteRef)
-					if err != nil {
+					// Decode the entity replacement DIRECTLY into the attribute
+					// buffer through a cap-enforcing sink instead of first
+					// materializing the full expansion via decodeEntities and
+					// then copying it in. The sink normalizes attribute-value
+					// whitespace (TAB/CR/LF -> space) and checks the node-content
+					// cap before every byte, so an over-cap expansion (e.g.
+					// <r a="&big;"/> with SubstituteEntities, or a
+					// forced-replacement namespace attr xmlns:x="&big;") fails
+					// with ErrNodeContentTooLarge as soon as the running total
+					// would exceed the remaining budget — the cap is enforced
+					// incrementally during decode, never after a fully-built rep.
+					sink := &attrEntitySink{pctx: pctx, b: b}
+					if err = pctx.decodeEntitiesToSink(ctx, ent.Content(), SubstituteRef, 0, sink); err != nil {
 						err = pctx.error(ctx, err)
 						return
-					}
-					// Enforce the node-content cap DURING the replacement
-					// write, not just at the top of the next outer-loop
-					// iteration: decodeEntities materialized the full rep, so
-					// copying all of it into b before re-checking the cap would
-					// let an over-cap entity expansion (e.g. <r a="&big;"/> with
-					// SubstituteEntities, or a forced-replacement namespace attr
-					// xmlns:x="&big;") be buffered before ErrNodeContentTooLarge
-					// is returned. writeAttrByte checks before each byte so the
-					// running total can never exceed the cap.
-					for i := range len(rep) {
-						by := rep[i]
-						switch by {
-						case 0xD, 0xA, 0x9:
-							by = 0x20
-						}
-						if err = pctx.writeAttrByte(ctx, b, by); err != nil {
-							return
-						}
 					}
 				} else {
 					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {

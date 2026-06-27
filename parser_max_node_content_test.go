@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -287,4 +288,55 @@ func TestMaxNodeContentSizeAttrEntityReplacement(t *testing.T) {
 			Parse(t.Context(), in)
 		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
 	})
+}
+
+// TestMaxNodeContentSizeAttrEntityNotMaterialized proves the substituted
+// entity-replacement path enforces the cap DURING decode rather than after
+// fully materializing the expansion. The entity nests so its stored literal is
+// tiny (~tens of KiB) but its full expansion is ~64 MiB. The amplification guard
+// is disabled so only the node-content cap can stop it. If the decoder still
+// built the whole replacement string before checking the cap (the old
+// decodeEntities → rep behavior), this parse would allocate at least the full
+// 64 MiB expansion; streaming the decode through the cap keeps total allocation
+// orders of magnitude smaller. The bound is checked via runtime.MemStats
+// TotalAlloc, so this test must NOT run in parallel (TotalAlloc is process-wide
+// and a concurrent test's allocations would pollute the delta).
+func TestMaxNodeContentSizeAttrEntityNotMaterialized(t *testing.T) {
+	// no t.Parallel(): isolated so the TotalAlloc delta reflects only this parse.
+
+	// inner: 4 KiB; outer references inner 16384 times => ~64 MiB expansion,
+	// but the stored literal of outer is only ~3*16384 = ~48 KiB.
+	inner := strings.Repeat("a", 4096)
+	var refs strings.Builder
+	for range 16384 {
+		refs.WriteString("&inner;")
+	}
+	in := []byte(`<!DOCTYPE r [` +
+		`<!ENTITY inner "` + inner + `">` +
+		`<!ENTITY outer "` + refs.String() + `">` +
+		`]><r a="&outer;"/>`)
+
+	const expansion = 16384 * 4096 // ~64 MiB the old path would have materialized
+	// Generous bound: far below the full expansion, far above the parse's real
+	// working set (input + entity-table literals + cursor buffers ≈ a few MiB).
+	const allocBound = 16 << 20 // 16 MiB
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	_, err := helium.NewParser().
+		SubstituteEntities(true).
+		MaxEntityAmplification(-1). // disable amplification guard: cap is the only brake
+		MaxNodeContentSize(64).
+		Parse(t.Context(), in)
+
+	runtime.ReadMemStats(&after)
+
+	require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+
+	delta := after.TotalAlloc - before.TotalAlloc
+	require.Less(t, delta, uint64(allocBound),
+		"entity expansion was materialized: parse allocated %d bytes (full expansion is %d bytes); the cap must stop the decode incrementally",
+		delta, uint64(expansion))
 }
