@@ -37,6 +37,10 @@ const (
 // Schema represents a compiled XML Schema.
 // (libxml2: xmlSchema)
 type Schema struct {
+	// version is the effective XSD specification version resolved at compile
+	// time (explicit Compiler.Version() or a vc:minVersion hint). The Validator
+	// reads it to apply the same version-specific semantics as compilation.
+	version           Version
 	targetNamespace   string
 	elemFormQualified bool // elementFormDefault="qualified"
 	attrFormQualified bool // attributeFormDefault="qualified"

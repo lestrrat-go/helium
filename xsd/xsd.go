@@ -31,9 +31,42 @@ var ErrNilSchema = errors.New("xsd: nil schema")
 // ErrNilDocument is returned by Validate when the document to validate is nil.
 var ErrNilDocument = errors.New("xsd: nil document")
 
+// Version selects the XML Schema specification version a [Compiler] targets.
+// The zero value is [Version10], so a compiler from [NewCompiler] behaves as a
+// strict XSD 1.0 processor unless [Compiler.Version] (or a vc: hint on the
+// schema) opts into 1.1.
+type Version int
+
+const (
+	// Version10 targets XML Schema 1.0. This is the default and matches the
+	// historical behavior of this package (a libxml2-style XSD 1.0 processor).
+	Version10 Version = iota
+	// Version11 targets XML Schema 1.1. It enables the 1.1-only lexical rules
+	// (e.g. "+INF" for xs:double/xs:float), the 1.1 built-in datatypes
+	// (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration,
+	// xs:anyAtomicType, xs:error), and — as later phases land — the 1.1
+	// structural features (assertions, conditional type assignment, open
+	// content, relaxed wildcards/UPA/all, xs:override).
+	Version11
+)
+
+// String returns "1.0" or "1.1".
+func (v Version) String() string {
+	if v == Version11 {
+		return "1.1"
+	}
+	return "1.0"
+}
+
 type compileConfig struct {
 	label   string // label for error messages (e.g. source filename)
 	baseDir string // base directory for resolving relative includes
+	// version is the XSD specification version the compiler targets. The zero
+	// value (Version10) is the default. When versionSet is false, a vc:minVersion
+	// hint on the root <xs:schema> may upgrade the effective version to 1.1; an
+	// explicit Version() call sets versionSet and always wins.
+	version    Version
+	versionSet bool
 	// rootKey is the resolved fs.FS key of the TOP-LEVEL schema document, when
 	// known (set by CompileFile). compileSchema seeds includeVisited with it so a
 	// circular include/redefine that points back at the root (main -> inc -> main)
@@ -141,6 +174,17 @@ func (c Compiler) FS(fsys fs.FS) Compiler {
 func (c Compiler) Parser(p helium.Parser) Compiler {
 	c = c.clone()
 	c.cfg.parser = &p
+	return c
+}
+
+// Version selects the XML Schema specification version the compiler targets.
+// The default is [Version10]. Setting it explicitly overrides any vc:minVersion
+// hint on the schema document; when left unset, the effective version may be
+// upgraded to 1.1 by a vc:minVersion="1.1" attribute on the root <xs:schema>.
+func (c Compiler) Version(v Version) Compiler {
+	c = c.clone()
+	c.cfg.version = v
+	c.cfg.versionSet = true
 	return c
 }
 

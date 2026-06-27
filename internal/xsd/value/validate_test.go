@@ -242,11 +242,11 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		t.Run(tt.typeName, func(t *testing.T) {
 			t.Parallel()
 			for _, v := range tt.valid {
-				err := value.ValidateBuiltin(v, tt.typeName)
+				err := value.ValidateBuiltin(v, tt.typeName, value.Version11)
 				require.NoError(t, err, "type %s should accept %q", tt.typeName, v)
 			}
 			for _, v := range tt.invalid {
-				err := value.ValidateBuiltin(v, tt.typeName)
+				err := value.ValidateBuiltin(v, tt.typeName, value.Version11)
 				require.Error(t, err, "type %s should reject %q", tt.typeName, v)
 			}
 		})
@@ -590,8 +590,8 @@ func TestTimezoneUppercaseZOnly(t *testing.T) {
 	for _, tt := range zTypes {
 		t.Run(tt.typ, func(t *testing.T) {
 			t.Parallel()
-			require.NoError(t, value.ValidateBuiltin(tt.validZ, tt.typ), "uppercase Z must be valid")
-			require.Error(t, value.ValidateBuiltin(tt.invalidz, tt.typ), "lowercase z must be invalid")
+			require.NoError(t, value.ValidateBuiltin(tt.validZ, tt.typ, value.Version11), "uppercase Z must be valid")
+			require.Error(t, value.ValidateBuiltin(tt.invalidz, tt.typ, value.Version11), "lowercase z must be invalid")
 		})
 	}
 

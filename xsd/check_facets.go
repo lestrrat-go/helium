@@ -354,7 +354,7 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		// restriction is in error. Each bound is resolved with ITS OWN captured
 		// namespace context so a prefixed bound (e.g. a QName-typed q:z) binds the
 		// prefix declared at its own facet element, not a sibling's.
-		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1, version: c.version}
 		if validateValue(ctx, *rf.value, rf.ns, base, "", "", 0, sub) == nil {
 			continue
 		}
@@ -415,7 +415,7 @@ func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, f
 		// suppressed; only the pass/fail verdict matters. A non-nil result means the
 		// member is not a valid instance of the base type, so the enumeration facet
 		// is in error.
-		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1, version: c.version}
 		if validateValue(ctx, ev, enumNS, base, "", "", 0, sub) == nil {
 			continue
 		}
@@ -545,7 +545,7 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 			// member accepts it under the literal's own namespace bindings. A
 			// QName/NOTATION carrier accepts it only with a bound prefix, so a
 			// successful match means the prefix is bound.
-			sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+			sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1, version: c.version}
 			if validateValue(ctx, ev, enumNS, member, "", "", 0, sub) == nil {
 				return false
 			}
