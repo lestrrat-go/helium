@@ -106,3 +106,61 @@ func TestVersion11WildcardPrecedence(t *testing.T) {
 		require.NoError(t, validate(t, schema, `<root><other/></root>`))
 	})
 }
+
+// TestVersion11WildcardPrecedenceNested verifies that element-over-wildcard
+// precedence also holds when the wildcard is NOT a direct choice branch but is
+// wrapped inside a model group (here a sequence). The typed element declaration
+// must still win over the nested skip wildcard so an invalid value is rejected
+// rather than swallowed by the wildcard branch (XSD11-001, nested case).
+func TestVersion11WildcardPrecedenceNested(t *testing.T) {
+	// Branch 1 wraps the skip wildcard in a sequence; branch 2 is the typed
+	// element. Naive top-level classification treats branch 1 as "non-wildcard"
+	// (its term is a sequence), so it would steal <a> and false-accept "not-int".
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:sequence>
+          <xs:any processContents="skip"/>
+        </xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	compile := func(t *testing.T) *xsd.Schema {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		return schema
+	}
+
+	validate := func(t *testing.T, schema *xsd.Schema, instance string) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), doc)
+	}
+
+	t.Run("typed element wins over wildcard nested in a sequence (invalid rejected)", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		err := validate(t, schema, `<root><a>not-int</a></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("typed element wins over wildcard nested in a sequence (valid accepted)", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		require.NoError(t, validate(t, schema, `<root><a>5</a></root>`))
+	})
+
+	t.Run("unknown element still matches the nested wildcard branch", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		require.NoError(t, validate(t, schema, `<root><other/></root>`))
+	})
+}

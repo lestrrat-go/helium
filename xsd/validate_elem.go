@@ -121,23 +121,25 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 
 	matchOnce := func(p int) (int, bool) {
 		// First find a structurally matching particle that consumes a child.
-		// In XSD 1.1, non-wildcard particles take precedence over wildcard
-		// particles (element-over-wildcard precedence): a wildcard declared
-		// before an element must not steal a child the element declaration is
+		// In XSD 1.1, a branch that consumes the current child via an element
+		// leaf takes precedence over one that would consume it via a wildcard
+		// (element-over-wildcard precedence) regardless of declaration order or
+		// nesting: a wildcard declared before an element — directly or wrapped in
+		// a model group — must not steal a child the element declaration is
 		// responsible for validating. XSD 1.0 uses pure declaration order.
-		if vc.version == Version11 {
+		if vc.version == Version11 && p < len(children) {
+			child := children[p]
+			// Pass 1: branches that match the current child via an element leaf.
 			for _, particle := range mg.Particles {
-				if isWildcardParticle(particle) {
+				if !particleConsumesViaElement(particle, child, vc.schema) {
 					continue
 				}
 				if consumed, ok := matchAt(particle, p); ok {
 					return consumed, true
 				}
 			}
+			// Pass 2: fall back to any matching branch (wildcard leaves).
 			for _, particle := range mg.Particles {
-				if !isWildcardParticle(particle) {
-					continue
-				}
 				if consumed, ok := matchAt(particle, p); ok {
 					return consumed, true
 				}
@@ -599,13 +601,17 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 		// later branch may be the one that actually consumes the current child;
 		// returning the zero-length match first would leave that child stranded.
 		//
-		// In XSD 1.1, non-wildcard particles take precedence over wildcard
-		// particles (element-over-wildcard precedence) so a wildcard declared
-		// before an element does not steal the element's child. XSD 1.0 uses
+		// In XSD 1.1, a branch that consumes the current child via an element
+		// leaf takes precedence over one that would consume it via a wildcard
+		// (element-over-wildcard precedence), regardless of declaration order or
+		// nesting, so a wildcard declared before an element — directly or wrapped
+		// in a model group — does not steal the element's child. XSD 1.0 uses
 		// pure declaration order.
-		if vc.version == Version11 {
+		if vc.version == Version11 && p < len(children) {
+			child := children[p]
+			// Pass 1: branches that match the current child via an element leaf.
 			for _, particle := range mg.Particles {
-				if isWildcardParticle(particle) {
+				if !particleConsumesViaElement(particle, child, vc.schema) {
 					continue
 				}
 				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
@@ -613,10 +619,8 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 					return consumed, true
 				}
 			}
+			// Pass 2: fall back to any matching branch (wildcard leaves).
 			for _, particle := range mg.Particles {
-				if !isWildcardParticle(particle) {
-					continue
-				}
 				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
 				if err == nil && consumed > 0 {
 					return consumed, true
@@ -936,10 +940,34 @@ func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string 
 	return names
 }
 
-// isWildcardParticle reports whether a particle's term is an xs:any wildcard.
-func isWildcardParticle(p *Particle) bool {
-	_, ok := p.Term.(*Wildcard)
-	return ok
+// particleConsumesViaElement reports whether the particle could consume the
+// given child through a non-wildcard (element) leaf — i.e. some element
+// declaration (or one of its substitution-group members) reachable within the
+// particle's term matches the child's QName. Wildcard leaves report false. It
+// recurses into *ModelGroup terms so a choice branch that wraps an xs:any inside
+// a sequence/choice/all is still classified by whether a real element leaf
+// matches the child, not merely by its top-level term.
+//
+// Used for XSD 1.1 element-over-wildcard precedence: when selecting a choice
+// branch for the current child, branches that match it via an element leaf are
+// preferred over branches that would consume it via a wildcard, so a skip
+// wildcard (direct or nested) cannot steal a child a typed element declaration
+// is responsible for validating. Side-effect free; conservative (only true when
+// an element leaf clearly matches the child's name).
+func particleConsumesViaElement(p *Particle, child childElem, schema *Schema) bool {
+	switch term := p.Term.(type) {
+	case *ElementDecl:
+		return elemMatchesDeclOrSubst(child, term, schema)
+	case *Wildcard:
+		return false
+	case *ModelGroup:
+		for _, sub := range term.Particles {
+			if particleConsumesViaElement(sub, child, schema) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // sequenceHasWildcard returns true if any particle in the model group is a wildcard.
