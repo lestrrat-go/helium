@@ -392,16 +392,17 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
-	t.Run("accepts derived member of a faceted base union", func(t *testing.T) {
+	t.Run("rejects derived member of a faceted base union", func(t *testing.T) {
 		t.Parallel()
 		// Base @a is a FACETED union: FacetedUnion = (xs:int | xs:string) restricted
-		// with an enumeration {1, "hello"}. The derived @a (xs:int) is validly derived
-		// from one of the union's {member type definitions}. Per W3C cos-st-derived-ok
-		// (Simple) clause 2.2.4 the derivation relation holds when D is validly derived
-		// from one of B's member types; it does NOT add a "base union has no facets"
-		// condition — facet validity is a separate construction/validation constraint,
-		// not part of this derivation relation. So this must be ACCEPTED. Regression
-		// guard against re-adding a facet gate to the derivation check.
+		// with an enumeration {1, "hello"}, so its value space is exactly {1,"hello"}.
+		// The derived restriction redeclares @a as bare xs:int, whose value space
+		// includes values the base FORBIDS (e.g. 2) — that WIDENS the value space, so
+		// it is NOT a valid restriction and must be REJECTED. Per the value-space
+		// reading of cos-st-derived-ok.2.2.4, the union member-derivation shortcut
+		// applies only when the base union (and every intervening union in its
+		// restriction chain) has EMPTY facets. Regression guard for the union facet
+		// gate.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:simpleType name="IntOrString">
     <xs:union memberTypes="xs:int xs:string"/>
@@ -426,7 +427,65 @@ func TestRestrictionAttrType(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
-		require.Empty(t, compileFatalErrors(t, schema))
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects atomic base redeclared as a user union", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is the atomic builtin xs:string; the derived restriction redeclares
+		// @a as a constructed user xs:union (StrOrInt = xs:string | xs:int). A
+		// constructed union is not derived from xs:string through the pointer chain and
+		// admits non-string values (e.g. ints), so it WIDENS the base value space. A
+		// constructed list/union can only derive from xs:anySimpleType or via a real
+		// base-type chain, so this must be REJECTED.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="StrOrInt">
+    <xs:union memberTypes="xs:string xs:int"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="t:StrOrInt"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects atomic base redeclared as a user list", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is the atomic builtin xs:string; the derived restriction redeclares
+		// @a as a constructed user xs:list (StrList = list of xs:string). A constructed
+		// list is not derived from xs:string through the pointer chain and admits
+		// multi-token values the base does not, so it WIDENS the value space. A
+		// constructed list/union can only derive from xs:anySimpleType or via a real
+		// base-type chain, so this must be REJECTED.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="StrList">
+    <xs:list itemType="xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="t:StrList"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
 
 	t.Run("rejects unrelated user-defined list types", func(t *testing.T) {

@@ -1266,15 +1266,22 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	// unconditionally — wrongly accepting e.g. base union(xs:int xs:boolean)
 	// redeclared as xs:date (date derives from NEITHER member, so the loop
 	// rejects it). Members are walked transitively via the recursive call (a
-	// member that is itself a union re-enters this branch).
+	// member that is itself a union re-enters this branch, so an intervening
+	// faceted member-union is rejected by its own facet gate below).
 	//
-	// The rule does NOT add a "base union has no facets" condition: per W3C
-	// cos-st-derived-ok (Simple) clause 2.2.4 the derivation relation holds when D
-	// is validly derived from one of B's member type definitions, full stop. Facet
-	// validity is a separate construction/validation constraint, not part of this
-	// derivation relation, so a faceted union base still admits a member-derived
-	// type here.
+	// FACET GATE (value-space reasoning): a FACETED union has a RESTRICTED value
+	// space — e.g. FacetedUnion = (xs:int | xs:string) with enumeration {1,"hello"}
+	// has value space {1,"hello"}. "Restricting" it down to a bare member type
+	// like xs:int would ADMIT values the base FORBIDS (e.g. 2), which WIDENS — that
+	// is NOT a valid restriction. So the member-derivation shortcut applies ONLY
+	// when the base union AND every intervening union in its restriction chain have
+	// EMPTY facets. If the base union (or an intervening union) carries ANY facet,
+	// reject the member shortcut. A facet-free union base still admits a type
+	// validly derived from any of its member types.
 	if resolveVariety(base) == TypeVarietyUnion {
+		if unionRestrictionChainHasFacets(base) {
+			return false
+		}
 		for _, member := range resolveUnionMembers(base) {
 			if simpleTypeValidlyRestricts(derived, member) {
 				return true
@@ -1308,6 +1315,17 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	if base.Name.NS == lexicon.NamespaceXSD && isBuiltinListName(base.Name.Local) {
 		return false
 	}
+	// A CONSTRUCTED derived list or union (resolveVariety List/Union) reaching this
+	// point has already FAILED both the pointer-chain derivation (isDerivedFrom) and
+	// the valid-union-base member shortcut above. A constructed list/union can only
+	// be validly derived from xs:anySimpleType (the simple ur-type) or through a real
+	// base-type chain — there is no other source. So accept ONLY when the base is the
+	// actual xs:anySimpleType; otherwise REJECT. Without this, the db=="" "unknown =>
+	// valid" fallback below would wrongly accept e.g. an atomic base xs:string
+	// redeclared as a user xs:union or xs:list.
+	if v := resolveVariety(derived); v == TypeVarietyList || v == TypeVarietyUnion {
+		return base.Name.NS == lexicon.NamespaceXSD && base.Name.Local == typeAnySimpleType
+	}
 	db := builtinBaseLocal(derived)
 	bb := builtinBaseLocal(base)
 	if db == "" || bb == "" {
@@ -1330,6 +1348,45 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 		return true
 	}
 	return ok
+}
+
+// unionRestrictionChainHasFacets reports whether a union base type, or any
+// restriction step in its base chain down to the type that actually constructs
+// the union (the one carrying MemberTypes), declares any value-restricting facet.
+// Such a facet narrows the union's value space, so a "restriction" to a bare
+// member type would widen it and is not a valid derivation. Per XSD §4.1.5 only
+// pattern and enumeration are even applicable to a union, but every restricting
+// facet is checked for robustness; whiteSpace (fixed to collapse on a union, not
+// value-restricting) is intentionally ignored. Intervening MEMBER unions are not
+// walked here — they are re-entered through simpleTypeValidlyRestricts' recursion
+// and gated by their own call to this helper.
+func unionRestrictionChainHasFacets(td *TypeDef) bool {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if facetSetRestricts(cur.Facets) {
+			return true
+		}
+		if len(cur.MemberTypes) > 0 {
+			// Reached the union-constructing type; nothing below it constrains the
+			// union value space.
+			break
+		}
+	}
+	return false
+}
+
+// facetSetRestricts reports whether a FacetSet declares any value-restricting
+// facet. The whiteSpace facet is excluded: it normalizes rather than narrows the
+// value space and is fixed to collapse on unions/lists.
+func facetSetRestricts(fs *FacetSet) bool {
+	if fs == nil {
+		return false
+	}
+	return len(fs.Enumeration) > 0 ||
+		len(fs.Patterns) > 0 ||
+		fs.MinInclusive != nil || fs.MaxInclusive != nil ||
+		fs.MinExclusive != nil || fs.MaxExclusive != nil ||
+		fs.TotalDigits != nil || fs.FractionDigits != nil ||
+		fs.Length != nil || fs.MinLength != nil || fs.MaxLength != nil
 }
 
 // fixedConstraintRestricts reports whether a derived attribute use's 'fixed'
