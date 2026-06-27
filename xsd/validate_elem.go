@@ -940,34 +940,95 @@ func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string 
 	return names
 }
 
-// particleConsumesViaElement reports whether the particle could consume the
-// given child through a non-wildcard (element) leaf — i.e. some element
-// declaration (or one of its substitution-group members) reachable within the
-// particle's term matches the child's QName. Wildcard leaves report false. It
-// recurses into *ModelGroup terms so a choice branch that wraps an xs:any inside
-// a sequence/choice/all is still classified by whether a real element leaf
-// matches the child, not merely by its top-level term.
+// consumerKind classifies how a particle would consume a given child as its
+// FIRST consuming term: through an element leaf, through a wildcard leaf, or not
+// at all.
+type consumerKind int
+
+const (
+	consumerNone consumerKind = iota
+	consumerElement
+	consumerWildcard
+)
+
+// particleConsumesViaElement reports whether the particle would consume the
+// given child through a non-wildcard (element) leaf AS ITS FIRST CONSUMING TERM.
+// It is path-aware: it respects compositor order, occurrences, and emptiable
+// prefixes, so a leading wildcard (direct or nested) that would consume the
+// child first makes the particle NOT an element-first-consumer — even when a
+// later element leaf inside the same model group also matches the child's name.
 //
 // Used for XSD 1.1 element-over-wildcard precedence: when selecting a choice
-// branch for the current child, branches that match it via an element leaf are
-// preferred over branches that would consume it via a wildcard, so a skip
-// wildcard (direct or nested) cannot steal a child a typed element declaration
-// is responsible for validating. Side-effect free; conservative (only true when
-// an element leaf clearly matches the child's name).
+// branch for the current child, branches that consume it via an element leaf as
+// first consumer are preferred over branches that would consume it via a
+// wildcard, so a skip wildcard (direct or nested as a leading term) cannot steal
+// a child a typed element declaration is responsible for validating. This is
+// bounded first-consumer determination, not full backtracking. Side-effect free.
 func particleConsumesViaElement(p *Particle, child childElem, schema *Schema) bool {
+	return particleFirstConsumerKind(p, child, schema) == consumerElement
+}
+
+// particleFirstConsumerKind classifies how the particle would consume child as
+// its first consuming term.
+func particleFirstConsumerKind(p *Particle, child childElem, schema *Schema) consumerKind {
 	switch term := p.Term.(type) {
 	case *ElementDecl:
-		return elemMatchesDeclOrSubst(child, term, schema)
+		if p.MaxOccurs == 0 {
+			return consumerNone
+		}
+		if elemMatchesDeclOrSubst(child, term, schema) {
+			return consumerElement
+		}
+		return consumerNone
 	case *Wildcard:
-		return false
+		if p.MaxOccurs == 0 {
+			return consumerNone
+		}
+		if wildcardMatches(term, child.ns) {
+			return consumerWildcard
+		}
+		return consumerNone
 	case *ModelGroup:
-		for _, sub := range term.Particles {
-			if particleConsumesViaElement(sub, child, schema) {
-				return true
+		if term.MaxOccurs == 0 {
+			return consumerNone
+		}
+		return groupFirstConsumerKind(term, child, schema)
+	}
+	return consumerNone
+}
+
+// groupFirstConsumerKind classifies how a model group would consume child as its
+// first consuming term, respecting compositor order and emptiable prefixes.
+func groupFirstConsumerKind(mg *ModelGroup, child childElem, schema *Schema) consumerKind {
+	switch mg.Compositor {
+	case CompositorSequence:
+		// Walk in order: the first member that can consume child decides; a
+		// non-matching but emptiable prefix member is skipped; a non-matching,
+		// non-emptiable member means the group cannot reach child at all.
+		for _, p := range mg.Particles {
+			kind := particleFirstConsumerKind(p, child, schema)
+			if kind != consumerNone {
+				return kind
+			}
+			if !particleEmptiable(p) {
+				return consumerNone
 			}
 		}
+		return consumerNone
+	default: // choice, all
+		// Element-first wins if ANY member is element-first; otherwise fall back
+		// to wildcard-first if some member consumes child via a wildcard.
+		result := consumerNone
+		for _, p := range mg.Particles {
+			switch particleFirstConsumerKind(p, child, schema) {
+			case consumerElement:
+				return consumerElement
+			case consumerWildcard:
+				result = consumerWildcard
+			}
+		}
+		return result
 	}
-	return false
 }
 
 // sequenceHasWildcard returns true if any particle in the model group is a wildcard.

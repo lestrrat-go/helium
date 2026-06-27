@@ -164,3 +164,69 @@ func TestVersion11WildcardPrecedenceNested(t *testing.T) {
 		require.NoError(t, validate(t, schema, `<root><other/></root>`))
 	})
 }
+
+// TestVersion11WildcardPrecedenceNestedLeading verifies the path-aware first
+// consumer rule: a choice branch whose sequence begins with a wildcard and is
+// FOLLOWED by an element leaf must NOT be classified as element-first for that
+// child — the leading wildcard would consume it first. A broad "any descendant
+// element matches" classifier wrongly prefers this branch and lets the leading
+// skip wildcard swallow the first child, false-accepting an invalid value
+// (XSD11-001, nested leading-wildcard case).
+func TestVersion11WildcardPrecedenceNestedLeading(t *testing.T) {
+	// Branch 1 is sequence(any skip, element a:int); branch 2 is element a:int.
+	// For the first <a>, branch 1's LEADING wildcard would consume it (via a
+	// wildcard leaf, no int validation), so precedence must select branch 2 (the
+	// element declaration) and reject an invalid value.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:sequence>
+          <xs:any processContents="skip"/>
+          <xs:element name="a" type="xs:int"/>
+        </xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	compile := func(t *testing.T) *xsd.Schema {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		return schema
+	}
+
+	validate := func(t *testing.T, schema *xsd.Schema, instance string) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), doc)
+	}
+
+	t.Run("element wins over a leading nested wildcard (invalid first child rejected)", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		// The first <a> must be validated by the element declaration (xs:int),
+		// not swallowed by branch 1's leading skip wildcard.
+		err := validate(t, schema, `<root><a>not-int</a><a>5</a></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("valid document still accepted", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		require.NoError(t, validate(t, schema, `<root><a>5</a></root>`))
+	})
+
+	t.Run("unknown element still matched by the leading wildcard branch", func(t *testing.T) {
+		t.Parallel()
+		schema := compile(t)
+		// <other/> can only be consumed by branch 1's leading wildcard, with the
+		// trailing element a satisfied by <a>5</a>.
+		require.NoError(t, validate(t, schema, `<root><other/><a>5</a></root>`))
+	})
+}
