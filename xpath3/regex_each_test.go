@@ -114,6 +114,61 @@ func TestRegexEachSubmatchIndexMultilineAnchorIsBounded(t *testing.T) {
 	}
 }
 
+// The public limit contract (regex.go) must hold uniformly across all three
+// enumeration paths: the ordinary RE2 streaming offset-loop, the full-context
+// RE2 FindAll path, and the regexp2 backtracking path. A non-positive limit
+// (including 0) means uncapped — every match is produced. A positive limit N
+// stops iteration after exactly N matches (or all of them, if fewer than N).
+func TestRegexEachSubmatchIndexLimitContract(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		pattern string
+		flags   string
+		input   string
+		total   int // number of matches with an uncapped limit
+	}{
+		// Ordinary RE2 streaming offset-loop.
+		{name: "re2 digits", pattern: "[0-9]", input: "1234567", total: 7},
+		// Full-context RE2 (multi-line anchor matches at every line start).
+		{name: "re2 multiline anchor", pattern: "^", flags: "m", input: "a\nb\nc\nd\ne", total: 5},
+		// regexp2 backtracking engine (backreference).
+		{name: "regexp2 backref", pattern: "(a)\\1", input: "aa-aa-aa-aa", total: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			re, err := xpath3.CompileRegex(tc.pattern, tc.flags)
+			require.NoError(t, err)
+
+			count := func(limit int) int {
+				n := 0
+				err := re.EachSubmatchIndex(tc.input, limit, func(_ []int) bool {
+					n++
+					return true
+				})
+				require.NoError(t, err)
+				return n
+			}
+
+			// limit == 0 and negative limits mean uncapped: all matches produced.
+			require.Equal(t, tc.total, count(0),
+				"limit == 0 must be uncapped and yield every match")
+			require.Equal(t, tc.total, count(-1),
+				"a negative limit must be uncapped and yield every match")
+
+			// A positive limit below the total stops after exactly that many.
+			require.Equal(t, 2, count(2),
+				"a positive limit must stop after exactly that many matches")
+
+			// A positive limit above the total yields all matches.
+			require.Equal(t, tc.total, count(tc.total+5),
+				"a limit larger than the match count yields all matches")
+		})
+	}
+}
+
 // A backtracking-shaped but RE2-compatible leading-context pattern such as
 // ^(a+)+b stays on Go's linear RE2 engine — it must NOT be routed through the
 // backtracking regexp2 engine, where the nested quantifier over a non-matching

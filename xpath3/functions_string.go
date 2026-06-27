@@ -1293,10 +1293,16 @@ func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]in
 // keeping live memory proportional to the cap rather than the input's match
 // count. The streaming paths never accumulate matches at all.
 func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn func([]int) bool) error {
+	// Normalize the public contract: a non-positive limit means "uncapped".
+	// Internally that is represented as -1, which is also the "all matches"
+	// sentinel understood by the full-context FindAllStringSubmatchIndex path.
+	if limit <= 0 {
+		limit = -1
+	}
 	if r.backtrack == nil {
 		return r.eachStdSubmatchIndex(s, limit, fn)
 	}
-	return r.eachBacktrackSubmatchIndex(s, fn)
+	return r.eachBacktrackSubmatchIndex(s, limit, fn)
 }
 
 // eachStdSubmatchIndex ports the standard library's regexp.allMatches loop
@@ -1327,6 +1333,7 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([
 	end := len(s)
 	pos := 0
 	prevMatchEnd := -1
+	produced := 0
 	for pos <= end {
 		loc := r.std.FindStringSubmatchIndex(s[pos:])
 		if loc == nil {
@@ -1363,6 +1370,10 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([
 			if !fn(loc) {
 				return nil
 			}
+			produced++
+			if limit > 0 && produced >= limit {
+				return nil
+			}
 		}
 	}
 	return nil
@@ -1376,8 +1387,9 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([
 // rune indices to byte offsets and stopping early when fn returns false. Because
 // matches are produced incrementally and never accumulated, a caller can enforce
 // a budget or honor a cancelled context DURING enumeration. No empty-match dedup
-// is applied — these patterns follow regexp2's own iteration.
-func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, fn func([]int) bool) error {
+// is applied — these patterns follow regexp2's own iteration. A positive limit
+// stops iteration after that many matches; a non-positive limit means uncapped.
+func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, limit int, fn func([]int) bool) error {
 	re := r.backtrack
 	offsets := runeByteOffsets(s)
 	match, err := withSpuriousTimeoutRetry(re.MatchTimeout, func() (*regexp2.Match, error) {
@@ -1386,6 +1398,7 @@ func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, fn func([]int)
 	if err != nil {
 		return err
 	}
+	produced := 0
 	for match != nil {
 		groups := match.Groups()
 		entry := make([]int, 0, len(groups)*2)
@@ -1399,6 +1412,10 @@ func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, fn func([]int)
 			entry = append(entry, start, end)
 		}
 		if !fn(entry) {
+			return nil
+		}
+		produced++
+		if limit > 0 && produced >= limit {
 			return nil
 		}
 		cur := match
