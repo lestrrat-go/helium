@@ -96,10 +96,17 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		if pctx.encoding == "" {
 			pctx.encoding = "ibm037"
 		}
-		// Reset the byte cursor from the raw input so the decoder
-		// reads from the beginning of the document.
-		pctx.popInput()
-		pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(pctx.rawInput)))
+		// For the byte-slice path rawInput holds the whole document, so reset the
+		// byte cursor from it to read the decoder from the document start.
+		// For the streaming path (ebcdicStream) rawInput is only a bounded sniff
+		// prefix; the live cursor already sits at the document start (detection
+		// only peeks) over the full prefix+remainder stream, so decode it in
+		// place — the parser's per-node content caps then bound memory as the
+		// stream is consumed, with no whole-document buffer.
+		if !pctx.ebcdicStream {
+			pctx.popInput()
+			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(pctx.rawInput)))
+		}
 		if err := pctx.switchEncoding(); err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -196,6 +203,9 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 	}
 	pctx.skipBlanks(ctx)
+	if pctx.blankRunErr != nil {
+		return pctx.error(ctx, pctx.blankRunErr)
+	}
 
 	if cur.Peek() != '<' {
 		// A cancelled or failed read can leave the cursor at an apparent end

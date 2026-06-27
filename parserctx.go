@@ -82,9 +82,23 @@ type parserCtx struct {
 	detectedEncoding string
 	in               io.Reader
 	rawInput         []byte // original bytes, used for EBCDIC encoding detection
-	nbread           int
-	instate          parserState
-	keepBlanks       bool
+	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
+	// that mode rawInput holds only a bounded sniff prefix (enough for
+	// ExtractEBCDICEncoding), and the live cursor over the prefix+remainder
+	// stream is decoded in place rather than being reset from rawInput (which
+	// would otherwise require buffering the whole — possibly unbounded — input).
+	ebcdicStream bool
+	// ebcdicConsumed counts the bytes pulled from the underlying reader on the
+	// EBCDIC streaming path. In ebcdicStream mode rawInput holds only a bounded
+	// sniff prefix, so init cannot seed inputSize with the real document size;
+	// the entity-amplification guard (entityCheckLimits) instead compares against
+	// this live consumed-byte count so a legitimate large EBCDIC document whose
+	// internal entity is referenced once is not falsely rejected. nil on every
+	// non-EBCDIC path (where inputSize already reflects the real/known size).
+	ebcdicConsumed *countingReader
+	nbread         int
+	instate        parserState
+	keepBlanks     bool
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
@@ -125,12 +139,13 @@ type parserCtx struct {
 	stopped          bool
 	disableSAX       bool              // suppress SAX callbacks after fatal error in recover mode
 	recoverErr       error             // first fatal error saved during recovery
+	blankRunErr      error             // sticky error from an over-cap whitespace run (prolog/inter-root DoS guard)
 	elemDepth        int               // current element nesting depth
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
 	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)
 	maxCMDepth       int               // max DTD content-model declaration depth (0 = unlimited)
 	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
-	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run or attribute value (0 = unlimited)
+	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run or attribute value, AND of a contiguous XML-whitespace blank-skip run (0 = unlimited)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
@@ -512,6 +527,24 @@ func (ctx *parserCtx) nodeContentScanBudget() int {
 	return ctx.maxNodeContent + utf8.UTFMax
 }
 
+// countingReader wraps an io.Reader and tracks the total number of bytes read
+// through it. The EBCDIC streaming path wraps its reconstructed stream
+// (sniff prefix + remainder) in one so the entity-amplification guard can use
+// the real number of document bytes consumed so far instead of the bounded
+// sniff-prefix length that rawInput holds in that mode. The count can never
+// exceed the source's true byte length, so it is a safe lower bound on the
+// document size.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
 func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.pushInput(strcursor.NewByteCursor(in))
 	ctx.detectedEncoding = encUTF8
@@ -650,6 +683,37 @@ func (pctx *parserCtx) namespaceError(ctx context.Context, err error) error {
 }
 
 func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorLevel) error {
+	// A blank-run scan that tripped the cancellation/over-cap guard records a
+	// sticky pctx.blankRunErr. Because skipBlanks/skipBlankBytes only return a
+	// bool, callers that ignore the sticky error (XML declaration, DTD subset,
+	// ...) keep going and report a generic follow-on parse error. Prefer the
+	// blank-run error verbatim here so it surfaces regardless of which caller hit
+	// it: this keeps context.Canceled propagating as cancellation (not a syntax
+	// error, preserving the no-partial-document contract) and keeps
+	// ErrNodeContentTooLarge from being masked behind a generic XML-decl/DTD error.
+	if pctx.blankRunErr != nil {
+		err = pctx.blankRunErr
+	} else if !isParseAbort(err) {
+		// A read failure or cancellation recorded as the active cursor's sticky
+		// read error (most importantly a push/streaming-stream Read returning
+		// context.Canceled when cancellation unblocks a pending wait) — or a
+		// pending ctx cancellation — must never be reported as a synthesized
+		// syntax error. Per the cancellation contract a cancelled/failed parse
+		// surfaces the underlying cause, not a malformed-document diagnostic.
+		// This generalizes the blankRunErr preference above to callers that turn
+		// a short read into a follow-on syntax error WITHOUT going through the
+		// blank scanner — e.g. a "<?xml" whose required trailing blank was never
+		// read, so looksLikeXMLDecl cannot confirm the declaration and it is
+		// reparsed as a reserved-target PI ("XML declaration allowed only at the
+		// start of the document") instead of propagating the real read error.
+		// It mirrors the ctx.Err()/cursorDecodeErr() gate parseDocument already
+		// applies at the document-end boundary.
+		if rerr := ctx.Err(); rerr != nil {
+			err = rerr
+		} else if rerr := pctx.cursorDecodeErr(); rerr != nil {
+			err = rerr
+		}
+	}
 	// Parse-abort errors (the stop sentinel, context cancellation, deadline
 	// expiry) are not genuine parse failures: pass them through unchanged so
 	// callers see them directly and SAX error handlers are not fired as if the
