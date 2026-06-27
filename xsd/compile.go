@@ -23,6 +23,10 @@ type compiler struct {
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
+	// unresolved xs:alternative (conditional type assignment) @type references,
+	// resolved in resolveRefs. A slice (not a map) so nil-append works without
+	// per-compiler initialization.
+	altTypeRefs []altTypeRef
 	// source info for element refs, used in unresolved-type error messages
 	elemRefSources map[*ElementDecl]elemRefSource
 	// unresolved group references: maps from model group placeholder to group QName

@@ -87,6 +87,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 	}
 
+	// Resolve XSD 1.1 conditional-type-assignment alternative @type references.
+	c.resolveAltTypeRefs(ctx)
+
 	// Resolve base type references.
 	for td, qn := range c.typeRefs {
 		base, ok := c.schema.types[qn]

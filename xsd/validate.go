@@ -661,6 +661,10 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		return nil
 	}
 
+	// XSD 1.1 conditional type assignment: the alternatives may select a
+	// different governing type. xsi:type (resolved next) still takes precedence.
+	declType = vc.applyTypeAlternatives(ctx, elem, edecl, declType)
+
 	td, err := vc.resolveXsiType(ctx, elem, declType)
 	if err != nil {
 		return err
