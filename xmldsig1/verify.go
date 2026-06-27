@@ -108,6 +108,12 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// confirm that the element they intend to consume is actually covered.
 	result := &VerifyResult{Signature: sigElem}
 	for i, ref := range parsed.references {
+		// Honor context cancellation between references: a signature with very
+		// many References must not be digested to completion once the caller's
+		// context is cancelled or its deadline has passed.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		target, err := verifyReference(doc, sigElem, ref, cfg.allowSHA1)
 		if err != nil {
 			return nil, &VerificationError{Reference: i, URI: ref.uri, Err: err}
