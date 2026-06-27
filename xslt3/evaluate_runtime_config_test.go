@@ -131,6 +131,54 @@ func TestEvaluateInLazyGlobalVarResolvesAgainstModuleBase(t *testing.T) {
 		templateURI, resolver.requests)
 }
 
+// evaluateEmptyBasePackageSource declares a PUBLIC global variable whose body
+// runs xsl:evaluate(unparsed-text(...)). The variable has no xml:base and the
+// package is served with an EMPTY module base, so its declaration-site base is
+// the empty string. Like a normal package component it is evaluated lazily on
+// first reference from the using stylesheet's template.
+const evaluateEmptyBasePackageSource = `<?xml version="1.0"?>
+<xsl:package name="http://example.com/pkg" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:variable name="g" visibility="public">
+    <xsl:evaluate xpath="'unparsed-text(&quot;data.txt&quot;)'"/>
+  </xsl:variable>
+</xsl:package>`
+
+// TestEvaluateInLazyGlobalVarWithEmptyModuleBaseDoesNotFallThrough proves that a
+// pinned but EMPTY declaration-site base is authoritative: the lazily-evaluated
+// package global's xsl:evaluate/unparsed-text resolves the relative href against
+// the empty declaration base, NOT the using stylesheet's non-empty base. With an
+// absent base a relative href is unresolvable, so the correct outcome is a
+// FOUT1170 "no base URI" failure and the resolver is NEVER asked for the using
+// stylesheet's URI. Before the fix an empty pinned base fell through to
+// ec.stylesheet.baseURI, so the global silently resolved against the USING
+// stylesheet ("mem://using/data.txt") — the same class of bug this branch fixes.
+func TestEvaluateInLazyGlobalVarWithEmptyModuleBaseDoesNotFallThrough(t *testing.T) {
+	// If the bug were present the relative href would be joined against the
+	// using stylesheet base and resolve to this URI; it must NOT.
+	const usingURI = "mem://using/data.txt"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(evaluateGlobalVarUsingStylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().
+		BaseURI("mem://using/main.xsl").
+		PackageResolver(fixedBasePackageResolver{source: evaluateEmptyBasePackageSource, baseURI: ""}).
+		Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	// Register the using-base URI so that, were the bug present, the lookup
+	// would succeed against it. The fix keeps the base empty, so resolution
+	// fails before any resolver call with that URI.
+	resolver := &recordingURIResolver{files: map[string][]byte{usingURI: []byte("payload")}}
+	_, err = ss.Transform(parseTransformSource(t)).URIResolver(resolver).Serialize(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "without base URI",
+		"empty declaration base must make the relative href unresolvable (FOUT1170), got %v", err)
+	require.False(t, resolver.seen(usingURI),
+		"must NOT fall through to the using stylesheet base %q; got %v",
+		usingURI, resolver.requests)
+}
+
 // evaluateCodepointsStylesheet maps an XML 1.1 restricted character (U+0001),
 // which is legal under an XSLT 3.0 processor (XML 1.1 chars allowed) but would
 // raise FOCH0001 under a plain XML-1.0 evaluator. We measure string-length to

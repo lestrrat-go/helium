@@ -670,10 +670,14 @@ func (ec *execContext) effectiveStaticBaseURI() string {
 	if ec.staticBaseURIPinned {
 		// Evaluating a global variable/param body: the static base URI is
 		// pinned to the declaration site (its module base) and must never fall
-		// through to the currently-executing template's base URI. The override
-		// already carries the declaration base whenever it is known; this guards
-		// the residual case where the whole module has no base URI.
-		return ec.stylesheet.baseURI
+		// through to the currently-executing template's base URI NOR the using
+		// stylesheet's base URI. The override already carries the declaration
+		// base whenever it is known; an empty pinned base is authoritative (e.g.
+		// a used package whose PackageResolver returns an empty base), so we
+		// return "" rather than falling back to ec.stylesheet.baseURI — falling
+		// back would resolve the global's xsl:evaluate / unparsed-text against
+		// the USING stylesheet, the very bug this pinning prevents.
+		return ec.staticBaseURIOverride
 	}
 	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
 		return ec.currentTemplate.BaseURI
