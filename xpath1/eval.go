@@ -438,23 +438,30 @@ func evalComparison(ctx context.Context, ec *evalContext, e BinaryExpr) (*Result
 	if err != nil {
 		return nil, err
 	}
-	b := compareResults(e.Op, left, right)
+	b, err := compareResults(ctx, ec, e.Op, left, right)
+	if err != nil {
+		return nil, err
+	}
 	return &Result{Type: BooleanResult, Bool: b}, nil
 }
 
-// compareResults implements XPath comparison semantics including node-set comparisons.
-func compareResults(op TokenType, left, right *Result) bool {
+// compareResults implements XPath comparison semantics including node-set
+// comparisons. Node-set comparisons iterate over (possibly large) node-sets, so
+// they charge the operation counter and honor context cancellation just like
+// the axis-iteration loops; a cancelled context or an exceeded op limit aborts
+// promptly with the same error the rest of the evaluator returns.
+func compareResults(ctx context.Context, ec *evalContext, op TokenType, left, right *Result) (bool, error) {
 	if left.Type == NodeSetResult {
-		return compareNodeSet(op, left.NodeSet, right)
+		return compareNodeSet(ctx, ec, op, left.NodeSet, right)
 	}
 	if right.Type == NodeSetResult {
-		return compareNodeSetRight(op, left, right.NodeSet)
+		return compareNodeSetRight(ctx, ec, op, left, right.NodeSet)
 	}
-	return compareScalars(op, left, right)
+	return compareScalars(op, left, right), nil
 }
 
 // compareNodeSet handles comparisons where the left operand is a node-set.
-func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
+func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNodes []helium.Node, right *Result) (bool, error) {
 	if right.Type == NodeSetResult {
 		// Pre-compute string values for the right-hand node-set to
 		// avoid recomputing them for every left-hand node.
@@ -463,56 +470,76 @@ func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
 			rightVals[i] = ixpath.StringValue(rn)
 		}
 		for _, ln := range leftNodes {
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
+			// Each left node compares against every right value: charge
+			// the whole inner row so the O(n*m) loop cannot run unbounded.
+			if err := ec.countOps(len(rightVals)); err != nil {
+				return false, err
+			}
 			lv := ixpath.StringValue(ln)
 			for _, rv := range rightVals {
 				if compareStrings(op, lv, rv) {
-					return true
+					return true, nil
 				}
 			}
 		}
-		return false
+		return false, nil
 	}
 	// Per XPath 1.0 REC 3.4, comparing a node-set with a boolean converts the
 	// whole node-set to a boolean (true iff non-empty), then compares booleans.
 	if right.Type == BooleanResult {
 		nsBool := len(leftNodes) > 0
 		if op == TokenEquals {
-			return nsBool == right.Bool
+			return nsBool == right.Bool, nil
 		}
 		if op == TokenNotEquals {
-			return nsBool != right.Bool
+			return nsBool != right.Bool, nil
 		}
-		return compareNumbers(op, boolToNumber(nsBool), boolToNumber(right.Bool))
+		return compareNumbers(op, boolToNumber(nsBool), boolToNumber(right.Bool)), nil
 	}
 	for _, ln := range leftNodes {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if err := ec.countOps(1); err != nil {
+			return false, err
+		}
 		if compareWithScalar(op, ixpath.StringValue(ln), right) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // compareNodeSetRight handles comparisons where only the right operand is a node-set.
-func compareNodeSetRight(op TokenType, left *Result, rightNodes []helium.Node) bool {
+func compareNodeSetRight(ctx context.Context, ec *evalContext, op TokenType, left *Result, rightNodes []helium.Node) (bool, error) {
 	// Per XPath 1.0 REC 3.4, comparing a boolean with a node-set converts the
 	// whole node-set to a boolean (true iff non-empty), then compares booleans.
 	if left.Type == BooleanResult {
 		nsBool := len(rightNodes) > 0
 		if op == TokenEquals {
-			return left.Bool == nsBool
+			return left.Bool == nsBool, nil
 		}
 		if op == TokenNotEquals {
-			return left.Bool != nsBool
+			return left.Bool != nsBool, nil
 		}
-		return compareNumbers(op, boolToNumber(left.Bool), boolToNumber(nsBool))
+		return compareNumbers(op, boolToNumber(left.Bool), boolToNumber(nsBool)), nil
 	}
 	rev := reverseOp(op)
 	for _, rn := range rightNodes {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if err := ec.countOps(1); err != nil {
+			return false, err
+		}
 		if compareWithScalar(rev, ixpath.StringValue(rn), left) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // boolToNumber converts a boolean to its XPath number value (true=1, false=0).

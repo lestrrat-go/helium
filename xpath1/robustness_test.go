@@ -128,3 +128,48 @@ func TestEvaluateContext(t *testing.T) {
 		require.Len(t, r.NodeSet, 2)
 	})
 }
+
+// verifies that a node-set vs node-set general comparison (an O(n*m) string
+// comparison) charges the operation limit instead of running an uncancellable
+// quadratic loop. Two large, non-matching node-sets are compared under an op
+// limit sized to clear the cheap path traversal but trip during the quadratic
+// comparison.
+func TestNodeSetComparisonBounded(t *testing.T) {
+	const n = 300
+
+	var sb strings.Builder
+	sb.WriteString("<root>")
+	for i := range n {
+		sb.WriteString("<a>x")
+		sb.WriteString(strconv.Itoa(i))
+		sb.WriteString("</a>")
+	}
+	for i := range n {
+		sb.WriteString("<b>y")
+		sb.WriteString(strconv.Itoa(i))
+		sb.WriteString("</b>")
+	}
+	sb.WriteString("</root>")
+	doc := parseXML(t, sb.String())
+
+	// /root/a and /root/b never share a string value, forcing the full
+	// n*n comparison before returning false.
+	compiled, err := xpath1.Compile("/root/a = /root/b")
+	require.NoError(t, err)
+
+	// The path traversal costs roughly 2*(1+2n) ~= 1200 ops; the comparison
+	// then attempts n*n == 90000 string comparisons. A limit between the two
+	// is honored only if the comparison loop charges the op counter.
+	t.Run("op limit honored", func(t *testing.T) {
+		_, err := xpath1.NewEvaluator().OpLimit(5000).Evaluate(t.Context(), compiled, doc)
+		require.ErrorIs(t, err, xpath1.ErrOpLimit)
+	})
+
+	// A generous limit still produces the correct boolean result.
+	t.Run("generous limit ok", func(t *testing.T) {
+		r, err := xpath1.NewEvaluator().OpLimit(1_000_000).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		require.Equal(t, xpath1.BooleanResult, r.Type)
+		require.False(t, r.Bool)
+	})
+}
