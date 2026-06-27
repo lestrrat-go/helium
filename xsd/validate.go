@@ -698,6 +698,22 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 		return err
 	}
 
+	if err := vc.validateContentByType(ctx, elem, edecl, td); err != nil {
+		return err
+	}
+
+	// XSD 1.1: xs:assert constraints are evaluated against the element once its
+	// attributes and content have been validated.
+	if vc.version == Version11 {
+		return vc.checkAssertions(ctx, elem, td)
+	}
+	return nil
+}
+
+// validateContentByType validates an element's content against its type's
+// content-type (empty/simple/element-only/mixed). Attribute validation and the
+// XSD 1.1 assertion check are handled by the caller (validateElementContent).
+func (vc *validationContext) validateContentByType(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	switch td.ContentType {
 	case ContentTypeEmpty:
 		return vc.validateEmptyContent(ctx, elem)

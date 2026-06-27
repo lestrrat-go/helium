@@ -147,10 +147,10 @@ XSLT element registry: metadata for all ~80 recognized XSLT 3.0 elements.
 
 ## xsd/
 
-XML Schema (XSD) 1.0 compilation and validation.
+XML Schema (XSD) compilation and validation. Defaults to XSD 1.0; XSD 1.1 is opt-in via `Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"` hint on the schema root). See the "XSD — Version Toggle" section in CLAUDE.md for what is implemented in 1.1.
 
 - **NewCompiler() → Compiler** — create fluent builder for schema compilation
-  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)`, `Version(Version)` — builder methods (clone-on-write). `Version(Version10|Version11)` selects the XSD spec version (default `Version10`)
   - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the schema document and all nested `xs:include`/`xs:import`/`xs:redefine` targets; supplies parse policy (limits, FS, XXE/network). Distinct from `FS`, which *fetches* schema bytes; the injected parser governs *parse policy* of those bytes. Unset → default `helium.NewParser()`.
   - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `xs:include`, `xs:import`, and `xs:redefine`. **Secure by default** (mirrors `helium.NewParser`): the default (and what a nil value restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), so an untrusted schema cannot disclose local files or exhaust resources via a hostile `schemaLocation`. Opt into host access with `helium.PermissiveFS()` (any `os.Open` path) or a confined FS. Each nested schema is read through a fixed `maxNestedSchemaSize` byte cap (10 MiB) regardless of FS, so an endless source (e.g. `schemaLocation` → `/dev/zero`) cannot exhaust memory; an over-cap read is fatal (`errSchemaTooLarge`, see `IsFatalSchemaLoad`). Schema-location resolution is URI-aware: when `BaseDir` is a URI (e.g. `https://…` or `file:///…`) a relative include is resolved with RFC 3986 semantics and an absolute-URI include is passed through unchanged, so the name handed to the FS is the canonical nested-schema URI; when `BaseDir` is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes like `os.DirFS`/`fstest.MapFS`)
   - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods; return `(nil, ErrCompilationFailed)` on fatal schema diagnostics
@@ -166,8 +166,8 @@ XML Schema (XSD) 1.0 compilation and validation.
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ErrValidationFailed` — sentinel error returned by `Validate()` when the document is invalid; individual errors delivered via `ErrorHandler`. `Validate()` also returns `ErrNilSchema` (no compiled schema) and `ErrNilDocument` (nil document); a nil `ctx` is normalized to `context.Background()`
 - `ErrCompilationFailed` — sentinel error returned by `Compile()`/`CompileFile()` when the schema has one or more fatal errors; the returned schema is nil and individual diagnostics are delivered via `ErrorHandler`
-- Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `constants.go`, `compile.go` + `compile_imports.go` (compile orchestration/imports), `resolve_uri.go` (shared schema-location URI resolver `ResolveSchemaURI`/`URIScheme`), `read_types.go` + `read_particles.go` + `read_elements.go` (schema readers), `link_refs.go` + `restriction_particle.go` + `check_*.go` (`check_element_consistent.go`, `check_elements.go`, `check_facets.go`, `check_upa.go`; reference resolution + constraints), `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_core.go` + `simplevalue_facets.go` (simple-value engine), `errors.go`
-- Imports: helium, xpath1/, internal/lexicon
+- Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `constants.go`, `compile.go` + `compile_imports.go` (compile orchestration/imports), `resolve_uri.go` (shared schema-location URI resolver `ResolveSchemaURI`/`URIScheme`), `read_types.go` + `read_particles.go` + `read_elements.go` (schema readers), `link_refs.go` + `restriction_particle.go` + `check_*.go` (`check_element_consistent.go`, `check_elements.go`, `check_facets.go`, `check_upa.go`; reference resolution + constraints), `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_core.go` + `simplevalue_facets.go` (simple-value engine), `assert.go` (XSD 1.1 xs:assert parse + eval), `errors.go`
+- Imports: helium, xpath1/, xpath3/ (XSD 1.1 assertions), internal/lexicon
 - Status: 225/226 golden tests passing
 
 ## relaxng/

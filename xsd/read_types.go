@@ -275,6 +275,12 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			}
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
+		case isXSDElement(ce, elemAssert) && c.version == Version11:
+			// XSD 1.1: xs:assert is the optional final content of a complex type,
+			// after the attribute uses and anyAttribute wildcard.
+			if a := c.parseAssert(ctx, ce); a != nil {
+				td.Assertions = append(td.Assertions, a)
+			}
 		}
 	}
 
@@ -439,6 +445,10 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 			}
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
+		case isXSDElement(ce, elemAssert) && c.version == Version11:
+			if a := c.parseAssert(ctx, ce); a != nil {
+				td.Assertions = append(td.Assertions, a)
+			}
 		}
 	}
 	return nil
@@ -586,6 +596,10 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			}
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
+		case isXSDElement(ce, elemAssert) && c.version == Version11:
+			if a := c.parseAssert(ctx, ce); a != nil {
+				td.Assertions = append(td.Assertions, a)
+			}
 		}
 	}
 	return nil
