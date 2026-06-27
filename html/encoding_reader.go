@@ -794,27 +794,12 @@ func wrapReaderForHTML(r io.Reader, maxBuffer int) (io.Reader, string, *utf8Sani
 
 	// Detect encoding from the peeked bytes.
 	//
-	// Use headHasGenuineInvalidUTF8 rather than !utf8.Valid: the latter reports
-	// false when byte 1024 splits an otherwise-valid multibyte rune, which would
-	// misclassify a valid UTF-8 document as Latin-1. An incomplete trailing rune
-	// is not a genuine error here — it falls through to the deferred reader,
-	// whose decide() re-reads more bytes (or EOF) to settle the encoding.
-	if n > 0 && headHasGenuineInvalidUTF8(head) {
-		// Non-UTF-8 detected in the head. Check if charset is declared.
-		if !declaredCharsetIsUTF8(head) {
-			enc := encWindows1252
-			if declaredCharsetIsLatin1(head) {
-				enc = encISO88591
-			}
-			return &latin1Reader{r: normalized, enc: enc}, enc, nil, nil
-		}
-		// charset=utf-8 declared but head has invalid bytes — sanitize.
-		san := newUTF8SanitizeReader(normalized)
-		return san, "", san, nil
-	}
-
-	// charset=utf-8 is explicitly declared: any later invalid bytes are
-	// genuine encoding errors and must be replaced with U+FFFD.
+	// DECLARED charset is honored first, regardless of the configured content
+	// cap: an explicit declaration is a deliberate author signal, not a guess
+	// over a bounded window, so it commits immediately.
+	//
+	// charset=utf-8 is explicitly declared: any invalid bytes (in the head or
+	// later) are genuine encoding errors and must be replaced with U+FFFD.
 	if declaredCharsetIsUTF8(head) {
 		san := newUTF8SanitizeReader(normalized)
 		return san, "", san, nil
@@ -831,11 +816,39 @@ func wrapReaderForHTML(r io.Reader, maxBuffer int) (io.Reader, string, *utf8Sani
 		return &latin1Reader{r: normalized, enc: encISO88591}, encISO88591, nil, nil
 	}
 
-	// Head is valid UTF-8 (or empty) and not declared as charset=utf-8 or
-	// charset=iso-8859-1. The document may still turn out to be Windows-1252 past
-	// the detection window, so defer the decision: stay UTF-8 until a non-UTF-8
-	// byte appears, then interpret the remainder as Windows-1252 (matching the
-	// whole-document []byte parse path).
+	// UNDECLARED from here on. The invalid-head decision must consider only the
+	// bytes UP TO maxBuffer (the configured content cap): a genuinely non-UTF-8
+	// byte that appears AFTER the cap but still inside the 1024-byte sniff
+	// window must NOT route an over-cap stream straight to latin1Reader and
+	// silently bypass the cap. When maxBuffer < 1024, an undeclared stream that
+	// is valid UTF-8 through the cap and only turns invalid past it must fall
+	// through to the deferred reader, whose bounded probe fails closed at
+	// maxBuffer (ErrContentSizeExceeded).
+	//
+	// Use headHasGenuineInvalidUTF8 rather than !utf8.Valid: the latter reports
+	// false when the decision window splits an otherwise-valid multibyte rune,
+	// which would misclassify a valid UTF-8 document as Latin-1. An incomplete
+	// trailing rune is not a genuine error here — it falls through to the
+	// deferred reader, whose decide() re-reads more bytes (or EOF) to settle the
+	// encoding.
+	decisionHead := head
+	if maxBuffer > 0 && len(decisionHead) > maxBuffer {
+		decisionHead = decisionHead[:maxBuffer]
+	}
+	if len(decisionHead) > 0 && headHasGenuineInvalidUTF8(decisionHead) {
+		// Genuine non-UTF-8 byte within the cap window on an undeclared stream:
+		// commit to Windows-1252 immediately (matching the in-memory []byte
+		// path, whose lazy Latin-1 interpretation is always Windows-1252).
+		return &latin1Reader{r: normalized, enc: encWindows1252}, encWindows1252, nil, nil
+	}
+
+	// Head is valid UTF-8 (or empty) through the cap window and not declared as
+	// charset=utf-8 or charset=iso-8859-1. The document may still turn out to be
+	// Windows-1252 past the detection window, so defer the decision: stay UTF-8
+	// until a non-UTF-8 byte appears, then interpret the remainder as
+	// Windows-1252 (matching the whole-document []byte parse path). The deferred
+	// reader's bounded probe enforces maxBuffer and fails closed if the stream
+	// stays valid UTF-8 past the cap.
 	dr := newDeferredLatin1Reader(normalized, maxBuffer)
 	return dr, "", nil, dr
 }
