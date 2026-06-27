@@ -262,3 +262,84 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 	require.Equal(t, []byte("wrapped-key-bytes"), parsed.EncryptedKeys[0].CipherValue)
 	require.Equal(t, []byte("cipher-bytes"), parsed.CipherValue)
 }
+
+// TestEncryptionMethodCardinality verifies that parseEncryptionMethod is
+// fail-closed: an empty Algorithm and duplicate DigestMethod/MGF/OAEPparams
+// children are rejected as ErrMalformedEncrypted, while a well-formed single
+// occurrence still parses.
+func TestEncryptionMethodCardinality(t *testing.T) {
+	const head = `<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xenc11="http://www.w3.org/2009/xmlenc11#">`
+	const cipher = `<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`
+
+	parse := func(t *testing.T, em string) (*xmlenc1.EncryptedData, error) {
+		t.Helper()
+		doc := mustParseXML(t, head+em+cipher)
+		elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
+		require.True(t, ok)
+		return xmlenc1.ParseEncryptedDataForTest(elem)
+	}
+
+	t.Run("empty Algorithm rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm=""/>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("duplicate DigestMethod rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<ds:DigestMethod Algorithm="`+xmlenc1.DigestSHA256+`"/>`+
+			`<ds:DigestMethod Algorithm="`+xmlenc1.DigestSHA1+`"/>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("duplicate MGF rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<xenc11:MGF Algorithm="`+xmlenc1.MGFSHA256+`"/>`+
+			`<xenc11:MGF Algorithm="`+xmlenc1.MGFSHA1+`"/>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("DigestMethod missing Algorithm rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<ds:DigestMethod/>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("MGF empty Algorithm rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<xenc11:MGF Algorithm=""/>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("duplicate KeySize rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("duplicate OAEPparams rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<xenc:OAEPparams>AAAA</xenc:OAEPparams>`+
+			`<xenc:OAEPparams>BBBB</xenc:OAEPparams>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("well-formed single still parses", func(t *testing.T) {
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<ds:DigestMethod Algorithm="`+xmlenc1.DigestSHA256+`"/>`+
+			`<xenc11:MGF Algorithm="`+xmlenc1.MGFSHA256+`"/>`+
+			`<xenc:OAEPparams>AAAA</xenc:OAEPparams>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.NotNil(t, ed.EncryptionMethod)
+		require.Equal(t, xmlenc1.RSAOAEP11, ed.EncryptionMethod.Algorithm)
+		require.Equal(t, xmlenc1.DigestSHA256, ed.EncryptionMethod.DigestMethod)
+		require.Equal(t, xmlenc1.MGFSHA256, ed.EncryptionMethod.MGFAlgorithm)
+	})
+}
