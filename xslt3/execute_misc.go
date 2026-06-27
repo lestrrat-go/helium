@@ -914,6 +914,17 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		}
 		if baseURI != "" {
 			eval = eval.BaseURI(ensureFileURI(baseURI))
+			// The base-uri attribute governs not only the native xpath3
+			// functions (fn:unparsed-text, fn:collection — they read the
+			// evaluator BaseURI above) but also the XSLT-aware functions
+			// fn:doc / fn:document / fn:stream-available, which resolve relative
+			// URIs through ec.baseDir() / effectiveStaticBaseURI(). Install the
+			// declared base as a static-base override for the duration of the
+			// dynamic evaluation so those functions resolve against the SAME
+			// base instead of the using template's static base.
+			savedOverride := ec.staticBaseURIOverride
+			ec.staticBaseURIOverride = baseURI
+			defer func() { ec.staticBaseURIOverride = savedOverride }()
 		}
 	} else if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
 		eval = eval.BaseURI(ensureFileURI(baseURI))

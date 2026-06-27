@@ -38,7 +38,6 @@ type execContext struct {
 	collectingVars               bool                 // reentrancy guard for collectAllVars
 	currentMode                  string
 	currentTemplate              *template                  // use setCurrentTemplate(); do not assign directly
-	currentTemplateBaseDir       string                     // use baseDir(); computed by setCurrentTemplate()
 	currentPackage               *Stylesheet                // owning package of currently executing template/function
 	xpathDefaultNS               string                     // current xpath-default-namespace
 	hasXPathDefaultNS            bool                       // true when xpathDefaultNS is explicitly set
@@ -135,20 +134,20 @@ type execContext struct {
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
 	ec.currentTemplate = tmpl
-	if tmpl != nil && tmpl.BaseURI != "" {
-		ec.currentTemplateBaseDir = documentBaseDir(tmpl.BaseURI)
-	} else if ec.stylesheet.baseURI != "" {
-		ec.currentTemplateBaseDir = documentBaseDir(ec.stylesheet.baseURI)
-	} else {
-		ec.currentTemplateBaseDir = ""
-	}
 }
 
-// baseDir returns the base directory for resolving relative URIs.
-// The value is computed by setCurrentTemplate from the current template's
-// base URI, falling back to the stylesheet's base URI.
+// baseDir returns the base directory for resolving relative URIs in the
+// XSLT-aware functions fn:doc / fn:document / fn:stream-available.
+//
+// It is derived from effectiveStaticBaseURI() — the in-scope static base URI —
+// so that every base-URI override is honored consistently: an xml:base on an
+// LRE/instruction, the pinned declaration-site base of a lazily-evaluated
+// global, and the base-uri attribute of an xsl:evaluate (which installs a
+// staticBaseURIOverride for the duration of the dynamic evaluation). This keeps
+// fn:doc resolution aligned with the native xpath3 functions (fn:unparsed-text,
+// fn:collection) that resolve against the same effective base.
 func (ec *execContext) baseDir() string {
-	return ec.currentTemplateBaseDir
+	return documentBaseDir(ec.effectiveStaticBaseURI())
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {

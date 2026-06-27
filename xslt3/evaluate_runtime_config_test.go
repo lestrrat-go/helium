@@ -179,6 +179,131 @@ func TestEvaluateInLazyGlobalVarWithEmptyModuleBaseDoesNotFallThrough(t *testing
 		usingURI, resolver.requests)
 }
 
+// evaluateXMLBaseDocStylesheet mirrors evaluateXMLBaseStylesheet but exercises
+// fn:doc instead of fn:unparsed-text: a relative href passed to doc() must
+// resolve against the TEMPLATE base (its xml:base), not the main stylesheet
+// base. fn:doc is an XSLT-aware wrapper that resolves through ec.baseDir(); this
+// proves that path honors the effective static base inside xsl:evaluate too.
+const evaluateXMLBaseDocStylesheet = `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:variable name="u" select="'data.xml'"/>
+  <xsl:template match="/" xml:base="sub/">
+    <out>%EXPR%</out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// TestEvaluateDocResolvesAgainstTemplateBase proves a dynamic XPath evaluated by
+// xsl:evaluate resolves a relative fn:doc href against the in-scope (template /
+// xml:base) static base URI, exactly like the same call made statically. Before
+// the fix fnDoc used ec.baseDir() which ignored the evaluator base, so a
+// relative doc() inside an xml:base scope resolved to the wrong directory.
+func TestEvaluateDocResolvesAgainstTemplateBase(t *testing.T) {
+	// xml:base="sub/" against the compiler base "mem://pkg/main.xsl" yields the
+	// template base "mem://pkg/sub/", so "data.xml" resolves under sub/.
+	const wantURI = "mem://pkg/sub/data.xml"
+
+	run := func(expr string) (*recordingURIResolver, string) {
+		src := strings.ReplaceAll(evaluateXMLBaseDocStylesheet, "%EXPR%", expr)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().BaseURI("mem://pkg/main.xsl").Compile(t.Context(), doc)
+		require.NoError(t, err)
+		resolver := &recordingURIResolver{files: map[string][]byte{wantURI: []byte(`<data v="payload"/>`)}}
+		out, err := ss.Transform(parseTransformSource(t)).URIResolver(resolver).Serialize(t.Context())
+		require.NoError(t, err)
+		return resolver, out
+	}
+
+	// Baseline: the same call made statically resolves against the template base.
+	staticResolver, staticOut := run(`<xsl:value-of select="string(doc($u)/data/@v)"/>`)
+	require.Contains(t, staticOut, "<out>payload</out>")
+	require.True(t, staticResolver.seen(wantURI),
+		"static doc() must resolve to %q; got %v", wantURI, staticResolver.requests)
+
+	// Dynamic: xsl:evaluate must resolve against the SAME template base.
+	dynResolver, dynOut := run(`<xsl:evaluate xpath="'string(doc($u)/data/@v)'"/>`)
+	require.Contains(t, dynOut, "<out>payload</out>")
+	require.True(t, dynResolver.seen(wantURI),
+		"xsl:evaluate dynamic doc() must resolve to %q like the static call; got %v",
+		wantURI, dynResolver.requests)
+}
+
+// evaluateDocBaseURIAttrStylesheet places a base-uri attribute on xsl:evaluate
+// that differs from both the stylesheet and the template base. fn:doc inside the
+// dynamic expression must resolve the relative href against the declared
+// base-uri, not the template base.
+const evaluateDocBaseURIAttrStylesheet = `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out><xsl:evaluate xpath="'string(doc(&quot;data.xml&quot;)/data/@v)'" base-uri="mem://other/"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// TestEvaluateDocResolvesAgainstBaseURIAttribute proves the xsl:evaluate
+// base-uri attribute governs XSLT-aware functions (fn:doc) and not just the
+// native xpath3 functions: doc("data.xml") must resolve against "mem://other/",
+// the declared base, rather than the using template's static base.
+func TestEvaluateDocResolvesAgainstBaseURIAttribute(t *testing.T) {
+	const overrideURI = "mem://other/data.xml"
+	const templateURI = "mem://pkg/data.xml"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(evaluateDocBaseURIAttrStylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI("mem://pkg/main.xsl").Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	resolver := &recordingURIResolver{files: map[string][]byte{overrideURI: []byte(`<data v="payload"/>`)}}
+	out, err := ss.Transform(parseTransformSource(t)).URIResolver(resolver).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>payload</out>")
+	require.True(t, resolver.seen(overrideURI),
+		"xsl:evaluate doc() must resolve against the base-uri attribute %q; got %v",
+		overrideURI, resolver.requests)
+	require.False(t, resolver.seen(templateURI),
+		"must NOT resolve against the using template base %q; got %v",
+		templateURI, resolver.requests)
+}
+
+// evaluateGlobalVarDocPackageSource mirrors evaluateGlobalVarPackageSource but
+// the lazily-evaluated public global runs xsl:evaluate(doc(...)). It proves the
+// XSLT-aware fn:doc honors the global's pinned declaration/module base, not the
+// template that triggered the lazy evaluation.
+const evaluateGlobalVarDocPackageSource = `<?xml version="1.0"?>
+<xsl:package name="http://example.com/pkg" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:variable name="g" visibility="public">
+    <xsl:evaluate xpath="'string(doc(&quot;data.xml&quot;)/data/@v)'"/>
+  </xsl:variable>
+</xsl:package>`
+
+// TestEvaluateInLazyGlobalVarDocResolvesAgainstModuleBase proves a dynamic XPath
+// evaluated by xsl:evaluate inside a LAZILY-evaluated global variable body
+// resolves a relative fn:doc href against the global's declaration/module base,
+// not the template that happened to trigger the lazy evaluation.
+func TestEvaluateInLazyGlobalVarDocResolvesAgainstModuleBase(t *testing.T) {
+	const moduleURI = "mem://lib/data.xml"
+	const templateURI = "mem://using/sub/data.xml"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(evaluateGlobalVarUsingStylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().
+		BaseURI("mem://using/main.xsl").
+		PackageResolver(fixedBasePackageResolver{source: evaluateGlobalVarDocPackageSource, baseURI: "mem://lib/lib.xsl"}).
+		Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	resolver := &recordingURIResolver{files: map[string][]byte{moduleURI: []byte(`<data v="payload"/>`)}}
+	out, err := ss.Transform(parseTransformSource(t)).URIResolver(resolver).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>payload</out>")
+	require.True(t, resolver.seen(moduleURI),
+		"lazy global-body xsl:evaluate doc() must resolve against the package module base %q; got %v",
+		moduleURI, resolver.requests)
+	require.False(t, resolver.seen(templateURI),
+		"must NOT resolve against the referencing template's xml:base %q; got %v",
+		templateURI, resolver.requests)
+}
+
 // evaluateCodepointsStylesheet maps an XML 1.1 restricted character (U+0001),
 // which is legal under an XSLT 3.0 processor (XML 1.1 chars allowed) but would
 // raise FOCH0001 under a plain XML-1.0 evaluator. We measure string-length to

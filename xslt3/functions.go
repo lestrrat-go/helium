@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -691,10 +690,17 @@ func splitURIFragment(uri string) (string, string) {
 // sibling "doc.xml" wrongly resolves to "mem:/pkg/doc.xml" instead of
 // "mem://pkg/doc.xml".
 //
-// For a genuine local filesystem base, the containing directory is taken with
-// forward-slash (path.Dir) semantics so the result uses '/' on every OS; on
-// Windows filepath.Dir would emit '\' here and corrupt the later slash-based
-// join.
+// For a genuine local filesystem base the containing directory is derived with
+// [baseURIDir] / [uripath.LocalBaseDir] forward-slash semantics (so the result
+// uses '/' on every OS; on Windows filepath.Dir would emit '\' and corrupt the
+// later slash-based join). LocalBaseDir — unlike a bare path.Dir — treats a
+// directory-form base correctly: a trailing-slash base ("…/tests/fn/", as an
+// xml:base=".." override resolves to) or a dot-less last segment names a
+// directory and is kept, whereas a file-form base ("…/main.xsl") has its last
+// segment dropped. A bare path.Dir over a directory-form base would wrongly
+// remove a real path segment ("…/tests/fn/" -> "…/tests"), so a sibling
+// reference resolved against an xml:base / xsl:evaluate base-uri override would
+// land one directory too high.
 func documentBaseDir(base string) string {
 	if base == "" {
 		return ""
@@ -702,7 +708,7 @@ func documentBaseDir(base string) string {
 	if xsd.URIScheme(base) != "" {
 		return base
 	}
-	return path.Dir(uripath.ToSlash(base))
+	return baseURIDir(base)
 }
 
 // baseURIDir extracts the directory from a local-filesystem base URI in
