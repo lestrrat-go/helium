@@ -3015,6 +3015,103 @@ func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {
 		"ParseReader output must match Parse([]byte) for a small EBCDIC doc")
 }
 
+// infiniteBlankReader streams a fixed head followed by an unbounded run of
+// ASCII spaces and never reaches EOF. It models a prolog / inter-root
+// whitespace DoS: input that keeps the parser in skipBlanks forever. The blank
+// run is OUTSIDE any element, so the char-data node-content cap never applies —
+// only the blank-run guard in skipBlanks bounds it.
+type infiniteBlankReader struct {
+	head    []byte
+	pos     int
+	stopped atomic.Bool
+}
+
+func (r *infiniteBlankReader) Stop() { r.stopped.Store(true) }
+
+func (r *infiniteBlankReader) Read(p []byte) (int, error) {
+	if r.stopped.Load() {
+		return 0, io.EOF
+	}
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	for i := range p {
+		p[i] = ' '
+	}
+	return len(p), nil
+}
+
+// TestParseReaderUnboundedPrologWhitespaceBounded guards the prolog/inter-root
+// whitespace DoS that the per-node content cap does NOT cover: an unbounded run
+// of whitespace BEFORE the root element (or after it) is consumed by skipBlanks,
+// which formerly peeked an ever-growing offset and grew the cursor buffer
+// without bound. The blank-run guard now caps it and fails the parse instead of
+// hanging or exhausting memory. A goroutine + timeout + Stop guarantees a
+// regression cannot hang or OOM the test process.
+func TestParseReaderUnboundedPrologWhitespaceBounded(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		// Infinite whitespace between the XML declaration and the root element.
+		"prolog before root": `<?xml version="1.0"?>`,
+		// Infinite whitespace in the epilogue, after a complete root element.
+		"epilogue after root": `<?xml version="1.0"?><root/>`,
+	}
+
+	for name, head := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := &infiniteBlankReader{head: []byte(head)}
+			defer r.Stop()
+
+			errCh := make(chan error, 1)
+			go func() {
+				// A small cap keeps the test fast: the blank-run guard must fire
+				// well before the infinite tail could exhaust memory.
+				_, perr := helium.NewParser().MaxNodeContentSize(4096).ParseReader(t.Context(), r)
+				errCh <- perr
+			}()
+
+			select {
+			case perr := <-errCh:
+				require.ErrorIs(t, perr, helium.ErrNodeContentTooLarge,
+					"unbounded %s whitespace must be bounded by the blank-run guard", name)
+			case <-time.After(5 * time.Second):
+				r.Stop() // unblock the parser so the leaked goroutine can exit
+				t.Fatalf("ParseReader did not terminate unbounded %s whitespace within the timeout", name)
+			}
+		})
+	}
+}
+
+// TestParseLeadingAndTrailingWhitespacePreserved confirms the bounded blank
+// skip still handles ordinary (within-cap) whitespace correctly: leading
+// whitespace before the root, whitespace around the XML declaration, and
+// trailing whitespace in the epilogue all parse without error.
+func TestParseLeadingAndTrailingWhitespacePreserved(t *testing.T) {
+	t.Parallel()
+
+	docs := map[string]string{
+		"leading before root":   "<?xml version=\"1.0\"?>\n\n  \t<root/>",
+		"trailing epilogue":     "<root/>\n  \t\n",
+		"between prolog nodes":  "<?xml version=\"1.0\"?>\n<!-- c -->\n  <root/>\n",
+		"large within-cap blob": "<?xml version=\"1.0\"?>" + strings.Repeat(" ", 5000) + "<root/>",
+	}
+
+	for name, doc := range docs {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// A cap larger than the within-cap blob; ordinary whitespace must
+			// never trip the blank-run guard.
+			d, err := helium.NewParser().MaxNodeContentSize(1<<20).Parse(t.Context(), []byte(doc))
+			require.NoError(t, err)
+			require.NotNil(t, d)
+		})
+	}
+}
+
 // prefixThenZeroThenRestReader delivers a leading prefix, then a single
 // transient (0, nil) read (which io.Reader explicitly permits while a slow
 // producer waits for more input), then the remaining bytes, then io.EOF. It

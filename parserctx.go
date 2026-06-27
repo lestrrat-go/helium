@@ -139,6 +139,7 @@ type parserCtx struct {
 	stopped          bool
 	disableSAX       bool              // suppress SAX callbacks after fatal error in recover mode
 	recoverErr       error             // first fatal error saved during recovery
+	blankRunErr      error             // sticky error from an over-cap whitespace run (prolog/inter-root DoS guard)
 	elemDepth        int               // current element nesting depth
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
 	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)

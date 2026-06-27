@@ -203,6 +203,9 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 	}
 	pctx.skipBlanks(ctx)
+	if pctx.blankRunErr != nil {
+		return pctx.error(ctx, pctx.blankRunErr)
+	}
 
 	if cur.Peek() != '<' {
 		// A cancelled or failed read can leave the cursor at an apparent end

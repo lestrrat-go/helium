@@ -310,6 +310,28 @@ hard content cap:
   already delivers in bounded chunks, so there is no unbounded buffer to guard.
   Its CDATA/comment/PI runs are still capped by the loop scanners above.
 
+### Blank-Run Bounding (`skipBlanks`)
+
+Whitespace OUTSIDE any element — the prolog (between the XML declaration and the
+root), between prolog `Misc` nodes, and the epilogue — is consumed by
+`skipBlanks`/`skipBlankBytes` (`parser_whitespace.go`), NOT by the char-data
+scanners, so the node-content cap above does not apply to it. An unbounded
+whitespace run there is its own memory-amplification DoS over a streaming reader
+(e.g. an XML declaration followed by infinite EBCDIC/ASCII spaces). The blank
+skip therefore advances in fixed-size chunks (`blankScanChunk`, 4096) via the
+shared `skipBlankRun(ctx, cur)` helper — scanning at most one chunk ahead with
+`PeekAt` then `Advance`-ing it, so the cursor buffer stays bounded instead of
+growing with the run — and checks `ctx.Err()` between chunks. The total run is
+capped by `blankRunLimit()` (= `maxNodeContent` when set, else
+`DefaultMaxNodeContentSize` 10 MiB — no public knob is added); an over-cap run
+records the sticky `parserCtx.blankRunErr` (`ErrNodeContentTooLarge`,
+`errors.Is`-matchable) and stops. Once `blankRunErr` is set, `skipBlanks`/
+`skipBlankBytes` short-circuit (consume no more whitespace) so no loop can spin
+advancing over the unbounded tail. `parseMisc` (prolog/epilogue loop) and
+`parseDocument` (the pre-root skip) surface `blankRunErr` via `ctx.error`; the
+XML-declaration and DTD-subset paths terminate on their own error/non-progress
+guards because the bounded cursor stops advancing.
+
 ## UTF-8 Parser Fast Paths
 
 The parser has several ASCII/UTF-8 fast paths that bypass more general rune-by-rune logic when the input shape is already known:
