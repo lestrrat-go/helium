@@ -1269,19 +1269,13 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	// member that is itself a union re-enters this branch, so an intervening
 	// faceted member-union is rejected by its own facet gate below).
 	//
-	// FACET GATE (value-space reasoning): a FACETED union has a RESTRICTED value
-	// space — e.g. FacetedUnion = (xs:int | xs:string) with enumeration {1,"hello"}
-	// has value space {1,"hello"}. "Restricting" it down to a bare member type
-	// like xs:int would ADMIT values the base FORBIDS (e.g. 2), which WIDENS — that
-	// is NOT a valid restriction. So the member-derivation shortcut applies ONLY
-	// when the base union AND every intervening union in its restriction chain have
-	// EMPTY facets. If the base union (or an intervening union) carries ANY facet,
-	// reject the member shortcut. A facet-free union base still admits a type
-	// validly derived from any of its member types.
+	// XSD 1.0 SCOPE: cos-st-derived-ok (§3.14.6, Type Derivation OK Simple) has NO
+	// "facets empty" condition on a union base — a type validly derived from any
+	// member type is a valid restriction of the union, regardless of facets the
+	// union carries. The "facets empty" gate is an XSD 1.1-only condition (§3.16.6.3
+	// Type Derivation OK Simple), and this package targets XSD 1.0 (libxml2 parity),
+	// so it is intentionally NOT enforced here.
 	if resolveVariety(base) == TypeVarietyUnion {
-		if unionRestrictionChainHasFacets(base) {
-			return false
-		}
 		for _, member := range resolveUnionMembers(base) {
 			if simpleTypeValidlyRestricts(derived, member) {
 				return true
@@ -1348,55 +1342,6 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 		return true
 	}
 	return ok
-}
-
-// unionRestrictionChainHasFacets reports whether a union base type, or any
-// restriction step in its base chain down to the type that EXPLICITLY constructs
-// the union (via <xs:union>), declares any value-restricting facet. Such a facet
-// narrows the union's value space, so a "restriction" to a bare member type would
-// widen it and is not a valid derivation. Per XSD §4.1.5 only pattern and
-// enumeration are even applicable to a union, but every restricting facet is
-// checked for robustness; whiteSpace (fixed to collapse on a union, not
-// value-restricting) is intentionally ignored. Intervening MEMBER unions are not
-// walked here — they are re-entered through simpleTypeValidlyRestricts' recursion
-// and gated by their own call to this helper.
-//
-// The walk stops only at the EXPLICIT union constructor, identified by carrying
-// MemberTypes with a non-restriction Derivation (an <xs:union> sets MemberTypes
-// at parse time with Derivation==DerivationNone). It must NOT stop at a
-// restriction-derived union ALIAS: resolveRefs copies MemberTypes onto every
-// restriction step over a union (`<xs:restriction base="aUnion"/>`), so an alias
-// over a faceted union also carries MemberTypes; breaking there would HIDE the
-// inherited facet on the underlying faceted union and wrongly accept narrowing to
-// a bare member. Such an alias has Derivation==DerivationRestriction, so the walk
-// continues through it to reach the faceted union below.
-func unionRestrictionChainHasFacets(td *TypeDef) bool {
-	for cur := td; cur != nil; cur = cur.BaseType {
-		if facetSetRestricts(cur.Facets) {
-			return true
-		}
-		if len(cur.MemberTypes) > 0 && cur.Derivation != DerivationRestriction {
-			// Reached the explicit union-constructing type; nothing below it
-			// constrains the union value space.
-			break
-		}
-	}
-	return false
-}
-
-// facetSetRestricts reports whether a FacetSet declares any value-restricting
-// facet. The whiteSpace facet is excluded: it normalizes rather than narrows the
-// value space and is fixed to collapse on unions/lists.
-func facetSetRestricts(fs *FacetSet) bool {
-	if fs == nil {
-		return false
-	}
-	return len(fs.Enumeration) > 0 ||
-		len(fs.Patterns) > 0 ||
-		fs.MinInclusive != nil || fs.MaxInclusive != nil ||
-		fs.MinExclusive != nil || fs.MaxExclusive != nil ||
-		fs.TotalDigits != nil || fs.FractionDigits != nil ||
-		fs.Length != nil || fs.MinLength != nil || fs.MaxLength != nil
 }
 
 // fixedConstraintRestricts reports whether a derived attribute use's 'fixed'

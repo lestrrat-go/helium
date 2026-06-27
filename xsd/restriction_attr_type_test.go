@@ -392,17 +392,16 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
-	t.Run("rejects derived member of a faceted base union", func(t *testing.T) {
+	t.Run("accepts derived member of a faceted base union (XSD 1.0)", func(t *testing.T) {
 		t.Parallel()
 		// Base @a is a FACETED union: FacetedUnion = (xs:int | xs:string) restricted
-		// with an enumeration {1, "hello"}, so its value space is exactly {1,"hello"}.
-		// The derived restriction redeclares @a as bare xs:int, whose value space
-		// includes values the base FORBIDS (e.g. 2) — that WIDENS the value space, so
-		// it is NOT a valid restriction and must be REJECTED. Per the value-space
-		// reading of cos-st-derived-ok.2.2.4, the union member-derivation shortcut
-		// applies only when the base union (and every intervening union in its
-		// restriction chain) has EMPTY facets. Regression guard for the union facet
-		// gate.
+		// with an enumeration {1, "hello"}. The derived restriction redeclares @a as
+		// bare xs:int, which is validly derived from one of the union's {member type
+		// definitions}. XSD 1.0 cos-st-derived-ok (§3.14.6) has NO "facets empty"
+		// condition on a union base, so this is a VALID restriction and must be
+		// ACCEPTED. The "facets empty" gate is an XSD 1.1-only condition (§3.16.6.3);
+		// this package targets XSD 1.0 (libxml2 parity). Regression guard documenting
+		// the 1.0 behavior.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:simpleType name="IntOrString">
     <xs:union memberTypes="xs:int xs:string"/>
@@ -427,7 +426,7 @@ func TestRestrictionAttrType(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
-		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
 	t.Run("rejects atomic base redeclared as a user union", func(t *testing.T) {
@@ -680,16 +679,17 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
 
-	t.Run("rejects derived member of an ALIAS over a faceted base union", func(t *testing.T) {
+	t.Run("accepts derived member of an ALIAS over a faceted base union (XSD 1.0)", func(t *testing.T) {
 		t.Parallel()
 		// Base @a is AliasUnion, a no-facet <xs:restriction> ALIAS over FacetedUnion
-		// (= (xs:int | xs:string) restricted with enumeration {1,"hello"}). The alias
-		// inherits the faceted union's value space {1,"hello"}. The derived
-		// restriction redeclares @a as bare xs:int, whose value space includes values
-		// the base FORBIDS (e.g. 2) — a WIDENING. resolveRefs copies MemberTypes onto
-		// the restriction-derived alias, so the facet gate must CONTINUE through the
-		// alias to see FacetedUnion's inherited enumeration rather than stop at the
-		// alias and wrongly accept. Regression guard for the union facet-gate walk.
+		// (= (xs:int | xs:string) restricted with enumeration {1,"hello"}). The derived
+		// restriction redeclares @a as bare xs:int, which is validly derived from one
+		// of the union's {member type definitions}. XSD 1.0 cos-st-derived-ok (§3.14.6)
+		// has NO "facets empty" condition on a union base — facets inherited through
+		// the alias do not block member-derivation — so this is a VALID restriction and
+		// must be ACCEPTED. The "facets empty" gate is XSD 1.1-only (§3.16.6.3); this
+		// package targets XSD 1.0 (libxml2 parity). Regression guard documenting the
+		// 1.0 behavior.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:simpleType name="IntOrString">
     <xs:union memberTypes="xs:int xs:string"/>
@@ -717,6 +717,6 @@ func TestRestrictionAttrType(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
-		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+		require.Empty(t, compileFatalErrors(t, schema))
 	})
 }
