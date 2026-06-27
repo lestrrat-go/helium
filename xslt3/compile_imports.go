@@ -264,6 +264,17 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
 	}
 
+	// Also cache the module document under its FOLDED effective base (root
+	// xml:base folded into the module URI). This module's templates compile with
+	// BaseURI = moduleEffectiveBaseURI(root, uri), and doc('')/document('') from
+	// within the module looks up moduleDocs by that folded key; without this entry
+	// the lookup misses and wrongly falls back to the principal stylesheet. The
+	// bare-uri entry above is kept for other lookups. For an embedded
+	// (fragment-selected) root the folded base equals uri, so this is a no-op.
+	if effBase := moduleEffectiveBaseURI(root, uri); effBase != uri {
+		c.stylesheet.moduleDocs[effBase] = doc
+	}
+
 	// Check use-when on the included/imported stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module. Evaluate against
 	// the module's effective static base (its root xml:base folded into the
@@ -714,6 +725,16 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	// the bare module URI. moduleDocs stays keyed on the unmodified uri. The root
 	// use-when below uses rootUseWhenBaseURI on top of this.
 	c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
+
+	// Also cache the module document under its FOLDED effective base so doc('') /
+	// document('') from within this module (whose templates compile under
+	// c.baseURI) resolves to the module's own document rather than falling back to
+	// the principal stylesheet. The bare-uri entry stored above is kept for other
+	// lookups; for an embedded (fragment-selected) root the folded base equals uri
+	// and this is a no-op.
+	if c.baseURI != uri {
+		c.stylesheet.moduleDocs[c.baseURI] = doc
+	}
 
 	// Check use-when on the imported/included stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module. Evaluate it under
