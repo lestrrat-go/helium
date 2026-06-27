@@ -441,17 +441,84 @@ func extractDeclaredCharset(data []byte) string {
 	}
 }
 
-// declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
-// <meta charset="utf-8"> declaration, returning true if found.
-func declaredCharsetIsUTF8(data []byte) bool {
-	return extractDeclaredCharset(data) == "utf-8"
+// extractMetaCharset scans the input for a charset declared by a REAL HTML
+// <meta> element — either <meta charset=...> or a <meta http-equiv=...
+// content="...; charset=..."> — within the first 1024 bytes, returning the
+// declared encoding name lowercased, or "" if none is found.
+//
+// Unlike extractDeclaredCharset (a loose scan for a "charset=" token anywhere in
+// the head), this honors ONLY an actual meta element: a "charset=iso-8859-1"
+// string that merely appears in ordinary text, an HTML comment, or a script does
+// NOT count. This precision matters because the eager Latin-1/UTF-8 encoding
+// commit overrides utf8.Valid — a false positive there would corrupt a valid
+// UTF-8 document (café → cafÃ©). It mirrors the spirit of the WHATWG "prescan a
+// byte stream to determine its encoding" algorithm: comments are skipped, other
+// tags are stepped over, and charset extraction is bounded to the bytes of a
+// genuine <meta ...> tag.
+func extractMetaCharset(data []byte) string {
+	lower := bytes.ToLower(data)
+	if len(lower) > 1024 {
+		lower = lower[:1024]
+	}
+	n := len(lower)
+	for i := 0; i < n; {
+		if lower[i] != '<' {
+			i++
+			continue
+		}
+		// Comment: skip past the closing "-->".
+		if bytes.HasPrefix(lower[i:], []byte("<!--")) {
+			end := bytes.Index(lower[i+4:], []byte("-->"))
+			if end < 0 {
+				return ""
+			}
+			i += 4 + end + 3
+			continue
+		}
+		// <meta followed by ASCII whitespace or '/': inspect its attributes only.
+		if i+5 <= n && bytes.Equal(lower[i+1:i+5], []byte("meta")) &&
+			(i+5 == n || isASCIIWhitespace(lower[i+5]) || lower[i+5] == '/') {
+			tag := lower[i:]
+			gt := bytes.IndexByte(tag, '>')
+			if gt >= 0 {
+				tag = tag[:gt]
+			}
+			if cs := extractDeclaredCharset(tag); cs != "" {
+				return cs
+			}
+			if gt < 0 {
+				return ""
+			}
+			i += gt + 1
+			continue
+		}
+		// Any other tag, markup declaration, or PI: step over it to its '>'.
+		gt := bytes.IndexByte(lower[i:], '>')
+		if gt < 0 {
+			return ""
+		}
+		i += gt + 1
+	}
+	return ""
 }
 
-// declaredCharsetIsLatin1 scans the raw input bytes for an explicit
-// charset=iso-8859-1 declaration. This distinguishes documents that
-// declare ISO-8859-1 from those that are just auto-detected as non-UTF-8.
+// declaredCharsetIsUTF8 reports whether a real <meta> element declares utf-8.
+// It uses extractMetaCharset (a precise meta-element prescan), NOT a loose
+// charset= scan, because its callers eagerly commit to the encoding and override
+// utf8.Valid.
+func declaredCharsetIsUTF8(data []byte) bool {
+	return extractMetaCharset(data) == "utf-8"
+}
+
+// declaredCharsetIsLatin1 reports whether a real <meta> element declares
+// iso-8859-1. This distinguishes documents that genuinely declare ISO-8859-1
+// from those that are just auto-detected as non-UTF-8. It uses extractMetaCharset
+// (a precise meta-element prescan), NOT a loose charset= scan, because its
+// callers eagerly commit to Latin-1 and override utf8.Valid — trusting a stray
+// "charset=iso-8859-1" in text/comment/script would corrupt a valid UTF-8
+// document.
 func declaredCharsetIsLatin1(data []byte) bool {
-	return extractDeclaredCharset(data) == "iso-8859-1"
+	return extractMetaCharset(data) == "iso-8859-1"
 }
 
 // hasPrefixFold checks if the current input starts with the given prefix
