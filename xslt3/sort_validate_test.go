@@ -218,3 +218,61 @@ func TestMultiKeySortIncompatibleSecondKeyRaisesXTDE1030(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "XTDE1030")
 }
+
+// XSLT3-102 r2: a SECONDARY sort key with explicit data-type="text" stringifies
+// every value before comparison, so mutually incomparable original atomic types
+// (here xs:date vs xs:integer) are perfectly valid and must NOT raise XTDE1030.
+// The per-level type-consistency check only applies to default-data-type levels.
+func TestMultiKeySortTextSecondKeyMixedTypesNoError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="@g"/>
+        <xsl:sort select="if (@t='d') then xs:date(@v) else xs:integer(@v)" data-type="text"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item g="x" t="d" v="2020-01-01"/><item g="x" t="n" v="5"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "<out")
+}
+
+// XSLT3-102 r2: likewise, a SECONDARY sort key with explicit data-type="number"
+// casts every value to xs:double, so mixed original atomic types (xs:date vs
+// xs:integer here, which belong to different orderability families) are
+// comparable and must NOT raise XTDE1030.
+func TestMultiKeySortNumberSecondKeyMixedTypesNoError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="@g"/>
+        <xsl:sort select="if (@t='d') then xs:date(@v) else xs:integer(@v)" data-type="number"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item g="x" t="d" v="2020-01-01"/><item g="x" t="i" v="5"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "<out")
+}

@@ -375,9 +375,19 @@ func (k keyedNLevel) keyType() string { return k.typeName }
 // key's values are of mutually incomparable types across the sequence. Mirrors
 // the per-key check the single-key sort paths run; the multi-key paths must
 // validate each key in turn rather than skip the check entirely.
-func checkSortKeysTypeConsistencyN[T any](entries keyedSlice[T], nLevels int) error {
+//
+// Only levels with the DEFAULT data type (no explicit data-type attribute, i.e.
+// dataTypeAuto / dataTypeNumberAuto) compare values by their own atomic types
+// and therefore need the cross-value consistency check. Levels with an explicit
+// data-type="text" stringify every value, and data-type="number" casts every
+// value to xs:double, so mixed original atomic types are always comparable and
+// the check is skipped for them.
+func checkSortKeysTypeConsistencyN[T any](entries keyedSlice[T], dtModes []dataTypeMode) error {
 	views := make([]keyedNLevel, len(entries))
-	for level := range nLevels {
+	for level, m := range dtModes {
+		if m == dataTypeText || m == dataTypeNumber {
+			continue
+		}
 		for i := range entries {
 			views[i] = keyedNLevel{typeName: entries[i].keys[level].typeName}
 		}
@@ -969,7 +979,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 	}
 
 	// XTDE1030: validate each sort key's type consistency across the sequence.
-	if err := checkSortKeysTypeConsistencyN(entries, len(sortKeys)); err != nil {
+	if err := checkSortKeysTypeConsistencyN(entries, dtModes); err != nil {
 		return nil, err
 	}
 
@@ -1031,7 +1041,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	}
 
 	// XTDE1030: validate each sort key's type consistency across the sequence.
-	if err := checkSortKeysTypeConsistencyN(entries, len(sortKeys)); err != nil {
+	if err := checkSortKeysTypeConsistencyN(entries, dtModes); err != nil {
 		return nil, err
 	}
 
@@ -1112,7 +1122,7 @@ func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKe
 	}
 
 	// XTDE1030: validate each sort key's type consistency across the sequence.
-	if err := checkSortKeysTypeConsistencyN(entries, len(sortKeys)); err != nil {
+	if err := checkSortKeysTypeConsistencyN(entries, dtModes); err != nil {
 		return nil, err
 	}
 
