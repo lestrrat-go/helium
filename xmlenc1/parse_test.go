@@ -44,6 +44,51 @@ func TestParse(t *testing.T) {
 			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 		})
 
+		t.Run("CipherValue plus CipherReference", func(t *testing.T) {
+			// CipherData is a choice of EXACTLY ONE CipherValue or one
+			// CipherReference. A CipherValue accompanied by a CipherReference
+			// (in either order, under EncryptedData or EncryptedKey) is
+			// schema-invalid and must be rejected, not silently reduced to
+			// the CipherValue.
+			const xencNS = "http://www.w3.org/2001/04/xmlenc#"
+			const dsigNS = "http://www.w3.org/2000/09/xmldsig#"
+
+			edWith := func(cipherData string) string {
+				return `<xenc:EncryptedData xmlns:xenc="` + xencNS + `">` +
+					`<xenc:CipherData>` + cipherData + `</xenc:CipherData>` +
+					`</xenc:EncryptedData>`
+			}
+			ekWith := func(cipherData string) string {
+				return `<xenc:EncryptedData xmlns:xenc="` + xencNS + `" xmlns:ds="` + dsigNS + `">` +
+					`<ds:KeyInfo><xenc:EncryptedKey>` +
+					`<xenc:CipherData>` + cipherData + `</xenc:CipherData>` +
+					`</xenc:EncryptedKey></ds:KeyInfo>` +
+					`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+					`</xenc:EncryptedData>`
+			}
+
+			const valueFirst = `<xenc:CipherValue>AAAA</xenc:CipherValue><xenc:CipherReference URI="#ref"/>`
+			const refFirst = `<xenc:CipherReference URI="#ref"/><xenc:CipherValue>AAAA</xenc:CipherValue>`
+
+			for _, tc := range []struct {
+				name string
+				xml  string
+			}{
+				{"EncryptedData value-then-reference", edWith(valueFirst)},
+				{"EncryptedData reference-then-value", edWith(refFirst)},
+				{"EncryptedKey value-then-reference", ekWith(valueFirst)},
+				{"EncryptedKey reference-then-value", ekWith(refFirst)},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					doc := mustParseXML(t, tc.xml)
+					elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
+					require.True(t, ok)
+					_, err := xmlenc1.ParseEncryptedDataForTest(elem)
+					require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+				})
+			}
+		})
+
 		t.Run("EncryptedKey missing CipherData", func(t *testing.T) {
 			// An EncryptedKey carried in KeyInfo with no CipherData/CipherValue
 			// must be rejected at parse, not deferred to a later crypto error.

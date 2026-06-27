@@ -165,31 +165,41 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 }
 
 // parseCipherData parses a CipherData element. Per the XML-Enc schema,
-// CipherData is a choice of exactly one CipherValue or one CipherReference.
-// Only CipherValue is supported here; a second CipherValue (or none) is
-// schema-invalid and rejected at parse rather than silently using the first.
+// CipherData is a choice of EXACTLY ONE CipherValue or one CipherReference.
+// A second choice member of either kind (CipherValue+CipherValue,
+// CipherValue+CipherReference, CipherReference+CipherValue, or two
+// CipherReferences) is schema-invalid and rejected at parse rather than
+// silently using the first. CipherReference (indirect cipher text fetched
+// via a URI plus transforms) is not supported by helium and is rejected
+// explicitly; ignoring it would both lose data and defeat the
+// exactly-one-choice rule.
 func parseCipherData(elem *helium.Element) ([]byte, error) {
 	var decoded []byte
-	var seenCipherValue bool
+	var seenChoice bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
-		if !isXMLEncElem(e, "CipherValue") {
-			continue
+		switch {
+		case isXMLEncElem(e, "CipherValue"):
+			if seenChoice {
+				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+			}
+			seenChoice = true
+			d, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
+			}
+			decoded = d
+		case isXMLEncElem(e, "CipherReference"):
+			if seenChoice {
+				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+			}
+			return nil, fmt.Errorf("%w: CipherReference is not supported", ErrMalformedEncrypted)
 		}
-		if seenCipherValue {
-			return nil, fmt.Errorf("%w: duplicate CipherValue", ErrMalformedEncrypted)
-		}
-		seenCipherValue = true
-		d, err := xmlbase64.DecodeString(domutil.TextContent(e))
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
-		}
-		decoded = d
 	}
-	if !seenCipherValue {
+	if !seenChoice {
 		return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
 	}
 	return decoded, nil
