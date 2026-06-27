@@ -462,11 +462,13 @@ type firstSetEntry struct {
 // Element-vs-element and wildcard-vs-wildcard overlap are unchanged across
 // versions.
 //
-// Note: enabling this relaxation only affects the compile-time determinism
-// check. The accept/reject verdict at validation is unaffected (the matcher
-// tries particles in declaration order). The PSVI refinement that an element
-// declared AFTER a competing wildcard should still claim the element (rather
-// than the earlier wildcard) is not yet implemented.
+// Note: this relaxation is the compile-time half of XSD 1.1 weak wildcards.
+// The validation half — element-over-wildcard precedence — is enforced for the
+// CHOICE case by matchChoice/tryMatchChoice (validate_elem.go), so a wildcard
+// no longer steals a child attributable to a competing element declaration
+// regardless of declaration order. The remaining gap is the SEQUENCE case (a
+// minOccurs=0 wildcard preceding an element in a sequence), which the
+// position-based sequence matcher does not yet override.
 func entriesOverlap(a, b firstSetEntry, version Version) bool {
 	// Two elements overlap if they have the same QName.
 	if !a.isWildcard && !b.isWildcard {

@@ -13,6 +13,15 @@ import (
 //
 // The greedy matching approach assumes UPA-compliant (deterministic) content
 // models, which is enforced at compile time by checkUPA in check_upa.go.
+//
+// LIMITATION (XSD 1.1 element-over-wildcard precedence): the choice case
+// (matchChoice/tryMatchChoice) gives non-wildcard particles precedence over a
+// wildcard in 1.1, so a wildcard declared before an element cannot steal that
+// element's child. The sequence case is NOT yet handled here: because sequence
+// matching is position-based and greedy (no backtracking), a minOccurs=0
+// wildcard preceding an element can still greedily consume a child the element
+// declaration should validate. Fixing it safely requires lookahead/backtracking
+// across particles; left as a remaining limitation.
 func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
 	startPos := pos
 
@@ -97,17 +106,76 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 
 	var contentErr error
 
+	matchAt := func(particle *Particle, p int) (int, bool) {
+		consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+		if err != nil || consumed == 0 {
+			return 0, false
+		}
+		// Now validate matched content with error reporting.
+		actualConsumed, actualErr := vc.matchParticle(ctx, parent, particle, children, p, false)
+		if actualErr != nil {
+			contentErr = actualErr
+		}
+		return actualConsumed, true
+	}
+
 	matchOnce := func(p int) (int, bool) {
-		// First find a structurally matching particle.
-		for _, particle := range mg.Particles {
-			consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
-			if err == nil && consumed > 0 {
-				// Now validate matched content with error reporting.
-				actualConsumed, actualErr := vc.matchParticle(ctx, parent, particle, children, p, false)
-				if actualErr != nil {
-					contentErr = actualErr
+		// First find a structurally matching particle that consumes a child.
+		// In XSD 1.1, a branch that consumes the current child via an element
+		// leaf takes precedence over one that would consume it via a wildcard
+		// (element-over-wildcard precedence) regardless of declaration order or
+		// nesting: a wildcard declared before an element — directly or wrapped in
+		// a model group — must not steal a child the element declaration is
+		// responsible for validating. XSD 1.0 uses pure declaration order.
+		if vc.version == Version11 && p < len(children) {
+			child := children[p]
+			// Pass 1: branches that match the current child via an element leaf.
+			// Element-over-wildcard precedence COMMITS: if any branch consumes the
+			// current child via an element leaf as its first consuming term, the
+			// choice MUST use an element-first branch for this child and MUST NOT
+			// fall back to a wildcard branch — even if the chosen element branch
+			// then fails structurally or by content. Otherwise a skip wildcard
+			// would false-accept a child a typed element is responsible for.
+			var elemFirst *Particle
+			for _, particle := range mg.Particles {
+				if !particleConsumesViaElement(particle, child, vc.schema) {
+					continue
 				}
-				return actualConsumed, true
+				if consumed, ok := matchAt(particle, p); ok {
+					return consumed, true
+				}
+				if elemFirst == nil {
+					elemFirst = particle
+				}
+			}
+			if elemFirst != nil {
+				// No element-first branch matched fully. Surface the first
+				// element-first branch's real failure (with error reporting)
+				// instead of falling back to a wildcard branch.
+				consumed, err := vc.matchParticle(ctx, parent, elemFirst, children, p, false)
+				if err != nil {
+					contentErr = err
+				}
+				if consumed > 0 {
+					return consumed, true
+				}
+				if contentErr == nil {
+					contentErr = fmt.Errorf("element content does not match")
+				}
+				return 0, false
+			}
+			// Pass 2: no element-first branch for this child, so a wildcard branch
+			// may consume it.
+			for _, particle := range mg.Particles {
+				if consumed, ok := matchAt(particle, p); ok {
+					return consumed, true
+				}
+			}
+		} else {
+			for _, particle := range mg.Particles {
+				if consumed, ok := matchAt(particle, p); ok {
+					return consumed, true
+				}
 			}
 		}
 		// Try zero-length matches.
@@ -559,10 +627,50 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 		// matchChoice. An earlier optional branch can match zero-length, but a
 		// later branch may be the one that actually consumes the current child;
 		// returning the zero-length match first would leave that child stranded.
-		for _, particle := range mg.Particles {
-			consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
-			if err == nil && consumed > 0 {
-				return consumed, true
+		//
+		// In XSD 1.1, a branch that consumes the current child via an element
+		// leaf takes precedence over one that would consume it via a wildcard
+		// (element-over-wildcard precedence), regardless of declaration order or
+		// nesting, so a wildcard declared before an element — directly or wrapped
+		// in a model group — does not steal the element's child. XSD 1.0 uses
+		// pure declaration order.
+		if vc.version == Version11 && p < len(children) {
+			child := children[p]
+			// Pass 1: branches that match the current child via an element leaf.
+			// Mirror matchChoice: element-over-wildcard precedence COMMITS, so if
+			// any branch is element-first for this child the lookahead must reflect
+			// that branch's success/failure and MUST NOT fall back to a wildcard
+			// branch.
+			hasElemFirst := false
+			for _, particle := range mg.Particles {
+				if !particleConsumesViaElement(particle, child, vc.schema) {
+					continue
+				}
+				hasElemFirst = true
+				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+				if err == nil && consumed > 0 {
+					return consumed, true
+				}
+			}
+			if hasElemFirst {
+				// An element-first branch is required for this child but none
+				// matched; do not fall back to a wildcard branch.
+				return 0, false
+			}
+			// Pass 2: no element-first branch for this child, so a wildcard branch
+			// may consume it.
+			for _, particle := range mg.Particles {
+				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+				if err == nil && consumed > 0 {
+					return consumed, true
+				}
+			}
+		} else {
+			for _, particle := range mg.Particles {
+				consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+				if err == nil && consumed > 0 {
+					return consumed, true
+				}
 			}
 		}
 		// Fall back to a zero-length (optional) branch.
@@ -869,6 +977,97 @@ func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string 
 		names = append(names, elementDisplayForExpected(m))
 	}
 	return names
+}
+
+// consumerKind classifies how a particle would consume a given child as its
+// FIRST consuming term: through an element leaf, through a wildcard leaf, or not
+// at all.
+type consumerKind int
+
+const (
+	consumerNone consumerKind = iota
+	consumerElement
+	consumerWildcard
+)
+
+// particleConsumesViaElement reports whether the particle would consume the
+// given child through a non-wildcard (element) leaf AS ITS FIRST CONSUMING TERM.
+// It is path-aware: it respects compositor order, occurrences, and emptiable
+// prefixes, so a leading wildcard (direct or nested) that would consume the
+// child first makes the particle NOT an element-first-consumer — even when a
+// later element leaf inside the same model group also matches the child's name.
+//
+// Used for XSD 1.1 element-over-wildcard precedence: when selecting a choice
+// branch for the current child, branches that consume it via an element leaf as
+// first consumer are preferred over branches that would consume it via a
+// wildcard, so a skip wildcard (direct or nested as a leading term) cannot steal
+// a child a typed element declaration is responsible for validating. This is
+// bounded first-consumer determination, not full backtracking. Side-effect free.
+func particleConsumesViaElement(p *Particle, child childElem, schema *Schema) bool {
+	return particleFirstConsumerKind(p, child, schema) == consumerElement
+}
+
+// particleFirstConsumerKind classifies how the particle would consume child as
+// its first consuming term.
+func particleFirstConsumerKind(p *Particle, child childElem, schema *Schema) consumerKind {
+	switch term := p.Term.(type) {
+	case *ElementDecl:
+		if p.MaxOccurs == 0 {
+			return consumerNone
+		}
+		if elemMatchesDeclOrSubst(child, term, schema) {
+			return consumerElement
+		}
+		return consumerNone
+	case *Wildcard:
+		if p.MaxOccurs == 0 {
+			return consumerNone
+		}
+		if wildcardMatches(term, child.ns) {
+			return consumerWildcard
+		}
+		return consumerNone
+	case *ModelGroup:
+		if term.MaxOccurs == 0 {
+			return consumerNone
+		}
+		return groupFirstConsumerKind(term, child, schema)
+	}
+	return consumerNone
+}
+
+// groupFirstConsumerKind classifies how a model group would consume child as its
+// first consuming term, respecting compositor order and emptiable prefixes.
+func groupFirstConsumerKind(mg *ModelGroup, child childElem, schema *Schema) consumerKind {
+	switch mg.Compositor {
+	case CompositorSequence:
+		// Walk in order: the first member that can consume child decides; a
+		// non-matching but emptiable prefix member is skipped; a non-matching,
+		// non-emptiable member means the group cannot reach child at all.
+		for _, p := range mg.Particles {
+			kind := particleFirstConsumerKind(p, child, schema)
+			if kind != consumerNone {
+				return kind
+			}
+			if !particleEmptiable(p) {
+				return consumerNone
+			}
+		}
+		return consumerNone
+	default: // choice, all
+		// Element-first wins if ANY member is element-first; otherwise fall back
+		// to wildcard-first if some member consumes child via a wildcard.
+		result := consumerNone
+		for _, p := range mg.Particles {
+			switch particleFirstConsumerKind(p, child, schema) {
+			case consumerElement:
+				return consumerElement
+			case consumerWildcard:
+				result = consumerWildcard
+			}
+		}
+		return result
+	}
 }
 
 // sequenceHasWildcard returns true if any particle in the model group is a wildcard.
