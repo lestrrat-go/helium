@@ -888,6 +888,16 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		// rawInput (which is only a prefix here, not the whole document).
 		pctx.rawInput = head
 		pctx.ebcdicStream = true
+		// rawInput is only the sniff prefix here, so init would seed inputSize
+		// with the prefix length rather than the real document size. Count the
+		// bytes the cursor actually pulls from the reconstructed stream (prefix +
+		// remainder) so the entity-amplification guard compares against the real
+		// consumed size — matching Parse([]byte), where inputSize is the full
+		// slice length — instead of falsely rejecting a large internal entity
+		// referenced once. See entityCheckLimits.
+		counter := &countingReader{r: stream}
+		pctx.ebcdicConsumed = counter
+		stream = counter
 	}
 	if err := pctx.init(p.cfg, stream); err != nil {
 		return nil, err

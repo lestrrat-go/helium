@@ -2946,6 +2946,48 @@ func TestParseReaderEBCDICLargeFiniteDocUnderNodeCap(t *testing.T) {
 		"ParseReader output must match Parse([]byte) for a large finite EBCDIC doc")
 }
 
+// TestParseReaderEBCDICLargeEntityNotFalselyAmplified guards against a
+// regression where the streaming EBCDIC path left inputSize seeded from the
+// bounded sniff prefix (~256/512 bytes) rather than the real document size. A
+// large internal entity referenced exactly once is legitimate (no
+// amplification), and Parse([]byte) accepts it because inputSize is the full
+// slice length. With only the prefix length as the divisor, the
+// amplification-ratio guard would falsely reject the same document over
+// ParseReader. Tracking the bytes consumed from the stream fixes it.
+func TestParseReaderEBCDICLargeEntityNotFalselyAmplified(t *testing.T) {
+	t.Parallel()
+
+	// Entity content just over the 1 MiB ratio-check baseline, referenced once.
+	bigContent := strings.Repeat("A", 1_500_000)
+	xml := fmt.Sprintf(`<?xml version="1.0" encoding="IBM037"?><!DOCTYPE root [<!ENTITY big "%s">]><root>&big;</root>`, bigContent)
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// Baseline: Parse([]byte) accepts it (inputSize == len(ebcdic)). Use a large
+	// per-node cap so the 1.5 MiB text node is not what trips — this test is about
+	// the amplification guard, not the node-content cap.
+	bytesDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must accept a large EBCDIC entity referenced once")
+	want := serialize(bytesDoc)
+
+	// ParseReader (unknown source size) must match: the amplification guard must
+	// use the real consumed-byte count, not the sniff-prefix length.
+	readerDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err,
+		"ParseReader must accept the same large-entity EBCDIC document as Parse([]byte)")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a large-entity EBCDIC doc")
+}
+
 // TestParseReaderEBCDICSmallDocUnderCap confirms the streaming EBCDIC reader
 // path parses a normal, small EBCDIC document identically to Parse([]byte).
 func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {

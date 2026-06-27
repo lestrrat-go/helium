@@ -88,9 +88,17 @@ type parserCtx struct {
 	// stream is decoded in place rather than being reset from rawInput (which
 	// would otherwise require buffering the whole — possibly unbounded — input).
 	ebcdicStream bool
-	nbread       int
-	instate      parserState
-	keepBlanks   bool
+	// ebcdicConsumed counts the bytes pulled from the underlying reader on the
+	// EBCDIC streaming path. In ebcdicStream mode rawInput holds only a bounded
+	// sniff prefix, so init cannot seed inputSize with the real document size;
+	// the entity-amplification guard (entityCheckLimits) instead compares against
+	// this live consumed-byte count so a legitimate large EBCDIC document whose
+	// internal entity is referenced once is not falsely rejected. nil on every
+	// non-EBCDIC path (where inputSize already reflects the real/known size).
+	ebcdicConsumed *countingReader
+	nbread         int
+	instate        parserState
+	keepBlanks     bool
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
@@ -516,6 +524,24 @@ func (ctx *parserCtx) nodeContentScanBudget() int {
 		return 0
 	}
 	return ctx.maxNodeContent + utf8.UTFMax
+}
+
+// countingReader wraps an io.Reader and tracks the total number of bytes read
+// through it. The EBCDIC streaming path wraps its reconstructed stream
+// (sniff prefix + remainder) in one so the entity-amplification guard can use
+// the real number of document bytes consumed so far instead of the bounded
+// sniff-prefix length that rawInput holds in that mode. The count can never
+// exceed the source's true byte length, so it is a safe lower bound on the
+// document size.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
