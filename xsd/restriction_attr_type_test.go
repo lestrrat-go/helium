@@ -392,16 +392,16 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
-	t.Run("rejects derived member of a faceted base union", func(t *testing.T) {
+	t.Run("accepts derived member of a faceted base union", func(t *testing.T) {
 		t.Parallel()
 		// Base @a is a FACETED union: FacetedUnion = (xs:int | xs:string) restricted
-		// with an enumeration {1, "hello"}. The enumeration narrows the union's value
-		// space to exactly two values. Redeclaring the derived @a as xs:int would
-		// widen the valid values back to EVERY integer — values the faceted base
-		// forbids. Per cos-st-derived-ok.2.2.4 the union member-derivation shortcut
-		// applies ONLY when the base union (and every intervening union) is
-		// facet-free, so a faceted union base must NOT admit a member type via the
-		// shortcut — it must be REJECTED.
+		// with an enumeration {1, "hello"}. The derived @a (xs:int) is validly derived
+		// from one of the union's {member type definitions}. Per W3C cos-st-derived-ok
+		// (Simple) clause 2.2.4 the derivation relation holds when D is validly derived
+		// from one of B's member types; it does NOT add a "base union has no facets"
+		// condition — facet validity is a separate construction/validation constraint,
+		// not part of this derivation relation. So this must be ACCEPTED. Regression
+		// guard against re-adding a facet gate to the derivation check.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:simpleType name="IntOrString">
     <xs:union memberTypes="xs:int xs:string"/>
@@ -421,6 +421,39 @@ func TestRestrictionAttrType(t *testing.T) {
       <xs:restriction base="t:Base">
         <xs:sequence/>
         <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects unrelated user-defined list types", func(t *testing.T) {
+		t.Parallel()
+		// Base @a has type IntList (xs:list itemType="xs:int"); the derived restriction
+		// redeclares @a as StringList (xs:list itemType="xs:string"). Neither list is
+		// the same as nor derived from the other, so StringList admits values (token
+		// lists of strings) the base does not. Both have empty builtinBaseLocal, so the
+		// builtin-base shortcut would wrongly accept it; the list-base branch (cos-st-
+		// derived-ok.2.2) must REJECT, since the only valid derivation from a list base
+		// not caught by the pointer chain is from xs:anySimpleType.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="StringList">
+    <xs:list itemType="xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:IntList"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="t:StringList"/>
       </xs:restriction>
     </xs:complexContent>
   </xs:complexType>
