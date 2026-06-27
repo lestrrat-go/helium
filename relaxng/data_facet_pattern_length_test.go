@@ -95,15 +95,14 @@ func TestDataLengthFacetApplicability(t *testing.T) {
 	})
 }
 
-// TestDataLengthFacetQNameNoOp covers RNG-104+105 r3: the length facets
-// (length, minLength, maxLength) are APPLICABLE to xs:QName and xs:NOTATION (so
-// the bound must still be a valid xs:nonNegativeInteger, validated at compile
-// time), but per XSD 1.1 they are DEPRECATED and NON-CONSTRAINING on those two
-// types — any lexically valid value is facet-valid regardless of its rune count.
-// So a multi-rune QName must NOT be rejected by maxLength/minLength/length, while
-// an invalid bound is still a compile error and string-type enforcement is
+// TestDataLengthFacetQNameEnforced covers RNG-104+105 r4: the length facets
+// (length, minLength, maxLength) on xs:QName and xs:NOTATION are CONSTRAINING
+// (XSD 1.0 / libxml2 parity, matching the shared xsd validator's facetLength), not
+// a no-op. A value whose rune count violates the bound is REJECTED exactly as the
+// xsd package rejects it, while an in-bounds value is accepted, the bound is still
+// compile-validated as an xs:nonNegativeInteger, and string-type enforcement is
 // unaffected.
-func TestDataLengthFacetQNameNoOp(t *testing.T) {
+func TestDataLengthFacetQNameEnforced(t *testing.T) {
 	t.Parallel()
 
 	const xsd = `datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"`
@@ -114,30 +113,36 @@ func TestDataLengthFacetQNameNoOp(t *testing.T) {
 </element>`
 	}
 
-	t.Run("maxLength does not constrain a QName", func(t *testing.T) {
+	t.Run("maxLength constrains a QName", func(t *testing.T) {
 		t.Parallel()
-		// "abc" is a 3-rune lexically valid QName. maxLength="1" would reject it if
-		// enforced as a character count, but the facet is non-constraining here.
-		require.NoError(t, validateWith(t, mk("QName", "maxLength", "1"), `<r>abc</r>`),
-			`maxLength on xs:QName must be a no-op, not a rune-count constraint`)
+		// "abc" is a 3-rune lexically valid QName; maxLength="1" rejects it, the same
+		// way the xsd validator rejects an out-of-space QName length facet.
+		require.Error(t, validateWith(t, mk("QName", "maxLength", "1"), `<r>abc</r>`),
+			`maxLength on xs:QName must reject a longer value (XSD 1.0 parity)`)
 	})
 
-	t.Run("minLength does not constrain a QName", func(t *testing.T) {
+	t.Run("maxLength accepts an in-bounds QName", func(t *testing.T) {
 		t.Parallel()
-		require.NoError(t, validateWith(t, mk("QName", "minLength", "100"), `<r>abc</r>`),
-			`minLength on xs:QName must be a no-op`)
+		require.NoError(t, validateWith(t, mk("QName", "maxLength", "3"), `<r>abc</r>`),
+			`maxLength on xs:QName must accept an in-bounds value`)
 	})
 
-	t.Run("length does not constrain a QName", func(t *testing.T) {
+	t.Run("minLength constrains a QName", func(t *testing.T) {
 		t.Parallel()
-		require.NoError(t, validateWith(t, mk("QName", "length", "1"), `<r>abc</r>`),
-			`length on xs:QName must be a no-op`)
+		require.Error(t, validateWith(t, mk("QName", "minLength", "100"), `<r>abc</r>`),
+			`minLength on xs:QName must reject a too-short value`)
 	})
 
-	t.Run("maxLength does not constrain a NOTATION", func(t *testing.T) {
+	t.Run("length constrains a QName", func(t *testing.T) {
 		t.Parallel()
-		require.NoError(t, validateWith(t, mk("NOTATION", "maxLength", "1"), `<r>abc</r>`),
-			`maxLength on xs:NOTATION must be a no-op`)
+		require.Error(t, validateWith(t, mk("QName", "length", "1"), `<r>abc</r>`),
+			`length on xs:QName must reject a value of a different length`)
+	})
+
+	t.Run("maxLength constrains a NOTATION", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, validateWith(t, mk("NOTATION", "maxLength", "1"), `<r>abc</r>`),
+			`maxLength on xs:NOTATION must reject a longer value`)
 	})
 
 	t.Run("length facet on QName still compiles", func(t *testing.T) {
@@ -148,8 +153,8 @@ func TestDataLengthFacetQNameNoOp(t *testing.T) {
 
 	t.Run("invalid bound on QName is still a compile error", func(t *testing.T) {
 		t.Parallel()
-		// The bound itself must remain a valid xs:nonNegativeInteger even though the
-		// facet does not constrain the value (the r2 bound check is kept).
+		// The bound itself must remain a valid xs:nonNegativeInteger (the r2 bound
+		// check is kept).
 		require.NotEmpty(t, compileErrorsFor(t, mk("QName", "maxLength", "-1")),
 			`maxLength="-1" on xs:QName must still be a compile error`)
 	})

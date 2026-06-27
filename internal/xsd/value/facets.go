@@ -69,45 +69,14 @@ var lengthApplicableTypes = map[string]struct{}{
 // on this keep the length facets off the numeric/decimal family, boolean, float,
 // double and the date/time/duration family, where XSD declares them inapplicable.
 //
-// Applicable is about facet-VALIDITY (may the facet appear, and must its bound be
-// a valid xs:nonNegativeInteger), NOT about whether the facet constrains the
-// value at validation time. For xs:QName and xs:NOTATION the length facets are
-// applicable (so they may appear and the bound is validated) but DEPRECATED and
-// NON-CONSTRAINING per XSD 1.1 — any lexically valid value is facet-valid
-// regardless of its rune length. Use LengthEnforced to gate the actual length
-// comparison.
+// On the applicable types — including xs:QName and xs:NOTATION — the length
+// facets are CONSTRAINING (XSD 1.0 / libxml2 parity): a value whose length (rune
+// count for the string family / QName / NOTATION / anyURI, octet count for the
+// binary types) violates the bound is rejected, the same way the xsd package
+// enforces it (see xsd's facetLength). This keeps relaxng and xsd consistent.
 func LengthApplicable(builtinLocal string) bool {
 	_, ok := lengthApplicableTypes[builtinLocal]
 	return ok
-}
-
-// lengthNoOpTypes is the subset of lengthApplicableTypes whose length facets are
-// DEPRECATED and NON-CONSTRAINING in XSD 1.1: length/minLength/maxLength on
-// xs:QName and xs:NOTATION are facet-valid (applicable, with a validated bound)
-// but never reject a value for its rune count — any lexically valid QName/NOTATION
-// is facet-valid regardless of the bound. Enforcing them as a character count
-// would wrongly reject valid values.
-var lengthNoOpTypes = map[string]struct{}{
-	lexicon.TypeQName:    {},
-	lexicon.TypeNotation: {},
-}
-
-// LengthEnforced reports whether the length facets (length, minLength, maxLength),
-// when present and applicable to builtinLocal, actually CONSTRAIN the value at
-// validation time. It is true for the string-derived, binary and anyURI types,
-// where length is a real rune/octet-count constraint, and FALSE for xs:QName and
-// xs:NOTATION, whose length facets are deprecated and facet-valid but
-// non-constraining (XSD 1.1) — a lexically valid value passes regardless of the
-// bound. Callers must still treat the facet as applicable (LengthApplicable) for
-// facet-validity and bound validation; LengthEnforced only gates the runtime
-// length comparison. A type to which the facet is wholly inapplicable returns
-// false here too (there is nothing to enforce).
-func LengthEnforced(builtinLocal string) bool {
-	if _, ok := lengthApplicableTypes[builtinLocal]; !ok {
-		return false
-	}
-	_, noop := lengthNoOpTypes[builtinLocal]
-	return !noop
 }
 
 // IsDecimalFamily reports whether builtinLocal is in the xs:decimal family

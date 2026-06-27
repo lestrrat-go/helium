@@ -2151,10 +2151,11 @@ func validateXSDType(typeName, text string, params []*param) int {
 // The parameter is named text (not value) so the internal/xsd/value package
 // stays reachable for the ordering-facet comparisons below.
 //
-// The length facets (length/minLength/maxLength) are measured via facetLength,
-// EXCEPT on xs:QName/xs:NOTATION, where they are applicable but deprecated and
-// non-constraining (XSD 1.1) — value.LengthEnforced gates the comparison so any
-// lexically valid QName/NOTATION passes regardless of the bound;
+// The length facets (length/minLength/maxLength) are measured via facetLength on
+// every applicable type — including xs:QName and xs:NOTATION, where they are
+// CONSTRAINING (XSD 1.0 / libxml2 parity, matching the xsd package's facetLength)
+// rather than a no-op, so RELAX NG rejects an out-of-length QName/NOTATION exactly
+// as the shared xsd validator does;
 // the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated through
 // the shared XSD value engine (value.Compare) so RELAX NG and XSD agree on the
 // value space (e.g. xs:integer "5" really is less than "10"); and the digit
@@ -2189,13 +2190,6 @@ func validateWithParams(text, typeName string, params []*param) int {
 				return -1
 			}
 		case "length":
-			// On xs:QName/xs:NOTATION the length facets are applicable (the bound was
-			// validated at compile time) but DEPRECATED and non-constraining per XSD
-			// 1.1: any lexically valid value passes regardless of its rune count, so
-			// skip the comparison rather than counting runes (value.LengthEnforced).
-			if !value.LengthEnforced(typeName) {
-				continue
-			}
 			// The bound is compile-time validated as an xs:nonNegativeInteger and
 			// parsed width-safely (big.Int) so a huge-but-valid bound is compared
 			// faithfully rather than overflowing int into a reject-all.
@@ -2208,9 +2202,6 @@ func validateWithParams(text, typeName string, params []*param) int {
 				return -1
 			}
 		case "minLength":
-			if !value.LengthEnforced(typeName) {
-				continue
-			}
 			n, ok := parseNonNegFacetBound(p.value)
 			if !ok {
 				return -1
@@ -2220,9 +2211,6 @@ func validateWithParams(text, typeName string, params []*param) int {
 				return -1
 			}
 		case "maxLength":
-			if !value.LengthEnforced(typeName) {
-				continue
-			}
 			n, ok := parseNonNegFacetBound(p.value)
 			if !ok {
 				return -1
