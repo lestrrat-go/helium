@@ -127,10 +127,13 @@ func TestRSAOAEP(t *testing.T) {
 		require.NoError(t, err)
 
 		// No MGF element must be serialized when none was requested.
+		// Match the element start-tag markup (":MGF"), not the bare
+		// substring "MGF": the latter can appear by chance inside the
+		// randomized base64 CipherValue, but a colon never can.
 		xml, err := helium.WriteString(doc)
 		require.NoError(t, err)
 		require.Contains(t, xml, xmlenc1.DigestSHA256)
-		require.NotContains(t, xml, "MGF")
+		require.NotContains(t, xml, ":MGF")
 
 		// Inject an explicit MGF1-SHA-1 element into the EncryptionMethod.
 		// Because the absent-MGF default is SHA-1, decryption under explicit
@@ -203,9 +206,11 @@ func TestRSAOAEP(t *testing.T) {
 			require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 
 			// No partial EncryptedData/MGF element should have been serialized.
+			// Match the element start-tag markup (":MGF") rather than the bare
+			// "MGF" substring, which a random base64 CipherValue could contain.
 			xml, werr := helium.WriteString(doc)
 			require.NoError(t, werr)
-			require.NotContains(t, xml, "MGF")
+			require.NotContains(t, xml, ":MGF")
 		}
 	})
 
