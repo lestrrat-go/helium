@@ -190,7 +190,7 @@ RELAX NG schema compilation and validation.
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
 - Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go` (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
-- Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xmlchar, internal/uripath
+- Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 - Status: 159/159 golden tests passing
 
 ## html/
@@ -509,6 +509,7 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - **XSDFields(s string) []string** — split on XSD list whitespace
 - **Orderable(builtinLocal string) bool** — whether the primitive value space is ordered (range facets may apply)
 - **IsDecimalFamily(builtinLocal string) bool** — whether the type is xs:decimal or a derived integer (digit facets may apply)
+- **LengthApplicable(builtinLocal string) bool** — whether length/minLength/maxLength facets apply and CONSTRAIN the value (string-derived, binary, anyURI, QName, NOTATION — enforced per XSD 1.0/libxml2 parity); shared by relaxng and xsd
 - **CountTotalDigits(value string) int** — significant total-digit count for the totalDigits facet
 - **CountFractionDigits(value string) int** — significant fraction-digit count for the fractionDigits facet
 - Files: `validate.go`, `compare.go`, `facets.go`
