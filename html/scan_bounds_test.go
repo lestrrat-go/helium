@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/html"
 	"github.com/stretchr/testify/require"
@@ -138,6 +139,47 @@ func TestOverCapStartTagNameEmitsNoStrayText(t *testing.T) {
 		"over-cap start-tag name must fail with ErrContentSizeExceeded")
 	require.False(t, sawAngle,
 		"over-cap start-tag name must not emit a stray '<' text node")
+}
+
+// TestOverCapDoctypeWhitespaceDoesNotBlock is the regression for the parseDoctype
+// streaming-block gap: an over-cap intra-DOCTYPE whitespace run sets fatalErr in
+// the FIRST skipWhitespace, but parseDoctype must check fatalErr IMMEDIATELY and
+// return rather than continuing into the next scanner (parseName / the second
+// skipWhitespace), whose PeekAt would issue another (blocking) Read on a streaming
+// reader stalled right at the over-cap boundary.
+//
+// The body is `<!DOCTYPE` followed by exactly an over-cap whitespace run and
+// nothing else; once it is delivered the reader blocks forever on any further
+// Read. Without the per-scanner fatal check parseDoctype's second skipWhitespace
+// issues that blocking Read and the parse hangs (caught by the timeout); with the
+// fix it surfaces ErrContentSizeExceeded promptly and never reads past the run.
+// (blockOnExtraReadReader and metaUTF8 are shared with rawtext_bounds_test.go.)
+func TestOverCapDoctypeWhitespaceDoesNotBlock(t *testing.T) {
+	// scanTokenCeiling+8 whitespace bytes trip skipWhitespace's hard cap. A
+	// <meta charset="utf-8"> forces the streaming sanitize path so the parser
+	// pulls bytes on demand and the cursor refills incrementally toward the
+	// boundary instead of buffering the whole stream up front.
+	ws := strings.Repeat(" ", scanTokenCeiling+8)
+	input := []byte(metaUTF8 + "<!DOCTYPE" + ws)
+	r := &blockOnExtraReadReader{
+		data:    input,
+		maxRead: 1 << 16,
+		block:   make(chan struct{}),
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := html.NewParser().ParseReader(t.Context(), r)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+			"over-cap DOCTYPE whitespace must fail with ErrContentSizeExceeded")
+	case <-time.After(10 * time.Second):
+		t.Fatal("parseDoctype issued a blocking Read after fatalErr was set (missing per-scanner fatal check)")
+	}
 }
 
 // TestNonFatalInvalidStartTagStillEmitsText guards that the over-cap fail-fast

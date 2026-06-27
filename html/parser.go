@@ -1297,11 +1297,27 @@ func (p *parser) parsePI(ctx context.Context) {
 func (p *parser) parseDoctype() {
 	// Skip <!DOCTYPE
 	_ = p.cur.Advance(9)
+
+	// Each scanner below — skipWhitespace, parseName, parseQuotedString — can set
+	// fatalErr on a hard-cap overflow (over-cap intra-tag whitespace, root name, or
+	// PUBLIC/SYSTEM literal). Check fatalErr IMMEDIATELY after each one and return
+	// before any further cursor read: on a streaming reader stalled right at the
+	// over-cap boundary, the next scanner's PeekAt would issue another (blocking)
+	// Read instead of promptly surfacing the fatal. The main loop surfaces fatalErr.
 	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
 
 	// Parse root element name
 	name := p.parseName()
+	if p.fatalErr != nil {
+		return
+	}
 	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
 
 	externalID := ""
 	systemID := ""
@@ -1310,19 +1326,37 @@ func (p *parser) parseDoctype() {
 	if p.hasPrefixFold("PUBLIC") {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		externalID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		systemID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 	} else if p.hasPrefixFold("SYSTEM") {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		systemID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 	}
 
-	// An over-cap external/system literal (or name/whitespace) set fatalErr.
-	// Return BEFORE the "skip to '>'" drain loop and the InternalSubset SAX emit
-	// so an unterminated abusive DOCTYPE is not drained and no partial subset is
-	// published; the main loop surfaces the fatal.
+	// Final gate before the "skip to '>'" drain loop and the InternalSubset SAX
+	// emit (redundant given the per-scanner checks above, kept defensively): an
+	// over-cap literal/name/whitespace must not drain an unterminated abusive
+	// DOCTYPE or publish a partial subset.
 	if p.fatalErr != nil {
 		return
 	}
