@@ -1207,22 +1207,6 @@ func isAtomicBuiltinName(local string) bool {
 	return ok
 }
 
-// unionHasFacets reports whether a union simple type (or a restriction of one)
-// carries any facets anywhere in its restriction chain. A faceted union narrows
-// its members' combined value space, so its members cannot stand in for the
-// union when deciding cos-st-derived-ok.2.2.4. The walk does NOT stop when a
-// type declares {member type definitions}: a derived union may copy the base's
-// MemberTypes onto itself while a faceted ancestor still further restricts the
-// value space, so the FULL base chain must be inspected.
-func unionHasFacets(td *TypeDef) bool {
-	for cur := td; cur != nil; cur = cur.BaseType {
-		if cur.Facets != nil {
-			return true
-		}
-	}
-	return false
-}
-
 // simpleTypeValidlyRestricts reports whether the derived simple type is a valid
 // restriction of (same as, or derived by restriction from) the base simple
 // type. It first consults the *TypeDef pointer chain (isDerivedFrom). When that
@@ -1242,20 +1226,18 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 		return true
 	}
 	// cos-st-derived-ok.2.2.4: a base that is a UNION admits a derived type that
-	// is validly derived from any of its member types. This MUST be handled
-	// BEFORE the builtin-base early return below, because builtinBaseLocal(base)
-	// is empty for a union (a union is not an atomic builtin) and the early
-	// return would otherwise accept ANY derived type unconditionally — wrongly
-	// accepting e.g. base union(xs:int xs:boolean) redeclared as xs:date. The
-	// member stand-in is sound ONLY when the union carries no facets of its own
-	// (an enumeration/pattern anywhere in the union's chain further restricts its
-	// value space, which a bare member type would widen past), so a faceted union
-	// is rejected outright. Members are walked transitively via the recursive
+	// is validly derived from (at least) ONE of its {member type definitions}.
+	// This MUST be handled BEFORE the builtin-base early return below, because
+	// builtinBaseLocal(base) is empty for a union (a union is not an atomic
+	// builtin) and the early return would otherwise accept ANY derived type
+	// unconditionally — wrongly accepting e.g. base union(xs:int xs:boolean)
+	// redeclared as xs:date (date derives from NEITHER member, so the loop
+	// rejects it). The clause makes NO exception for a faceted union: a
+	// restriction of a union whose member set includes the derived type IS valid
+	// derivation, so derived-from-a-member = accept regardless of any facets the
+	// union itself carries. Members are walked transitively via the recursive
 	// call (a member that is itself a union re-enters this branch).
 	if resolveVariety(base) == TypeVarietyUnion {
-		if unionHasFacets(base) {
-			return false
-		}
 		for _, member := range resolveUnionMembers(base) {
 			if simpleTypeValidlyRestricts(derived, member) {
 				return true
