@@ -58,7 +58,12 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ctx context.Context, ec 
 	if seqLen(singletonSeq) == 0 {
 		return false, true, nil
 	}
-	singletonAtoms, err := AtomizeSequence(singletonSeq)
+	// Atomize with an early stop (cap 2): the range fast-path only applies when
+	// the non-range side is a singleton, so a multi-item or unbounded-lazy operand
+	// (e.g. another large range) must be detected WITHOUT materializing/draining
+	// the whole sequence. When more than one atom is produced, fall back to the
+	// general O(N*M) path, which honors OpLimit / context cancellation.
+	singletonAtoms, err := atomizeSingletonOperand(singletonSeq)
 	if err != nil {
 		return false, true, err
 	}
