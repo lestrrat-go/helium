@@ -272,17 +272,6 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		// base all (RecurseUnordered). The other four pairs have NO derivation rule
 		// and are invalid restrictions.
 		//
-		// Before rejecting, fold away "pointless" single-emitting-child wrappers on
-		// either side and re-dispatch: a group with exactly one emitting member is
-		// equivalent to that member, so e.g. choice(a) restricting sequence(a) is a
-		// valid (element-to-element) restriction once both pointless wrappers are
-		// removed. Only re-dispatch when a reduction actually made progress, so the
-		// recursion terminates.
-		rr := reduceSingletonGroup(r)
-		bb := reduceSingletonGroup(b)
-		if rr != r || bb != b {
-			return particleValidRestriction(ctx, rr, bb)
-		}
 		// sequence:all is RecurseUnordered (XSD §3.9.6): a derived SEQUENCE
 		// restricting a base ALL. Order is irrelevant in the base all, so each
 		// derived sequence particle must map to a DISTINCT base all particle it
@@ -292,6 +281,14 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		// so reuse it after checking the group occurrence range. A derived sequence
 		// that adds/renames a particle (no distinct base counterpart) or drops a
 		// required base member is rejected.
+		//
+		// Handle this BEFORE reduceSingletonGroup: a SINGLETON derived sequence
+		// (e.g. sequence(a?) over base all(a?, b?)) must be mapped member-by-member
+		// through recurseAll against the base all's children. Folding it to a bare
+		// element first would route it to elementRestrictsGroup, which compares the
+		// lone element against every base all child and over-rejects a valid
+		// RecurseUnordered restriction that simply leaves an emptiable base member
+		// unmatched.
 		if rg.Compositor == CompositorSequence && bg.Compositor == CompositorAll {
 			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 				return false
@@ -308,8 +305,18 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 			}
 			return recurseAll(ctx, rg.Particles, bg.Particles)
 		}
-		// choice:sequence, choice:all, all:sequence, all:choice — no derivation
-		// rule, reject.
+		// Remaining mixed pairs: choice:sequence, choice:all, all:sequence,
+		// all:choice — no §3.9.6 derivation rule. Before rejecting, fold away
+		// "pointless" single-emitting-child wrappers on either side and re-dispatch:
+		// a group with exactly one emitting member is equivalent to that member, so
+		// e.g. choice(a) restricting sequence(a) is a valid (element-to-element)
+		// restriction once both pointless wrappers are removed. Only re-dispatch when
+		// a reduction actually made progress, so the recursion terminates.
+		rr := reduceSingletonGroup(r)
+		bb := reduceSingletonGroup(b)
+		if rr != r || bb != b {
+			return particleValidRestriction(ctx, rr, bb)
+		}
 		return false
 	}
 }

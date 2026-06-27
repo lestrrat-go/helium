@@ -1256,6 +1256,34 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	t.Run("accepts singleton sequence restricting all of optionals", func(t *testing.T) {
+		t.Parallel()
+		// Base all (a?, b?); derived sequence (a?) is a SINGLETON sequence. Per
+		// RecurseUnordered it maps a? onto base a? and leaves the emptiable b?
+		// unmatched — a valid restriction. The singleton must be routed through
+		// recurseAll, NOT collapsed to a bare element (which elementRestrictsGroup
+		// would over-reject against the 1..1-particle base all).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string" minOccurs="0"/>
+      <xs:element name="b" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("accepts empty sequence restricting optional all", func(t *testing.T) {
 		t.Parallel()
 		// Base all is OPTIONAL (minOccurs="0") with required members a,b, so it
