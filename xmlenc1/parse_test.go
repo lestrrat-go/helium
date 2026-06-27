@@ -233,6 +233,28 @@ func TestEncryptionMethodCardinality(t *testing.T) {
 		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 	})
 
+	t.Run("DigestMethod missing Algorithm rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<ds:DigestMethod/>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("MGF empty Algorithm rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<xenc11:MGF Algorithm=""/>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("duplicate KeySize rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
 	t.Run("duplicate OAEPparams rejected", func(t *testing.T) {
 		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
 			`<xenc:OAEPparams>AAAA</xenc:OAEPparams>`+

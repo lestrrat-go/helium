@@ -142,7 +142,7 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	// mirroring the duplicate-EncryptionMethod/CipherData guards in the
 	// parent parsers. Boolean sentinels are used because an empty
 	// attribute/text value is otherwise ambiguous.
-	var seenDigestMethod, seenMGF, seenOAEPParams bool
+	var seenDigestMethod, seenMGF, seenOAEPParams, seenKeySize bool
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
@@ -155,13 +155,30 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 				return nil, fmt.Errorf("%w: duplicate DigestMethod", ErrMalformedEncrypted)
 			}
 			seenDigestMethod = true
-			em.DigestMethod, _ = e.GetAttribute("Algorithm")
+			alg, ok := e.GetAttribute("Algorithm")
+			if !ok || alg == "" {
+				return nil, fmt.Errorf("%w: DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
+			}
+			em.DigestMethod = alg
 		case isMGFElem(e):
 			if seenMGF {
 				return nil, fmt.Errorf("%w: duplicate MGF", ErrMalformedEncrypted)
 			}
 			seenMGF = true
-			em.MGFAlgorithm, _ = e.GetAttribute("Algorithm")
+			alg, ok := e.GetAttribute("Algorithm")
+			if !ok || alg == "" {
+				return nil, fmt.Errorf("%w: MGF missing/empty Algorithm", ErrMalformedEncrypted)
+			}
+			em.MGFAlgorithm = alg
+		case isXMLEncElem(e, "KeySize"):
+			// KeySize is an optional singleton in the schema. The package
+			// derives key sizes from the algorithm URI and does not consume
+			// KeySize, so enforce at-most-one cardinality to stay consistent
+			// with the other sub-element guards.
+			if seenKeySize {
+				return nil, fmt.Errorf("%w: duplicate KeySize", ErrMalformedEncrypted)
+			}
+			seenKeySize = true
 		case isXMLEncElem(e, "OAEPparams"):
 			if seenOAEPParams {
 				return nil, fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
