@@ -652,4 +652,71 @@ func TestRestrictionAttrType(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	t.Run("rejects untyped derived attr widening a narrower base attr type", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is xs:int; the derived restriction redeclares @a with NO type
+		// and NO inline <xs:simpleType>. Per XSD §3.2.2.1 an attribute with no type
+		// has {type definition} = xs:anySimpleType, the simple ur-type — a
+		// SUPERTYPE of xs:int. Redeclaring @a as the ur-type WIDENS the value space
+		// to admit non-integers the base forbids, so it is NOT a valid restriction
+		// and must be rejected. Regression guard: an absent attr type must NOT skip
+		// the restriction-derivation check.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:int"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects derived member of an ALIAS over a faceted base union", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is AliasUnion, a no-facet <xs:restriction> ALIAS over FacetedUnion
+		// (= (xs:int | xs:string) restricted with enumeration {1,"hello"}). The alias
+		// inherits the faceted union's value space {1,"hello"}. The derived
+		// restriction redeclares @a as bare xs:int, whose value space includes values
+		// the base FORBIDS (e.g. 2) — a WIDENING. resolveRefs copies MemberTypes onto
+		// the restriction-derived alias, so the facet gate must CONTINUE through the
+		// alias to see FacetedUnion's inherited enumeration rather than stop at the
+		// alias and wrongly accept. Regression guard for the union facet-gate walk.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntOrString">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="FacetedUnion">
+    <xs:restriction base="t:IntOrString">
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="hello"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="AliasUnion">
+    <xs:restriction base="t:FacetedUnion"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:AliasUnion"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }

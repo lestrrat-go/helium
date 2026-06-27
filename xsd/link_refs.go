@@ -1351,23 +1351,33 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 }
 
 // unionRestrictionChainHasFacets reports whether a union base type, or any
-// restriction step in its base chain down to the type that actually constructs
-// the union (the one carrying MemberTypes), declares any value-restricting facet.
-// Such a facet narrows the union's value space, so a "restriction" to a bare
-// member type would widen it and is not a valid derivation. Per XSD §4.1.5 only
-// pattern and enumeration are even applicable to a union, but every restricting
-// facet is checked for robustness; whiteSpace (fixed to collapse on a union, not
+// restriction step in its base chain down to the type that EXPLICITLY constructs
+// the union (via <xs:union>), declares any value-restricting facet. Such a facet
+// narrows the union's value space, so a "restriction" to a bare member type would
+// widen it and is not a valid derivation. Per XSD §4.1.5 only pattern and
+// enumeration are even applicable to a union, but every restricting facet is
+// checked for robustness; whiteSpace (fixed to collapse on a union, not
 // value-restricting) is intentionally ignored. Intervening MEMBER unions are not
 // walked here — they are re-entered through simpleTypeValidlyRestricts' recursion
 // and gated by their own call to this helper.
+//
+// The walk stops only at the EXPLICIT union constructor, identified by carrying
+// MemberTypes with a non-restriction Derivation (an <xs:union> sets MemberTypes
+// at parse time with Derivation==DerivationNone). It must NOT stop at a
+// restriction-derived union ALIAS: resolveRefs copies MemberTypes onto every
+// restriction step over a union (`<xs:restriction base="aUnion"/>`), so an alias
+// over a faceted union also carries MemberTypes; breaking there would HIDE the
+// inherited facet on the underlying faceted union and wrongly accept narrowing to
+// a bare member. Such an alias has Derivation==DerivationRestriction, so the walk
+// continues through it to reach the faceted union below.
 func unionRestrictionChainHasFacets(td *TypeDef) bool {
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if facetSetRestricts(cur.Facets) {
 			return true
 		}
-		if len(cur.MemberTypes) > 0 {
-			// Reached the union-constructing type; nothing below it constrains the
-			// union value space.
+		if len(cur.MemberTypes) > 0 && cur.Derivation != DerivationRestriction {
+			// Reached the explicit union-constructing type; nothing below it
+			// constrains the union value space.
 			break
 		}
 	}
@@ -1455,9 +1465,12 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// attribute's type. Attribute types are simple types, so any
 			// derivation is by restriction; isDerivedFrom captures the chain.
 			// When either type is unresolved, accept conservatively (mirrors the
-			// element-to-element restriction check).
-			derivedTD := attrUseTypeDef(au, c.schema)
-			baseTD := attrUseTypeDef(baseAU, c.schema)
+			// element-to-element restriction check). An ABSENT attribute type is
+			// xs:anySimpleType (XSD §3.2.2.1), so attrUseEffectiveTypeDef defaults
+			// to the ur-type: an untyped derived attribute restricting a narrower
+			// base (e.g. xs:int) is the ur-type widening the base and is rejected.
+			derivedTD := attrUseEffectiveTypeDef(au, c.schema)
+			baseTD := attrUseEffectiveTypeDef(baseAU, c.schema)
 			if derivedTD != nil && baseTD != nil && !simpleTypeValidlyRestricts(derivedTD, baseTD) {
 				msg := fmt.Sprintf("The type definition of the attribute use is not a valid restriction of the corresponding attribute use's type definition of the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
