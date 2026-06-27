@@ -223,6 +223,11 @@ func TestMultiKeySortIncompatibleSecondKeyRaisesXTDE1030(t *testing.T) {
 // every value before comparison, so mutually incomparable original atomic types
 // (here xs:date vs xs:integer) are perfectly valid and must NOT raise XTDE1030.
 // The per-level type-consistency check only applies to default-data-type levels.
+//
+// XSLT3-102 r5: with a uniform primary key the secondary text level must drive
+// the order by STRING value. Document order is date-then-integer; correct text
+// order is "1" < "2020-01-01", so the integer item must come first. Pre-r5 the
+// date key's str was blanked to "" by the numeric rewrite and sorted first.
 func TestMultiKeySortTextSecondKeyMixedTypesNoError(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
@@ -240,12 +245,12 @@ func TestMultiKeySortTextSecondKeyMixedTypesNoError(t *testing.T) {
 </xsl:stylesheet>`)
 
 	doc, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<root><item g="x" t="d" v="2020-01-01"/><item g="x" t="n" v="5"/></root>`))
+		[]byte(`<root><item g="x" t="d" v="2020-01-01"/><item g="x" t="n" v="1"/></root>`))
 	require.NoError(t, err)
 
 	result, err := ss.Transform(doc).Serialize(t.Context())
 	require.NoError(t, err)
-	require.Contains(t, result, "<out")
+	require.Contains(t, result, ">12020-01-01<")
 }
 
 // XSLT3-102 r3: a SINGLE-key sort with explicit data-type="text" stringifies
@@ -253,6 +258,13 @@ func TestMultiKeySortTextSecondKeyMixedTypesNoError(t *testing.T) {
 // xs:integer) are perfectly valid and must NOT raise XTDE1030. The single-key
 // path must skip the type-consistency check for explicit text levels exactly
 // like the multi-key path does.
+//
+// XSLT3-102 r5: the result must also be ordered by the STRING value of each
+// key. Pre-r5 fillSingletonSortValue rewrote the xs:date key into a numeric
+// sortValue with an empty str, so under text comparison the date key compared
+// as "" (sorting before the integer's "1") and the order was wrong. Document
+// order is date-then-integer; correct text order is "1" < "2020-01-01", so the
+// integer must come first.
 func TestSingleKeyTextSortMixedTypesNoError(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
@@ -269,12 +281,104 @@ func TestSingleKeyTextSortMixedTypesNoError(t *testing.T) {
 </xsl:stylesheet>`)
 
 	doc, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<root><item t="d" v="2020-01-01"/><item t="n" v="5"/></root>`))
+		[]byte(`<root><item t="d" v="2020-01-01"/><item t="n" v="1"/></root>`))
 	require.NoError(t, err)
 
 	result, err := ss.Transform(doc).Serialize(t.Context())
 	require.NoError(t, err)
-	require.Contains(t, result, "<out")
+	require.Contains(t, result, ">12020-01-01<")
+}
+
+// XSLT3-102 r5: a default single-key sort over xs:date keys with explicit
+// data-type="text" must order strictly by the canonical string value. Pre-r5
+// fillSingletonSortValue rewrote every date key into a numeric sortValue and
+// blanked str, so all keys compared equal ("") and the sort degenerated to
+// document order. Document order here is 2020,2019,2021; correct text order is
+// 2019,2020,2021.
+func TestSingleKeyTextSortDateKeysOrdersByString(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="xs:date(@v)" data-type="text"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="2020-01-01"/><item v="2019-06-01"/><item v="2021-03-03"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, ">2019-06-012020-01-012021-03-03<")
+}
+
+// XSLT3-102 r5: same as the date case but for xs:dayTimeDuration keys, which
+// fillSingletonSortValue rewrites through a separate duration branch. Under
+// data-type="text" the canonical string value must drive ordering. value-of
+// outputs the canonical duration string (the same value the sort compares) so
+// the assertion is independent of any lexical-vs-canonical mismatch. Document
+// order is PT3H,PT1H,PT20H; correct text order is PT1H < PT20H < PT3H.
+func TestSingleKeyTextSortDurationKeysOrdersByString(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="xs:dayTimeDuration(@v)" data-type="text"/>
+        <xsl:value-of select="xs:dayTimeDuration(@v)"/><xsl:text>|</xsl:text>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item v="PT3H"/><item v="PT1H"/><item v="PT20H"/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(doc).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, ">PT1H|PT20H|PT3H|<")
+}
+
+// XSLT3-102 r5: a default multi-key sort whose secondary level is flipped to
+// auto-number mode by an earlier item (an xs:integer key) and whose later item
+// supplies the key as a NODE with an incompatible atomized type (untypedAtomic
+// "zzz", not castable to a number) must raise XTDE1030. Pre-r5 the
+// dataTypeNumberAuto branch only recorded an atom when the singleton item was
+// already an xpath3.AtomicValue, so the node key was silently skipped by
+// validateSortLevelTypes and the inconsistency bypassed the type gate.
+func TestMultiKeySortNumberAutoNodeKeyBypassRaisesXTDE1030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="@g"/>
+        <xsl:sort select="if (@t='i') then xs:integer(@v) else @v"/>
+        <xsl:value-of select="@v"/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item g="x" t="i" v="5"/><item g="x" t="n" v="zzz"/></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE1030")
 }
 
 // XSLT3-102 r3: a default-data-type sort mixing xs:dateTimeStamp and xs:dateTime

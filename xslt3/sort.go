@@ -494,36 +494,39 @@ func fillSingletonSortValue(sv *sortValue, item xpath3.Item, dtMode *dataTypeMod
 		if *dtMode == dataTypeAuto && v.IsNumeric() {
 			*dtMode = dataTypeNumberAuto
 		}
-		// Duration types: use numeric comparison based on total months or seconds.
-		if v.TypeName == xpath3.TypeYearMonthDuration || v.TypeName == xpath3.TypeDayTimeDuration {
-			d := v.DurationVal()
-			f := float64(d.Months)
-			if v.TypeName == xpath3.TypeDayTimeDuration {
-				f = d.Seconds
-			}
-			if d.Negative {
-				f = -f
-			}
-			*sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
-			if *dtMode == dataTypeAuto {
+		// Only an auto-detect data-type level rewrites orderable
+		// duration/date/time keys into a numeric sortValue (and flips the level
+		// to dataTypeNumberAuto). An explicit data-type="text" level must keep
+		// the string value already stored in sv.str — a numeric rewrite there
+		// would blank str and make every such key compare as "" under text
+		// comparison. The atom is recorded by the caller either way so the
+		// XTDE1030 orderability gate still sees the true source type.
+		if *dtMode == dataTypeAuto {
+			// Duration types: use numeric comparison based on total months or seconds.
+			if v.TypeName == xpath3.TypeYearMonthDuration || v.TypeName == xpath3.TypeDayTimeDuration {
+				d := v.DurationVal()
+				f := float64(d.Months)
+				if v.TypeName == xpath3.TypeDayTimeDuration {
+					f = d.Seconds
+				}
+				if d.Negative {
+					f = -f
+				}
+				*sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
 				*dtMode = dataTypeNumberAuto
 			}
-		}
-		// Date/time types: use Unix seconds for numeric comparison.
-		switch v.TypeName {
-		case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate:
-			t := xpath3.ApplyImplicitTZ(v.TimeVal(), implicitTZ)
-			f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
-			*sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
-			if *dtMode == dataTypeAuto {
+			// Date/time types: use Unix seconds for numeric comparison.
+			switch v.TypeName {
+			case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate:
+				t := xpath3.ApplyImplicitTZ(v.TimeVal(), implicitTZ)
+				f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+				*sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
 				*dtMode = dataTypeNumberAuto
-			}
-		case xpath3.TypeTime:
-			// xs:time comparison uses reference date 1972-12-31 per F&O §10.4.4
-			t := xpath3.TimeToReferenceDateTime(xpath3.ApplyImplicitTZ(v.TimeVal(), implicitTZ))
-			f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
-			*sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
-			if *dtMode == dataTypeAuto {
+			case xpath3.TypeTime:
+				// xs:time comparison uses reference date 1972-12-31 per F&O §10.4.4
+				t := xpath3.TimeToReferenceDateTime(xpath3.ApplyImplicitTZ(v.TimeVal(), implicitTZ))
+				f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+				*sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
 				*dtMode = dataTypeNumberAuto
 			}
 		}
@@ -585,9 +588,13 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		if *dtMode == dataTypeNumberAuto {
 			// Auto-detected numeric: preserve date/time ordering.
 			sv := extractNumericSortValue(seq, result.StringValue(), false, implicitTZ)
-			// Preserve original type/atom for XTDE1030 checking
+			// Preserve the original atom/type for the XTDE1030 gate. Atomize ANY
+			// singleton item — a NodeItem is atomizable too, and skipping it
+			// (recording an atom only for an already-atomic value) let a later
+			// node key with an incompatible atomized type bypass the per-level
+			// type check. The numeric key extracted above is left unchanged.
 			if seqLen == 1 {
-				if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
+				if av, err := xpath3.AtomizeItem(seq.Get(0)); err == nil {
 					sv.typeName = av.TypeName
 					sv.atom = av
 					sv.hasAtom = true
@@ -645,7 +652,11 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		// dropping it and bypassing the XTDE1030 check on later items.
 		sv := extractNumericSortValue(val, stringifySequence(val), false, implicitTZBody)
 		if val != nil && sequence.Len(val) == 1 {
-			if av, ok := val.Get(0).(xpath3.AtomicValue); ok {
+			// Atomize ANY singleton item (node or atomic), mirroring the select
+			// path: a NodeItem key must still be recorded so a later body key
+			// with an incompatible atomized type cannot bypass the XTDE1030 gate.
+			// The numeric key extracted above is left unchanged.
+			if av, err := xpath3.AtomizeItem(val.Get(0)); err == nil {
 				sv.typeName = av.TypeName
 				sv.atom = av
 				sv.hasAtom = true
