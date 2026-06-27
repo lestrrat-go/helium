@@ -714,30 +714,56 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 	return nil
 }
 
+// rejectNonWhitespaceText reports a validity error and returns a non-nil error
+// if elem has any non-whitespace text or CDATA child. It is used for element-only
+// content types (including the XSD 1.1 synthesized empty+openContent type), where
+// character content other than whitespace is not allowed.
+func (vc *validationContext) rejectNonWhitespaceText(ctx context.Context, elem *helium.Element) error {
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.TextNode && child.Type() != helium.CDATASectionNode {
+			continue
+		}
+		// Use XSD/XML whitespace (space, tab, CR, LF) only: characters like
+		// NBSP (U+00A0) are NOT ignorable in element-only content, so
+		// strings.TrimSpace (which strips all Unicode space) must not be used.
+		if !xmlchar.IsAllSpace(child.Content()) {
+			msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			return fmt.Errorf("text content in element-only type")
+		}
+	}
+	return nil
+}
+
 // validateContentByType validates an element's content against its type's
 // content-type (empty/simple/element-only/mixed). Attribute validation and the
 // XSD 1.1 assertion check are handled by the caller (validateElementContent).
 func (vc *validationContext) validateContentByType(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	switch td.ContentType {
 	case ContentTypeEmpty:
+		// XSD 1.1 §3.4.2.3.3: an empty explicit content type plus effective open
+		// content (mode != none) becomes element-only with an empty particle plus
+		// the open content, so extra wildcard-matched children are admitted.
+		if vc.version == Version11 && td.OpenContent != nil {
+			// The synthesized type is element-only, so non-whitespace character
+			// content is not allowed even though extra wildcard-matched children are.
+			if err := vc.rejectNonWhitespaceText(ctx, elem); err != nil {
+				return err
+			}
+			mg := td.ContentModel
+			if mg == nil {
+				mg = &ModelGroup{Compositor: CompositorSequence, MinOccurs: 1, MaxOccurs: 1}
+			}
+			return vc.validateContentModelOpen(ctx, elem, mg, td.OpenContent)
+		}
 		return vc.validateEmptyContent(ctx, elem)
 	case ContentTypeSimple:
 		return vc.validateSimpleContent(ctx, elem, edecl, td)
 	case ContentTypeElementOnly, ContentTypeMixed:
 		// For element-only content, non-whitespace text children are not allowed.
 		if td.ContentType == ContentTypeElementOnly {
-			for child := range helium.Children(elem) {
-				if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
-					// Use XSD/XML whitespace (space, tab, CR, LF) only: characters
-					// like NBSP (U+00A0) are NOT ignorable in element-only content,
-					// so strings.TrimSpace (which strips all Unicode space) must not
-					// be used here.
-					if !xmlchar.IsAllSpace(child.Content()) {
-						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
-						vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-						return fmt.Errorf("text content in element-only type")
-					}
-				}
+			if err := vc.rejectNonWhitespaceText(ctx, elem); err != nil {
+				return err
 			}
 		}
 		if td.ContentModel == nil {
