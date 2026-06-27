@@ -141,6 +141,39 @@ func TestRegexEachSubmatchIndexFullContextCeilingIsBounded(t *testing.T) {
 		"the ceiling breach must be reported before any match is delivered")
 }
 
+// A high-capture leading-context pattern must be bounded by the index-CELL
+// ceiling, not the match COUNT: each FindAll record holds 2*(NumSubexp()+1)
+// ints, so a pattern with many captures gets a proportionally smaller match cap
+// and trips ErrRegexMatchLimit on a far smaller input than a capture-free
+// pattern would. This guards against bounding match records alone — which would
+// let `^()()()...` with `m` allocate far past the intended ceiling before the
+// cap fires.
+func TestRegexEachSubmatchIndexHighCaptureCeilingIsBounded(t *testing.T) {
+	t.Parallel()
+
+	// 63 empty capture groups => 2*(63+1) = 128 ints per match record, so the
+	// derived match cap is (1<<20)/128 = 8192 — far below the capture-free 1<<20
+	// match ceiling. An input with more line starts than that must be rejected.
+	const captures = 63
+	pattern := "^" + strings.Repeat("()", captures)
+	re, err := xpath3.CompileRegex(pattern, "m")
+	require.NoError(t, err)
+
+	const matchCap = (1 << 20) / (2 * (captures + 1)) // 8192
+	// Each newline adds one line start; matchCap+16 newlines yield matchCap+17
+	// matches — past the cap, so the cell ceiling (not the 1<<20 count) binds.
+	input := strings.Repeat("\n", matchCap+16)
+	visited := 0
+	err = re.EachSubmatchIndex(input, -1, func(_ []int) bool {
+		visited++
+		return true
+	})
+	require.ErrorIs(t, err, xpath3.ErrRegexMatchLimit,
+		"a high-capture full-context pattern over the cell ceiling must be rejected")
+	require.Zero(t, visited,
+		"the ceiling breach must be reported before any match is delivered")
+}
+
 // The public limit contract (regex.go) must hold uniformly across all three
 // enumeration paths: the ordinary RE2 streaming offset-loop, the full-context
 // RE2 FindAll path, and the regexp2 backtracking path. A non-positive limit

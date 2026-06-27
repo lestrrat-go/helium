@@ -266,6 +266,7 @@ var (
     ErrPathNotNodeSet           // path expression requires node-set
     ErrUnsupportedBinaryOp      // unsupported binary operator
     ErrNodeSetLimit             // node-set size limit exceeded (alias of internal/xpath.ErrNodeSetLimit)
+    ErrRegexMatchLimit          // Regex.EachSubmatchIndex full-context match alloc exceeds the safe ceiling
 )
 ```
 
