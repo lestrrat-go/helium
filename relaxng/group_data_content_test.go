@@ -146,4 +146,95 @@ func TestGroupDataContentTypeError(t *testing.T) {
 		require.Empty(t, compile(t, schema),
 			"data inside an attribute is attribute content, not element content; must not conflict")
 	})
+
+	t.Run("choice of data and element compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <choice>
+        <data type="string"/>
+        <element name="child"><empty/></element>
+      </choice>
+    </element>
+  </start>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"choice branches never coexist, so choice(data, element) is a valid content model")
+	})
+
+	t.Run("choice of data behind ref and element compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <choice>
+        <ref name="d"/>
+        <element name="child"><empty/></element>
+      </choice>
+    </element>
+  </start>
+  <define name="d"><data type="string"/></define>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"data hidden behind a ref inside a choice still does not coexist with the element branch")
+	})
+
+	t.Run("group of data and text is rejected", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <group>
+        <data type="string"/>
+        <text/>
+      </group>
+    </element>
+  </start>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"simple (data) content cannot be grouped with complex (text) content")
+	})
+
+	t.Run("group of data and value is rejected", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <group>
+        <data type="string"/>
+        <value>x</value>
+      </group>
+    </element>
+  </start>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"two simple values cannot be grouped together")
+	})
+
+	t.Run("oneOrMore of data is rejected", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <oneOrMore>
+        <data type="string"/>
+      </oneOrMore>
+    </element>
+  </start>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"a repetition of simple content is not groupable with itself")
+	})
+
+	t.Run("oneOrMore of data inside a list compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <list>
+        <oneOrMore>
+          <data type="string"/>
+        </oneOrMore>
+      </list>
+    </element>
+  </start>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"a <list> opens a separate token context; repeated data inside it is valid")
+	})
 }

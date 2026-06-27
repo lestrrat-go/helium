@@ -1498,14 +1498,49 @@ func (c *compiler) addSchemaError(ctx context.Context, node *helium.Element, msg
 	c.errorCount++
 }
 
-// checkContentTypes enforces the RELAX NG data/element content-type restriction
-// (data/value/list content may not be mixed with element content in the same
-// element's content context). It runs AFTER resolveScopedRefs so the classifier
-// can follow <ref>/<parentRef> into their resolved define bodies — data hidden
-// behind a ref must still be detected.
+// rngContentType is a RELAX NG §7.2 content-type. The ordering
+// empty < complex < simple is what maxContentType uses for the
+// choice/group/interleave rules.
+type rngContentType int
+
+const (
+	ctEmpty rngContentType = iota
+	ctComplex
+	ctSimple
+)
+
+// maxContentType returns the larger of two content-types under the ordering
+// empty < complex < simple (RELAX NG §7.2 max()).
+func maxContentType(a, b rngContentType) rngContentType {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// groupableContentTypes reports whether two content-types may be combined by a
+// <group>, <interleave>, or <oneOrMore>/<zeroOrMore> per RELAX NG §7.2: the
+// empty content-type is groupable with anything, and complex is groupable with
+// complex. A simple content-type (data/value/list) is groupable only with
+// empty — two string-sequence values cannot be grouped together, and simple
+// content cannot be grouped with element/text (complex) content.
+func groupableContentTypes(a, b rngContentType) bool {
+	return a == ctEmpty || b == ctEmpty || (a == ctComplex && b == ctComplex)
+}
+
+// checkContentTypes enforces the RELAX NG §7.2 content-type constraints on every
+// <element> body recorded during parsing. It runs AFTER resolveScopedRefs so the
+// content-type of data/value/list/element content hidden behind a
+// <ref>/<parentRef> is resolved through the define body. A body whose
+// content-type cannot be derived — a <group>/<interleave> mixing simple
+// (data/value/list) content with element/text (complex) content, two simple
+// values grouped together, or a <oneOrMore>/<zeroOrMore> of simple content — is
+// a content-type error. A <choice> of those same patterns is NOT an error: its
+// branches are independent alternatives that never coexist.
 func (c *compiler) checkContentTypes(ctx context.Context) {
 	for _, chk := range c.contentTypeChecks {
-		if hasDataContent(chk.pat.children) && hasElementContent(chk.pat.children) {
+		visited := make(map[*pattern]struct{})
+		if _, ok := c.contentTypeOfSeq(chk.pat.children, visited); !ok {
 			eName := chk.pat.name
 			if eName == "" && chk.pat.nameClass != nil {
 				eName = chk.pat.nameClass.name
@@ -1515,80 +1550,106 @@ func (c *compiler) checkContentTypes(ctx context.Context) {
 	}
 }
 
-// hasDataContent checks if any pattern in the slice contains a data/value/list
-// pattern in the current content context.
-func hasDataContent(pats []*pattern) bool {
-	visited := make(map[*pattern]struct{})
-	return slices.ContainsFunc(pats, func(p *pattern) bool {
-		return containsData(p, visited)
-	})
+// contentTypeOfSeq combines a sequence of sibling patterns as an implicit
+// <group>: each successive content-type must be groupable with the running
+// result and the result is their max. It is used for an element body and for
+// the (possibly multi-child) body of a group/interleave/repetition/optional.
+// An empty sequence has the empty content-type. ok=false propagates a
+// content-type violation.
+func (c *compiler) contentTypeOfSeq(pats []*pattern, visited map[*pattern]struct{}) (rngContentType, bool) {
+	result := ctEmpty
+	for _, p := range pats {
+		ct, ok := c.contentTypeOf(p, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		if !groupableContentTypes(result, ct) {
+			return ctEmpty, false
+		}
+		result = maxContentType(result, ct)
+	}
+	return result, true
 }
 
-// containsData reports whether p contributes data/value/list content to the
-// enclosing element's content context. Like containsElement it recurses through
-// composite patterns (group, interleave, choice, optional, repetition, ...) so
-// data wrapped in a <group> is detected, and it follows <ref>/<parentRef>
-// through their compile-time-resolved define body (with visited guarding
-// against cycles) so data hidden behind a reference is detected too. It stops at
-// element and attribute boundaries: data inside a nested <element> or
-// <attribute> belongs to that node's own content context, not the current one.
-func containsData(p *pattern, visited map[*pattern]struct{}) bool {
+// contentTypeOf derives the RELAX NG §7.2 content-type of a single pattern,
+// returning ok=false when the pattern (or a descendant) violates a content-type
+// constraint. It stops at <element>/<attribute>/<list> boundaries — each opens a
+// fresh content context — and follows <ref>/<parentRef> through their
+// compile-time-resolved define body (visited-guarded, as a DFS stack, so a
+// reference cycle terminates while a define referenced from sibling branches is
+// still evaluated each time) so data/element content hidden behind a reference
+// is classified correctly.
+func (c *compiler) contentTypeOf(p *pattern, visited map[*pattern]struct{}) (rngContentType, bool) {
 	if p == nil {
-		return false
+		return ctEmpty, true
 	}
 	switch p.kind {
+	case patternEmpty, patternNotAllowed, patternAttribute:
+		// An attribute's value is a separate content context; the attribute
+		// pattern itself contributes the empty content-type here.
+		return ctEmpty, true
+	case patternText, patternElement:
+		return ctComplex, true
 	case patternData, patternValue, patternList:
-		return true
-	case patternElement, patternAttribute:
-		return false
+		// A <list>'s items form a separate token context; the list still
+		// contributes the simple content-type to the enclosing element.
+		return ctSimple, true
 	case patternRef, patternParentRef:
-		return followsResolved(p, visited, containsData)
+		if p.resolved == nil {
+			return ctEmpty, true
+		}
+		if _, seen := visited[p.resolved]; seen {
+			// A non-element reference cycle is degenerate and is reported
+			// separately by checkRefCycles; treat it as contributing nothing.
+			return ctEmpty, true
+		}
+		visited[p.resolved] = struct{}{}
+		ct, ok := c.contentTypeOf(p.resolved, visited)
+		delete(visited, p.resolved)
+		return ct, ok
+	case patternChoice:
+		// choice combines branches with max and NO groupable constraint: the
+		// branches are independent alternatives that never coexist, so
+		// choice(data, element) is a valid simple-or-complex content model.
+		result := ctEmpty
+		for _, ch := range p.children {
+			ct, ok := c.contentTypeOf(ch, visited)
+			if !ok {
+				return ctEmpty, false
+			}
+			result = maxContentType(result, ct)
+		}
+		return result, true
+	case patternOptional:
+		// optional(p) == choice(empty, p): no groupable constraint beyond its
+		// own (grouped) body.
+		return c.contentTypeOfSeq(p.children, visited)
+	case patternGroup, patternInterleave:
+		return c.contentTypeOfSeq(p.children, visited)
+	case patternOneOrMore, patternZeroOrMore:
+		// oneOrMore(p) requires groupable(ct, ct); zeroOrMore is
+		// optional(oneOrMore(p)) and carries the same constraint. So a
+		// repetition of simple content (e.g. oneOrMore(data)) is an error.
+		ct, ok := c.contentTypeOfSeq(p.children, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		if !groupableContentTypes(ct, ct) {
+			return ctEmpty, false
+		}
+		return ct, true
 	}
-	return slices.ContainsFunc(p.children, func(child *pattern) bool {
-		return containsData(child, visited)
-	})
-}
-
-// hasElementContent checks if any pattern in the slice contains an element pattern.
-func hasElementContent(pats []*pattern) bool {
-	visited := make(map[*pattern]struct{})
-	return slices.ContainsFunc(pats, func(p *pattern) bool {
-		return containsElement(p, visited)
-	})
-}
-
-// containsElement mirrors containsData for element content: it recurses through
-// composite patterns and follows <ref>/<parentRef> through their resolved define
-// body (visited-guarded), stopping at attribute boundaries.
-func containsElement(p *pattern, visited map[*pattern]struct{}) bool {
-	if p == nil {
-		return false
+	// Unknown/unsupported kinds: combine children without a groupable
+	// constraint so an unexpected node can never cause a false rejection.
+	result := ctEmpty
+	for _, ch := range p.children {
+		ct, ok := c.contentTypeOf(ch, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		result = maxContentType(result, ct)
 	}
-	switch p.kind {
-	case patternElement:
-		return true
-	case patternAttribute:
-		return false
-	case patternRef, patternParentRef:
-		return followsResolved(p, visited, containsElement)
-	}
-	return slices.ContainsFunc(p.children, func(child *pattern) bool {
-		return containsElement(child, visited)
-	})
-}
-
-// followsResolved descends a ref/parentRef into its compile-time-resolved define
-// body, using visited to break reference cycles. An unresolved ref (resolved is
-// nil) contributes nothing.
-func followsResolved(p *pattern, visited map[*pattern]struct{}, fn func(*pattern, map[*pattern]struct{}) bool) bool {
-	if p.resolved == nil {
-		return false
-	}
-	if _, seen := visited[p.resolved]; seen {
-		return false
-	}
-	visited[p.resolved] = struct{}{}
-	return fn(p.resolved, visited)
+	return result, true
 }
 
 // resolveQName resolves a QName from a schema element, returning the local name
