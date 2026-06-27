@@ -218,3 +218,56 @@ func TestMaxNodeContentSizeAttrValue(t *testing.T) {
 		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
 	})
 }
+
+// TestMaxNodeContentSizeAttrEntityReplacement covers the entity-replacement
+// branch of parseAttributeValueInternal (decodeEntities → rep written into the
+// accumulating buffer), which the &amp;-based "slow" test above does NOT reach
+// because &amp; is a predefined entity handled on a separate branch. An over-cap
+// replacement must fail with ErrNodeContentTooLarge while the running total is
+// bounded by the cap, not after the whole rep is copied in.
+func TestMaxNodeContentSizeAttrEntityReplacement(t *testing.T) {
+	t.Parallel()
+
+	// big is far larger than the 64-byte cap; a single reference stays well
+	// under the entity-amplification baseline so the node-content cap is what
+	// trips, not the amplification guard.
+	doc := func(attr string) []byte {
+		big := strings.Repeat("a", 4096)
+		return []byte(`<!DOCTYPE r [<!ENTITY big "` + big + `">]>` +
+			`<r ` + attr + `/>`)
+	}
+
+	t.Run("substituted general entity over cap fails", func(t *testing.T) {
+		t.Parallel()
+		// SubstituteEntities(true) forces &big; to expand inline into the
+		// attribute value, exercising the replaceEntities replacement loop.
+		_, err := helium.NewParser().
+			SubstituteEntities(true).
+			MaxNodeContentSize(64).
+			Parse(t.Context(), doc(`a="&big;"`))
+		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+	})
+
+	t.Run("namespace attribute over cap fails", func(t *testing.T) {
+		t.Parallel()
+		// A namespace attribute forces entity replacement even without
+		// SubstituteEntities, so xmlns:x="&big;" hits the same branch.
+		_, err := helium.NewParser().
+			MaxNodeContentSize(64).
+			Parse(t.Context(), doc(`xmlns:x="&big;"`))
+		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+	})
+
+	t.Run("within-cap substituted entity parses fine", func(t *testing.T) {
+		t.Parallel()
+		small := strings.Repeat("a", 32)
+		in := []byte(`<!DOCTYPE r [<!ENTITY small "` + small + `">]>` +
+			`<r a="&small;"/>`)
+		d, err := helium.NewParser().
+			SubstituteEntities(true).
+			MaxNodeContentSize(64).
+			Parse(t.Context(), in)
+		require.NoError(t, err)
+		require.NotNil(t, d)
+	})
+}

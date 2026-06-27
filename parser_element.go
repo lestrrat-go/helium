@@ -912,7 +912,20 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						err = pctx.error(ctx, err)
 						return
 					}
+					// Enforce the node-content cap DURING the replacement
+					// write, not just at the top of the next outer-loop
+					// iteration: decodeEntities materialized the full rep, so
+					// copying all of it into b before re-checking the cap would
+					// let an over-cap entity expansion (e.g. <r a="&big;"/> with
+					// SubstituteEntities, or a forced-replacement namespace attr
+					// xmlns:x="&big;") be buffered before ErrNodeContentTooLarge
+					// is returned. Check before each byte so the running total
+					// can never exceed the cap.
 					for i := range len(rep) {
+						if pctx.nodeContentTooLong(b.Len()) {
+							err = pctx.error(ctx, ErrNodeContentTooLarge)
+							return
+						}
 						switch rep[i] {
 						case 0xD, 0xA, 0x9:
 							_ = b.WriteByte(0x20)
