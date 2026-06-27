@@ -46,3 +46,45 @@ func TestExtractDeclaredCharset(t *testing.T) {
 		})
 	}
 }
+
+// extractMetaCharset must bound the <meta> tag at its first UNQUOTED '>'. A '>'
+// inside a quoted attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) is
+// part of that value, not the tag terminator, so a naive first-'>' scan would
+// truncate the tag before charset= and miss the declaration. (Regression:
+// PR #821 / HTML-101.)
+func TestExtractMetaCharset_QuotedGT(t *testing.T) {
+	t.Parallel()
+
+	const iso = "iso-8859-1"
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "quoted-gt-before-charset",
+			in:   `<meta data-x=">" charset="iso-8859-1">`,
+			want: iso,
+		},
+		{
+			name: "single-quoted-gt-before-charset",
+			in:   `<meta data-x='>' charset='iso-8859-1'>`,
+			want: iso,
+		},
+		{
+			name: "quoted-gt-http-equiv",
+			in:   `<meta data-x=">" http-equiv="Content-Type" content="text/html; charset=iso-8859-1">`,
+			want: iso,
+		},
+		{
+			name: "quoted-gt-in-preceding-tag",
+			in:   `<a title=">"><meta charset="iso-8859-1">`,
+			want: iso,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, extractMetaCharset([]byte(tc.in)))
+		})
+	}
+}

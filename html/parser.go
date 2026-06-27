@@ -479,7 +479,11 @@ func extractMetaCharset(data []byte) string {
 		if i+5 <= n && bytes.Equal(lower[i+1:i+5], []byte("meta")) &&
 			(i+5 == n || isASCIIWhitespace(lower[i+5]) || lower[i+5] == '/') {
 			tag := lower[i:]
-			gt := bytes.IndexByte(tag, '>')
+			// Bound the tag at its first UNQUOTED '>'. A '>' inside a quoted
+			// attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) is
+			// part of the value, not the tag terminator, so a naive IndexByte
+			// would truncate the tag before charset= and miss the declaration.
+			gt := metaTagEnd(tag)
 			if gt >= 0 {
 				tag = tag[:gt]
 			}
@@ -492,14 +496,41 @@ func extractMetaCharset(data []byte) string {
 			i += gt + 1
 			continue
 		}
-		// Any other tag, markup declaration, or PI: step over it to its '>'.
-		gt := bytes.IndexByte(lower[i:], '>')
+		// Any other tag, markup declaration, or PI: step over it to its first
+		// unquoted '>' (a quoted '>' in an attribute is not the terminator).
+		gt := metaTagEnd(lower[i:])
 		if gt < 0 {
 			return ""
 		}
 		i += gt + 1
 	}
 	return ""
+}
+
+// metaTagEnd returns the index of the byte that terminates the tag starting at
+// tag[0] (its first UNQUOTED '>'), or -1 if no unquoted '>' is present. It
+// tracks single/double quote state while scanning so a '>' that sits inside a
+// quoted attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) does not
+// prematurely terminate the tag. The scan stays within the caller's bounded
+// prescan window.
+func metaTagEnd(tag []byte) int {
+	var quote byte // 0 = unquoted, '"' or '\'' inside a value
+	for j := range tag {
+		c := tag[j]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			quote = c
+		case '>':
+			return j
+		}
+	}
+	return -1
 }
 
 // declaredCharsetIsUTF8 reports whether a real <meta> element declares utf-8.
