@@ -580,3 +580,44 @@ func TestVerifyNilKeySource(t *testing.T) {
 		})
 	})
 }
+
+// TestVerifyHonorsContextCancellation ensures the per-Reference verification
+// loop checks ctx between references: a document with several References must
+// not be digested to completion once the caller's context is cancelled. The
+// StaticKey source ignores ctx and verifyBytes does not check it, so a
+// pre-cancelled context reaches the Reference loop, where cancellation must be
+// observed and surfaced as the context error instead of a full verify.
+func TestVerifyHonorsContextCancellation(t *testing.T) {
+	xml := `<root><a Id="one">first</a><b Id="two">second</b></root>`
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, xml)
+
+	mkRef := func(uri string) xmldsig1.ReferenceConfig {
+		return xmldsig1.ReferenceConfig{
+			URI:             uri,
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		}
+	}
+
+	sigElem, err := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(mkRef("#one")).
+		Reference(mkRef("#two")).
+		SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+
+	// Sanity: verifies under a live context.
+	_, err = verifier.Verify(t.Context(), doc)
+	require.NoError(t, err)
+
+	// A context cancelled before verification must abort the Reference loop and
+	// surface the context error rather than completing a full verification.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = verifier.Verify(ctx, doc)
+	require.ErrorIs(t, err, context.Canceled)
+}
