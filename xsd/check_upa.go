@@ -428,7 +428,11 @@ func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
 			if pi == pj {
 				continue
 			}
-			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry) {
+			version := Version10
+			if a.schema != nil {
+				version = a.schema.version
+			}
+			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry, version) {
 				return false
 			}
 		}
@@ -451,16 +455,35 @@ type firstSetEntry struct {
 }
 
 // entriesOverlap checks if two first-set entries can match the same element.
-func entriesOverlap(a, b firstSetEntry) bool {
+//
+// In XSD 1.1 wildcards are "weak": when an element particle and a wildcard
+// compete for the same element name, the element declaration wins, so the pair
+// is NOT a UPA (cos-nonambig) violation. In XSD 1.0 such a pair IS ambiguous.
+// Element-vs-element and wildcard-vs-wildcard overlap are unchanged across
+// versions.
+//
+// Note: enabling this relaxation only affects the compile-time determinism
+// check. The accept/reject verdict at validation is unaffected (the matcher
+// tries particles in declaration order). The PSVI refinement that an element
+// declared AFTER a competing wildcard should still claim the element (rather
+// than the earlier wildcard) is not yet implemented.
+func entriesOverlap(a, b firstSetEntry, version Version) bool {
 	// Two elements overlap if they have the same QName.
 	if !a.isWildcard && !b.isWildcard {
 		return a.qname == b.qname
 	}
-	// Element vs wildcard: check if the wildcard's namespace matches the element's namespace.
+	// Element vs wildcard: in 1.1 the element wins (no conflict); in 1.0 they
+	// overlap when the wildcard's namespace admits the element's namespace.
 	if !a.isWildcard && b.isWildcard {
+		if version == Version11 {
+			return false
+		}
 		return wildcardMatchesNS(b.wildcard, b.targetNS, a.qname.NS)
 	}
 	if a.isWildcard && !b.isWildcard {
+		if version == Version11 {
+			return false
+		}
 		return wildcardMatchesNS(a.wildcard, a.targetNS, b.qname.NS)
 	}
 	// Two wildcards: check if their namespace constraints can both match the same namespace.
