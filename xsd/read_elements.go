@@ -872,9 +872,13 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
-			if c.filename != "" {
+			// Use diagSource() (not c.filename) so an unbound-prefix @refer in an
+			// included/redefined schema is cited under the declaring file
+			// (c.includeFile), matching idc.Line.
+			src := c.diagSource()
+			if src != "" {
 				c.schemaError(ctx,
-					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+					schemaParserErrorAttr(src, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			}
 			return QName{}, true
 		}
