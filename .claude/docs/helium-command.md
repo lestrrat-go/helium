@@ -92,7 +92,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - `--xpath EXPR` → also sets `--noout`
 - `--pretty N>=1` → also sets `--format`
 - `--loaddtd` / `--dtdattr` / `--valid` / `--noent` → external-loading opt-in: each lifts the parser's default `BlockXXE` block and installs a permissive FS (or the `--path` search FS) so the requested external DTD/entity actually loads. Bare `lint` is safe-by-default (`NewParser` blocks external loading and uses a deny-all FS), matching the library.
-- `--huge` → lifts the tunable parser limits for trusted input: `MaxNameLength(-1)`, `MaxEntityAmplification(-1)`, `MaxContentModelDepth(-1)`, `MaxNodeContentSize(-1)` (disables the 10 MiB single-construct CDATA/comment/PI/char-data/attribute-value cap), and `MaxDepth(0)`. An explicit `--max-depth` still wins (applied after `--huge`).
+- `--huge` → lifts the tunable parser limits for trusted input: `MaxNameLength(-1)`, `MaxEntityAmplification(-1)`, `MaxContentModelDepth(-1)`, `MaxNodeContentSize(-1)` (disables the 10 MiB cap on both single-construct CDATA/comment/PI/char-data/attribute-value runs and contiguous XML-whitespace blank-skip runs), and `MaxDepth(0)`. An explicit `--max-depth` still wins (applied after `--huge`).
 - `--xinclude` → `xinclude.NewProcessor()` now denies all FS access by default (safe-by-default, matching the library), so the CLI installs a permissive resolver (`Resolver(NewFSResolver(...))`) backed by the same permissive root — or the `--path` search FS — used by the parser, preserving the historical behavior of reading includes off disk.
 
 ### Output / Input Safety
