@@ -1043,9 +1043,10 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 // date/time/g* family, duration, the binary types, anyURI, QName, NOTATION)
 // is rooted at anySimpleType, which terminates the chain — so a cross-family
 // pair is decided ("known") and REJECTED rather than treated as "unknown" and
-// silently accepted. Only atomic types are listed; list builtins
-// (IDREFS/ENTITIES/NMTOKENS) are intentionally absent so their derivation is
-// treated as "unknown" (and the caller stays conservative).
+// silently accepted. Only atomic types are listed here; the list builtins
+// (IDREFS/ENTITIES/NMTOKENS) are handled separately by builtinDerivesFrom via
+// builtinListItem so an atomic-vs-list pair is also decided rather than
+// silently accepted.
 var builtinRestrictionParent = map[string]string{
 	// string family
 	lexicon.TypeString:           typeAnySimpleType,
@@ -1097,12 +1098,43 @@ var builtinRestrictionParent = map[string]string{
 	lexicon.TypeNotation:   typeAnySimpleType,
 }
 
+// builtinListItem maps each XSD builtin LIST type's local name to the local name
+// of its item type, per XML Schema Part 2. These three list builtins carry no
+// BaseType links (they are registered as bare names), so builtinDerivesFrom
+// recognizes them explicitly to decide atomic-vs-list and list-vs-list
+// derivation rather than treating them as "unknown".
+var builtinListItem = map[string]string{
+	typeIDRefs:   lexicon.TypeIDREF,
+	typeEntities: typeEntity,
+	typeNMTokens: typeNMToken,
+}
+
+// isBuiltinListName reports whether local is one of the XSD builtin list types.
+func isBuiltinListName(local string) bool {
+	_, ok := builtinListItem[local]
+	return ok
+}
+
 // builtinDerivesFrom reports whether the builtin type named derived is the same
 // as, or derived by restriction from, the builtin named base. The second bool
-// is false ("unknown") when either name is not a recognized atomic builtin
-// (including the list builtins), so callers can stay conservative on cases the
-// table cannot decide.
+// is false ("unknown") when either name is not a recognized builtin (atomic or
+// list), so callers can stay conservative on cases the table cannot decide.
 func builtinDerivesFrom(derived, base string) (bool, bool) {
+	// List builtins (IDREFS/ENTITIES/NMTOKENS) participate in derivation
+	// decisions even though they carry no parent links: a list type is the same
+	// as itself, validly derives from xs:anySimpleType (cos-st-derived-ok 2.2.3),
+	// and is otherwise UNRELATED to every atomic type and to the other two list
+	// types. Deciding these (rather than returning "unknown") rejects an invalid
+	// widening such as xs:IDREFS "restricted" by xs:string.
+	if isBuiltinListName(derived) || isBuiltinListName(base) {
+		if derived == base {
+			return true, true
+		}
+		if isBuiltinListName(derived) && base == typeAnySimpleType {
+			return true, true
+		}
+		return false, true
+	}
 	if !isAtomicBuiltinName(derived) || !isAtomicBuiltinName(base) {
 		return false, false
 	}
@@ -1127,6 +1159,23 @@ func isAtomicBuiltinName(local string) bool {
 	}
 	_, ok := builtinRestrictionParent[local]
 	return ok
+}
+
+// unionHasFacets reports whether a union simple type (or a restriction of one)
+// carries any facets of its own, walking the restriction chain down to the type
+// that declares the {member type definitions}. A faceted union narrows its
+// members' combined value space, so its members cannot stand in for the union
+// when deciding cos-st-derived-ok.2.2.4.
+func unionHasFacets(td *TypeDef) bool {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Facets != nil {
+			return true
+		}
+		if len(cur.MemberTypes) > 0 {
+			break
+		}
+	}
+	return false
 }
 
 // simpleTypeValidlyRestricts reports whether the derived simple type is a valid
@@ -1162,6 +1211,20 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	// is through the pointer chain (isDerivedFrom, already checked above) — so
 	// reject.
 	if base.Name.NS != lexicon.NamespaceXSD {
+		// cos-st-derived-ok.2.2.4: a base that is a user-defined UNION admits a
+		// derived type that is validly derived from any of its member types. This
+		// is sound ONLY when the union carries no facets of its own (an
+		// enumeration/pattern on the union further restricts its value space,
+		// which a bare member type would widen past), so it is gated on an
+		// empty-facet union. Members are walked transitively via the recursive
+		// call (a member that is itself a union re-enters this branch).
+		if resolveVariety(base) == TypeVarietyUnion && !unionHasFacets(base) {
+			for _, member := range resolveUnionMembers(base) {
+				if simpleTypeValidlyRestricts(derived, member) {
+					return true
+				}
+			}
+		}
 		return false
 	}
 	ok, known := builtinDerivesFrom(db, bb)

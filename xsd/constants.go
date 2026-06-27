@@ -23,6 +23,9 @@ const (
 	typeEntity        = "ENTITY"
 	typeHexBinary     = "hexBinary"
 	typeBase64Binary  = "base64Binary"
+	typeIDRefs        = "IDREFS"
+	typeEntities      = "ENTITIES"
+	typeNMTokens      = "NMTOKENS"
 )
 
 const (

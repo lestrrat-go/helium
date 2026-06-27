@@ -256,4 +256,56 @@ func TestRestrictionAttrType(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	t.Run("accepts derived attr type that is a member of base union type", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is a USER union (IntOrString = xs:int | xs:string) with no facets.
+		// The derived restriction redeclares @a as xs:int — a member of the union,
+		// so per cos-st-derived-ok.2.2.4 it is validly derived from the union and
+		// must be ACCEPTED (the base's value space already admits every xs:int).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntOrString">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:IntOrString"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects builtin list type restricted by an atomic type", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is xs:IDREFS (a builtin LIST type); the derived restriction
+		// redeclares @a as xs:string (atomic). A list type is unrelated to an
+		// atomic type, so the restriction admits values the base does not and must
+		// be rejected — the builtin list types must be DECIDED, not treated as
+		// "unknown" and silently accepted.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:IDREFS"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }
