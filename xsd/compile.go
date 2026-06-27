@@ -554,6 +554,11 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Check facet consistency after refs are resolved (base types are available).
 	c.checkFacetConsistency(ctx)
 
+	// Reject circular simple-type definitions (a union/list/restriction that
+	// reaches itself). This must run before the variety-walking checks below,
+	// which would otherwise recurse forever on a cyclic union member or base.
+	c.checkCircularSimpleTypes(ctx)
+
 	// Validate QName/NOTATION enumeration literal prefixes (and the NOTATION
 	// no-enumeration rule) now that base types are resolved.
 	c.checkEnumQNameAndNotation(ctx)
