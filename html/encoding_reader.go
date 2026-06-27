@@ -491,10 +491,7 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 		remaining := dr.maxBuffer - len(dr.pending)
 		if remaining > 0 {
 			var buf [4096]byte
-			toRead := len(buf)
-			if toRead > remaining {
-				toRead = remaining
-			}
+			toRead := min(len(buf), remaining)
 			n, err := dr.r.Read(buf[:toRead])
 			dr.pending = append(dr.pending, buf[:n]...)
 			switch {
@@ -534,12 +531,12 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 			dr.pending = nil
 			return 0, dr.capErr
 		}
-		switch {
-		case err == nil:
+		switch err {
+		case nil:
 			// No byte and no error: a misbehaving reader made no progress. Loop
 			// to probe again rather than spin, matching the chunk-read path.
 			continue
-		case err == io.EOF:
+		case io.EOF:
 			// Stream ended exactly at the cap with everything valid UTF-8.
 			dr.eof = true
 		default:
@@ -553,8 +550,8 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 // decide inspects the buffered pending bytes. If a genuine non-UTF-8 byte is
 // present it switches to Latin-1 and converts the WHOLE pending buffer; if EOF
 // has been reached with everything valid it flushes pending as UTF-8.
-// Returns true if it produced output (or switched), false if still undecided.
-func (dr *deferredLatin1Reader) decide() bool {
+// Otherwise it leaves the encoding undecided and keeps the bytes buffered.
+func (dr *deferredLatin1Reader) decide() {
 	data := dr.pending
 	for i := 0; i < len(data); {
 		b := data[i]
@@ -586,7 +583,7 @@ func (dr *deferredLatin1Reader) decide() bool {
 			dr.out = latin1ToUTF8(dr.pending)
 			dr.outPos = 0
 			dr.pending = nil
-			return true
+			return
 		}
 		i += size
 	}
@@ -599,14 +596,13 @@ func (dr *deferredLatin1Reader) decide() bool {
 		dr.out = dr.pending
 		dr.outPos = 0
 		dr.pending = nil
-		return true
+		return
 	}
 
 	// Still undecided and under the cap: keep buffering. The cap boundary itself
 	// is enforced by Read — which bounds each read to the remaining cap and, once
 	// pending fills maxBuffer, does a one-byte EOF probe to decide between
 	// accept-at-EOF and fail-closed — so decide never has to reject here.
-	return false
 }
 
 // fillLatin1 converts raw bytes from the underlying reader as Latin-1/Windows
