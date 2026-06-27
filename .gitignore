@@ -40,6 +40,10 @@ testdata/qt3ts/source/
 # W3C XSLT 3.0 test suite clone (dev-time only, not committed)
 testdata/xslt30/source/
 
+# W3C XML Schema Test Suite (XSTS) clone + harness output (dev-time only, not committed)
+testdata/xsdtests/source/
+testdata/xsdtests/results.tsv
+
 # Scratch/design markdown files in root (keep only README.md)
 /*.md
 !README.md

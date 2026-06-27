@@ -16,7 +16,7 @@ func baseFacets(td *TypeDef) *FacetSet {
 	if td.BaseType == nil {
 		return nil
 	}
-	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td.BaseType) {
 		if cur.Facets != nil {
 			return cur.Facets
 		}
@@ -504,6 +504,107 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 	}
 }
 
+// checkCircularSimpleTypes reports a schema error for any simple type that
+// participates in a circular definition: a union whose memberTypes reference it
+// (transitively), a list whose itemType reaches it, or a restriction whose base
+// chain returns to it (XSD §3.16.6.3 / cos-no-circular-unions and the general
+// "no circular type definitions" rule). Such a schema is invalid, and several
+// variety-walking compile checks (and resolveVariety/resolveItemType base
+// walks) would otherwise recurse forever on it; reporting it here surfaces the
+// real error before those walks run. It returns true when at least one circular
+// type was found, so the caller can stop before the (not fully cycle-guarded)
+// downstream checks walk the broken type graph.
+func (c *compiler) checkCircularSimpleTypes(ctx context.Context) bool {
+	if c.filename == "" {
+		return false
+	}
+
+	type entry struct {
+		td  *TypeDef
+		src typeDefSource
+	}
+	var entries []entry
+	for td, src := range c.typeDefSources {
+		if td.Name.NS == lexicon.NamespaceXSD {
+			continue
+		}
+		entries = append(entries, entry{td: td, src: src})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].src.line != entries[j].src.line {
+			return entries[i].src.line < entries[j].src.line
+		}
+		if entries[i].td.Name.Local != entries[j].td.Name.Local {
+			return entries[i].td.Name.Local < entries[j].td.Name.Local
+		}
+		return entries[i].src.ordinal < entries[j].src.ordinal
+	})
+
+	found := false
+	for _, e := range entries {
+		if !simpleTypeReachesSelf(e.td) {
+			continue
+		}
+		found = true
+		component := e.td.Name.Local
+		if component == "" || e.src.isLocal {
+			component = "local simple type"
+		}
+		c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
+			"Circular definition of the simple type; a type must not be a member, item, or base type of itself."))
+	}
+	return found
+}
+
+// simpleTypeReachesSelf reports whether start is reachable from itself by
+// following simple-type definition edges — union member types, the list item
+// type, and a non-builtin restriction base type. The visited set bounds the
+// walk so it terminates on the cycle instead of recursing forever.
+func simpleTypeReachesSelf(start *TypeDef) bool {
+	visited := map[*TypeDef]struct{}{}
+	var walk func(td *TypeDef) bool
+	walk = func(td *TypeDef) bool {
+		for _, n := range simpleTypeNeighbors(td) {
+			if n == start {
+				return true
+			}
+			if _, seen := visited[n]; seen {
+				continue
+			}
+			visited[n] = struct{}{}
+			if walk(n) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(start)
+}
+
+// simpleTypeNeighbors returns the non-builtin simple types that td directly
+// depends on: its union member types, its list item type, and its restriction
+// base type (only when that base is a user-defined, non-builtin type). Builtin
+// XSD types are leaves and are never returned, so the walk stays within the
+// user-declared simple-type graph.
+func simpleTypeNeighbors(td *TypeDef) []*TypeDef {
+	if td == nil {
+		return nil
+	}
+	var out []*TypeDef
+	for _, m := range td.MemberTypes {
+		if m != nil && m.Name.NS != lexicon.NamespaceXSD {
+			out = append(out, m)
+		}
+	}
+	if td.ItemType != nil && td.ItemType.Name.NS != lexicon.NamespaceXSD {
+		out = append(out, td.ItemType)
+	}
+	if td.BaseType != nil && td.BaseType.Name.NS != lexicon.NamespaceXSD {
+		out = append(out, td.BaseType)
+	}
+	return out
+}
+
 // enumLiteralHasUnboundQName reports whether the enumeration literal ev has a
 // QName/NOTATION component whose prefix is not bound in enumNS, dispatched on the
 // restriction base's effective variety:
@@ -616,14 +717,31 @@ func notationUsedWithoutEnumeration(td *TypeDef) bool {
 // derivation chain supplies an enumeration; a list/union recurses into its
 // item/member types.
 func notationCarrierNotEnumerated(td *TypeDef) bool {
+	return notationCarrierNotEnumeratedVisit(td, map[*TypeDef]struct{}{})
+}
+
+// notationCarrierNotEnumeratedVisit is the cycle-guarded recursion behind
+// notationCarrierNotEnumerated. A cyclic / self-referential union member (a union
+// whose memberTypes include itself, directly or transitively) would otherwise
+// recurse forever; the visited set terminates the walk on a repeated type. A
+// genuinely circular member type is an invalid schema reported by the regular
+// compilation checks, so stopping here (treating the cyclic node as not a
+// NOTATION carrier) lets that real error surface instead of crashing.
+func notationCarrierNotEnumeratedVisit(td *TypeDef, visited map[*TypeDef]struct{}) bool {
 	if td == nil {
 		return false
 	}
+	if _, seen := visited[td]; seen {
+		return false
+	}
+	visited[td] = struct{}{}
 	switch resolveVariety(td) {
 	case TypeVarietyList:
-		return notationCarrierNotEnumerated(resolveItemType(td))
+		return notationCarrierNotEnumeratedVisit(resolveItemType(td), visited)
 	case TypeVarietyUnion:
-		return slices.ContainsFunc(resolveUnionMembers(td), notationCarrierNotEnumerated)
+		return slices.ContainsFunc(resolveUnionMembers(td), func(m *TypeDef) bool {
+			return notationCarrierNotEnumeratedVisit(m, visited)
+		})
 	default:
 		if builtinBaseLocal(td) != lexicon.TypeNotation {
 			return false
@@ -640,14 +758,29 @@ func notationCarrierNotEnumerated(td *TypeDef) bool {
 // prefix-binding check (and the NOTATION-use check) so QName/NOTATION carriers
 // hidden inside list/union members are not missed.
 func typeHasQNameNotationCarrier(td *TypeDef) bool {
+	return typeHasQNameNotationCarrierVisit(td, map[*TypeDef]struct{}{})
+}
+
+// typeHasQNameNotationCarrierVisit is the cycle-guarded recursion behind
+// typeHasQNameNotationCarrier. As with notationCarrierNotEnumeratedVisit, a
+// cyclic / self-referential union member would recurse forever; the visited set
+// terminates the walk on a repeated type and reports no carrier for the cyclic
+// node, leaving the real circular-type schema error to the regular checks.
+func typeHasQNameNotationCarrierVisit(td *TypeDef, visited map[*TypeDef]struct{}) bool {
 	if td == nil {
 		return false
 	}
+	if _, seen := visited[td]; seen {
+		return false
+	}
+	visited[td] = struct{}{}
 	switch resolveVariety(td) {
 	case TypeVarietyList:
-		return typeHasQNameNotationCarrier(resolveItemType(td))
+		return typeHasQNameNotationCarrierVisit(resolveItemType(td), visited)
 	case TypeVarietyUnion:
-		return slices.ContainsFunc(resolveUnionMembers(td), typeHasQNameNotationCarrier)
+		return slices.ContainsFunc(resolveUnionMembers(td), func(m *TypeDef) bool {
+			return typeHasQNameNotationCarrierVisit(m, visited)
+		})
 	default:
 		bl := builtinBaseLocal(td)
 		return bl == lexicon.TypeQName || bl == lexicon.TypeNotation
@@ -657,7 +790,7 @@ func typeHasQNameNotationCarrier(td *TypeDef) bool {
 // hasEffectiveEnumeration reports whether td or any of its base types along the
 // restriction chain carries an enumeration facet.
 func hasEffectiveEnumeration(td *TypeDef) bool {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if cur.Facets != nil && len(cur.Facets.Enumeration) > 0 {
 			return true
 		}

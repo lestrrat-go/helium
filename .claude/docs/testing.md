@@ -278,6 +278,24 @@ Regenerate: `go run ./tools/xslt3gen/`
 
 Test runner for W3C XSLT 3.0 conformance: compiles stylesheet, transforms input, compares output against expected results.
 
+### 6. W3C XML Schema Test Suite (XSTS)
+
+W3C XML Schema conformance suite, restricted to the **XSD 1.1** subset (the canonical compliance suite). Unlike qt3ts/xslt30, the cases are **embedded** at generate time: `tools/xstsgen` walks a local clone of the suite and writes the schema + instance file contents into committed Go source, so `TestW3CXSTS` runs everywhere (incl. CI) with no clone present.
+
+```
+testdata/xsdtests/
+├── source/        # github.com/w3c/xsdtests clone (fetched by fetch.sh, gitignored)
+│   ├── suite.xml  # top-level: <testSetRef xlink:href> per .testSet
+│   └── */*.testSet
+├── results.tsv    # local debugging log (gitignored)
+└── fetch.sh       # clones/updates the suite (needed only to regenerate)
+```
+
+- Generator: `tools/xstsgen` — `go run ./tools/xstsgen` reads `testdata/xsdtests/source`, selects the 1.1 testGroups, and emits `xsd/w3c_xsts_<contributor>_gen_test.go` (`xstsIbmCases`, `xstsOracleCases`, `xstsSaxonCases`, `xstsWgCases`) with every referenced schema/instance embedded. Run `testdata/xsdtests/fetch.sh` first to get the clone. The gen files are `Code generated … DO NOT EDIT`.
+- Harness: `xsd/w3c_xsts_test.go` (`TestW3CXSTS`). Iterates the embedded cases; each group's primary schema is compiled with `xsd.NewCompiler().Version(xsd.Version11).FS(mapfs).BaseDir(...)` (the embedded files as an in-memory `fstest.MapFS`) and its instances validated against it, **each case a subtest that FAILS on a verdict mismatch** (real pass/fail, like qt3ts/xslt30). Expected validity is version-aware at generate time (`<expected validity version>` — some tests are valid in 1.0 but invalid in 1.1).
+- **Skip map** (`xsd/w3c_xsts_skip_test.go`): known-failing cases — those exercising not-yet-implemented 1.1 features (xs:override, vc:, the xs:assertion facet, etc.) and other current gaps — are listed by case ID (grouped/sorted by testSet) in `xstsSkipIDs` and `t.Skip`ped, so the committed suite is GREEN. As features land, delete IDs and those cases start really running; any NEW mismatch (a regression) fails the build.
+- License: the suite is under the W3C Document License; the clone is a **gitignored dev-time** artifact (the embedded file bodies are committed inside the gen files).
+
 ## Skip Maps
 
 Tests are skipped via in-code maps with reasons:
