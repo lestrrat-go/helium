@@ -20,6 +20,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	heliumencoding "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
@@ -2970,6 +2971,81 @@ func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {
 	require.NoError(t, err, "a small EBCDIC doc must parse under the default ingestion cap")
 	require.Equal(t, want, serialize(readerDoc),
 		"ParseReader output must match Parse([]byte) for a small EBCDIC doc")
+}
+
+// prefixThenZeroThenRestReader delivers a leading prefix, then a single
+// transient (0, nil) read (which io.Reader explicitly permits while a slow
+// producer waits for more input), then the remaining bytes, then io.EOF. It
+// models a stream that splits the EBCDIC sniff prefix across a zero-progress
+// read.
+type prefixThenZeroThenRestReader struct {
+	data        []byte
+	prefixLen   int
+	pos         int
+	emittedZero bool
+}
+
+func (r *prefixThenZeroThenRestReader) Read(p []byte) (int, error) {
+	if r.pos < r.prefixLen {
+		n := copy(p, r.data[r.pos:r.prefixLen])
+		r.pos += n
+		return n, nil
+	}
+	if !r.emittedZero {
+		r.emittedZero = true
+		return 0, nil // transient empty read mid-sniff
+	}
+	if r.pos < len(r.data) {
+		n := copy(p, r.data[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	return 0, io.EOF
+}
+
+// TestParseReaderEBCDICNonIBM037SplitByZeroProgressRead guards the EBCDIC
+// sniff-extension loop against a transient (0, nil) read that splits the sniff
+// prefix before the encoding declaration has been buffered. A non-IBM037 EBCDIC
+// variant (CP1141) is declared and its content uses byte 0x4A, which decodes to
+// U+00C4 (Ä) under CP1141 but to U+00A2 (¢) under CP037. If a (0, nil) read
+// truncated the sniff prefix, ExtractEBCDICEncoding would miss the declaration,
+// the parser would default to IBM-037, and the text would wrongly decode to ¢.
+// The bounded zero-progress retry must keep reading so CP1141 is detected and
+// the document parses identically to Parse([]byte).
+func TestParseReaderEBCDICNonIBM037SplitByZeroProgressRead(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM1141"?><root>Ä</root>`
+	cp1141 := heliumencoding.Load("ibm1141")
+	require.NotNil(t, cp1141, "internal encoding registry must know CP1141")
+	ebcdic, err := cp1141.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle CP1141 EBCDIC")
+	want := serialize(bytesDoc)
+	// The writer re-encodes to the document's declared EBCDIC encoding, so assert
+	// the decoded DOM text directly: CP1141 byte 0x4A is Ä (U+00C4); the IBM-037
+	// default would have decoded it to ¢ (U+00A2).
+	require.Equal(t, "Ä", string(bytesDoc.DocumentElement().Content()),
+		"CP1141 content byte 0x4A must decode to Ä, not the IBM-037 default (¢)")
+
+	// Split the stream right after the invariant prefix so the (0, nil) read lands
+	// inside the sniff-extension loop, before the encoding declaration is buffered.
+	r := &prefixThenZeroThenRestReader{data: ebcdic, prefixLen: len(ebcdic[:4])}
+	doc, err := helium.NewParser().ParseReader(t.Context(), r)
+	require.NoError(t, err,
+		"ParseReader must parse CP1141 EBCDIC when a transient (0, nil) read splits the sniff prefix")
+	require.Equal(t, want, serialize(doc),
+		"ParseReader must detect CP1141 (not default to IBM-037) across a zero-progress read")
 }
 
 // ebcdicSlowTailReader returns the EBCDIC invariant prefix on its first Read (so

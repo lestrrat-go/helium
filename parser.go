@@ -769,6 +769,7 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	var scratch [512]byte
 	var hn int
 	var perr error
+	sniffZeroProgress := 0
 	for hn < len(patEBCDIC) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -780,8 +781,20 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 			break
 		}
 		if m == 0 {
-			break
+			// A single (0, nil) read is legal: a slow producer may return no data
+			// and no error while it waits for more input. Retry a bounded number of
+			// CONSECUTIVE empty reads (mirroring the cursor fill loops'
+			// maxZeroProgressReads guard) so a transient empty read does not
+			// truncate the sniff prefix below the invariant EBCDIC pattern and
+			// silently misclassify an EBCDIC stream as non-EBCDIC. A reader stuck at
+			// (0, nil) forever fails fast with io.ErrNoProgress instead of hanging.
+			sniffZeroProgress++
+			if sniffZeroProgress >= maxSniffZeroProgressReads {
+				return nil, io.ErrNoProgress
+			}
+			continue
 		}
+		sniffZeroProgress = 0
 	}
 	// Copy the sniffed bytes off the stack scratch buffer so head may be grown
 	// (EBCDIC prefix extension below) and safely referenced for the lifetime of
@@ -816,6 +829,7 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		// ExtractEBCDICEncoding works with whatever prefix arrived, falling back
 		// to IBM-037 when no declaration is present.
 		var chunk [ebcdicEncodingSniffMax]byte
+		extZeroProgress := 0
 		for len(head) < ebcdicEncodingSniffMax {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -827,8 +841,23 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 				break
 			}
 			if n == 0 {
-				break
+				// A single (0, nil) read is legal here too: treating it as
+				// end-of-sniff would leave the prefix too short for
+				// ExtractEBCDICEncoding to find the encoding declaration, so the
+				// parser would default to IBM-037 and never re-switch to the
+				// declared EBCDIC variant. Retry a bounded number of CONSECUTIVE
+				// empty reads (mirroring the cursor fill loops' maxZeroProgressReads
+				// guard) so a transient empty read does not prematurely truncate the
+				// sniff prefix, while keeping the prefix bounded (the loop still
+				// stops at ebcdicEncodingSniffMax — no unbounded buffering). A reader
+				// stuck at (0, nil) forever fails fast with io.ErrNoProgress.
+				extZeroProgress++
+				if extZeroProgress >= maxSniffZeroProgressReads {
+					return nil, io.ErrNoProgress
+				}
+				continue
 			}
+			extZeroProgress = 0
 		}
 	}
 
