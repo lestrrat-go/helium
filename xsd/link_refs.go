@@ -1029,7 +1029,11 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		if td == nil || td.ContentType != ContentTypeSimple {
 			continue
 		}
-		if err := td.Validate(ctx, *val, it.src.nsMap); err != nil {
+		// Validate through the version-aware path so a 1.1 schema accepts 1.1-only
+		// lexical forms (e.g. "+INF") in attribute default/fixed constraints. The
+		// version-less (*TypeDef).Validate would build a Version10 context.
+		vc := &validationContext{errorHandler: helium.NilErrorHandler{}, version: c.version}
+		if err := validateValue(ctx, *val, it.src.nsMap, td, "", "", 0, vc); err != nil {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
 		}
