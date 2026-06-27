@@ -718,7 +718,8 @@ func TestValueOfInterpolation(t *testing.T) {
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collected[0].Message, "result is True")
+		// XPath 1.0 string(boolean): true() converts to "true" (lowercase).
+		require.Contains(t, collected[0].Message, "result is true")
 	})
 
 	t.Run("boolean false", func(t *testing.T) {
@@ -735,7 +736,45 @@ func TestValueOfInterpolation(t *testing.T) {
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collected[0].Message, "result is False")
+		// XPath 1.0 string(boolean): false() converts to "false" (lowercase).
+		require.Contains(t, collected[0].Message, "result is false")
+	})
+
+	t.Run("number formatting", func(t *testing.T) {
+		t.Parallel()
+		// XPath 1.0 string(number) lexical forms (xmlXPathFormatNumber):
+		// integers carry no decimal point or exponent, special values use
+		// the "NaN"/"Infinity"/"-Infinity" spellings, and negative zero
+		// renders as "0". Go's default %g formatting diverges on all of these.
+		for _, tc := range []struct {
+			name   string
+			expr   string
+			expect string
+		}{
+			{"large integer", "1234567", "n=1234567"},
+			{"decimal", "3 div 2", "n=1.5"},
+			{"NaN", "0 div 0", "n=NaN"},
+			{"positive infinity", "1 div 0", "n=Infinity"},
+			{"negative infinity", "-1 div 0", "n=-Infinity"},
+			{"negative zero", "-1 * 0", "n=0"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+					<pattern><rule context="item">
+						<assert test="false()">n=<value-of select="`+tc.expr+`"/></assert>
+					</rule></pattern>
+				</schema>`)
+				require.Equal(t, "", errs)
+
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+				require.NoError(t, err)
+
+				collected, err := validateAndCollect(t, schema, doc)
+				require.ErrorIs(t, err, schematron.ErrValidationFailed)
+				require.Contains(t, collected[0].Message, tc.expect)
+			})
+		}
 	})
 
 	t.Run("nodeset string-value", func(t *testing.T) {
