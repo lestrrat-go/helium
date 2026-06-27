@@ -153,11 +153,11 @@ func TestParseReaderAllValidUTF8StaysUTF8(t *testing.T) {
 // TestParseReaderDeclaredLatin1PastCapStaysISO88591 guards that an explicit
 // charset=iso-8859-1 declaration streams straight through the Latin-1 reader and
 // is NOT routed through the deferred/bounded path. The first high byte (0xE9 =
-// 'é' in ISO-8859-1) lands well past the deferred reader's 1 MiB commit cap: if
-// the declared stream went through that path, the cap would commit it to UTF-8
-// and sanitize the 0xE9 to U+FFFD, discarding the declared encoding. A declared
-// encoding must decode faithfully regardless of how far in its first high byte
-// appears.
+// 'é' in ISO-8859-1) lands well past the deferred reader's 1 MiB buffering cap:
+// if the declared stream went through that path it would hit the cap still
+// undecided and fail closed with a bounded-input error, discarding a perfectly
+// valid declared document. A declared encoding must decode faithfully regardless
+// of how far in its first high byte appears.
 func TestParseReaderDeclaredLatin1PastCapStaysISO88591(t *testing.T) {
 	t.Parallel()
 
@@ -186,46 +186,25 @@ func TestParseReaderDeclaredLatin1PastCapStaysISO88591(t *testing.T) {
 		"a declared Latin-1 byte must never be sanitized to U+FFFD")
 }
 
-// TestParseReaderDeferredCommitInvalidByteRaisesEncodingError covers the
-// post-commit sanitizer path: an UNDECLARED stream that stays valid UTF-8 past
-// the deferred reader's 1 MiB cap (so the reader commits to UTF-8) and THEN
-// carries a raw non-UTF-8 byte. The byte is sanitized to U+FFFD, and the parser
-// must raise the same "Invalid bytes in character encoding" SAX diagnostic the
-// declared-UTF-8 sanitizer path emits — not silently swallow it.
-func TestParseReaderDeferredCommitInvalidByteRaisesEncodingError(t *testing.T) {
+// TestParseReaderDeferredOverCapFailsClosed covers the bounded-decision
+// fail-closed path: an UNDECLARED stream that stays valid UTF-8 past the deferred
+// reader's 1 MiB cap and THEN carries a raw non-UTF-8 byte. The []byte path would
+// reinterpret the whole document as Latin-1, so the streaming reader cannot
+// safely commit to UTF-8; rather than silently mis-decode the late byte it FAILS
+// CLOSED with ErrContentSizeExceeded. This preserves parity (no irreversible
+// mis-decoded SAX/DOM output) and keeps memory bounded.
+func TestParseReaderDeferredOverCapFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	var b bytes.Buffer
 	b.WriteString("<html><body><p>")
-	for b.Len() < (1<<20)+4096 { // commit to UTF-8 at the 1 MiB cap
+	for b.Len() < (1<<20)+4096 { // stay valid UTF-8 past the 1 MiB cap
 		b.WriteByte('a')
 	}
-	b.WriteByte(0x93) // lone Windows-1252 byte: invalid UTF-8, post-commit
+	b.WriteByte(0x93) // lone Windows-1252 byte: invalid UTF-8, past the cap
 	b.WriteString("z</p></body></html>")
 
-	var chars bytes.Buffer
-	var sawEncodingError bool
-	sax := &html.SAXCallbacks{}
-	sax.SetOnCharacters(html.CharactersFunc(func(data []byte) error {
-		chars.Write(data)
-		return nil
-	}))
-	sax.SetOnError(html.ErrorFunc(func(err error) error {
-		if err != nil && err.Error() == "Invalid bytes in character encoding" {
-			sawEncodingError = true
-		}
-		return nil
-	}))
-
-	pp := html.NewParser().NewSAXPushParser(t.Context(), sax)
-	require.NoError(t, pp.Push(b.Bytes()))
-	_, err := pp.Close()
-	require.NoError(t, err)
-
-	require.True(t, sawEncodingError,
-		"a post-commit invalid byte must raise the encoding-error diagnostic")
-	require.Contains(t, chars.String(), "�",
-		"the post-commit invalid byte must be sanitized to U+FFFD")
-	require.NotContains(t, chars.String(), "\x93",
-		"the raw invalid byte must never leak into SAX char data")
+	_, err := html.NewParser().ParseReader(t.Context(), bytes.NewReader(b.Bytes()))
+	require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+		"an undeclared stream that stays valid UTF-8 past the cap must fail closed")
 }
