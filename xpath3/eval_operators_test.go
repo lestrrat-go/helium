@@ -58,3 +58,49 @@ func TestEvalSimpleMapExpr_WithinMaxNodes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 6, res.Sequence().Len())
 }
+
+// A FLWOR return clause has the same materialize-before-cap hazard as
+// simple-map: `for $i in 1 return $big` with a borrowed lazy $big must enforce
+// the node-set/sequence limit item-by-item BEFORE the return sub-sequence is
+// materialized. The right side is bound to a lazy Range that counts how many
+// items it actually produces; the bound (20) is far below the range length
+// (1000). Before the fix the return clause called seqMaterialize first, so all
+// 1000 items were produced before the aggregate cap rejected the result.
+func TestEvalFLWOR_LazyReturnHonorsMaxNodesBeforeMaterialize(t *testing.T) {
+	const rangeLen = 1000
+	const limit = 20
+
+	var produced int
+	big := sequence.NewRange[xpath3.Item](rangeLen, func(int) xpath3.Item {
+		produced++
+		return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "x"}
+	})
+
+	compiled, err := xpath3.NewCompiler().Compile("for $i in 1 return $big")
+	require.NoError(t, err)
+
+	// EvalBorrowing keeps $big lazy (DefaultEvaluatorOptions would clone and thus
+	// materialize the sequence up front, defeating the laziness probe).
+	_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(map[string]xpath3.Sequence{"big": big}).
+		MaxNodesForTesting(limit).
+		Evaluate(t.Context(), compiled, nil)
+	require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+	require.Less(t, produced, rangeLen, "return sub-sequence was fully materialized before the cap check")
+	require.LessOrEqual(t, produced, limit+1)
+}
+
+// A FLWOR whose accumulated result stays within the cap must succeed and return
+// the full sequence, confirming the bound does not reject legitimate results.
+func TestEvalFLWOR_WithinMaxNodes(t *testing.T) {
+	const limit = 20
+
+	compiled, err := xpath3.NewCompiler().Compile("for $i in (1, 2, 3) return (1 to 2)")
+	require.NoError(t, err)
+
+	res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		MaxNodesForTesting(limit).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
+	require.Equal(t, 6, res.Sequence().Len())
+}

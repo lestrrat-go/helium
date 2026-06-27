@@ -100,18 +100,22 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 		}
 	}
 
-	lines, err := unparsedtext.LoadTextLines(ctx, unparsedTextConfig(ctx), href, encoding)
+	// Enforce the aggregate node-set/sequence cap BEFORE the whole resource is
+	// split into lines: LoadTextLinesBounded stops once maxNodes+1 lines would be
+	// produced, so an over-line-count resource is rejected without ever building
+	// the full line slice. (LoadTextLines splits every line up front, then this
+	// site could only reject after the fact.)
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	lines, truncated, err := unparsedtext.LoadTextLinesBounded(ctx, unparsedTextConfig(ctx), href, encoding, maxNodes)
 	if err != nil {
 		return nil, wrapUnparsedTextError(err)
 	}
-	// Enforce the aggregate node-set/sequence cap (and charge ops + honor
-	// cancellation) BEFORE materializing one Item per line, matching how
-	// functions_array / functions_map guard one-shot materialization.
-	ec := getFnContext(ctx)
-	maxNodes := fnMaxNodes(ec)
-	if maxNodes > 0 && len(lines) > maxNodes {
+	if truncated {
 		return nil, ErrNodeSetLimit
 	}
+	// Charge ops + honor cancellation before materializing one Item per line,
+	// matching how functions_array / functions_map guard one-shot materialization.
 	if err := fnCountOps(ctx, ec, len(lines)); err != nil {
 		return nil, err
 	}
