@@ -509,7 +509,8 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - **XSDFields(s string) []string** — split on XSD list whitespace
 - **Orderable(builtinLocal string) bool** — whether the primitive value space is ordered (range facets may apply)
 - **IsDecimalFamily(builtinLocal string) bool** — whether the type is xs:decimal or a derived integer (digit facets may apply)
-- **LengthApplicable(builtinLocal string) bool** — whether length/minLength/maxLength facets apply (string-derived, binary, anyURI, QName, NOTATION); shared by relaxng and xsd
+- **LengthApplicable(builtinLocal string) bool** — whether length/minLength/maxLength facets are APPLICABLE/facet-valid (string-derived, binary, anyURI, QName, NOTATION); shared by relaxng and xsd
+- **LengthEnforced(builtinLocal string) bool** — whether an applicable length facet actually CONSTRAINS the value (true for string-derived/binary/anyURI; FALSE for QName/NOTATION, whose length facets are deprecated/non-constraining per XSD 1.1)
 - **CountTotalDigits(value string) int** — significant total-digit count for the totalDigits facet
 - **CountFractionDigits(value string) int** — significant fraction-digit count for the fractionDigits facet
 - Files: `validate.go`, `compare.go`, `facets.go`

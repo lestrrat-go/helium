@@ -95,6 +95,66 @@ func TestDataLengthFacetApplicability(t *testing.T) {
 	})
 }
 
+// TestDataLengthFacetQNameNoOp covers RNG-104+105 r3: the length facets
+// (length, minLength, maxLength) are APPLICABLE to xs:QName and xs:NOTATION (so
+// the bound must still be a valid xs:nonNegativeInteger, validated at compile
+// time), but per XSD 1.1 they are DEPRECATED and NON-CONSTRAINING on those two
+// types — any lexically valid value is facet-valid regardless of its rune count.
+// So a multi-rune QName must NOT be rejected by maxLength/minLength/length, while
+// an invalid bound is still a compile error and string-type enforcement is
+// unaffected.
+func TestDataLengthFacetQNameNoOp(t *testing.T) {
+	t.Parallel()
+
+	const xsd = `datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"`
+
+	mk := func(typ, facet, bound string) string {
+		return `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0" ` + xsd + `>
+  <data type="` + typ + `"><param name="` + facet + `">` + bound + `</param></data>
+</element>`
+	}
+
+	t.Run("maxLength does not constrain a QName", func(t *testing.T) {
+		t.Parallel()
+		// "abc" is a 3-rune lexically valid QName. maxLength="1" would reject it if
+		// enforced as a character count, but the facet is non-constraining here.
+		require.NoError(t, validateWith(t, mk("QName", "maxLength", "1"), `<r>abc</r>`),
+			`maxLength on xs:QName must be a no-op, not a rune-count constraint`)
+	})
+
+	t.Run("minLength does not constrain a QName", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateWith(t, mk("QName", "minLength", "100"), `<r>abc</r>`),
+			`minLength on xs:QName must be a no-op`)
+	})
+
+	t.Run("length does not constrain a QName", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateWith(t, mk("QName", "length", "1"), `<r>abc</r>`),
+			`length on xs:QName must be a no-op`)
+	})
+
+	t.Run("maxLength does not constrain a NOTATION", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateWith(t, mk("NOTATION", "maxLength", "1"), `<r>abc</r>`),
+			`maxLength on xs:NOTATION must be a no-op`)
+	})
+
+	t.Run("length facet on QName still compiles", func(t *testing.T) {
+		t.Parallel()
+		require.Empty(t, compileErrorsFor(t, mk("QName", "length", "1")),
+			"length facet on xs:QName is applicable and must compile")
+	})
+
+	t.Run("invalid bound on QName is still a compile error", func(t *testing.T) {
+		t.Parallel()
+		// The bound itself must remain a valid xs:nonNegativeInteger even though the
+		// facet does not constrain the value (the r2 bound check is kept).
+		require.NotEmpty(t, compileErrorsFor(t, mk("QName", "maxLength", "-1")),
+			`maxLength="-1" on xs:QName must still be a compile error`)
+	})
+}
+
 // TestDataLengthFacetBoundValidity covers RNG-104+105 r2: a length/minLength/
 // maxLength bound must be a valid xs:nonNegativeInteger, validated at COMPILE
 // time with XSD lexical/whitespace rules (not Go's strconv.Atoi + TrimSpace).

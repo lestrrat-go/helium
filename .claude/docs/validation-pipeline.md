@@ -464,11 +464,21 @@ the string-derived family, the binary types, anyURI, QName and NOTATION
 (`value.LengthApplicable` in `internal/xsd/value`, shared with relaxng; xsd's
 `check_facets.go` keeps an equivalent table);
 a length facet on a numeric, boolean or date/time datatype is rejected at COMPILE
-time by `checkDataFacets`. Each length bound is itself COMPILE-validated as an
+time by `checkDataFacets`. APPLICABLE is about facet-VALIDITY (may the facet
+appear, is its bound valid), NOT enforcement: on `xs:QName` and `xs:NOTATION` the
+length facets are applicable (so they may appear and the bound is validated) but
+DEPRECATED and NON-CONSTRAINING per XSD 1.1 — a lexically valid QName/NOTATION is
+facet-valid regardless of its rune count. `validateWithParams` gates the actual
+length comparison on `value.LengthEnforced` (true for string-derived/binary/anyURI,
+FALSE for QName/NOTATION), so a multi-rune QName with `maxLength="1"` is ACCEPTED
+rather than rejected, while the bound itself is still compile-validated. Each
+length bound is COMPILE-validated as an
 `xs:nonNegativeInteger` (XSD-collapse normalized, NOT Go `TrimSpace`) so a
 negative, fractional, non-digit, or NBSP-padded bound is a fatal schema error
+(including on QName/NOTATION)
 rather than a facet that silently accepts every value (`minLength="-1"`) or whose
-bound is leniently trimmed. At validation `validateWithParams` parses the bound
+bound is leniently trimmed. At validation, for an ENFORCED type
+`validateWithParams` parses the bound
 with `math/big` (`parseNonNegFacetBound`) and compares against `facetLength` via
 `big.Int.Cmp`, so a huge-but-valid `maxLength` cannot overflow `int` into a
 reject-all.
