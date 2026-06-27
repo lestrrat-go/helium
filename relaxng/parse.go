@@ -57,6 +57,13 @@ type compiler struct {
 	// scopes holds every grammar scope ever created (kept alive after pop) so
 	// the post-parse passes can enumerate all defines across nested grammars.
 	scopes []*grammarScope
+	// elementNodes maps every parsed <element> pattern to its source node so the
+	// RELAX NG §7.2 content-type check can report against the original element
+	// node. The check itself walks the LIVE grammar (start pattern plus the
+	// post-override scope.defines), not this map, so an element removed or
+	// replaced by an <include> override is never checked even though its node is
+	// still recorded here.
+	elementNodes map[*pattern]*helium.Element
 }
 
 // pendingRef is a ref/parentRef node awaiting compile-time resolution against
@@ -152,6 +159,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// the entire grammar tree (including nested grammars and forward-declared
 	// defines) has been parsed.
 	c.resolveScopedRefs(ctx)
+	c.checkContentTypes(ctx, startPat)
 	c.checkRefCycles(ctx)
 
 	c.grammar.start = startPat
@@ -957,21 +965,21 @@ attrConflictDone:
 		c.addSchemaError(ctx, node, "xmlRelaxNGParseElement: element has no content")
 	}
 
-	// Check: content type error (mixing data/value with element/group patterns)
-	if hasDataContent(contentChildren) && hasElementContent(contentChildren) {
-		eName := p.name
-		if eName == "" && p.nameClass != nil {
-			eName = p.nameClass.name
-		}
-		c.addSchemaError(ctx, node, fmt.Sprintf("Element %s has a content type error", eName))
-	}
-
 	// Wrap content
 	if len(contentChildren) > 1 {
 		p.children = []*pattern{{kind: patternGroup, children: contentChildren}}
 	} else if len(contentChildren) == 1 {
 		p.children = contentChildren
 	}
+
+	// Record this element's source node for the deferred §7.2 content-type check
+	// (run after scoped refs are resolved over the live grammar). Reporting needs
+	// the original node; whether this element is actually checked depends on it
+	// still being reachable from the live grammar after include overrides.
+	if c.elementNodes == nil {
+		c.elementNodes = make(map[*pattern]*helium.Element)
+	}
+	c.elementNodes[p] = node
 
 	return p
 }
@@ -1487,30 +1495,219 @@ func (c *compiler) addSchemaError(ctx context.Context, node *helium.Element, msg
 	c.errorCount++
 }
 
-// hasDataContent checks if any pattern in the slice is a data/value/list pattern.
-func hasDataContent(pats []*pattern) bool {
-	for _, p := range pats {
-		switch p.kind {
-		case patternData, patternValue, patternList:
-			return true
+// rngContentType is a RELAX NG §7.2 content-type. The ordering
+// empty < complex < simple is what maxContentType uses for the
+// choice/group/interleave rules.
+type rngContentType int
+
+const (
+	ctEmpty rngContentType = iota
+	ctComplex
+	ctSimple
+)
+
+// maxContentType returns the larger of two content-types under the ordering
+// empty < complex < simple (RELAX NG §7.2 max()).
+func maxContentType(a, b rngContentType) rngContentType {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// groupableContentTypes reports whether two content-types may be combined by a
+// <group>, <interleave>, or <oneOrMore>/<zeroOrMore> per RELAX NG §7.2: the
+// empty content-type is groupable with anything, and complex is groupable with
+// complex. A simple content-type (data/value/list) is groupable only with
+// empty — two string-sequence values cannot be grouped together, and simple
+// content cannot be grouped with element/text (complex) content.
+func groupableContentTypes(a, b rngContentType) bool {
+	return a == ctEmpty || b == ctEmpty || (a == ctComplex && b == ctComplex)
+}
+
+// checkContentTypes enforces the RELAX NG §7.2 content-type constraints on every
+// <element> body reachable in the LIVE grammar. It runs AFTER resolveScopedRefs
+// so the content-type of data/value/list/element content hidden behind a
+// <ref>/<parentRef> is resolved through the define body. A body whose
+// content-type cannot be derived — a <group>/<interleave> mixing simple
+// (data/value/list) content with element/text (complex) content, two simple
+// values grouped together, or a <oneOrMore>/<zeroOrMore> of simple content — is
+// a content-type error. A <choice> of those same patterns is NOT an error: its
+// branches are independent alternatives that never coexist.
+//
+// The live element bodies are gathered by walking ONLY from the resolved start
+// pattern (collectLiveElements, following resolved refs under a cycle guard),
+// reaching every <element> reachable through the live start/define graph —
+// including those inside referenced defines and nested grammars. Seeding from the
+// start alone, rather than from every append-only c.scopes entry, is what keeps a
+// removed/overridden define out of the check: a nested-grammar scope created
+// while parsing a define that an <include> override later deletes stays in
+// c.scopes forever, but is unreachable from the live start, so its (now dead)
+// content is no longer wrongly flagged. The define that REPLACED an overridden
+// one is reachable from start and so IS checked.
+func (c *compiler) checkContentTypes(ctx context.Context, startPat *pattern) {
+	walkVisited := make(map[*pattern]struct{})
+	var elems []*pattern
+	c.collectLiveElements(startPat, walkVisited, &elems)
+
+	for _, ep := range elems {
+		visited := make(map[*pattern]struct{})
+		if _, ok := c.contentTypeOfSeq(ep.children, visited); ok {
+			continue
 		}
+		eName := ep.name
+		if eName == "" && ep.nameClass != nil {
+			eName = ep.nameClass.name
+		}
+		msg := fmt.Sprintf("Element %s has a content type error", eName)
+		if node := c.elementNodes[ep]; node != nil {
+			c.addSchemaError(ctx, node, msg)
+			continue
+		}
+		c.addBareSchemaError(ctx, msg)
 	}
-	return false
 }
 
-// hasElementContent checks if any pattern in the slice contains an element pattern.
-func hasElementContent(pats []*pattern) bool {
-	return slices.ContainsFunc(pats, containsElement)
-}
-
-func containsElement(p *pattern) bool {
+// collectLiveElements walks a live pattern tree, appending every reachable
+// <element> pattern (each once) to out. It descends into children, attribute
+// patterns, and resolved <ref>/<parentRef> targets, using walkVisited (keyed by
+// pattern pointer) both to dedupe shared/recursively-referenced element patterns
+// and to terminate reference cycles. Element bodies ARE descended (to find
+// nested elements), but the per-element body content-type classification stops
+// at element boundaries on its own.
+func (c *compiler) collectLiveElements(p *pattern, walkVisited map[*pattern]struct{}, out *[]*pattern) {
 	if p == nil {
-		return false
+		return
 	}
+	if _, seen := walkVisited[p]; seen {
+		return
+	}
+	walkVisited[p] = struct{}{}
 	if p.kind == patternElement {
-		return true
+		*out = append(*out, p)
 	}
-	return slices.ContainsFunc(p.children, containsElement)
+	for _, ch := range p.children {
+		c.collectLiveElements(ch, walkVisited, out)
+	}
+	for _, a := range p.attrs {
+		c.collectLiveElements(a, walkVisited, out)
+	}
+	c.collectLiveElements(p.resolved, walkVisited, out)
+}
+
+// contentTypeOfSeq combines a sequence of sibling patterns as an implicit
+// <group>: each successive content-type must be groupable with the running
+// result and the result is their max. It is used for an element body and for
+// the (possibly multi-child) body of a group/interleave/repetition/optional.
+// An empty sequence has the empty content-type. ok=false propagates a
+// content-type violation.
+func (c *compiler) contentTypeOfSeq(pats []*pattern, visited map[*pattern]struct{}) (rngContentType, bool) {
+	result := ctEmpty
+	for _, p := range pats {
+		ct, ok := c.contentTypeOf(p, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		if !groupableContentTypes(result, ct) {
+			return ctEmpty, false
+		}
+		result = maxContentType(result, ct)
+	}
+	return result, true
+}
+
+// contentTypeOf derives the RELAX NG §7.2 content-type of a single pattern,
+// returning ok=false when the pattern (or a descendant) violates a content-type
+// constraint. It stops at <element>/<attribute>/<list> boundaries — each opens a
+// fresh content context — and follows <ref>/<parentRef> through their
+// compile-time-resolved define body (visited-guarded, as a DFS stack, so a
+// reference cycle terminates while a define referenced from sibling branches is
+// still evaluated each time) so data/element content hidden behind a reference
+// is classified correctly.
+func (c *compiler) contentTypeOf(p *pattern, visited map[*pattern]struct{}) (rngContentType, bool) {
+	if p == nil {
+		return ctEmpty, true
+	}
+	switch p.kind {
+	case patternEmpty, patternNotAllowed, patternAttribute:
+		// An attribute's value is a separate content context; the attribute
+		// pattern itself contributes the empty content-type here.
+		return ctEmpty, true
+	case patternText, patternElement:
+		return ctComplex, true
+	case patternData, patternValue, patternList:
+		// A <list>'s items form a separate token context; the list still
+		// contributes the simple content-type to the enclosing element.
+		return ctSimple, true
+	case patternRef, patternParentRef:
+		// A reference contributes the content-type of its TARGET define body, not
+		// the unconditional complex() the RELAX NG §7.2 table assigns to <ref>.
+		// That table is stated for the FULLY SIMPLIFIED grammar, in which every
+		// define wraps a single <element> (so every ref is complex). helium (like
+		// libxml2) does not run that simplification, so a ref may resolve to an
+		// attribute-only/empty/data define; following the ref to its actual
+		// content-type is what matches libxml2: a ref to a group-of-attributes is
+		// EMPTY and groups with simple <value> content (e.g. libvirt.rng's
+		// ostypehvm), while a ref to <data> is SIMPLE and is correctly rejected
+		// when grouped with sibling <element> content. (Confirmed against
+		// xmllint --relaxng: both schemas behave exactly this way.) Do NOT change
+		// this to a flat complex() — it both over-rejects real schemas and
+		// under-rejects ref-to-data mixed with elements.
+		if p.resolved == nil {
+			return ctEmpty, true
+		}
+		if _, seen := visited[p.resolved]; seen {
+			// A non-element reference cycle is degenerate and is reported
+			// separately by checkRefCycles; treat it as contributing nothing.
+			return ctEmpty, true
+		}
+		visited[p.resolved] = struct{}{}
+		ct, ok := c.contentTypeOf(p.resolved, visited)
+		delete(visited, p.resolved)
+		return ct, ok
+	case patternChoice:
+		// choice combines branches with max and NO groupable constraint: the
+		// branches are independent alternatives that never coexist, so
+		// choice(data, element) is a valid simple-or-complex content model.
+		result := ctEmpty
+		for _, ch := range p.children {
+			ct, ok := c.contentTypeOf(ch, visited)
+			if !ok {
+				return ctEmpty, false
+			}
+			result = maxContentType(result, ct)
+		}
+		return result, true
+	case patternOptional:
+		// optional(p) == choice(empty, p): no groupable constraint beyond its
+		// own (grouped) body.
+		return c.contentTypeOfSeq(p.children, visited)
+	case patternGroup, patternInterleave:
+		return c.contentTypeOfSeq(p.children, visited)
+	case patternOneOrMore, patternZeroOrMore:
+		// oneOrMore(p) requires groupable(ct, ct); zeroOrMore is
+		// optional(oneOrMore(p)) and carries the same constraint. So a
+		// repetition of simple content (e.g. oneOrMore(data)) is an error.
+		ct, ok := c.contentTypeOfSeq(p.children, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		if !groupableContentTypes(ct, ct) {
+			return ctEmpty, false
+		}
+		return ct, true
+	}
+	// Unknown/unsupported kinds: combine children without a groupable
+	// constraint so an unexpected node can never cause a false rejection.
+	result := ctEmpty
+	for _, ch := range p.children {
+		ct, ok := c.contentTypeOf(ch, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		result = maxContentType(result, ct)
+	}
+	return result, true
 }
 
 // resolveQName resolves a QName from a schema element, returning the local name
