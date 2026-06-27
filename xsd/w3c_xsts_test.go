@@ -1,13 +1,27 @@
 package xsd_test
 
 import (
+	"io/fs"
 	"path"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 )
+
+// slashFS adapts a slash-keyed fstest.MapFS to the compiler's include
+// resolution, which (per Compiler.FS) may hand the FS OS-specific separators
+// for a local BaseDir — on Windows filepath-built names use backslashes that
+// would never match the suite's slash-keyed entries. Open normalizes the name
+// back to forward slashes before delegating so embedded includes resolve on
+// every OS.
+type slashFS struct{ fsys fs.FS }
+
+func (s slashFS) Open(name string) (fs.File, error) {
+	return s.fsys.Open(filepath.ToSlash(name))
+}
 
 // xstsCase is a single W3C XML Schema Test Suite (XSTS) test group, restricted
 // to the XSD 1.1 subset. All referenced schema and instance file contents are
@@ -81,7 +95,7 @@ func runXSTSCase(t *testing.T, c xstsCase) {
 	} else {
 		schema, cerr = xsd.NewCompiler().
 			Version(xsd.Version11).
-			FS(mapfs).
+			FS(slashFS{mapfs}).
 			BaseDir(path.Dir(c.SchemaRel)).
 			Compile(t.Context(), doc)
 	}
