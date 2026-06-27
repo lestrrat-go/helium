@@ -240,6 +240,89 @@ func TestNodeSetComparisonBounded(t *testing.T) {
 	})
 }
 
+// cancelNode wraps a real node and fires onContent the first time its
+// string-value is materialized (StringValue reads a text node via Content()).
+// It lets a node-set comparison cancel its own context mid-loop, deterministically
+// and single-threaded, so the per-pair cancellation check can be exercised.
+type cancelNode struct {
+	helium.Node
+	onContent func()
+}
+
+func (c *cancelNode) Content() []byte {
+	if c.onContent != nil {
+		c.onContent()
+	}
+	return c.Node.Content()
+}
+
+// textNodeAt returns the first text-node child of the element at path.
+func textNodeAt(t *testing.T, doc *helium.Document, path string) helium.Node {
+	t.Helper()
+	el := nodeAt(t, doc, path)
+	tn := el.FirstChild()
+	require.NotNil(t, tn)
+	require.Equal(t, helium.TextNode, tn.Type())
+	return tn
+}
+
+// TestNodeSetComparisonCancelAfterN pins the per-pair cancellation check in the
+// node-set-vs-node-set compare. The context is cancelled MID-loop (as a side
+// effect of materializing the 3rd left node's string value) over a comparison of
+// far fewer than the old 1024-pair re-check window. With only a pre-loop check
+// plus an every-1024 re-check, that cancellation is missed entirely and the
+// compare runs to completion returning (false, nil). A per-pair check catches it
+// on the very next pair and returns the context error promptly.
+func TestNodeSetComparisonCancelAfterN(t *testing.T) {
+	const leftCount = 8
+	const cancelAt = 2 // 0-based index of the left node whose Content() cancels
+
+	var sb strings.Builder
+	sb.WriteString("<root>")
+	for i := range leftCount {
+		sb.WriteString("<a>x")
+		sb.WriteString(strconv.Itoa(i))
+		sb.WriteString("</a>")
+	}
+	sb.WriteString("<b>y</b></root>")
+	doc := parseXML(t, sb.String())
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	var materialized int
+	leftNodes := make([]helium.Node, leftCount)
+	for i := range leftNodes {
+		tn := textNodeAt(t, doc, "/root/a["+strconv.Itoa(i+1)+"]")
+		idx := i
+		leftNodes[i] = &cancelNode{Node: tn, onContent: func() {
+			materialized++
+			if idx == cancelAt {
+				cancel()
+			}
+		}}
+	}
+	rightNode := textNodeAt(t, doc, "/root/b")
+
+	lhs := nodeSetFunc(leftNodes)
+	rhs := nodeSetFunc([]helium.Node{rightNode})
+
+	expr, err := xpath1.Compile("lhs() = rhs()")
+	require.NoError(t, err)
+
+	_, err = xpath1.NewEvaluator().
+		Function("lhs", lhs).
+		Function("rhs", rhs).
+		OpLimit(1_000_000).
+		Evaluate(ctx, expr, doc)
+	require.ErrorIs(t, err, context.Canceled)
+
+	// The compare must have aborted promptly: only the nodes up to and including
+	// the cancelling one were materialized, never all leftCount of them.
+	require.Equal(t, cancelAt+1, materialized,
+		"compare kept materializing left string values after cancellation")
+}
+
 // nodeAt resolves a location path to its first node, asserting the result is a
 // non-empty node-set. Used to grab a real node for a synthetic node-set.
 func nodeAt(t *testing.T, doc *helium.Document, path string) helium.Node {

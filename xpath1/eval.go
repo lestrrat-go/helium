@@ -488,8 +488,12 @@ func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNode
 		// bound for a huge right-hand node-set (e.g. one returned by a custom
 		// function) even when the budget is already exhausted.
 		rightVals := make(map[int]string)
-		const cancelCheckEvery = 1024
-		sinceCheck := 0
+		// Hoist the cancellation channel once so the per-pair check below is a
+		// cheap non-blocking channel receive (cancelCtx.Err() takes a mutex; a
+		// receive on this hoisted channel does not). A nil channel is fine: the
+		// select's default branch always wins, matching the rest of the evaluator's
+		// nil-context tolerance.
+		done := ctx.Done()
 		for _, ln := range leftNodes {
 			// lv is materialized lazily, only AFTER the first successful op
 			// charge for this left node, so a pre-exhausted budget aborts before
@@ -500,12 +504,14 @@ func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNode
 				if err := ec.countOps(1); err != nil {
 					return false, err
 				}
-				sinceCheck++
-				if sinceCheck >= cancelCheckEvery {
-					sinceCheck = 0
-					if err := ctx.Err(); err != nil {
-						return false, err
-					}
+				// Honor cancellation on EVERY pair, before either side's
+				// string-value walk runs, so a context cancelled mid-loop aborts
+				// promptly even for comparisons far smaller than any periodic
+				// re-check window.
+				select {
+				case <-done:
+					return false, ctx.Err()
+				default:
 				}
 				if !lvComputed {
 					lv = ixpath.StringValue(ln)
