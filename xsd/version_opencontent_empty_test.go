@@ -51,6 +51,16 @@ func TestVersion11OpenContentEmpty(t *testing.T) {
 		require.NoError(t, validate(t, s, `<root/>`))
 	})
 
+	t.Run("1.1 open-content-only empty type rejects non-whitespace text", func(t *testing.T) {
+		t.Parallel()
+		s := compile(t, xsd.NewCompiler().Version(xsd.Version11), openOnly)
+		// The synthesized type is element-only, so character content other than
+		// whitespace is not allowed even though extra elements are admitted.
+		require.ErrorIs(t, validate(t, s, `<root>text</root>`), xsd.ErrValidationFailed)
+		require.ErrorIs(t, validate(t, s, `<root>text<extra/></root>`), xsd.ErrValidationFailed)
+		require.NoError(t, validate(t, s, `<root><extra/></root>`))
+	})
+
 	t.Run("truly empty type with no open content rejects child", func(t *testing.T) {
 		t.Parallel()
 		s := compile(t, xsd.NewCompiler().Version(xsd.Version11), empty)
