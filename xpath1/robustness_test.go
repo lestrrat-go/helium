@@ -2,10 +2,12 @@ package xpath1_test
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
@@ -235,5 +237,129 @@ func TestNodeSetComparisonBounded(t *testing.T) {
 
 		_, err = xpath1.NewEvaluator().Function("boom", boom).Evaluate(ctx, expr, doc)
 		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// nodeAt resolves a location path to its first node, asserting the result is a
+// non-empty node-set. Used to grab a real node for a synthetic node-set.
+func nodeAt(t *testing.T, doc *helium.Document, path string) helium.Node {
+	t.Helper()
+	expr, err := xpath1.Compile(path)
+	require.NoError(t, err)
+	r, err := expr.Evaluate(t.Context(), doc)
+	require.NoError(t, err)
+	require.Equal(t, xpath1.NodeSetResult, r.Type)
+	require.NotEmpty(t, r.NodeSet)
+	return r.NodeSet[0]
+}
+
+// nodeSetFunc returns a custom function that hands back the given nodes as a
+// node-set result. A no-argument call costs exactly one op.
+func nodeSetFunc(nodes []helium.Node) xpath1.Function {
+	return xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+		return &xpath1.Result{Type: xpath1.NodeSetResult, NodeSet: nodes}, nil
+	})
+}
+
+// TestNodeSetComparisonNoUpfrontWork pins compareNodeSet's bound: every unit of
+// work — the O(len(right)) right-hand cache AND each side's string-value
+// materialization — must come AFTER the per-pair op charge. The regressions
+// measure allocation across an Evaluate call: before the fix, a pre-exhausted
+// budget (or a tight limit over a huge right-hand set) still allocated O(m)
+// dense caches and/or materialized a huge left string value before charging.
+func TestNodeSetComparisonNoUpfrontWork(t *testing.T) {
+	allocDelta := func(fn func()) uint64 {
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		fn()
+		runtime.ReadMemStats(&after)
+		return after.TotalAlloc - before.TotalAlloc
+	}
+
+	// Gap (i), left side: the op budget is spent before compareNodeSet runs, so
+	// the very first per-pair charge must fail BEFORE the (huge) left node's
+	// string value is materialized. OpLimit(2) is exactly the cost of the two
+	// no-arg function operands, so compareNodeSet's first countOps trips.
+	t.Run("pre-exhausted budget skips left materialization", func(t *testing.T) {
+		const leftSize = 8 << 20 // 8 MiB string value
+		doc := parseXML(t, "<root><a>"+strings.Repeat("x", leftSize)+"</a><b>y</b></root>")
+		lhs := nodeSetFunc([]helium.Node{nodeAt(t, doc, "/root/a")})
+		rhs := nodeSetFunc([]helium.Node{nodeAt(t, doc, "/root/b")})
+
+		expr, err := xpath1.Compile("lhs() = rhs()")
+		require.NoError(t, err)
+
+		var cmpErr error
+		delta := allocDelta(func() {
+			_, cmpErr = xpath1.NewEvaluator().
+				Function("lhs", lhs).
+				Function("rhs", rhs).
+				OpLimit(2).
+				Evaluate(t.Context(), expr, doc)
+		})
+		require.ErrorIs(t, cmpErr, xpath1.ErrOpLimit)
+		require.Less(t, delta, uint64(2<<20),
+			"compare materialized the left string value before charging the op counter")
+	})
+
+	// Gap (i), right side: a huge right-hand node-set from a custom function with
+	// a pre-exhausted budget must not trigger any O(m) up-front allocation.
+	t.Run("pre-exhausted budget skips O(m) right allocation", func(t *testing.T) {
+		doc := parseXML(t, "<root><a>x</a><b>y</b></root>")
+		const m = 1_000_000
+		big := make([]helium.Node, m)
+		rn := nodeAt(t, doc, "/root/b")
+		for i := range big {
+			big[i] = rn
+		}
+		lhs := nodeSetFunc([]helium.Node{nodeAt(t, doc, "/root/a")})
+		rhs := nodeSetFunc(big)
+
+		expr, err := xpath1.Compile("lhs() = rhs()")
+		require.NoError(t, err)
+
+		var cmpErr error
+		delta := allocDelta(func() {
+			_, cmpErr = xpath1.NewEvaluator().
+				Function("lhs", lhs).
+				Function("rhs", rhs).
+				OpLimit(2).
+				Evaluate(t.Context(), expr, doc)
+		})
+		require.ErrorIs(t, cmpErr, xpath1.ErrOpLimit)
+		require.Less(t, delta, uint64(4<<20),
+			"compare allocated an O(len(right)) cache before charging the op counter")
+	})
+
+	// Gap (ii): a tight (non-zero) op limit over a huge right-hand set trips after
+	// a bounded number of pairs. The work — and the sparse right-hand cache — must
+	// stay proportional to the pairs actually reached, not to len(right).
+	t.Run("tight limit trips after bounded work on huge right set", func(t *testing.T) {
+		doc := parseXML(t, "<root><a>x</a><b>y</b></root>")
+		const m = 1_000_000
+		big := make([]helium.Node, m)
+		rn := nodeAt(t, doc, "/root/b")
+		for i := range big {
+			big[i] = rn
+		}
+		lhs := nodeSetFunc([]helium.Node{nodeAt(t, doc, "/root/a")})
+		rhs := nodeSetFunc(big)
+
+		expr, err := xpath1.Compile("lhs() = rhs()")
+		require.NoError(t, err)
+
+		var cmpErr error
+		delta := allocDelta(func() {
+			// Two function operands cost 2 ops; the remaining 62 trip mid-loop.
+			_, cmpErr = xpath1.NewEvaluator().
+				Function("lhs", lhs).
+				Function("rhs", rhs).
+				OpLimit(64).
+				Evaluate(t.Context(), expr, doc)
+		})
+		require.ErrorIs(t, cmpErr, xpath1.ErrOpLimit)
+		require.Less(t, delta, uint64(4<<20),
+			"compare allocated an O(len(right)) cache instead of growing lazily")
 	})
 }

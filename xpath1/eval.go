@@ -477,19 +477,25 @@ func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNode
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		// Compute each right-hand node's string value LAZILY, caching it on
-		// first use, and charge an op + honor cancellation BEFORE materializing
-		// it. Eagerly pre-filling every right-hand string value would do O(m)
-		// uncharged work up front, so a lopsided 1xM compare whose first pair
-		// matches could escape the op limit / cancellation entirely. Charging
-		// per comparison and only materializing on demand bounds the work as it
-		// happens.
-		rightVals := make([]string, len(right.NodeSet))
-		rightComputed := make([]bool, len(right.NodeSet))
+		// Charge an op (and periodically honor cancellation) BEFORE materializing
+		// EITHER side's string value, so the bound is complete: if the operand
+		// evaluation already spent the budget, the first per-pair charge fails
+		// before any string-value walk or large allocation runs.
+		//
+		// The right-hand string values are cached LAZILY in a sparse map, grown
+		// only for the indices actually reached. A dense len(right)-sized cache
+		// would do O(m) allocation up front — escaping the op-limit/cancellation
+		// bound for a huge right-hand node-set (e.g. one returned by a custom
+		// function) even when the budget is already exhausted.
+		rightVals := make(map[int]string)
 		const cancelCheckEvery = 1024
 		sinceCheck := 0
 		for _, ln := range leftNodes {
-			lv := ixpath.StringValue(ln)
+			// lv is materialized lazily, only AFTER the first successful op
+			// charge for this left node, so a pre-exhausted budget aborts before
+			// walking/copying a potentially large left subtree.
+			var lv string
+			lvComputed := false
 			for i, rn := range right.NodeSet {
 				if err := ec.countOps(1); err != nil {
 					return false, err
@@ -501,11 +507,16 @@ func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNode
 						return false, err
 					}
 				}
-				if !rightComputed[i] {
-					rightVals[i] = ixpath.StringValue(rn)
-					rightComputed[i] = true
+				if !lvComputed {
+					lv = ixpath.StringValue(ln)
+					lvComputed = true
 				}
-				if compareStrings(op, lv, rightVals[i]) {
+				rv, ok := rightVals[i]
+				if !ok {
+					rv = ixpath.StringValue(rn)
+					rightVals[i] = rv
+				}
+				if compareStrings(op, lv, rv) {
 					return true, nil
 				}
 			}
