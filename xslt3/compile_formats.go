@@ -396,7 +396,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 
 	if v := getAttr(elem, paramParameterDocument); v != "" {
 		outDef.ParameterDocument = v
-		baseURI := stylesheetBaseURI(elem, c.baseURI)
+		baseURI := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 		var err error
 		// This applies the parameter-document directly onto the xsl:output's
 		// OutputDef (not a delta to be folded later), so the boolean presence
@@ -830,7 +830,7 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 		c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 	}
 	// Build a part for this declaration
-	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 	part := attributeSetPart{
 		UseAttrSets:   asd.UseAttrSets,
 		Attrs:         asd.Attrs,

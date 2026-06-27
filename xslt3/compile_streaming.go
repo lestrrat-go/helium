@@ -26,7 +26,7 @@ func (c *compiler) compileSourceDocument(ctx context.Context, elem *helium.Eleme
 	inst := &sourceDocumentInst{
 		Href:       hrefAVT,
 		Streamable: xsdBoolTrue(getAttr(elem, "streamable")),
-		BaseURI:    stylesheetBaseURI(elem, c.baseURI),
+		BaseURI:    stylesheetBaseURI(elem, c.baseURI, c.moduleRoot),
 		Validation: getAttr(elem, "validation"),
 	}
 	if typeName := getAttr(elem, "type"); typeName != "" {
@@ -848,7 +848,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 	}
 	src := &mergeSource{
 		Name:    getAttr(elem, "name"),
-		BaseURI: stylesheetBaseURI(elem, c.baseURI),
+		BaseURI: stylesheetBaseURI(elem, c.baseURI, c.moduleRoot),
 	}
 
 	// Parse streamable attribute — must be a valid xs:boolean.
