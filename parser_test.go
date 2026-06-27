@@ -3910,3 +3910,122 @@ func TestEncodingIgnored(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, doc.DocumentElement())
 }
+
+// TestParseOverCapWhitespaceInDeclAndDTD guards that an over-cap whitespace run
+// inside the XML DECLARATION and inside the DTD internal subset surfaces
+// ErrNodeContentTooLarge, not a generic XML-decl / DTD syntax error. The
+// blank-skip helpers only return a bool, so the callers in those positions keep
+// going after the sticky over-cap error is recorded; without the central
+// preference for the blank-run error in errorAtLevel the follow-on syntax error
+// (a malformed version info / "DOCTYPE not finished") would mask the real cause.
+func TestParseOverCapWhitespaceInDeclAndDTD(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+
+	cases := map[string]string{
+		// Whitespace between '<?xml' and the version pseudo-attribute.
+		"xml declaration whitespace": "<?xml" + blanks + `version="1.0"?><root/>`,
+		// Whitespace inside the DTD internal subset.
+		"dtd subset whitespace": `<?xml version="1.0"?><!DOCTYPE root [` + blanks + `]><root/>`,
+	}
+
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().MaxNodeContentSize(limit).Parse(t.Context(), []byte(doc))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+				"over-cap %s must surface ErrNodeContentTooLarge, not a masking syntax error", name)
+		})
+	}
+}
+
+// blockUntilCancelledBlankReader serves a fixed head, then (on the first read
+// past the head) signals it has reached the trailing whitespace run and blocks
+// until the test cancels the context, after which it streams ASCII spaces
+// forever. It drives a cancellation first observable while the parser is
+// scanning a whitespace run in the XML declaration or DTD subset.
+type blockUntilCancelledBlankReader struct {
+	head      []byte
+	pos       int
+	entered   chan struct{}
+	cancelled chan struct{}
+	once      sync.Once
+}
+
+func (r *blockUntilCancelledBlankReader) Read(p []byte) (int, error) {
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	r.once.Do(func() {
+		close(r.entered)
+		<-r.cancelled
+	})
+	for i := range p {
+		p[i] = ' '
+	}
+	return len(p), nil
+}
+
+// TestParseReaderCancelInDeclAndDTDWhitespace guards the cancellation contract
+// in the XML DECLARATION and DTD whitespace positions (not only prolog /
+// epilogue): a context cancelled while the parser is scanning whitespace there
+// must surface as context.Canceled with no partial document, never as a syntax
+// error. The blank-skip helpers only return a bool, so without the central
+// preference for the sticky blank-run error in errorAtLevel a follow-on syntax
+// error (e.g. "blank needed after '<?xml'") would mask the cancellation.
+func TestParseReaderCancelInDeclAndDTDWhitespace(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"xml declaration whitespace": "<?xml",
+		"dtd subset whitespace":      `<?xml version="1.0"?><!DOCTYPE root [`,
+	}
+
+	for name, head := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &blockUntilCancelledBlankReader{
+				head:      []byte(head),
+				entered:   make(chan struct{}),
+				cancelled: make(chan struct{}),
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			type result struct {
+				doc *helium.Document
+				err error
+			}
+			resCh := make(chan result, 1)
+			go func() {
+				// A generous cap so the over-cap guard does not fire first; the
+				// cancellation must win.
+				doc, err := helium.NewParser().MaxNodeContentSize(1<<20).ParseReader(ctx, r)
+				resCh <- result{doc, err}
+			}()
+
+			select {
+			case <-r.entered:
+			case <-time.After(2 * time.Second):
+				close(r.cancelled) // unblock the reader so the goroutine can exit
+				t.Fatalf("parser did not reach the %s run", name)
+			}
+			cancel()
+			close(r.cancelled)
+
+			select {
+			case res := <-resCh:
+				require.ErrorIs(t, res.err, context.Canceled,
+					"cancellation while scanning %s must surface as context.Canceled", name)
+				require.Nil(t, res.doc, "a cancelled parse must not return a partial document")
+			case <-time.After(2 * time.Second):
+				t.Fatalf("ParseReader did not return after cancellation in %s", name)
+			}
+		})
+	}
+}

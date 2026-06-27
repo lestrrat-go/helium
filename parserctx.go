@@ -683,6 +683,17 @@ func (pctx *parserCtx) namespaceError(ctx context.Context, err error) error {
 }
 
 func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorLevel) error {
+	// A blank-run scan that tripped the cancellation/over-cap guard records a
+	// sticky pctx.blankRunErr. Because skipBlanks/skipBlankBytes only return a
+	// bool, callers that ignore the sticky error (XML declaration, DTD subset,
+	// ...) keep going and report a generic follow-on parse error. Prefer the
+	// blank-run error verbatim here so it surfaces regardless of which caller hit
+	// it: this keeps context.Canceled propagating as cancellation (not a syntax
+	// error, preserving the no-partial-document contract) and keeps
+	// ErrNodeContentTooLarge from being masked behind a generic XML-decl/DTD error.
+	if pctx.blankRunErr != nil {
+		err = pctx.blankRunErr
+	}
 	// Parse-abort errors (the stop sentinel, context cancellation, deadline
 	// expiry) are not genuine parse failures: pass them through unchanged so
 	// callers see them directly and SAX error handlers are not fired as if the
