@@ -146,7 +146,7 @@ func CompileRegex(pattern, flags string) (*Regex, error)
 
 func (r *Regex) MatchString(s string) (bool, error)
 func (r *Regex) FindAllSubmatchIndex(s string, n int) ([][]int, error) // n<0 = unlimited
-func (r *Regex) EachSubmatchIndex(s string, fn func(m []int) bool) error
+func (r *Regex) EachSubmatchIndex(s string, limit int, fn func(m []int) bool) error // limit<=0 = uncapped
 ```
 
 - `FindAllSubmatchIndex` returns every match, each a flat slice of `(start, end)`
@@ -155,13 +155,17 @@ func (r *Regex) EachSubmatchIndex(s string, fn func(m []int) bool) error
 - `EachSubmatchIndex` **streams** the same successive matches one at a time,
   calling `fn` once per match with the same per-match layout. The slice handed to
   `fn` is valid only for that call — copy it to retain it. Iteration stops early
-  (returning `nil`) as soon as `fn` returns false. Unlike `FindAllSubmatchIndex`,
+  (returning `nil`) as soon as `fn` returns false. For the streaming engines
   matches are produced incrementally and never accumulated, so live memory stays
   bounded regardless of match count; this lets a caller enforce a match-count
   budget or honor a cancelled context DURING enumeration. Leading-context
-  patterns (e.g. a multi-line `^`, which matches at every line start) stream
-  through a regexp2 twin so the anchor stays correct without first materializing
-  a match slice proportional to the input size.
+  patterns (e.g. a multi-line `^`, which matches at every line start) cannot be
+  streamed incrementally on RE2, so they are matched against the whole string by
+  Go's `regexp` in one bounded `FindAllStringSubmatchIndex` pass — staying linear
+  (no backtracking-ReDoS regression for RE2-compatible patterns like `^(a+)+b`).
+  `limit` caps how many matches that pass may materialize: a caller enforcing a
+  budget of N passes `limit = N+1` so the allocation stays proportional to the
+  budget rather than to the input's match count (`limit<=0` = uncapped).
 
 ## Configuration types & resolvers
 

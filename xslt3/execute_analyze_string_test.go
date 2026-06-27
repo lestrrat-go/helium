@@ -79,9 +79,9 @@ func TestAnalyzeStringEmptyMatchIsCapped(t *testing.T) {
 
 // A multi-line "^" (flags="m") is a leading-context anchor that matches at every
 // line start, so an input of N newlines yields ~N matches. Unlike "x*", this
-// pattern streams through the regexp2 full-context twin; the cap must still be
-// enforced DURING enumeration (before allocating work proportional to the match
-// count) rather than after materializing every line-start match.
+// pattern cannot stream incrementally on RE2; it is matched in one bounded
+// FindAll pass whose limit is the cap, so the cap is enforced without first
+// materializing every line-start match.
 func TestAnalyzeStringMultilineAnchorIsCapped(t *testing.T) {
 	t.Parallel()
 

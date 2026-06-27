@@ -83,12 +83,19 @@ func (r *Regex) FindAllSubmatchIndex(s string, n int) ([][]int, error) {
 // only valid for the duration of the call — copy it to retain it. Iteration
 // stops early, and EachSubmatchIndex returns nil, as soon as fn returns false.
 //
-// Unlike FindAllSubmatchIndex, matches are produced one at a time and never
-// accumulated, so the live memory stays bounded regardless of how many matches
-// s contains. This lets callers enforce a match-count budget (or honor a
-// cancelled context) DURING enumeration — an empty- or near-empty-matching
-// regex over a large input is rejected without first materializing a match
-// slice proportional to the input size.
-func (r *Regex) EachSubmatchIndex(s string, fn func(m []int) bool) error {
-	return r.inner.eachStringSubmatchIndex(s, fn)
+// Unlike FindAllSubmatchIndex, matches are produced one at a time and (for the
+// streaming engines) never accumulated, so live memory stays bounded regardless
+// of how many matches s contains. This lets callers enforce a match-count budget
+// (or honor a cancelled context) DURING enumeration — an empty- or near-empty-
+// matching regex over a large input is rejected without first materializing a
+// match slice proportional to the input size.
+//
+// limit caps the maximum number of matches ever produced; pass a non-positive
+// value for no cap. A leading-context pattern (a multi-line ^, \A, \b, ...)
+// cannot be streamed incrementally on the RE2 engine and is matched against the
+// whole string in one bounded pass, so a caller enforcing a budget of N should
+// pass limit = N+1 to keep that pass's allocation proportional to the budget
+// rather than to the input's match count.
+func (r *Regex) EachSubmatchIndex(s string, limit int, fn func(m []int) bool) error {
+	return r.inner.eachStringSubmatchIndex(s, limit, fn)
 }

@@ -97,6 +97,19 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		maxMatches = max(clampInt64ToInt(limit), 1)
 	}
 
+	// findLimit caps how many matches EachSubmatchIndex may produce. The callback
+	// rejects once it observes match maxMatches+1, so the enumeration must be able
+	// to surface that one extra match; passing maxMatches+1 keeps a leading-context
+	// pattern's single bounded FindAll pass allocating at most the budget rather
+	// than one entry per input match. A non-positive maxMatches (unbounded cap) and
+	// an int overflow both fall back to -1 (no enumeration limit).
+	findLimit := -1
+	if maxMatches >= 0 {
+		if n := maxMatches + 1; n > 0 {
+			findLimit = n
+		}
+	}
+
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -113,7 +126,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	matchCount := 0
 	pos := 0
 	var earlyErr error
-	countErr := re.EachSubmatchIndex(input, func(m []int) bool {
+	countErr := re.EachSubmatchIndex(input, findLimit, func(m []int) bool {
 		if err := ctx.Err(); err != nil {
 			earlyErr = err
 			return false
@@ -179,7 +192,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	// span is discovered. Like the count pass, matches are never accumulated.
 	pos = 0
 	var execErr error
-	execIterErr := re.EachSubmatchIndex(input, func(m []int) bool {
+	execIterErr := re.EachSubmatchIndex(input, findLimit, func(m []int) bool {
 		if err := ctx.Err(); err != nil {
 			execErr = err
 			return false
