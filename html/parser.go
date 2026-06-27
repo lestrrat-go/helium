@@ -190,6 +190,17 @@ func (l *parserLocator) GetPublicID() string { return "" }
 func (l *parserLocator) GetSystemID() string { return "" }
 
 func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
+	// Detect the declared charset from the RAW input (before newline
+	// normalization), bounded to the first 1024 raw bytes by extractMetaCharset.
+	// The streaming ParseReader/push path prescans the first 1024 RAW bytes
+	// (wrapReaderForHTML reads its sniff window straight off the reader, BEFORE
+	// chaining the newlineNormReader), so Parse must detect against the same raw
+	// window. Detecting against `normalized` instead would let a CRLF-heavy head
+	// (each \r\n collapsing to \n) pull a <meta charset=...> that sits PAST raw
+	// byte 1024 INTO the post-normalization window — Parse would honor a
+	// declaration that ParseReader/push never sees, a parity divergence.
+	declared := extractMetaCharset(input)
+
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
@@ -197,7 +208,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 	var encErrLine, encErrCol int
 	var detectedEnc string
 	switch {
-	case declaredCharsetIsLatin1(normalized):
+	case declared == "iso-8859-1":
 		// An explicit charset=iso-8859-1 commits to Latin-1 BEFORE the utf8.Valid
 		// check below: a declared Latin-1 document whose bytes happen to be valid
 		// UTF-8 must still decode as Latin-1, exactly as the streaming ParseReader
@@ -207,7 +218,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 		normalized = latin1ToUTF8(normalized)
 	case utf8.Valid(normalized):
 		// Already valid UTF-8 with no Latin-1 declaration: parse as-is.
-	case declaredCharsetIsUTF8(normalized):
+	case declared == "utf-8":
 		raw := normalized
 		var invBytes invalidByteInfo
 		normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)

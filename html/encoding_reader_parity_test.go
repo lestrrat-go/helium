@@ -170,6 +170,67 @@ func TestDeclaredLatin1QuotedGTInMetaParity(t *testing.T) {
 	}
 }
 
+// TestDeclaredCharsetDetectedFromRawBytesParity guards the Parse-vs-ParseReader
+// charset-detection window against newline normalization. Parse([]byte) must
+// detect the declared charset from the RAW input (first 1024 raw bytes), exactly
+// like the streaming ParseReader/push path whose sniff window is read off the raw
+// reader BEFORE newline normalization. If Parse instead prescanned the normalized
+// bytes, a CRLF-heavy head (each \r\n collapsing to \n) would pull a <meta
+// charset=iso-8859-1> that sits PAST raw byte 1024 INTO the post-normalization
+// window: Parse would honor the declaration (decode Latin-1, café → cafÃ©) while
+// ParseReader never sees it (stays UTF-8) — a parity divergence.
+//
+// Here ~600 \r\n pairs place the meta past raw byte 1024 but before normalized
+// byte 1024, so BOTH APIs must agree, and both must stay UTF-8 (the meta is
+// outside the raw 1024-byte window neither path inspects).
+func TestDeclaredCharsetDetectedFromRawBytesParity(t *testing.T) {
+	t.Parallel()
+
+	var b bytes.Buffer
+	b.WriteString("<html><head>")
+	// 600 CRLF pairs = 1200 raw bytes; collapse to 600 LF after normalization.
+	for range 600 {
+		b.WriteString("\r\n")
+	}
+	// The meta now starts at raw offset 12+1200 = 1212 (OUTSIDE raw byte 1024)
+	// but at normalized offset 12+600 = 612 (INSIDE normalized byte 1024).
+	b.WriteString("<meta charset=iso-8859-1>")
+	b.WriteString("</head><body><p>caf\xC3\xA9</p></body></html>")
+	doc := b.Bytes()
+	require.True(t, utf8.Valid(doc), "test input must be valid UTF-8 as a whole")
+	require.Greater(t, bytes.Index(doc, []byte("<meta")), 1024,
+		"the meta must sit past raw byte 1024 for the divergence to be possible")
+
+	serialize := func(d *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, html.NewWriter().WriteTo(&buf, d))
+		return buf.String()
+	}
+	textOf := func(d *helium.Document) string {
+		var text bytes.Buffer
+		for n := range helium.Descendants(d) {
+			if tx, ok := n.(*helium.Text); ok {
+				text.Write(tx.Content())
+			}
+		}
+		return text.String()
+	}
+
+	bytesDoc, err := html.NewParser().Parse(t.Context(), doc)
+	require.NoError(t, err)
+	require.NotEqual(t, "ISO-8859-1", bytesDoc.Encoding(),
+		"a meta past raw byte 1024 must NOT be detected (matching the streaming prescan)")
+	require.Contains(t, textOf(bytesDoc), "é",
+		"the bytes 0xC3 0xA9 must stay one UTF-8 rune, not decode as Latin-1 Ã©")
+
+	readerDoc, err := html.NewParser().ParseReader(t.Context(), bytes.NewReader(doc))
+	require.NoError(t, err)
+	require.Equal(t, serialize(bytesDoc), serialize(readerDoc),
+		"Parse([]byte) and ParseReader must agree on a meta past raw byte 1024")
+	require.Equal(t, bytesDoc.Encoding(), readerDoc.Encoding(),
+		"both APIs must report the same encoding for a meta past raw byte 1024")
+}
+
 // TestParseReaderRuneStraddlesSniffBoundary guards against misclassifying a
 // fully-valid UTF-8 document as Latin-1/Windows-1252 when a multibyte rune
 // straddles the 1024-byte charset sniff boundary.
