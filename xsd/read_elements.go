@@ -788,11 +788,12 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			fieldLines = append(fieldLines, ce.Line())
 			idc.Fields = append(idc.Fields, c.idcXPathAttr(ctx, ce, elemField))
 		default:
-			// Any other XSD-namespaced child is not in the content model. A
-			// foreign-namespaced child is tolerated (annotation extensibility).
-			if ce.URI() == lexicon.NamespaceXSD {
-				contentErr = true
-			}
+			// Any other element child is not in the content model. The
+			// (annotation?, (selector, field+)) model has NO element wildcard, so
+			// a foreign-namespaced child is rejected too (extension content belongs
+			// inside xs:annotation/xs:appinfo, not as a direct IDC child). libxml2
+			// rejects this with the same content error.
+			contentErr = true
 		}
 	}
 

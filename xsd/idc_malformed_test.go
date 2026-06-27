@@ -116,6 +116,17 @@ func TestMalformedIDConstraint(t *testing.T) {
 		require.Contains(t, errs, "Element '{http://www.w3.org/2001/XMLSchema}field': The attribute 'xpath' is required but missing.")
 	})
 
+	t.Run("foreign direct child rejected", func(t *testing.T) {
+		t.Parallel()
+		// The IDC content model (annotation?, (selector, field+)) has NO element
+		// wildcard. Extension content belongs inside xs:annotation/xs:appinfo, not
+		// as an arbitrary foreign-namespaced direct child. libxml2 rejects this with
+		// the same content error.
+		idc := `<xs:key name="k" xmlns:ext="urn:ext"><xs:selector xpath="item"/><xs:field xpath="@id"/><ext:x/></xs:key>`
+		errs := compileSchemaErrors(t, fmt.Sprintf(valid, idc))
+		require.Contains(t, errs, "The content is not valid. Expected is (annotation?, (selector, field+)).")
+	})
+
 	t.Run("annotation before selector compiles clean", func(t *testing.T) {
 		t.Parallel()
 		idc := `<xs:key name="k"><xs:annotation><xs:documentation>doc</xs:documentation></xs:annotation>` +
