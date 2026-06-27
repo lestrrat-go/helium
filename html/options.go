@@ -61,6 +61,21 @@ func (c parseConfig) contentLimit() int {
 	return defaultMaxContentSize
 }
 
+// scanTokenLimit bounds the unbounded PeekAt scans for indivisible tag-level
+// tokens (tag/attribute names and intra-tag whitespace runs). These are not
+// chunkable content, and MaxContentSize is a content-chunking granularity knob
+// that callers legitimately set very small (e.g. 1) for fine-grained streaming;
+// binding tag names to it would reject ordinary multi-character names like
+// "script". The cap is therefore floored at defaultMaxContentSize and only grows
+// when the caller raises MaxContentSize above it, so it never rejects realistic
+// markup while still preventing an unbounded-PeekAt buffering DoS.
+func (c parseConfig) scanTokenLimit() int {
+	if c.maxContentSize > defaultMaxContentSize {
+		return c.maxContentSize
+	}
+	return defaultMaxContentSize
+}
+
 // Writer configures HTML serialization. It is a value-style wrapper:
 // fluent methods return updated copies and the original is never mutated.
 type Writer struct {

@@ -155,6 +155,15 @@ func (p Parser) Strict(v bool) Parser {
 // [Parser.SuppressImplied](true) once an element is open — stays a pure soft-cap
 // stream with no hard-fail.
 //
+// Indivisible STRUCTURAL token scans — a tag name, end-tag name, attribute name,
+// PUBLIC/SYSTEM DOCTYPE literal, or intra-tag whitespace run — are also HARD-
+// capped, but against a separate structural scan cap rather than this value:
+// because callers legitimately set MaxContentSize very small, the structural cap
+// is FLOORED at the 16 MiB default (so ordinary names like "script" always parse)
+// and only grows when MaxContentSize is raised above that floor. An over-cap
+// structural run fails the parse with [ErrContentSizeExceeded] and emits no
+// partial token.
+//
 // A value <= 0 selects the default (16 MiB).
 //
 // Default: 16 MiB.
