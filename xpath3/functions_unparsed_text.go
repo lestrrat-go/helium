@@ -100,24 +100,42 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 		}
 	}
 
-	// Enforce the aggregate node-set/sequence cap BEFORE the whole resource is
-	// split into lines: LoadTextLinesBounded stops once maxNodes+1 lines would be
-	// produced, so an over-line-count resource is rejected without ever building
-	// the full line slice. (LoadTextLines splits every line up front, then this
-	// site could only reject after the fact.)
+	// Bound line production by the EFFECTIVE budget actually in force for this
+	// call — the smaller of the node-set cap (maxNodes) and the remaining op
+	// budget — so an OpLimit far below maxNodes stops splitting after ~OpLimit
+	// lines instead of allocating a []string proportional to the resource's full
+	// line count. LoadTextLinesBounded stops once limit+1 lines would be produced;
+	// the +1 lets the op charge below detect the overflow precisely.
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
-	lines, truncated, err := unparsedtext.LoadTextLinesBounded(ctx, unparsedTextConfig(ctx), href, encoding, maxNodes)
+	limit := maxNodes
+	opBounded := false
+	if rem, bounded := fnRemainingOps(ec); bounded && rem < limit {
+		limit = rem
+		opBounded = true
+	}
+	// SplitLinesBounded treats limit <= 0 as "no bound"; a fully-exhausted op
+	// budget (rem == 0) must still cap allocation, so floor the splitter bound at
+	// 1. The op charge below then rejects the single produced line via ErrOpLimit.
+	splitLimit := limit
+	if opBounded && splitLimit < 1 {
+		splitLimit = 1
+	}
+
+	lines, truncated, err := unparsedtext.LoadTextLinesBounded(ctx, unparsedTextConfig(ctx), href, encoding, splitLimit)
 	if err != nil {
 		return nil, wrapUnparsedTextError(err)
 	}
-	if truncated {
-		return nil, ErrNodeSetLimit
-	}
-	// Charge ops + honor cancellation before materializing one Item per line,
-	// matching how functions_array / functions_map guard one-shot materialization.
+	// Charge the produced lines against the op-counter (honoring cancellation)
+	// BEFORE materializing one Item per line, matching how functions_array /
+	// functions_map guard one-shot materialization. When the op budget is the
+	// binding constraint this surfaces ErrOpLimit; truncation past the node-set
+	// cap surfaces ErrNodeSetLimit.
 	if err := fnCountOps(ctx, ec, len(lines)); err != nil {
 		return nil, err
+	}
+	if truncated {
+		return nil, ErrNodeSetLimit
 	}
 	result := make(ItemSlice, len(lines))
 	for i, line := range lines {

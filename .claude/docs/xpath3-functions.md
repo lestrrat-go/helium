@@ -155,6 +155,16 @@ All delegate to Go `math` package.
 ### `functions_unparsed_text.go`
 `unparsed-text`, `unparsed-text-lines`, `unparsed-text-available`
 
+`fn:unparsed-text-lines` bounds line production by the **effective** budget in
+force — `min(fnMaxNodes(ec), fnRemainingOps(ec))` — not just `maxNodes`, so a
+small `OpLimit` (far below the 10M default node-set cap) stops splitting after
+~`OpLimit` lines instead of first allocating a `[]string` proportional to the
+resource's full line count. `LoadTextLinesBounded` produces at most `limit+1`
+lines; the produced count is then charged via `fnCountOps`, surfacing
+`ErrOpLimit` (op budget binding) or `ErrNodeSetLimit` (node-set cap binding).
+`fnRemainingOps` (in `functions_hof.go`) returns the remaining op budget and
+whether one is in force (false when `OpLimit` is unset or `ec == nil`).
+
 ## FunctionItem Mechanics
 
 Inline functions, named refs, partial applications → all produce `FunctionItem`.
