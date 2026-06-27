@@ -363,15 +363,45 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
 
-	t.Run("accepts derived member of a faceted base union", func(t *testing.T) {
+	t.Run("accepts derived member of a no-facet base union", func(t *testing.T) {
 		t.Parallel()
-		// Base @a is a FACETED union: IntOrString (xs:int | xs:string) restricted
-		// with an enumeration. The derived @a (xs:int) is validly derived from one
-		// of the union's {member type definitions}. Per cos-st-derived-ok.2.2.4 a
-		// union base admits a derived type validly derived from ANY of its member
-		// types, with NO exception for a union that carries facets — so this must be
-		// ACCEPTED. Regression guard against over-correcting into a faceted-union
+		// Base @a is a NO-FACET union: IntOrString (xs:int | xs:string). The derived
+		// @a (xs:int) is validly derived from one of the union's {member type
+		// definitions}. Per cos-st-derived-ok.2.2.4 a facet-free union base admits a
+		// derived type validly derived from ANY of its member types — so this must be
+		// ACCEPTED. Regression guard against over-correcting into a union
 		// false-reject.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntOrString">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:IntOrString"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects derived member of a faceted base union", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is a FACETED union: FacetedUnion = (xs:int | xs:string) restricted
+		// with an enumeration {1, "hello"}. The enumeration narrows the union's value
+		// space to exactly two values. Redeclaring the derived @a as xs:int would
+		// widen the valid values back to EVERY integer — values the faceted base
+		// forbids. Per cos-st-derived-ok.2.2.4 the union member-derivation shortcut
+		// applies ONLY when the base union (and every intervening union) is
+		// facet-free, so a faceted union base must NOT admit a member type via the
+		// shortcut — it must be REJECTED.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:simpleType name="IntOrString">
     <xs:union memberTypes="xs:int xs:string"/>
@@ -396,7 +426,7 @@ func TestRestrictionAttrType(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
-		require.Empty(t, compileFatalErrors(t, schema))
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
 
 	t.Run("rejects non-restriction ref with local default vs global fixed", func(t *testing.T) {

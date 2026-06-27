@@ -1232,12 +1232,22 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	// builtin) and the early return would otherwise accept ANY derived type
 	// unconditionally — wrongly accepting e.g. base union(xs:int xs:boolean)
 	// redeclared as xs:date (date derives from NEITHER member, so the loop
-	// rejects it). The clause makes NO exception for a faceted union: a
-	// restriction of a union whose member set includes the derived type IS valid
-	// derivation, so derived-from-a-member = accept regardless of any facets the
-	// union itself carries. Members are walked transitively via the recursive
-	// call (a member that is itself a union re-enters this branch).
+	// rejects it). Members are walked transitively via the recursive call (a
+	// member that is itself a union re-enters this branch).
+	//
+	// The member-derivation shortcut applies ONLY when the base union — and every
+	// intervening union restriction up its base chain — has EMPTY facets. A
+	// faceted union narrows the value space BELOW the bare member type (e.g.
+	// (xs:int | xs:string) restricted with enumeration {1, "hello"} admits only
+	// those two values), so widening the derived type back to a full member type
+	// like xs:int would admit values (every integer) the faceted base forbids —
+	// not a valid restriction. When the base union (or an intervening union)
+	// carries facets, the shortcut does NOT apply and the only valid derivation is
+	// through the pointer chain (isDerivedFrom, already checked above) — so reject.
 	if resolveVariety(base) == TypeVarietyUnion {
+		if unionBaseChainHasFacets(base) {
+			return false
+		}
 		for _, member := range resolveUnionMembers(base) {
 			if simpleTypeValidlyRestricts(derived, member) {
 				return true
@@ -1267,6 +1277,29 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 		return true
 	}
 	return ok
+}
+
+// unionBaseChainHasFacets reports whether a union-variety base type B, or any
+// intervening union restriction up its base chain to the underlying union
+// definition, carries facets. It gates cos-st-derived-ok.2.2.4's member-
+// derivation shortcut: that shortcut (D validly derives from B because D derives
+// from one of B's {member type definitions}) only applies when B and every
+// intervening union have EMPTY facets, because a faceted union narrows the value
+// space below its bare member types. The walk stops at the type that actually
+// declares the union's {member type definitions} (MemberTypes set) — that is the
+// union root; the member types themselves are separate derivation chains and
+// their own facets do not disqualify the shortcut. A nil Facets means no facets
+// (parseFacets allocates a FacetSet only when at least one facet is declared).
+func unionBaseChainHasFacets(base *TypeDef) bool {
+	for cur := base; cur != nil; cur = cur.BaseType {
+		if cur.Facets != nil {
+			return true
+		}
+		if len(cur.MemberTypes) > 0 {
+			break
+		}
+	}
+	return false
 }
 
 // fixedConstraintRestricts reports whether a derived attribute use's 'fixed'
