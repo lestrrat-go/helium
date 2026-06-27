@@ -139,20 +139,19 @@ func nameClassesOverlap(a, b *nameClass) bool {
 		return nameClassesOverlap(a, b.left) || nameClassesOverlap(a, b.right)
 	}
 
-	// anyName: check if except clause excludes the other name class
+	// anyName: anyName-except-E matches every name NOT in E, so it is disjoint
+	// from the other class b exactly when E fully CONTAINS b (every name b can
+	// match is excluded). This generalises the single-ncName case to nsName and
+	// choice — e.g. anyName except nsName(X) does not overlap nsName(X).
 	if a.kind == ncAnyName {
-		if a.except != nil && b.kind == ncName {
-			if nameClassMatches(a.except, b.name, b.ns) {
-				return false
-			}
+		if a.except != nil && nameClassContains(a.except, b) {
+			return false
 		}
 		return true
 	}
 	if b.kind == ncAnyName {
-		if b.except != nil && a.kind == ncName {
-			if nameClassMatches(b.except, a.name, a.ns) {
-				return false
-			}
+		if b.except != nil && nameClassContains(b.except, a) {
+			return false
 		}
 		return true
 	}
@@ -187,6 +186,220 @@ func nameClassesOverlap(a, b *nameClass) bool {
 		return a.name == b.name && a.ns == b.ns
 	}
 
+	return false
+}
+
+// nameClassContains reports whether outer definitely matches every name that
+// inner can match (outer ⊇ inner). It is CONSERVATIVE: it returns true only
+// when containment is certain, so a caller subtracting an <except> never
+// concludes "disjoint" for a pair that might actually overlap. Any inner
+// <except> only shrinks inner, so it is safe to ignore for containment.
+func nameClassContains(outer, inner *nameClass) bool {
+	if outer == nil || inner == nil {
+		return false
+	}
+	switch inner.kind {
+	case ncChoice:
+		return nameClassContains(outer, inner.left) && nameClassContains(outer, inner.right)
+	case ncName:
+		return nameClassMatches(outer, inner.name, inner.ns)
+	case ncNsName:
+		// inner = nsName(inner.ns) minus inner.except, so outer need only cover
+		// the names inner actually matches — namespace inner.ns with inner.except
+		// removed — NOT all of inner.ns. Threading inner.except lets an outer
+		// nsName/anyName carrying its OWN finite except still contain inner.
+		return nameClassCoversNSExcept(outer, inner.ns, inner.except)
+	case ncAnyName:
+		return nameClassCoversAll(outer)
+	}
+	return false
+}
+
+// nameClassCoversNSExcept reports whether outer certainly matches every name in
+// namespace ns that is NOT matched by innerExcept (i.e. outer ⊇ nsName(ns)
+// except innerExcept). A finite set of ncName leaves can never cover an
+// (infinite) namespace, so only an anyName/nsName whose own except removes
+// nothing from ns that innerExcept does not already remove, or a choice
+// containing one of those, qualifies. When innerExcept is nil this reduces to
+// "outer covers every name in ns".
+func nameClassCoversNSExcept(outer *nameClass, ns string, innerExcept *nameClass) bool {
+	if outer == nil {
+		return false
+	}
+	switch outer.kind {
+	case ncAnyName:
+		// anyName except outer.except covers (ns \ innerExcept) iff every name
+		// IN ns that outer.except removes is already removed by innerExcept.
+		// Names outer.except removes OUTSIDE ns are irrelevant — outer never
+		// needed to match them within ns — so only outer.except ∩ ns matters.
+		if outer.except == nil {
+			return true
+		}
+		return nameClassCoversWithinNS(innerExcept, outer.except, ns)
+	case ncNsName:
+		if outer.ns != ns {
+			return false
+		}
+		if outer.except == nil {
+			return true
+		}
+		return nameClassCoversWithinNS(innerExcept, outer.except, ns)
+	case ncChoice:
+		// A single branch may cover ns\innerExcept on its own...
+		if nameClassCoversNSExcept(outer.left, ns, innerExcept) ||
+			nameClassCoversNSExcept(outer.right, ns, innerExcept) {
+			return true
+		}
+		// ...or the branches may cover it only by UNION. e.g.
+		// (nsName(X) except foo) | name(foo) covers all of nsName(X): the
+		// nsName branch matches everything in X but foo, and a sibling branch
+		// fills the foo gap.
+		return choiceCoversNSByUnion(outer, ns, innerExcept)
+	}
+	return false
+}
+
+// nameClassCoversWithinNS reports whether cover certainly matches every name in
+// namespace ns that sub matches — i.e. cover ⊇ (sub ∩ ns). Names sub matches
+// OUTSIDE ns are ignored: when establishing that an outer class covers
+// nsName(ns) minus some except, an excluded name in a DIFFERENT namespace can
+// never have been in ns to begin with, so it does not need to be re-covered.
+// This is what makes e.g. anyName except (nsName(X) except name(Y:foo)) cover
+// nsName(X): within X, the inner except removes nothing (Y:foo ∉ X), so the
+// excluded class is all of X and the anyName matches no name in X. Conservative:
+// returns true only when coverage within ns is certain.
+func nameClassCoversWithinNS(cover, sub *nameClass, ns string) bool {
+	if sub == nil {
+		// sub matches nothing, so there is nothing in ns to cover.
+		return true
+	}
+	switch sub.kind {
+	case ncChoice:
+		return nameClassCoversWithinNS(cover, sub.left, ns) &&
+			nameClassCoversWithinNS(cover, sub.right, ns)
+	case ncName:
+		if sub.ns != ns {
+			// A single name outside ns is not part of sub ∩ ns.
+			return true
+		}
+		return cover != nil && nameClassMatches(cover, sub.name, sub.ns)
+	case ncNsName:
+		if sub.ns != ns {
+			// sub matches only its own namespace, which is not ns.
+			return true
+		}
+		// sub ∩ ns = nsName(ns) minus sub.except; cover must cover that.
+		return nameClassCoversNSExcept(cover, ns, sub.except)
+	case ncAnyName:
+		// sub ∩ ns = nsName(ns) minus sub.except; cover must cover that.
+		return nameClassCoversNSExcept(cover, ns, sub.except)
+	}
+	return false
+}
+
+// choiceCoversNSByUnion reports whether the UNION of a choice's branches
+// certainly matches every name in namespace ns that innerExcept does not
+// remove. It handles the disjoint-union case nameClassCoversNSExcept's
+// branch-by-branch test misses: one branch is nsName(ns) minus a FINITE set of
+// names, and sibling branches match each of those removed names. Soundness
+// rests on the gap being finitely enumerable — if the nsName branch's own
+// except is not a finite set of ncName leaves, no claim is made.
+func choiceCoversNSByUnion(choice *nameClass, ns string, innerExcept *nameClass) bool {
+	for _, branch := range flattenChoiceBranches(choice) {
+		if branch.kind != ncNsName || branch.ns != ns {
+			continue
+		}
+		if branch.except == nil {
+			return true
+		}
+		gap, ok := collectFiniteNames(branch.except)
+		if !ok {
+			// The branch removes an infinite/unknown set; the gap cannot be
+			// enumerated, so coverage cannot be claimed soundly.
+			continue
+		}
+		covered := true
+		for _, n := range gap {
+			if n.ns != ns {
+				// A name outside ns the branch excludes is irrelevant: the
+				// nsName branch never matched it within ns anyway.
+				continue
+			}
+			if innerExcept != nil && nameClassMatches(innerExcept, n.name, n.ns) {
+				// innerExcept already removes this name, so it need not be
+				// covered.
+				continue
+			}
+			// Some OTHER branch must match the gap name; the nsName branch
+			// itself excludes it by construction.
+			if !nameClassMatches(choice, n.name, n.ns) {
+				covered = false
+				break
+			}
+		}
+		if covered {
+			return true
+		}
+	}
+	return false
+}
+
+// ncQName is a fully-qualified name (local + namespace) used when enumerating a
+// finite name set out of a name class.
+type ncQName struct {
+	name string
+	ns   string
+}
+
+// collectFiniteNames returns the finite set of names a name class matches, or
+// ok=false when the class is not a finite union of ncName leaves (i.e. it
+// contains an nsName/anyName/ncNoMatch and so matches an infinite or
+// indeterminate set).
+func collectFiniteNames(nc *nameClass) ([]ncQName, bool) {
+	if nc == nil {
+		return nil, true
+	}
+	switch nc.kind {
+	case ncName:
+		return []ncQName{{name: nc.name, ns: nc.ns}}, true
+	case ncChoice:
+		left, ok := collectFiniteNames(nc.left)
+		if !ok {
+			return nil, false
+		}
+		right, ok := collectFiniteNames(nc.right)
+		if !ok {
+			return nil, false
+		}
+		return append(left, right...), true
+	}
+	return nil, false
+}
+
+// flattenChoiceBranches collapses a (possibly nested) ncChoice tree into its
+// leaf branches.
+func flattenChoiceBranches(nc *nameClass) []*nameClass {
+	if nc == nil {
+		return nil
+	}
+	if nc.kind != ncChoice {
+		return []*nameClass{nc}
+	}
+	return append(flattenChoiceBranches(nc.left), flattenChoiceBranches(nc.right)...)
+}
+
+// nameClassCoversAll reports whether outer certainly matches every possible
+// name (only an except-free anyName, or a choice containing one).
+func nameClassCoversAll(outer *nameClass) bool {
+	if outer == nil {
+		return false
+	}
+	switch outer.kind {
+	case ncAnyName:
+		return outer.except == nil
+	case ncChoice:
+		return nameClassCoversAll(outer.left) || nameClassCoversAll(outer.right)
+	}
 	return false
 }
 
