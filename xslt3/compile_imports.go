@@ -149,7 +149,7 @@ func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Eleme
 	}
 
 	savedBase := c.baseURI
-	c.baseURI = uri
+	c.baseURI = moduleEffectiveBaseURI(root, uri)
 	defer func() { c.baseURI = savedBase }()
 	savedModuleKey := c.moduleKey
 	c.moduleKey = importKey
@@ -309,7 +309,7 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 	}
 
 	savedBase := c.baseURI
-	c.baseURI = uri
+	c.baseURI = moduleEffectiveBaseURI(root, uri)
 	defer func() { c.baseURI = savedBase }()
 	savedModuleKey := c.moduleKey
 	c.moduleKey = importKey
@@ -468,6 +468,36 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 	return nil
 }
 
+// moduleEffectiveBaseURI applies an included/imported stylesheet module root's
+// xml:base (if any) to the module's own document URI, yielding the effective
+// static base URI against which that module's globals and templates resolve
+// relative references (doc(), unparsed-text(), document(”), etc.).
+//
+// The MAIN module gets this treatment in compile() via resolveRootXMLBase, but
+// external modules are loaded with c.baseURI set to the bare module URI and
+// compiled directly (loadExternalStylesheet → compileTopLevel; or the two-phase
+// include path). Without this, a root xml:base on an included/imported module
+// is silently dropped and its globals resolve against the bare module URI
+// instead of the declaration-site static base. stylesheetBaseURI deliberately
+// stops before the document element on the assumption that the root xml:base is
+// already folded into the base it is handed — so that base must be the
+// effective one computed here.
+//
+// This folding applies ONLY when the module root IS the document element. For
+// an EMBEDDED module root (one selected by a fragment identifier, whose parent
+// is another element rather than the Document), stylesheetBaseURI's ancestor
+// walk already reaches and applies the embedded root's xml:base, so folding it
+// in here too would double-count it.
+func moduleEffectiveBaseURI(root *helium.Element, uri string) string {
+	if _, isDoc := root.Parent().(*helium.Document); !isDoc {
+		return uri
+	}
+	if xmlBase := getAttr(root, lexicon.QNameXMLBase); xmlBase != "" {
+		return resolveRootXMLBase(uri, xmlBase)
+	}
+	return uri
+}
+
 func stylesheetBaseURI(n helium.Node, fallback string) string {
 	base := fallback
 	var bases []string
@@ -501,9 +531,11 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 		// xml:base=".." ("…/tests/fn/") indistinguishable from a stylesheet FILE
 		// base ("…/tests/fn") — so a later sibling reference resolved through
 		// documentBaseDir (path.Dir) would drop the real "fn" segment. Restore the
-		// RFC-correct trailing slash so the directory form is preserved.
-		if resolved != "" && refDenotesDirectory(v) && !strings.HasSuffix(resolved, "/") {
-			resolved += "/"
+		// RFC-correct trailing slash so the directory form is preserved, inserting
+		// it into the PATH (before any '?'/'#') so a directory base carrying a
+		// query ("…/dir?v") becomes "…/dir/?v", never "…/dir?v/".
+		if resolved != "" && refDenotesDirectory(v) {
+			resolved = ensureDirSlash(resolved)
 		}
 		base = resolved
 	}
@@ -512,21 +544,42 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 
 // refDenotesDirectory reports whether a URI reference names a directory rather
 // than a file, i.e. resolving it per RFC 3986 produces a base ending in '/'. A
-// reference denotes a directory when it ends in '/' or its last path segment is
-// "." or ".." (a pure dot-segment that resolves to the containing directory).
+// reference denotes a directory when its PATH portion ends in '/' or its last
+// path segment is "." or ".." (a pure dot-segment that resolves to the
+// containing directory). The query/fragment is excluded from the test, and a
+// reference with an empty path portion (query-only "?v" or fragment-only
+// "#frag") is NOT directory-denoting — path.Base("") == "." must not be
+// mistaken for a "." dot-segment.
 func refDenotesDirectory(ref string) bool {
-	if ref == "" {
+	pathPart := ref
+	if i := strings.IndexAny(pathPart, "?#"); i >= 0 {
+		pathPart = pathPart[:i]
+	}
+	if pathPart == "" {
 		return false
 	}
-	if strings.HasSuffix(ref, "/") {
+	if strings.HasSuffix(pathPart, "/") {
 		return true
 	}
-	seg := ref
-	if i := strings.IndexAny(seg, "?#"); i >= 0 {
-		seg = seg[:i]
-	}
-	last := path.Base(seg)
+	last := path.Base(pathPart)
 	return last == "." || last == ".."
+}
+
+// ensureDirSlash guarantees that the PATH portion of a resolved URI ends in
+// '/', inserting the slash before any query ('?') or fragment ('#') component
+// rather than at the very end. A directory base carrying a query ("…/dir?v")
+// thus becomes "…/dir/?v", never "…/dir?v/" (which would corrupt the query and
+// misplace the directory boundary). Idempotent when the path already ends in
+// '/'.
+func ensureDirSlash(uri string) string {
+	pathEnd := len(uri)
+	if i := strings.IndexAny(uri, "?#"); i >= 0 {
+		pathEnd = i
+	}
+	if pathEnd > 0 && uri[pathEnd-1] == '/' {
+		return uri
+	}
+	return uri[:pathEnd] + "/" + uri[pathEnd:]
 }
 
 func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href string, isImport bool) error {
@@ -684,6 +737,12 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 			c.stylesheet.inputTypeAnnotations = importedITA
 		}
 	}
+
+	// Fold the module root's xml:base into the effective static base URI so
+	// this module's globals/templates resolve relative references against the
+	// declaration-site base (matching the main module's compile() handling),
+	// not the bare module URI. moduleDocs stays keyed on the unmodified uri.
+	c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
 
 	if isImport {
 		// For imports: the imported stylesheet gets current (lower) precedence.

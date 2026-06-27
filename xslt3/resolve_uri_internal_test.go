@@ -205,6 +205,65 @@ func TestRootXMLBaseURIAware(t *testing.T) {
 	}
 }
 
+// TestRefDenotesDirectory verifies that directory-detection looks only at the
+// PATH portion of a reference: a query-only/fragment-only ref has an empty path
+// and is NOT directory-denoting (path.Base("") == "." must not be mistaken for
+// a "." dot-segment), while a path that ends in '/' before a query still is.
+func TestRefDenotesDirectory(t *testing.T) {
+	for _, tc := range []struct {
+		ref  string
+		want bool
+	}{
+		{"", false},
+		{"dir/", true},
+		{"dir", false},
+		{".", true},
+		{"..", true},
+		{"a/b/", true},
+		{"a/b", false},
+		// Query-only / fragment-only: empty path portion, not a directory.
+		{"?v", false},
+		{"#frag", false},
+		{"?a=b", false},
+		// Path ends in '/' even with a trailing query/fragment.
+		{"dir/?v", true},
+		{"dir/#f", true},
+		// Path is a plain file even with a query.
+		{"dir?v", false},
+		{"file.xml#frag", false},
+		// Dot-segment paths with a query.
+		{"..?v", true},
+		{"./#f", true},
+	} {
+		t.Run(tc.ref, func(t *testing.T) {
+			require.Equal(t, tc.want, refDenotesDirectory(tc.ref))
+		})
+	}
+}
+
+// TestEnsureDirSlash verifies the trailing path slash is inserted before any
+// query/fragment, never at the very end — so a directory base carrying a query
+// ("…/dir?v") becomes "…/dir/?v", not the path-corrupting "…/dir?v/".
+func TestEnsureDirSlash(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{"a/b/dir", "a/b/dir/"},
+		{"a/b/dir/", "a/b/dir/"},
+		{"a/b/dir?v", "a/b/dir/?v"},
+		{"a/b/dir?v=1&w=2", "a/b/dir/?v=1&w=2"},
+		{"a/b/dir#f", "a/b/dir/#f"},
+		{"a/b/dir/?v", "a/b/dir/?v"},
+		{"a/b/dir/#f", "a/b/dir/#f"},
+		{"mem://h/dir?v", "mem://h/dir/?v"},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			require.Equal(t, tc.want, ensureDirSlash(tc.in))
+		})
+	}
+}
+
 var errStopAfterResolve = stopAfterResolveError{}
 
 type stopAfterResolveError struct{}
