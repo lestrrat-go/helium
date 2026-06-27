@@ -446,15 +446,17 @@ func extractDeclaredCharset(data []byte) string {
 // content="...; charset=..."> — within the first 1024 bytes, returning the
 // declared encoding name lowercased, or "" if none is found.
 //
-// Unlike extractDeclaredCharset (a loose scan for a "charset=" token anywhere in
-// the head), this honors ONLY an actual meta element: a "charset=iso-8859-1"
-// string that merely appears in ordinary text, an HTML comment, or a script does
-// NOT count. This precision matters because the eager Latin-1/UTF-8 encoding
-// commit overrides utf8.Valid — a false positive there would corrupt a valid
-// UTF-8 document (café → cafÃ©). It mirrors the spirit of the WHATWG "prescan a
-// byte stream to determine its encoding" algorithm: comments are skipped, other
-// tags are stepped over, and charset extraction is bounded to the bytes of a
-// genuine <meta ...> tag.
+// This honors ONLY an actual meta element: a "charset=iso-8859-1" string that
+// merely appears in ordinary text, an HTML comment, or a script does NOT count.
+// Within a genuine <meta ...> tag it further honors only a real declaration per
+// WHATWG (metaCharsetFromTag): a `charset` attribute, or a `content` attribute's
+// charset when paired with `http-equiv="content-type"`. A `charset=` token in any
+// other attribute (data-charset, name, a non-pragma content value, ...) is
+// ignored. This precision matters because the eager Latin-1/UTF-8 encoding commit
+// overrides utf8.Valid — a false positive there would corrupt a valid UTF-8
+// document (café → cafÃ©). It mirrors the WHATWG "prescan a byte stream to
+// determine its encoding" algorithm: comments are skipped, other tags are stepped
+// over, and charset extraction parses the attributes of a genuine <meta ...> tag.
 func extractMetaCharset(data []byte) string {
 	lower := bytes.ToLower(data)
 	if len(lower) > 1024 {
@@ -487,7 +489,7 @@ func extractMetaCharset(data []byte) string {
 			if gt >= 0 {
 				tag = tag[:gt]
 			}
-			if cs := extractDeclaredCharset(tag); cs != "" {
+			if cs := metaCharsetFromTag(tag); cs != "" {
 				return cs
 			}
 			if gt < 0 {
@@ -531,6 +533,123 @@ func metaTagEnd(tag []byte) int {
 		}
 	}
 	return -1
+}
+
+// metaCharsetFromTag applies the WHATWG meta-element prescan attribute rules to
+// the (already lowercased) bytes of a single tag that begins with "<meta". It
+// parses the tag's attributes and returns a declared encoding ONLY when it comes
+// from a real `charset` attribute, or from a `content` attribute paired with an
+// `http-equiv="content-type"` attribute on the same element. A `charset=` token
+// appearing in any other attribute (data-charset, name, a non-pragma content
+// value, ...) is ignored. Returns "" when no qualifying declaration is present.
+//
+// This mirrors the WHATWG "prescan a byte stream" per-meta decision: track a
+// candidate charset, whether a content-type pragma was seen (gotPragma), and
+// whether the candidate requires that pragma to be trusted (needPragma). A
+// `charset` attribute is always trusted; a `content` charset is trusted only when
+// the pragma is also present.
+func metaCharsetFromTag(tag []byte) string {
+	pos := len("<meta")
+	var charset string
+	gotPragma := false
+	// needPragma: 0 = unset (no candidate yet), 1 = content candidate (needs the
+	// content-type pragma), 2 = charset attribute (trusted unconditionally).
+	needPragma := 0
+	for {
+		name, value, next, ok := metaNextAttr(tag, pos)
+		if !ok {
+			break
+		}
+		pos = next
+		switch string(name) {
+		case "http-equiv":
+			if string(value) == "content-type" {
+				gotPragma = true
+			}
+		case "content":
+			if charset == "" {
+				if cs := extractDeclaredCharset(value); cs != "" {
+					charset = cs
+					needPragma = 1
+				}
+			}
+		case "charset":
+			if len(value) > 0 {
+				charset = string(value)
+				needPragma = 2
+			}
+		}
+	}
+	if needPragma == 0 {
+		return ""
+	}
+	if needPragma == 1 && !gotPragma {
+		return ""
+	}
+	return charset
+}
+
+// metaNextAttr implements the WHATWG "get an attribute" sub-algorithm of the meta
+// prescan over the (already lowercased) tag bytes starting at pos. It returns the
+// next attribute's name and value (sub-slices of tag; value is nil when the
+// attribute has no value), the position to resume scanning, and ok=false when no
+// further attribute is present. Quote-aware: a quoted value runs to its matching
+// quote; an unquoted value runs to ASCII whitespace or the tag-end '>'.
+func metaNextAttr(tag []byte, pos int) (name, value []byte, next int, ok bool) {
+	n := len(tag)
+	// Skip leading ASCII whitespace and '/' separators.
+	for pos < n && (isASCIIWhitespace(tag[pos]) || tag[pos] == '/') {
+		pos++
+	}
+	if pos >= n || tag[pos] == '>' {
+		return nil, nil, pos, false
+	}
+	// Read the attribute name. A '=' terminates the name only when the name is
+	// non-empty (a leading '=' is part of the name, per WHATWG).
+	nameStart := pos
+	for pos < n {
+		c := tag[pos]
+		if c == '=' && pos > nameStart {
+			break
+		}
+		if isASCIIWhitespace(c) || c == '/' || c == '>' {
+			break
+		}
+		pos++
+	}
+	name = tag[nameStart:pos]
+	// Skip whitespace between the name and a possible '='.
+	for pos < n && isASCIIWhitespace(tag[pos]) {
+		pos++
+	}
+	if pos >= n || tag[pos] != '=' {
+		return name, nil, pos, true
+	}
+	pos++ // consume '='
+	// Skip whitespace after '='.
+	for pos < n && isASCIIWhitespace(tag[pos]) {
+		pos++
+	}
+	if pos >= n || tag[pos] == '>' {
+		return name, nil, pos, true
+	}
+	if q := tag[pos]; q == '"' || q == '\'' {
+		pos++
+		valStart := pos
+		for pos < n && tag[pos] != q {
+			pos++
+		}
+		value = tag[valStart:pos]
+		if pos < n {
+			pos++ // consume the closing quote
+		}
+		return name, value, pos, true
+	}
+	valStart := pos
+	for pos < n && !isASCIIWhitespace(tag[pos]) && tag[pos] != '>' {
+		pos++
+	}
+	return name, tag[valStart:pos], pos, true
 }
 
 // declaredCharsetIsUTF8 reports whether a real <meta> element declares utf-8.

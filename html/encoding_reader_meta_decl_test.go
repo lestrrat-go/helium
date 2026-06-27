@@ -73,3 +73,83 @@ func TestNonDeclarationCharsetStaysUTF8(t *testing.T) {
 		})
 	}
 }
+
+// TestMetaCharsetAttributePrecisionParity guards the WHATWG per-meta attribute
+// rule end-to-end through Parse and ParseReader. A `charset=iso-8859-1` token in
+// the WRONG attribute (data-charset, or a content value with no
+// http-equiv="content-type") must NOT commit the document to Latin-1: a valid
+// UTF-8 body stays UTF-8 (café, not cafÃ©). A real charset attribute or a
+// content-type pragma DOES commit to Latin-1. Both APIs must agree.
+func TestMetaCharsetAttributePrecisionParity(t *testing.T) {
+	t.Parallel()
+
+	serialize := func(d *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, html.NewWriter().WriteTo(&buf, d))
+		return buf.String()
+	}
+	textOf := func(d *helium.Document) string {
+		var text bytes.Buffer
+		for n := range helium.Descendants(d) {
+			if tx, ok := n.(*helium.Text); ok {
+				text.Write(tx.Content())
+			}
+		}
+		return text.String()
+	}
+
+	// cafe with a UTF-8 e-acute (\xC3\xA9). Latin-1 misdecoding yields "Ã©".
+	const cafeUTF8 = "caf\xC3\xA9"
+
+	for _, tc := range []struct {
+		name      string
+		meta      string
+		wantLatin bool // true: should decode as Latin-1 (corrupt the UTF-8 body)
+	}{
+		{
+			name: "data-charset-ignored",
+			meta: `<meta data-charset=iso-8859-1>`,
+		},
+		{
+			name: "non-pragma-content-ignored",
+			meta: `<meta name=description content="charset=iso-8859-1">`,
+		},
+		{
+			name:      "real-charset-attr-latin1",
+			meta:      `<meta charset=iso-8859-1>`,
+			wantLatin: true,
+		},
+		{
+			name:      "pragma-content-type-latin1",
+			meta:      `<meta http-equiv="content-type" content="text/html; charset=iso-8859-1">`,
+			wantLatin: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := []byte("<html><head>" + tc.meta + "</head><body><p>" + cafeUTF8 + "</p></body></html>")
+			require.True(t, utf8.Valid(doc), "test input must be valid UTF-8")
+
+			bytesDoc, err := html.NewParser().Parse(t.Context(), doc)
+			require.NoError(t, err)
+			readerDoc, err := html.NewParser().ParseReader(t.Context(), bytes.NewReader(doc))
+			require.NoError(t, err)
+
+			require.Equal(t, serialize(bytesDoc), serialize(readerDoc),
+				"Parse and ParseReader must agree on the encoding decision")
+
+			switch tc.wantLatin {
+			case true:
+				require.Contains(t, textOf(bytesDoc), "Ã©",
+					"a real meta charset declaration must commit to Latin-1")
+				require.Contains(t, bytesDoc.Encoding(), "8859",
+					"a real meta charset declaration must record ISO-8859-1")
+			case false:
+				require.NotContains(t, textOf(bytesDoc), "Ã©",
+					"charset= in the wrong attribute must not corrupt valid UTF-8")
+				require.NotContains(t, bytesDoc.Encoding(), "8859",
+					"charset= in the wrong attribute must not commit to ISO-8859-1")
+			}
+		})
+	}
+}

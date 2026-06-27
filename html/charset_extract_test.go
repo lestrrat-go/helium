@@ -88,3 +88,61 @@ func TestExtractMetaCharset_QuotedGT(t *testing.T) {
 		})
 	}
 }
+
+// extractMetaCharset must honor the WHATWG per-meta attribute rules: a declared
+// encoding counts ONLY from a real `charset` attribute, or from a `content`
+// attribute's charset when paired with `http-equiv="content-type"`. A `charset=`
+// token in any other attribute (data-charset, name, a non-pragma content value)
+// is ignored — trusting it would corrupt a valid UTF-8 document, since the eager
+// encoding commit overrides utf8.Valid. (Regression: PR #821 / HTML-101.)
+func TestExtractMetaCharset_AttributePrecision(t *testing.T) {
+	t.Parallel()
+
+	const iso = "iso-8859-1"
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		// Qualifying declarations.
+		{name: "real-charset-attr", in: `<meta charset=iso-8859-1>`, want: iso},
+		{name: "real-charset-attr-quoted", in: `<meta charset="iso-8859-1">`, want: iso},
+		{
+			name: "pragma-content-type",
+			in:   `<meta http-equiv="content-type" content="text/html; charset=iso-8859-1">`,
+			want: iso,
+		},
+		{
+			name: "pragma-content-type-attr-order-swapped",
+			in:   `<meta content="text/html; charset=iso-8859-1" http-equiv="content-type">`,
+			want: iso,
+		},
+		// Non-qualifying: charset= sits in the wrong attribute.
+		{name: "data-charset-ignored", in: `<meta data-charset=iso-8859-1>`, want: ""},
+		{
+			name: "non-pragma-content-ignored",
+			in:   `<meta name=description content="charset=iso-8859-1">`,
+			want: "",
+		},
+		{
+			name: "content-without-http-equiv-ignored",
+			in:   `<meta content="text/html; charset=iso-8859-1">`,
+			want: "",
+		},
+		{
+			name: "http-equiv-not-content-type-ignored",
+			in:   `<meta http-equiv="refresh" content="charset=iso-8859-1">`,
+			want: "",
+		},
+		{
+			name: "name-attr-value-ignored",
+			in:   `<meta name="charset=iso-8859-1">`,
+			want: "",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, extractMetaCharset([]byte(tc.in)))
+		})
+	}
+}
