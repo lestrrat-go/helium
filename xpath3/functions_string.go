@@ -228,7 +228,7 @@ func isValidXML11Codepoint(cp int) bool {
 	return false
 }
 
-func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) {
+func fnStringToCodepoints(ctx context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -236,10 +236,21 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 	if s == "" {
 		return validNilSequence, nil
 	}
-	runes := []rune(s)
-	result := make(ItemSlice, len(runes))
-	for i, r := range runes {
-		result[i] = AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))}
+	// Build the codepoint sequence one item per character, charging the op-limit
+	// and honoring context cancellation before each append (and capping the
+	// length at maxNodes). A huge input string would otherwise materialize an
+	// unbounded item sequence in one shot, ignoring both budgets.
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	var result ItemSlice
+	for _, r := range s {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		if len(result) >= maxNodes {
+			return nil, ErrNodeSetLimit
+		}
+		result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))})
 	}
 	return result, nil
 }
@@ -943,7 +954,7 @@ func matchesXPathEmptyLine(s string) bool {
 	return s == "" || strings.HasPrefix(s, "\n") || strings.Contains(s, "\n\n")
 }
 
-func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
+func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -988,7 +999,14 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
+	// Charge the op-limit and honor context cancellation once per match: an input
+	// with a huge number of matches would otherwise build the result tree
+	// uncancellable and unaccounted against the op budget.
+	ec := getFnContext(ctx)
 	for _, m := range matches {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		start, end := m[0], m[1]
 		if start > pos {
 			if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:start]); err != nil {
