@@ -17,8 +17,9 @@ const (
 	elemAnnotation     = "annotation"
 	elemAny            = "any"
 	elemAnyAttribute   = "anyAttribute"
-	elemAssert         = "assert"    // XSD 1.1: xs:assert on complex types
-	elemAssertion      = "assertion" // XSD 1.1: xs:assertion facet on simple types
+	elemAssert         = "assert"      // XSD 1.1: xs:assert on complex types
+	elemAssertion      = "assertion"   // XSD 1.1: xs:assertion facet on simple types
+	elemOpenContent    = "openContent" // XSD 1.1: xs:openContent on complex types
 	elemAppinfo        = "appinfo"
 	elemAttribute      = "attribute"
 	elemAttributeGroup = "attributeGroup"
@@ -62,6 +63,7 @@ const (
 	attrMaxOccurs            = "maxOccurs"
 	attrMemberTypes          = "memberTypes"
 	attrMinOccurs            = "minOccurs"
+	attrMode                 = "mode" // XSD 1.1: xs:openContent mode
 	attrName                 = "name"
 	attrNamespace            = "namespace"
 	attrNillable             = "nillable"
