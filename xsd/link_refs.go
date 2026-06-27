@@ -253,6 +253,18 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if !ok {
 			continue
 		}
+		// au-props-correct.3: if the referenced global declaration carries a
+		// 'fixed' value constraint and this use declares its OWN value constraint,
+		// the use's constraint must ALSO be 'fixed' and value-equal to the
+		// declaration's. A local 'default', or a 'fixed' with a different value,
+		// would let the use admit values the declaration pins, so it is rejected.
+		// Enforced for EVERY referencing use (not only inside a restriction), so a
+		// plain complexType with <xs:attribute ref="t:a" default="2"/> against a
+		// fixed t:a is caught — the derivation-ok-restriction check only covers the
+		// derived-vs-base relationship.
+		if ga.Fixed != nil && (au.Default != nil || au.Fixed != nil) {
+			c.checkAttrRefFixedConflict(ctx, au, ga, qn)
+		}
 		// A use inherits the declaration's value constraint ONLY when it has no
 		// LOCAL value constraint of its own. A local 'default' must not be
 		// overwritten by — nor silently absorb — the declaration's 'fixed': the
@@ -1038,6 +1050,36 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 	}
 }
 
+// checkAttrRefFixedConflict enforces au-props-correct.3 for an <xs:attribute
+// ref> use whose referenced global declaration has a 'fixed' value constraint:
+// the use's own value constraint must also be 'fixed' and value-equal. A local
+// 'default' (no fixed) or a 'fixed' carrying a different value is rejected. Both
+// constraint lexicals are typed by the global declaration's simple type, so the
+// value comparison runs under that single type.
+func (c *compiler) checkAttrRefFixedConflict(ctx context.Context, au, ga *AttrUse, qn QName) {
+	if c.filename == "" {
+		return
+	}
+	// A local fixed value-equal to the declaration's fixed is valid; nothing to
+	// report. A local default (au.Fixed == nil) always conflicts.
+	if au.Fixed != nil {
+		gaTD := attrUseTypeDef(ga, c.schema)
+		if fixedConstraintRestricts(ctx, *au.Fixed, *ga.Fixed, gaTD, gaTD, au.FixedNS, ga.FixedNS) {
+			return
+		}
+	}
+	line := 0
+	source := c.diagSource()
+	local := qn.Local
+	if src, ok := c.attrUseConstraintSources[au]; ok {
+		line = src.line
+		source = c.diagSourceOrRecorded(src.source)
+		local = src.local
+	}
+	msg := fmt.Sprintf("The value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the referenced attribute declaration '{%s}%s'.", qn.NS, qn.Local)
+	c.schemaError(ctx, schemaParserErrorAttr(source, line, local, "attribute", local, msg))
+}
+
 // builtinRestrictionParent maps each XSD builtin atomic type's local name to
 // the local name of the builtin it is derived (by restriction) from, per the
 // W3C XML Schema Part 2 type hierarchy. It is used to decide builtin-to-builtin
@@ -1166,17 +1208,16 @@ func isAtomicBuiltinName(local string) bool {
 }
 
 // unionHasFacets reports whether a union simple type (or a restriction of one)
-// carries any facets of its own, walking the restriction chain down to the type
-// that declares the {member type definitions}. A faceted union narrows its
-// members' combined value space, so its members cannot stand in for the union
-// when deciding cos-st-derived-ok.2.2.4.
+// carries any facets anywhere in its restriction chain. A faceted union narrows
+// its members' combined value space, so its members cannot stand in for the
+// union when deciding cos-st-derived-ok.2.2.4. The walk does NOT stop when a
+// type declares {member type definitions}: a derived union may copy the base's
+// MemberTypes onto itself while a faceted ancestor still further restricts the
+// value space, so the FULL base chain must be inspected.
 func unionHasFacets(td *TypeDef) bool {
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if cur.Facets != nil {
 			return true
-		}
-		if len(cur.MemberTypes) > 0 {
-			break
 		}
 	}
 	return false
@@ -1200,6 +1241,28 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	if isDerivedFrom(derived, base) {
 		return true
 	}
+	// cos-st-derived-ok.2.2.4: a base that is a UNION admits a derived type that
+	// is validly derived from any of its member types. This MUST be handled
+	// BEFORE the builtin-base early return below, because builtinBaseLocal(base)
+	// is empty for a union (a union is not an atomic builtin) and the early
+	// return would otherwise accept ANY derived type unconditionally — wrongly
+	// accepting e.g. base union(xs:int xs:boolean) redeclared as xs:date. The
+	// member stand-in is sound ONLY when the union carries no facets of its own
+	// (an enumeration/pattern anywhere in the union's chain further restricts its
+	// value space, which a bare member type would widen past), so a faceted union
+	// is rejected outright. Members are walked transitively via the recursive
+	// call (a member that is itself a union re-enters this branch).
+	if resolveVariety(base) == TypeVarietyUnion {
+		if unionHasFacets(base) {
+			return false
+		}
+		for _, member := range resolveUnionMembers(base) {
+			if simpleTypeValidlyRestricts(derived, member) {
+				return true
+			}
+		}
+		return false
+	}
 	db := builtinBaseLocal(derived)
 	bb := builtinBaseLocal(base)
 	if db == "" || bb == "" {
@@ -1211,24 +1274,10 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	// narrows), but treating a user simple type that RESTRICTS a builtin (e.g.
 	// xs:int with maxInclusive="10") as that builtin would WIDEN the base back to
 	// its ancestor and wrongly accept a derived type that drops the user-added
-	// facets. When the base is a user-restricted type, the only valid derivation
-	// is through the pointer chain (isDerivedFrom, already checked above) — so
-	// reject.
+	// facets. When the base is a user-restricted (non-union) type, the only valid
+	// derivation is through the pointer chain (isDerivedFrom, already checked
+	// above) — so reject.
 	if base.Name.NS != lexicon.NamespaceXSD {
-		// cos-st-derived-ok.2.2.4: a base that is a user-defined UNION admits a
-		// derived type that is validly derived from any of its member types. This
-		// is sound ONLY when the union carries no facets of its own (an
-		// enumeration/pattern on the union further restricts its value space,
-		// which a bare member type would widen past), so it is gated on an
-		// empty-facet union. Members are walked transitively via the recursive
-		// call (a member that is itself a union re-enters this branch).
-		if resolveVariety(base) == TypeVarietyUnion && !unionHasFacets(base) {
-			for _, member := range resolveUnionMembers(base) {
-				if simpleTypeValidlyRestricts(derived, member) {
-					return true
-				}
-			}
-		}
 		return false
 	}
 	ok, known := builtinDerivesFrom(db, bb)

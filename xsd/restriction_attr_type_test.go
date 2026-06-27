@@ -334,6 +334,119 @@ func TestRestrictionAttrType(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	t.Run("rejects derived attr type unrelated to base union members", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is a USER union (IntOrBool = xs:int | xs:boolean) with no facets.
+		// The derived restriction redeclares @a as xs:date — NOT a member of the
+		// union and not derived from either member, so it admits values (dates) the
+		// base does not. Per cos-st-derived-ok.2.2.4 it must be REJECTED. Regression
+		// guard: builtinBaseLocal(union) is empty, so the union rule must run BEFORE
+		// the builtin-base early return that would otherwise accept it.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntOrBool">
+    <xs:union memberTypes="xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:IntOrBool"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:date"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects derived member of a faceted base union", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is a FACETED union: IntOrString (xs:int | xs:string) restricted
+		// with an enumeration. Even though the derived @a (xs:int) is a member of
+		// the underlying union, the enumeration narrows the union's value space, so
+		// the bare member type would WIDEN the base back past the enumeration and
+		// admit values the base forbids. Per cos-st-derived-ok.2.2.4 a faceted union
+		// base must be REJECTED.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntOrString">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="FacetedUnion">
+    <xs:restriction base="t:IntOrString">
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="hello"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:FacetedUnion"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects non-restriction ref with local default vs global fixed", func(t *testing.T) {
+		t.Parallel()
+		// Global @t:a is fixed="1". A PLAIN (non-restriction) complexType references
+		// it with a LOCAL default="2". au-props-correct.3: a 'default' does not
+		// satisfy the declaration's 'fixed' constraint, so it must be REJECTED even
+		// though no restriction derivation is involved.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="HasRef">
+    <xs:sequence/>
+    <xs:attribute ref="t:a" default="2"/>
+  </xs:complexType>
+  <xs:element name="root" type="t:HasRef"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), fixedInconsistent)
+	})
+
+	t.Run("rejects non-restriction ref with mismatched local fixed vs global fixed", func(t *testing.T) {
+		t.Parallel()
+		// Global @t:a is fixed="1"; a plain complexType references it with a LOCAL
+		// fixed="2" — a different value-space value. au-props-correct.3 requires the
+		// use's fixed to equal the declaration's, so it must be REJECTED.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="HasRef">
+    <xs:sequence/>
+    <xs:attribute ref="t:a" fixed="2"/>
+  </xs:complexType>
+  <xs:element name="root" type="t:HasRef"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), fixedInconsistent)
+	})
+
+	t.Run("accepts non-restriction ref with matching local fixed vs global fixed", func(t *testing.T) {
+		t.Parallel()
+		// Global @t:a is fixed="1"; a plain complexType references it with a LOCAL
+		// fixed="01" — lexically different but value-space-equal for xs:int. The use
+		// satisfies au-props-correct.3, so it must be ACCEPTED.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attribute name="a" type="xs:int" fixed="1"/>
+  <xs:complexType name="HasRef">
+    <xs:sequence/>
+    <xs:attribute ref="t:a" fixed="01"/>
+  </xs:complexType>
+  <xs:element name="root" type="t:HasRef"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("rejects builtin list type restricted by an atomic type", func(t *testing.T) {
 		t.Parallel()
 		// Base @a is xs:IDREFS (a builtin LIST type); the derived restriction
