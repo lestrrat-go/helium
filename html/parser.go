@@ -386,11 +386,14 @@ func isASCIIWhitespace(b byte) bool {
 // may be wrapped in single or double quotes, or left unquoted (terminated by
 // whitespace or ";").
 func extractDeclaredCharset(data []byte) string {
-	lower := bytes.ToLower(data)
-	// Limit scan to the first 1024 bytes (charset should appear early).
-	if len(lower) > 1024 {
-		lower = lower[:1024]
+	// Bound to the first 1024 RAW bytes BEFORE case folding so the lowercase
+	// copy is never larger than the prescan window — folding the whole input
+	// just to inspect its head would allocate proportional to the document
+	// (and bytes.ToLower can expand invalid UTF-8). The charset appears early.
+	if len(data) > 1024 {
+		data = data[:1024]
 	}
+	lower := bytes.ToLower(data)
 	const key = "charset"
 	from := 0
 	for {
@@ -458,10 +461,16 @@ func extractDeclaredCharset(data []byte) string {
 // determine its encoding" algorithm: comments are skipped, other tags are stepped
 // over, and charset extraction parses the attributes of a genuine <meta ...> tag.
 func extractMetaCharset(data []byte) string {
-	lower := bytes.ToLower(data)
-	if len(lower) > 1024 {
-		lower = lower[:1024]
+	// Bound to the first 1024 RAW bytes BEFORE case folding. newParser calls
+	// this (via declaredCharsetIs{Latin1,UTF8}) ahead of utf8.Valid on every
+	// in-memory Parse([]byte), so lowercasing the whole document just to look
+	// at its head would allocate proportional to the input on the hot path
+	// (and bytes.ToLower can expand invalid UTF-8). The work is bounded to the
+	// prescan window regardless of input size.
+	if len(data) > 1024 {
+		data = data[:1024]
 	}
+	lower := bytes.ToLower(data)
 	n := len(lower)
 	for i := 0; i < n; {
 		if lower[i] != '<' {

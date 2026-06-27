@@ -1,6 +1,9 @@
 package html
 
 import (
+	"bytes"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -87,6 +90,47 @@ func TestExtractMetaCharset_QuotedGT(t *testing.T) {
 			require.Equal(t, tc.want, extractMetaCharset([]byte(tc.in)))
 		})
 	}
+}
+
+// extractMetaCharset must inspect ONLY the first 1024 raw bytes, and must do so
+// without lowercasing the whole document. newParser calls this (via
+// declaredCharsetIs{Latin1,UTF8}) ahead of utf8.Valid on every in-memory
+// Parse([]byte), so folding the entire input just to read its head would
+// allocate proportional to the document — a resource regression. The scan must
+// be bounded to the ~1 KiB prescan window regardless of input size.
+// (Regression: PR #821 / HTML-101 r13.) This test is intentionally NOT parallel
+// so the allocation measurement runs without concurrent sibling tests.
+func TestExtractMetaCharset_BoundedPrefix(t *testing.T) {
+	t.Run("declaration past the 1024-byte window is ignored", func(t *testing.T) {
+		// >1024 bytes of filler push the real meta past the prescan window.
+		pad := strings.Repeat("x", 2000)
+		doc := []byte("<!doctype html><html><head>" + pad + `<meta charset="iso-8859-1">`)
+		require.Empty(t, extractMetaCharset(doc))
+	})
+
+	t.Run("declaration within the window is honored in a huge doc", func(t *testing.T) {
+		body := strings.Repeat("a", 4<<20) // 4 MiB of trailing valid UTF-8
+		doc := []byte(`<meta charset="iso-8859-1">` + body)
+		require.Equal(t, "iso-8859-1", extractMetaCharset(doc))
+	})
+
+	t.Run("allocation is bounded to the window, not the input", func(t *testing.T) {
+		const docSize = 8 << 20 // 8 MiB of valid UTF-8 trailing the meta
+		doc := append([]byte(`<meta charset="iso-8859-1">`), bytes.Repeat([]byte("a"), docSize)...)
+
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		got := extractMetaCharset(doc)
+		runtime.ReadMemStats(&after)
+		require.Equal(t, "iso-8859-1", got)
+
+		allocated := after.TotalAlloc - before.TotalAlloc
+		// Generous ceiling: a few KiB for the bounded lowercase copy + result.
+		// Whole-document folding (the regression) would allocate >= docSize.
+		require.Less(t, allocated, uint64(64<<10),
+			"prescan allocated %d bytes; must stay bounded to the ~1 KiB window, not the %d-byte input", allocated, docSize)
+	})
 }
 
 // extractMetaCharset must honor the WHATWG per-meta attribute rules: a declared
