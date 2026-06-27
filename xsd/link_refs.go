@@ -248,6 +248,19 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	c.checkDuplicateAttrUses(ctx)
 
 	// Resolve attribute references: copy Default/Fixed/TypeName from global attr.
+	//
+	// au-props-correct.3 conflict diagnostics are collected here and emitted AFTER
+	// the loop in a deterministic order. The copy steps below are per-use and
+	// order-independent, but reporting inline while iterating the randomized
+	// c.attrRefs map would surface multiple conflicting refs in nondeterministic
+	// order; collect first, then sort by recorded source line/local (matching
+	// checkAttrUseConstraints) before reporting.
+	type attrRefConflict struct {
+		au *AttrUse
+		ga *AttrUse
+		qn QName
+	}
+	var conflicts []attrRefConflict
 	for au, qn := range c.attrRefs {
 		ga, ok := c.schema.globalAttrs[qn]
 		if !ok {
@@ -263,7 +276,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// fixed t:a is caught — the derivation-ok-restriction check only covers the
 		// derived-vs-base relationship.
 		if ga.Fixed != nil && (au.Default != nil || au.Fixed != nil) {
-			c.checkAttrRefFixedConflict(ctx, au, ga, qn)
+			conflicts = append(conflicts, attrRefConflict{au: au, ga: ga, qn: qn})
 		}
 		// A use inherits the declaration's value constraint ONLY when it has no
 		// LOCAL value constraint of its own. A local 'default' must not be
@@ -282,6 +295,26 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if au.Type == nil {
 			au.Type = ga.Type
 		}
+	}
+	// Sort key mirrors checkAttrRefFixedConflict's own source resolution (recorded
+	// line/local, falling back to qn.Local), so diagnostics report in stable
+	// document order regardless of map iteration order.
+	conflictSortKey := func(au *AttrUse, qn QName) (int, string) {
+		if src, ok := c.attrUseConstraintSources[au]; ok {
+			return src.line, src.local
+		}
+		return 0, qn.Local
+	}
+	sort.Slice(conflicts, func(i, j int) bool {
+		li, loci := conflictSortKey(conflicts[i].au, conflicts[i].qn)
+		lj, locj := conflictSortKey(conflicts[j].au, conflicts[j].qn)
+		if li != lj {
+			return li < lj
+		}
+		return loci < locj
+	})
+	for _, cf := range conflicts {
+		c.checkAttrRefFixedConflict(ctx, cf.au, cf.ga, cf.qn)
 	}
 
 	// Validate attribute default/fixed constraint values against the
@@ -1249,16 +1282,31 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 		}
 		return false
 	}
-	// cos-st-derived-ok.2.2: a base that is a LIST is NOT covered by the
-	// builtin-base shortcut below (builtinBaseLocal(list) is empty), which would
-	// otherwise accept ANY derived type unconditionally — wrongly accepting e.g. a
-	// base list(xs:int) redeclared as an unrelated list(xs:string). isDerivedFrom
-	// already failed above, so the only remaining valid derivation against a list
-	// base is from xs:anySimpleType (the simple ur-type, clause 2.1). Anything
-	// else (an unrelated list, or a list with a different item type) must be
-	// REJECTED.
+	// cos-st-derived-ok.2.2: a base that is a LIST variety. isDerivedFrom already
+	// failed above, so the derived type does NOT appear in the base list's
+	// restriction chain (a real <xs:restriction base="theList"> sets the BaseType
+	// pointer, which isDerivedFrom follows). A type that did not pass the pointer
+	// chain is therefore NOT a valid restriction of the list: an unrelated list,
+	// or a list with a different item type, admits values the base does not, and
+	// xs:anySimpleType is the simple ur-type — a SUPERTYPE — so deriving the list
+	// "down to" it would WIDEN to accept non-list values. A restriction can never
+	// validly produce a supertype, so REJECT everything here.
 	if resolveVariety(base) == TypeVarietyList {
-		return builtinBaseLocal(derived) == typeAnySimpleType
+		return false
+	}
+	// cos-st-derived-ok.2.2: the builtin LIST types (xs:IDREFS, xs:ENTITIES,
+	// xs:NMTOKENS) are registered as bare atomic-variety names with no BaseType
+	// link and no list marker, so resolveVariety reports Atomic and the list
+	// branch above does not catch them. isDerivedFrom already failed, so the
+	// derived type is not in the base list's restriction chain (a real
+	// <xs:restriction base="xs:IDREFS"> sets the BaseType pointer). Decide here
+	// rather than fall through to the db/bb shortcut, which returns "valid"
+	// whenever the derived side has no builtin base name (db == "") — that is the
+	// gap that let an unrelated user list (xs:list itemType="xs:string") stand in
+	// for an xs:IDREFS base. An unrelated list or atomic is not a valid
+	// restriction of a builtin list base, so REJECT.
+	if base.Name.NS == lexicon.NamespaceXSD && isBuiltinListName(base.Name.Local) {
+		return false
 	}
 	db := builtinBaseLocal(derived)
 	bb := builtinBaseLocal(base)

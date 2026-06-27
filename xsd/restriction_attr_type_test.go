@@ -535,4 +535,62 @@ func TestRestrictionAttrType(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	t.Run("rejects user list base restricted by xs:anySimpleType", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is a user LIST type (xs:list itemType="xs:int"); the derived
+		// restriction redeclares @a as xs:anySimpleType. anySimpleType is the simple
+		// ur-type — a SUPERTYPE of the list — so deriving the list "down to" it would
+		// WIDEN to accept non-list values. A restriction can never validly produce a
+		// supertype, so it must be rejected.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:IntList"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:anySimpleType"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects builtin list base restricted by an unrelated user list", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is xs:IDREFS (a builtin LIST type, registered as a bare name with
+		// no list marker); the derived restriction redeclares @a as a user list
+		// (xs:list itemType="xs:string"). The user list is not derived from xs:IDREFS
+		// (it has no <xs:restriction base="xs:IDREFS"> pointer), and IDREFS is a list
+		// of xs:IDREF — an unrelated list type that admits values the base does not,
+		// so the restriction must be rejected rather than silently accepted because
+		// the derived side has no builtin base name.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="StringList">
+    <xs:list itemType="xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:IDREFS"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="t:StringList"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }
