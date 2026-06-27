@@ -86,43 +86,59 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 
 	// Bound the number of matches against the execution resource budget. An
 	// empty- or near-empty-matching regex matches at every character boundary,
-	// so an N-byte input yields ~N matches; an unbounded FindAllSubmatchIndex
-	// would amplify a bounded input string into millions of match/segment
-	// allocations and exhaust memory before a cancelled context can intervene.
-	// The per-resource byte cap (MaxResourceBytes; <0 selects unbounded)
-	// doubles as a match-count ceiling. The default cap is far above any
-	// legitimate match count, so valid inputs are unaffected.
+	// so an N-byte input yields ~N matches; accumulating every match (e.g. via
+	// FindAllSubmatchIndex) would amplify a bounded input string into millions
+	// of match/segment allocations and exhaust memory before a cancelled
+	// context can intervene. The per-resource byte cap (MaxResourceBytes; <0
+	// selects unbounded) doubles as a match-count ceiling. The default cap is
+	// far above any legitimate match count, so valid inputs are unaffected.
 	maxMatches := -1
 	if limit := resolveResourceLimit(ec.resourceLimit()); limit >= 0 {
 		maxMatches = max(clampInt64ToInt(limit), 1)
 	}
-	// Cap the limit so the one-over-budget probe (maxMatches+1, below) cannot
-	// overflow into a negative findN. A resource limit raised above math.MaxInt
-	// makes clampInt64ToInt return math.MaxInt; maxMatches+1 would then wrap to
-	// math.MinInt, and FindAllSubmatchIndex treats a negative n as "unbounded",
-	// silently defeating the cap. clampMatchCap keeps the value positive.
-	maxMatches = clampMatchCap(maxMatches)
 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0 which
-	// raised XTDE1150); FindAllSubmatchIndex advances past each one. Request
-	// one match over the cap so an over-budget input is detected rather than
-	// silently truncated.
-	findN := maxMatches
-	if maxMatches >= 0 {
-		// maxMatches is already clamped to math.MaxInt-1, so +1 stays positive.
-		findN = maxMatches + 1
+	// First pass: count the alternating non-match/match segments so
+	// position()/last() inside the bodies see the right focus, streaming the
+	// matches one at a time via EachSubmatchIndex so live memory stays bounded
+	// regardless of input size. The match-count ceiling is enforced DURING
+	// enumeration — an over-budget input is rejected after maxMatches+1 matches
+	// without ever materializing a slice proportional to the match count. In
+	// XSLT 3.0 zero-length matches are allowed (unlike XSLT 2.0's XTDE1150);
+	// EachSubmatchIndex advances past each one.
+	totalSegments := 0
+	matchCount := 0
+	pos := 0
+	var earlyErr error
+	countErr := re.EachSubmatchIndex(input, func(m []int) bool {
+		if err := ctx.Err(); err != nil {
+			earlyErr = err
+			return false
+		}
+		matchCount++
+		if maxMatches >= 0 && matchCount > maxMatches {
+			earlyErr = dynamicErrorCause("", ErrResourceTooLarge,
+				"xsl:analyze-string produced more than %d matches, exceeding the configured resource limit", maxMatches)
+			return false
+		}
+		if m[0] > pos {
+			totalSegments++
+		}
+		totalSegments++
+		pos = m[1]
+		return true
+	})
+	if earlyErr != nil {
+		return earlyErr
 	}
-	matches, err := re.FindAllSubmatchIndex(input, findN)
-	if err != nil {
-		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", err)
+	if countErr != nil {
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", countErr)
 	}
-	if maxMatches >= 0 && len(matches) > maxMatches {
-		return dynamicErrorCause("", ErrResourceTooLarge,
-			"xsl:analyze-string produced more than %d matches, exceeding the configured resource limit", maxMatches)
+	if pos < len(input) {
+		totalSegments++
 	}
 
 	// Save and restore context state
@@ -140,22 +156,6 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		ec.size = savedSize
 		ec.regexGroups = savedGroups
 	}()
-
-	// Count the alternating non-match/match segments without materializing
-	// them, so position()/last() inside the bodies see the same focus as
-	// before, then execute each body as its span is discovered.
-	totalSegments := 0
-	pos := 0
-	for _, m := range matches {
-		if m[0] > pos {
-			totalSegments++
-		}
-		totalSegments++
-		pos = m[1]
-	}
-	if pos < len(input) {
-		totalSegments++
-	}
 
 	segIdx := 0
 	// runSegment sets the focus for one segment and executes its body.
@@ -175,15 +175,20 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		return nil
 	}
 
+	// Second pass: re-stream the matches and execute each segment's body as its
+	// span is discovered. Like the count pass, matches are never accumulated.
 	pos = 0
-	for _, m := range matches {
+	var execErr error
+	execIterErr := re.EachSubmatchIndex(input, func(m []int) bool {
 		if err := ctx.Err(); err != nil {
-			return err
+			execErr = err
+			return false
 		}
 		start, end := m[0], m[1]
 		if start > pos {
 			if err := runSegment(input[pos:start], inst.NonMatchingBody, nil); err != nil {
-				return err
+				execErr = err
+				return false
 			}
 		}
 		// Collect captured groups (group 0 = full match).
@@ -198,9 +203,17 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 			groups = append(groups, input[gs:ge])
 		}
 		if err := runSegment(input[start:end], inst.MatchingBody, groups); err != nil {
-			return err
+			execErr = err
+			return false
 		}
 		pos = end
+		return true
+	})
+	if execErr != nil {
+		return execErr
+	}
+	if execIterErr != nil {
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", execIterErr)
 	}
 	if pos < len(input) {
 		if err := ctx.Err(); err != nil {

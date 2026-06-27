@@ -6,6 +6,8 @@ import (
 	"math"
 	"math/big"
 	"regexp"
+	"regexp/syntax"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -1078,6 +1080,35 @@ type compiledXPathRegex struct {
 	unicodeTable *unicode.RangeTable // non-nil for simple \p{Name} or \P{Name} patterns
 	negated      bool                // true when the simple pattern is \P{...}
 	isSimple     bool                // true when unicodeTable is usable for single-rune fast paths
+	// stdNeedsFullContext is true when the std (RE2) pattern contains a
+	// leading-context zero-width assertion (^, \A, \b, \B, or multi-line ^)
+	// whose truth depends on input to the LEFT of the current scan position.
+	// Such patterns cannot be streamed by advancing an offset over s[pos:]
+	// (slicing makes those assertions see a false "start of input"), so
+	// eachStdSubmatchIndex falls back to the exact accumulating scan for them.
+	stdNeedsFullContext bool
+}
+
+// patternNeedsFullContext reports whether the RE2 pattern contains a
+// leading-context zero-width assertion. Trailing assertions ($, \z, multi-line
+// $) are unaffected by left-truncation — the slice end coincides with the
+// string end — so they do NOT require the full-context fallback.
+func patternNeedsFullContext(pattern string) bool {
+	parsed, err := syntax.Parse(pattern, syntax.Perl)
+	if err != nil {
+		// Be conservative: if we cannot analyze it, assume it needs full
+		// context so correctness never depends on the analysis succeeding.
+		return true
+	}
+	return regexpHasLeadingContextAssertion(parsed)
+}
+
+func regexpHasLeadingContextAssertion(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpBeginText, syntax.OpBeginLine, syntax.OpWordBoundary, syntax.OpNoWordBoundary:
+		return true
+	}
+	return slices.ContainsFunc(re.Sub, regexpHasLeadingContextAssertion)
 }
 
 type xpathRegexCacheKey struct {
@@ -1249,6 +1280,118 @@ func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]in
 	return result, nil
 }
 
+// eachStringSubmatchIndex streams successive matches of the regex in s one at a
+// time, calling fn with the per-match (start,end) index pairs (the same layout
+// as one FindAllStringSubmatchIndex entry). Iteration stops early when fn
+// returns false. Unlike FindAllStringSubmatchIndex it never accumulates the
+// matches, so live memory stays bounded regardless of match count.
+func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, fn func([]int) bool) error {
+	if r.backtrack == nil {
+		return r.eachStdSubmatchIndex(s, fn)
+	}
+	return r.eachBacktrackSubmatchIndex(s, fn)
+}
+
+// eachStdSubmatchIndex ports the standard library's regexp.allMatches loop
+// (its successive-match + empty-match advancement rules) so that the streamed
+// match sequence is identical to std.FindAllStringSubmatchIndex, while
+// delivering one match at a time instead of accumulating them all.
+//
+// The streaming loop advances an offset and matches against s[pos:]; that is
+// exact for patterns without a leading-context assertion. Patterns that DO have
+// one (^, \A, \b, \B) would see a spurious "start of input" at every slice
+// boundary, so they fall back to the accumulating scan, which is exact. Such
+// assertions inherently gate the positions a match may occur at, so they cannot
+// produce the zero-width-match-at-every-character amplification that the
+// streaming path exists to bound; the unbounded vector (an empty- or
+// near-empty-matching, assertion-free regex) always takes the streaming path.
+func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, fn func([]int) bool) error {
+	if r.stdNeedsFullContext {
+		for _, m := range r.std.FindAllStringSubmatchIndex(s, -1) {
+			if !fn(m) {
+				return nil
+			}
+		}
+		return nil
+	}
+
+	end := len(s)
+	pos := 0
+	prevMatchEnd := -1
+	for pos <= end {
+		loc := r.std.FindStringSubmatchIndex(s[pos:])
+		if loc == nil {
+			break
+		}
+		// FindStringSubmatchIndex reports indices relative to s[pos:]; shift
+		// them back to absolute positions (leaving the -1 "unmatched group"
+		// sentinels intact).
+		for i := range loc {
+			if loc[i] >= 0 {
+				loc[i] += pos
+			}
+		}
+		matchStart, matchEnd := loc[0], loc[1]
+		accept := true
+		if matchEnd == pos {
+			// Empty match at the current scan position. Mirror allMatches:
+			// reject an empty match immediately following a previous match,
+			// then advance past one rune to avoid looping forever.
+			if matchStart == prevMatchEnd {
+				accept = false
+			}
+			_, width := utf8.DecodeRuneInString(s[pos:])
+			if width > 0 {
+				pos += width
+			} else {
+				pos = end + 1
+			}
+		} else {
+			pos = matchEnd
+		}
+		prevMatchEnd = matchEnd
+		if accept {
+			if !fn(loc) {
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+// eachBacktrackSubmatchIndex is the regexp2 (backtracking-engine) counterpart
+// of eachStdSubmatchIndex: it walks matches via FindNextMatch, which the engine
+// resumes against the original string (preserving anchor/boundary context),
+// yielding one match at a time.
+func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, fn func([]int) bool) error {
+	offsets := runeByteOffsets(s)
+	match, err := r.findStringMatch(s)
+	if err != nil {
+		return err
+	}
+	for match != nil {
+		groups := match.Groups()
+		entry := make([]int, 0, len(groups)*2)
+		for _, group := range groups {
+			if len(group.Captures) == 0 {
+				entry = append(entry, -1, -1)
+				continue
+			}
+			start := offsets[group.Index]
+			end := offsets[group.Index+group.Length]
+			entry = append(entry, start, end)
+		}
+		if !fn(entry) {
+			return nil
+		}
+		match, err = r.findNextMatch(match)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *compiledXPathRegex) NumSubexp() int {
 	if r.backtrack != nil {
 		return r.numGroups
@@ -1413,10 +1556,11 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
 	compiled := &compiledXPathRegex{
-		std:          re,
-		unicodeTable: simpleTable,
-		negated:      simpleNegated,
-		isSimple:     simpleOk,
+		std:                 re,
+		unicodeTable:        simpleTable,
+		negated:             simpleNegated,
+		isSimple:            simpleOk,
+		stdNeedsFullContext: patternNeedsFullContext(pattern),
 	}
 	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
 	return actual, nil
