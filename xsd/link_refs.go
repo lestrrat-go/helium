@@ -1358,7 +1358,26 @@ func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed strin
 	if derivedTD == nil || baseTD == nil || derivedTD == baseTD {
 		return fixedValueMatches(ctx, derivedFixed, baseFixed, derivedTD, derivedNS, baseNS)
 	}
+	// xs:anySimpleType — the simple ur-type — has NO primitive value-space family,
+	// so crossMemberValueEqual (which needs a shared primitive family) can never
+	// match against it and would false-reject. This arises when an untyped
+	// attribute (whose effective type defaults to xs:anySimpleType) carries a
+	// 'fixed' value and the other side narrows it to a real type. Per XSD 1.0 any
+	// simple type validly derives from the ur-type, and a base 'fixed' value is
+	// preserved iff the derived 'fixed' LITERAL is identical — there is no
+	// narrower value space to compare in. So when either side's effective type is
+	// the ur-type, accept on exact lexical equality.
+	if isUrSimpleType(derivedTD) || isUrSimpleType(baseTD) {
+		return derivedFixed == baseFixed
+	}
 	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS)
+}
+
+// isUrSimpleType reports whether td is xs:anySimpleType, the simple ur-type. It
+// has no primitive value-space family, so cross-member value comparison cannot
+// route through it; callers fall back to lexical equality for the ur-type.
+func isUrSimpleType(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == typeAnySimpleType
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes

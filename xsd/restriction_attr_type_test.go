@@ -719,4 +719,57 @@ func TestRestrictionAttrType(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	t.Run("accepts typed derived fixed restricting untyped base fixed (anySimpleType)", func(t *testing.T) {
+		t.Parallel()
+		// Base @a has NO type and NO inline <xs:simpleType>, so per XSD §3.2.2.1 its
+		// {type definition} = xs:anySimpleType (the simple ur-type), and it pins
+		// fixed="x". The derived restriction redeclares @a as xs:string fixed="x".
+		// xs:string is validly derived from the simple ur-type (cos-st-derived-ok)
+		// and the fixed LITERAL is identical, so the fixed value is preserved — a
+		// VALID XSD 1.0 restriction that must be ACCEPTED. xs:anySimpleType has no
+		// primitive value-space family, so the cross-member value comparison cannot
+		// route through it; fixedConstraintRestricts must fall back to literal
+		// equality for the ur-type instead of false-rejecting.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" fixed="x"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:string" fixed="x"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects typed derived fixed differing from untyped base fixed (anySimpleType)", func(t *testing.T) {
+		t.Parallel()
+		// Same shape as the accept case, but the derived fixed LITERAL ("y") differs
+		// from the base fixed literal ("x"). The base ur-type fixed value is NOT
+		// preserved, so the restriction must still be REJECTED — the ur-type fallback
+		// is literal equality, not blanket acceptance.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" fixed="x"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:string" fixed="y"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), fixedInconsistent)
+	})
 }
