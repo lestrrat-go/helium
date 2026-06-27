@@ -130,7 +130,7 @@ type parserCtx struct {
 	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)
 	maxCMDepth       int               // max DTD content-model declaration depth (0 = unlimited)
 	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
-	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run (0 = unlimited)
+	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run or attribute value (0 = unlimited)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
