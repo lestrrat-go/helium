@@ -693,6 +693,26 @@ func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorL
 	// ErrNodeContentTooLarge from being masked behind a generic XML-decl/DTD error.
 	if pctx.blankRunErr != nil {
 		err = pctx.blankRunErr
+	} else if !isParseAbort(err) {
+		// A read failure or cancellation recorded as the active cursor's sticky
+		// read error (most importantly a push/streaming-stream Read returning
+		// context.Canceled when cancellation unblocks a pending wait) — or a
+		// pending ctx cancellation — must never be reported as a synthesized
+		// syntax error. Per the cancellation contract a cancelled/failed parse
+		// surfaces the underlying cause, not a malformed-document diagnostic.
+		// This generalizes the blankRunErr preference above to callers that turn
+		// a short read into a follow-on syntax error WITHOUT going through the
+		// blank scanner — e.g. a "<?xml" whose required trailing blank was never
+		// read, so looksLikeXMLDecl cannot confirm the declaration and it is
+		// reparsed as a reserved-target PI ("XML declaration allowed only at the
+		// start of the document") instead of propagating the real read error.
+		// It mirrors the ctx.Err()/cursorDecodeErr() gate parseDocument already
+		// applies at the document-end boundary.
+		if rerr := ctx.Err(); rerr != nil {
+			err = rerr
+		} else if rerr := pctx.cursorDecodeErr(); rerr != nil {
+			err = rerr
+		}
 	}
 	// Parse-abort errors (the stop sentinel, context cancellation, deadline
 	// expiry) are not genuine parse failures: pass them through unchanged so

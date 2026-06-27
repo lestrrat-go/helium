@@ -4199,3 +4199,62 @@ func TestParseReaderCancelInDeclAndDTDWhitespace(t *testing.T) {
 		})
 	}
 }
+
+// headThenReadErrReader serves head bytes once, then fails every subsequent
+// Read with err. It models the push/streaming stream whose blocking Read
+// returns context.Canceled when cancellation unblocks a pending wait: the
+// ByteCursor records that as a sticky Err() while PeekAt reports 0, the same 0
+// a genuine non-blank byte / clean EOF yields. ctx is never cancelled here, so
+// the ONLY signal of the failure is the cursor's sticky read error.
+type headThenReadErrReader struct {
+	head []byte
+	pos  int
+	err  error
+}
+
+func (r *headThenReadErrReader) Read(p []byte) (int, error) {
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	return 0, r.err
+}
+
+// TestParseReaderReadErrorInXMLDeclNotMaskedAsSyntaxError pins the cancellation
+// contract for a read failure that lands RIGHT AFTER "<?xml", before the
+// declaration's required trailing blank has been read. Because the sixth byte
+// is never delivered, looksLikeXMLDecl cannot confirm the declaration and the
+// parser falls through to treating "<?xml" as a processing instruction, whose
+// reserved "xml" target then synthesizes "XML declaration allowed only at the
+// start of the document". That synthesized syntax error must NOT mask the
+// underlying read failure: a parse whose stream fails (a push-stream Read
+// returning context.Canceled on cancellation) must surface that error, never a
+// malformed-document diagnostic, and must return no partial document.
+//
+// ctx is context.Background() (never cancelled) on purpose: the only signal of
+// the failure is the cursor's sticky Err(), exactly as in the push/streaming
+// path where the stream Read returns the context error.
+func TestParseReaderReadErrorInXMLDeclNotMaskedAsSyntaxError(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		// Read fails immediately after "<?xml" with no trailing blank read, so
+		// looksLikeXMLDecl is false and "<?xml" is reparsed as a reserved PI.
+		"no blank after <?xml": "<?xml",
+		// A blank was read but the read fails before the version pseudo-attribute,
+		// so the declaration parse begins and then stalls on the failed read.
+		"blank then read error": "<?xml ",
+	}
+
+	for name, head := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := &headThenReadErrReader{head: []byte(head), err: context.Canceled}
+			doc, err := helium.NewParser().ParseReader(context.Background(), r)
+			require.ErrorIs(t, err, context.Canceled,
+				"a read failure in the XML declaration (%s) must surface as context.Canceled, not a synthesized syntax error", name)
+			require.Nil(t, doc, "a failed parse must not return a partial document")
+		})
+	}
+}

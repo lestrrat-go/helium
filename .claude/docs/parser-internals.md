@@ -381,6 +381,21 @@ interface (post-`switchEncoding` rune path) expose `Err()` and `HasByteAt(int)`
 for this; the local `blankScanner` interface in `parser_whitespace.go` requires
 both.
 
+Not every read failure flows through the blank scanner, though, so `errorAtLevel`
+ALSO generalizes the same preference: when the error it is asked to report is not
+already a parse-abort and `blankRunErr` is unset, it prefers a pending `ctx.Err()`
+and then the active cursor's sticky read error (`cursorDecodeErr()`) over the
+synthesized syntax error. This mirrors the `ctx.Err()`/`cursorDecodeErr()` gate
+`parseDocument` applies at the document-end boundary, and closes the masking case
+where a read failure (push-stream `context.Canceled`) lands right after `<?xml`
+BEFORE its required trailing blank is read: `looksLikeXMLDecl` cannot confirm the
+declaration (the sixth byte never arrives, `PeekAt(5)` is 0), so `<?xml` is
+reparsed as a processing instruction whose reserved `xml` target synthesizes "XML
+declaration allowed only at the start of the document" — which would otherwise
+mask the real `context.Canceled`. The blank scanner is never reached on that path,
+so `blankRunErr` stays nil and only the central `errorAtLevel` preference surfaces
+the cancellation.
+
 ## UTF-8 Parser Fast Paths
 
 The parser has several ASCII/UTF-8 fast paths that bypass more general rune-by-rune logic when the input shape is already known:
