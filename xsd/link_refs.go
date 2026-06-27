@@ -1432,6 +1432,11 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		component = "complex type '" + td.Name.Local + "'"
 	}
 
+	// Attribute the diagnostic to the schema that DECLARES this type: src.line is
+	// the line within that schema, so the filename must come from src.source
+	// (which may be an included/imported file), not the top-level c.filename.
+	source := c.diagSourceOrRecorded(src.source)
+
 	baseTypeName := td.BaseType.Name.Local
 	baseTypeNS := td.BaseType.Name.NS
 	baseQualified := fmt.Sprintf("'{%s}%s'", baseTypeNS, baseTypeName)
@@ -1456,7 +1461,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
-				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
 
@@ -1473,7 +1478,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			baseTD := attrUseEffectiveTypeDef(baseAU, c.schema)
 			if derivedTD != nil && baseTD != nil && !simpleTypeValidlyRestricts(derivedTD, baseTD) {
 				msg := fmt.Sprintf("The type definition of the attribute use is not a valid restriction of the corresponding attribute use's type definition of the base complex type definition %s.", baseQualified)
-				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
 
@@ -1489,7 +1494,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			if baseAU.Fixed != nil {
 				if au.Fixed == nil || !fixedConstraintRestricts(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, baseTD, au.FixedNS, baseAU.FixedNS) {
 					msg := fmt.Sprintf("The effective value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the corresponding attribute use of the base complex type definition %s.", baseQualified)
-					c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+					c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 						component+", attribute use '"+au.Name.Local+"'", msg))
 				}
 			}
@@ -1497,7 +1502,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// No matching attribute, and no base wildcard whose namespace
 			// constraint admits this derived attribute's namespace.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
-			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))
 		}
 	}
@@ -1514,7 +1519,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		derived, found := derivedAttrs[baseAU.Name]
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
+			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		}
 	}
 
@@ -1523,26 +1528,31 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		// 4.1: Base must also have a wildcard.
 		if td.BaseType.AnyAttribute == nil {
 			msg := fmt.Sprintf("The complex type definition has an attribute wildcard, but the base complex type definition %s does not have one.", baseQualified)
-			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
+			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
 			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
-				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 			}
 			// 4.3: Derived processContents must be >= base strength (strict > lax > skip).
 			// libxml2 attributes this error to the base type's source location.
 			if processContentsStrength(td.AnyAttribute.ProcessContents) < processContentsStrength(td.BaseType.AnyAttribute.ProcessContents) {
 				errLine := src.line
 				errComponent := component
+				errFile := source
 				if baseSrc, ok := c.typeDefSources[td.BaseType]; ok {
 					errLine = baseSrc.line
+					// The line now comes from the BASE type's schema, so the
+					// filename must follow it (the base may live in an
+					// included/imported file).
+					errFile = c.diagSourceOrRecorded(baseSrc.source)
 					if !baseSrc.isLocal {
 						errComponent = "complex type '" + td.BaseType.Name.Local + "'"
 					}
 				}
 				msg := fmt.Sprintf("The {process contents} of the attribute wildcard is weaker than the one in the base complex type definition %s.", baseQualified)
-				c.schemaError(ctx, schemaComponentError(c.filename, errLine, "complexType", errComponent, msg))
+				c.schemaError(ctx, schemaComponentError(errFile, errLine, "complexType", errComponent, msg))
 			}
 		}
 	}
