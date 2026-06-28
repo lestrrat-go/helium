@@ -318,10 +318,16 @@ func (dc *deepCopier) copyAttributes(src, elem *Element) error {
 			if _, err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return err
 			}
-			continue
-		}
-		if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+		} else if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
 			return err
+		}
+		// Preserve the source attribute's line. SetAttribute* returns the element,
+		// so look the copy back up by expanded name. This is the attribute analogue
+		// of record()'s line preservation, but done HERE (not via dc.record) so it
+		// stays metadata-only and does not start surfacing attributes to onCopy
+		// callbacks, which only expect element/text/etc. nodes.
+		if cp, ok := elem.FindAttribute(NSPredicate{Local: a.LocalName(), NamespaceURI: a.URI()}); ok {
+			copyLine(a, cp)
 		}
 	}
 	return nil
