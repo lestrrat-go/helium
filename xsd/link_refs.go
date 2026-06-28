@@ -349,7 +349,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 				td.AnyAttribute = td.BaseType.AnyAttribute
 			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
 			}
 			continue
 		}
@@ -416,7 +416,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 			td.AnyAttribute = td.BaseType.AnyAttribute
 		} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-			td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+			td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
 		}
 	}
 
@@ -1237,12 +1237,17 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 //   - "not(ns)"   → ##other: matches everything except ns and absent
 //   - "not(absent)" → matches everything except absent (empty namespace)
 //   - "set"       → finite set of namespace URIs (empty string = absent)
-func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
-	// XSD 1.1: when either operand carries a notNamespace/notQName constraint the
-	// 1.0 case analysis below cannot express the result; route to the general
-	// constraint algebra. Wildcards with no 1.1 fields keep the byte-identical
-	// 1.0 path so existing goldens are unchanged.
-	if wildcardHas11Fields(w1) || wildcardHas11Fields(w2) {
+func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
+	// Route to the general constraint algebra for EVERY XSD 1.1 union, not just
+	// those whose operands carry a notNamespace/notQName field. The 1.0 case
+	// analysis below keys processContents on w1 and APPROXIMATES some namespace
+	// unions (e.g. ##other|##local as ##any), both wrong for 1.1: the extension
+	// union must take the DERIVED (w2) processContents (XSD 3.4.2), and an xs:all
+	// restriction's base-wildcard union must compute the EXACT namespace set so a
+	// target-namespace element is not falsely admitted. The 1.0 path is kept
+	// STRICTLY for Version10 so existing goldens stay byte-identical; the
+	// 1.1-field guard remains as a defensive fallback.
+	if version == Version11 || wildcardHas11Fields(w1) || wildcardHas11Fields(w2) {
 		return unionWildcards11(w1, w2)
 	}
 

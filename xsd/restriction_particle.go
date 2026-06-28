@@ -535,7 +535,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		if baseUnion == nil {
 			baseUnion = wc
 		} else {
-			baseUnion = wildcardUnion(baseUnion, wc)
+			baseUnion = wildcardUnion(baseUnion, wc, version)
 		}
 		if bw.MaxOccurs == Unbounded {
 			baseUnbounded = true

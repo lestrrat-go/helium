@@ -160,6 +160,91 @@ func TestVersion11ExtensionUnionProcessContents(t *testing.T) {
 	})
 }
 
+// TestVersion11ExtensionUnionPlainProcessContents covers gauntlet finding
+// PR858-R10-001: the 1.1 wildcard union must be selected by VERSION, not by the
+// presence of 1.1-only fields. With PLAIN namespace wildcards (no notQName), a
+// base skip extended by a derived strict must still yield a strict effective
+// wildcard, so an undeclared attribute is rejected. Previously this fell through
+// to the 1.0 path (pc = base skip) and was wrongly accepted.
+func TestVersion11ExtensionUnionPlainProcessContents(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="e">
+    <xs:complexContent>
+      <xs:extension base="b">
+        <xs:anyAttribute namespace="##any" processContents="strict"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="e"/>
+</xs:schema>`
+
+	t.Run("plain skip base + strict derived rejects an undeclared attribute", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema, `<root foo="1"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("XSD 1.0 keeps the legacy union path (attribute accepted)", func(t *testing.T) {
+		t.Parallel()
+		// In 1.0 the legacy union path (pc = base skip) is preserved byte-identical;
+		// skip admits the undeclared attribute. This guards against regressing the
+		// 1.0 behavior while fixing 1.1.
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schema, `<root foo="1"/>`)
+		require.NoError(t, err)
+	})
+}
+
+// TestVersion11AllRestrictionPlainWildcardNamespace covers gauntlet finding
+// PR858-R10-001 (xs:all restriction half): a base xs:all union of disjoint PLAIN
+// wildcards (##other | ##local) must compute the EXACT admitted namespace set,
+// not the 1.0 ##any approximation. A derived restriction adding a
+// target-namespace concrete element — which NO base wildcard admits (##other
+// excludes the target namespace, ##local admits only absent) — must be rejected.
+func TestVersion11AllRestrictionPlainWildcardNamespace(t *testing.T) {
+	// elementFormDefault selects the namespace of the derived local element "a":
+	// "qualified" → urn:t (the target namespace, admitted by NEITHER ##other nor
+	// ##local → invalid); "unqualified" → absent namespace (admitted by ##local →
+	// valid).
+	schema := func(formDefault string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="` + formDefault + `">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:any namespace="##other" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:any namespace="##local" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="t:b">
+        <xs:all>
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="t:r"/>
+</xs:schema>`
+	}
+
+	t.Run("target-namespace element no base wildcard admits is rejected", func(t *testing.T) {
+		t.Parallel()
+		// qualified → element "a" is in urn:t: ##other excludes the target namespace
+		// and ##local admits only absent, so the base union admits neither. Under
+		// the 1.0 approximation (##other|##local ≈ ##any) this wrongly compiled.
+		mustCompile11Fail(t, schema("qualified"))
+	})
+
+	t.Run("absent-namespace element admitted by ##local compiles", func(t *testing.T) {
+		t.Parallel()
+		// unqualified → element "a" is in the absent namespace, which ##local admits.
+		mustCompile11OK(t, schema("unqualified"))
+	})
+}
+
 // TestVersion11UnionRetainsSiblingNames covers gauntlet finding PR858-R6-003: a
 // materialized wildcard UNION (base xs:all with two disjoint ##definedSibling
 // wildcards) must carry the resolved SiblingNames, not just the marker bit. A
