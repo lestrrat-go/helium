@@ -704,3 +704,82 @@ func TestVersion11DeepSimpleContentChain(t *testing.T) {
 	require.NoError(t, validateAssertion(t, schema, `<e>ok</e>`))
 	require.ErrorIs(t, validateAssertion(t, schema, `<e>bad</e>`), xsd.ErrValidationFailed)
 }
+
+// TestVersion11AssertCastRecursion guards against unbounded recursion when a
+// schema-aware cast/castable inside a type's OWN xs:assertion targets that same
+// type: validateCast → validateValue → checkSimpleTypeAssertions → Evaluate →
+// validateCast … The per-validation cast guard must terminate it (fail closed)
+// rather than overflow the stack.
+func TestVersion11AssertCastRecursion(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="rec">
+    <xs:restriction base="xs:string">
+      <xs:assertion test="$value castable as t:rec"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e" type="t:rec"/>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// The self-referential castable fails closed; the key property is that
+	// validation TERMINATES (no stack overflow) and treats the value as invalid.
+	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">x</e>`), xsd.ErrValidationFailed)
+}
+
+// TestVersion11FixedDefaultQNameNS verifies that a QName fixed/default value
+// substituted into an empty element resolves its prefix against the DECLARATION's
+// namespace context (where it was authored), not the instance's bindings.
+func TestVersion11FixedDefaultQNameNS(t *testing.T) {
+	t.Run("fixed QName resolves against schema ns even when prefix is unbound in instance", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:schema" xmlns:p="urn:schema" elementFormDefault="qualified">
+  <xs:element name="e" type="xs:QName" fixed="p:x"/>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		// Empty element: the fixed "p:x" resolves via the schema's xmlns:p, so the
+		// QName is valid even though the instance never binds p.
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:schema"/>`))
+	})
+
+	t.Run("default QName $value binds the schema URI regardless of instance bindings", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:schema" xmlns:p="urn:schema" elementFormDefault="qualified">
+  <xs:element name="e" default="p:x">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:QName">
+          <xs:assert test="namespace-uri-from-QName($value) = 'urn:schema'"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		// No instance binding for p at all → $value still resolves to urn:schema.
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:schema"/>`))
+		// Instance binds p to a DIFFERENT URI → the declaration's binding still wins.
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:schema" xmlns:p="urn:instance"/>`))
+	})
+
+	t.Run("defaulted QName attribute observed by xs:assert uses the schema ns", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:schema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName" default="p:x"/>
+      <xs:assert test="namespace-uri-from-QName(@a) = 'urn:schema'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		// The default attribute is materialized as "p:x"; the assert reading @a must
+		// see {urn:schema}x even though the instance never declared p.
+		require.NoError(t, validateAssertion(t, schema, `<e/>`))
+	})
+}

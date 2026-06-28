@@ -962,11 +962,15 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// a base type's facets/assertions are enforced (e.g. an extension of a named
 	// faceted type), and a narrowed content type is inherited through derived
 	// simpleContent types (e.g. a restriction's enumeration survives a further
-	// restriction or extension). XSD 1.0 keeps the original gating, byte-identical.
+	// restriction or extension). A QName/NOTATION value substituted from the
+	// declaration's fixed/default (empty element) resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's. XSD 1.0 keeps the original
+	// gating and instance-context resolution, byte-identical.
 	if vc.version == Version11 {
 		effTD := effectiveContentSimpleType(td)
 		if simpleContentNeedsValidation(effTD) {
-			return validateValue(ctx, effectiveValue, collectNSContext(elem), effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+			valueNS := effectiveValueNS(elem, edecl, isEmpty)
+			return validateValue(ctx, effectiveValue, valueNS, effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 		}
 		return nil
 	}
@@ -977,6 +981,24 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	}
 
 	return nil
+}
+
+// effectiveValueNS returns the namespace context for resolving a QName/NOTATION
+// in a simpleContent element's effective value. A non-empty element's content is
+// the instance's own text, resolved against the instance's in-scope namespaces.
+// An EMPTY element's value is substituted from the declaration's fixed/default,
+// which was authored in the schema, so its prefixes resolve against the
+// DECLARATION's namespace context (FixedNS/DefaultNS).
+func effectiveValueNS(elem *helium.Element, edecl *ElementDecl, isEmpty bool) map[string]string {
+	if isEmpty && edecl != nil {
+		if edecl.Fixed != nil && edecl.FixedNS != nil {
+			return edecl.FixedNS
+		}
+		if edecl.Default != nil && edecl.DefaultNS != nil {
+			return edecl.DefaultNS
+		}
+	}
+	return collectNSContext(elem)
 }
 
 // effectiveContentSimpleType returns the simple type that constrains the text
@@ -1259,6 +1281,17 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if _, ok := present[au.Name]; ok {
 			continue
 		}
+		// A QName/NOTATION default/fixed value was authored in the schema, so its
+		// lexical prefix denotes the schema's namespace. Once materialized on the
+		// instance, an xs:assert / IDC that atomizes the attribute resolves the
+		// prefix against the INSTANCE's in-scope namespaces — so ensure that prefix
+		// is bound to the declaration's URI on the element (rewriting to a fresh
+		// prefix if the instance already binds it to a different URI).
+		declNS := au.FixedNS
+		if au.Default != nil {
+			declNS = au.DefaultNS
+		}
+		defVal = vc.materializeQNameAttrValue(elem, au, defVal, declNS)
 		// Insert the default/fixed value as an attribute on the element. A
 		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
 		// "qualified") must be inserted with its namespace so later consumers
@@ -1285,6 +1318,60 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		return fmt.Errorf("attribute validation failed")
 	}
 	return nil
+}
+
+// materializeQNameAttrValue prepares a default/fixed attribute value for insertion
+// so a QName/NOTATION lexical keeps its SCHEMA-intended namespace once on the
+// instance. The value is authored with the declaration's prefix bindings (declNS);
+// an instance consumer (xs:assert, IDC) resolves the prefix against the element's
+// in-scope namespaces instead, so this binds that prefix to the declaration's URI
+// on the element. If the instance already binds the prefix to a DIFFERENT URI, it
+// rewrites the value to use a fresh, non-colliding prefix bound to the right URI.
+// Non-QName values and unprefixed (no-namespace) QNames are returned unchanged.
+func (vc *validationContext) materializeQNameAttrValue(elem *helium.Element, au *AttrUse, value string, declNS map[string]string) string {
+	if declNS == nil {
+		return value
+	}
+	td, ok := vc.attrUseType(au)
+	if !ok {
+		return value
+	}
+	switch builtinBaseLocal(td) {
+	case lexicon.TypeQName, lexicon.TypeNotation:
+	default:
+		return value
+	}
+	prefix, local, found := strings.Cut(value, ":")
+	if !found || prefix == "" {
+		return value // no prefix → no-namespace QName; nothing to bind
+	}
+	uri, ok := declNS[prefix]
+	if !ok || uri == "" {
+		return value // prefix not bound in the declaration; leave as authored
+	}
+	inScope := collectNSContext(elem)
+	cur, bound := inScope[prefix]
+	if bound && cur == uri {
+		return value // already resolves to the intended URI
+	}
+	if !bound {
+		elem.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		return value
+	}
+	// Prefix collides with a different instance binding: mint a fresh prefix.
+	np := freshNSPrefix(inScope, prefix)
+	elem.AddNamespaceDecl(helium.NewNamespace(np, uri))
+	return np + ":" + local
+}
+
+// freshNSPrefix returns a prefix not present in inScope, derived from base.
+func freshNSPrefix(inScope map[string]string, base string) string {
+	for i := 0; ; i++ {
+		candidate := fmt.Sprintf("%s_gen%d", base, i)
+		if _, taken := inScope[candidate]; !taken {
+			return candidate
+		}
+	}
 }
 
 // validateWildcardAttr validates an attribute matched by a wildcard according

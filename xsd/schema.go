@@ -151,11 +151,15 @@ type ElementDecl struct {
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document. It is used to resolve
 	// a QName/NOTATION fixed value's prefix when comparing in value space.
-	FixedNS  map[string]string
-	Block    BlockFlags
-	BlockSet bool // true if block was explicitly set (even to empty)
-	Final    FinalFlags
-	FinalSet bool // true if final was explicitly set (even to empty)
+	FixedNS map[string]string
+	// DefaultNS mirrors FixedNS for the Default value: a QName/NOTATION default
+	// substituted into an empty element resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's.
+	DefaultNS map[string]string
+	Block     BlockFlags
+	BlockSet  bool // true if block was explicitly set (even to empty)
+	Final     FinalFlags
+	FinalSet  bool // true if final was explicitly set (even to empty)
 	// Alternatives is the XSD 1.1 conditional-type-assignment {type table}: the
 	// ordered xs:alternative children. At validation (when no xsi:type is present)
 	// the governing type is the one selected by the first alternative whose @test
@@ -352,6 +356,10 @@ type AttrUse struct {
 	// the Fixed value was declared in the schema document, used to resolve a
 	// QName/NOTATION fixed value's prefix when comparing in value space.
 	FixedNS map[string]string
+	// DefaultNS mirrors FixedNS for the Default value: a QName/NOTATION default
+	// materialized onto an absent attribute resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's.
+	DefaultNS map[string]string
 }
 
 // ModelGroup is a content model compositor (sequence, choice, all).

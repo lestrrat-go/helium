@@ -337,13 +337,18 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	// what validateSimpleContent validates against.
 	valueType := effectiveContentSimpleType(td)
 	value := elemTextContent(elem)
-	if value == "" && edecl != nil {
+	isEmpty := value == ""
+	if isEmpty && edecl != nil {
 		if edecl.Fixed != nil {
 			value = *edecl.Fixed
 		} else if edecl.Default != nil {
 			value = *edecl.Default
 		}
 	}
+	// A QName/NOTATION value substituted from the declaration's fixed/default
+	// resolves its prefix against the DECLARATION's namespace context, so $value
+	// binds the schema-intended URI rather than an unrelated instance binding.
+	valueNS := effectiveValueNS(elem, edecl, isEmpty)
 	raw := normalizeWhiteSpace(value, resolveWhiteSpace(valueType))
-	return buildValueSequence(ctx, raw, collectNSContext(elem), valueType, vc.version)
+	return buildValueSequence(ctx, raw, valueNS, valueType, vc.version)
 }

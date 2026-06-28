@@ -27,6 +27,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				edecl.Type = ge.Type
 				if edecl.Default == nil {
 					edecl.Default = ge.Default
+					edecl.DefaultNS = ge.DefaultNS
 				}
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
@@ -257,6 +258,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		if au.Default == nil {
 			au.Default = ga.Default
+			au.DefaultNS = ga.DefaultNS
 		}
 		if au.Fixed == nil {
 			au.Fixed = ga.Fixed

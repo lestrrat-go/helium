@@ -2,11 +2,25 @@ package xsd
 
 import (
 	"context"
+	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
+
+// castGuardKey carries, in the evaluation context, the set of (type, value) casts
+// currently being validated, so a self-referential schema-aware cast inside a
+// type's own xs:assertion is detected and fails closed instead of recursing
+// forever. It is per-evaluation (lives only in the derived contexts of one
+// validateCast → validateValue → assertion-evaluate chain) and self-clears as the
+// recursion unwinds, so nothing leaks between top-level validations.
+type castGuardKey struct{}
+
+type castGuardEntry struct {
+	typeName string
+	value    string
+}
 
 // schemaDecls adapts a compiled *Schema to xpath3.SchemaDeclarations so an
 // xs:assert / xs:assertion XPath atomizes a PSVI-typed node through its schema
@@ -107,6 +121,25 @@ func (d schemaDecls) validateCast(ctx context.Context, value, typeName string, n
 	if !ok || td.ContentType != ContentTypeSimple {
 		return nil
 	}
+
+	// Guard against a self-referential cast: a `cast`/`castable as t:T` evaluated
+	// inside t:T's own xs:assertion would recurse (validateCast → validateValue →
+	// checkSimpleTypeAssertions → Evaluate → validateCast …) until the stack
+	// overflows. Track the active (type, value) casts in the context and, on a
+	// repeat, fail closed — the cast is treated as not castable / a cast failure,
+	// which terminates the recursion.
+	entry := castGuardEntry{typeName: typeName, value: value}
+	guard, _ := ctx.Value(castGuardKey{}).(map[castGuardEntry]struct{})
+	if guard == nil {
+		guard = make(map[castGuardEntry]struct{})
+		ctx = context.WithValue(ctx, castGuardKey{}, guard)
+	}
+	if _, active := guard[entry]; active {
+		return fmt.Errorf("xsd: recursive cast to %s while validating its own assertion", typeName)
+	}
+	guard[entry] = struct{}{}
+	defer delete(guard, entry)
+
 	// Validate with the SCHEMA's version, not TypeDef.Validate's hardcoded 1.0
 	// default — inside a 1.1 assertion a user-defined cast/castable must accept
 	// 1.1-only lexical forms (e.g. year 0000). suppressDepth keeps the throwaway
