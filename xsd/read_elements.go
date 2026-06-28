@@ -703,11 +703,14 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 	// Global attributes are always in the target namespace (per spec).
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
 
-	// An attribute declaration must not be in the XSI namespace (XSD Schema
-	// Component Constraint "no-xsi" / xs:attribute representation): the XSI
-	// namespace is reserved for the four processor attributes and a schema may
-	// not add to it.
-	if c.filename != "" && qn.NS == lexicon.NamespaceXSI {
+	// A GLOBAL attribute declaration must not be in the XSI namespace (XSD 1.1
+	// Schema Component Constraint "no-xsi" / xs:attribute representation): the XSI
+	// namespace is reserved for the four processor attributes and a schema may not
+	// add to it. This is gated on Version11: it is NEW in this PR and the opt-in
+	// contract requires 1.0 to stay byte-identical to origin/feat-xsd11, which has
+	// no global-attribute no-xsi check (the pre-existing check in check_elements.go
+	// covers only LOCAL qualified attributes and is left unchanged for 1.0).
+	if c.version == Version11 && c.filename != "" && qn.NS == lexicon.NamespaceXSI {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
 			elem.LocalName(), elem.LocalName(), attrName,
 			"An attribute declaration must not be in the XSI namespace."))

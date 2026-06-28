@@ -103,6 +103,20 @@ func (c *compiler) resolveDefinedSiblings() {
 			return
 		}
 		visited[td] = struct{}{}
+		if !modelGroupHasDefinedSibling(td.ContentModel) {
+			return
+		}
+		// The content-model tree may be SHARED with other types: group-ref
+		// expansion reuses the group definition's particle slice
+		// (link_refs.go `placeholder.Particles = grp.Particles`) and type
+		// extension embeds the base type's model-group pointer
+		// (link_refs.go `Term: baseMG`). assignDefinedSiblings mutates the
+		// *Wildcard terms, so a shared wildcard would have ITS SiblingNames
+		// overwritten by whichever owning type is resolved last — nondeterministic
+		// (map iteration order). Deep-clone this type's content model so it owns
+		// its own wildcard objects before assigning. Only types whose content
+		// model actually carries a ##definedSibling wildcard pay the clone cost.
+		td.ContentModel = cloneModelGroupForSiblings(td.ContentModel)
 		names := collectModelElementNames(td.ContentModel, c.schema)
 		var siblings []QName
 		for qn := range names {
@@ -116,6 +130,51 @@ func (c *compiler) resolveDefinedSiblings() {
 	for td := range c.typeDefSources {
 		resolve(td)
 	}
+}
+
+// modelGroupHasDefinedSibling reports whether a model-group tree contains any
+// wildcard term flagged @notQName="##definedSibling".
+func modelGroupHasDefinedSibling(mg *ModelGroup) bool {
+	if mg == nil {
+		return false
+	}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			if term.NotQNameDefinedSibling {
+				return true
+			}
+		case *ModelGroup:
+			if modelGroupHasDefinedSibling(term) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cloneModelGroupForSiblings deep-copies a model-group tree, giving it fresh
+// ModelGroup, Particle, and Wildcard objects so per-type ##definedSibling
+// resolution cannot alias a wildcard shared via group-ref expansion or extension
+// embedding. ElementDecl terms are shared (read-only for sibling resolution).
+func cloneModelGroupForSiblings(mg *ModelGroup) *ModelGroup {
+	if mg == nil {
+		return nil
+	}
+	nmg := *mg
+	nmg.Particles = make([]*Particle, len(mg.Particles))
+	for i, p := range mg.Particles {
+		np := *p
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			wc := *term
+			np.Term = &wc
+		case *ModelGroup:
+			np.Term = cloneModelGroupForSiblings(term)
+		}
+		nmg.Particles[i] = &np
+	}
+	return &nmg
 }
 
 // assignDefinedSiblings walks a model group tree and, for every wildcard term

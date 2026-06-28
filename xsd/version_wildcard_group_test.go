@@ -390,3 +390,70 @@ func TestVersion11AttrGroupGrammar(t *testing.T) {
 </xs:schema>`)
 	})
 }
+
+// TestVersion11DefinedSiblingNoCrossTypeAlias covers gauntlet finding
+// PR858-REVIEW-001: resolveDefinedSiblings must not mutate a wildcard SHARED
+// across types (extension embeds the base model-group pointer; group refs reuse
+// the group's particle slice). The base type's ##definedSibling wildcard admits
+// `c` (not a base sibling), but the derived extension adds `c` so its wildcard
+// excludes it; sharing the wildcard let map-iteration order overwrite the base's
+// sibling set. Compiling fresh many times must ALWAYS accept the base instance
+// (per-type clone makes resolution deterministic).
+func TestVersion11DefinedSiblingNoCrossTypeAlias(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:extension base="base">
+        <xs:sequence>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="base"/>
+  <xs:element name="droot" type="derived"/>
+</xs:schema>`
+
+	// Go randomizes map iteration order, so a single fresh compile may differ from
+	// the next. Loop enough to make a cross-type aliasing regression overwhelmingly
+	// likely to surface; combine with `go test -count=N` for extra coverage.
+	for i := range 50 {
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root><a>x</a><c>y</c></root>`)
+		require.NoErrorf(t, err, "iteration %d: base instance must be valid (c is not a base sibling)", i)
+	}
+}
+
+// TestVersion10GlobalAttrXSINamespaceAllowed covers gauntlet finding
+// PR858-REVIEW-002: the GLOBAL-attribute no-xsi rejection is new in this PR and
+// 1.1-only; XSD 1.0 must stay byte-identical to origin (no such rejection). A
+// schema whose targetNamespace IS the XSI namespace declaring a global attribute
+// compiles under 1.0 and is rejected under 1.1.
+func TestVersion10GlobalAttrXSINamespaceAllowed(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:attribute name="foo" type="xs:string"/>
+</xs:schema>`
+
+	t.Run("1.0 does not reject a global attribute in the XSI namespace", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("1.1 rejects a global attribute in the XSI namespace", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+}
