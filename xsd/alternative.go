@@ -426,12 +426,27 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 			}
 		}
 	}
-	// Only fall back to the under-strict acceptance when BOTH sides are actual
-	// SIMPLE type DEFINITIONS. IsComplex is the reliable discriminator: a complex
-	// type with <xs:simpleContent> also has ContentType == ContentTypeSimple, so
-	// keying off ContentType would wrongly accept a simple alternative against such a
-	// complex declared type (or vice versa). A simple type can never be derived from
-	// a complex one, so a simple-vs-complex pair that isDerivedFrom did not accept is
-	// always a real violation, not a built-in-hierarchy-linking gap.
+	// The XSD built-in simple-type hierarchy is NOT BaseType-linked, so isDerivedFrom
+	// cannot chain e.g. xs:nonNegativeInteger → xs:integer → xs:decimal. When the
+	// DECLARED type is a built-in simple type and alt's effective built-in base
+	// (builtinBaseLocal walks alt's linked base chain to the first built-in) is
+	// derived from it, alt IS validly derived from decl. This accepts a complex
+	// simpleContent alternative whose content extends/restricts a built-in subtype of
+	// the declared type — WITHOUT broadening to unrelated complex types (an
+	// element-only complex bottoms out at xs:anyType, not a simple type, and an
+	// unrelated simple base does not chain to decl). It is gated on decl being the
+	// built-in ITSELF (not a user restriction of it), because deriving from a
+	// built-in subtype only implies derivation from decl when decl is that built-in.
+	if decl.Name.NS == lexicon.NamespaceXSD && !decl.IsComplex &&
+		builtinSimpleDerivedFrom(builtinBaseLocal(alt), decl.Name.Local) {
+		return true
+	}
+	// Final fallback: accept an unconfirmed derivation only when BOTH sides are
+	// actual SIMPLE type DEFINITIONS. IsComplex is the reliable discriminator: a
+	// complex type with <xs:simpleContent> also has ContentType == ContentTypeSimple,
+	// so keying off ContentType would wrongly accept a simple alternative against
+	// such a complex declared type (or vice versa). A simple type can never be
+	// derived from a complex one, so a simple-vs-complex pair that isDerivedFrom did
+	// not accept is always a real violation, not a built-in-hierarchy-linking gap.
 	return !alt.IsComplex && !decl.IsComplex
 }
