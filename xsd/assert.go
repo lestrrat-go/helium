@@ -9,51 +9,20 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-// resolveXPathDefaultNS computes the effective default element namespace for an
-// XPath-bearing XSD 1.1 element (xs:assert/xs:assertion). The xpathDefaultNamespace
-// attribute on the element wins; otherwise the schema-level default
-// (c.schemaXPathDefaultNS) applies. It returns (uri, true) when a default is in
-// effect (an empty uri means "no namespace", e.g. ##local) and ("", false) when
-// no xpathDefaultNamespace is specified anywhere, in which case unprefixed element
-// name tests match no-namespace nodes (XPath 3.1 §3.3.2.1). The special tokens
-// ##targetNamespace, ##defaultNamespace and ##local are resolved against the
-// schema target namespace and the element's in-scope default xmlns.
-//
-// The schema-for-schemas gives xpathDefaultNamespace whiteSpace="collapse", so
-// the raw value (element-local OR schema-level) is whitespace-collapsed before the
-// empty check and the sentinel switch — a valid `xpathDefaultNamespace=
-// " ##targetNamespace "` resolves like `##targetNamespace`, not as a URI literal.
-func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) (string, bool) {
-	raw := normalizeWhiteSpace(getAttr(elem, attrXPathDefaultNamespace), "collapse")
-	if raw == "" {
-		raw = normalizeWhiteSpace(c.schemaXPathDefaultNS, "collapse")
-	}
-	if raw == "" {
-		return "", false
-	}
-	switch raw {
-	case xpathDefaultNSLocal:
-		return "", true
-	case xpathDefaultNSTargetNamespace:
-		return c.schema.targetNamespace, true
-	case xpathDefaultNSDefaultNamespace:
-		// The default namespace in scope at the element (an xmlns="..." default).
-		return collectNSContext(elem)[""], true
-	default:
-		return raw, true
-	}
-}
-
 // assertionNamespaces captures the in-scope namespace bindings for an XPath in an
 // xs:assert/xs:assertion, then sets the default element namespace per
 // xpathDefaultNamespace. The default element namespace for an XSD XPath is
 // governed SOLELY by xpathDefaultNamespace, not by an xmlns="..." default in the
 // schema document, so the bare xmlns default (key "") is removed unless
-// xpathDefaultNamespace reinstates one.
+// xpathDefaultNamespace reinstates one. The effective default is resolved by the
+// SHARED resolveXPathDefaultNS helper (read_elements.go) used by the idc/CTA paths
+// too: it honors a locally-present @xpathDefaultNamespace (collapsed and resolved
+// via resolveXPathDefaultNSToken) and otherwise inherits the schema-level URI
+// (c.schemaXPathDefaultNS), already resolved against the schema root.
 func (c *compiler) assertionNamespaces(elem *helium.Element) map[string]string {
 	ns := collectNSContext(elem)
 	delete(ns, "")
-	if def, ok := c.resolveXPathDefaultNS(elem); ok && def != "" {
+	if def := c.resolveXPathDefaultNS(elem); def != "" {
 		ns[""] = def
 	}
 	return ns

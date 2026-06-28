@@ -292,6 +292,23 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		return fmt.Errorf("xsd: included document %q is not an xs:schema", location)
 	}
 
+	// Conditional inclusion runs per schema document, BEFORE the targetNamespace
+	// compatibility check and the default-attribute interpretation: a vc-excluded
+	// root contributes an EMPTY schema and must not be rejected for a TNS mismatch.
+	// (For a non-excluded root the same call prunes its vc:-excluded descendants.)
+	// c.includeFile is set across the pre-pass so a malformed-vc diagnostic in the
+	// included document is attributed to the included file, not the including one,
+	// then restored on every path (the later block sets it again for parsing).
+	savedIncludeFileVC := c.includeFile
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
+	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
+	c.includeFile = savedIncludeFileVC
+	if rootExcluded {
+		return nil
+	}
+
 	// Check target namespace compatibility.
 	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
@@ -329,12 +346,26 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
-	// xpathDefaultNamespace is a PER-document default for the contained
-	// xs:assert/xs:assertion. An included (chameleon) schema's own root value
-	// applies to its asserts, and its ##targetNamespace resolves against the
-	// effective (including schema's) target namespace, which c.schema.targetNamespace
-	// already carries during include processing.
-	c.schemaXPathDefaultNS = getAttr(incRoot, attrXPathDefaultNamespace)
+	// schemaXPathDefaultNS is PER document (used by the SHARED resolveXPathDefaultNS
+	// for the included schema's identity-constraint selector/field XPaths AND its
+	// xs:assert/xs:assertion XPaths): an included root's @xpathDefaultNamespace must
+	// govern its own IDCs/asserts, not inherit the including schema's. Reset to
+	// spec-default (none) plus this document's value, RESOLVED against the included
+	// root now (so an inherited ##defaultNamespace uses the included root's default
+	// namespace).
+	c.schemaXPathDefaultNS = ""
+	if c.version == Version11 {
+		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+	}
+
+	// The CTA static context (static base URI, xpathDefaultNamespace) is PER schema
+	// document: an xs:alternative in the included file must see the included
+	// document's base URI and its own xpathDefaultNamespace, not the including
+	// schema's. Save/restore mirrors the form/default handling above.
+	savedSchemaBaseURI := c.schemaBaseURI
+	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	c.schemaBaseURI = path
+	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
 
 	// Set the include file path for duplicate element error reporting.
 	if c.filename != "" {
@@ -350,6 +381,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
 
 	// Parse the included schema's declarations into the current compiler.
+	// (Conditional inclusion already ran above, before the TNS check.)
 	err = c.parseSchemaChildren(ctx, incRoot)
 
 	// Process the included schema's OWN xs:include/xs:import/xs:redefine so a
@@ -367,11 +399,13 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		}
 	}
 
-	// Restore form-qualified settings, defaults, and include file.
+	// Restore form-qualified settings, defaults, CTA static context, and include file.
 	c.schema.elemFormQualified = savedElemForm
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schemaBaseURI = savedSchemaBaseURI
+	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
@@ -487,6 +521,41 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return fmt.Errorf("xsd: redefined document %q is not an xs:schema", location)
 	}
 
+	// Conditional inclusion runs per schema document, BEFORE the targetNamespace
+	// check and default-attribute interpretation: a vc-excluded root contributes an
+	// EMPTY schema (no Phase-A components) and must not be rejected for a TNS
+	// mismatch. (For a non-excluded root the same call prunes its descendants.)
+	// c.includeFile is set across the pre-pass so a malformed-vc diagnostic in the
+	// redefined document is attributed to that file, then restored on every path.
+	savedIncludeFileVC := c.includeFile
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
+	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
+	c.includeFile = savedIncludeFileVC
+	if rootExcluded {
+		// The redefined document's root is vc-excluded, so it contributes NO
+		// Phase-A components. The <xs:redefine> override children (which live in the
+		// REDEFINING schema, not the excluded document) must STILL be validated
+		// against that empty target set: XSD rejects an override whose Phase-A
+		// target does not exist, so an override of a now-absent component is an
+		// error, not a silent no-op. (path is already in includeVisited from above;
+		// c.includeFile/form-defaults are the redefining schema's, correct for
+		// override-local diagnostics and declarations.)
+		emptyKeys := map[redefineKind]map[QName]struct{}{
+			redefineKindSimpleType:  {},
+			redefineKindComplexType: {},
+			redefineKindGroup:       {},
+			redefineKindAttrGroup:   {},
+		}
+		rs := &redefinableSet{
+			keys:     emptyKeys,
+			consumed: make(map[redefineKind]map[QName]struct{}),
+		}
+		c.loadedRedefinable[path] = rs
+		return c.processRedefineOverrides(ctx, redefineElem, rs.keys, rs.consumed)
+	}
+
 	// Check target namespace compatibility (same rules as include).
 	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
@@ -517,7 +586,23 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
-	c.schemaXPathDefaultNS = getAttr(incRoot, attrXPathDefaultNamespace)
+	// schemaXPathDefaultNS is PER document, like the form/block/final defaults (see
+	// loadInclude): the redefined root's @xpathDefaultNamespace governs its own
+	// identity-constraint AND xs:assert/xs:assertion XPaths during Phase A, RESOLVED
+	// against the redefined root now (so an inherited ##defaultNamespace uses that
+	// root's default ns).
+	c.schemaXPathDefaultNS = ""
+	if c.version == Version11 {
+		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+	}
+	// The CTA static context (base URI + xpathDefaultNamespace) is per-document too:
+	// Phase A parses the REDEFINED document's declarations, so set them here; the
+	// override children (from the redefining schema) get the parent's values restored
+	// before processRedefineOverrides, like the defaults above.
+	savedSchemaBaseURI := c.schemaBaseURI
+	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	c.schemaBaseURI = path
+	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
@@ -532,11 +617,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
 
 	// Parse the included schema's declarations into the current compiler.
+	// (Conditional inclusion already ran above, before the TNS check.)
 	if err := c.parseSchemaChildren(ctx, incRoot); err != nil {
 		c.schema.elemFormQualified = savedElemForm
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schemaBaseURI = savedSchemaBaseURI
+		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
@@ -549,6 +637,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schemaBaseURI = savedSchemaBaseURI
+		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
@@ -579,6 +669,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schemaBaseURI = savedSchemaBaseURI
+	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
@@ -748,6 +840,17 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			origRefSources := c.attrGroupRefSources[qn]
 			delete(c.attrGroupRefChildren, qn)
 			delete(c.attrGroupRefSources, qn)
+			// XSD 1.1: the override REPLACES the Phase-A group's xs:anyAttribute too.
+			// Snapshot the original group wildcard (a self-reference re-contributes
+			// it) and clear the slot so a stale base wildcard cannot leak.
+			origWildcard := c.attrGroupWildcards[qn]
+			delete(c.attrGroupWildcards, qn)
+			var ownWildcard, selfRefWildcard *Wildcard
+			var anyAttributeSeen bool
+			reportAfterWildcard := func(gce *helium.Element) {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attributeGroup",
+					fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", gce.LocalName())))
+			}
 			// Build the new attribute list manually, expanding self-references
 			// inline. parseNamedAttributeGroup only collects xs:attribute children
 			// and doesn't handle xs:attributeGroup ref children within a definition.
@@ -762,6 +865,10 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				}
 				switch {
 				case isXSDElement(gce, elemAttribute):
+					if c.version == Version11 && anyAttributeSeen {
+						reportAfterWildcard(gce)
+						continue
+					}
 					// A use="prohibited" attribute is pointless inside an
 					// <xs:attributeGroup> (including a redefine override): libxml2
 					// warns and skips it so a referencing wildcard still admits the
@@ -775,15 +882,29 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 					}
 					au := c.parseAttributeUse(ctx, gce)
 					attrs = append(attrs, au)
+				case c.version == Version11 && isXSDElement(gce, elemAnyAttribute):
+					if anyAttributeSeen {
+						c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attributeGroup",
+							fmt.Sprintf("An attribute group definition must not have more than one attribute wildcard (found a second '%s').", gce.LocalName())))
+						continue
+					}
+					anyAttributeSeen = true
+					ownWildcard = c.parseAnyAttribute(ctx, gce)
 				case isXSDElement(gce, elemAttributeGroup):
+					if c.version == Version11 && anyAttributeSeen {
+						reportAfterWildcard(gce)
+						continue
+					}
 					if ref := getAttr(gce, attrRef); ref != "" {
 						refQN := c.resolveQName(ctx, gce, ref)
 						switch refQN {
 						case qn:
-							// A self-reference resolves to the Phase-A group content.
+							// A self-reference resolves to the Phase-A group content,
+							// including its xs:anyAttribute wildcard.
 							if origAttrs != nil {
 								attrs = append(attrs, origAttrs...)
 							}
+							selfRefWildcard = origWildcard
 							if len(origRefChildren) > 0 {
 								c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], origRefChildren...)
 								c.attrGroupRefSources[qn] = append(c.attrGroupRefSources[qn], origRefSources...)
@@ -798,6 +919,15 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				}
 			}
 			c.schema.attrGroups[qn] = attrs
+			// Store the override's effective group wildcard (Version11): the group's
+			// own xs:anyAttribute INTERSECTED with the original wildcard a
+			// self-reference re-contributes. The type's "complete wildcard" further
+			// intersects the non-self refs recorded above at link time.
+			if c.version == Version11 {
+				if w := combineGroupWildcards(ownWildcard, selfRefWildcard); w != nil {
+					c.attrGroupWildcards[qn] = w
+				}
+			}
 			// The override REPLACES the Phase-A attribute group, so re-record its
 			// source to the redefining file/line (c.includeFile is the redefining
 			// label here). Without this the duplicate-attribute-use diagnostic over
@@ -859,25 +989,6 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		impFilename = schemaDisplayLoc(c.filename, location)
 	}
 
-	// The targetNamespace of the located schema must match the namespace
-	// declared on <xs:import> (XSD src-import; libxml2 rejects the mismatch
-	// rather than merging declarations from the wrong namespace). A present
-	// namespace requires that exact targetNamespace; an absent namespace
-	// requires the imported schema to have no targetNamespace. This is a
-	// fatal schema error, not an I/O warning, so it is emitted directly here
-	// and reported via a nil return (mirroring the xs:include check above).
-	impTargetNS := getAttr(impRoot, attrTargetNamespace)
-	if impTargetNS != ns {
-		displayLoc := location
-		if c.filename != "" {
-			displayLoc = schemaDisplayLoc(c.filename, location)
-		}
-		c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
-			importElem.LocalName(), elemImport,
-			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
-		return nil
-	}
-
 	// Create a temporary compiler for the imported schema. The imported schema is
 	// compiled under the importing schema's effective XSD version.
 	impC := &compiler{
@@ -904,6 +1015,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
+		attrGroupWildcards:       make(map[QName]*Wildcard),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),
@@ -940,21 +1052,99 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	defer func() { _ = subCollector.Close() }()
 	impC.errorHandler = subCollector
 
+	// propagateImpErrors drains the import sub-compiler's collected diagnostics and
+	// folds its error count into the parent. Preserving libxml2's "stop after the
+	// first import failure" rule, the diagnostic TEXT is forwarded only when the
+	// parent has no prior errors, but impC.errorCount is ALWAYS added so an
+	// imported-schema failure still fails the compile. It is IDEMPOTENT (a
+	// `propagated` guard makes the second and later calls no-ops) and is `defer`red
+	// immediately below so EVERY exit path after the sub-collector is installed —
+	// including the parseSchemaChildren-error and fatal nested-load early returns —
+	// flushes the sub-compiler's diagnostics. The explicit calls that remain only
+	// fix ORDERING (forward while the parent is still error-free, BEFORE a TNS error
+	// is reported; skip the declaration merge when the import failed). Close is
+	// idempotent, so the separate Close defer above stays harmless.
+	propagated := false
+	propagateImpErrors := func() {
+		if propagated {
+			return
+		}
+		propagated = true
+		_ = subCollector.Close()
+		if impC.errorCount == 0 {
+			return
+		}
+		if c.errorCount == 0 {
+			for _, e := range subCollector.Errors() {
+				c.errorHandler.Handle(ctx, e)
+			}
+		}
+		c.errorCount += impC.errorCount
+	}
+	// Guaranteed flush on every remaining exit path (idempotent; explicit calls
+	// below run first where ordering matters and turn this into a no-op).
+	defer propagateImpErrors()
+
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
 	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified
 	impC.schema.attrFormQualified = getAttr(impRoot, attrAttributeFormDefault) == attrValQualified
-	// The imported schema's root xpathDefaultNamespace governs its OWN assertions
-	// (like the direct compile/include/redefine paths). The raw value is stored;
-	// resolveXPathDefaultNS whitespace-collapses it and resolves the ## sentinels.
-	impC.schemaXPathDefaultNS = getAttr(impRoot, attrXPathDefaultNamespace)
 	if v := getAttr(impRoot, attrBlockDefault); v != "" {
 		impC.schema.blockDefault = parseBlockFlags(v)
 	}
 	if v := getAttr(impRoot, attrFinalDefault); v != "" {
 		impC.schema.finalDefault = parseFinalFlags(v)
 	}
+	// The imported root's @xpathDefaultNamespace governs its own
+	// identity-constraint selector/field XPaths (resolveXPathDefaultNS reads the
+	// sub-compiler's schemaXPathDefaultNS); without this an imported IDC selector
+	// like xpath="emp" would not inherit the imported root's default namespace.
+	// Resolved against the imported root now (so an inherited ##defaultNamespace
+	// uses the imported root's default namespace, not a selector/field's).
+	if impC.version == Version11 {
+		impC.schemaXPathDefaultNS = resolveXPathDefaultNSToken(impRoot, getAttr(impRoot, attrXPathDefaultNS), impC.schema.targetNamespace)
+	}
+
+	// Seed the imported sub-compiler's CTA static context from the IMPORTED document
+	// so an xs:alternative parsed there sees its own schema's static base URI
+	// (fn:static-base-uri) and xpathDefaultNamespace, not the importing schema's.
+	impC.schemaBaseURI = path
+	if hasAttr(impRoot, attrXPathDefaultNamespace) {
+		impC.xpathDefaultNSSet = true
+	}
 
 	registerBuiltinTypes(impC.schema, impC.version)
+
+	// Conditional inclusion runs per schema document, BEFORE the src-import
+	// targetNamespace check: a vc-excluded imported root contributes an EMPTY
+	// schema and must not be rejected for a namespace mismatch. A malformed 1.1 vc
+	// value on the (excluded or non-excluded) root is still a schema error, so its
+	// diagnostics are propagated on every exit path below.
+	if impC.applyConditionalInclusion(ctx, impRoot) {
+		propagateImpErrors()
+		return nil
+	}
+
+	// The targetNamespace of the located schema must match the namespace
+	// declared on <xs:import> (XSD src-import; libxml2 rejects the mismatch
+	// rather than merging declarations from the wrong namespace). A present
+	// namespace requires that exact targetNamespace; an absent namespace
+	// requires the imported schema to have no targetNamespace. This is a
+	// fatal schema error, not an I/O warning, so it is emitted directly here
+	// and reported via a nil return (mirroring the xs:include check above).
+	// Pre-pass diagnostics collected in impC are flushed FIRST (while the parent
+	// is still error-free) so they are not dropped by this early return.
+	impTargetNS := getAttr(impRoot, attrTargetNamespace)
+	if impTargetNS != ns {
+		propagateImpErrors()
+		displayLoc := location
+		if c.filename != "" {
+			displayLoc = schemaDisplayLoc(c.filename, location)
+		}
+		c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
+			importElem.LocalName(), elemImport,
+			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
+		return nil
+	}
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err
@@ -979,18 +1169,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		_ = err
 	}
 
-	_ = subCollector.Close()
-
-	// Only propagate sub-compiler errors to the parent if the parent has no
-	// prior errors. This matches libxml2's behavior of stopping error reporting
-	// after the first import failure.
+	// Propagate sub-compiler diagnostics (same rule as the early-return paths).
+	propagateImpErrors()
 	if impC.errorCount > 0 {
-		if c.errorCount == 0 {
-			for _, e := range subCollector.Errors() {
-				c.errorHandler.Handle(ctx, e)
-			}
-		}
-		c.errorCount += impC.errorCount
 		return nil
 	}
 
@@ -1074,6 +1255,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			c.attrGroupRefChildren[qn] = refs
 		}
 	}
+	// Merge the XSD 1.1 attribute-group wildcards so a type in the importing
+	// schema that references an imported group sees the group's xs:anyAttribute.
+	for qn, wc := range impC.attrGroupWildcards {
+		if _, exists := c.attrGroupWildcards[qn]; !exists {
+			c.attrGroupWildcards[qn] = wc
+		}
+	}
 	// Merge the per-edge ref sources alongside attrGroupRefChildren. A ref edge
 	// parsed directly in the imported document (not via a nested include) has an
 	// empty source; attribute it to the imported file so an indirect-cycle
@@ -1118,6 +1306,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 		c.attrUseSources[au] = src
 	}
+
+	// Carry the imported CTA bookkeeping into the parent so imported alternatives
+	// participate in the parent's deferred resolution and checks: altTypeRefs are
+	// resolved by the parent's resolveAltTypeRefs (against the merged type table),
+	// and ctaElems are checked by the parent's checkAltSubstitutability.
+	c.altTypeRefs = append(c.altTypeRefs, impC.altTypeRefs...)
+	c.ctaElems = append(c.ctaElems, impC.ctaElems...)
 
 	return nil
 }

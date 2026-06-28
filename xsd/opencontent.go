@@ -81,6 +81,120 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 	return names
 }
 
+// resolveDefinedSiblings populates SiblingNames on every xs:any wildcard that
+// carries @notQName="##definedSibling" (XSD 1.1). The sibling set is the names
+// of the element declarations that appear in the SAME content model as the
+// wildcard, so the wildcard never claims a child a sibling element declaration
+// would match. Runs after group refs are expanded so nested/group-contributed
+// siblings are included.
+//
+// It must visit ALL parsed complex types, not just NAMED ones (c.schema.types):
+// an inline ANONYMOUS complexType (e.g. on a local element declaration) also
+// carries content models with ##definedSibling wildcards. Anonymous types are
+// recorded in c.typeDefSources by parseComplexType, so iterate that map's keys
+// in addition to the named types, deduplicating by *TypeDef pointer.
+func (c *compiler) resolveDefinedSiblings() {
+	visited := make(map[*TypeDef]struct{})
+	resolve := func(td *TypeDef) {
+		if td == nil || td.ContentModel == nil {
+			return
+		}
+		if _, seen := visited[td]; seen {
+			return
+		}
+		visited[td] = struct{}{}
+		if !modelGroupHasDefinedSibling(td.ContentModel) {
+			return
+		}
+		// The content-model tree may be SHARED with other types: group-ref
+		// expansion reuses the group definition's particle slice
+		// (link_refs.go `placeholder.Particles = grp.Particles`) and type
+		// extension embeds the base type's model-group pointer
+		// (link_refs.go `Term: baseMG`). assignDefinedSiblings mutates the
+		// *Wildcard terms, so a shared wildcard would have ITS SiblingNames
+		// overwritten by whichever owning type is resolved last — nondeterministic
+		// (map iteration order). Deep-clone this type's content model so it owns
+		// its own wildcard objects before assigning. Only types whose content
+		// model actually carries a ##definedSibling wildcard pay the clone cost.
+		td.ContentModel = cloneModelGroupForSiblings(td.ContentModel)
+		names := collectModelElementNames(td.ContentModel, c.schema)
+		var siblings []QName
+		for qn := range names {
+			siblings = append(siblings, qn)
+		}
+		assignDefinedSiblings(td.ContentModel, siblings)
+	}
+	for _, td := range c.schema.types {
+		resolve(td)
+	}
+	for td := range c.typeDefSources {
+		resolve(td)
+	}
+}
+
+// modelGroupHasDefinedSibling reports whether a model-group tree contains any
+// wildcard term flagged @notQName="##definedSibling".
+func modelGroupHasDefinedSibling(mg *ModelGroup) bool {
+	if mg == nil {
+		return false
+	}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			if term.NotQNameDefinedSibling {
+				return true
+			}
+		case *ModelGroup:
+			if modelGroupHasDefinedSibling(term) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cloneModelGroupForSiblings deep-copies a model-group tree, giving it fresh
+// ModelGroup, Particle, and Wildcard objects so per-type ##definedSibling
+// resolution cannot alias a wildcard shared via group-ref expansion or extension
+// embedding. ElementDecl terms are shared (read-only for sibling resolution).
+func cloneModelGroupForSiblings(mg *ModelGroup) *ModelGroup {
+	if mg == nil {
+		return nil
+	}
+	nmg := *mg
+	nmg.Particles = make([]*Particle, len(mg.Particles))
+	for i, p := range mg.Particles {
+		np := *p
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			wc := *term
+			np.Term = &wc
+		case *ModelGroup:
+			np.Term = cloneModelGroupForSiblings(term)
+		}
+		nmg.Particles[i] = &np
+	}
+	return &nmg
+}
+
+// assignDefinedSiblings walks a model group tree and, for every wildcard term
+// flagged ##definedSibling, sets its SiblingNames to the supplied set.
+func assignDefinedSiblings(mg *ModelGroup, siblings []QName) {
+	if mg == nil {
+		return
+	}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			if term.NotQNameDefinedSibling {
+				term.SiblingNames = siblings
+			}
+		case *ModelGroup:
+			assignDefinedSiblings(term, siblings)
+		}
+	}
+}
+
 // validateContentModelOpen validates an element's children against a content
 // model carrying XSD 1.1 open content.
 //
@@ -118,7 +232,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	var declared, open []childElem
 	for _, ch := range children {
 		qn := QName{Local: ch.name, NS: ch.ns}
-		if !declaredNames[qn] && wildcardMatches(oc.Wildcard, ch.ns) {
+		if !declaredNames[qn] && wildcardAllowsExpandedName(oc.Wildcard, ch.name, ch.ns, vc.schema, false) {
 			open = append(open, ch)
 			continue
 		}

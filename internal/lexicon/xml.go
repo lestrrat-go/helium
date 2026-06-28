@@ -109,10 +109,22 @@ const (
 	TypeUnsignedShort      = "unsignedShort"
 	TypeUnsignedByte       = "unsignedByte"
 	TypeIDREF              = "IDREF"
+	TypeIDREFS             = "IDREFS"
 	TypeToken              = "token"
 	TypeNumber             = "number"
 	TypeQName              = "QName"
 	TypeNotation           = "NOTATION"
+	TypeAnySimpleType      = "anySimpleType"
+	TypeHexBinary          = "hexBinary"
+	TypeBase64Binary       = "base64Binary"
+	TypeLanguage           = "language"
+	TypeName               = "Name"
+	TypeNCName             = "NCName"
+	TypeID                 = "ID"
+	TypeENTITY             = "ENTITY"
+	TypeENTITIES           = "ENTITIES"
+	TypeNMToken            = "NMTOKEN"
+	TypeNMTokens           = "NMTOKENS"
 )
 
 // XPath node test string constants (with parentheses).

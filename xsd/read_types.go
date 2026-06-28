@@ -86,7 +86,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 }
 
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
-	td := &TypeDef{}
+	td := &TypeDef{IsComplex: true}
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 
 	if c.readBooleanAttr(ctx, elem, "mixed") {
