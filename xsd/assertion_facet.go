@@ -3,7 +3,9 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	valuepkg "github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -12,34 +14,62 @@ import (
 // typed atomic value(s) of a (whitespace-normalized, already lexically valid)
 // simple value. A list type yields a sequence of typed items; an atomic or
 // union type yields a single typed atomic value. Typing uses the value's
-// effective builtin primitive (via xpath3.CastFromString); a value that cannot
-// be re-cast (e.g. a type xpath3 does not model) falls back to xs:untypedAtomic,
-// which still atomizes and casts correctly in comparisons.
+// effective builtin primitive (via xpath3.CastFromString), resolving a union to
+// its active member and a QName/NOTATION lexical to a namespace-qualified value;
+// a value that cannot be re-cast (e.g. a type xpath3 does not model) falls back
+// to xs:untypedAtomic, which still atomizes and casts correctly in comparisons.
 func buildValueSequence(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, version Version) xpath3.Sequence {
 	switch resolveVariety(td) {
 	case TypeVarietyList:
 		itemType := resolveItemType(td)
 		var items xpath3.ItemSlice
 		for _, item := range valuepkg.XSDFields(value) {
-			items = append(items, atomicForType(item, itemType))
+			items = append(items, typedAtomic(ctx, item, valueNS, itemType, version))
 		}
 		return items
-	case TypeVarietyUnion:
-		member := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), version)
-		return xpath3.ItemSlice{atomicForType(value, member)}
 	default:
-		return xpath3.ItemSlice{atomicForType(value, td)}
+		return xpath3.ItemSlice{typedAtomic(ctx, value, valueNS, td, version)}
 	}
+}
+
+// typedAtomic builds the typed atomic value for a single (already whitespace-
+// normalized) lexical value of type td, resolving a union type down to the
+// member that actually accepts the value first so a union item is typed as its
+// active member rather than falling back to xs:untypedAtomic.
+func typedAtomic(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, version Version) xpath3.AtomicValue {
+	if td != nil && resolveVariety(td) == TypeVarietyUnion {
+		td = fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), version)
+	}
+	return atomicForType(value, valueNS, td)
 }
 
 // atomicForType casts a single lexical value to the typed atomic value of td's
 // effective builtin primitive, falling back to xs:untypedAtomic when td is nil
 // or the cast fails (the value already passed lexical validation, so a failure
-// only means xpath3 does not model that exact type).
-func atomicForType(value string, td *TypeDef) xpath3.AtomicValue {
+// only means xpath3 does not model that exact type). QName/NOTATION lexicals are
+// resolved against valueNS into an xpath3.QNameValue, since CastFromString has no
+// namespace context.
+func atomicForType(value string, valueNS map[string]string, td *TypeDef) xpath3.AtomicValue {
 	local := ""
 	if td != nil {
 		local = builtinBaseLocal(td)
+	}
+	switch local {
+	case lexicon.TypeQName, lexicon.TypeNotation:
+		if qn, err := resolveLexicalQName(value, valueNS); err == nil {
+			prefix := ""
+			if p, _, found := strings.Cut(value, ":"); found {
+				prefix = p
+			}
+			typeName := xpath3.TypeQName
+			if local == lexicon.TypeNotation {
+				typeName = xpath3.TypeNOTATION
+			}
+			return xpath3.AtomicValue{
+				TypeName: typeName,
+				Value:    xpath3.QNameValue{Prefix: prefix, Local: qn.Local, URI: qn.NS},
+			}
+		}
 	}
 	if local != "" {
 		if av, err := xpath3.CastFromString(value, "xs:"+local); err == nil {
@@ -70,6 +100,7 @@ func checkSimpleTypeAssertions(ctx context.Context, value string, valueNS map[st
 	}
 
 	valueSeq := buildValueSequence(ctx, value, valueNS, td, vc.version)
+	decls := vc.assertSchemaDecls()
 
 	var firstErr error
 	for cur := range baseChain(td) {
@@ -83,6 +114,9 @@ func checkSimpleTypeAssertions(ctx context.Context, value string, valueNS map[st
 			ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 				Namespaces(a.Namespaces).
 				Variables(map[string]xpath3.Sequence{"value": valueSeq})
+			if decls != nil {
+				ev = ev.SchemaDeclarations(decls)
+			}
 			res, err := ev.Evaluate(ctx, a.compiled, nil)
 			ok := false
 			if err == nil {

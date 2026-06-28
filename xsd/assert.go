@@ -135,6 +135,7 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 	// PSVI type annotations onto the copy) and evaluate every assertion against it
 	// so an expression cannot navigate to ancestors/siblings.
 	root, annotations := vc.isolatedAssertTree(elem)
+	decls := vc.assertSchemaDecls()
 	var firstErr error
 	for cur := range baseChain(td) {
 		for _, a := range cur.Assertions {
@@ -146,6 +147,9 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 				Variables(map[string]xpath3.Sequence{"value": valueSeq})
 			if annotations != nil {
 				ev = ev.TypeAnnotations(annotations)
+			}
+			if decls != nil {
+				ev = ev.SchemaDeclarations(decls)
 			}
 			res, err := ev.Evaluate(ctx, a.compiled, root)
 			if err != nil {
@@ -231,7 +235,7 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 	var ann map[helium.Node]string
 	if vc.assertAnnotations != nil {
 		ann = make(map[helium.Node]string, len(vc.assertAnnotations))
-		mapAssertAnnotations(elem, ce, vc.assertAnnotations, ann)
+		mapAssertAnnotations(elem, ce, vc.assertAnnotations, ann, true)
 	}
 	stripCommentsAndPIs(ce)
 	return ce, ann
@@ -242,8 +246,14 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 // each element's and attribute's type annotation from src (keyed by live node) into
 // dst (keyed by copied node). It runs BEFORE comment/PI stripping so the two trees
 // still align node-for-node.
-func mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string) {
-	if name, ok := src[orig]; ok {
+//
+// The assertion-tree ROOT element is deliberately left UNannotated (isRoot): an
+// xs:assert is part of determining the element's own validity, so its type is not
+// yet assigned during evaluation — its typed value (data(.)) is untyped — while
+// its attributes and all descendant elements (validated earlier) keep their PSVI
+// types. This matches the XSD 1.1 conformance tests (and Saxon).
+func mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string, isRoot bool) {
+	if name, ok := src[orig]; ok && !isRoot {
 		dst[copied] = name
 	}
 	// Match attributes by expanded QName rather than positional index: the copy
@@ -270,7 +280,7 @@ func mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst
 		oe, ok1 := helium.AsNode[*helium.Element](oc[i])
 		ce, ok2 := helium.AsNode[*helium.Element](cc[i])
 		if ok1 && ok2 {
-			mapAssertAnnotations(oe, ce, src, dst)
+			mapAssertAnnotations(oe, ce, src, dst, false)
 		}
 	}
 }
@@ -319,6 +329,12 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	if td == nil || td.ContentType != ContentTypeSimple {
 		return xpath3.EmptySequence()
 	}
-	raw := normalizeWhiteSpace(elemTextContent(elem), resolveWhiteSpace(td))
-	return buildValueSequence(ctx, raw, collectNSContext(elem), td, vc.version)
+	// For a simpleContent restriction the typed value follows the narrowed content
+	// type (nested simpleType / facets), so $value carries that type.
+	valueType := td
+	if td.ContentSimpleType != nil {
+		valueType = td.ContentSimpleType
+	}
+	raw := normalizeWhiteSpace(elemTextContent(elem), resolveWhiteSpace(valueType))
+	return buildValueSequence(ctx, raw, collectNSContext(elem), valueType, vc.version)
 }

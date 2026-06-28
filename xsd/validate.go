@@ -955,9 +955,18 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 	}
 
+	// XSD 1.1 simpleContent RESTRICTION: validate the text against the narrowed
+	// content simple type (nested <xs:simpleType> or direct facets) rather than the
+	// base, so an enumeration / type restriction actually constrains the content.
+	contentTD := td
+	if td != nil && td.ContentSimpleType != nil {
+		contentTD = td.ContentSimpleType
+		return validateValue(ctx, effectiveValue, collectNSContext(elem), contentTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+	}
+
 	// Validate the text value against the type.
-	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
-		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+	if contentTD != nil && (contentTD.Facets != nil || resolveVariety(contentTD) == TypeVarietyList || resolveVariety(contentTD) == TypeVarietyUnion || builtinBaseLocal(contentTD) != "" && builtinBaseLocal(contentTD) != "string" && builtinBaseLocal(contentTD) != "anySimpleType") {
+		return validateValue(ctx, effectiveValue, collectNSContext(elem), contentTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 	}
 
 	return nil

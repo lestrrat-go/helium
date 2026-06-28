@@ -269,3 +269,152 @@ func TestVersion11AssertEdges(t *testing.T) {
 		require.NoError(t, validateAssertion(t, schema, `<e a="1"><!-- hi --></e>`))
 	})
 }
+
+// TestVersion11AssertionGauntletFixes covers the four gauntlet-review fixes:
+// (1) required-attribute inheritance for a NON-assert 1.1 restriction; (2) a list
+// whose item type is a union typed via per-item active-member resolution; (3) a
+// QName-typed $value resolved with namespace context; (4) a named user-defined
+// simple type atomizing through its builtin base via SchemaDeclarations.
+func TestVersion11AssertionGauntletFixes(t *testing.T) {
+	t.Run("non-assert 1.1 restriction still requires inherited attribute", func(t *testing.T) {
+		t.Parallel()
+		// floatType-style: a simpleContent restriction with NO assert that does not
+		// redeclare the base's required attribute must still require it.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="req" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base"/>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e req="5">x</e>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<e>x</e>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.0 restriction omitting required attribute stays byte-identical", func(t *testing.T) {
+		t.Parallel()
+		// In 1.0 helium does not inherit restriction attributes; the historical
+		// behavior is preserved (the restriction is rejected at compile time for the
+		// missing required base attribute). This guards the 1.1-only gating.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="req" type="xs:int" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base"/>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		_, err := compileAssertion(t, xsd.NewCompiler(), schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
+	t.Run("list item type that is a union is typed per active member", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="ublist">
+    <xs:list itemType="intOrBool"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="ublist">
+        <xs:assertion test="$value[1] instance of xs:int and $value[2] instance of xs:boolean"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e>5 true</e>`))
+		// Reversed: first item is a boolean, second an int — the typed instance-of
+		// checks fail, proving the items are genuinely typed (not untypedAtomic).
+		require.ErrorIs(t, validateAssertion(t, schema, `<e>true 5</e>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("QName $value resolved with namespace context", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="xs:QName">
+        <xs:assertion test="namespace-uri-from-QName($value) = 'http://example.com/ns'"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="http://example.com/ns">p:foo</e>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns:q="http://other/ns">q:foo</e>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("named user simple type atomizes through builtin base", func(t *testing.T) {
+		t.Parallel()
+		// @len is typed as a NAMED restriction of xs:integer; data(@len) must
+		// atomize as xs:integer (via SchemaDeclarations), not xs:untypedAtomic.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="lengthType">
+    <xs:restriction base="xs:integer"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="len" type="lengthType"/>
+      <xs:assert test="data(@len) instance of xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e len="5"/>`))
+	})
+
+	t.Run("simpleContent restriction enumeration constrains content", func(t *testing.T) {
+		t.Parallel()
+		// Regression guard for the merge-for-all change: the inherited attribute is
+		// now allowed, so the enumeration facet on the restriction must actually
+		// constrain the content (it is no longer masked by an attribute rejection).
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="a" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base">
+          <xs:enumeration value="square"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e a="x">square</e>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<e a="x">circle</e>`), xsd.ErrValidationFailed)
+	})
+}

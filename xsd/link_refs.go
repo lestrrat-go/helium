@@ -430,18 +430,17 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 
 	// XSD 1.1: a restriction inherits each base attribute use it does not itself
 	// redeclare (§3.4.2.2). Merge those base uses into the derived type's effective
-	// {attribute uses} so validation enforces and PSVI-annotates them (e.g. an
-	// inherited typed attribute referenced by an xs:assert). Runs AFTER the
-	// derivation checks above, which compare the derived type's OWN declarations
-	// against the base. Gated to 1.1, and further scoped to types that actually
-	// carry an assert (directly or inherited): that is where the merged inherited
-	// attribute is observable, and limiting it there keeps every other type's
-	// effective attribute set — and thus all non-assert validation — unchanged.
+	// {attribute uses} so validation enforces and PSVI-annotates them. This MUST run
+	// for EVERY restriction-derived complex type (not only assert-bearing ones):
+	// checkRestrictionAttrs above no longer reports a non-redeclared required base
+	// attribute as "missing" in 1.1 (it is inherited), so without the merge such an
+	// inherited required attribute would be silently dropped and an instance omitting
+	// it would wrongly validate. Runs AFTER the derivation checks, which compare the
+	// derived type's OWN declarations against the base. Gated to 1.1 so XSD 1.0 stays
+	// byte-identical.
 	if c.version == Version11 {
 		for _, td := range restrictionTypes {
-			if typeHasAssertions(td) {
-				c.mergeRestrictionAttrs(td)
-			}
+			c.mergeRestrictionAttrs(td)
 		}
 	}
 

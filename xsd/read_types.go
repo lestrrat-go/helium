@@ -713,6 +713,50 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			}
 		}
 	}
+
+	// XSD 1.1: a simpleContent RESTRICTION narrows the base content type via a
+	// nested <xs:simpleType> OR direct facets. Capture the resulting effective
+	// content simple type so validateSimpleContent checks the text against the
+	// narrowed type (e.g. an enumeration or a restriction to xs:float) rather than
+	// only the base. Gated to 1.1 so XSD 1.0 content validation stays byte-identical.
+	if kind == DerivationRestriction && c.version == Version11 {
+		td.ContentSimpleType = c.parseSimpleContentRestrictionType(ctx, derivation, td)
+	}
+}
+
+// parseSimpleContentRestrictionType derives the effective content simple type of
+// a simpleContent <xs:restriction>: the nested <xs:simpleType> if present, else a
+// synthesized simple type restricting the base content type (BaseType = the
+// owning complex type, so its base chain resolves to the builtin base) with the
+// restriction's direct facets. Returns nil when neither is present (an empty
+// restriction inherits the base content type unchanged).
+func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, derivation *helium.Element, owner *TypeDef) *TypeDef {
+	for child := range helium.Children(derivation) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if isXSDElement(ce, elemSimpleType) {
+			st, err := c.parseSimpleType(ctx, ce)
+			if err != nil {
+				return nil
+			}
+			return st
+		}
+	}
+	fs := c.parseFacets(ctx, derivation)
+	if fs == nil {
+		return nil
+	}
+	return &TypeDef{
+		ContentType: ContentTypeSimple,
+		Derivation:  DerivationRestriction,
+		BaseType:    owner,
+		Facets:      fs,
+	}
 }
 
 func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {

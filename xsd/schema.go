@@ -258,6 +258,14 @@ type TypeDef struct {
 	FinalSet     bool         // true if final was explicitly set (even to empty)
 	Assertions   []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
 	OpenContent  *OpenContent // XSD 1.1 xs:openContent (nil = none)
+	// ContentSimpleType is the effective simple type that constrains the text
+	// content of a complexType with simpleContent derived by RESTRICTION (XSD 1.1):
+	// either the nested <xs:simpleType> or a synthesized restriction of the base
+	// content type carrying the restriction's direct facets. nil means the content
+	// is validated against this type's own base chain (extensions, and restrictions
+	// with no content-narrowing facets). Used by validateSimpleContent so a
+	// restricted simpleContent value is actually checked against its narrowed type.
+	ContentSimpleType *TypeDef
 }
 
 // OpenContentMode is the XSD 1.1 xs:openContent mode.
