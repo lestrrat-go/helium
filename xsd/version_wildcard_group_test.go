@@ -539,3 +539,43 @@ func TestVersion11NotQNameResolveQNameSemantics(t *testing.T) {
 </xs:schema>`)
 	})
 }
+
+// TestVersion11NotNamespaceEmpty covers gauntlet finding PR858-WC-001: an EMPTY
+// @notNamespace is valid in XSD 1.1 (xs:basicNamespaceList may be empty) and
+// means a `not` constraint with an empty excluded set — it admits ALL
+// namespaces. It must compile (not be rejected) and behave as a wildcard that
+// admits any name, while staying distinct from an absent @notNamespace.
+func TestVersion11NotNamespaceEmpty(t *testing.T) {
+	t.Run("xs:anyAttribute notNamespace='' compiles and admits any attribute", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute notNamespace="" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		// An attribute in any namespace (and an unqualified one) is admitted.
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e a:z="1" xmlns:a="http://x.com/"/>`))
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e plain="1"/>`))
+	})
+
+	t.Run("xs:any notNamespace='' compiles and admits any child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any notNamespace="" processContents="skip" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		// Children in any namespace and the absent namespace are admitted.
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root><c xmlns="http://ns.com/"/><d/></root>`))
+	})
+}

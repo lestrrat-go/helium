@@ -292,20 +292,24 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 }
 
 // parseNotNamespace parses an xs:any/xs:anyAttribute @notNamespace value (XSD
-// 1.1). The value is a non-empty whitespace list whose members are each an
-// anyURI, "##targetNamespace", or "##local"; the "##any"/"##other" keywords are
-// NOT permitted. It returns the resolved set of EXCLUDED namespace URIs ("" for
+// 1.1). The value is an xs:basicNamespaceList whose members are each an anyURI,
+// "##targetNamespace", or "##local"; the "##any"/"##other" keywords are NOT
+// permitted. It returns the resolved set of EXCLUDED namespace URIs ("" for
 // ##local / the absent namespace).
+//
+// An EMPTY list (e.g. notNamespace="") is VALID: it is a `not` constraint with
+// an empty excluded set, which admits every namespace (XSD 1.1 §3.10.1). The
+// caller passes a present (possibly empty) attribute value, so a NON-NIL empty
+// slice is returned to mark the wildcard as a notNamespace constraint — distinct
+// from an ABSENT @notNamespace (nil), which leaves the @namespace constraint in
+// effect. wildcardMatches treats a non-nil empty NotNamespace as "excludes
+// nothing" (matches all).
 func (c *compiler) parseNotNamespace(ctx context.Context, elem *helium.Element, raw string) []string {
 	reject := func(msg string) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
 			elem.LocalName(), elem.LocalName(), attrNotNamespace, msg))
 	}
 	tokens := splitSpace(normalizeWhiteSpace(raw, "collapse"))
-	if len(tokens) == 0 {
-		reject("The value of 'notNamespace' must be a non-empty list of namespace names.")
-		return nil
-	}
 	seen := make(map[string]struct{}, len(tokens))
 	out := make([]string, 0, len(tokens))
 	for _, tok := range tokens {
