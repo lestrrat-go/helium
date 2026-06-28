@@ -314,6 +314,12 @@ type FacetSet struct {
 	// pattern failed to compile and is skipped during validation.
 	compiledPatterns []*xsdregex.Regexp
 	WhiteSpace       *string
+	// Assertions holds the XSD 1.1 <xs:assertion> facets from a single
+	// simpleType restriction step. Each is evaluated against the value being
+	// validated with $value bound to its typed atomic value (a sequence for a
+	// list type). Assertions from different derivation steps are all enforced
+	// (ANDed), handled by validateValue walking the base-type chain.
+	Assertions []*Assertion
 }
 
 // AttrUse represents an attribute use in a complex type definition.

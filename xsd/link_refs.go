@@ -341,8 +341,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		// cos-ct-extends-1-1: complexContent extension requires the base type
 		// to also have complex content (mixed or element-only), not simple content.
-		// Only check when the derived type has element content (not empty/attribute-only).
-		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed) {
+		// (simpleContent extensions already continued above, so any type reaching
+		// here is a complexContent derivation.) XSD 1.0 only flagged this when the
+		// derived type had element content; XSD 1.1 flags the empty/attribute-only
+		// case too (a complexContent extension of a simple base is always invalid).
+		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed || c.version == Version11) {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
 				component := componentLocalComplexType
 				if !src.isLocal {
@@ -423,6 +426,23 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for _, td := range restrictionTypes {
 		c.checkRestrictionAttrs(ctx, td)
 		c.checkRestrictionParticles(ctx, td)
+	}
+
+	// XSD 1.1: a restriction inherits each base attribute use it does not itself
+	// redeclare (§3.4.2.2). Merge those base uses into the derived type's effective
+	// {attribute uses} so validation enforces and PSVI-annotates them (e.g. an
+	// inherited typed attribute referenced by an xs:assert). Runs AFTER the
+	// derivation checks above, which compare the derived type's OWN declarations
+	// against the base. Gated to 1.1, and further scoped to types that actually
+	// carry an assert (directly or inherited): that is where the merged inherited
+	// attribute is observable, and limiting it there keeps every other type's
+	// effective attribute set — and thus all non-assert validation — unchanged.
+	if c.version == Version11 {
+		for _, td := range restrictionTypes {
+			if typeHasAssertions(td) {
+				c.mergeRestrictionAttrs(td)
+			}
+		}
 	}
 
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.
@@ -1102,6 +1122,18 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			continue
 		}
 		derived, found := derivedAttrs[baseAU.Name]
+		// XSD restriction inherits a base attribute use that the derived type does
+		// not redeclare (§3.4.2.2): an absent derived declaration is not "missing",
+		// it carries the base use forward. In XSD 1.1 mode that inheritance is
+		// honored, so only an explicit prohibition of a required base attribute is
+		// an error. XSD 1.0 mode keeps its historical behavior byte-identical.
+		if c.version == Version11 {
+			if found && derived.Prohibited {
+				msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
+				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
+			}
+			continue
+		}
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
@@ -1135,6 +1167,35 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				c.schemaError(ctx, schemaComponentError(c.filename, errLine, "complexType", errComponent, msg))
 			}
 		}
+	}
+}
+
+// mergeRestrictionAttrs folds the base type's attribute uses that the derived
+// restriction does not itself redeclare into td.Attributes, applying XSD 1.1
+// restriction semantics: a derived declaration (including use="prohibited")
+// overrides the base use of the same expanded QName; an absent derived
+// declaration inherits the base use verbatim. An attribute wildcard is inherited
+// when the derived type declares none. Validation already handles prohibited uses
+// (rejecting a present instance attribute), so they are kept in the merged set.
+func (c *compiler) mergeRestrictionAttrs(td *TypeDef) {
+	base := td.BaseType
+	if base == nil {
+		return
+	}
+	if len(base.Attributes) > 0 {
+		derivedByName := make(map[QName]struct{}, len(td.Attributes))
+		for _, au := range td.Attributes {
+			derivedByName[au.Name] = struct{}{}
+		}
+		for _, bau := range base.Attributes {
+			if _, redeclared := derivedByName[bau.Name]; redeclared {
+				continue
+			}
+			td.Attributes = append(td.Attributes, bau)
+		}
+	}
+	if td.AnyAttribute == nil {
+		td.AnyAttribute = base.AnyAttribute
 	}
 }
 

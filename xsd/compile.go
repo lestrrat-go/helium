@@ -16,10 +16,14 @@ import (
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
-	version Version        // XSD specification version targeted by this compilation
-	baseDir string         // directory of the schema file, for resolving relative paths
-	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
-	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
+	version Version // XSD specification version targeted by this compilation
+	// schemaXPathDefaultNS is the raw xpathDefaultNamespace attribute on the root
+	// <xs:schema> element ("" if absent). It provides the default for any
+	// xs:assert/xs:assertion that does not carry its own xpathDefaultNamespace.
+	schemaXPathDefaultNS string
+	baseDir              string         // directory of the schema file, for resolving relative paths
+	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser               *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -500,6 +504,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.version = c.version
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
+	c.schemaXPathDefaultNS = getAttr(root, attrXPathDefaultNamespace)
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 

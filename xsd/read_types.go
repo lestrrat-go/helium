@@ -704,6 +704,13 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			}
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ae)
+		case isXSDElement(ae, elemAssert) && c.version == Version11:
+			// XSD 1.1 xs:assert on a complexType with simpleContent. The assert is
+			// evaluated against the element after content validation, with $value
+			// bound to the element's typed simple value (see checkAssertions).
+			if a := c.parseAssert(ctx, ae); a != nil {
+				td.Assertions = append(td.Assertions, a)
+			}
 		}
 	}
 }
@@ -925,6 +932,18 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 					fmt.Sprintf("The value '%s' is not a valid regular expression: %s.", val, rerr)))
 			}
 			fs.compiledPatterns = append(fs.compiledPatterns, re)
+		case "assertion":
+			// XSD 1.1 <xs:assertion> simple-type facet. Evaluated at simple-value
+			// validation time with $value bound to the typed atomic value.
+			if c.version != Version11 {
+				continue
+			}
+			if a := c.parseAssertion(ctx, ce, elemAssertion); a != nil {
+				if fs == nil {
+					fs = &FacetSet{}
+				}
+				fs.Assertions = append(fs.Assertions, a)
+			}
 		}
 	}
 
