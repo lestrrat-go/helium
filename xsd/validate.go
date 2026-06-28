@@ -1763,14 +1763,18 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
-// assertAnnotationName returns the PSVI annotation name recorded for a node in the
-// xs:assert evaluation tree. For a named type it is xsdTypeName; for an INLINE
-// ANONYMOUS list/union simple type (whose list-item / union-member metadata would
-// be lost once xsdTypeName collapses it to a named ancestor) it mints a stable
-// synthetic name and registers the actual *TypeDef so schemaDecls can recover the
-// metadata. Anonymous item/member types are registered recursively for the same
-// reason. Used ONLY for the assert annotations map; the user-facing annotations map
-// keeps xsdTypeName, byte-identical.
+// assertAnnotationName returns the PSVI annotation name recorded for a NODE in the
+// xs:assert evaluation tree. For an INLINE ANONYMOUS list/union simple type (whose
+// list-item / union-member metadata would be lost once xsdTypeName collapses it to a
+// named ancestor) it mints a stable synthetic name and registers the actual
+// *TypeDef so schemaDecls can recover the metadata; otherwise it is xsdTypeName. In
+// either case the anonymous list-item / union-member types reachable from a list/
+// union are registered too (assertRegisterAnonChildren) — INCLUDING anonymous ATOMIC
+// (faceted) members — so active-member selection validates the actual faceted member
+// rather than a collapsed builtin ancestor. Used ONLY for the assert annotations map;
+// the user-facing annotations map keeps xsdTypeName, byte-identical. A standalone
+// anonymous ATOMIC node type keeps xsdTypeName so node annotations are not broadly
+// changed.
 func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
 	if td == nil || vc.assertAnonNames == nil {
 		return xsdTypeName(td)
@@ -1778,22 +1782,52 @@ func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
 	if name, ok := vc.assertAnonNames[td]; ok {
 		return name
 	}
-	if td.Name.Local == "" && td.Name.NS == "" {
-		switch resolveVariety(td) {
-		case TypeVarietyList, TypeVarietyUnion:
-			name := fmt.Sprintf("Q{%s}%d", assertAnonNS, len(vc.assertAnonTypes)+1)
-			vc.assertAnonTypes[name] = td
-			vc.assertAnonNames[td] = name
-			if td.ItemType != nil {
-				vc.assertAnnotationName(td.ItemType)
-			}
-			for _, m := range td.MemberTypes {
-				vc.assertAnnotationName(m)
-			}
-			return name
+	switch resolveVariety(td) {
+	case TypeVarietyList, TypeVarietyUnion:
+		// Register anonymous members/items (recursively) regardless of whether the
+		// list/union itself is named, so a NAMED union with inline anonymous members
+		// still resolves each member's facets.
+		vc.assertRegisterAnonChildren(td)
+		if td.Name.Local == "" && td.Name.NS == "" {
+			return vc.assertRegisterAnon(td)
 		}
 	}
 	return xsdTypeName(td)
+}
+
+// assertRegisterAnon registers an ANONYMOUS TypeDef of ANY variety (atomic
+// restriction, list, or union) under a stable synthetic annotation name and returns
+// it, recursing into its anonymous item/member types; a NAMED type is left unchanged
+// (returns xsdTypeName) but its anonymous descendants are still registered. This lets
+// an inline anonymous union member — even a plain faceted atomic restriction (e.g.
+// xs:int with maxInclusive) — round-trip to its actual *TypeDef so ValidateCastWithNS
+// validates its facets during active-member selection.
+func (vc *validationContext) assertRegisterAnon(td *TypeDef) string {
+	if td == nil || vc.assertAnonNames == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.assertAnonNames[td]; ok {
+		return name
+	}
+	name := xsdTypeName(td)
+	if td.Name.Local == "" && td.Name.NS == "" {
+		name = fmt.Sprintf("Q{%s}%d", assertAnonNS, len(vc.assertAnonTypes)+1)
+		vc.assertAnonTypes[name] = td
+		vc.assertAnonNames[td] = name
+	}
+	vc.assertRegisterAnonChildren(td)
+	return name
+}
+
+// assertRegisterAnonChildren registers the anonymous list-item / union-member types
+// reachable from td (one level; assertRegisterAnon recurses deeper for each).
+func (vc *validationContext) assertRegisterAnonChildren(td *TypeDef) {
+	if td.ItemType != nil {
+		vc.assertRegisterAnon(td.ItemType)
+	}
+	for _, m := range td.MemberTypes {
+		vc.assertRegisterAnon(m)
+	}
 }
 
 // annotateElement records a type annotation for an element node.

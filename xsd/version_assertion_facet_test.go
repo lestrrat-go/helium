@@ -1735,3 +1735,60 @@ func TestVersion11AssertInstanceOfAnonListType(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e v="1 2 3"/>`))
 }
+
+// TestVersion11AssertUnionAnonAtomicMemberFacet verifies that an inline ANONYMOUS
+// ATOMIC union member's facets are honored during assert NODE active-member
+// selection (PR859-REV-F04). The first member is an anonymous xs:int restricted to
+// maxInclusive=10, followed by xs:string. Value "20" exceeds the facet so the active
+// member must be xs:string (data(@u) instance of xs:string, count 1); value "5"
+// satisfies the faceted int, so it is the active member.
+func TestVersion11AssertUnionAnonAtomicMemberFacet(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:union>
+      <xs:simpleType>
+        <xs:restriction base="xs:int">
+          <xs:maxInclusive value="10"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType>
+        <xs:restriction base="xs:string"/>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 1 and (data(@u) instance of xs:string)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// "20" exceeds maxInclusive=10 on the int member → active member is xs:string.
+	require.NoError(t, validateAssertion(t, schema, `<e u="20"/>`))
+	// "5" satisfies the faceted int member → active member is the int.
+	const schemaXML2 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:union>
+      <xs:simpleType>
+        <xs:restriction base="xs:int">
+          <xs:maxInclusive value="10"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType>
+        <xs:restriction base="xs:string"/>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 1 and (data(@u) instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML2)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e u="5"/>`))
+}
