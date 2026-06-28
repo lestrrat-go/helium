@@ -266,11 +266,14 @@ func wildcardAdmitsNameIgnoringDefined(wc *Wildcard, local, ns string) bool {
 }
 
 // wildcardConstraintSubset11 reports whether sub's namespace constraint is a
-// subset of super's, honoring XSD 1.1 notNamespace/notQName. sub ⊆ super iff
-// every namespace sub admits is also admitted by super, AND every name super's
-// notQName disallows within sub's admitted namespaces is also disallowed by sub
-// (sub may not re-admit a name super excludes).
-func wildcardConstraintSubset11(sub, super *Wildcard) bool {
+// subset of super's, honoring XSD 1.1 notNamespace/notQName (cos-ns-subset).
+// sub ⊆ super iff every namespace sub admits is also admitted by super, AND
+// every name super disallows is also disallowed by sub (sub may not re-admit a
+// name super excludes). The per-name subset test is the FULL "allows expanded
+// name" test (`wildcardAllowsExpandedName`), so a derived wildcard may discharge
+// a base's explicit `notQName="t:g"` via its own `##defined` when t:g has a
+// global declaration. schema/isAttr select the declaration table for ##defined.
+func wildcardConstraintSubset11(sub, super *Wildcard, schema *Schema, isAttr bool) bool {
 	subC := wildcardConstraint(sub)
 	supC := wildcardConstraint(super)
 
@@ -303,16 +306,18 @@ func wildcardConstraintSubset11(sub, super *Wildcard) bool {
 		}
 	}
 
-	// notQName: a name disallowed by super (within sub's admitted namespaces)
-	// must also be disallowed by sub, else the restriction re-admits it.
+	// notQName: a name disallowed by super must also be disallowed by sub, else
+	// the restriction re-admits it. The test is the FULL expanded-name admission
+	// (namespace + explicit notQName + ##defined + ##definedSibling) so sub can
+	// discharge a super-excluded global name via its own ##defined.
 	for _, qn := range super.NotQName {
-		if !wildcardMatches(sub, qn.NS) {
-			continue // sub doesn't admit this namespace anyway
-		}
-		if !wildcardExcludesName(sub, qn.Local, qn.NS) {
+		if wildcardAllowsExpandedName(sub, qn.Local, qn.NS, schema, isAttr) {
 			return false
 		}
 	}
+	// ##defined as a whole: if super excludes every globally-declared name, sub
+	// must too (an individual ##defined-excluded name need not be listed, so this
+	// marker-level check complements the per-name loop above).
 	if super.NotQNameDefined && !sub.NotQNameDefined {
 		return false
 	}
@@ -320,16 +325,13 @@ func wildcardConstraintSubset11(sub, super *Wildcard) bool {
 	// both carry it) resolve to a NARROWER sibling-name set. Comparing the marker
 	// bit alone is insufficient — base and derived live in different content
 	// models, so their resolved SiblingNames can differ. Every sibling name super
-	// excludes (within a namespace sub admits) must also be excluded by sub.
+	// excludes must also be disallowed by sub (again via the full test).
 	if super.NotQNameDefinedSibling {
 		if !sub.NotQNameDefinedSibling {
 			return false
 		}
 		for _, qn := range super.SiblingNames {
-			if !wildcardMatches(sub, qn.NS) {
-				continue // sub doesn't admit this namespace anyway
-			}
-			if !wildcardExcludesName(sub, qn.Local, qn.NS) {
+			if wildcardAllowsExpandedName(sub, qn.Local, qn.NS, schema, isAttr) {
 				return false
 			}
 		}

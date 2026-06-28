@@ -726,3 +726,110 @@ func TestVersion11RestrictionDisjointWildcardProcessContents(t *testing.T) {
 		mustCompile11OK(t, schema("strict"))
 	})
 }
+
+// TestVersion11RestrictionAttrAgainstBaseWildcard covers gauntlet finding
+// PR858-R5-001: a derived CONCRETE attribute checked against a base
+// xs:anyAttribute must use the full notQName/##defined-aware expanded-name test,
+// not namespace-only matching. A base wildcard excluding the attribute (by
+// explicit notQName or ##defined) makes the restriction invalid.
+func TestVersion11RestrictionAttrAgainstBaseWildcard(t *testing.T) {
+	t.Run("base wildcard excluding the attribute via explicit notQName rejects it", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" notQName="bad" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:sequence/>
+        <xs:attribute name="bad" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`)
+	})
+
+	t.Run("base wildcard excluding the attribute via ##defined rejects it", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="g" type="xs:string"/>
+  <xs:complexType name="b">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" notQName="##defined" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:sequence/>
+        <xs:attribute ref="g"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`)
+	})
+
+	t.Run("base wildcard admitting the attribute compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" notQName="bad" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:sequence/>
+        <xs:attribute name="ok" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`)
+	})
+}
+
+// TestVersion11SubsetDefinedDischargesNamedExclusion covers gauntlet finding
+// PR858-R5-002: the per-name subset test in wildcardConstraintSubset11 is the
+// full ##defined-aware "allows expanded name" test. A derived wildcard with
+// notQName="##defined" validly restricts a base wildcard with notQName="g" when
+// g has a global declaration (the derived ##defined excludes g), and is invalid
+// when g is NOT globally declared (the derived re-admits a name the base excludes).
+func TestVersion11SubsetDefinedDischargesNamedExclusion(t *testing.T) {
+	schema := func(gGlobal bool) string {
+		decl := ""
+		if gGlobal {
+			decl = `  <xs:element name="g" type="xs:string"/>` + "\n"
+		}
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + decl + `  <xs:complexType name="b">
+    <xs:sequence>
+      <xs:any namespace="##any" notQName="g" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:sequence>
+          <xs:any namespace="##any" notQName="##defined" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`
+	}
+
+	t.Run("derived ##defined discharges base notQName for a globally-declared name", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema(true))
+	})
+
+	t.Run("derived ##defined does not discharge a non-global name (rejected)", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, schema(false))
+	})
+}

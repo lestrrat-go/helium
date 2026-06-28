@@ -135,7 +135,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			if processContentsStrength(rt.ProcessContents) < processContentsStrength(bt.ProcessContents) {
 				return false
 			}
-			return wildcardConstraintSubset(rt, bt)
+			return wildcardConstraintSubset(rt, bt, schema, false)
 		case *ElementDecl:
 			// A wildcard can never be a restriction of a single element. This is a
 			// clear violation.
@@ -605,7 +605,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 					return false
 				}
 			}
-			if !wildcardConstraintSubset(rt, baseUnion) {
+			if !wildcardConstraintSubset(rt, baseUnion, schema, false) {
 				return false
 			}
 			derivedWilds = append(derivedWilds, rp)
@@ -642,7 +642,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		guaranteed := 0
 		for _, dw := range derivedWilds {
 			dwc, _ := dw.Term.(*Wildcard)
-			if wildcardConstraintSubset(dwc, bwc) {
+			if wildcardConstraintSubset(dwc, bwc, schema, false) {
 				guaranteed += dw.MinOccurs
 			}
 		}
@@ -979,7 +979,7 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle, schema 
 			if processContentsStrength(t.ProcessContents) < processContentsStrength(bwc.ProcessContents) {
 				return false
 			}
-			if !wildcardConstraintSubset(t, bwc) {
+			if !wildcardConstraintSubset(t, bwc, schema, false) {
 				return false
 			}
 			if !occurrenceValidRestriction(0, leafMax, 0, bw.MaxOccurs) {
@@ -1059,12 +1059,14 @@ func particleEmptiable(p *Particle) bool {
 //   - finite set      = the listed URIs (##local→absent, ##targetNamespace→TNS)
 //
 // sub ⊆ super when every namespace sub admits is also admitted by super.
-func wildcardConstraintSubset(sub, super *Wildcard) bool {
+// schema/isAttr are used only by the XSD 1.1 path for ##defined-aware per-name
+// subset checks (isAttr selects the elements vs attributes declaration table).
+func wildcardConstraintSubset(sub, super *Wildcard, schema *Schema, isAttr bool) bool {
 	// XSD 1.1: when either wildcard carries a notNamespace/notQName constraint
 	// the 1.0 case analysis below cannot represent it; decide via the general
 	// constraint algebra. 1.0-only wildcards keep the byte-identical path below.
 	if wildcardHas11Fields(sub) || wildcardHas11Fields(super) {
-		return wildcardConstraintSubset11(sub, super)
+		return wildcardConstraintSubset11(sub, super, schema, isAttr)
 	}
 	// super = ##any admits everything.
 	if super.Namespace == WildcardNSAny {

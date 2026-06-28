@@ -1131,9 +1131,11 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
-		} else if td.BaseType.AnyAttribute == nil || !wildcardMatches(td.BaseType.AnyAttribute, au.Name.NS) {
-			// No matching attribute, and no base wildcard whose namespace
-			// constraint admits this derived attribute's namespace.
+		} else if td.BaseType.AnyAttribute == nil || !wildcardAllowsExpandedName(td.BaseType.AnyAttribute, au.Name.Local, au.Name.NS, c.schema, true) {
+			// No matching attribute, and no base wildcard that ADMITS this derived
+			// attribute's expanded name — the full test honors the base wildcard's
+			// notNamespace/notQName/##defined, not just its namespace constraint, so
+			// a derived attribute the base wildcard excludes by name is rejected.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))
@@ -1164,7 +1166,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
-			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
+			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute, c.schema, true) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
 			}
