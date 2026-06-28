@@ -1,6 +1,8 @@
 package xsd_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -673,4 +675,32 @@ func TestVersion11SimpleContentChainFacets(t *testing.T) {
 		require.NoError(t, validateAssertion(t, schema, `<e>square</e>`))
 		require.ErrorIs(t, validateAssertion(t, schema, `<e>circle</e>`), xsd.ErrValidationFailed)
 	})
+}
+
+// TestVersion11DeepSimpleContentChain guards against a recursion-depth cutoff in
+// effectiveContentSimpleType: a deep (>64 levels) but finite, acyclic simpleContent
+// restriction chain whose DEEPEST step carries a narrowing enumeration must still
+// have that enumeration enforced. A depth cutoff would return an intermediate type
+// before reaching the narrowing facet (which lives on ContentSimpleType, not
+// Facets), causing a violating value to be wrongly accepted.
+func TestVersion11DeepSimpleContentChain(t *testing.T) {
+	const depth = 80 // comfortably beyond the old depth>64 cutoff
+
+	var b strings.Builder
+	b.WriteString(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`)
+	// t0: simpleContent extension of xs:string.
+	b.WriteString(`<xs:complexType name="t0"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`)
+	// t1: the only narrowing — restricts t0 with enumeration "ok".
+	b.WriteString(`<xs:complexType name="t1"><xs:simpleContent><xs:restriction base="t0"><xs:enumeration value="ok"/></xs:restriction></xs:simpleContent></xs:complexType>`)
+	// t2..tN: pass-through restrictions (no own narrowing) of the level below.
+	for i := 2; i <= depth; i++ {
+		fmt.Fprintf(&b, `<xs:complexType name="t%d"><xs:simpleContent><xs:restriction base="t%d"/></xs:simpleContent></xs:complexType>`, i, i-1)
+	}
+	fmt.Fprintf(&b, `<xs:element name="e" type="t%d"/>`, depth)
+	b.WriteString(`</xs:schema>`)
+
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), b.String())
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e>ok</e>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<e>bad</e>`), xsd.ErrValidationFailed)
 }

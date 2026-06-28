@@ -991,17 +991,23 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 //     complex type): a fresh restriction of the base's EFFECTIVE content type with
 //     those facets, so an ancestor's facets compose with the derived ones.
 //
-// depth bounds the recursion defensively; validation only runs on an acyclic,
-// successfully compiled schema.
+// A visited set guards against a cyclic base chain (an invalid schema reported by
+// the circular-type check) without bounding the depth, so EVERY finite acyclic
+// chain — however deep — is walked fully and a narrowing facet far down the chain
+// is never silently skipped.
 func effectiveContentSimpleType(td *TypeDef) *TypeDef {
-	return effectiveContentSimpleTypeRec(td, 0)
+	return effectiveContentSimpleTypeRec(td, make(map[*TypeDef]struct{}))
 }
 
-func effectiveContentSimpleTypeRec(td *TypeDef, depth int) *TypeDef {
-	if td == nil || !td.IsSimpleContent || depth > 64 {
+func effectiveContentSimpleTypeRec(td *TypeDef, visited map[*TypeDef]struct{}) *TypeDef {
+	if td == nil || !td.IsSimpleContent {
 		return td
 	}
-	base := effectiveContentSimpleTypeRec(td.BaseType, depth+1)
+	if _, seen := visited[td]; seen {
+		return td // cyclic base chain; the circular-type check reports the error
+	}
+	visited[td] = struct{}{}
+	base := effectiveContentSimpleTypeRec(td.BaseType, visited)
 	cst := td.ContentSimpleType
 	if cst == nil {
 		return base
