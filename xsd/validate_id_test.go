@@ -525,10 +525,59 @@ func TestIDConstraintRefConflictingChildren(t *testing.T) {
 		t.Parallel()
 		require.ErrorIs(t, compile(t, `<xs:unique ref="u"><xs:field xpath="@nr"/></xs:unique>`), xsd.ErrCompilationFailed)
 	})
+	t.Run("ref with malformed QName is rejected", func(t *testing.T) {
+		t.Parallel()
+		// ":u" is not a valid xs:QName (empty prefix); it must be a fatal error, not
+		// silently resolved as an unprefixed/default-namespace reference.
+		require.ErrorIs(t, compile(t, `<xs:unique ref=":u"/>`), xsd.ErrCompilationFailed)
+	})
+	t.Run("keyref refer with malformed QName is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, `<xs:keyref name="kr" refer=":k"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:keyref>`), xsd.ErrCompilationFailed)
+	})
 	t.Run("plain ref is accepted", func(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compile(t, `<xs:unique ref="u"/>`))
 	})
+}
+
+// TestIDConstraintRefValidPrefixed verifies that a valid PREFIXED @ref still
+// resolves after the malformed-QName check is added (the check must not reject
+// well-formed prefixed references).
+func TestIDConstraintRefValidPrefixed(t *testing.T) {
+	t.Parallel()
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:x" targetNamespace="urn:x">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="s:chap">
+          <xs:unique name="u"><xs:selector xpath="s:section"/><xs:field xpath="@nr"/></xs:unique>
+        </xs:element>
+        <xs:element name="appx" type="s:chap">
+          <xs:unique ref="s:u"/>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err, "a valid prefixed @ref must resolve")
+	require.NotNil(t, schema)
+
+	// The ref'd unique applies at appx: a duplicate @nr inside appx is invalid.
+	bad := `<doc xmlns="urn:x"><appx><section nr="1"/><section nr="1"/></appx></doc>`
+	bdoc, err := helium.NewParser().Parse(t.Context(), []byte(bad))
+	require.NoError(t, err)
+	require.Error(t, xsd.NewValidator(schema).Validate(t.Context(), bdoc))
 }
 
 // TestIDLaxWildcardXsiTypeAssessed covers PR860-XSD-ID-001: an element admitted

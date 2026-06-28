@@ -1494,3 +1494,17 @@ func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.El
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 }
+
+// reportInvalidQNameValue emits a fatal schema-compilation error for a
+// QName-valued attribute whose value is not a lexically valid xs:QName (e.g. a
+// leading colon like ":u"). Without this such a value would slip past the
+// prefix-resolution path (strings.Cut yields an empty prefix that bypasses the
+// unbound-prefix check) and resolve as an unprefixed reference.
+func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, ref string) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("The QName value '%s' is not a valid QName.", ref)
+	c.schemaError(ctx,
+		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
+}

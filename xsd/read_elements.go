@@ -910,6 +910,17 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		// An empty @refer is reported by checkKeyRefRefers.
 		return QName{}, false
 	}
+	// A malformed @refer (e.g. ":k") is a fatal error, not a silently-resolved
+	// unprefixed reference. The returned bool suppresses checkKeyRefRefers's own
+	// "unknown key" diagnostic, mirroring the unbound-prefix path.
+	if err := validateQName(refer); err != nil {
+		if c.filename != "" {
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' that is not a valid QName.", idc.Name, refer)
+			c.schemaError(ctx,
+				schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+		}
+		return QName{}, true
+	}
 	if prefix, local, found := strings.Cut(refer, ":"); found {
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {
@@ -940,6 +951,13 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 // to the schema's target namespace (identity-constraints live in the target
 // namespace).
 func (c *compiler) resolveIDCNameQName(ctx context.Context, elem *helium.Element, ref string) (QName, bool) {
+	// A malformed value (e.g. ":u") must be a fatal error, not silently resolved
+	// as an unprefixed/default-namespace reference (strings.Cut would yield an
+	// empty prefix that bypasses the unbound-prefix check below).
+	if err := validateQName(ref); err != nil {
+		c.reportInvalidQNameValue(ctx, elem, ref)
+		return QName{}, true
+	}
 	if prefix, local, found := strings.Cut(ref, ":"); found {
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {

@@ -375,11 +375,17 @@ schema error. A `@ref` constraint has no name of its own and is skipped in the
 duplicate-name and key-name registries. The ref form is detected by PRESENCE
 (`hasAttr(elem, attrRef)`, since `getAttr` cannot tell an absent attribute from an
 empty one) so a literal `ref=""` is recognized as the (invalid) ref form and
-reported as a fatal error rather than silently dropped. A prefixed `@ref` whose
-prefix is not bound in scope is a fatal error (`resolveIDCNameQName` →
-`reportUnboundQNamePrefix`, the same path every other QName-valued schema attribute
-uses), not a silent map to no-namespace; the `constraintRefUnbound` flag suppresses
-the follow-up "unknown constraint" diagnostic. The `@ref` form is mutually
+reported as a fatal error rather than silently dropped. `resolveIDCNameQName`
+first validates `@ref` as a lexical `xs:QName` (`validateQName`) before splitting
+the prefix, so a malformed value such as `:u` (empty prefix) is a fatal error
+(`reportInvalidQNameValue`) instead of being silently resolved as an unprefixed
+reference — `strings.Cut(":u", ":")` would otherwise yield an empty prefix that
+bypasses the unbound-prefix check. `@refer` (`resolveIDCReferQName`) is validated
+the same way. A prefixed `@ref` whose prefix is not bound in scope is a fatal error
+(`resolveIDCNameQName` → `reportUnboundQNamePrefix`, the same path every other
+QName-valued schema attribute uses), not a silent map to no-namespace; the
+`constraintRefUnbound` flag suppresses the follow-up "unknown constraint"
+diagnostic. The `@ref` form is mutually
 exclusive with the full form: a `@ref` constraint that ALSO carries
 `name`/`xs:selector`/`xs:field`/`refer` is rejected (`reportIDCRefConflict`). The
 `name` and `refer` companions are detected by PRESENCE (`hasAttr`), not value, so
