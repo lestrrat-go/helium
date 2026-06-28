@@ -350,7 +350,10 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     no global declaration — using a non-reporting `resolveXsiTypeQuiet`, then
     recurses. This is what lets a nested `<item xsi:type="itemType" n="5"/>` /
     `n="+5"` pair under an `xs:any processContents="skip"` wrapper collide in
-    xs:integer value space rather than being wrongly accepted as unique.
+    xs:integer value space rather than being wrongly accepted as unique. These
+    skip-only actual type records are NOT written to the XSD 1.1 `assertAnnotations`
+    map, so an ancestor `xs:assert` still atomizes skipped content as unassessed
+    (`xs:untypedAtomic`) even when the skipped node carries a resolvable `xsi:type`.
 
 **XSD 1.1 identity-constraint extras** (compile time): `@xpathDefaultNamespace`
 on `xs:selector`/`xs:field` (or inherited from the root `xs:schema`) becomes a

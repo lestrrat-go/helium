@@ -481,13 +481,14 @@ type validationContext struct {
 	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
 	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
-	// assertAnnotations maps element and attribute nodes to their XSD type name
-	// (the xpath3 annotation form, e.g. "xs:integer"). It is populated during
-	// validation in XSD 1.1 mode (nil otherwise) so xs:assert tests evaluate
-	// against a PSVI-typed tree: a typed attribute like @length atomizes to
-	// xs:nonNegativeInteger rather than xs:untypedAtomic (which a value
+	// assertAnnotations maps assessed element and attribute nodes to their XSD
+	// type name (the xpath3 annotation form, e.g. "xs:integer"). It is populated
+	// during validation in XSD 1.1 mode (nil otherwise) so xs:assert tests
+	// evaluate against a PSVI-typed tree: a typed attribute like @length atomizes
+	// to xs:nonNegativeInteger rather than xs:untypedAtomic (which a value
 	// comparison would cast to xs:string), and "instance of" tests see the
-	// declared type.
+	// declared type. Unassessed skip/lax-no-declaration content is deliberately
+	// excluded even when actualElemType records an xsi:type for IDC canonicalization.
 	assertAnnotations TypeAnnotations
 	// assertAnonTypes / assertAnonNames register INLINE ANONYMOUS list/union simple
 	// types under stable synthetic annotation names (Q{assertAnonNS}N). An anonymous
@@ -2059,8 +2060,9 @@ func (vc *validationContext) assertRegisterAnonChildren(td *TypeDef) {
 // IDC canonicalization, as for skip/lax-no-declaration content): only an assessed
 // element is recorded in assessedElemType, which the XSD 1.1 ID/IDREF pass
 // consults. actualElemType is always recorded (post-xsi:type) for pass-2 IDC field
-// canonicalization, independent of assessment. The assert annotations map (1.1) is
-// also populated so xs:assert/xs:assertion tests atomize a PSVI-typed tree.
+// canonicalization, independent of assessment. The assert annotations map (1.1)
+// is populated only for assessed elements so xs:assert/xs:assertion tests atomize
+// the PSVI-typed tree without typing processContents="skip" subtrees.
 func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef, assessed bool) {
 	if td != nil {
 		if vc.actualElemType != nil {
@@ -2070,7 +2072,7 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 			vc.assessedElemType[elem] = td
 		}
 	}
-	if vc.assertAnnotations != nil {
+	if assessed && vc.assertAnnotations != nil {
 		vc.assertAnnotations[elem] = vc.assertAnnotationName(td)
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {

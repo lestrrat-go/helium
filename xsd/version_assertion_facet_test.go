@@ -565,6 +565,23 @@ func TestVersion11AssertionFacetSchemaAwareUntypedComparison(t *testing.T) {
 	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">6</e>`), xsd.ErrValidationFailed)
 }
 
+func TestVersion11AssertSkipWildcardXsiTypeIsNotPSVITyped(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:assert test="data(x) instance of xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.ErrorIs(t, validateAssertion(t, schema, `<root><x xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:integer">5</x></root>`), xsd.ErrValidationFailed)
+}
+
 // TestVersion11AttrMergeExtensionOfRestriction covers the round-4 finding
 // (XSD11-ATTR-MERGE-EXT-001): an EXTENSION whose base is a RESTRICTION that
 // itself inherited a required attribute must still require it. The effective
