@@ -1617,6 +1617,35 @@ func TestVersion11AssertInlineAnonQNameUnion(t *testing.T) {
 	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p" q="p:x"/>`))
 }
 
+func TestVersion11AssertInlineAnonUnionMembersThroughRestriction(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u">
+        <xs:simpleType>
+          <xs:restriction>
+            <xs:simpleType>
+              <xs:union memberTypes="xs:string">
+                <xs:simpleType>
+                  <xs:restriction base="xs:int">
+                    <xs:maxInclusive value="10"/>
+                  </xs:restriction>
+                </xs:simpleType>
+              </xs:union>
+            </xs:simpleType>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:assert test="data(@u) instance of xs:string"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e u="20"/>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<e u="5"/>`), xsd.ErrValidationFailed)
+}
+
 // TestVersion11AssertUnionActiveMemberList verifies that assert NODE atomization
 // resolves a union's ACTIVE member value-dependently (PR859-CR19-02): for
 // memberTypes="IntList xs:string" with value "1 2" the active member is the LIST,

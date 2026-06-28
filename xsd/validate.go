@@ -2044,14 +2044,18 @@ func (vc *validationContext) assertRegisterAnon(td *TypeDef) string {
 	return name
 }
 
-// assertRegisterAnonChildren registers the anonymous list-item / union-member types
-// reachable from td (one level; assertRegisterAnon recurses deeper for each).
+// assertRegisterAnonChildren registers the anonymous list-item / union-member
+// types reachable from td and its bases. A restriction wrapper can inherit its
+// effective list/union variety from an anonymous base type, so the child
+// metadata must be registered across the full base chain.
 func (vc *validationContext) assertRegisterAnonChildren(td *TypeDef) {
-	if td.ItemType != nil {
-		vc.assertRegisterAnon(td.ItemType)
-	}
-	for _, m := range td.MemberTypes {
-		vc.assertRegisterAnon(m)
+	for cur := range baseChain(td) {
+		if cur.ItemType != nil {
+			vc.assertRegisterAnon(cur.ItemType)
+		}
+		for _, m := range cur.MemberTypes {
+			vc.assertRegisterAnon(m)
+		}
 	}
 }
 

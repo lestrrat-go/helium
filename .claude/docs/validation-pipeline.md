@@ -355,6 +355,12 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     map, so an ancestor `xs:assert` still atomizes skipped content as unassessed
     (`xs:untypedAtomic`) even when the skipped node carries a resolvable `xsi:type`.
 
+    XSD 1.1 assertion PSVI annotations register INLINE ANONYMOUS list item and
+    union member metadata across the annotated type's full base chain, not just
+    the immediate `TypeDef`. This preserves anonymous faceted members inherited
+    through a restriction wrapper, so `data()` active-member selection in
+    `xs:assert` sees the same value space as validation.
+
 **XSD 1.1 identity-constraint extras** (compile time): `@xpathDefaultNamespace`
 on `xs:selector`/`xs:field` (or inherited from the root `xs:schema`) becomes a
 default ELEMENT namespace URI stored per selector/field
