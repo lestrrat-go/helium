@@ -342,27 +342,34 @@ func wildcardConstraintSubset11(sub, super *Wildcard, schema *Schema, isAttr boo
 	if super.NotQNameDefined && !sub.NotQNameDefined {
 		return false
 	}
-	// ##definedSibling: a derived wildcard may neither DROP the marker nor (when
-	// both carry it) resolve to a NARROWER sibling-name set. Comparing the marker
-	// bit alone is insufficient — base and derived live in different content
-	// models, so their resolved SiblingNames can differ. Every sibling name super
-	// excludes must also be disallowed by sub (again via the full test).
-	if super.NotQNameDefinedSibling {
-		if !sub.NotQNameDefinedSibling {
+	// ##definedSibling: every concrete sibling name super excludes (its resolved
+	// SiblingNames) must also be disallowed by sub. This runs REGARDLESS of the
+	// NotQNameDefinedSibling marker, because a materialized union can carry a
+	// finite SiblingNames set with the marker dropped (the marker survives only
+	// when BOTH operands had it) — those names still exclude matches, so sub must
+	// honor them or the restriction silently re-admits them.
+	for _, qn := range super.SiblingNames {
+		if wildcardAllowsExpandedName(sub, qn.Local, qn.NS, schema, isAttr) {
 			return false
 		}
-		for _, qn := range super.SiblingNames {
-			if wildcardAllowsExpandedName(sub, qn.Local, qn.NS, schema, isAttr) {
-				return false
-			}
-		}
+	}
+	// A LIVE ##definedSibling marker excludes the (content-model-derived) sibling
+	// set open-endedly; require sub to also carry the marker so a derived wildcard
+	// in a different content model cannot re-admit siblings the base would compute
+	// there.
+	if super.NotQNameDefinedSibling && !sub.NotQNameDefinedSibling {
+		return false
 	}
 	return true
 }
 
 // wildcardHas11Fields reports whether a wildcard carries any XSD 1.1 negated
 // namespace/name constraint. Used to route to the 1.1-aware algebra without
-// disturbing the byte-identical 1.0 union path.
+// disturbing the byte-identical 1.0 union path. Resolved SiblingNames count as
+// 1.1 state even when NotQNameDefinedSibling is false — a materialized union can
+// retain concrete ##definedSibling exclusions without the live marker, and those
+// names still exclude matches, so subset/algebra checks must not skip them.
 func wildcardHas11Fields(wc *Wildcard) bool {
-	return wc.NotNamespace != nil || len(wc.NotQName) > 0 || wc.NotQNameDefined || wc.NotQNameDefinedSibling
+	return wc.NotNamespace != nil || len(wc.NotQName) > 0 || wc.NotQNameDefined ||
+		wc.NotQNameDefinedSibling || len(wc.SiblingNames) > 0
 }

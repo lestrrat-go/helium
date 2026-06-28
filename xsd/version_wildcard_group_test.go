@@ -154,6 +154,52 @@ func TestVersion11UnionRetainsSiblingNames(t *testing.T) {
 	})
 }
 
+// TestVersion11UnionSiblingNamesWithoutMarker covers gauntlet finding
+// PR858-R8-001: when a base xs:all union mixes a ##definedSibling wildcard with a
+// DISJOINT plain wildcard, the materialized union retains the resolved sibling
+// names but DROPS the NotQNameDefinedSibling marker (kept only when BOTH operands
+// carry it). Those retained names must still be honored: classification
+// (wildcardHas11Fields) and the subset check must treat them as exclusions, so a
+// derived wildcard that re-admits a base-excluded sibling is rejected.
+func TestVersion11UnionSiblingNamesWithoutMarker(t *testing.T) {
+	schema := func(derivedKeepsSibling bool) string {
+		derivedWildcard := `          <xs:any namespace="##targetNamespace urn:o" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>`
+		if derivedKeepsSibling {
+			derivedWildcard = `          <xs:any namespace="##targetNamespace urn:o" notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>`
+		}
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:element name="a" type="xs:string" minOccurs="0"/>
+      <xs:any namespace="##targetNamespace" notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:any namespace="urn:o" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="t:b">
+        <xs:all>
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+` + derivedWildcard + `
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="t:r"/>
+</xs:schema>`
+	}
+
+	t.Run("derived dropping ##definedSibling re-admits the base-excluded sibling (rejected)", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, schema(false))
+	})
+
+	t.Run("derived keeping ##definedSibling compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema(true))
+	})
+}
+
 // TestVersion11NotQNameAcceptsXMLNameChars covers gauntlet finding PR858-R6-004:
 // notQName must accept any valid XML NCName, including non-ASCII NameChars like
 // the middle dot (U+00B7), via the shared xmlchar.IsValidQName validator.
