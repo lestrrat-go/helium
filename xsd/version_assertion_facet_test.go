@@ -502,3 +502,78 @@ func TestVersion11AssertionRound3Fixes(t *testing.T) {
 		require.ErrorIs(t, validateAssertion(t, schema, `<e>7</e>`), xsd.ErrValidationFailed)
 	})
 }
+
+// TestVersion11AttrMergeExtensionOfRestriction covers the round-4 finding
+// (XSD11-ATTR-MERGE-EXT-001): an EXTENSION whose base is a RESTRICTION that
+// itself inherited a required attribute must still require it. The effective
+// attribute set must be finalized topologically across both derivation kinds, not
+// in the order the extension/restriction passes happen to run.
+func TestVersion11AttrMergeExtensionOfRestriction(t *testing.T) {
+	// A declares required req; B restricts A (inherits req); E extends B.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="E">
+    <xs:simpleContent>
+      <xs:extension base="B"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:restriction base="A"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="A">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="req" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>`
+
+	t.Run("missing inherited required attribute is rejected", func(t *testing.T) {
+		t.Parallel()
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.ErrorIs(t, validateAssertion(t, schema, `<e>ok</e>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("present inherited required attribute is accepted", func(t *testing.T) {
+		t.Parallel()
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e req="x">ok</e>`))
+	})
+
+	t.Run("complexContent extension of restriction inherits required attribute", func(t *testing.T) {
+		t.Parallel()
+		// Same chain over complexContent (element-only) content models.
+		const cc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="B"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:complexContent>
+      <xs:restriction base="A">
+        <xs:sequence>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="A">
+    <xs:sequence>
+      <xs:element name="c" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="req" type="xs:string" use="required"/>
+  </xs:complexType>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), cc)
+		require.NoError(t, err)
+		require.ErrorIs(t, validateAssertion(t, schema, `<e><c>x</c></e>`), xsd.ErrValidationFailed)
+		require.NoError(t, validateAssertion(t, schema, `<e req="y"><c>x</c></e>`))
+	})
+}

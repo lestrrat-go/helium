@@ -327,15 +327,20 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for _, td := range extensionTypes {
 		if td.ContentType == ContentTypeSimple {
 			// simpleContent extension — check for base-vs-derived duplicate
-			// attributes BEFORE inheriting the base attributes, then merge.
-			c.checkExtensionAttrDuplicates(ctx, td)
-			if td.BaseType.Attributes != nil {
-				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
-			}
-			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = td.BaseType.AnyAttribute
-			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+			// attributes BEFORE inheriting the base attributes, then merge. In XSD
+			// 1.1 attribute inheritance is deferred to finalizeEffectiveAttrs, which
+			// is topological across BOTH extension and restriction derivations so an
+			// extension of a restriction reads a FINALIZED base attribute set.
+			if c.version != Version11 {
+				c.checkExtensionAttrDuplicates(ctx, td)
+				if td.BaseType.Attributes != nil {
+					td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+				}
+				if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
+					td.AnyAttribute = td.BaseType.AnyAttribute
+				} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
+					td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+				}
 			}
 			continue
 		}
@@ -395,17 +400,18 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if td.ContentType == ContentTypeEmpty && td.BaseType.ContentType != ContentTypeEmpty {
 			td.ContentType = td.BaseType.ContentType
 		}
-		// Check for duplicate attributes before merging base type attributes.
-		c.checkExtensionAttrDuplicates(ctx, td)
-		// Inherit attributes from base.
-		if td.BaseType.Attributes != nil {
-			td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
-		}
-		// Inherit/union anyAttribute wildcards.
-		if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
-			td.AnyAttribute = td.BaseType.AnyAttribute
-		} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-			td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+		// Check for duplicate attributes before merging base type attributes, then
+		// inherit. XSD 1.1 defers both to finalizeEffectiveAttrs (topological).
+		if c.version != Version11 {
+			c.checkExtensionAttrDuplicates(ctx, td)
+			if td.BaseType.Attributes != nil {
+				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+			}
+			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
+				td.AnyAttribute = td.BaseType.AnyAttribute
+			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
+				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+			}
 		}
 	}
 
@@ -424,25 +430,39 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		return si.line < sj.line
 	})
 	for _, td := range restrictionTypes {
-		c.checkRestrictionAttrs(ctx, td)
+		// In XSD 1.1 checkRestrictionAttrs is run inside finalizeEffectiveAttrs,
+		// once the base's effective attributes are finalized; here only the content
+		// model restriction check runs (it is independent of attribute finalization).
+		if c.version != Version11 {
+			c.checkRestrictionAttrs(ctx, td)
+		}
 		c.checkRestrictionParticles(ctx, td)
 	}
 
-	// XSD 1.1: a restriction inherits each base attribute use it does not itself
-	// redeclare (§3.4.2.2). Merge those base uses into the derived type's effective
-	// {attribute uses} so validation enforces and PSVI-annotates them. This MUST run
-	// for EVERY restriction-derived complex type (not only assert-bearing ones):
-	// checkRestrictionAttrs above no longer reports a non-redeclared required base
-	// attribute as "missing" in 1.1 (it is inherited), so without the merge such an
-	// inherited required attribute would be silently dropped and an instance omitting
-	// it would wrongly validate. Runs AFTER the derivation checks, which compare the
-	// derived type's OWN declarations against the base. Gated to 1.1 so XSD 1.0 stays
-	// byte-identical.
+	// XSD 1.1: finalize each derived complex type's effective {attribute uses}
+	// TOPOLOGICALLY across BOTH extension and restriction derivations. A derivation
+	// inherits each base attribute use it does not redeclare (§3.4.2); a required
+	// base attribute that is not redeclared must stay required, so the merge — not
+	// the relaxed checkRestrictionAttrs — is what keeps it enforced. The merge must
+	// read a FINALIZED base attribute set, so an extension of a restriction (or vice
+	// versa) inherits correctly regardless of source order; the extension and
+	// restriction passes above DEFER all attribute work to here in 1.1. Gated to
+	// 1.1 so XSD 1.0 stays byte-identical.
 	if c.version == Version11 {
+		derived := make([]*TypeDef, 0, len(extensionTypes)+len(restrictionTypes))
+		derived = append(derived, extensionTypes...)
+		derived = append(derived, restrictionTypes...)
+		sort.SliceStable(derived, func(i, j int) bool {
+			si, sj := c.typeDefSources[derived[i]], c.typeDefSources[derived[j]]
+			if si.line != sj.line {
+				return si.line < sj.line
+			}
+			return si.ordinal < sj.ordinal
+		})
 		merged := make(map[*TypeDef]bool)
 		visiting := make(map[*TypeDef]bool)
-		for _, td := range restrictionTypes {
-			c.mergeRestrictionAttrs(td, merged, visiting)
+		for _, td := range derived {
+			c.finalizeEffectiveAttrs(ctx, td, merged, visiting)
 		}
 	}
 
@@ -1171,24 +1191,25 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 	}
 }
 
-// mergeRestrictionAttrs folds the base type's EFFECTIVE attribute uses that the
-// derived restriction does not itself redeclare into td.Attributes, applying XSD
-// 1.1 restriction semantics: a derived declaration (including use="prohibited")
-// overrides the base use of the same expanded QName; an absent derived
-// declaration inherits the base use verbatim. An attribute wildcard is inherited
-// when the derived type declares none. Validation already handles prohibited uses
-// (rejecting a present instance attribute), so they are kept in the merged set.
+// finalizeEffectiveAttrs computes the effective {attribute uses} of a derived
+// complex type (XSD 1.1) TOPOLOGICALLY across BOTH extension and restriction
+// derivations: the base is finalized FIRST (recursively, regardless of its
+// derivation kind), then the derivation attribute check runs against td's OWN
+// declarations and the now-finalized base, then td inherits every base use it
+// does not redeclare. This makes the result independent of source order and, in
+// particular, lets an extension of a restriction (or a restriction of an
+// extension, at any depth) read a complete base attribute set — the round-3 merge
+// only recursed through restriction bases and so dropped attributes that a base
+// restriction had itself inherited.
 //
-// The merge is TOPOLOGICAL, not source-order: before inheriting from a base that
-// is ITSELF a restriction, that base is merged first (recursively) so its own
-// inherited attributes are already present. This makes the result independent of
-// the order types appear in the schema — a forward-referenced chain
-// (D restricts B, B restricts A, with B declared after D) still gives D every
-// attribute A contributes. merged memoizes completed types (each merges once);
-// visiting guards a cyclic base chain (an invalid schema reported elsewhere) from
-// infinite recursion. Extension bases were already fully merged in the
-// depth-sorted extension pass, so only restriction bases are recursed into.
-func (c *compiler) mergeRestrictionAttrs(td *TypeDef, merged, visiting map[*TypeDef]bool) {
+// A derived declaration (including use="prohibited") overrides the base use of
+// the same expanded QName; validation handles prohibited uses (rejecting a
+// present instance attribute), so they are kept in the merged set. An attribute
+// wildcard is inherited when the derived type declares none; an extension also
+// UNIONS its own wildcard with the base's. merged memoizes completed types (each
+// finalizes once); visiting guards a cyclic base chain (an invalid schema
+// reported by the circular-type check) from infinite recursion.
+func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merged, visiting map[*TypeDef]bool) {
 	if td == nil || merged[td] {
 		return
 	}
@@ -1197,15 +1218,27 @@ func (c *compiler) mergeRestrictionAttrs(td *TypeDef, merged, visiting map[*Type
 	}
 	visiting[td] = true
 	base := td.BaseType
-	if base != nil && base.Derivation == DerivationRestriction {
-		c.mergeRestrictionAttrs(base, merged, visiting)
+	if base != nil && base.Derivation != DerivationNone {
+		c.finalizeEffectiveAttrs(ctx, base, merged, visiting)
 	}
 	delete(visiting, td)
 	merged[td] = true
 
-	if base == nil {
+	if base == nil || td.Derivation == DerivationNone {
 		return
 	}
+
+	// The base now carries its FINAL effective attribute set. Run the derivation
+	// attribute check with td's OWN declarations against that finalized base BEFORE
+	// inheriting (so the check sees the real derived-vs-base comparison and the
+	// extension duplicate detection sees inherited base attrs), then merge.
+	switch td.Derivation {
+	case DerivationRestriction:
+		c.checkRestrictionAttrs(ctx, td)
+	case DerivationExtension:
+		c.checkExtensionAttrDuplicates(ctx, td)
+	}
+
 	if len(base.Attributes) > 0 {
 		derivedByName := make(map[QName]struct{}, len(td.Attributes))
 		for _, au := range td.Attributes {
@@ -1218,8 +1251,13 @@ func (c *compiler) mergeRestrictionAttrs(td *TypeDef, merged, visiting map[*Type
 			td.Attributes = append(td.Attributes, bau)
 		}
 	}
-	if td.AnyAttribute == nil {
+	// anyAttribute: a restriction inherits the base wildcard when it declares none;
+	// an extension additionally unions its own wildcard with the base's.
+	switch {
+	case td.AnyAttribute == nil:
 		td.AnyAttribute = base.AnyAttribute
+	case td.Derivation == DerivationExtension && base.AnyAttribute != nil:
+		td.AnyAttribute = wildcardUnion(base.AnyAttribute, td.AnyAttribute)
 	}
 }
 
