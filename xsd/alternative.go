@@ -416,7 +416,14 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	if isErrorType(alt) {
 		return true
 	}
-	if isDerivedFrom(alt, decl) {
+	// strictBuiltinAwareDerivedFrom is isDerivedFrom plus the built-in simple-type
+	// hierarchy (built-ins are not BaseType-linked, so isDerivedFrom alone cannot
+	// chain e.g. xs:nonNegativeInteger → xs:integer). It accepts a complex
+	// simpleContent alternative whose content extends/restricts a built-in subtype of
+	// the declared built-in type, and a direct simple alternative that genuinely
+	// derives from it — but NOT an unrelated atomic (xs:string vs xs:integer) or a
+	// list vs its item type (xs:NMTOKENS vs xs:NMTOKEN).
+	if strictBuiltinAwareDerivedFrom(alt, decl) {
 		return true
 	}
 	if decl.Variety == TypeVarietyUnion {
@@ -426,27 +433,21 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 			}
 		}
 	}
-	// The XSD built-in simple-type hierarchy is NOT BaseType-linked, so isDerivedFrom
-	// cannot chain e.g. xs:nonNegativeInteger → xs:integer → xs:decimal. When the
-	// DECLARED type is a built-in simple type and alt's effective built-in base
-	// (builtinBaseLocal walks alt's linked base chain to the first built-in) is
-	// derived from it, alt IS validly derived from decl. This accepts a complex
-	// simpleContent alternative whose content extends/restricts a built-in subtype of
-	// the declared type — WITHOUT broadening to unrelated complex types (an
-	// element-only complex bottoms out at xs:anyType, not a simple type, and an
-	// unrelated simple base does not chain to decl). It is gated on decl being the
-	// built-in ITSELF (not a user restriction of it), because deriving from a
-	// built-in subtype only implies derivation from decl when decl is that built-in.
-	if decl.Name.NS == lexicon.NamespaceXSD && !decl.IsComplex &&
-		builtinSimpleDerivedFrom(builtinBaseLocal(alt), decl.Name.Local) {
-		return true
+	// When decl is a BUILT-IN simple type the built-in hierarchy is DECISIVE: the
+	// check above already accepted every genuine built-in derivation, so reaching
+	// here means alt is NOT derived from decl and must be rejected — there is NO
+	// permissive simple-vs-simple fallback (that would false-accept xs:NMTOKENS for
+	// xs:NMTOKEN, or xs:string for xs:integer). The sole exception is xs:anySimpleType,
+	// the root of the simple-type hierarchy, from which every non-complex simple type
+	// is validly derived.
+	if isBuiltinSimpleType(decl) {
+		return decl.Name.Local == lexicon.TypeAnySimpleType && !alt.IsComplex
 	}
-	// Final fallback: accept an unconfirmed derivation only when BOTH sides are
-	// actual SIMPLE type DEFINITIONS. IsComplex is the reliable discriminator: a
-	// complex type with <xs:simpleContent> also has ContentType == ContentTypeSimple,
-	// so keying off ContentType would wrongly accept a simple alternative against
-	// such a complex declared type (or vice versa). A simple type can never be
-	// derived from a complex one, so a simple-vs-complex pair that isDerivedFrom did
-	// not accept is always a real violation, not a built-in-hierarchy-linking gap.
+	// USER-defined simple decl: its BaseType chain IS linked, so strictBuiltinAware-
+	// DerivedFrom already saw any real derivation. An unconfirmed simple-vs-simple
+	// pair is the rare hierarchy-gap case (e.g. a user restriction of a built-in
+	// against another) — accept conservatively when BOTH sides are simple type
+	// DEFINITIONS. IsComplex is the reliable discriminator (a complex type with
+	// <xs:simpleContent> also has ContentType == ContentTypeSimple).
 	return !alt.IsComplex && !decl.IsComplex
 }

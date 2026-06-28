@@ -1475,8 +1475,13 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 		return nil, fmt.Errorf("xsi:type not found")
 	}
 
-	// Check derivation: xsi:type must be the same as or derived from the declared type.
-	if declaredType != nil && !isDerivedFrom(td, declaredType) {
+	// Check derivation: xsi:type must be the same as or derived from the declared
+	// type. Use the built-in-aware predicate so a narrowing to a built-in subtype
+	// (e.g. xsi:type="xs:int" over a declared xs:integer) is accepted — the built-in
+	// types are registered without BaseType links, so raw isDerivedFrom would wrongly
+	// reject it. The predicate is STRICT (no permissive simple-vs-simple fallback),
+	// so an unrelated xsi:type (e.g. xs:string over xs:integer) is still rejected.
+	if declaredType != nil && !strictBuiltinAwareDerivedFrom(td, declaredType) {
 		msg := fmt.Sprintf("The type definition '%s' is not validly derived from the type definition '%s'.",
 			typeDisplayName(td), typeDisplayName(declaredType))
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)

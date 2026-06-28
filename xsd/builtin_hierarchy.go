@@ -94,3 +94,25 @@ func builtinSimpleDerivedFrom(sub, super string) bool {
 	}
 	return false
 }
+
+// isBuiltinSimpleType reports whether td is a built-in (XSD-namespace) SIMPLE type
+// definition. The built-in simple types are registered WITHOUT BaseType pointer
+// links, so their derivation must be resolved through the builtinSimpleBase table
+// rather than by walking BaseType.
+func isBuiltinSimpleType(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && !td.IsComplex
+}
+
+// strictBuiltinAwareDerivedFrom reports whether sub is validly derived from super
+// (Type Derivation OK), additionally consulting the built-in simple-type hierarchy
+// when super is a built-in simple type (whose BaseType chain is not linked, so
+// isDerivedFrom alone cannot confirm e.g. xs:int ⊂ xs:integer). Unlike the CTA
+// substitutability fallback it has NO permissive simple-vs-simple acceptance: it is
+// the STRICT derivation predicate used both for the xsi:type-must-derive-from-the-
+// declared-type check and as the decisive built-in branch of isValidlySubstitutable.
+func strictBuiltinAwareDerivedFrom(sub, super *TypeDef) bool {
+	if isDerivedFrom(sub, super) {
+		return true
+	}
+	return isBuiltinSimpleType(super) && builtinSimpleDerivedFrom(builtinBaseLocal(sub), super.Name.Local)
+}
