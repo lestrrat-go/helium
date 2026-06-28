@@ -44,6 +44,12 @@ type compiler struct {
 	// through a referenced group — not just direct xs:attribute children — is
 	// reported (ag-props-correct.2).
 	attrGroupRefChildren map[QName][]QName
+	// XSD 1.1: the xs:anyAttribute wildcard declared directly inside a GLOBAL
+	// attribute group, keyed by the group's QName. A type referencing the group
+	// intersects this wildcard (and those of nested group refs) into its
+	// effective attribute wildcard. Populated only in Version11 so 1.0 behavior
+	// (group wildcards dropped) is unchanged.
+	attrGroupWildcards map[QName]*Wildcard
 	// per-edge source info for the nested xs:attributeGroup ref children recorded in
 	// attrGroupRefChildren, keyed by the containing group's QName and index-aligned
 	// with the corresponding attrGroupRefChildren slice. Each entry records the
@@ -454,6 +460,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		groupSources:             make(map[QName]groupSource),
 		attrGroupSources:         make(map[QName]attrGroupSource),
+		attrGroupWildcards:       make(map[QName]*Wildcard),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
@@ -550,6 +557,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	// Second pass: resolve type references.
 	c.resolveRefs(ctx)
+
+	// XSD 1.1: resolve ##definedSibling on element wildcards now that content
+	// models (including expanded group refs) are fully built.
+	if c.version == Version11 {
+		c.resolveDefinedSiblings()
+	}
 
 	// Reject circular simple-type definitions (a union/list/restriction that
 	// reaches itself) BEFORE any check that walks the variety/base chain. A

@@ -1,0 +1,282 @@
+package xsd_test
+
+import (
+	"testing"
+
+	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
+	"github.com/stretchr/testify/require"
+)
+
+// mustCompile11Fail asserts schemaXML fails to compile under XSD 1.1.
+func mustCompile11Fail(t *testing.T, schemaXML string) {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
+// mustCompile11OK asserts schemaXML compiles cleanly under XSD 1.1.
+func mustCompile11OK(t *testing.T, schemaXML string) {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+	require.NoError(t, err)
+}
+
+// TestVersion11WildcardNotNamespace covers the XSD 1.1 @notNamespace constraint
+// on xs:anyAttribute and xs:any: it admits any namespace EXCEPT the listed ones
+// (with ##local = absent, ##targetNamespace = the schema TNS).
+func TestVersion11WildcardNotNamespace(t *testing.T) {
+	const attrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute notNamespace="http://x.com/ http://y.com/" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("1.1 admits an attribute outside the excluded namespaces", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), attrSchema,
+			`<e a:z="1" xmlns:a="http://other.com/"/>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("1.1 rejects an attribute in an excluded namespace", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), attrSchema,
+			`<e a:z="1" xmlns:a="http://x.com/"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	const elemSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any notNamespace="##local" processContents="skip" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("1.1 element wildcard notNamespace=##local rejects an absent-namespace child", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), elemSchema,
+			`<root><c/></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.1 element wildcard notNamespace=##local admits a namespaced child", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), elemSchema,
+			`<root><c xmlns="http://ns.com/"/></root>`)
+		require.NoError(t, err)
+	})
+}
+
+// TestVersion11WildcardNotQName covers the XSD 1.1 @notQName disallowed-name set,
+// including an explicit QName and ##defined (a name with a global declaration).
+func TestVersion11WildcardNotQName(t *testing.T) {
+	const attrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute notQName="xml:space" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("1.1 admits an attribute not named in notQName", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), attrSchema,
+			`<e a="1"/>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("1.1 rejects the excluded xml:space attribute", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), attrSchema,
+			`<e xml:space="preserve"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.0 still admits xml:space (XML-namespace attrs always allowed)", func(t *testing.T) {
+		t.Parallel()
+		// In 1.0 @notQName is not recognized and xml: attributes are leniently
+		// allowed, so the same instance validates.
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), attrSchema,
+			`<e xml:space="preserve"/>`)
+		require.NoError(t, err)
+	})
+
+	const definedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute namespace="##any" notQName="##defined" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="g" type="xs:string"/>
+</xs:schema>`
+
+	t.Run("1.1 ##defined rejects an attribute with a global declaration", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), definedSchema,
+			`<e g="x"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.1 ##defined admits an undeclared attribute", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), definedSchema,
+			`<e h="x"/>`)
+		require.NoError(t, err)
+	})
+}
+
+// TestVersion11WildcardDefinedSibling covers @notQName="##definedSibling": an
+// element wildcard does not claim children whose names match sibling element
+// declarations in the same content model.
+func TestVersion11WildcardDefinedSibling(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="z"/>
+  <xs:complexType name="z">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:any notQName="##definedSibling" processContents="skip" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	t.Run("wildcard admits a non-sibling name", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root><a>x</a><b/></root>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("wildcard does not claim a second sibling-named child", func(t *testing.T) {
+		t.Parallel()
+		// The sibling element "a" has maxOccurs=1; a second <a> is excluded by the
+		// ##definedSibling wildcard, so it is not accepted as open content.
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root><a>x</a><a>y</a></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+}
+
+// TestVersion11WildcardSchemaChecks covers the schema-validity rules added with
+// the 1.1 wildcard attributes.
+func TestVersion11WildcardSchemaChecks(t *testing.T) {
+	t.Run("namespace and notNamespace are mutually exclusive", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute namespace="##other" notNamespace="##targetNamespace" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	})
+
+	t.Run("notQName name must be in a namespace the wildcard admits", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="c">
+    <xs:all>
+      <xs:any processContents="lax" namespace="##other" notQName="memory" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:element name="c" type="c"/>
+</xs:schema>`)
+	})
+
+	t.Run("invalid QName in notQName is rejected", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="c">
+    <xs:sequence/>
+    <xs:anyAttribute processContents="lax" notQName="xml:xml:lang"/>
+  </xs:complexType>
+  <xs:element name="c" type="c"/>
+</xs:schema>`)
+	})
+
+	t.Run("valid notNamespace + notQName compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute notNamespace="http://x.com/" notQName="xml:space" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	})
+
+	t.Run("attribute declaration in the XSI namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:attribute name="bogus" type="xs:string"/>
+</xs:schema>`)
+	})
+}
+
+// TestVersion11AttrGroupWildcardIntersection covers the XSD 1.1 attribute
+// wildcard INTERSECTION: a type referencing two attribute groups, each with an
+// xs:anyAttribute, admits only attributes BOTH groups admit.
+func TestVersion11AttrGroupWildcardIntersection(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="t"/>
+  <xs:complexType name="t">
+    <xs:sequence/>
+    <xs:attributeGroup ref="a"/>
+    <xs:attributeGroup ref="b"/>
+  </xs:complexType>
+  <xs:attributeGroup name="a">
+    <xs:anyAttribute notNamespace="##local" processContents="skip"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="b">
+    <xs:anyAttribute notNamespace="http://eve.com/" processContents="skip"/>
+  </xs:attributeGroup>
+</xs:schema>`
+
+	t.Run("admits a namespaced attribute neither group excludes", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e m:adam="m" xmlns:m="http://adam.com/"/>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects an attribute one group excludes (##local)", func(t *testing.T) {
+		t.Parallel()
+		// Group "a" excludes ##local (absent namespace); an unqualified attribute is
+		// admitted by "b" but not "a", so the intersection rejects it.
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e local="x"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("rejects an attribute the other group excludes (eve)", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e f:x="1" xmlns:f="http://eve.com/"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.0 ignores attribute-group wildcards (lenient, attribute rejected)", func(t *testing.T) {
+		t.Parallel()
+		// In 1.0 the group wildcards are dropped (pre-existing behavior), and
+		// notNamespace is unrecognized, so the type has no effective wildcard and
+		// the unknown attribute is not allowed.
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schema,
+			`<e m:adam="m" xmlns:m="http://adam.com/"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+}
