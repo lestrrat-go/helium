@@ -446,9 +446,12 @@ wildcard element — even one carrying `xsi:type="xs:ID"` — is NEVER assessed 
 not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element IS. This avoids both
 false-rejecting duplicate skipped IDs and false-accepting duplicate (or invalid)
 lax-assessed xsi:type content. The pass never runs in 1.0
-mode, so the libxml2-compat goldens stay byte-identical. NOT covered:
-`xs:ENTITY`/`xs:ENTITIES` (need the DTD unparsed-entity table) and ID/IDREF
-members inside a union at instance level. NOTE: this skip-exclusion is for the
+mode, so the libxml2-compat goldens stay byte-identical. ID/IDREF members inside a
+union ARE covered: `collectIDFromValue`'s union branch resolves the active member
+(`unionActiveMember`) and recurses to the atomic ID/IDREF leaf (and `idFamilyType`
+recurses into union members), so a duplicate union xs:ID across owners and a
+dangling union xs:IDREF both fail. NOT covered: `xs:ENTITY`/`xs:ENTITIES` (need the
+DTD unparsed-entity table). NOTE: this skip-exclusion is for the
 ID/IDREF DATATYPE pass only; pass-2 IDC selectors (`xs:key`/`xs:unique`) still
 match skip-content nodes by XPath — helium deliberately includes skip-matched
 nodes in an ancestor IDC (see `TestIDCFieldSkipWildcardSelectedSelf`), so the
