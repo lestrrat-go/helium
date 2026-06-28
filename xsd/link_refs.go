@@ -1237,7 +1237,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		if c.version == Version11 {
 			if found && derived.Prohibited {
 				msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
+				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
 			}
 			continue
 		}
