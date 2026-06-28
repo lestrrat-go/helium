@@ -947,11 +947,20 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// folds its error count into the parent. Preserving libxml2's "stop after the
 	// first import failure" rule, the diagnostic TEXT is forwarded only when the
 	// parent has no prior errors, but impC.errorCount is ALWAYS added so an
-	// imported-schema failure still fails the compile. It is invoked on every exit
-	// path once the sub-collector is live (pre-pass exclusion, TNS mismatch, and the
-	// normal completion) so a pre-pass/parse error is never dropped by a later
-	// early return. Close is idempotent, so the trailing defer is harmless.
+	// imported-schema failure still fails the compile. It is IDEMPOTENT (a
+	// `propagated` guard makes the second and later calls no-ops) and is `defer`red
+	// immediately below so EVERY exit path after the sub-collector is installed —
+	// including the parseSchemaChildren-error and fatal nested-load early returns —
+	// flushes the sub-compiler's diagnostics. The explicit calls that remain only
+	// fix ORDERING (forward while the parent is still error-free, BEFORE a TNS error
+	// is reported; skip the declaration merge when the import failed). Close is
+	// idempotent, so the separate Close defer above stays harmless.
+	propagated := false
 	propagateImpErrors := func() {
+		if propagated {
+			return
+		}
+		propagated = true
 		_ = subCollector.Close()
 		if impC.errorCount == 0 {
 			return
@@ -963,6 +972,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 		c.errorCount += impC.errorCount
 	}
+	// Guaranteed flush on every remaining exit path (idempotent; explicit calls
+	// below run first where ordering matters and turn this into a no-op).
+	defer propagateImpErrors()
 
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
 	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified

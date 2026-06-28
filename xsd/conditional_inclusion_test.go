@@ -402,6 +402,41 @@ func TestConditionalInclusion(t *testing.T) {
 		require.NotNil(t, schema)
 	})
 
+	t.Run("malformed vc in an imported schema is reported, not dropped", func(t *testing.T) {
+		t.Parallel()
+		// The imported schema records a malformed-vc fatal diagnostic in the import
+		// sub-collector during the pre-pass, then fails parseSchemaChildren on a
+		// nameless top-level complexType (an early `return err` path in loadImport).
+		// The sub-collector's diagnostic and error count must still be propagated to
+		// the parent (so the compile fails) rather than silently dropped behind the
+		// import's I/O-warning demotion.
+		const mainXSD = "vc_imp_main.xsd"
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="urn:main" xmlns:imp="urn:imp">
+  <xs:import namespace="urn:imp" schemaLocation="vc_imp_bad.xsd"/>
+  <xs:element name="temp" type="xs:string"/>
+</xs:schema>`)},
+			"vc_imp_bad.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="urn:imp">
+  <xs:element name="e" vc:minVersion="1.1.3" type="xs:string"/>
+  <xs:complexType/>
+</xs:schema>`)},
+		}
+		data, err := fsys.ReadFile(mainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, compileErr := xsd.NewCompiler().Version(xsd.Version11).Label(mainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, collector.Close())
+		require.Error(t, compileErr)
+		var combined strings.Builder
+		for _, e := range collector.Errors() {
+			combined.WriteString(e.Error())
+			combined.WriteByte('\n')
+		}
+		require.Contains(t, combined.String(), "1.1.3")
+	})
+
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema ` + ns + ` targetNamespace="a" elementFormDefault="qualified">
