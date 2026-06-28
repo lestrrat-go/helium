@@ -1792,3 +1792,52 @@ func TestVersion11AssertUnionAnonAtomicMemberFacet(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema2, `<e u="5"/>`))
 }
+
+// TestVersion11AssertUnionEmptyListMember verifies that an EMPTY list value selects
+// a list union member during assert NODE atomization (PR859-REVIEW-01): a plain list
+// accepts the empty list, so data(@u) is the empty sequence (count 0, empty() true),
+// matching validation/$value — instead of falling through to a later xs:string member.
+// A minLength>0 list facet pushes the empty value to the later member instead.
+func TestVersion11AssertUnionEmptyListMember(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="empty(data(@u)) and count(data(@u)) = 0"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// "" is a valid empty IntList → active member is the list → empty sequence.
+	require.NoError(t, validateAssertion(t, schema, `<e u=""/>`))
+
+	// With minLength=1 on the list member, the empty value cannot be the list, so the
+	// active member is xs:string → one (empty-string) atom, count 1.
+	const schemaXML2 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:restriction>
+      <xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType>
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 1 and (data(@u) instance of xs:string)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML2)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e u=""/>`))
+}

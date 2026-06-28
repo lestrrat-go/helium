@@ -285,12 +285,13 @@ func unionMemberMeta(decls SchemaDeclarations, member string) NodeItemUnionMembe
 // built-ins).
 func unionMemberCastOK(val string, m NodeItemUnionMember, node helium.Node, qnameNoDefault bool) bool {
 	if m.ListItem != "" {
-		tokens := xsdListFields(val)
-		if len(tokens) == 0 {
-			return false
-		}
+		// An EMPTY list value (zero tokens) is a valid list lexically — the validator
+		// accepts it unless a facet (e.g. minLength) disallows it, which the
+		// ValidateCastWithNS layer enforces. Do NOT reject it here, else active-member
+		// selection for node atomization would disagree with validation/$value (a
+		// union(IntList, xs:string) with value "" must resolve to the empty list).
 		lni := NodeItem{Node: node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: qnameNoDefault}
-		for _, tok := range tokens {
+		for _, tok := range xsdListFields(val) {
 			if _, err := atomizeListToken(tok, m.ListItem, lni); err != nil {
 				return false
 			}
