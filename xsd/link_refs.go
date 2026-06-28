@@ -1074,8 +1074,11 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		}
 		// Validate through the version-aware path so a 1.1 schema accepts 1.1-only
 		// lexical forms (e.g. "+INF") in attribute default/fixed constraints. The
-		// version-less (*TypeDef).Validate would build a Version10 context.
-		vc := &validationContext{errorHandler: helium.NilErrorHandler{}, version: c.version}
+		// version-less (*TypeDef).Validate would build a Version10 context. schema is
+		// supplied because validateValue may evaluate an xs:assertion facet whose
+		// schema-aware cast (`castable as t:T`) needs the schema declarations — a nil
+		// schema would make that cast fail closed and reject a valid default/fixed.
+		vc := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, version: c.version}
 		if err := validateValue(ctx, *val, it.src.nsMap, td, "", "", 0, vc); err != nil {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))

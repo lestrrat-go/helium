@@ -1000,3 +1000,58 @@ func TestVersion11QNameDefaultAttrWhitespace(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e/>`))
 }
+
+// TestVersion11DefaultValueSchemaAwareAssertion guards the compile-time
+// default/fixed value check (checkAttrUseConstraints) and the facet
+// value-against-base checks: they evaluate xs:assertion facets, so the throwaway
+// validation context must carry the schema. A default whose type's assertion uses
+// a schema-aware cast must NOT reject a valid schema at compile time.
+func TestVersion11DefaultValueSchemaAwareAssertion(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="bar">
+    <xs:restriction base="xs:integer"/>
+  </xs:simpleType>
+  <xs:simpleType name="foo">
+    <xs:restriction base="xs:integer">
+      <xs:assertion test="$value castable as t:bar"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="t:foo" default="5"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	// The default "5" satisfies foo's schema-aware assertion, so the schema must
+	// COMPILE (a nil-schema throwaway context would make `castable as t:bar` fail
+	// closed and wrongly reject it).
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// And the materialized default still validates an instance.
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t"/>`))
+
+	t.Run("violating default is still rejected", func(t *testing.T) {
+		t.Parallel()
+		// foo additionally requires the value to be even; default "5" violates it,
+		// so the compile-time default check must reject the schema.
+		const bad = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="bar">
+    <xs:restriction base="xs:integer"/>
+  </xs:simpleType>
+  <xs:simpleType name="foo">
+    <xs:restriction base="xs:integer">
+      <xs:assertion test="$value castable as t:bar and $value mod 2 = 0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="t:foo" default="5"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		_, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), bad)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+}
