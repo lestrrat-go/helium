@@ -222,29 +222,23 @@ func (c *compiler) parseInlineAlternativeType(ctx context.Context, elem *helium.
 // default-element-namespace binding untouched. The ##targetNamespace/
 // ##defaultNamespace/##local keywords are resolved against the element's context.
 func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) {
-	raw := ""
-	switch {
-	case hasAttr(elem, attrXPathDefaultNamespace):
-		raw = getAttr(elem, attrXPathDefaultNamespace)
-	case c.xpathDefaultNSSet:
-		raw = c.xpathDefaultNS
-	default:
-		return "", false
+	// A locally-present xpathDefaultNamespace on the alternative wins and is resolved
+	// against the alternative's OWN namespace context (so a local ##defaultNamespace
+	// uses the alternative's in-scope default namespace). xpathDefaultNamespace is
+	// whitespace-collapse, so collapse the value before matching the ##keyword forms.
+	if hasAttr(elem, attrXPathDefaultNamespace) {
+		raw := normalizeWhiteSpace(getAttr(elem, attrXPathDefaultNamespace), "collapse")
+		return resolveXPathDefaultNSToken(elem, raw, c.schema.targetNamespace), true
 	}
-	// xpathDefaultNamespace is whitespace-collapse, so the ##keyword forms (and a
-	// literal URI) must be matched after collapsing surrounding/internal whitespace.
-	raw = normalizeWhiteSpace(raw, "collapse")
-	switch raw {
-	case xpathDefaultNSTargetNamespace:
-		return c.schema.targetNamespace, true
-	case xpathDefaultNSLocal:
-		return "", true
-	case xpathDefaultNSDefaultNamespace:
-		// The in-scope default namespace (xmlns="…") at the alternative element.
-		return collectNSContext(elem)[""], true
-	default:
-		return raw, true
+	// Otherwise inherit the schema-level value. It is ALREADY RESOLVED against the
+	// schema ROOT at root-read time (compiler.schemaXPathDefaultNS, shared with the
+	// identity-constraint path), so an inherited ##defaultNamespace uses the ROOT's
+	// default namespace — NOT a nested default-namespace redeclaration in scope at
+	// the alternative element (CTA-861-001).
+	if c.xpathDefaultNSSet {
+		return c.schemaXPathDefaultNS, true
 	}
+	return "", false
 }
 
 // isErrorType reports whether td is the XSD 1.1 built-in xs:error type, whose

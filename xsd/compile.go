@@ -151,12 +151,13 @@ type compiler struct {
 	// recompute its Phase-A delta (the components are already merged), so it
 	// validates and consumes its overrides against this cached set instead.
 	loadedRedefinable map[string]*redefinableSet
-	// xpathDefaultNS holds the schema-level xpathDefaultNamespace (XSD 1.1) raw
-	// lexical value (a URI or one of the ##targetNamespace/##defaultNamespace/##local
-	// keywords). It is inherited by xs:alternative/xs:assert XPath expressions that
-	// do not carry their own xpathDefaultNamespace. xpathDefaultNSSet distinguishes
-	// "absent" from "present and empty".
-	xpathDefaultNS    string
+	// xpathDefaultNSSet records whether the current schema document carries a
+	// schema-level xpathDefaultNamespace (XSD 1.1). When set, xs:alternative XPath
+	// expressions that do not carry their own xpathDefaultNamespace inherit the
+	// already-root-resolved schemaXPathDefaultNS value (shared with the
+	// identity-constraint path). It is per-document (saved/restored across
+	// include/redefine/import) and distinguishes "absent" from "present" so an
+	// explicit empty value is still inherited as "no default element namespace".
 	xpathDefaultNSSet bool
 	// schemaBaseURI is the schema document's URI, exposed to xs:alternative /
 	// xs:assert XPath expressions as fn:static-base-uri(). It is sourced from the
@@ -539,7 +540,6 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
 	if hasAttr(root, attrXPathDefaultNamespace) {
-		c.xpathDefaultNS = getAttr(root, attrXPathDefaultNamespace)
 		c.xpathDefaultNSSet = true
 	}
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified

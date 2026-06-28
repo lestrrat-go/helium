@@ -362,10 +362,8 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// document's base URI and its own xpathDefaultNamespace, not the including
 	// schema's. Save/restore mirrors the form/default handling above.
 	savedSchemaBaseURI := c.schemaBaseURI
-	savedCTAXPathDefaultNS := c.xpathDefaultNS
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	c.schemaBaseURI = path
-	c.xpathDefaultNS = getAttr(incRoot, attrXPathDefaultNamespace)
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
 
 	// Set the include file path for duplicate element error reporting.
@@ -406,7 +404,6 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.schemaBaseURI = savedSchemaBaseURI
-	c.xpathDefaultNS = savedCTAXPathDefaultNS
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
@@ -601,10 +598,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// override children (from the redefining schema) get the parent's values restored
 	// before processRedefineOverrides, like the defaults above.
 	savedSchemaBaseURI := c.schemaBaseURI
-	savedCTAXPathDefaultNS := c.xpathDefaultNS
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	c.schemaBaseURI = path
-	c.xpathDefaultNS = getAttr(incRoot, attrXPathDefaultNamespace)
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
@@ -627,7 +622,6 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.schemaBaseURI = savedSchemaBaseURI
-		c.xpathDefaultNS = savedCTAXPathDefaultNS
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
@@ -642,7 +636,6 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.schemaBaseURI = savedSchemaBaseURI
-		c.xpathDefaultNS = savedCTAXPathDefaultNS
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
@@ -675,7 +668,6 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.schemaBaseURI = savedSchemaBaseURI
-	c.xpathDefaultNS = savedCTAXPathDefaultNS
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
@@ -1115,7 +1107,6 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// (fn:static-base-uri) and xpathDefaultNamespace, not the importing schema's.
 	impC.schemaBaseURI = path
 	if hasAttr(impRoot, attrXPathDefaultNamespace) {
-		impC.xpathDefaultNS = getAttr(impRoot, attrXPathDefaultNamespace)
 		impC.xpathDefaultNSSet = true
 	}
 
