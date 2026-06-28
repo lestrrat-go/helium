@@ -1277,3 +1277,39 @@ func TestVersion11SimpleContentNestedTypeKeepsBaseFacets(t *testing.T) {
 	// "abc" satisfies the nested minLength=1 but violates the inherited maxLength=2.
 	require.ErrorIs(t, validateAssertion(t, schema, `<e>abc</e>`), xsd.ErrValidationFailed)
 }
+
+// TestVersion11FixedSimpleContentQNameValueSpace verifies that the NON-EMPTY
+// element FIXED-value comparison for a simpleContent complex type compares in the
+// EFFECTIVE content simple type (PR859-XSD11-FIXED-SIMPLECONTENT-QNAME). The
+// element's content type is a nested simpleContent restriction to xs:QName, so the
+// fixed value "p:x" must match instance content "q:x" by QName VALUE-space equality
+// (both prefixes bound to the SAME namespace), not by lexical string comparison
+// against the outer complex type's base chain.
+func TestVersion11FixedSimpleContentQNameValueSpace(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:x">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:anySimpleType"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e" fixed="p:x">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base">
+          <xs:simpleType>
+            <xs:restriction base="xs:QName"/>
+          </xs:simpleType>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// q:x with q bound to urn:x (same URI as p) — QName value-space equal to p:x.
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:q="urn:x">q:x</e>`))
+	// p:x verbatim is trivially equal.
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:x">p:x</e>`))
+	// q:x with q bound to a DIFFERENT URI is not QName-equal — rejected.
+	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns:q="urn:other">q:x</e>`), xsd.ErrValidationFailed)
+}

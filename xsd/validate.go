@@ -959,6 +959,17 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		if fixedType == nil {
 			fixedType = td
 		}
+		// XSD 1.1: for a simpleContent complex type the fixed value lives in the
+		// NARROWED content simple type (ContentSimpleType), not the outer complex
+		// type's own base chain. Compare in the EFFECTIVE content simple type so the
+		// comparison runs in the right value space — e.g. QName value-space equality
+		// accepts a different prefix bound to the same namespace, and a narrowing
+		// facet applies. effectiveContentSimpleType returns a non-simpleContent type
+		// unchanged, so a plain simple-typed element is unaffected. XSD 1.0 keeps the
+		// historical declared-type comparison, byte-identical.
+		if vc.version == Version11 {
+			fixedType = effectiveContentSimpleType(fixedType)
+		}
 		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)

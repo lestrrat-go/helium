@@ -82,7 +82,14 @@ falls back to raw string equality. The element fixed-value comparison uses the
 element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
 declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
 even when the instance's `xsi:type` collapses whitespace — element content is still
-validated against the actual type. In `fixedUnionMatches`, when the fixed and
+validated against the actual type. In XSD **1.1** the comparison type is first
+passed through `effectiveContentSimpleType`, so for a simpleContent complex type the
+fixed value is compared in its NARROWED content simple type (`ContentSimpleType`) —
+e.g. a content type restricted to `xs:QName` accepts a different-prefix/same-URI
+instance value by QName value-space equality instead of being rejected by a lexical
+comparison against the outer complex type's own base chain. `effectiveContentSimpleType`
+returns a non-simpleContent type unchanged, so a plain simple-typed element is
+unaffected; XSD 1.0 keeps the historical declared-type comparison, byte-identical. In `fixedUnionMatches`, when the fixed and
 instance values resolve to *different* active members, the cross-member
 comparison (`crossMemberValueEqual`) is **recursive over variety**: when both
 active members are **lists** (e.g. `memberTypes="intList decimalList"`) each value
