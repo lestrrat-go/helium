@@ -457,3 +457,85 @@ func TestVersion10GlobalAttrXSINamespaceAllowed(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 }
+
+// TestVersion11NotQNameResolveQNameSemantics covers gauntlet finding
+// PR858-NQ-001: @notQName tokens use resolve-QName ACTUAL VALUE semantics — an
+// unprefixed token resolves through the in-scope DEFAULT namespace (or ABSENT if
+// none), NEVER the schema's targetNamespace. Previously the targetNamespace
+// fallback both rejected valid `namespace="##local" notQName="a"` schemas and
+// excluded the wrong target-namespace name.
+func TestVersion11NotQNameResolveQNameSemantics(t *testing.T) {
+	t.Run("unprefixed token in a targetNamespace schema with no default resolves to absent", func(t *testing.T) {
+		t.Parallel()
+		// namespace="##local" admits only the absent namespace. notQName="a" must
+		// resolve to {absent}a (NOT {urn:t}a), so it is in an allowed namespace and
+		// the schema compiles.
+		mustCompile11OK(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute namespace="##local" notQName="a" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	})
+
+	t.Run("unprefixed notQName excludes the absent-namespace name, not the target-namespace one", func(t *testing.T) {
+		t.Parallel()
+		// The element's wildcard (namespace ##local, notQName="a") must EXCLUDE the
+		// absent-namespace attribute "a" (rejected) while still ADMITTING a
+		// different absent-namespace attribute "b" (accepted). attributeFormDefault
+		// is unqualified, so instance attributes a/b are in the absent namespace.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:element name="e" type="t:ct"/>
+  <xs:complexType name="ct">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##local" notQName="a" processContents="skip"/>
+  </xs:complexType>
+</xs:schema>`
+		errExcluded := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<t:e xmlns:t="urn:t" a="1"/>`)
+		require.ErrorIs(t, errExcluded, xsd.ErrValidationFailed)
+
+		errAdmitted := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<t:e xmlns:t="urn:t" b="1"/>`)
+		require.NoError(t, errAdmitted)
+	})
+
+	t.Run("unprefixed token resolves through the in-scope default namespace", func(t *testing.T) {
+		t.Parallel()
+		// With a default namespace (xmlns="urn:t") in scope on the schema, an
+		// unprefixed notQName token resolves to {urn:t}. The wildcard namespace
+		// "##targetNamespace" admits urn:t, so the schema compiles, and the named
+		// element {urn:t}a is excluded while {urn:t}b is admitted.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##targetNamespace" notQName="a" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		// {urn:t}a is excluded by notQName → not admitted by the wildcard → invalid.
+		errExcluded := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root xmlns="urn:t"><a/></root>`)
+		require.ErrorIs(t, errExcluded, xsd.ErrValidationFailed)
+		// {urn:t}b is admitted.
+		errAdmitted := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root xmlns="urn:t"><b/></root>`)
+		require.NoError(t, errAdmitted)
+	})
+
+	t.Run("prefixed token with an unbound prefix is a schema error", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute namespace="##any" notQName="nope:a" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	})
+}

@@ -364,7 +364,7 @@ func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *
 			reject(fmt.Sprintf("The value '%s' is not a valid QName.", tok))
 			continue
 		}
-		qn := c.resolveQName(ctx, elem, tok)
+		qn := c.resolveNotQName(ctx, elem, tok)
 		// The name's namespace must be admitted by the wildcard's namespace
 		// constraint; excluding a name the wildcard could never match is an error
 		// (cvc/wildcard: notQName names must be in an allowed namespace).
@@ -374,6 +374,26 @@ func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *
 		}
 		wc.NotQName = append(wc.NotQName, qn)
 	}
+}
+
+// resolveNotQName resolves a @notQName QName token using resolve-QName ACTUAL
+// VALUE semantics (XSD 1.1), which differ from schema-component reference
+// resolution (c.resolveQName): an UNPREFIXED token resolves through the in-scope
+// DEFAULT namespace, or to the ABSENT namespace when there is no default — it
+// must NEVER fall back to the schema's targetNamespace. A prefixed token uses
+// the in-scope binding (and the predeclared xml prefix), with the same
+// unbound-prefix diagnostic as c.resolveQName.
+func (c *compiler) resolveNotQName(ctx context.Context, elem *helium.Element, ref string) QName {
+	if prefix, local, found := strings.Cut(ref, ":"); found {
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
+		}
+		return QName{Local: local, NS: ns}
+	}
+	// Unprefixed: the in-scope default namespace, else absent. No targetNamespace
+	// fallback (lookupNS returns "" when no default xmlns is in scope).
+	return QName{Local: ref, NS: lookupNS(elem, "")}
 }
 
 func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, opts elementDeclReadOptions) (*ElementDecl, error) {
