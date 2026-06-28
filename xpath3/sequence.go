@@ -301,10 +301,15 @@ func atomizeUnionItems(ni NodeItem) ([]AtomicValue, bool) {
 	s := ixpath.StringValue(ni.Node)
 	if m.ListItem != "" {
 		tokens := xsdListFields(s)
-		lni := NodeItem{Node: ni.Node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: ni.QNameNoDefaultNS}
+		// When the active member's list item type is a UNION, m.ListItemLeaves carries
+		// the per-token active leaves (resolved value-dependently in nodeItemFor), so each
+		// token atomizes through its own active member — agreeing with $value — instead of
+		// the single static m.ListItemAtom base; atomizeListTokenAt falls back to the
+		// static path for a nil/absent leaf.
+		lni := NodeItem{Node: ni.Node, ListItemAtomized: m.ListItemAtom, ListItemLeaves: m.ListItemLeaves, QNameNoDefaultNS: ni.QNameNoDefaultNS}
 		atoms := make([]AtomicValue, 0, len(tokens))
-		for _, tok := range tokens {
-			av, err := atomizeListToken(tok, m.ListItem, lni)
+		for i, tok := range tokens {
+			av, err := atomizeListTokenAt(i, tok, m.ListItem, lni)
 			if err != nil {
 				return nil, false
 			}

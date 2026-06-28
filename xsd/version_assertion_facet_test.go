@@ -709,11 +709,16 @@ func TestVersion11DeepSimpleContentChain(t *testing.T) {
 
 // TestVersion11AssertCastRecursion guards against unbounded recursion when a
 // schema-aware cast/castable inside a type's OWN xs:assertion targets that same
-// type: validateCast → validateValue → checkSimpleTypeAssertions → Evaluate →
-// validateCast … The per-validation cast guard must terminate it (fail closed)
-// rather than overflow the stack.
+// type. The key invariant is TERMINATION (no stack overflow).
 func TestVersion11AssertCastRecursion(t *testing.T) {
-	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+	t.Run("self-cast terminates via identity", func(t *testing.T) {
+		t.Parallel()
+		// $value is typed as the user type t:rec (PR859-REVIEW-01 preservation), so
+		// `$value castable as t:rec` is identity-true (a value of type T is castable
+		// to T) — it short-circuits before the schema-aware cast recursion, so it both
+		// TERMINATES and (correctly) holds: t:rec has no constraint beyond this
+		// trivially-true self-cast, so the value is VALID.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:simpleType name="rec">
     <xs:restriction base="xs:string">
@@ -722,11 +727,37 @@ func TestVersion11AssertCastRecursion(t *testing.T) {
   </xs:simpleType>
   <xs:element name="e" type="t:rec"/>
 </xs:schema>`
-	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
-	require.NoError(t, err)
-	// The self-referential castable fails closed; the key property is that
-	// validation TERMINATES (no stack overflow) and treats the value as invalid.
-	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">x</e>`), xsd.ErrValidationFailed)
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">x</e>`))
+	})
+
+	t.Run("mutual recursion terminates fail-closed", func(t *testing.T) {
+		t.Parallel()
+		// recA's assertion casts to recB and vice versa: the source type never equals
+		// the cast target, so the identity short-circuit does NOT apply and the
+		// schema-aware path recurses validateCast → validateValue →
+		// checkSimpleTypeAssertions → Evaluate → validateCast … The per-validation
+		// cast guard must TERMINATE it (fail closed → not castable → invalid) rather
+		// than overflow the stack.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="recA">
+    <xs:restriction base="xs:string">
+      <xs:assertion test="$value castable as t:recB"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="recB">
+    <xs:restriction base="xs:string">
+      <xs:assertion test="$value castable as t:recA"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e" type="t:recA"/>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">x</e>`), xsd.ErrValidationFailed)
+	})
 }
 
 // TestVersion11FixedDefaultQNameNS verifies that a QName fixed/default value
@@ -2154,4 +2185,54 @@ func TestVersion11AssertSimpleContentComplexNotSimpleTarget(t *testing.T) {
 	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t"><c>hi</c></e>`))
+}
+
+// TestVersion11AssertionFacetValuePreservesUserType verifies that the $value binding
+// of an xs:assertion simple-type facet PRESERVES a named user-defined atomic type's
+// identity (PR859-REVIEW-01) instead of collapsing it to its builtin base: $value of
+// type t:MyInt must satisfy `$value instance of t:MyInt`, agreeing with schema-aware
+// data() atomization. Without the fix $value is typed xs:int and the instance-of test
+// (a narrower user type) is false.
+func TestVersion11AssertionFacetValuePreservesUserType(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="MyInt">
+    <xs:restriction base="xs:int">
+      <xs:assertion test="$value instance of t:MyInt"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e" type="t:MyInt"/>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">5</e>`))
+}
+
+// TestVersion11AssertUnionOfListOfUnionPerToken verifies that a UNION whose ACTIVE
+// member is a LIST whose item type is itself a UNION atomizes each list token through
+// its OWN active union member (PR859-REVIEW-02), not the single static list-item base.
+// outer = union(iobList, xs:string); iobList = list(intOrBool); intOrBool =
+// union(xs:int, xs:boolean). value "1 true 2" must atomize to xs:int, xs:boolean,
+// xs:int — agreeing with $value. Without the fix data(@v)[2] is mis-typed.
+func TestVersion11AssertUnionOfListOfUnionPerToken(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="iobList">
+    <xs:list itemType="intOrBool"/>
+  </xs:simpleType>
+  <xs:simpleType name="outer">
+    <xs:union memberTypes="iobList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="v" type="outer"/>
+      <xs:assert test="count(data(@v)) = 3 and (data(@v)[1] instance of xs:int) and (data(@v)[2] instance of xs:boolean) and (data(@v)[3] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e v="1 true 2"/>`))
 }

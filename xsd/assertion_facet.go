@@ -69,12 +69,33 @@ func typedAtomic(ctx context.Context, value string, valueNS map[string]string, t
 // or the cast fails (the value already passed lexical validation, so a failure
 // only means xpath3 does not model that exact type). QName/NOTATION lexicals are
 // resolved against valueNS into an xpath3.QNameValue, since CastFromString has no
-// namespace context.
+// namespace context. When td is a NAMED user-defined type, the user type name is
+// PRESERVED as TypeName (with the builtin cast type kept as BaseType), mirroring
+// AtomizeItem / schema-aware data() atomization, so $value and data() agree on a
+// user atomic/QName/NOTATION/list-item/union-leaf type's identity (a value of
+// t:MyInt is typed t:MyInt, not collapsed to xs:int).
 func atomicForType(value string, valueNS map[string]string, td *TypeDef) xpath3.AtomicValue {
 	local := ""
 	if td != nil {
 		local = builtinBaseLocal(td)
 	}
+	av, ok := builtinAtomicForType(value, valueNS, local)
+	if !ok {
+		return xpath3.AtomicValue{TypeName: xpath3.TypeUntypedAtomic, Value: value}
+	}
+	if td != nil {
+		if name := xsdTypeName(td); !xpath3.IsKnownXSDType(name) {
+			av.BaseType = av.TypeName
+			av.TypeName = name
+		}
+	}
+	return av
+}
+
+// builtinAtomicForType casts value to the atomic value of the builtin primitive
+// named by local (no user-type identity), returning ok=false when local is empty
+// or the cast fails. QName/NOTATION lexicals are resolved against valueNS.
+func builtinAtomicForType(value string, valueNS map[string]string, local string) (xpath3.AtomicValue, bool) {
 	switch local {
 	case lexicon.TypeQName, lexicon.TypeNotation:
 		if qn, err := resolveLexicalQName(value, valueNS); err == nil {
@@ -89,15 +110,15 @@ func atomicForType(value string, valueNS map[string]string, td *TypeDef) xpath3.
 			return xpath3.AtomicValue{
 				TypeName: typeName,
 				Value:    xpath3.QNameValue{Prefix: prefix, Local: qn.Local, URI: qn.NS},
-			}
+			}, true
 		}
 	}
 	if local != "" {
 		if av, err := xpath3.CastFromString(value, "xs:"+local); err == nil {
-			return av
+			return av, true
 		}
 	}
-	return xpath3.AtomicValue{TypeName: xpath3.TypeUntypedAtomic, Value: value}
+	return xpath3.AtomicValue{}, false
 }
 
 // checkSimpleTypeAssertions enforces the XSD 1.1 <xs:assertion> facets declared

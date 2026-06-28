@@ -286,6 +286,19 @@ func resolveActiveUnionLeafRec(ctx context.Context, ec *evalContext, n helium.No
 		if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m, nsMap); err != nil {
 			continue
 		}
+		// When this active member is a LIST whose item type is itself a UNION, resolve
+		// EACH list token's active leaf so the member atomizes per-token (matching
+		// $value), not through one static ListItemAtom base.
+		if meta.ListItem != "" {
+			if itemMembers := ec.schemaDeclarations.UnionMemberTypes(meta.ListItem); len(itemMembers) > 0 {
+				tokens := xsdListFields(val)
+				leaves := make([]*NodeItemUnionMember, len(tokens))
+				for i, tok := range tokens {
+					leaves[i] = resolveActiveUnionLeafForValue(ctx, ec, n, meta.ListItem, qnameNoDefault, tok)
+				}
+				meta.ListItemLeaves = leaves
+			}
+		}
 		leaf := meta
 		return &leaf
 	}

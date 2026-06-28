@@ -268,6 +268,13 @@ type NodeItemUnionMember struct {
 	Atomized     string // built-in base of an atomic member (for typing)
 	ListItem     string // non-empty if the member is a list: its item type name
 	ListItemAtom string // built-in base of the list item (e.g. xs:QName)
+	// ListItemLeaves is non-nil when this member is a LIST whose item type is itself a
+	// UNION: one entry per whitespace token of the union value (aligned with
+	// xsdListFields), the value-dependent ACTIVE leaf member for THAT token, precomputed
+	// in resolveActiveUnionLeafRec. So a union whose active member is a list-of-union
+	// atomizes each token through its own active member (matching $value), not the static
+	// ListItemAtom base. A nil entry means the token resolved no member.
+	ListItemLeaves []*NodeItemUnionMember
 }
 
 func (NodeItem) itemTag() {}
