@@ -286,7 +286,7 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 		wc.NotNamespace = c.parseNotNamespace(ctx, elem, getAttr(elem, attrNotNamespace))
 	}
 	if hasAttr(elem, attrNotQName) {
-		c.parseNotQName(ctx, elem, wc, getAttr(elem, attrNotQName))
+		c.parseNotQName(ctx, elem, wc, getAttr(elem, attrNotQName), isXSDElement(elem, elemAnyAttribute))
 	}
 	return wc
 }
@@ -339,7 +339,9 @@ func (c *compiler) parseNotNamespace(ctx context.Context, elem *helium.Element, 
 // (for xs:any only) "##definedSibling". Each QName must be lexically valid, its
 // prefix bound, and its namespace admitted by the wildcard's namespace
 // constraint (otherwise listing it would be pointless and is a schema error).
-func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *Wildcard, raw string) {
+// isAttr is true for an xs:anyAttribute wildcard, for which "##definedSibling"
+// is NOT a permitted token (XSD 1.1 restricts it to ELEMENT wildcards).
+func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *Wildcard, raw string, isAttr bool) {
 	reject := func(msg string) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
 			elem.LocalName(), elem.LocalName(), attrNotQName, msg))
@@ -351,6 +353,10 @@ func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *
 			wc.NotQNameDefined = true
 			continue
 		case WildcardQNameDefinedSibling:
+			if isAttr {
+				reject("The value '##definedSibling' is only allowed on an element wildcard, not on 'anyAttribute'.")
+				continue
+			}
 			wc.NotQNameDefinedSibling = true
 			continue
 		}

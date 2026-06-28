@@ -291,6 +291,11 @@ func wildcardConstraintSubset11(sub, super *Wildcard) bool {
 	if super.NotQNameDefined && !sub.NotQNameDefined {
 		return false
 	}
+	// A derived wildcard may not drop ##definedSibling: super excluding sibling
+	// names that sub re-admits is not a valid restriction.
+	if super.NotQNameDefinedSibling && !sub.NotQNameDefinedSibling {
+		return false
+	}
 	return true
 }
 

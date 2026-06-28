@@ -280,3 +280,176 @@ func TestVersion11AttrGroupWildcardIntersection(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrValidationFailed)
 	})
 }
+
+// TestVersion10MatchAllWildcardRegression guards the XSD 1.0 matchAll path
+// (gauntlet finding 1): a wildcard inside xs:all is an XSD 1.1-only feature, so
+// in 1.0 a child admitted only by such a wildcard must still be REJECTED (the
+// pre-feature behavior), while 1.1 accepts it. A wildcard-only xs:all compiles
+// in both versions (no element competes for UPA), so it isolates matchAll.
+func TestVersion10MatchAllWildcardRegression(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="t">
+    <xs:all>
+      <xs:any processContents="skip" minOccurs="0" maxOccurs="1"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:element name="e" type="t"/>
+</xs:schema>`
+
+	t.Run("1.0 rejects wildcard-in-all content (byte-identical pre-feature)", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schema, `<e><b/></e>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("1.1 accepts wildcard-in-all content", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema, `<e><b/></e>`)
+		require.NoError(t, err)
+	})
+}
+
+// TestVersion11RestrictionNotQName covers gauntlet finding 2: the
+// restriction-derivation check (element-restricts-wildcard NSCompat) must honor
+// the base wildcard's @notQName — a derived element the base wildcard EXCLUDES
+// is not a valid restriction, so the schema is rejected.
+func TestVersion11RestrictionNotQName(t *testing.T) {
+	schema := func(notQName string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:sequence>
+      <xs:any namespace="##any" notQName="` + notQName + `" processContents="skip"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:sequence>
+          <xs:element name="foo" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`
+	}
+
+	t.Run("base wildcard excluding the derived element name rejects the restriction", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, schema("foo"))
+	})
+
+	t.Run("base wildcard not excluding the derived element name compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema("bar"))
+	})
+}
+
+// TestVersion11RestrictionDefinedSiblingSubset covers gauntlet finding 3: a
+// derived wildcard may not DROP ##definedSibling that the base wildcard carries.
+func TestVersion11RestrictionDefinedSiblingSubset(t *testing.T) {
+	schema := func(derivedNotQName string) string {
+		dn := ""
+		if derivedNotQName != "" {
+			dn = ` notQName="` + derivedNotQName + `"`
+		}
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:any namespace="##any" notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:any namespace="##any"` + dn + ` processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`
+	}
+
+	t.Run("dropping ##definedSibling in the derived wildcard rejects the restriction", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, schema(""))
+	})
+
+	t.Run("retaining ##definedSibling compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema("##definedSibling"))
+	})
+}
+
+// TestVersion11DefinedSiblingAttributeRejected covers gauntlet finding 4:
+// ##definedSibling is permitted only on ELEMENT wildcards, not xs:anyAttribute.
+func TestVersion11DefinedSiblingAttributeRejected(t *testing.T) {
+	t.Run("##definedSibling on xs:anyAttribute is a schema error", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute notQName="##definedSibling" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	})
+
+	t.Run("##definedSibling on xs:any (element wildcard) compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="t">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="e" type="t"/>
+</xs:schema>`)
+	})
+}
+
+// TestVersion11RestrictionPerBaseWildcardMax covers gauntlet finding 5: an
+// xs:all restriction must respect PER-NAMESPACE wildcard capacity, not just the
+// aggregate total. A derived wildcard confined to one base wildcard's namespace
+// may not exceed THAT base wildcard's maxOccurs even when the aggregate total
+// across all base wildcards would allow it.
+func TestVersion11RestrictionPerBaseWildcardMax(t *testing.T) {
+	schema := func(derivedMax string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:any namespace="http://a/" minOccurs="0" maxOccurs="2" processContents="skip"/>
+      <xs:any namespace="http://bb/" minOccurs="0" maxOccurs="2" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:all>
+          <xs:any namespace="http://a/" minOccurs="0" maxOccurs="` + derivedMax + `" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`
+	}
+
+	t.Run("derived wildcard exceeding one base wildcard's max rejects the restriction", func(t *testing.T) {
+		t.Parallel()
+		// aggregate base max is 4 (2+2); derived max 4 would pass an aggregate-only
+		// check, but namespace http://a/ is capped at 2 by its base wildcard.
+		mustCompile11Fail(t, schema("4"))
+	})
+
+	t.Run("derived wildcard within the per-namespace max compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema("2"))
+	})
+}

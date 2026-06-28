@@ -223,10 +223,13 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
-	// XSD 1.1: an xs:all may contain element wildcards (and its particles may
+	// XSD 1.1 ONLY: an xs:all may contain element wildcards (and its particles may
 	// have maxOccurs>1). Track wildcard particle indices and per-wildcard match
 	// counts so order-independent matching honors each wildcard's occurrence
-	// bounds and processContents.
+	// bounds and processContents. In XSD 1.0 a wildcard is NOT a permitted xs:all
+	// member, so wildcardIdx stays empty and the matcher's behavior is identical
+	// to before this feature: a child matching no element particle is unexpected.
+	is11 := vc.version == Version11
 	var wildcardIdx []int
 	wcCount := make([]int, len(mg.Particles))
 	for i, p := range mg.Particles {
@@ -238,7 +241,9 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 				nameToIdx[member.Name] = i
 			}
 		case *Wildcard:
-			wildcardIdx = append(wildcardIdx, i)
+			if is11 {
+				wildcardIdx = append(wildcardIdx, i)
+			}
 		}
 	}
 
