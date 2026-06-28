@@ -109,6 +109,7 @@ const (
 	TypeUnsignedShort      = "unsignedShort"
 	TypeUnsignedByte       = "unsignedByte"
 	TypeIDREF              = "IDREF"
+	TypeIDREFS             = "IDREFS"
 	TypeToken              = "token"
 	TypeNumber             = "number"
 	TypeQName              = "QName"

@@ -16,15 +16,15 @@ import (
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
-	version Version        // XSD specification version targeted by this compilation
+	version Version // XSD specification version targeted by this compilation
 	// schemaXPathDefaultNS is the raw value of the root xs:schema
 	// @xpathDefaultNamespace (XSD 1.1), inherited by every identity-constraint
 	// selector/field that does not set its own. Empty means absent (XPath 1.0
 	// default: unprefixed element = no-namespace).
 	schemaXPathDefaultNS string
-	baseDir              string // directory of the schema file, for resolving relative paths
-	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
-	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
+	baseDir              string         // directory of the schema file, for resolving relative paths
+	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser               *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName

@@ -3,8 +3,10 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
@@ -137,15 +139,10 @@ func idFamilyType(td *TypeDef) bool {
 	case TypeVarietyList:
 		return idFamilyType(resolveItemType(td))
 	case TypeVarietyUnion:
-		for _, m := range resolveUnionMembers(td) {
-			if idFamilyType(m) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(resolveUnionMembers(td), idFamilyType)
 	default:
 		switch builtinBaseLocal(td) {
-		case "ID", "IDREF", "IDREFS":
+		case "ID", lexicon.TypeIDREF, lexicon.TypeIDREFS:
 			return true
 		}
 		return false
@@ -174,9 +171,9 @@ func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idColl
 		switch builtinBaseLocal(td) {
 		case "ID":
 			vc.recordID(ctx, col, normalizeWhiteSpace(raw, "collapse"), owner, elem, attr)
-		case "IDREF":
+		case lexicon.TypeIDREF:
 			vc.recordIDRef(col, normalizeWhiteSpace(raw, "collapse"), elem, attr)
-		case "IDREFS":
+		case lexicon.TypeIDREFS:
 			// The built-in xs:IDREFS is registered as a flat atomic placeholder
 			// (no ItemType), so its multiple-token nature is handled here by name.
 			for _, f := range value.XSDFields(raw) {
