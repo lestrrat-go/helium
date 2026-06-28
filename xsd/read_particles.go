@@ -114,6 +114,12 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// override path (compile_imports.go), not here, so any self-reference that
 		// reaches this point is genuinely circular and is reported and dropped (the
 		// reference is cut to avoid further confusion, matching libxml2).
+		// XSD 1.1: capture an xs:anyAttribute wildcard declared in the group so a
+		// referencing type can intersect it into its effective attribute wildcard.
+		if c.version == Version11 && isXSDElement(ce, elemAnyAttribute) {
+			c.attrGroupWildcards[qn] = c.parseAnyAttribute(ctx, ce)
+			continue
+		}
 		if isXSDElement(ce, elemAttributeGroup) {
 			if ref := getAttr(ce, attrRef); ref != "" {
 				refQN := c.resolveQName(ctx, ce, ref)

@@ -237,6 +237,20 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for td, qns := range c.attrGroupRefs {
 		for _, qn := range qns {
 			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
+			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
+			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
+			// "complete wildcard"). Gated on Version11 so 1.0 (which drops group
+			// wildcards) is unchanged.
+			if c.version != Version11 {
+				continue
+			}
+			if gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{}); gw != nil {
+				if td.AnyAttribute == nil {
+					td.AnyAttribute = gw
+				} else {
+					td.AnyAttribute = intersectWildcards(td.AnyAttribute, gw)
+				}
+			}
 		}
 	}
 
@@ -480,6 +494,32 @@ func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*
 		uses = appendAttrUses(uses, c.expandAttrGroupUses(refQN, visited))
 	}
 	return uses
+}
+
+// attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
+// attribute group: its OWN xs:anyAttribute (if any) INTERSECTED with the
+// complete wildcards of every nested xs:attributeGroup ref child. visited guards
+// against reference cycles. Returns nil if neither the group nor any referenced
+// group declares a wildcard.
+func (c *compiler) attrGroupCompleteWildcard(qn QName, visited map[QName]struct{}) *Wildcard {
+	if _, seen := visited[qn]; seen {
+		return nil
+	}
+	visited[qn] = struct{}{}
+
+	result := c.attrGroupWildcards[qn]
+	for _, refQN := range c.attrGroupRefChildren[qn] {
+		nested := c.attrGroupCompleteWildcard(refQN, visited)
+		if nested == nil {
+			continue
+		}
+		if result == nil {
+			result = nested
+			continue
+		}
+		result = intersectWildcards(result, nested)
+	}
+	return result
 }
 
 // appendAttrUses merges the attribute uses in extra into dst applying
@@ -1176,6 +1216,14 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 //   - "not(absent)" → matches everything except absent (empty namespace)
 //   - "set"       → finite set of namespace URIs (empty string = absent)
 func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
+	// XSD 1.1: when either operand carries a notNamespace/notQName constraint the
+	// 1.0 case analysis below cannot express the result; route to the general
+	// constraint algebra. Wildcards with no 1.1 fields keep the byte-identical
+	// 1.0 path so existing goldens are unchanged.
+	if wildcardHas11Fields(w1) || wildcardHas11Fields(w2) {
+		return unionWildcards11(w1, w2)
+	}
+
 	pc := w1.ProcessContents
 	tns := w1.TargetNS
 
