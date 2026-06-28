@@ -20,6 +20,22 @@ func evalInstanceOfExpr(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 	return SingleBoolean(matchesSequenceType(seq, e.Type, ec)), nil
 }
 
+// castTargetParts derives the (local, ns) pair used for schema-declaration
+// lookups in the cast/castable schema fallback. It prefers the ALREADY-RESOLVED
+// targetType (Q{ns}local), which correctly reflects an xpathDefaultNamespace
+// applied to an UNPREFIXED type name; it falls back to the lexical type's prefix
+// binding only when targetType is not a resolved expanded name.
+func castTargetParts(targetType string, t AtomicTypeName, ec *evalContext) (local, ns string) {
+	if l, n, ok := schemaAnnotationParts(targetType); ok {
+		return l, n
+	}
+	local = t.Name
+	if t.Prefix != "" && ec != nil && ec.namespaces != nil {
+		ns = ec.namespaces[t.Prefix]
+	}
+	return local, ns
+}
+
 func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	if isAbstractCastTarget(targetType) {
@@ -68,12 +84,9 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	if err != nil {
 		// If CastAtomic fails for a non-built-in type, try resolving via schema declarations.
 		if ec.schemaDeclarations != nil {
-			ns := ""
-			if e.Type.Prefix != "" && ec.namespaces != nil {
-				ns = ec.namespaces[e.Type.Prefix]
-			}
-			annName := QAnnotation(ns, e.Type.Name)
-			if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
+			local, ns := castTargetParts(targetType, e.Type, ec)
+			annName := QAnnotation(ns, local)
+			if builtinBase := resolveToBuiltinBase(local, ns, ec.schemaDeclarations); builtinBase != "" {
 				// QName/NOTATION-derived user types need namespace context (the
 				// abstract base cannot be a direct CastAtomic target). Mirror the
 				// castable branch: validate with namespace context and return the
@@ -172,12 +185,9 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	}
 	_, castErr := CastAtomic(av, targetType)
 	if castErr != nil && ec.schemaDeclarations != nil {
-		ns := ""
-		if e.Type.Prefix != "" && ec.namespaces != nil {
-			ns = ec.namespaces[e.Type.Prefix]
-		}
-		annName := QAnnotation(ns, e.Type.Name)
-		if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
+		local, ns := castTargetParts(targetType, e.Type, ec)
+		annName := QAnnotation(ns, local)
+		if builtinBase := resolveToBuiltinBase(local, ns, ec.schemaDeclarations); builtinBase != "" {
 			// NOTATION and QName derived types require namespace context
 			// for resolution. The abstract base type (xs:NOTATION, xs:QName)
 			// cannot be used as a cast target directly, so validate with
@@ -1216,8 +1226,11 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 			}
 		}
 	} else {
-		// No prefix: check default namespace in context
-		if ec != nil && ec.namespaces != nil {
+		// No prefix: check default namespace in context. Under XSD value-space
+		// semantics (qnameValueNoDefaultNS), an unprefixed QName/NOTATION VALUE has
+		// no namespace — the XPath default element namespace is NOT applied (opt-in;
+		// default xpath3 behavior is unchanged).
+		if ec != nil && ec.namespaces != nil && !ec.qnameValueNoDefaultNS {
 			if ns, ok := ec.namespaces[""]; ok {
 				uri = ns
 			}

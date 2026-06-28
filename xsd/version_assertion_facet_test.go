@@ -1234,3 +1234,46 @@ func TestVersion11AssertCastUserQNameType(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t" a="p:y"/>`))
 }
+
+// TestVersion11SimpleContentNestedTypeKeepsBaseFacets verifies that a
+// simpleContent restriction whose content is given by a nested <xs:simpleType>
+// still enforces the BASE complex type's content facets (PR859-CR15-01). The base
+// content is xs:string with maxLength=2; the derived restriction supplies a nested
+// xs:string with minLength=1. A 3-character value satisfies the nested minLength
+// but MUST be rejected by the inherited maxLength=2 — the nested type restricts,
+// it does not replace, the base content type (XSD 3.4.2.2).
+func TestVersion11SimpleContentNestedTypeKeepsBaseFacets(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:restriction base="xs:anySimpleType">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="2"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base">
+          <xs:simpleType>
+            <xs:restriction base="xs:string">
+              <xs:minLength value="1"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e>ab</e>`))
+	// "x" satisfies both the nested minLength=1 and the inherited maxLength=2.
+	require.NoError(t, validateAssertion(t, schema, `<e>x</e>`))
+	// "abc" satisfies the nested minLength=1 but violates the inherited maxLength=2.
+	require.ErrorIs(t, validateAssertion(t, schema, `<e>abc</e>`), xsd.ErrValidationFailed)
+}

@@ -976,10 +976,29 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// DECLARATION's namespace context, not the instance's. XSD 1.0 keeps the original
 	// gating and instance-context resolution, byte-identical.
 	if vc.version == Version11 {
+		valueNS := effectiveValueNS(elem, edecl, isEmpty)
 		effTD := effectiveContentSimpleType(td)
 		if simpleContentNeedsValidation(effTD) {
-			valueNS := effectiveValueNS(elem, edecl, isEmpty)
-			return validateValue(ctx, effectiveValue, valueNS, effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+			if err := validateValue(ctx, effectiveValue, valueNS, effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+				return err
+			}
+		}
+		// A nested <xs:simpleType> restriction (or a nested type narrowed further by
+		// sibling facets) restricts the base content type per XSD §3.4.2.2; it does
+		// not REPLACE it. effectiveContentSimpleType returns such an inline type with
+		// its own declared base chain, so the base complex type's inherited content
+		// facets (e.g. a maxLength on the base) would otherwise be bypassed. Validate
+		// the value against the base content type as well so both sets apply. The
+		// facet-only synthetic case (ContentSimpleType.BaseType == td) is already
+		// re-based onto the effective base content by effectiveContentSimpleType, so
+		// it is excluded here to avoid redundant work.
+		if td != nil && td.ContentSimpleType != nil && td.ContentSimpleType.BaseType != td {
+			baseContent := effectiveContentSimpleType(td.BaseType)
+			if baseContent != effTD && simpleContentNeedsValidation(baseContent) {
+				if err := validateValue(ctx, effectiveValue, valueNS, baseContent, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	}
