@@ -447,23 +447,31 @@ type validationContext struct {
 	// contributed by xsi:type is canonicalized in the correct value space.
 	actualElemType map[*helium.Element]*TypeDef
 	// actualElemDecl records the resolved *ElementDecl matched for each element
-	// instance during pass-1 content validation, including LOCAL declarations
-	// buried inside content models (which lookupElemDecl, finding only GLOBAL
-	// declarations, cannot recover). Pass-2 identity-constraint evaluation
-	// consults this map BEFORE falling back to lookupElemDecl, so xs:key/
-	// xs:unique/xs:keyref declared on a local element are evaluated rather than
-	// silently skipped.
+	// instance during pass-1, including LOCAL declarations buried inside content
+	// models (which lookupElemDecl, finding only GLOBAL declarations, cannot
+	// recover). It is written AS SOON AS a child MATCHES a particle (recordElemDecl)
+	// — BEFORE the child's content is validated/assessed — so a partially-satisfied
+	// occurrence (e.g. an unsatisfied minOccurs) still records the matched decl.
+	// Pass-2 identity-constraint evaluation consults this map (for the host decl and
+	// its IDCs / default / fixed / nillable metadata) BEFORE falling back to
+	// lookupElemDecl, so xs:key/xs:unique/xs:keyref declared on a local element are
+	// evaluated rather than silently skipped. Because it is written pre-assessment,
+	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
+	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
 	// assessedElemType records the ACTUAL *TypeDef of each element that was truly
 	// SCHEMA-ASSESSED during pass-1 — the validation root, a content-model particle
-	// match, or an xs:anyType/lax child WITH a matching global declaration. It is
-	// the element-side counterpart of actualAttrType. It is deliberately NOT
-	// populated by annotateSkipChildren or the lax-no-declaration branch (which
-	// write actualElemType purely for pass-2 IDC canonicalization), so an element
+	// match whose content was actually validated, or an xs:anyType/lax child WITH a
+	// matching global declaration (all post-xsi:type). It is the element-side
+	// counterpart of actualAttrType. It is deliberately NOT populated by
+	// annotateSkipChildren or the lax-no-declaration branch (which write
+	// actualElemType purely for pass-2 IDC canonicalization), NOR at the
+	// recordElemDecl match site (which fires before assessment), so an element
 	// admitted through a processContents="skip" wildcard — even one carrying
-	// xsi:type="xs:ID" — is absent here. The XSD 1.1 ID/IDREF pass consults ONLY
-	// this map (plus actualElemDecl, itself written only at assessed sites), never
-	// actualElemType, so skip content is never mistaken for an xs:ID/xs:IDREF.
+	// xsi:type="xs:ID" — and a matched-but-unassessed child (e.g. an unsatisfied
+	// minOccurs) are both absent here. The XSD 1.1 ID/IDREF pass uses ONLY this map
+	// for element typing (never actualElemType and never actualElemDecl), so neither
+	// skip content nor matched-but-failed children are mistaken for an xs:ID/xs:IDREF.
 	assessedElemType map[*helium.Element]*TypeDef
 	// actualAttrType records the declared *TypeDef of each attribute that was
 	// actually SCHEMA-ASSESSED during pass-1 — matched by an explicit attribute

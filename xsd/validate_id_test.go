@@ -832,3 +832,40 @@ func TestIDConstraintRefForbidsReferAllKinds(t *testing.T) {
 		require.ErrorIs(t, compile(t, `<xs:unique ref="k" refer="k"/>`), xsd.ErrCompilationFailed)
 	})
 }
+
+// TestIDMinOccursFailureNoSpuriousDangling covers PR860-IDPASS-001: a child that
+// MATCHES a particle but is never actually assessed (the particle fails early,
+// here an unsatisfied minOccurs) must NOT be classified as ID/IDREF by pass 3.
+// recordElemDecl writes actualElemDecl at the match scan BEFORE content
+// validation, so relying on it would report a spurious dangling IDREF on top of
+// the real structural error. elementTypeForID uses assessedElemType only, which is
+// not set for the unassessed child.
+func TestIDMinOccursFailureNoSpuriousDangling(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="r" type="xs:IDREF" minOccurs="2" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err)
+
+	// Only one <r> for a minOccurs=2 element: a structural error. The single <r>
+	// matched the particle (so actualElemDecl is recorded) but its occurrence is
+	// unsatisfied, so it is never assessed and must not be collected as an IDREF.
+	inst := `<doc><r>missing</r></doc>`
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(inst))
+	require.NoError(t, err)
+
+	var errs string
+	verr := validateWithOutput(t, xsd.NewValidator(schema), idoc, &errs)
+	require.Error(t, verr, "the unsatisfied minOccurs must fail validation")
+	require.NotContains(t, errs, "There is no ID/IDREF binding",
+		"a matched-but-unassessed child must not produce a spurious dangling-IDREF error; got: %q", errs)
+}

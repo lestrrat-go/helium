@@ -225,23 +225,22 @@ func (vc *validationContext) recordIDRef(col *idCollector, tok string, elem *hel
 }
 
 // elementTypeForID resolves the effective type of an instance element for the
-// purpose of ID/IDREF collection, using ONLY provenance recorded at genuine
-// pass-1 ASSESSMENT sites: assessedElemType (root, content-model matches, and
-// xs:anyType/lax children with a global declaration — all post-xsi:type) and
-// actualElemDecl (likewise written only at assessed sites). It deliberately does
-// NOT consult actualElemType, which is ALSO populated for processContents="skip"
-// (and lax-no-declaration) subtrees purely for pass-2 IDC canonicalization: a
-// skipped element is not schema-assessed, so even one carrying xsi:type="xs:ID"
-// must not be subjected to ID uniqueness. It also never falls back to a global
-// element-declaration lookup, for the same reason.
+// purpose of ID/IDREF collection, using assessedElemType as the SOLE source: the
+// type recorded at a genuine pass-1 ASSESSMENT site (the validation root, a
+// content-model particle match whose content was actually validated, an
+// xs:anyType/lax child WITH a global declaration, or assessLaxElement), all
+// post-xsi:type. It deliberately consults NEITHER actualElemType — also populated
+// for processContents="skip"/lax-no-declaration subtrees purely for pass-2 IDC
+// canonicalization — NOR actualElemDecl, which recordElemDecl writes as soon as a
+// child MATCHES a particle, BEFORE content validation (so a particle that fails
+// early, e.g. an unsatisfied minOccurs, would otherwise leave a matched-but-
+// UNASSESSED child wrongly classified as ID/IDREF and report a spurious
+// duplicate/dangling). It also never falls back to a global element-declaration
+// lookup, for the same reason. The host declaration (default/fixed/nillable
+// metadata) is consulted by the caller only AFTER this returns a non-nil
+// (assessed) type.
 func (vc *validationContext) elementTypeForID(elem *helium.Element) *TypeDef {
-	if td := vc.assessedElemType[elem]; td != nil {
-		return td
-	}
-	if decl := vc.actualElemDecl[elem]; decl != nil && decl.Type != nil {
-		return decl.Type
-	}
-	return nil
+	return vc.assessedElemType[elem]
 }
 
 // attrTypeForID resolves the declared type of an instance attribute for ID/IDREF

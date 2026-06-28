@@ -417,16 +417,20 @@ is skipped (attribute IDs still apply). The check is by DECLARATION, NOT raw
 `xsi:nil`: a `processContents="lax"` element with no declaration but a resolvable
 `xsi:type` is not validly nilled (xsi:nil requires a nillable declaration), and
 `assessLaxElement` validated its real content, so its ID/IDREF content is still
-collected — raw `xsi:nil` would wrongly drop it and false-accept a duplicate. Element/attribute
-typing for this pass uses ONLY provenance recorded at genuine pass-1 ASSESSMENT
-sites: `assessedElemType`/`actualElemDecl` for elements and `actualAttrType` for
-attributes (the latter populated in `annotateAttrUse` and `validateWildcardAttr`
+collected — raw `xsi:nil` would wrongly drop it and false-accept a duplicate. Element
+typing for this pass uses `assessedElemType` as the SOLE source; attribute typing
+uses `actualAttrType` (populated in `annotateAttrUse` and `validateWildcardAttr`
 for explicit uses and strict/lax wildcard-admitted global attributes) — with NO
-global-declaration fallback. Crucially it does NOT read `actualElemType`: that map
-is ALSO written (with `assessed=false`) by `annotateSkipChildren` and by the
-lax branch for an element with no resolvable governing type, purely for pass-2 IDC
-canonicalization, so such content appears in `actualElemType` but NOT in
-`assessedElemType`. `annotateElement` takes an `assessed` bool — true at the root,
+global-declaration fallback. Crucially it reads NEITHER `actualElemType` (ALSO
+written, `assessed=false`, by `annotateSkipChildren` and the lax-no-resolvable-type
+branch purely for pass-2 IDC canonicalization) NOR `actualElemDecl` (written by
+`recordElemDecl` at the particle-MATCH scan BEFORE content validation — so a
+matched-but-UNASSESSED child, e.g. an unsatisfied `minOccurs`, would otherwise be
+misclassified as ID/IDREF and produce a spurious duplicate/dangling on top of the
+real structural error). Only `assessedElemType` reflects genuine assessment, so
+both skip content and matched-but-failed children are excluded. The host
+declaration (`idcHostDecl`, for default/fixed/nillable metadata) is consulted only
+AFTER `elementTypeForID` returns a non-nil assessed type. `annotateElement` takes an `assessed` bool — true at the root,
 content-model matches, xs:anyType/lax children WITH a global declaration, AND a
 `processContents="lax"` element with no declaration but a RESOLVABLE `xsi:type`
 (which per XSD lax IS assessed: validated against that type and counted for pass 3,
