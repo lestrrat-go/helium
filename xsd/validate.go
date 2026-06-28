@@ -541,6 +541,11 @@ type validationContext struct {
 type assertEffectiveValue struct {
 	value string
 	ns    map[string]string
+	// qname is true when the effective value's active type is xs:QName/xs:NOTATION,
+	// so isolatedAssertTree does prefix materialization (declare/rewrite) for it; a
+	// non-QName value (e.g. an xs:string that happens to contain a colon) is appended
+	// verbatim with no prefix rewrite.
+	qname bool
 }
 
 // assertAnonNS is the synthetic namespace for inline anonymous list/union type
@@ -1097,9 +1102,26 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// than "" (isolatedAssertTree materializes it onto the copy). A QName/NOTATION
 	// default's prefix resolves in the DECLARATION's namespace context (effectiveValueNS).
 	if isEmpty && effectiveValue != "" && vc.assertEffectiveValues != nil {
+		ns := effectiveValueNS(elem, edecl, true)
+		// Mark whether the value is a QName/NOTATION (resolving a union's active
+		// member), so materialization does prefix declare/collision-rewrite only then.
+		isQName := false
+		if contentTD := effectiveContentSimpleType(td); contentTD != nil {
+			activeTD := contentTD
+			if resolveVariety(contentTD) == TypeVarietyUnion {
+				activeTD = fixedUnionActiveMember(ctx, normalizeWhiteSpace(effectiveValue, "collapse"), ns, resolveUnionMembers(contentTD), vc.schema, vc.version)
+			}
+			if activeTD != nil {
+				switch builtinBaseLocal(activeTD) {
+				case lexicon.TypeQName, lexicon.TypeNotation:
+					isQName = true
+				}
+			}
+		}
 		vc.assertEffectiveValues[elem] = assertEffectiveValue{
 			value: effectiveValue,
-			ns:    effectiveValueNS(elem, edecl, true),
+			ns:    ns,
+			qname: isQName,
 		}
 	}
 

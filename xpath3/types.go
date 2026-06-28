@@ -106,12 +106,14 @@ func deepCloneItem(item Item) Item {
 		}
 		return item
 	case NodeItem:
-		if v.UnionMemberTypes == nil {
+		if v.UnionMemberTypes == nil && v.ListItemLeaves == nil {
 			return item
 		}
 		v.UnionMemberTypes = append([]string(nil), v.UnionMemberTypes...)
-		// ActiveUnionMember points at an immutable NodeItemUnionMember (never mutated
-		// after construction), so the pointer is safely shared across clones.
+		v.ListItemLeaves = append([]*NodeItemUnionMember(nil), v.ListItemLeaves...)
+		// ActiveUnionMember / ListItemLeaves entries point at immutable
+		// NodeItemUnionMember values (never mutated after construction), so the
+		// pointers are safely shared across clones.
 		return v
 	case FunctionItem:
 		if v.ParamTypes == nil && v.ReturnType == nil {
@@ -235,6 +237,13 @@ type NodeItem struct {
 	ListItemType     string   // non-empty when the type is a list; the item type name
 	ListItemAtomized string   // built-in base of the list item type (e.g. xs:QName for a QName-derived item)
 	UnionMemberTypes []string // member type names for union types (for atomization)
+	// ListItemLeaves is non-nil when the list ITEM type is a UNION: one entry per
+	// whitespace token of the node value (aligned with xsdListFields), the
+	// value-dependent ACTIVE leaf member for THAT token, precomputed in nodeItemFor.
+	// So a list of a union atomizes each token through its own active member, matching
+	// $value, instead of one static ListItemAtomized base. A nil entry means the token
+	// resolved no member (the atomizer falls back to the static path).
+	ListItemLeaves []*NodeItemUnionMember
 	// ActiveUnionMember is the value-dependent ACTIVE LEAF member of a union-typed
 	// node, precomputed in nodeItemFor via full schema-aware validation (nil when the
 	// node is not a union or no member resolved). It is the resolved LEAF — when the

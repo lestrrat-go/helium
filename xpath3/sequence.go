@@ -159,8 +159,8 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				for _, tok := range xsdListFields(s) {
-					cast, err := atomizeListToken(tok, listItem, ni)
+				for i, tok := range xsdListFields(s) {
+					cast, err := atomizeListTokenAt(i, tok, listItem, ni)
 					if err != nil {
 						return false, err
 					}
@@ -257,6 +257,21 @@ func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
 		return AtomicValue{TypeName: listItem, Value: tok}, nil
 	}
 	return AtomicValue{}, err
+}
+
+// atomizeListTokenAt atomizes the i-th list token. When the list ITEM type is a
+// UNION (ni.ListItemLeaves populated), it atomizes through that token's precomputed
+// ACTIVE union member (resolved value-dependently in nodeItemFor), so a list of a
+// union agrees with $value per token; otherwise it falls back to the static
+// atomizeListToken on the declared item type.
+func atomizeListTokenAt(i int, tok, listItem string, ni NodeItem) (AtomicValue, error) {
+	if i < len(ni.ListItemLeaves) {
+		if leaf := ni.ListItemLeaves[i]; leaf != nil {
+			lni := NodeItem{Node: ni.Node, ListItemAtomized: leaf.Atomized, QNameNoDefaultNS: ni.QNameNoDefaultNS}
+			return atomizeListToken(tok, leaf.TypeName, lni)
+		}
+	}
+	return atomizeListToken(tok, listItem, ni)
 }
 
 // xsdListFields splits an xs:list value into items on runs of XSD whitespace ONLY

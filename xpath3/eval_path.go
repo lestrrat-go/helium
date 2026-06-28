@@ -209,6 +209,17 @@ func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
 		if itemType, ok := ec.schemaDeclarations.ListItemType(ni.TypeAnnotation); ok {
 			ni.ListItemType = itemType
 			ni.ListItemAtomized = atomizedTypeForAnnotation(itemType, ec.schemaDeclarations)
+			// When the list ITEM type is a UNION, the static ListItemAtomized base is
+			// one member only; resolve EACH token's active union member so the list
+			// atomizes per-token consistently with $value.
+			if members := ec.schemaDeclarations.UnionMemberTypes(itemType); len(members) > 0 {
+				tokens := xsdListFields(ixpath.StringValue(n))
+				leaves := make([]*NodeItemUnionMember, len(tokens))
+				for i, tok := range tokens {
+					leaves[i] = resolveActiveUnionLeafForValue(ctx, ec, n, itemType, ni.QNameNoDefaultNS, tok)
+				}
+				ni.ListItemLeaves = leaves
+			}
 		}
 		if members := ec.schemaDeclarations.UnionMemberTypes(ni.TypeAnnotation); len(members) > 0 {
 			ni.UnionMemberTypes = members
@@ -229,7 +240,15 @@ func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
 // SchemaDeclarations.ValidateCastWithNS (a no-op for built-ins, where the cast check
 // already covers validity). Returns nil when no member validates.
 func resolveActiveUnionLeaf(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool) *NodeItemUnionMember {
-	val := ixpath.StringValue(n)
+	return resolveActiveUnionLeafForValue(ctx, ec, n, unionType, qnameNoDefault, ixpath.StringValue(n))
+}
+
+// resolveActiveUnionLeafForValue resolves the active leaf member of unionType for an
+// EXPLICIT value (rather than the node's whole string value), used to resolve EACH
+// token of an xs:list whose item type is a union — so a list-of-union node atomizes
+// each token through its own active member (matching $value), not one static base.
+// QName/NOTATION members still resolve their prefix against the node n's namespaces.
+func resolveActiveUnionLeafForValue(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool, val string) *NodeItemUnionMember {
 	nsMap := inScopeNSMap(n)
 	// visited tracks union type NAMES currently being descended, so any finite
 	// acyclic nesting (however deep) is fully walked while a cyclic union graph

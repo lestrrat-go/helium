@@ -290,24 +290,45 @@ func (vc *validationContext) materializeAssertDefault(orig, copied *helium.Eleme
 	if elemTextContent(copied) != "" {
 		return // copy already carries content; do not overwrite
 	}
-	// Declare the value's QName prefix (if any) from the declaration namespace
-	// context so a QName/NOTATION default resolves on the copy.
-	if prefix, _, found := strings.Cut(strings.TrimSpace(ev.value), ":"); found && prefix != "" && ev.ns != nil {
-		if uri, bound := ev.ns[prefix]; bound && !copyHasPrefix(copied, prefix) {
-			copied.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
-		}
-	}
-	_ = copied.AppendText([]byte(ev.value))
+	_ = copied.AppendText([]byte(vc.materializeAssertText(copied, ev)))
 }
 
-// copyHasPrefix reports whether the element already declares the given prefix.
-func copyHasPrefix(e *helium.Element, prefix string) bool {
-	for _, ns := range e.Namespaces() {
-		if ns.Prefix() == prefix {
-			return true
-		}
+// materializeAssertText returns the text to append for a defaulted descendant in the
+// isolated assert tree, handling a QName/NOTATION value's prefix exactly like
+// materializeQNameAttrValue: a prefix bound in the DECLARATION context is declared on
+// the copy so the value resolves to its intended URI; if that prefix already binds a
+// DIFFERENT URI in the copy's scope, a fresh prefix is minted, declared, and the text
+// is rewritten to it. A non-QName value (or a value with no prefix / an unbound
+// prefix) is returned verbatim. QName atomization later collapses, so the non-rewrite
+// cases keep the authored value and only the collision rewrite emits the collapsed local.
+func (vc *validationContext) materializeAssertText(copied *helium.Element, ev assertEffectiveValue) string {
+	if !ev.qname || ev.ns == nil {
+		return ev.value
 	}
-	return false
+	collapsed := normalizeWhiteSpace(ev.value, "collapse")
+	prefix, local, found := strings.Cut(collapsed, ":")
+	if !found || prefix == "" {
+		return ev.value // no-namespace QName; nothing to bind
+	}
+	uri, bound := ev.ns[prefix]
+	if !bound || uri == "" {
+		return ev.value // prefix not bound in the declaration; leave as authored
+	}
+	inScope := collectNSContext(copied)
+	cur, already := inScope[prefix]
+	switch {
+	case already && cur == uri:
+		return ev.value // already resolves to the intended URI
+	case !already:
+		copied.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		return ev.value
+	default:
+		// Prefix collides with a DIFFERENT binding in the copy: mint a fresh prefix,
+		// declare it to the declaration-ns URI, and rewrite the value to it.
+		np := freshNSPrefix(inScope, prefix)
+		copied.AddNamespaceDecl(helium.NewNamespace(np, uri))
+		return np + ":" + local
+	}
 }
 
 // stripCommentsAndPIs removes every comment and processing-instruction node from

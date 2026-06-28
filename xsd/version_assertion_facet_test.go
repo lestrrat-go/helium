@@ -2079,3 +2079,79 @@ func TestVersion11AssertDescendantDefaultValue(t *testing.T) {
 	// The instance does NOT bind p; the default resolves via the declaration context.
 	require.NoError(t, validateAssertion(t, schema2, `<root><c/></root>`))
 }
+
+// TestVersion11AssertDescendantQNameDefaultPrefixCollision verifies that a defaulted
+// descendant QName element materialized into the isolated assert tree resolves to its
+// DECLARATION-ns URI even when the instance already binds the schema's default-value
+// prefix to a DIFFERENT URI (PR859-F01). The schema declares default="p:x" with p →
+// urn:decl; the instance binds p → urn:other. The materialized value must resolve to
+// urn:decl (a fresh prefix is minted), so namespace-uri-from-QName(data(c)) = urn:decl.
+func TestVersion11AssertDescendantQNameDefaultPrefixCollision(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:decl">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="xs:QName" default="p:x"/>
+      </xs:sequence>
+      <xs:assert test="namespace-uri-from-QName(data(c)) = 'urn:decl'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// The instance binds p to a DIFFERENT URI; the empty <c/> default must still
+	// resolve via the declaration's p → urn:decl, not the instance's urn:other.
+	require.NoError(t, validateAssertion(t, schema, `<root xmlns:p="urn:other"><c/></root>`))
+}
+
+// TestVersion11AssertListOfUnionPerToken verifies that an xs:list whose ITEM TYPE is
+// a UNION atomizes each token through its OWN active union member (PR859-F02), not one
+// static base. itemType="intOrBool" (union of xs:int, xs:boolean); value "1 true 2"
+// must atomize to xs:int, xs:boolean, xs:int — agreeing with $value.
+func TestVersion11AssertListOfUnionPerToken(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="iobList">
+    <xs:list itemType="intOrBool"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="v" type="iobList"/>
+      <xs:assert test="count(data(@v)) = 3 and (data(@v)[1] instance of xs:int) and (data(@v)[2] instance of xs:boolean) and (data(@v)[3] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e v="1 true 2"/>`))
+}
+
+// TestVersion11AssertSimpleContentComplexNotSimpleTarget verifies that a simpleContent
+// COMPLEX type is NOT accepted as a simple/atomic target (PR859-F03): a literal value
+// `castable as` the complex type is false (validateCast rejects a complex target), and
+// `t:c instance of element(*, xs:anySimpleType)` is false — a complex type is not a
+// subtype of xs:anySimpleType — even though data() atomization still resolves its
+// content type.
+func TestVersion11AssertSimpleContentComplexNotSimpleTarget(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="ccType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="t:ccType"/>
+      </xs:sequence>
+      <xs:assert test="not(t:c instance of element(*, xs:anySimpleType)) and not('hi' castable as t:ccType) and (data(t:c) = 'hi')"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t"><c>hi</c></e>`))
+}

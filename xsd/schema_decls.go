@@ -151,9 +151,12 @@ func (d schemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 	if !ok {
 		return false
 	}
-	// Every simple type derives (ultimately) from xs:anySimpleType, even a list or
-	// union whose BaseType pointer is left nil (the implicit anySimpleType root).
-	if td.ContentType == ContentTypeSimple && baseTypeName == xpath3.TypeAnySimpleType {
+	// Every SIMPLE type derives (ultimately) from xs:anySimpleType, even a list or
+	// union whose BaseType pointer is left nil (the implicit anySimpleType root). A
+	// simpleContent COMPLEX type (IsComplex with ContentType==ContentTypeSimple) is
+	// NOT a simple type — it is not a subtype of xs:anySimpleType for node/instance-of
+	// tests — so exclude it (its content is resolved separately for ATOMIZATION).
+	if td.ContentType == ContentTypeSimple && !td.IsComplex && baseTypeName == xpath3.TypeAnySimpleType {
 		return true
 	}
 	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
@@ -161,7 +164,14 @@ func (d schemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 		if name == baseTypeName {
 			return true
 		}
-		if xpath3.IsKnownXSDType(name) {
+		// Only fall into the BUILTIN simple-type hierarchy when the ORIGINAL type is
+		// itself simple. A simpleContent COMPLEX type's {base type definition} can be a
+		// simple type (e.g. an extension of xs:string), but the complex type is NOT a
+		// subtype of that simple type's simple ancestors (xs:anySimpleType, …) for
+		// node/instance-of tests — it is a COMPLEX type whose universal ancestor is
+		// xs:anyType (handled by the early return). Without this guard a complex
+		// simpleContent type would be wrongly accepted as an xs:anySimpleType target.
+		if !td.IsComplex && xpath3.IsKnownXSDType(name) {
 			return xpath3.BuiltinIsSubtypeOf(name, baseTypeName)
 		}
 	}
@@ -182,6 +192,12 @@ func (d schemaDecls) validateCast(ctx context.Context, value, typeName string, n
 	td, ok := d.lookupTypeName(typeName)
 	if !ok || td.ContentType != ContentTypeSimple {
 		return nil
+	}
+	// A simpleContent COMPLEX type is NOT a valid simple/atomic cast target — its
+	// content type drives data() atomization (LookupSchemaType resolves that), but
+	// `cast`/`castable as` must reject it as a target, not facet-validate its content.
+	if td.IsComplex {
+		return fmt.Errorf("xsd: %s is a complex type, not a valid cast target", typeName)
 	}
 
 	// Guard against a self-referential cast: a `cast`/`castable as t:T` evaluated
