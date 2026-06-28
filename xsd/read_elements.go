@@ -311,6 +311,9 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	decl.IDCs = c.parseIDConstraints(ctx, elem)
 	if c.version == Version11 {
 		decl.Alternatives = c.parseTypeAlternatives(ctx, elem)
+		if len(decl.Alternatives) > 0 {
+			c.ctaElems = append(c.ctaElems, decl)
+		}
 	}
 	return decl, nil
 }
@@ -435,6 +438,12 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 		case attrValProhibited:
 			au.Prohibited = true
 		}
+	}
+	// XSD 1.1 inheritable: a non-boolean lexical (e.g. "" or "2") is a schema
+	// error (reported by readBooleanAttr); whitespace is collapsed (" 1 " → 1).
+	if c.version == Version11 && hasAttr(elem, attrInheritable) {
+		au.Inheritable = c.readBooleanAttr(ctx, elem, attrInheritable)
+		au.InheritableSet = true
 	}
 	c.attrUseSources[au] = attrConstraintSource{
 		line:   elem.Line(),
@@ -621,6 +630,12 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 			au.Required = true
 		case attrValProhibited:
 			au.Prohibited = true
+		}
+		// XSD 1.1: an explicit inheritable on the ref USE wins over the referenced
+		// global declaration's value (resolved in resolveRefs when unset here).
+		if c.version == Version11 && hasAttr(elem, attrInheritable) {
+			au.Inheritable = c.readBooleanAttr(ctx, elem, attrInheritable)
+			au.InheritableSet = true
 		}
 		// Record the source for a prohibited ref'd use so the pointless-prohibition
 		// warning can cite its line and declaring file. Only prohibited uses need

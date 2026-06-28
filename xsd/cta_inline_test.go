@@ -70,27 +70,32 @@ func TestVersion11CTAEdges(t *testing.T) {
 			`<lib><pub kind="book"><title>T</title></pub></lib>`), xsd.ErrValidationFailed)
 	})
 
-	t.Run("inline anonymous simpleType", func(t *testing.T) {
+	t.Run("inline anonymous simpleType selected via inherited attribute", func(t *testing.T) {
 		t.Parallel()
+		// val's declared type is xs:integer; the inline alternative restricts it to
+		// <= 10. @mode is inheritable on the parent, so the CTA test sees it as an
+		// inherited attribute (the detached CTA context has no parent to navigate).
 		const s = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="c">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="val" type="xs:string">
-          <xs:alternative test="../@mode='int'">
-            <xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType>
+        <xs:element name="val" type="xs:integer">
+          <xs:alternative test="@mode='small'">
+            <xs:simpleType>
+              <xs:restriction base="xs:integer"><xs:maxInclusive value="10"/></xs:restriction>
+            </xs:simpleType>
           </xs:alternative>
         </xs:element>
       </xs:sequence>
-      <xs:attribute name="mode" type="xs:string"/>
+      <xs:attribute name="mode" type="xs:string" inheritable="true"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>`
 		schema := mustCompile(t, s)
-		require.NoError(t, validate(t, schema, `<c mode="int"><val>42</val></c>`))
-		require.ErrorIs(t, validate(t, schema, `<c mode="int"><val>abc</val></c>`), xsd.ErrValidationFailed)
-		// mode!=int falls back to xs:string, so any text is valid.
-		require.NoError(t, validate(t, schema, `<c mode="str"><val>abc</val></c>`))
+		require.NoError(t, validate(t, schema, `<c mode="small"><val>5</val></c>`))
+		require.ErrorIs(t, validate(t, schema, `<c mode="small"><val>50</val></c>`), xsd.ErrValidationFailed)
+		// mode!=small falls back to xs:integer, so 50 is valid.
+		require.NoError(t, validate(t, schema, `<c mode="big"><val>50</val></c>`))
 	})
 
 	t.Run("xs:error alternative makes element invalid", func(t *testing.T) {
@@ -137,32 +142,40 @@ func TestVersion11CTAEdges(t *testing.T) {
 
 	t.Run("xpathDefaultNamespace affects unprefixed test path", func(t *testing.T) {
 		t.Parallel()
-		// With xpathDefaultNamespace=##targetNamespace, the unprefixed name test
-		// `self::root` matches the {urn:t}root element and selects Alt (needs <y>).
+		// PosHolder restricts Holder (positiveInteger ⊂ integer) so the type table is
+		// valid. With xpathDefaultNamespace=##targetNamespace the unprefixed name test
+		// `self::root` matches the {urn:t}root element and selects PosHolder; without
+		// it, `self::root` is {}root, never matches, and Holder governs.
 		const withXDN = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
-  <xs:complexType name="Base"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
-  <xs:complexType name="Alt"><xs:sequence><xs:element name="y" type="xs:string"/></xs:sequence></xs:complexType>
-  <xs:element name="root" type="t:Base">
-    <xs:alternative test="self::root" type="t:Alt" xpathDefaultNamespace="##targetNamespace"/>
+  <xs:complexType name="Holder"><xs:sequence/><xs:attribute name="value" type="xs:integer"/></xs:complexType>
+  <xs:complexType name="PosHolder">
+    <xs:complexContent>
+      <xs:restriction base="t:Holder"><xs:sequence/><xs:attribute name="value" type="xs:positiveInteger"/></xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Holder">
+    <xs:alternative test="self::root" type="t:PosHolder" xpathDefaultNamespace="##targetNamespace"/>
   </xs:element>
 </xs:schema>`
 		schemaXDN := mustCompile(t, withXDN)
-		require.NoError(t, validate(t, schemaXDN, `<root xmlns="urn:t"><y>v</y></root>`))
-		require.ErrorIs(t, validate(t, schemaXDN, `<root xmlns="urn:t"><x>v</x></root>`), xsd.ErrValidationFailed)
+		require.NoError(t, validate(t, schemaXDN, `<root xmlns="urn:t" value="5"/>`))
+		require.ErrorIs(t, validate(t, schemaXDN, `<root xmlns="urn:t" value="-5"/>`), xsd.ErrValidationFailed)
 
-		// Without xpathDefaultNamespace, `self::root` resolves to {}root which does
-		// not match {urn:t}root, so the alternative never fires and Base governs.
 		const noXDN = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
-  <xs:complexType name="Base"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
-  <xs:complexType name="Alt"><xs:sequence><xs:element name="y" type="xs:string"/></xs:sequence></xs:complexType>
-  <xs:element name="root" type="t:Base">
-    <xs:alternative test="self::root" type="t:Alt"/>
+  <xs:complexType name="Holder"><xs:sequence/><xs:attribute name="value" type="xs:integer"/></xs:complexType>
+  <xs:complexType name="PosHolder">
+    <xs:complexContent>
+      <xs:restriction base="t:Holder"><xs:sequence/><xs:attribute name="value" type="xs:positiveInteger"/></xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Holder">
+    <xs:alternative test="self::root" type="t:PosHolder"/>
   </xs:element>
 </xs:schema>`
 		schemaNo := mustCompile(t, noXDN)
-		require.NoError(t, validate(t, schemaNo, `<root xmlns="urn:t"><x>v</x></root>`))
-		require.ErrorIs(t, validate(t, schemaNo, `<root xmlns="urn:t"><y>v</y></root>`), xsd.ErrValidationFailed)
+		// self::root does not match {urn:t}root, so Holder governs and -5 is valid.
+		require.NoError(t, validate(t, schemaNo, `<root xmlns="urn:t" value="-5"/>`))
 	})
 }

@@ -454,6 +454,12 @@ type validationContext struct {
 	// xs:unique/xs:keyref declared on a local element are evaluated rather than
 	// silently skipped.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// attrInheritable records, for XSD 1.1, the instance attribute nodes matched to
+	// an AttrUse whose {inheritable} is true. The top-down validation walk populates
+	// it for every ancestor before a descendant's conditional type assignment runs,
+	// so inheritedAttributes can resolve a CTA/assertion @test against inherited
+	// ancestor attributes.
+	attrInheritable map[*helium.Attribute]struct{}
 }
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
@@ -471,13 +477,14 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		version = schema.version
 	}
 	return &validationContext{
-		schema:         schema,
-		version:        version,
-		cfg:            cfg,
-		filename:       filename,
-		errorHandler:   handler,
-		actualElemType: make(map[*helium.Element]*TypeDef),
-		actualElemDecl: make(map[*helium.Element]*ElementDecl),
+		schema:          schema,
+		version:         version,
+		cfg:             cfg,
+		filename:        filename,
+		errorHandler:    handler,
+		actualElemType:  make(map[*helium.Element]*TypeDef),
+		actualElemDecl:  make(map[*helium.Element]*ElementDecl),
+		attrInheritable: make(map[*helium.Attribute]struct{}),
 	}
 }
 
@@ -1114,6 +1121,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			// Annotate the attribute with its declared type.
 			vc.annotateAttrUse(ctx, a, au)
+			// XSD 1.1: record an inheritable attribute so descendants' conditional
+			// type assignment / assertions can see it as an inherited attribute.
+			if vc.version == Version11 && au.Inheritable {
+				vc.attrInheritable[a] = struct{}{}
+			}
 			continue
 		}
 		// An explicitly prohibited attribute use is rejected outright and must

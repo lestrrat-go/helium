@@ -59,6 +59,7 @@ const (
 	attrFinalDefault         = "finalDefault"
 	attrFixed                = "fixed"
 	attrForm                 = "form"
+	attrInheritable          = "inheritable" // XSD 1.1: inheritable attribute
 	attrItemType             = "itemType"
 	attrMaxOccurs            = "maxOccurs"
 	attrMemberTypes          = "memberTypes"

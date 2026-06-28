@@ -143,6 +143,10 @@ type compiler struct {
 	// "absent" from "present and empty".
 	xpathDefaultNS    string
 	xpathDefaultNSSet bool
+	// ctaElems collects every element declaration carrying a {type table}
+	// (xs:alternative children), so the alternative-type substitutability check
+	// (cta-cvc / Type Alternative valid) can run after all types resolve.
+	ctaElems []*ElementDecl
 }
 
 // redefinableSet caches the redefinable component names a schema document
@@ -583,6 +587,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Reject element/attribute declarations whose effective type is the built-in
 	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
 	c.checkNotationOnDeclarations(ctx)
+
+	// XSD 1.1: each conditional-type-assignment alternative's type must be validly
+	// substitutable for the element's declared type. Runs after type refs resolve.
+	c.checkAltSubstitutability(ctx)
 
 	// Detect circular substitution-group references. The membership map itself was
 	// already built by buildSubstGroups (before resolveRefs) so UPA could see it;

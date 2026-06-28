@@ -54,6 +54,7 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 		Namespaces: collectNSContext(elem),
 		Line:       elem.Line(),
 		Source:     c.diagSource(),
+		BaseURI:    c.diagSource(),
 	}
 
 	typeRef := getAttr(elem, attrType)
@@ -224,6 +225,10 @@ func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *he
 	if elementHasXsiType(elem) {
 		return declType
 	}
+	// The XPath @test runs against the XSD 1.1 CTA context node: a detached copy of
+	// the element with its own + inherited attributes and namespaces but no children
+	// or parent (§3.13). Built once per element and shared by every alternative.
+	var cta *helium.Element
 	for _, alt := range alts {
 		// A testless alternative is the unconditional default.
 		if alt.compiled == nil {
@@ -232,8 +237,18 @@ func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *he
 			}
 			continue
 		}
-		ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Namespaces(alt.Namespaces)
-		res, err := ev.Evaluate(ctx, alt.compiled, elem)
+		if cta == nil {
+			cta = vc.ctaContextNode(elem)
+		}
+		ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Namespaces(alt.Namespaces).
+			Position(1).
+			Size(1).
+			CollectionResolver(emptyCollectionResolver{})
+		if alt.BaseURI != "" {
+			ev = ev.BaseURI(alt.BaseURI)
+		}
+		res, err := ev.Evaluate(ctx, alt.compiled, cta)
 		if err != nil {
 			// A failing alternative test does not select the type (treated as not
 			// matched); evaluation continues to the next alternative.
@@ -255,4 +270,61 @@ func elementHasXsiType(elem *helium.Element) bool {
 		}
 	}
 	return false
+}
+
+// checkAltSubstitutability enforces the XSD 1.1 constraint that each alternative's
+// {type definition} be validly substitutable for the element's declared type
+// (cvc-alt / "Type Alternative"). It runs after resolveRefs so both the element's
+// declared type and every alternative type (named or inline) are linked.
+func (c *compiler) checkAltSubstitutability(ctx context.Context) {
+	if c.filename == "" || c.version != Version11 {
+		return
+	}
+	for _, edecl := range c.ctaElems {
+		for _, alt := range edecl.Alternatives {
+			if alt.Type == nil {
+				continue
+			}
+			if isValidlySubstitutable(alt.Type, edecl.Type) {
+				continue
+			}
+			msg := fmt.Sprintf("The type alternative's type '{%s}%s' is not validly substitutable for the declared type '{%s}%s' of the element declaration.",
+				alt.Type.Name.NS, alt.Type.Name.Local, edecl.Type.Name.NS, edecl.Type.Name.Local)
+			c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(alt.Source), alt.Line, elemAlternative, attrType, msg))
+		}
+	}
+}
+
+// isValidlySubstitutable reports whether a type alternative's type alt may govern
+// an element whose declared type is decl. xs:error is always permitted (it makes
+// the element invalid by design). Otherwise alt must be validly derived from decl
+// (Type Derivation OK), which — for a union declared type — includes alt being
+// derived from one of the union's member types.
+//
+// The check is deliberately under-strict for SIMPLE alternative types: the XSD
+// built-in simple-type hierarchy (e.g. xs:nonNegativeInteger ⊂ xs:integer) is not
+// linked via BaseType pointers, so isDerivedFrom cannot confirm those legitimate
+// derivations. Rather than risk false-rejecting a valid schema, a simple
+// alternative type whose derivation cannot be confirmed is accepted; only an
+// unrelated COMPLEX alternative type (whose derivation IS reliably linked) is
+// firmly rejected — which is exactly the case the constraint must catch (an inline
+// complexType not derived from the element's declared complex type).
+func isValidlySubstitutable(alt, decl *TypeDef) bool {
+	if alt == nil || decl == nil {
+		return true
+	}
+	if isErrorType(alt) {
+		return true
+	}
+	if isDerivedFrom(alt, decl) {
+		return true
+	}
+	if decl.Variety == TypeVarietyUnion {
+		for _, m := range decl.MemberTypes {
+			if isValidlySubstitutable(alt, m) {
+				return true
+			}
+		}
+	}
+	return alt.ContentType == ContentTypeSimple
 }

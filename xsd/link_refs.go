@@ -268,6 +268,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if au.Type == nil {
 			au.Type = ga.Type
 		}
+		// XSD 1.1 {inheritable}: a ref use without an explicit inheritable adopts
+		// the referenced global declaration's value; an explicit one already won.
+		if !au.InheritableSet {
+			au.Inheritable = ga.Inheritable
+			au.InheritableSet = ga.InheritableSet
+		}
 	}
 
 	// Validate attribute default/fixed constraint values against the
@@ -1080,6 +1086,13 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
+				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+					component+", attribute use '"+au.Name.Local+"'", msg))
+			}
+			// XSD 1.1 derivation-ok-restriction: a restricting attribute use must
+			// keep the base use's {inheritable} (true→false and false→true both fail).
+			if c.version == Version11 && au.Inheritable != baseAU.Inheritable {
+				msg := fmt.Sprintf("The 'inheritable' property of the attribute use '%s' is inconsistent with the corresponding attribute use of the base complex type definition %s.", au.Name.Local, baseQualified)
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
