@@ -211,20 +211,24 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
+	// Atomize through the stream so a schema-typed list/union node expands; the
+	// at-most-one cardinality is checked on the atomized result.
+	sAtoms, err := atomizeSingletonOperand(startSeq)
+	if err != nil {
+		return nil, err
+	}
+	eAtoms, err := atomizeSingletonOperand(endSeq)
+	if err != nil {
+		return nil, err
+	}
+	if len(sAtoms) == 0 || len(eAtoms) == 0 {
 		return validNilSequence, nil
 	}
-	if seqLen(startSeq) > 1 || seqLen(endSeq) > 1 {
+	if len(sAtoms) > 1 || len(eAtoms) > 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "to operator operands must each be xs:integer? (at most one item)"}
 	}
-	sa, err := AtomizeItem(startSeq.Get(0))
-	if err != nil {
-		return nil, err
-	}
-	ea, err := AtomizeItem(endSeq.Get(0))
-	if err != nil {
-		return nil, err
-	}
+	sa := sAtoms[0]
+	ea := eAtoms[0]
 	// Per spec, operands are converted using function coercion rules for xs:integer?.
 	// This allows untypedAtomic → integer, but rejects double/float/decimal → integer.
 	saInt, err := coerceToInteger(sa)

@@ -78,19 +78,24 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(seq) == 0 {
+	// Atomize THROUGH the stream (atomizeSingletonOperand) so a schema-typed node
+	// whose typed value is a list/union expands to its atoms; the cast cardinality
+	// (singleton, or empty when `as T?`) is then applied to the ATOMIZED result, not
+	// the raw item count — a single node atomizing to >1 value is a cardinality error.
+	atoms, err := atomizeSingletonOperand(seq)
+	if err != nil {
+		return nil, err
+	}
+	if len(atoms) == 0 {
 		if e.AllowEmpty {
 			return validNilSequence, nil
 		}
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "cast requires non-empty sequence"}
 	}
-	if seqLen(seq) > 1 {
+	if len(atoms) > 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "cast requires singleton"}
 	}
-	av, err := AtomizeItem(seq.Get(0))
-	if err != nil {
-		return nil, err
-	}
+	av := atoms[0]
 	// xs:QName cast from string requires namespace context
 	if targetType == TypeQName {
 		result, err := castToQName(av, ec)
@@ -184,16 +189,21 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(seq) == 0 {
-		return SingleBoolean(e.AllowEmpty), nil
-	}
-	if seqLen(seq) > 1 {
-		return SingleBoolean(false), nil
-	}
-	av, err := AtomizeItem(seq.Get(0))
+	// Atomize THROUGH the stream so a schema-typed node whose typed value is a
+	// list/union expands; castable's cardinality (singleton, or empty when `as T?`)
+	// is applied to the ATOMIZED result — a node atomizing to >1 value is NOT
+	// castable to a single atomic type.
+	atoms, err := atomizeSingletonOperand(seq)
 	if err != nil {
 		return SingleBoolean(false), nil //nolint:nilerr // castable returns false on atomization failure
 	}
+	if len(atoms) == 0 {
+		return SingleBoolean(e.AllowEmpty), nil
+	}
+	if len(atoms) > 1 {
+		return SingleBoolean(false), nil
+	}
+	av := atoms[0]
 	// xs:QName cast from string requires namespace context
 	if targetType == TypeQName {
 		_, castErr := castToQName(av, ec)

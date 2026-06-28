@@ -237,6 +237,15 @@ func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 // two atoms; a genuine atomization error (e.g. FOTY0013 for a map/function item
 // encountered before the cap) still propagates.
 func atomizeSingletonOperand(seq Sequence) ([]AtomicValue, error) {
+	// Fast path: a single ALREADY-ATOMIC item atomizes to itself, with no streaming
+	// machinery — preserving perf on hot numeric paths (arithmetic, range). Arrays
+	// (flattened) and schema list/union-typed nodes (expanded) fall through to
+	// atomizeStream so their multi-atom typed value is seen.
+	if seqLen(seq) == 1 {
+		if av, ok := seq.Get(0).(AtomicValue); ok {
+			return []AtomicValue{av}, nil
+		}
+	}
 	atoms := make([]AtomicValue, 0, 2)
 	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
 		atoms = append(atoms, av)

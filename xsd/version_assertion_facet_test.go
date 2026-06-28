@@ -1841,3 +1841,55 @@ func TestVersion11AssertUnionEmptyListMember(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema2, `<e u=""/>`))
 }
+
+// TestVersion11AssertCastMultiItemTypedValue verifies that cast/castable/arithmetic
+// atomize a singleton OPERAND through the typed-value stream (PR859-001): a node whose
+// schema typed value is a MULTI-item list/union-list is seen as multiple atoms, so
+// `castable as <singleton>` is false and `cast as <singleton>` is a cardinality error,
+// matching data() (which already expanded). Single-item typed values still cast.
+func TestVersion11AssertCastMultiItemTypedValue(t *testing.T) {
+	// Direct list-typed attribute.
+	const listSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="IntList"/>
+      <xs:assert test="%s"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	// union(IntList, xs:string) attribute (active member is the list for "1 2").
+	const unionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="%s"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	run := func(t *testing.T, tmpl, test, instance string) {
+		t.Helper()
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), fmt.Sprintf(tmpl, test))
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, instance))
+	}
+
+	// Multi-item typed value: NOT castable to a single xs:string; the cardinality
+	// makes `cast as xs:string` raise (so the assert uses castable / not()).
+	run(t, listSchema, `not(@u castable as xs:string)`, `<e u="1 2"/>`)
+	run(t, unionSchema, `not(@u castable as xs:string)`, `<e u="1 2"/>`)
+	// Single-item typed value IS castable (and equals the value).
+	run(t, listSchema, `@u castable as xs:int and (@u cast as xs:int) eq 7`, `<e u="7"/>`)
+	run(t, unionSchema, `@u castable as xs:int and (@u cast as xs:int) eq 7`, `<e u="7"/>`)
+	// data() agreement (multi-item) — sanity that the same node expands consistently.
+	run(t, listSchema, `count(data(@u)) = 2`, `<e u="1 2"/>`)
+}
