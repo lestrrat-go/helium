@@ -198,7 +198,11 @@ func (c *compiler) vcExcluded(ctx context.Context, elem *helium.Element, pv stri
 // schema error UNDER 1.1 only; under 1.0 it is tolerated (valid=false so the
 // caller skips the condition).
 func (c *compiler) vcDecimal(ctx context.Context, elem *helium.Element, attr, val string) (string, bool) {
-	s := strings.TrimSpace(val)
+	// Trim only ASCII XML whitespace (#x20/#x9/#xD/#xA), the whitespace facet's
+	// scope for xs:decimal — NOT strings.TrimSpace, which also strips Unicode
+	// whitespace like NBSP. So vc:minVersion="<NBSP>1.1" stays malformed (fatal
+	// under 1.1) rather than being silently accepted as "1.1".
+	s := strings.Trim(val, " \t\r\n")
 	if isValidXSDDecimal(s) {
 		return s, true
 	}

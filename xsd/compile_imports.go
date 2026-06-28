@@ -292,6 +292,14 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		return fmt.Errorf("xsd: included document %q is not an xs:schema", location)
 	}
 
+	// Conditional inclusion runs per schema document, BEFORE the targetNamespace
+	// compatibility check and the default-attribute interpretation: a vc-excluded
+	// root contributes an EMPTY schema and must not be rejected for a TNS mismatch.
+	// (For a non-excluded root the same call prunes its vc:-excluded descendants.)
+	if c.applyConditionalInclusion(ctx, incRoot) {
+		return nil
+	}
+
 	// Check target namespace compatibility.
 	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
@@ -342,12 +350,8 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	beforeGroups := snapshotKeys(c.schema.groups)
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
 
-	// Conditional inclusion runs per schema document: prune the included
-	// document's vc:-excluded elements (and an empty/vc-excluded root, which makes
-	// the include contribute nothing) before its declarations are interpreted.
-	c.applyConditionalInclusion(ctx, incRoot)
-
 	// Parse the included schema's declarations into the current compiler.
+	// (Conditional inclusion already ran above, before the TNS check.)
 	err = c.parseSchemaChildren(ctx, incRoot)
 
 	// Process the included schema's OWN xs:include/xs:import/xs:redefine so a
@@ -484,6 +488,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return fmt.Errorf("xsd: redefined document %q is not an xs:schema", location)
 	}
 
+	// Conditional inclusion runs per schema document, BEFORE the targetNamespace
+	// check and default-attribute interpretation: a vc-excluded root contributes an
+	// EMPTY schema (no Phase-A components) and must not be rejected for a TNS
+	// mismatch. (For a non-excluded root the same call prunes its descendants.)
+	if c.applyConditionalInclusion(ctx, incRoot) {
+		return nil
+	}
+
 	// Check target namespace compatibility (same rules as include).
 	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
@@ -526,10 +538,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	beforeGroups := snapshotKeys(c.schema.groups)
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
 
-	// Conditional inclusion runs per schema document (see loadInclude).
-	c.applyConditionalInclusion(ctx, incRoot)
-
 	// Parse the included schema's declarations into the current compiler.
+	// (Conditional inclusion already ran above, before the TNS check.)
 	if err := c.parseSchemaChildren(ctx, incRoot); err != nil {
 		c.schema.elemFormQualified = savedElemForm
 		c.schema.attrFormQualified = savedAttrForm
@@ -854,25 +864,6 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		impFilename = schemaDisplayLoc(c.filename, location)
 	}
 
-	// The targetNamespace of the located schema must match the namespace
-	// declared on <xs:import> (XSD src-import; libxml2 rejects the mismatch
-	// rather than merging declarations from the wrong namespace). A present
-	// namespace requires that exact targetNamespace; an absent namespace
-	// requires the imported schema to have no targetNamespace. This is a
-	// fatal schema error, not an I/O warning, so it is emitted directly here
-	// and reported via a nil return (mirroring the xs:include check above).
-	impTargetNS := getAttr(impRoot, attrTargetNamespace)
-	if impTargetNS != ns {
-		displayLoc := location
-		if c.filename != "" {
-			displayLoc = schemaDisplayLoc(c.filename, location)
-		}
-		c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
-			importElem.LocalName(), elemImport,
-			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
-		return nil
-	}
-
 	// Create a temporary compiler for the imported schema. The imported schema is
 	// compiled under the importing schema's effective XSD version.
 	impC := &compiler{
@@ -947,8 +938,40 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 
 	registerBuiltinTypes(impC.schema, impC.version)
 
-	// Conditional inclusion runs per schema document (see loadInclude).
-	impC.applyConditionalInclusion(ctx, impRoot)
+	// Conditional inclusion runs per schema document, BEFORE the src-import
+	// targetNamespace check: a vc-excluded imported root contributes an EMPTY
+	// schema and must not be rejected for a namespace mismatch. A malformed 1.1 vc
+	// value on the excluded root is still a schema error, so forward the
+	// sub-collector's diagnostics before returning.
+	if impC.applyConditionalInclusion(ctx, impRoot) {
+		_ = subCollector.Close()
+		if impC.errorCount > 0 && c.errorCount == 0 {
+			for _, e := range subCollector.Errors() {
+				c.errorHandler.Handle(ctx, e)
+			}
+		}
+		c.errorCount += impC.errorCount
+		return nil
+	}
+
+	// The targetNamespace of the located schema must match the namespace
+	// declared on <xs:import> (XSD src-import; libxml2 rejects the mismatch
+	// rather than merging declarations from the wrong namespace). A present
+	// namespace requires that exact targetNamespace; an absent namespace
+	// requires the imported schema to have no targetNamespace. This is a
+	// fatal schema error, not an I/O warning, so it is emitted directly here
+	// and reported via a nil return (mirroring the xs:include check above).
+	impTargetNS := getAttr(impRoot, attrTargetNamespace)
+	if impTargetNS != ns {
+		displayLoc := location
+		if c.filename != "" {
+			displayLoc = schemaDisplayLoc(c.filename, location)
+		}
+		c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
+			importElem.LocalName(), elemImport,
+			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
+		return nil
+	}
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err

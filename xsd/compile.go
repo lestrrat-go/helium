@@ -514,8 +514,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// <xs:schema> is itself vc-excluded the whole document contributes nothing:
 	// return an empty (valid) schema WITHOUT interpreting or validating its other
 	// (non-preserved) root attributes — an excluded root must not fail compilation
-	// on, say, a bogus blockDefault it would never use.
+	// on, say, a bogus blockDefault it would never use. A MALFORMED 1.1 vc value on
+	// the excluded root is still a schema error (reported during the pre-pass), so
+	// surface it instead of swallowing it behind the empty-schema short-circuit.
 	if c.applyConditionalInclusion(ctx, root) {
+		if c.errorCount > 0 {
+			return nil, ErrCompilationFailed
+		}
 		return c.schema, nil
 	}
 

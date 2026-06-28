@@ -3,6 +3,7 @@ package xsd_test
 import (
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -311,6 +312,66 @@ func TestConditionalInclusion(t *testing.T) {
 		s, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), schema)
 		require.NoError(t, err)
 		require.Error(t, validate(t, s, `<temp>hi</temp>`)) // temp was pruned with the root
+	})
+
+	t.Run("excluded root with a malformed vc value still errors under 1.1", func(t *testing.T) {
+		t.Parallel()
+		// The root is vc-excluded (maxVersion 0.9 <= 1.1) AND carries a malformed
+		// minVersion; the malformed-value schema error must NOT be swallowed by the
+		// empty-schema short-circuit.
+		schema := `<xs:schema ` + ns + ` vc:maxVersion="0.9" vc:minVersion="1.1.3">
+  <xs:element name="temp" type="xs:string"/>
+</xs:schema>`
+		_, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), schema)
+		require.Error(t, err)
+		// Under 1.0 the malformed value is tolerated; the root (maxVersion 0.9) is
+		// still excluded, so the schema compiles to an empty schema.
+		s10, err10 := compileVC(t, xsd.NewCompiler().Version(xsd.Version10), schema)
+		require.NoError(t, err10)
+		require.Error(t, validate(t, s10, `<temp>hi</temp>`))
+	})
+
+	t.Run("NBSP in vc:minVersion is malformed (not ASCII-trimmed) under 1.1", func(t *testing.T) {
+		t.Parallel()
+		// A leading NBSP (U+00A0) is NOT XSD whitespace, so the value is not a valid
+		// xs:decimal and is a fatal schema error under 1.1 — it must not be silently
+		// trimmed to "1.1".
+		schema := `<xs:schema ` + ns + `>
+  <xs:element name="temp">
+    <xs:complexType>
+       <xs:sequence/>
+       <xs:attribute name="x" use="required"/>
+       <xs:assert test="@x > 300" vc:minVersion="` + " " + `1.1"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		_, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), schema)
+		require.Error(t, err)
+	})
+
+	t.Run("vc-excluded included root with mismatched TNS contributes empty (no error)", func(t *testing.T) {
+		t.Parallel()
+		// The included document's root is vc-excluded (maxVersion 0.9) AND declares a
+		// targetNamespace incompatible with the including schema. Conditional
+		// inclusion must run BEFORE the TNS compatibility check, so the excluded root
+		// contributes an empty schema instead of failing the include for TNS mismatch.
+		const mainXSD = "vc_inc_main.xsd"
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="urn:main">
+  <xs:include schemaLocation="vc_inc_other.xsd"/>
+  <xs:element name="temp" type="xs:string"/>
+</xs:schema>`)},
+			"vc_inc_other.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="urn:other" vc:maxVersion="0.9">
+  <xs:element name="bogus" type="xs:string"/>
+</xs:schema>`)},
+		}
+		data, err := fsys.ReadFile(mainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Label(mainXSD).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		require.NotNil(t, schema)
 	})
 
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {
