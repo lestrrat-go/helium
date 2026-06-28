@@ -151,6 +151,23 @@ type compiler struct {
 	// recompute its Phase-A delta (the components are already merged), so it
 	// validates and consumes its overrides against this cached set instead.
 	loadedRedefinable map[string]*redefinableSet
+	// xpathDefaultNSSet records whether the current schema document carries a
+	// schema-level xpathDefaultNamespace (XSD 1.1). When set, xs:alternative XPath
+	// expressions that do not carry their own xpathDefaultNamespace inherit the
+	// already-root-resolved schemaXPathDefaultNS value (shared with the
+	// identity-constraint path). It is per-document (saved/restored across
+	// include/redefine/import) and distinguishes "absent" from "present" so an
+	// explicit empty value is still inherited as "no default element namespace".
+	xpathDefaultNSSet bool
+	// schemaBaseURI is the schema document's URI, exposed to xs:alternative /
+	// xs:assert XPath expressions as fn:static-base-uri(). It is sourced from the
+	// document URL (or the CompileFile path), NEVER from the diagnostic label, so a
+	// caller-supplied error-message label cannot leak into XPath static-base-uri().
+	schemaBaseURI string
+	// ctaElems collects every element declaration carrying a {type table}
+	// (xs:alternative children), so the alternative-type substitutability check
+	// (cta-cvc / Type Alternative valid) can run after all types resolve.
+	ctaElems []*ElementDecl
 }
 
 // redefinableSet caches the redefinable component names a schema document
@@ -503,6 +520,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		if c.filename == "" {
 			c.filename = "(string)"
 		}
+		// XPath fn:static-base-uri() source: the document URL (set by the caller),
+		// else the CompileFile path. NEVER the diagnostic label.
+		c.schemaBaseURI = doc.URL()
+		if c.schemaBaseURI == "" {
+			c.schemaBaseURI = cfg.schemaURI
+		}
 		if cfg.errorHandler != nil {
 			c.errorHandler = cfg.errorHandler
 		}
@@ -516,6 +539,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.version = c.version
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
+	if hasAttr(root, attrXPathDefaultNamespace) {
+		c.xpathDefaultNSSet = true
+	}
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 
@@ -638,6 +664,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Reject element/attribute declarations whose effective type is the built-in
 	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
 	c.checkNotationOnDeclarations(ctx)
+
+	// XSD 1.1: each conditional-type-assignment alternative's type must be validly
+	// substitutable for the element's declared type. Runs after type refs resolve.
+	c.checkAltSubstitutability(ctx)
 
 	// Detect circular substitution-group references. The membership map itself was
 	// already built by buildSubstGroups (before resolveRefs) so UPA could see it;
@@ -1300,6 +1330,7 @@ func registerBuiltinTypes(s *Schema, version Version) {
 			ContentType: ContentTypeSimple,
 		}
 		if name == typeAnyType {
+			td.IsComplex = true
 			td.ContentType = ContentTypeMixed
 			td.AnyAttribute = &Wildcard{
 				Namespace:       WildcardNSAny,
@@ -1323,6 +1354,11 @@ func registerBuiltinTypes11(s *Schema) {
 	}
 	for local, baseLocal := range builtinType11Bases {
 		qn := QName{Local: local, NS: lexicon.NamespaceXSD}
-		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: builtin(baseLocal)}
+		// The XSD 1.1 built-in datatypes here are all derived from their base by
+		// RESTRICTION. Recording Derivation (these built-ins ARE BaseType-linked, so
+		// the pointer walk reaches the base) lets isDerivationBlocked enforce
+		// block="restriction"/"#all" on e.g. xsi:type="xs:dateTimeStamp" over a
+		// declared xs:dateTime.
+		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: builtin(baseLocal), Derivation: DerivationRestriction}
 	}
 }

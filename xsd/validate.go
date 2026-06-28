@@ -459,6 +459,12 @@ type validationContext struct {
 	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
 	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// attrInheritable records, for XSD 1.1, the instance attribute nodes matched to
+	// an AttrUse whose {inheritable} is true. The top-down validation walk populates
+	// it for every ancestor before a descendant's conditional type assignment runs,
+	// so inheritedAttributes can resolve a CTA/assertion @test against inherited
+	// ancestor attributes.
+	attrInheritable map[*helium.Attribute]struct{}
 	// assessedElemType records the ACTUAL *TypeDef of each element that was truly
 	// SCHEMA-ASSESSED during pass-1 — the validation root, a content-model particle
 	// match whose content was actually validated, or an xs:anyType/lax child WITH a
@@ -506,6 +512,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		errorHandler:     handler,
 		actualElemType:   make(map[*helium.Element]*TypeDef),
 		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
+		attrInheritable:  make(map[*helium.Attribute]struct{}),
 		assessedElemType: make(map[*helium.Element]*TypeDef),
 		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
 	}
@@ -710,15 +717,20 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// different governing type. xsi:type (resolved next) still takes precedence.
 	declType = vc.applyTypeAlternatives(ctx, elem, edecl, declType)
 
-	td, err := vc.resolveXsiType(ctx, elem, declType)
+	td, err := vc.resolveXsiType(ctx, elem, declType, vc.hasTypeTable(edecl))
 	if err != nil {
 		return err
 	}
-	// Check block flags against xsi:type derivation.
+	// Check block flags against xsi:type derivation. A blocked xsi:type is a
+	// validity error (cvc-elt.4.3): fail rather than silently fall back to the
+	// declared type — otherwise a blocked narrowing whose value is also valid under
+	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
+	// block="restriction") would be wrongly accepted. This mirrors the per-child
+	// match sites, which already treat a blocked xsi:type as a content error.
 	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-		td = declType // fall back to declared type
+		return fmt.Errorf("blocked xsi:type")
 	}
 	if td != nil && td.Abstract {
 		msg := msgAbstractType
@@ -742,6 +754,16 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 }
 
 func (vc *validationContext) validateElementContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	// XSD 1.1: a governing type of xs:error (selected by conditional type
+	// assignment, or referenced directly) has an empty value space, so any element
+	// it governs is invalid. This is the single choke point for every type-selection
+	// site (root and the per-child content-model matches).
+	if vc.version == Version11 && isErrorType(td) {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+			"The element is not valid: the conditional type assignment selected the type xs:error.")
+		return fmt.Errorf("xs:error type selected")
+	}
+
 	// Validate attributes and annotate them.
 	if err := vc.validateAttributes(ctx, elem, td); err != nil {
 		return err
@@ -894,9 +916,22 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			}
 			continue
 		}
-		td, xsiErr := vc.resolveXsiType(ctx, ce, effectiveDeclType(edecl, vc.schema))
+		// XSD 1.1 conditional type assignment applies to a global element reached
+		// through xs:anyType too: select the alternative type BEFORE resolving
+		// xsi:type (xsi:type still wins), mirroring the established order at the
+		// explicit-particle/wildcard match sites.
+		declType := vc.applyTypeAlternatives(ctx, ce, edecl, effectiveDeclType(edecl, vc.schema))
+		td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
+			continue
+		}
+		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+		// for a global element assessed through xs:anyType too.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
+				"The xsi:type definition is blocked by the element declaration.")
+			contentErr = fmt.Errorf("blocked xsi:type")
 			continue
 		}
 		if td != nil && td.Abstract {
@@ -1179,6 +1214,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			// Annotate the attribute with its declared type.
 			vc.annotateAttrUse(ctx, a, au)
+			// XSD 1.1: record an inheritable attribute so descendants' conditional
+			// type assignment / assertions can see it as an inherited attribute.
+			if vc.version == Version11 && au.Inheritable {
+				vc.attrInheritable[a] = struct{}{}
+			}
 			continue
 		}
 		// An explicitly prohibited attribute use is rejected outright and must
@@ -1250,10 +1290,15 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		} else {
 			_, _ = elem.SetAttribute(au.Name.Local, defVal)
 		}
-		// Annotate the newly inserted attribute.
+		// Annotate the newly inserted attribute and, for XSD 1.1, record it as
+		// inheritable when its use is — a defaulted/fixed attribute is part of the
+		// inherited-attribute set just like an explicitly-present one.
 		for _, a := range elem.Attributes() {
 			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
 				vc.annotateAttrUse(ctx, a, au)
+				if vc.version == Version11 && au.Inheritable {
+					vc.attrInheritable[a] = struct{}{}
+				}
 				break
 			}
 		}
@@ -1321,6 +1366,14 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		}
 	}
 
+	// A wildcard-matched global attribute participates in type annotation and (XSD
+	// 1.1) inheritance exactly like an explicitly-declared attribute use, so a
+	// descendant's conditional type assignment can see an inheritable ancestor
+	// attribute admitted through xs:anyAttribute.
+	vc.annotateAttrUse(ctx, a, globalAttr)
+	if vc.version == Version11 && globalAttr.Inheritable {
+		vc.attrInheritable[a] = struct{}{}
+	}
 	return nil
 }
 
@@ -1379,6 +1432,14 @@ func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Eleme
 // reports a validity error.
 func (vc *validationContext) validateNilledElement(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	dn := elemDisplayName(elem)
+
+	// XSD 1.1: a governing type of xs:error has an empty value space, so the element
+	// is invalid regardless of xsi:nil — the nilled path must NOT let it through.
+	if vc.version == Version11 && isErrorType(td) {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
+			"The element is not valid: the conditional type assignment selected the type xs:error.")
+		return fmt.Errorf("xs:error type selected")
+	}
 
 	if !edecl.Nillable {
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
@@ -1443,15 +1504,32 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 // resolves it to a type definition in the schema. Returns the resolved type
 // or the original declaredType if no xsi:type is present. Returns an error
 // if the xsi:type value doesn't resolve or is not derived from the declared type.
-func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef) (*TypeDef, error) {
+// ctaActive must be true when conditional type assignment is in effect for elem
+// (Version11 and the element declaration has a {type table}). It scopes the
+// empty-xsi:type handling: only then does a present-but-empty xsi:type hard-error,
+// so it cannot suppress a CTA-selected type (e.g. xs:error). Everywhere else an
+// empty xsi:type falls back to the declared type, byte-identical to pre-CTA
+// behavior (XSD 1.0 and no-alternative 1.1).
+func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef, ctaActive bool) (*TypeDef, error) {
 	var xsiTypeVal string
+	var present bool
 	for _, a := range elem.Attributes() {
 		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
 			xsiTypeVal = a.Value()
+			present = true
 			break
 		}
 	}
-	if xsiTypeVal == "" {
+	// An ABSENT xsi:type always falls back to the declared type (under CTA this is
+	// the already-selected type, so it must not error).
+	if !present {
+		return declaredType, nil
+	}
+	// A present-but-empty xsi:type historically also falls back to the declared
+	// type. Preserve that EXCEPT when CTA is active, where it must instead report the
+	// invalid-QName validity error so it cannot bypass a CTA-selected type (e.g.
+	// xs:error). A non-empty value always proceeds to QName resolution below.
+	if xsiTypeVal == "" && !ctaActive {
 		return declaredType, nil
 	}
 
@@ -1487,8 +1565,13 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 		return nil, fmt.Errorf("xsi:type not found")
 	}
 
-	// Check derivation: xsi:type must be the same as or derived from the declared type.
-	if declaredType != nil && !isDerivedFrom(td, declaredType) {
+	// Check derivation: xsi:type must be the same as or derived from the declared
+	// type. Use the built-in-aware predicate so a narrowing to a built-in subtype
+	// (e.g. xsi:type="xs:int" over a declared xs:integer) is accepted — the built-in
+	// types are registered without BaseType links, so raw isDerivedFrom would wrongly
+	// reject it. The predicate is STRICT (no permissive simple-vs-simple fallback),
+	// so an unrelated xsi:type (e.g. xs:string over xs:integer) is still rejected.
+	if declaredType != nil && !strictBuiltinAwareDerivedFrom(td, declaredType) {
 		msg := fmt.Sprintf("The type definition '%s' is not validly derived from the type definition '%s'.",
 			typeDisplayName(td), typeDisplayName(declaredType))
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)

@@ -445,6 +445,9 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	decl.IDCs = c.parseIDConstraints(ctx, elem)
 	if c.version == Version11 {
 		decl.Alternatives = c.parseTypeAlternatives(ctx, elem)
+		if len(decl.Alternatives) > 0 {
+			c.ctaElems = append(c.ctaElems, decl)
+		}
 	}
 	return decl, nil
 }
@@ -569,6 +572,12 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 		case attrValProhibited:
 			au.Prohibited = true
 		}
+	}
+	// XSD 1.1 inheritable: a non-boolean lexical (e.g. "" or "2") is a schema
+	// error (reported by readBooleanAttr); whitespace is collapsed (" 1 " → 1).
+	if c.version == Version11 && hasAttr(elem, attrInheritable) {
+		au.Inheritable = c.readBooleanAttr(ctx, elem, attrInheritable)
+		au.InheritableSet = true
 	}
 	c.attrUseSources[au] = attrConstraintSource{
 		line:   elem.Line(),
@@ -769,6 +778,12 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 			au.Required = true
 		case attrValProhibited:
 			au.Prohibited = true
+		}
+		// XSD 1.1: an explicit inheritable on the ref USE wins over the referenced
+		// global declaration's value (resolved in resolveRefs when unset here).
+		if c.version == Version11 && hasAttr(elem, attrInheritable) {
+			au.Inheritable = c.readBooleanAttr(ctx, elem, attrInheritable)
+			au.InheritableSet = true
 		}
 		// Record the source for a prohibited ref'd use so the pointless-prohibition
 		// warning can cite its line and declaring file. Only prohibited uses need
@@ -1012,8 +1027,16 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 // selector/field that may redeclare the default namespace — so schema-level values
 // are pre-resolved at root-read time (see compiler.schemaXPathDefaultNS) and
 // inherited as the already-resolved URI.
+//
+// @xpathDefaultNamespace is xs:anyURI (whiteSpace=collapse), so the raw lexical
+// value is whitespace-collapsed BEFORE matching the ##keyword forms — a padded
+// "  ##targetNamespace  " must resolve to the target namespace, not be mistaken for
+// a literal URI. Every caller (schema-level root/include/redefine/import and the
+// idc/CTA local selector/field paths) routes through here, so the collapse is
+// centralized here rather than duplicated per call site.
 func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) string {
-	switch raw {
+	collapsed := normalizeWhiteSpace(raw, "collapse")
+	switch collapsed {
 	case "", xpathDefaultNSLocal:
 		return ""
 	case xpathDefaultNSTargetNamespace:
@@ -1021,7 +1044,7 @@ func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) stri
 	case xpathDefaultNSDefaultNamespace:
 		return lookupNS(elem, "")
 	default:
-		return raw
+		return collapsed
 	}
 }
 

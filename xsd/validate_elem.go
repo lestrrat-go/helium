@@ -345,11 +345,19 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
 		// The host declaration was already recorded during the initial scan above
 		// (before any early return). Nothing to record here.
-		td := effectiveDeclType(actualDecl, vc.schema)
-		td = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, td)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+		declType := effectiveDeclType(actualDecl, vc.schema)
+		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
+			continue
+		}
+		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+		// here just like at matchElementParticle/root.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+				"The xsi:type definition is blocked by the element declaration.")
+			contentErr = fmt.Errorf("blocked xsi:type")
 			continue
 		}
 		if td != nil && td.Abstract {
@@ -503,7 +511,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// above (before any early return). Nothing to record here.
 		declType := effectiveDeclType(actualDecl, vc.schema)
 		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
@@ -831,7 +839,10 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 		return count, nil
 	}
 
-	// Validate matched elements per processContents (lax/strict).
+	// Validate matched elements per processContents (lax/strict). The per-child
+	// logic — strict/lax assessment, CTA governing-type selection, the xsi:type
+	// block check, and the lax/anyType descendant recursion — lives in
+	// validateWildcardChild (shared with the idc lax-assessment path).
 	var contentErr error
 	for i := range count {
 		if err := vc.validateWildcardChild(ctx, wc, children[pos+i]); err != nil {
@@ -882,11 +893,18 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		// xsi:nil bypass type validation.
 		return vc.assessLaxElement(ctx, child.elem)
 	}
-	td := effectiveDeclType(edecl, vc.schema)
-	td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
-	td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+	declType := effectiveDeclType(edecl, vc.schema)
+	declType = vc.applyTypeAlternatives(ctx, child.elem, edecl, declType)
+	td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(edecl))
 	if xsiErr != nil {
 		return xsiErr
+	}
+	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced for
+	// a strict wildcard-matched global element too.
+	if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+			"The xsi:type definition is blocked by the element declaration.")
+		return fmt.Errorf("blocked xsi:type")
 	}
 	if td != nil && td.Abstract {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
@@ -1069,6 +1087,20 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 			return true
 		}
 		td = td.BaseType
+	}
+	// The BaseType pointer chain is NOT linked for built-in simple types, so it can
+	// bottom out (td == nil) before reaching a built-in base. ALL built-in
+	// simple-type derivation is by RESTRICTION, so when base is a built-in simple
+	// type that derived's effective built-in base is a STRICT subtype of, a blocked
+	// restriction derivation must be rejected — e.g. xsi:type="xs:int" over a
+	// declared xs:integer with block="restriction" (or block="#all"). Without this
+	// the block is bypassed because isDerivedFrom-style pointer walking can't chain
+	// xs:int → xs:integer.
+	if td != base && blocked&BlockRestriction != 0 && isBuiltinSimpleType(base) {
+		db := builtinBaseLocal(derived)
+		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
+			return true
+		}
 	}
 	return false
 }

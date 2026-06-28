@@ -59,6 +59,7 @@ const (
 	attrFinalDefault         = "finalDefault"
 	attrFixed                = "fixed"
 	attrForm                 = "form"
+	attrInheritable          = "inheritable" // XSD 1.1: inheritable attribute
 	attrItemType             = "itemType"
 	attrMaxOccurs            = "maxOccurs"
 	attrMemberTypes          = "memberTypes"
@@ -81,10 +82,16 @@ const (
 	attrType                 = "type"
 	attrUse                  = "use"
 	attrXPath                = "xpath"
-	attrXPathDefaultNS       = "xpathDefaultNamespace" // XSD 1.1: default element namespace for IDC selector/field XPath
+	// attrXPathDefaultNamespace and attrXPathDefaultNS are two names for the SAME
+	// XSD 1.1 xpathDefaultNamespace attribute (on xs:schema, xs:alternative,
+	// xs:assert, xs:selector, xs:field) supplying the default element namespace for
+	// an XPath expression's unprefixed names. CTA code uses the first, IDC code the
+	// second; both are kept to avoid churning every reference site.
+	attrXPathDefaultNamespace = "xpathDefaultNamespace"
+	attrXPathDefaultNS        = "xpathDefaultNamespace"
 )
 
-// XSD 1.1 xpathDefaultNamespace special keyword values.
+// XSD 1.1 xpathDefaultNamespace keyword values (in addition to a literal URI).
 const (
 	xpathDefaultNSTargetNamespace  = "##targetNamespace"
 	xpathDefaultNSDefaultNamespace = "##defaultNamespace"

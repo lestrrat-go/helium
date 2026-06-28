@@ -72,7 +72,11 @@ type compileConfig struct {
 	// circular include/redefine that points back at the root (main -> inc -> main)
 	// treats the root as already-loaded instead of re-parsing it and emitting
 	// spurious duplicate-component errors.
-	rootKey      string
+	rootKey string
+	// schemaURI is the schema document's URI/path when known (set by CompileFile),
+	// used as the XPath fn:static-base-uri() source when the parsed document carries
+	// no URL of its own. Distinct from label, which is only a diagnostic source.
+	schemaURI    string
 	fsys         fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
 	parser       *helium.Parser // parser governing schema-document parse policy
 	errorHandler helium.ErrorHandler
@@ -266,6 +270,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	// A clone of cfg keeps the shared config (and clone-on-write Compiler
 	// contract) intact.
 	cfgWithRoot := *cfg
+	cfgWithRoot.schemaURI = path
 	if rootKey, ok := rootSchemaKey(path, baseDir); ok {
 		cfgWithRoot.rootKey = rootKey
 	}

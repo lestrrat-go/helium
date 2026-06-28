@@ -172,6 +172,7 @@ type TypeAlternative struct {
 	Namespaces map[string]string  // prefix → URI from the schema document
 	Line       int                // source line of the xs:alternative element
 	Source     string             // source filename of the declaring schema document
+	BaseURI    string             // schema document URI, exposed as the XPath static base URI
 	TypeName   QName              // the @type reference (resolved into Type during resolveRefs)
 	Type       *TypeDef           // resolved governing type
 	compiled   *xpath3.Expression // pre-compiled @test; nil for a testless default (or compile failure)
@@ -258,7 +259,13 @@ const (
 
 // TypeDef is a schema type definition.
 type TypeDef struct {
-	Name         QName
+	Name QName
+	// IsComplex distinguishes a complex type DEFINITION from a simple one. It is a
+	// reliable discriminator independent of ContentType, because a complex type with
+	// <xs:simpleContent> also carries ContentType == ContentTypeSimple. Set true by
+	// parseComplexType (and for the built-in xs:anyType); a simple type definition
+	// (parseSimpleType, simple built-ins, recovery placeholders) leaves it false.
+	IsComplex    bool
 	ContentType  ContentTypeKind
 	ContentModel *ModelGroup
 	BaseType     *TypeDef
@@ -340,8 +347,15 @@ type AttrUse struct {
 	Type       *TypeDef // anonymous inline <xs:simpleType>, if any
 	Required   bool
 	Prohibited bool
-	Default    *string // nil = not set
-	Fixed      *string // nil = not set
+	// Inheritable is the XSD 1.1 {inheritable} property: when true, an instance of
+	// this attribute is contributed to the inherited-attribute set of every
+	// descendant element (consulted by conditional type assignment / assertions).
+	// InheritableSet records whether inheritable was given explicitly on the use,
+	// so a ref use's explicit value wins over the referenced declaration's.
+	Inheritable    bool
+	InheritableSet bool
+	Default        *string // nil = not set
+	Fixed          *string // nil = not set
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document, used to resolve a
 	// QName/NOTATION fixed value's prefix when comparing in value space.

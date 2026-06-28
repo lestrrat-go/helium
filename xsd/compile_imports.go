@@ -357,6 +357,15 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
 	}
 
+	// The CTA static context (static base URI, xpathDefaultNamespace) is PER schema
+	// document: an xs:alternative in the included file must see the included
+	// document's base URI and its own xpathDefaultNamespace, not the including
+	// schema's. Save/restore mirrors the form/default handling above.
+	savedSchemaBaseURI := c.schemaBaseURI
+	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	c.schemaBaseURI = path
+	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
+
 	// Set the include file path for duplicate element error reporting.
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
@@ -389,11 +398,13 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		}
 	}
 
-	// Restore form-qualified settings, defaults, and include file.
+	// Restore form-qualified settings, defaults, CTA static context, and include file.
 	c.schema.elemFormQualified = savedElemForm
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schemaBaseURI = savedSchemaBaseURI
+	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
@@ -574,7 +585,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
-	// schemaXPathDefaultNS is PER document, like the form/block/final defaults
+	// schemaXPathDefaultNS (IDC) is PER document, like the form/block/final defaults
 	// (see loadInclude): the redefined root's @xpathDefaultNamespace governs its
 	// own identity-constraint XPaths during Phase A, RESOLVED against the redefined
 	// root now (so an inherited ##defaultNamespace uses that root's default ns).
@@ -582,6 +593,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
 	}
+	// The CTA static context (base URI + xpathDefaultNamespace) is per-document too:
+	// Phase A parses the REDEFINED document's declarations, so set them here; the
+	// override children (from the redefining schema) get the parent's values restored
+	// before processRedefineOverrides, like the defaults above.
+	savedSchemaBaseURI := c.schemaBaseURI
+	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	c.schemaBaseURI = path
+	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
@@ -602,6 +621,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schemaBaseURI = savedSchemaBaseURI
+		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
@@ -614,6 +635,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schemaBaseURI = savedSchemaBaseURI
+		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
@@ -644,6 +667,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schemaBaseURI = savedSchemaBaseURI
+	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
@@ -1077,6 +1102,14 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		impC.schemaXPathDefaultNS = resolveXPathDefaultNSToken(impRoot, getAttr(impRoot, attrXPathDefaultNS), impC.schema.targetNamespace)
 	}
 
+	// Seed the imported sub-compiler's CTA static context from the IMPORTED document
+	// so an xs:alternative parsed there sees its own schema's static base URI
+	// (fn:static-base-uri) and xpathDefaultNamespace, not the importing schema's.
+	impC.schemaBaseURI = path
+	if hasAttr(impRoot, attrXPathDefaultNamespace) {
+		impC.xpathDefaultNSSet = true
+	}
+
 	registerBuiltinTypes(impC.schema, impC.version)
 
 	// Conditional inclusion runs per schema document, BEFORE the src-import
@@ -1271,6 +1304,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 		c.attrUseSources[au] = src
 	}
+
+	// Carry the imported CTA bookkeeping into the parent so imported alternatives
+	// participate in the parent's deferred resolution and checks: altTypeRefs are
+	// resolved by the parent's resolveAltTypeRefs (against the merged type table),
+	// and ctaElems are checked by the parent's checkAltSubstitutability.
+	c.altTypeRefs = append(c.altTypeRefs, impC.altTypeRefs...)
+	c.ctaElems = append(c.ctaElems, impC.ctaElems...)
 
 	return nil
 }
