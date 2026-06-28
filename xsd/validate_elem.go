@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -222,52 +223,78 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
+	// XSD 1.1 ONLY: an xs:all may contain element wildcards (and its particles may
+	// have maxOccurs>1). Track wildcard particle indices and per-wildcard match
+	// counts so order-independent matching honors each wildcard's occurrence
+	// bounds and processContents. In XSD 1.0 a wildcard is NOT a permitted xs:all
+	// member, so wildcardIdx stays empty and the matcher's behavior is identical
+	// to before this feature: a child matching no element particle is unexpected.
+	is11 := vc.version == Version11
+	var wildcardIdx []int
+	wcCount := make([]int, len(mg.Particles))
 	for i, p := range mg.Particles {
-		if ed, ok := p.Term.(*ElementDecl); ok {
+		switch ed := p.Term.(type) {
+		case *ElementDecl:
 			nameToIdx[ed.Name] = i
 			// Also register substitution group members.
 			for _, member := range vc.schema.substGroups[ed.Name] {
 				nameToIdx[member.Name] = i
 			}
+		case *Wildcard:
+			if is11 {
+				wildcardIdx = append(wildcardIdx, i)
+			}
 		}
+	}
+
+	// wcClaimed marks child positions (absolute index) consumed by a wildcard,
+	// so the element-content validation pass below skips them — a child whose
+	// name also matches a (now-exhausted) element particle must not be
+	// re-validated as that element.
+	wcClaimed := make(map[int]bool)
+	tryWildcard := func(child childElem) (int, bool) {
+		widx := vc.allWildcardFor(mg, wildcardIdx, wcCount, child)
+		return widx, widx >= 0
 	}
 
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
-		if !ok {
-			// Unknown child in <all>.
-			expected := unseenParticleNames(mg.Particles, seen, vc.schema)
-			msg := "This element is not expected."
-			if len(expected) > 0 {
-				msg = formatExpected("This element is not expected.", expected)
+		// A declared element wins over a wildcard (weak-wildcard precedence) while
+		// it still has occurrence budget. Once exhausted (already seen), a further
+		// same-named child may instead be claimed by a wildcard member.
+		if ok && !seen[idx] {
+			// Record the (possibly LOCAL) host declaration AS SOON AS this child is
+			// matched to a particle — BEFORE any early return — so pass-2 IDC
+			// evaluation does not fall back to a same-named GLOBAL declaration.
+			if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
+				vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
 			}
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
-			return consumed, fmt.Errorf("unexpected element")
+			seen[idx] = true
+			consumed++
+			continue
 		}
-		// Record the (possibly LOCAL) host declaration AS SOON AS this child is
-		// matched to a particle — at the ABSOLUTE EARLIEST point, BEFORE the
-		// duplicate-child check and the post-scan missing-required early returns
-		// can fire. Otherwise pass-2 identity-constraint evaluation would fall
-		// back to a same-named GLOBAL declaration (and apply its IDCs) for a
-		// child that was actually matched to a local declaration here — even a
-		// DUPLICATE local child that shadows a same-named global with IDCs.
-		if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
-			vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
-		}
-		if seen[idx] {
-			// Duplicate — stop matching and report error.
-			expected := unseenParticleNames(mg.Particles, seen, vc.schema)
-			msg := "This element is not expected."
-			if len(expected) > 0 {
-				msg = formatExpected("This element is not expected.", expected)
+		if widx, matched := tryWildcard(child); matched {
+			wc, _ := mg.Particles[widx].Term.(*Wildcard)
+			if err := vc.validateWildcardChild(ctx, wc, child); err != nil {
+				return consumed, err
 			}
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
-			return consumed, fmt.Errorf("duplicate")
+			wcCount[widx]++
+			seen[widx] = true
+			wcClaimed[pos+consumed] = true
+			consumed++
+			continue
 		}
-		seen[idx] = true
-		consumed++
+		// Not matchable: a duplicate of an exhausted element, or an undeclared
+		// child not admitted by any wildcard.
+		expected := unseenParticleNames(mg.Particles, seen, vc.schema)
+		msg := "This element is not expected."
+		if len(expected) > 0 {
+			msg = formatExpected("This element is not expected.", expected)
+		}
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+		return consumed, fmt.Errorf("unexpected element")
 	}
 
 	// Respect <all> group's minOccurs: if 0 and group is empty, skip required checks.
@@ -275,9 +302,18 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		return 0, nil
 	}
 
-	// Check for required missing particles.
+	// Check for required missing particles. A wildcard particle is satisfied by
+	// its match count meeting minOccurs (which may be >1 in XSD 1.1); an element
+	// particle by having been seen.
 	hasRequired := false
 	for i, p := range mg.Particles {
+		if _, isWC := p.Term.(*Wildcard); isWC {
+			if wcCount[i] < p.MinOccurs {
+				hasRequired = true
+				break
+			}
+			continue
+		}
 		if !seen[i] && p.MinOccurs > 0 {
 			hasRequired = true
 			break
@@ -294,6 +330,9 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 	var contentErr error
 	for i := range consumed {
 		child := children[pos+i]
+		if wcClaimed[pos+i] {
+			continue // already validated inline by the wildcard path
+		}
 		childQN := QName{Local: child.name, NS: child.ns}
 		idx, ok := nameToIdx[childQN]
 		if !ok {
@@ -338,6 +377,23 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 	}
 
 	return consumed, nil
+}
+
+// allWildcardFor returns the index of a wildcard particle in an xs:all group
+// that admits child and still has occurrence budget (maxOccurs not reached), or
+// -1 if none. Wildcards are tried in declaration order.
+func (vc *validationContext) allWildcardFor(mg *ModelGroup, wildcardIdx []int, wcCount []int, child childElem) int {
+	for _, i := range wildcardIdx {
+		p := mg.Particles[i]
+		wc, _ := p.Term.(*Wildcard)
+		if p.MaxOccurs != Unbounded && wcCount[i] >= p.MaxOccurs {
+			continue
+		}
+		if wildcardAllowsExpandedName(wc, child.name, child.ns, vc.schema, false) {
+			return i
+		}
+	}
+	return -1
 }
 
 // validateContentModelTop validates children against a model group, checking
@@ -745,7 +801,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
-		if !wildcardMatches(wc, child.elem.URI()) {
+		if !wildcardAllowsExpandedName(wc, child.elem.LocalName(), child.elem.URI(), vc.schema, false) {
 			break
 		}
 		count++
@@ -778,52 +834,8 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 	// Validate matched elements per processContents (lax/strict).
 	var contentErr error
 	for i := range count {
-		child := children[pos+i]
-		edecl := lookupElemDecl(child.elem, vc.schema)
-		if edecl == nil {
-			if wc.ProcessContents == ProcessStrict {
-				msg := "No matching global declaration available, but demanded by the strict wildcard."
-				vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
-				contentErr = fmt.Errorf("strict wildcard: no global element decl")
-			}
-			// Lax: this element has no global declaration, so it is not
-			// schema-assessed. Still recurse into its subtree so any deeper
-			// descendant that DOES have a global declaration gets its ACTUAL
-			// type (honoring xsi:type) recorded via annotateElement before
-			// pass-2 IDC evaluation — otherwise a nested global IDC host's
-			// fields would be canonicalized with declared (or raw) types and
-			// xsi:type overrides on descendants would be missed.
-			if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
-				contentErr = err
-			}
-			continue
-		}
-		td := effectiveDeclType(edecl, vc.schema)
-		td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
-		if xsiErr != nil {
-			contentErr = xsiErr
-			continue
-		}
-		if td != nil && td.Abstract {
-			msg := msgAbstractType
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
-			contentErr = fmt.Errorf("abstract type")
-			continue
-		}
-		// Annotate wildcard-matched element with its type.
-		vc.annotateElement(ctx, child.elem, td)
-		if td != nil {
-			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
-			if nilErr != nil {
-				contentErr = nilErr
-			} else if nilled {
-				if err := vc.validateNilledElement(ctx, child.elem, edecl, td); err != nil {
-					contentErr = err
-				}
-			} else if err := vc.validateElementContent(ctx, child.elem, edecl, td); err != nil {
-				contentErr = err
-			}
+		if err := vc.validateWildcardChild(ctx, wc, children[pos+i]); err != nil {
+			contentErr = err
 		}
 	}
 	if contentErr != nil {
@@ -833,12 +845,57 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 	return count, nil
 }
 
+// validateWildcardChild validates a single element matched by a wildcard
+// according to its processContents setting (skip = not assessed; lax = assess
+// only if a global declaration exists; strict = a global declaration is
+// required). It mirrors the per-child logic the run-based matchWildcardParticle
+// applies, factored out so the xs:all matcher can reuse it.
+func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wildcard, child childElem) error {
+	if wc.ProcessContents == ProcessSkip {
+		vc.annotateSkipChildren(ctx, child.elem)
+		return nil
+	}
+	edecl := lookupElemDecl(child.elem, vc.schema)
+	if edecl == nil {
+		if wc.ProcessContents == ProcessStrict {
+			msg := "No matching global declaration available, but demanded by the strict wildcard."
+			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+			return fmt.Errorf("strict wildcard: no global element decl")
+		}
+		// Lax: no global declaration, not schema-assessed. Still recurse so a
+		// nested global IDC host gets its actual type recorded.
+		return vc.annotateAnyTypeChildren(ctx, child.elem)
+	}
+	td := effectiveDeclType(edecl, vc.schema)
+	td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
+	td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+	if xsiErr != nil {
+		return xsiErr
+	}
+	if td != nil && td.Abstract {
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, child.elem, td)
+	if td == nil {
+		return nil
+	}
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+	if nilErr != nil {
+		return nilErr
+	}
+	if nilled {
+		return vc.validateNilledElement(ctx, child.elem, edecl, td)
+	}
+	return vc.validateElementContent(ctx, child.elem, edecl, td)
+}
+
 // tryMatchWildcardParticle is the try version (no error reporting).
 func (vc *validationContext) tryMatchWildcardParticle(_ context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) {
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
-		if !wildcardMatches(wc, child.elem.URI()) {
+		if !wildcardAllowsExpandedName(wc, child.elem.LocalName(), child.elem.URI(), vc.schema, false) {
 			break
 		}
 		count++
@@ -854,8 +911,16 @@ func (vc *validationContext) tryMatchWildcardParticle(_ context.Context, p *Part
 	return count, nil
 }
 
-// wildcardMatches checks if an element namespace matches a wildcard constraint.
+// wildcardMatches checks if an element namespace matches a wildcard's NAMESPACE
+// constraint. In XSD 1.1 a wildcard may instead carry a @notNamespace negation
+// (NotNamespace), which matches any namespace NOT in the excluded set; the two
+// are mutually exclusive, so NotNamespace takes precedence when present. This is
+// the namespace-only half of wildcard matching — the @notQName disallowed-name
+// half is applied by callers that have the local name (wildcardExcludesName).
 func wildcardMatches(wc *Wildcard, elemNS string) bool {
+	if wc.NotNamespace != nil {
+		return !slices.Contains(wc.NotNamespace, elemNS)
+	}
 	ns := wc.Namespace
 	switch ns {
 	case WildcardNSAny:
@@ -887,6 +952,49 @@ func wildcardMatches(wc *Wildcard, elemNS string) bool {
 		}
 		return false
 	}
+}
+
+// wildcardExcludesName reports whether the wildcard's XSD 1.1 @notQName
+// disallowed-name set excludes the given expanded name. isAttr selects the
+// global declaration table consulted for ##defined (attributes vs elements).
+// A name excluded here is NOT matched by the wildcard even though its namespace
+// is admitted. In XSD 1.0 (no notQName fields) this always returns false.
+func wildcardExcludesName(wc *Wildcard, local, ns string) bool {
+	for _, qn := range wc.NotQName {
+		if qn.Local == local && qn.NS == ns {
+			return true
+		}
+	}
+	for _, qn := range wc.SiblingNames {
+		if qn.Local == local && qn.NS == ns {
+			return true
+		}
+	}
+	return false
+}
+
+// wildcardAllowsExpandedName is the full XSD 1.1 "Wildcard allows Expanded Name"
+// test: the namespace constraint admits ns AND the @notQName disallowed-name set
+// (including ##defined / ##definedSibling) does not exclude {local, ns}. isAttr
+// selects the global table for ##defined.
+func wildcardAllowsExpandedName(wc *Wildcard, local, ns string, schema *Schema, isAttr bool) bool {
+	if !wildcardMatches(wc, ns) {
+		return false
+	}
+	if wildcardExcludesName(wc, local, ns) {
+		return false
+	}
+	if wc.NotQNameDefined && schema != nil {
+		qn := QName{Local: local, NS: ns}
+		if isAttr {
+			if _, ok := schema.globalAttrs[qn]; ok {
+				return false
+			}
+		} else if _, ok := schema.elements[qn]; ok {
+			return false
+		}
+	}
+	return true
 }
 
 // wildcardExpected formats the expected string for wildcard error messages.
@@ -1023,7 +1131,7 @@ func particleFirstConsumerKind(p *Particle, child childElem, schema *Schema) con
 		if p.MaxOccurs == 0 {
 			return consumerNone
 		}
-		if wildcardMatches(term, child.ns) {
+		if wildcardAllowsExpandedName(term, child.name, child.ns, schema, false) {
 			return consumerWildcard
 		}
 		return consumerNone
