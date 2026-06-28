@@ -1055,3 +1055,26 @@ func TestVersion11DefaultValueSchemaAwareAssertion(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 }
+
+// TestVersion11UnionDefaultQNameAttrMaterialize verifies that a default/fixed
+// attribute whose type is a UNION with an active QName member has its prefix
+// materialized on the instance, so a later xs:assert atomizing it resolves the
+// schema-intended namespace.
+func TestVersion11UnionDefaultQNameAttrMaterialize(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:schema">
+  <xs:simpleType name="qnameOrString">
+    <xs:union memberTypes="xs:QName xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="qnameOrString" default="p:x"/>
+      <xs:assert test="namespace-uri-from-QName(@a) = 'urn:schema'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// The default "p:x" is active in the xs:QName member; its prefix p (declared
+	// only in the schema) must be bound on the instance so the assert resolves it.
+	require.NoError(t, validateAssertion(t, schema, `<e/>`))
+}

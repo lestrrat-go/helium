@@ -1303,7 +1303,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			if au.Default != nil {
 				declNS = au.DefaultNS
 			}
-			defVal = vc.materializeQNameAttrValue(elem, au, defVal, declNS)
+			defVal = vc.materializeQNameAttrValue(ctx, elem, au, defVal, declNS)
 		}
 		// Insert the default/fixed value as an attribute on the element. A
 		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
@@ -1341,7 +1341,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 // on the element. If the instance already binds the prefix to a DIFFERENT URI, it
 // rewrites the value to use a fresh, non-colliding prefix bound to the right URI.
 // Non-QName values and unprefixed (no-namespace) QNames are returned unchanged.
-func (vc *validationContext) materializeQNameAttrValue(elem *helium.Element, au *AttrUse, value string, declNS map[string]string) string {
+func (vc *validationContext) materializeQNameAttrValue(ctx context.Context, elem *helium.Element, au *AttrUse, value string, declNS map[string]string) string {
 	if declNS == nil {
 		return value
 	}
@@ -1349,16 +1349,26 @@ func (vc *validationContext) materializeQNameAttrValue(elem *helium.Element, au 
 	if !ok {
 		return value
 	}
-	switch builtinBaseLocal(td) {
-	case lexicon.TypeQName, lexicon.TypeNotation:
-	default:
-		return value
-	}
 	// QName/NOTATION whiteSpace is "collapse": the lexical prefix/local must be
 	// extracted from the COLLAPSED value, so a default authored as " p:x " still
 	// binds p. (Atomization later collapses too, so the non-rewrite case can keep
 	// the authored value; a rewrite emits the fresh prefix with the collapsed local.)
 	collapsed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
+	// Resolve the ACTIVE type: for a union, the value's active member decides
+	// whether it is a QName/NOTATION (e.g. memberTypes="xs:QName xs:string" with a
+	// QName default). Only then does it need prefix materialization.
+	activeTD := td
+	if resolveVariety(td) == TypeVarietyUnion {
+		activeTD = fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+	}
+	if activeTD == nil {
+		return value
+	}
+	switch builtinBaseLocal(activeTD) {
+	case lexicon.TypeQName, lexicon.TypeNotation:
+	default:
+		return value
+	}
 	prefix, local, found := strings.Cut(collapsed, ":")
 	if !found || prefix == "" {
 		return value // no prefix → no-namespace QName; nothing to bind
