@@ -13,6 +13,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -230,6 +231,7 @@ type NodeItem struct {
 	TypeAnnotation   string   // optional xs:... type annotation (schema-aware)
 	AtomizedType     string   // optional built-in base type used for typed atomization
 	ListItemType     string   // non-empty when the type is a list; the item type name
+	ListItemAtomized string   // built-in base of the list item type (e.g. xs:QName for a QName-derived item)
 	UnionMemberTypes []string // member type names for union types (for atomization)
 	// QNameNoDefaultNS, when true, atomizes an UNPREFIXED QName/NOTATION value to
 	// NO namespace instead of resolving the node's in-scope default namespace —
@@ -1359,7 +1361,12 @@ func resolveQNameFromNode(s string, node helium.Node, noDefaultNS bool) (QNameVa
 	if _, ok := scope.(*helium.Element); !ok {
 		scope = node.Parent()
 	}
-	if prefix != "" {
+	if prefix == "xml" {
+		// The "xml" prefix is predeclared (XML Namespaces) and need not be bound on
+		// any node — matches xsd.resolveLexicalQName, so e.g. xml:lang atomizes as a
+		// valid xs:QName in an assertion instead of failing with an undeclared prefix.
+		uri = lexicon.NamespaceXML
+	} else if prefix != "" {
 		// prefix is non-empty here so an empty-URI binding cannot occur and the
 		// first-match-wins helper matches the original skip-empty walk exactly.
 		var found bool

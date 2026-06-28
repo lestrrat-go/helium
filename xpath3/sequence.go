@@ -160,16 +160,9 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
 				for tok := range strings.FieldsSeq(s) {
-					cast, err := CastFromString(tok, listItem)
+					cast, err := atomizeListToken(tok, listItem, ni)
 					if err != nil {
-						// For user-defined schema types (Q{ns}local),
-						// the value was already validated during
-						// construction; store as string with the type name.
-						if strings.HasPrefix(listItem, "Q{") {
-							cast = AtomicValue{TypeName: listItem, Value: tok}
-						} else {
-							return false, err
-						}
+						return false, err
 					}
 					cont, err := yield(cast)
 					if err != nil {
@@ -195,6 +188,47 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 		}
 	}
 	return true, nil
+}
+
+// atomizeListToken converts one whitespace-separated list token to an atomic
+// value of the list's item type. A QName/NOTATION item type is resolved against
+// the node's in-scope namespaces (CastFromString cannot resolve a prefix), so a
+// list whose item type is xs:QName/xs:NOTATION — or a user type derived from
+// either (whose built-in base is carried in ni.ListItemAtomized) — atomizes
+// correctly in a schema-aware context, preserving the user/list-item type name.
+// Other item types cast context-free; a user-defined item type whose value was
+// validated at construction stores the token verbatim when the context-free cast
+// cannot interpret it.
+func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
+	if listItem == TypeQName || listItem == TypeNOTATION ||
+		ni.ListItemAtomized == TypeQName || ni.ListItemAtomized == TypeNOTATION {
+		qv, err := resolveQNameFromNode(tok, ni.Node, ni.QNameNoDefaultNS)
+		if err != nil {
+			return AtomicValue{}, &XPathError{
+				Code:    errCodeFORG0001,
+				Message: fmt.Sprintf("invalid QName list item %q: %v", tok, err),
+			}
+		}
+		av := AtomicValue{TypeName: listItem, Value: qv}
+		if !IsKnownXSDType(listItem) {
+			base := ni.ListItemAtomized
+			if base == "" {
+				base = TypeQName
+			}
+			av.BaseType = base
+		}
+		return av, nil
+	}
+	cast, err := CastFromString(tok, listItem)
+	if err != nil {
+		// For user-defined schema types (Q{ns}local), the value was already
+		// validated during construction; store as string with the type name.
+		if strings.HasPrefix(listItem, "Q{") {
+			return AtomicValue{TypeName: listItem, Value: tok}, nil
+		}
+		return AtomicValue{}, err
+	}
+	return cast, nil
 }
 
 // builtinListItemType returns the item type for built-in XSD list types.

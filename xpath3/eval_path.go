@@ -207,6 +207,7 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 	if ec.schemaDeclarations != nil && ni.TypeAnnotation != "" {
 		if itemType, ok := ec.schemaDeclarations.ListItemType(ni.TypeAnnotation); ok {
 			ni.ListItemType = itemType
+			ni.ListItemAtomized = atomizedTypeForAnnotation(itemType, ec.schemaDeclarations)
 		}
 		if members := ec.schemaDeclarations.UnionMemberTypes(ni.TypeAnnotation); len(members) > 0 {
 			ni.UnionMemberTypes = members

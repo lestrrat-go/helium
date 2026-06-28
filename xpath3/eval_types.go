@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -34,6 +35,35 @@ func castTargetParts(targetType string, t AtomicTypeName, ec *evalContext) (loca
 		ns = ec.namespaces[t.Prefix]
 	}
 	return local, ns
+}
+
+// qnameCastLexical prepares the (lexical, nsMap) used to re-validate an
+// ALREADY-RESOLVED QName VALUE against a schema-aware QName/NOTATION-derived cast
+// target. The source value's prefix may be bound only on the instance node and
+// absent from the assertion's STATIC namespace map, so re-serializing to
+// `prefix:local` and re-resolving against the static map would fail even though
+// the value is already valid. Instead it binds the lexical's prefix to the value's
+// OWN namespace URI in a COPY of base, so schema validation resolves to the same
+// URI. A no-namespace value keeps its bare local name. Used only inside the
+// schema-aware cast fallback, so existing xpath3 cast behavior is unchanged.
+func qnameCastLexical(qv QNameValue, base map[string]string) (string, map[string]string) {
+	if qv.URI == "" {
+		return qv.Local, base
+	}
+	ns := make(map[string]string, len(base)+1)
+	maps.Copy(ns, base)
+	prefix := qv.Prefix
+	if prefix == "" {
+		for i := 0; ; i++ {
+			cand := fmt.Sprintf("ns%d", i)
+			if _, taken := ns[cand]; !taken {
+				prefix = cand
+				break
+			}
+		}
+	}
+	ns[prefix] = qv.URI
+	return prefix + ":" + qv.Local, ns
 }
 
 func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
@@ -99,7 +129,11 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 						return nil, err
 					}
 					s, _ := AtomicToString(av)
-					if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, ec.namespaces); vErr != nil {
+					nsForCast := ec.namespaces
+					if qv, isQV := av.Value.(QNameValue); isQV {
+						s, nsForCast = qnameCastLexical(qv, ec.namespaces)
+					}
+					if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); vErr != nil {
 						return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
 					}
 					qv, qErr := castToQName(av, ec)
@@ -201,7 +235,11 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 					av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
 				if srcOK {
 					s, _ := AtomicToString(av)
-					castErr = ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, ec.namespaces)
+					nsForCast := ec.namespaces
+					if qv, isQV := av.Value.(QNameValue); isQV {
+						s, nsForCast = qnameCastLexical(qv, ec.namespaces)
+					}
+					castErr = ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast)
 				}
 			} else {
 				result, baseErr := CastAtomic(av, builtinBase)

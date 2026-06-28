@@ -1313,3 +1313,67 @@ func TestVersion11FixedSimpleContentQNameValueSpace(t *testing.T) {
 	// q:x with q bound to a DIFFERENT URI is not QName-equal — rejected.
 	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns:q="urn:other">q:x</e>`), xsd.ErrValidationFailed)
 }
+
+// TestVersion11AssertCastInstanceBoundQName verifies that casting an
+// ALREADY-RESOLVED xs:QName value (from data(@q)) to a QName-derived USER type
+// succeeds even when the value's prefix is declared ONLY on the instance node and
+// is absent from the assertion's static namespace map (PR859-CR17-01). The cast
+// must validate using the value's own namespace URI, not by re-resolving the
+// serialized `p:x` against the static map.
+func TestVersion11AssertCastInstanceBoundQName(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="myQName">
+    <xs:restriction base="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="q" type="xs:QName"/>
+      <xs:assert test="namespace-uri-from-QName(data(@q) cast as t:myQName) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// p is declared on the INSTANCE only; the cast must still resolve to urn:p.
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t" xmlns:p="urn:p" q="p:x"/>`))
+}
+
+// TestVersion11AssertXMLPrefixQName verifies that an xs:QName VALUE using the
+// predeclared `xml` prefix atomizes correctly in an assertion (PR859-CR17-02):
+// `xml` need not be bound on any node, matching XSD validation which accepts
+// xml:lang/xml:space as xs:QName.
+func TestVersion11AssertXMLPrefixQName(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="q" type="xs:QName"/>
+      <xs:assert test="namespace-uri-from-QName(data(@q)) = 'http://www.w3.org/XML/1998/namespace'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e q="xml:space"/>`))
+}
+
+// TestVersion11AssertListOfQName verifies that an xs:list whose itemType is
+// xs:QName atomizes namespace-aware in an assertion (PR859-CR17-03): each list
+// token resolves against the node's in-scope namespaces, so count(data(@qs)) and
+// per-item namespace resolution work instead of failing the context-free cast.
+func TestVersion11AssertListOfQName(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qnames">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="qs" type="qnames"/>
+      <xs:assert test="count(data(@qs)) = 2 and namespace-uri-from-QName(data(@qs)[1]) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p" qs="p:a p:b"/>`))
+}

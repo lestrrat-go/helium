@@ -387,13 +387,9 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 				tokens := strings.Fields(s)
 				listSeq := make(ItemSlice, len(tokens))
 				for i, tok := range tokens {
-					cast, err := CastFromString(tok, listItem)
+					cast, err := atomizeListToken(tok, listItem, ni)
 					if err != nil {
-						if strings.HasPrefix(listItem, "Q{") {
-							cast = AtomicValue{TypeName: listItem, Value: tok}
-						} else {
-							return AtomicValue{}, false, err
-						}
+						return AtomicValue{}, false, err
 					}
 					listSeq[i] = cast
 				}
