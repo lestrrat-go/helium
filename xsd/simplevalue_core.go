@@ -250,7 +250,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		// fallback on a string leaf.
 		memberLocal := ""
 		memberWS := resolveWhiteSpace(cur)
-		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), vc.version); active != nil {
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), nil, vc.version); active != nil {
 			memberLocal = builtinBaseLocal(active)
 			memberWS = resolveWhiteSpace(active)
 		}

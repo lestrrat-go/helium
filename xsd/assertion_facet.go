@@ -18,27 +18,34 @@ import (
 // its active member and a QName/NOTATION lexical to a namespace-qualified value;
 // a value that cannot be re-cast (e.g. a type xpath3 does not model) falls back
 // to xs:untypedAtomic, which still atomizes and casts correctly in comparisons.
-func buildValueSequence(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, version Version) xpath3.Sequence {
+func buildValueSequence(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, vc *validationContext) xpath3.Sequence {
 	switch resolveVariety(td) {
 	case TypeVarietyList:
 		itemType := resolveItemType(td)
 		var items xpath3.ItemSlice
 		for _, item := range valuepkg.XSDFields(value) {
-			items = append(items, typedAtomic(ctx, item, valueNS, itemType, version))
+			items = append(items, typedAtomic(ctx, item, valueNS, itemType, vc))
 		}
 		return items
 	default:
-		return xpath3.ItemSlice{typedAtomic(ctx, value, valueNS, td, version)}
+		return xpath3.ItemSlice{typedAtomic(ctx, value, valueNS, td, vc)}
 	}
 }
 
 // typedAtomic builds the typed atomic value for a single (already whitespace-
 // normalized) lexical value of type td, resolving a union type down to the
 // member that actually accepts the value first so a union item is typed as its
-// active member rather than falling back to xs:untypedAtomic.
-func typedAtomic(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, version Version) xpath3.AtomicValue {
+// active member rather than falling back to xs:untypedAtomic. Active-member
+// probing is SCHEMA-AWARE (vc.schema is threaded into fixedUnionActiveMember),
+// so a member whose own assertion needs `castable as t:T` resolves the same way
+// as the real validation path — otherwise the wrong member could be selected.
+func typedAtomic(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, vc *validationContext) xpath3.AtomicValue {
 	if td != nil && resolveVariety(td) == TypeVarietyUnion {
-		td = fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), version)
+		var schema *Schema
+		if vc != nil {
+			schema = vc.schema
+		}
+		td = fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), schema, vc.version)
 	}
 	return atomicForType(value, valueNS, td)
 }
@@ -99,7 +106,7 @@ func checkSimpleTypeAssertions(ctx context.Context, value string, valueNS map[st
 		return nil
 	}
 
-	valueSeq := buildValueSequence(ctx, value, valueNS, td, vc.version)
+	valueSeq := buildValueSequence(ctx, value, valueNS, td, vc)
 	decls := vc.assertSchemaDecls()
 
 	var firstErr error

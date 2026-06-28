@@ -726,12 +726,17 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 }
 
 // parseSimpleContentRestrictionType derives the effective content simple type of
-// a simpleContent <xs:restriction>: the nested <xs:simpleType> if present, else a
-// synthesized simple type restricting the base content type (BaseType = the
-// owning complex type, so its base chain resolves to the builtin base) with the
-// restriction's direct facets. Returns nil when neither is present (an empty
-// restriction inherits the base content type unchanged).
+// a simpleContent <xs:restriction>. A nested <xs:simpleType> defines the base;
+// the restriction's DIRECT facet children (siblings of that simpleType) further
+// constrain it — both must compose. So:
+//   - inline simpleType only → that simpleType;
+//   - inline simpleType + direct facets → a restriction of the inline type
+//     carrying those sibling facets (so both sets apply);
+//   - direct facets only → a restriction of the base content type (BaseType =
+//     the owning complex type, whose base chain resolves to the builtin base);
+//   - neither → nil (the restriction inherits the base content type unchanged).
 func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, derivation *helium.Element, owner *TypeDef) *TypeDef {
+	var inline *TypeDef
 	for child := range helium.Children(derivation) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -742,21 +747,37 @@ func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, deriva
 		}
 		if isXSDElement(ce, elemSimpleType) {
 			st, err := c.parseSimpleType(ctx, ce)
-			if err != nil {
-				return nil
+			if err == nil {
+				inline = st
 			}
-			return st
+			break
 		}
 	}
+	// Direct facet children (xs:enumeration, xs:length, …) of the restriction.
+	// parseFacets ignores the nested <xs:simpleType> (not a facet element), so
+	// these are exactly the sibling facets.
 	fs := c.parseFacets(ctx, derivation)
-	if fs == nil {
+
+	switch {
+	case inline != nil && fs == nil:
+		return inline
+	case inline != nil:
+		// Compose: restrict the inline type with the sibling facets.
+		return &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			BaseType:    inline,
+			Facets:      fs,
+		}
+	case fs != nil:
+		return &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			BaseType:    owner,
+			Facets:      fs,
+		}
+	default:
 		return nil
-	}
-	return &TypeDef{
-		ContentType: ContentTypeSimple,
-		Derivation:  DerivationRestriction,
-		BaseType:    owner,
-		Facets:      fs,
 	}
 }
 

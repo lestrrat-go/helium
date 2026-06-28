@@ -220,14 +220,20 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 	// CopyNode re-declares only an element's own (and active) namespaces, so a
 	// prefix declared on a now-excluded ancestor would otherwise be unbound on the
 	// copy — breaking node-scope resolution of a QName-valued attribute/content
-	// (e.g. @name = "xsd:element").
+	// (e.g. @name = "xsd:element"). The inherited DEFAULT namespace (prefix "") is
+	// re-declared too (when in scope and not already on the copy), so
+	// namespace-uri-for-prefix('', .) and unprefixed name resolution survive
+	// isolation.
 	existing := make(map[string]bool)
 	for _, ns := range ce.Namespaces() {
 		existing[ns.Prefix()] = true
 	}
 	for prefix, uri := range collectNSContext(elem) {
-		if prefix == "" || existing[prefix] {
+		if existing[prefix] {
 			continue
+		}
+		if prefix == "" && uri == "" {
+			continue // no default namespace in scope; nothing to re-declare
 		}
 		ce.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
 	}
@@ -350,5 +356,5 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	// binds the schema-intended URI rather than an unrelated instance binding.
 	valueNS := effectiveValueNS(elem, edecl, isEmpty)
 	raw := normalizeWhiteSpace(value, resolveWhiteSpace(valueType))
-	return buildValueSequence(ctx, raw, valueNS, valueType, vc.version)
+	return buildValueSequence(ctx, raw, valueNS, valueType, vc)
 }

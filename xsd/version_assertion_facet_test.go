@@ -812,3 +812,99 @@ func TestVersion10QNameDefaultAttrNoRewrite(t *testing.T) {
 	require.NotContains(t, out, "p_gen0")
 	require.NotContains(t, out, "urn:schema") // no schema-prefix declaration leaked into the instance
 }
+
+// TestVersion11SimpleContentInlineTypePlusSiblingFacets verifies that a
+// simpleContent restriction with BOTH a nested <xs:simpleType> AND direct sibling
+// facets composes the two — the sibling facets are not dropped.
+func TestVersion11SimpleContentInlineTypePlusSiblingFacets(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base">
+          <xs:simpleType>
+            <xs:restriction base="xs:string">
+              <xs:length value="2"/>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:enumeration value="ab"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e>ab</e>`))
+	// "cd" satisfies the inline length=2 but NOT the sibling enumeration "ab".
+	require.ErrorIs(t, validateAssertion(t, schema, `<e>cd</e>`), xsd.ErrValidationFailed)
+	// "abc" satisfies the enumeration's character set but NOT the inline length=2.
+	require.ErrorIs(t, validateAssertion(t, schema, `<e>abc</e>`), xsd.ErrValidationFailed)
+}
+
+// TestVersion11UnionValueSchemaAwareMember verifies that union $value active-member
+// typing is schema-aware: a member whose own assertion needs `castable as t:T`
+// must be selectable when building $value, so the union assertion sees the right
+// type (here xs:integer rather than the xs:string fallback member).
+func TestVersion11UnionValueSchemaAwareMember(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="foo">
+    <xs:restriction base="xs:integer"/>
+  </xs:simpleType>
+  <xs:simpleType name="memberA">
+    <xs:restriction base="xs:integer">
+      <xs:assertion test="$value castable as t:foo"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="t:memberA xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="t:u">
+        <xs:assertion test="$value instance of xs:integer"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// "5" is accepted by memberA (whose schema-aware assertion holds), so $value is
+	// typed xs:integer and the union assertion `$value instance of xs:integer`
+	// passes. Without schema-aware member probing memberA is skipped, $value falls
+	// back to xs:string, and the assertion would fail.
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">5</e>`))
+}
+
+// TestVersion11AssertIsolationKeepsDefaultNamespace verifies that the isolated
+// assertion tree preserves an INHERITED default namespace (xmlns="…" on an
+// ancestor), so namespace-uri-for-prefix(”, .) still resolves after isolation.
+func TestVersion11AssertIsolationKeepsDefaultNamespace(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:elems" elementFormDefault="qualified">
+  <xs:element name="outer">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="inner">
+          <xs:complexType>
+            <xs:sequence/>
+            <xs:assert test="namespace-uri-for-prefix('', .) = 'urn:default'"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// inner is prefixed (urn:elems) but inherits the default namespace urn:default
+	// from outer; isolation must keep that default binding on the copied root.
+	require.NoError(t, validateAssertion(t, schema,
+		`<t:outer xmlns:t="urn:elems" xmlns="urn:default"><t:inner/></t:outer>`))
+}

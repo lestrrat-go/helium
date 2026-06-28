@@ -130,11 +130,11 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
 	members := resolveUnionMembers(td)
 
-	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, version)
+	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, nil, version)
 	if fixedMember == nil {
 		return false
 	}
-	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, version)
+	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, nil, version)
 	if instanceMember == nil {
 		return false
 	}
@@ -212,14 +212,14 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// a union nested directly inside another union, and any deeper combination, so
 	// the recursion always descends to a non-union variety before comparing.
 	if instanceVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), version)
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), nil, version)
 		if active == nil {
 			return false
 		}
 		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, version)
 	}
 	if fixedVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), version)
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), nil, version)
 		if active == nil {
 			return false
 		}
@@ -379,9 +379,18 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // the main validation path uses — e.g. a 1.1-only lexical form ("+INF" for
 // xs:double) appearing INSIDE a union fixed-value or enumeration literal is
 // accepted in 1.1 mode rather than rejected under a defaulted Version10.
-func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, version Version) *TypeDef {
+// fixedUnionActiveMember returns the union member that accepts value. The schema
+// argument (nil when none is available) is threaded onto the throwaway
+// validation context so a member whose own xs:assertion needs schema-aware
+// resolution (e.g. `castable as t:T`) validates the same way as the real path;
+// the per-validation cast guard flows through ctx. Most callers pass nil
+// (schema-awareness is immaterial for plain fixed/enumeration comparisons); the
+// assertion $value path passes the real schema so union member typing is
+// consistent with validation.
+func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, schema *Schema, version Version) *TypeDef {
 	for _, member := range members {
 		vc := &validationContext{
+			schema:        schema,
 			errorHandler:  helium.NilErrorHandler{},
 			suppressDepth: 1,
 			version:       version,
@@ -393,7 +402,7 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 		// the active basic member within it; the validateValue success above
 		// guarantees at least one nested member accepts the value.
 		if resolveVariety(member) == TypeVarietyUnion {
-			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), version); basic != nil {
+			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), schema, version); basic != nil {
 				return basic
 			}
 		}
