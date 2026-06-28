@@ -325,15 +325,23 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 		return
 	}
 	for _, edecl := range c.ctaElems {
+		// A substitution-group member with no explicit type has edecl.Type == nil but
+		// inherits the head's type; check against the EFFECTIVE declared type so a
+		// simple alternative cannot bypass the simple-vs-complex rejection via a nil
+		// declared type.
+		declType := effectiveDeclType(edecl, c.schema)
+		if declType == nil {
+			continue
+		}
 		for _, alt := range edecl.Alternatives {
 			if alt.Type == nil {
 				continue
 			}
-			if isValidlySubstitutable(alt.Type, edecl.Type) {
+			if isValidlySubstitutable(alt.Type, declType) {
 				continue
 			}
 			msg := fmt.Sprintf("The type alternative's type '{%s}%s' is not validly substitutable for the declared type '{%s}%s' of the element declaration.",
-				alt.Type.Name.NS, alt.Type.Name.Local, edecl.Type.Name.NS, edecl.Type.Name.Local)
+				alt.Type.Name.NS, alt.Type.Name.Local, declType.Name.NS, declType.Name.Local)
 			c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(alt.Source), alt.Line, elemAlternative, attrType, msg))
 		}
 	}

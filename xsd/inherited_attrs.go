@@ -61,7 +61,10 @@ func (vc *validationContext) inheritedAttributes(elem *helium.Element) []*helium
 // inherited ancestor attributes so a test like @c:kind matches them.
 func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Element {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
-	synth := doc.CreateElement(elem.Name())
+	// Use the LOCAL name: elem.Name() is the lexical QName (e.g. "p:root") for a
+	// prefixed element, which CreateElement would store verbatim and SetActiveNamespace
+	// would then leave with a wrong local part, so a name test in @test would miss.
+	synth := doc.CreateElement(elem.LocalName())
 	for prefix, uri := range collectNSContext(elem) {
 		_ = synth.DeclareNamespace(prefix, uri)
 	}
