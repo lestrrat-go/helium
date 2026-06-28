@@ -503,6 +503,22 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 
+	// Register built-in types. Done BEFORE conditional inclusion so the pre-pass
+	// can test type/facet availability against the active version's registry.
+	registerBuiltinTypes(c.schema, c.version)
+
+	// Conditional inclusion (XSD 1.1 version-control namespace): prune any
+	// elements excluded by their vc: attributes for the active version BEFORE the
+	// tree is interpreted, so a removed element (e.g. a 1.1-only xs:assert under a
+	// 1.0 processor, or a 1.0 fallback under 1.1) is never compiled. If the ROOT
+	// <xs:schema> is itself vc-excluded the whole document contributes nothing:
+	// return an empty (valid) schema WITHOUT interpreting or validating its other
+	// (non-preserved) root attributes — an excluded root must not fail compilation
+	// on, say, a bogus blockDefault it would never use.
+	if c.applyConditionalInclusion(ctx, root) {
+		return c.schema, nil
+	}
+
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
@@ -522,9 +538,6 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 			c.schema.finalDefault = parseFinalFlags(v)
 		}
 	}
-
-	// Register built-in types.
-	registerBuiltinTypes(c.schema, c.version)
 
 	// First pass: collect all named types and global elements.
 	if err := c.parseSchemaChildren(ctx, root); err != nil {

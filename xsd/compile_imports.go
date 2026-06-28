@@ -342,6 +342,11 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	beforeGroups := snapshotKeys(c.schema.groups)
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
 
+	// Conditional inclusion runs per schema document: prune the included
+	// document's vc:-excluded elements (and an empty/vc-excluded root, which makes
+	// the include contribute nothing) before its declarations are interpreted.
+	c.applyConditionalInclusion(ctx, incRoot)
+
 	// Parse the included schema's declarations into the current compiler.
 	err = c.parseSchemaChildren(ctx, incRoot)
 
@@ -520,6 +525,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	beforeTypes := snapshotKeys(c.schema.types)
 	beforeGroups := snapshotKeys(c.schema.groups)
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
+
+	// Conditional inclusion runs per schema document (see loadInclude).
+	c.applyConditionalInclusion(ctx, incRoot)
 
 	// Parse the included schema's declarations into the current compiler.
 	if err := c.parseSchemaChildren(ctx, incRoot); err != nil {
@@ -938,6 +946,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	}
 
 	registerBuiltinTypes(impC.schema, impC.version)
+
+	// Conditional inclusion runs per schema document (see loadInclude).
+	impC.applyConditionalInclusion(ctx, impRoot)
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err
