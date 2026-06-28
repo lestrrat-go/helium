@@ -421,6 +421,12 @@ func TestIDConstraintRefConflictingChildren(t *testing.T) {
 		t.Parallel()
 		require.ErrorIs(t, compile(t, `<xs:unique ref="u" name="dup"/>`), xsd.ErrCompilationFailed)
 	})
+	t.Run("ref with empty-but-present name is rejected", func(t *testing.T) {
+		t.Parallel()
+		// PR860-IDC-004: a present name="" must be rejected like any name companion;
+		// detection is by attribute PRESENCE, not value.
+		require.ErrorIs(t, compile(t, `<xs:unique ref="u" name=""/>`), xsd.ErrCompilationFailed)
+	})
 	t.Run("ref with selector is rejected", func(t *testing.T) {
 		t.Parallel()
 		require.ErrorIs(t, compile(t, `<xs:unique ref="u"><xs:selector xpath="section"/></xs:unique>`), xsd.ErrCompilationFailed)

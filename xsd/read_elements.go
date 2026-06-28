@@ -733,9 +733,10 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			return nil
 		}
 		// A @ref constraint must not also declare its own name/selector/field/refer
-		// (the ref form is mutually exclusive with the full form). refer is rejected
-		// for EVERY kind, not just keyref — the ref form forbids it regardless.
-		if name != "" {
+		// (the ref form is mutually exclusive with the full form). Companions are
+		// detected by PRESENCE (hasAttr), not value, so an empty-but-present
+		// name=""/refer="" is still rejected, consistent with the ref-form detection.
+		if hasAttr(elem, attrName) {
 			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
 		}
 		if hasAttr(elem, attrRefer) {

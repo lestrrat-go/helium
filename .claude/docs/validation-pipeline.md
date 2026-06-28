@@ -370,9 +370,11 @@ prefix is not bound in scope is a fatal error (`resolveIDCNameQName` →
 uses), not a silent map to no-namespace; the `constraintRefUnbound` flag suppresses
 the follow-up "unknown constraint" diagnostic. The `@ref` form is mutually
 exclusive with the full form: a `@ref` constraint that ALSO carries
-`name`/`xs:selector`/`xs:field`/`refer` is rejected (`reportIDCRefConflict`) — and
-`refer` is rejected for EVERY kind (key/unique/keyref), detected via `hasAttr`, not
-only on `xs:keyref`.
+`name`/`xs:selector`/`xs:field`/`refer` is rejected (`reportIDCRefConflict`). The
+`name` and `refer` companions are detected by PRESENCE (`hasAttr`), not value, so
+an empty-but-present `name=""`/`refer=""` is still rejected (consistent with the
+ref-form detection); and `refer` is rejected for EVERY kind (key/unique/keyref),
+not only on `xs:keyref`.
 
 **Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
 a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
