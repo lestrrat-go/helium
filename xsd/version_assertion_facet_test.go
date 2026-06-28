@@ -1078,3 +1078,48 @@ func TestVersion11UnionDefaultQNameAttrMaterialize(t *testing.T) {
 	// only in the schema) must be bound on the instance so the assert resolves it.
 	require.NoError(t, validateAssertion(t, schema, `<e/>`))
 }
+
+// TestVersion11XPathDefaultNSWhitespace verifies that xpathDefaultNamespace is
+// whitespace-COLLAPSED before its sentinel/URI is resolved, so a value authored
+// with surrounding whitespace (" ##targetNamespace ") still resolves like the
+// sentinel — both at the schema root and on the assertion element itself.
+func TestVersion11XPathDefaultNSWhitespace(t *testing.T) {
+	t.Run("root-level xpathDefaultNamespace with surrounding whitespace", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" elementFormDefault="qualified"
+    xpathDefaultNamespace=" ##targetNamespace ">
+  <xs:element name="outer">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="inner" type="xs:string"/>
+      </xs:sequence>
+      <xs:assert test="exists(inner)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		// The unprefixed `inner` in the assert resolves to urn:t (the collapsed
+		// ##targetNamespace), matching the namespaced child.
+		require.NoError(t, validateAssertion(t, schema, `<outer xmlns="urn:t"><inner>x</inner></outer>`))
+	})
+
+	t.Run("assertion-local xpathDefaultNamespace with surrounding whitespace", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:element name="outer">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="inner" type="xs:string"/>
+      </xs:sequence>
+      <xs:assert test="exists(inner)" xpathDefaultNamespace=" ##targetNamespace "/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<outer xmlns="urn:t"><inner>x</inner></outer>`))
+	})
+}

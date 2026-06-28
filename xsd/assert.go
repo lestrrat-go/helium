@@ -17,10 +17,15 @@ import (
 // name tests match no-namespace nodes (XPath 3.1 §3.3.2.1). The special tokens
 // ##targetNamespace, ##defaultNamespace and ##local are resolved against the
 // schema target namespace and the element's in-scope default xmlns.
+//
+// The schema-for-schemas gives xpathDefaultNamespace whiteSpace="collapse", so
+// the raw value (element-local OR schema-level) is whitespace-collapsed before the
+// empty check and the sentinel switch — a valid `xpathDefaultNamespace=
+// " ##targetNamespace "` resolves like `##targetNamespace`, not as a URI literal.
 func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) (string, bool) {
-	raw := getAttr(elem, attrXPathDefaultNamespace)
+	raw := normalizeWhiteSpace(getAttr(elem, attrXPathDefaultNamespace), "collapse")
 	if raw == "" {
-		raw = c.schemaXPathDefaultNS
+		raw = normalizeWhiteSpace(c.schemaXPathDefaultNS, "collapse")
 	}
 	if raw == "" {
 		return "", false
