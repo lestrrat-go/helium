@@ -125,13 +125,21 @@ func (d schemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 	if xpath3.IsKnownXSDType(typeName) {
 		return xpath3.BuiltinIsSubtypeOf(typeName, baseTypeName)
 	}
-	local, ns := annotationParts(typeName)
-	td, ok := d.schema.LookupType(local, ns)
+	// Resolve through the anonymous-type registry too (lookupTypeName), so a
+	// synthetic assert annotation (Q{urn:x-helium:assert-anon}N for an inline
+	// anonymous list/union) participates in subtype checks; walk bases via
+	// d.typeName so an anonymous ancestor keeps its synthetic name.
+	td, ok := d.lookupTypeName(typeName)
 	if !ok {
 		return false
 	}
+	// Every simple type derives (ultimately) from xs:anySimpleType, even a list or
+	// union whose BaseType pointer is left nil (the implicit anySimpleType root).
+	if td.ContentType == ContentTypeSimple && baseTypeName == xpath3.TypeAnySimpleType {
+		return true
+	}
 	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
-		name := xsdTypeName(cur)
+		name := d.typeName(cur)
 		if name == baseTypeName {
 			return true
 		}

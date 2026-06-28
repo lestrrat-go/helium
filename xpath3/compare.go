@@ -384,7 +384,7 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				tokens := strings.Fields(s)
+				tokens := xsdListFields(s)
 				listSeq := make(ItemSlice, len(tokens))
 				for i, tok := range tokens {
 					cast, err := atomizeListToken(tok, listItem, ni)

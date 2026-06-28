@@ -285,7 +285,7 @@ func unionMemberMeta(decls SchemaDeclarations, member string) NodeItemUnionMembe
 // built-ins).
 func unionMemberCastOK(val string, m NodeItemUnionMember, node helium.Node, qnameNoDefault bool) bool {
 	if m.ListItem != "" {
-		tokens := strings.Fields(val)
+		tokens := xsdListFields(val)
 		if len(tokens) == 0 {
 			return false
 		}
@@ -299,7 +299,7 @@ func unionMemberCastOK(val string, m NodeItemUnionMember, node helium.Node, qnam
 	}
 	if m.Atomized == TypeQName || m.Atomized == TypeNOTATION ||
 		m.TypeName == TypeQName || m.TypeName == TypeNOTATION {
-		if len(strings.Fields(val)) != 1 {
+		if len(xsdListFields(val)) != 1 {
 			return false
 		}
 		_, err := resolveQNameFromNode(val, node, qnameNoDefault)

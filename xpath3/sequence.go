@@ -159,7 +159,7 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				for tok := range strings.FieldsSeq(s) {
+				for _, tok := range xsdListFields(s) {
 					cast, err := atomizeListToken(tok, listItem, ni)
 					if err != nil {
 						return false, err
@@ -207,15 +207,16 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 	return true, nil
 }
 
-// atomizeListToken converts one whitespace-separated list token to an atomic
+// atomizeListToken converts one XSD-whitespace-separated list token to an atomic
 // value of the list's item type. A QName/NOTATION item type is resolved against
 // the node's in-scope namespaces (CastFromString cannot resolve a prefix), so a
 // list whose item type is xs:QName/xs:NOTATION — or a user type derived from
 // either (whose built-in base is carried in ni.ListItemAtomized) — atomizes
 // correctly in a schema-aware context, preserving the user/list-item type name.
-// Other item types cast context-free; a user-defined item type whose value was
-// validated at construction stores the token verbatim when the context-free cast
-// cannot interpret it.
+// A non-QName USER-defined item type (a Q{...} name CastFromString cannot resolve)
+// is cast through its built-in base (ni.ListItemAtomized) and typed as the user
+// type with that built-in BaseType, so e.g. a list item type derived from xs:int
+// atomizes to a numeric value usable by sum()/numeric comparison (matching $value).
 func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
 	if listItem == TypeQName || listItem == TypeNOTATION ||
 		ni.ListItemAtomized == TypeQName || ni.ListItemAtomized == TypeNOTATION {
@@ -237,15 +238,37 @@ func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
 		return av, nil
 	}
 	cast, err := CastFromString(tok, listItem)
-	if err != nil {
-		// For user-defined schema types (Q{ns}local), the value was already
-		// validated during construction; store as string with the type name.
-		if strings.HasPrefix(listItem, "Q{") {
-			return AtomicValue{TypeName: listItem, Value: tok}, nil
-		}
-		return AtomicValue{}, err
+	if err == nil {
+		return cast, nil
 	}
-	return cast, nil
+	// User-defined item type (Q{ns}local): CastFromString does not know it, so cast
+	// through its built-in base and carry the user type name with that base.
+	if ni.ListItemAtomized != "" && ni.ListItemAtomized != listItem {
+		base, berr := CastFromString(tok, ni.ListItemAtomized)
+		if berr == nil {
+			base.BaseType = base.TypeName
+			base.TypeName = listItem
+			return base, nil
+		}
+	}
+	// Last resort: the value was already validated at construction; store it
+	// verbatim under the user type name so atomization does not fail.
+	if strings.HasPrefix(listItem, "Q{") {
+		return AtomicValue{TypeName: listItem, Value: tok}, nil
+	}
+	return AtomicValue{}, err
+}
+
+// xsdListFields splits an xs:list value into items on runs of XSD whitespace ONLY
+// (space, tab, CR, LF), matching XSD list tokenization and the validation / $value
+// paths (internal/xsd/value.XSDFields). Unlike strings.Fields it does NOT split on
+// NBSP or other Unicode whitespace, so a list item containing NBSP stays a single
+// token (and is then rejected by per-item lexical validation) rather than being
+// silently split into two atoms.
+func xsdListFields(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\r' || r == '\n'
+	})
 }
 
 // atomizeUnionItems atomizes a union-typed node through its precomputed ACTIVE
@@ -262,7 +285,7 @@ func atomizeUnionItems(ni NodeItem) ([]AtomicValue, bool) {
 	m := *ni.ActiveUnionMember
 	s := ixpath.StringValue(ni.Node)
 	if m.ListItem != "" {
-		tokens := strings.Fields(s)
+		tokens := xsdListFields(s)
 		lni := NodeItem{Node: ni.Node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: ni.QNameNoDefaultNS}
 		atoms := make([]AtomicValue, 0, len(tokens))
 		for _, tok := range tokens {

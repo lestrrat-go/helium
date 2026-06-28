@@ -1652,3 +1652,86 @@ func TestVersion11AssertNestedUnionActiveLeaf(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema2, `<e u="hello world"/>`))
 }
+
+// TestVersion11AssertListNBSPToken verifies schema-aware list atomization splits on
+// XSD whitespace ONLY (space/tab/CR/LF), not on NBSP or other Unicode whitespace
+// (PR859-REV-F01), matching validation/$value. A one-item xs:list value whose sole
+// token contains an NBSP stays a SINGLE atom, so count(data(@v)) = 1.
+func TestVersion11AssertListNBSPToken(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="strList">
+    <xs:list itemType="xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="v" type="strList"/>
+      <xs:assert test="count(data(@v)) = 1"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// "a b" is one xs:string list item (NBSP is not XSD whitespace).
+	require.NoError(t, validateAssertion(t, schema, "<e v=\"a b\"/>"))
+	// A real space-separated value is two items, confirming the tokenizer still works.
+	const schemaXML2 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="strList">
+    <xs:list itemType="xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="v" type="strList"/>
+      <xs:assert test="count(data(@v)) = 2"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML2)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e v="a b"/>`))
+}
+
+// TestVersion11AssertUserNumericListItem verifies a list whose item type is a
+// USER-defined numeric type (derived from xs:int) atomizes to numeric atoms usable
+// by sum() (PR859-REV-F02): the token is cast through the item type's built-in base
+// (xs:int) and typed as the user type, instead of stored as an untyped string.
+func TestVersion11AssertUserNumericListItem(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="MyInt">
+    <xs:restriction base="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="MyIntList">
+    <xs:list itemType="MyInt"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="v" type="MyIntList"/>
+      <xs:assert test="sum(data(@v)) = 6 and (data(@v)[1] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e v="1 2 3"/>`))
+}
+
+// TestVersion11AssertInstanceOfAnonListType verifies that an INLINE ANONYMOUS list
+// type (recorded under a synthetic assert annotation name) participates in subtype
+// checks (PR859-REV-F03): schemaDecls.IsSubtypeOf resolves the synthetic name via
+// the anonymous-type registry, so an instance-of test against the node's type holds.
+func TestVersion11AssertInstanceOfAnonListType(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="v">
+        <xs:simpleType>
+          <xs:list itemType="xs:int"/>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:assert test="@v instance of attribute(v, xs:anySimpleType)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e v="1 2 3"/>`))
+}
