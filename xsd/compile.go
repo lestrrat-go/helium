@@ -508,6 +508,28 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// can test type/facet availability against the active version's registry.
 	registerBuiltinTypes(c.schema, c.version)
 
+	// Conditional inclusion UNLINKS vc:-excluded elements from the schema tree.
+	// The top-level `doc` is CALLER-OWNED, so pruning it in place would make
+	// Compile side-effecting and non-idempotent (e.g. compiling the same parsed
+	// document under Version10 then Version11 would no longer see the 1.1 branch).
+	// Defend the caller's DOM by compiling against a deep copy — but ONLY when a vc
+	// directive is actually present, so the overwhelmingly common vc-free schema
+	// keeps the fast no-copy path (no perf regression). The clone preserves
+	// doc.URL() so relative include/import/redefine schemaLocation resolution is
+	// unchanged. (Nested include/import/redefine documents are parsed fresh on
+	// every Compile, so the pre-pass may prune those in place.)
+	if documentHasVCDirective(root) {
+		clone, cerr := helium.CopyDoc(doc)
+		if cerr != nil {
+			return nil, fmt.Errorf("xsd: failed to copy schema document for conditional inclusion: %w", cerr)
+		}
+		clone.SetURL(doc.URL())
+		root = findDocumentElement(clone)
+		if root == nil || !isXSDElement(root, elemSchema) {
+			return nil, fmt.Errorf("xsd: empty document")
+		}
+	}
+
 	// Conditional inclusion (XSD 1.1 version-control namespace): prune any
 	// elements excluded by their vc: attributes for the active version BEFORE the
 	// tree is interpreted, so a removed element (e.g. a 1.1-only xs:assert under a

@@ -468,6 +468,34 @@ func TestConditionalInclusion(t *testing.T) {
 		require.Error(t, compileErr)
 	})
 
+	t.Run("Compile does not mutate the caller's document across versions", func(t *testing.T) {
+		t.Parallel()
+		// The xs:assert is gated by vc:minVersion="1.1": pruned under 1.0, kept under
+		// 1.1. Compiling the SAME parsed *helium.Document first under 1.0 (which would
+		// unlink the assert if it mutated the caller's DOM) then under 1.1 must STILL
+		// see the assert — the conditional-inclusion pre-pass operates on a clone, so
+		// the caller's document is never mutated and Compile is idempotent.
+		const schemaXML = `<xs:schema ` + ns + `>
+  <xs:element name="temp">
+    <xs:complexType>
+       <xs:sequence/>
+       <xs:attribute name="x" use="required"/>
+       <xs:assert test="@x > 300" vc:minVersion="1.1"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		s10, err := xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		require.NoError(t, validate(t, s10, `<temp x="204"/>`)) // assert pruned under 1.0
+		// Re-compile the SAME doc under 1.1: the assert must still be present.
+		s11, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		require.Error(t, validate(t, s11, `<temp x="204"/>`)) // assert kept under 1.1 → 204 fails
+		require.NoError(t, validate(t, s11, `<temp x="304"/>`))
+	})
+
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema ` + ns + ` targetNamespace="a" elementFormDefault="qualified">

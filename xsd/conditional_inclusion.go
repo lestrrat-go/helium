@@ -90,6 +90,38 @@ func facetNameSet(s string) map[string]struct{} {
 // short-circuit BEFORE interpreting/validating the root's other (non-preserved)
 // attributes (e.g. blockDefault/finalDefault) — an excluded root must not error
 // on attributes it would never use.
+// documentHasVCDirective reports whether elem or any descendant carries an
+// attribute in the version-control namespace. It is a cheap pre-scan the
+// TOP-LEVEL compile uses to decide whether the conditional-inclusion pre-pass
+// could mutate the tree at all: when no vc attribute is present the pre-pass is a
+// guaranteed no-op, so the caller's parsed document can be compiled in place
+// without a defensive deep copy (the fast, no-allocation path that the vast
+// majority of schemas take). Only when a vc directive IS present does the
+// top-level compile clone the document so pruning never mutates the caller's DOM.
+func documentHasVCDirective(elem *helium.Element) bool {
+	if elem == nil {
+		return false
+	}
+	for _, a := range elem.Attributes() {
+		if a.URI() == lexicon.NamespaceXSDVersioning {
+			return true
+		}
+	}
+	for ch := range helium.Children(elem) {
+		if ch.Type() != helium.ElementNode {
+			continue
+		}
+		child, ok := helium.AsNode[*helium.Element](ch)
+		if !ok {
+			continue
+		}
+		if documentHasVCDirective(child) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *compiler) applyConditionalInclusion(ctx context.Context, root *helium.Element) bool {
 	pv := c.processorVersionString()
 
