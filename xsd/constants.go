@@ -81,6 +81,14 @@ const (
 	attrType                 = "type"
 	attrUse                  = "use"
 	attrXPath                = "xpath"
+	attrXPathDefaultNS       = "xpathDefaultNamespace" // XSD 1.1: default element namespace for IDC selector/field XPath
+)
+
+// XSD 1.1 xpathDefaultNamespace special keyword values.
+const (
+	xpathDefaultNSTargetNamespace  = "##targetNamespace"
+	xpathDefaultNSDefaultNamespace = "##defaultNamespace"
+	xpathDefaultNSLocal            = "##local"
 )
 
 const (

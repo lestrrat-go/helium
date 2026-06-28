@@ -39,7 +39,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `restr
 
 ### Validate: Document + Schema → Errors
 
-**Two-pass validation:**
+**Three-pass validation** (pass 3 runs only in XSD 1.1 mode):
 
 **Pass 1 — Content Model** (`validateDocument` via `helium.Walk()`):
 - For each element:
@@ -340,6 +340,142 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     `n="+5"` pair under an `xs:any processContents="skip"` wrapper collide in
     xs:integer value space rather than being wrongly accepted as unique.
 
+**XSD 1.1 identity-constraint extras** (compile time): `@xpathDefaultNamespace`
+on `xs:selector`/`xs:field` (or inherited from the root `xs:schema`) becomes a
+default ELEMENT namespace URI stored per selector/field
+(`IDConstraint.SelectorDefaultNS`/`FieldDefaultNS`). The token→URI resolution
+(`resolveXPathDefaultNSToken`, `read_elements.go`: `##targetNamespace` → the
+target namespace, `##defaultNamespace` → the element's in-scope default namespace,
+`##local`/empty → none, else literal URI) is namespace-context-sensitive for
+`##defaultNamespace`. A LOCALLY-PRESENT selector/field value is resolved against
+THAT element; an inherited schema-level value is resolved ONCE against the SCHEMA
+ROOT at root-read time and stored as the resolved URI (`compiler.schemaXPathDefaultNS`),
+so an inherited `##defaultNamespace` uses the ROOT's default namespace, NOT a
+selector/field that redeclares `xmlns`. `evaluateIDC` applies the URI via the
+opt-in `xpath1.Evaluator.DefaultElementNamespace`, which matches unprefixed
+ELEMENT name tests against it (attributes are never affected — they have no
+default namespace). `resolveXPathDefaultNS` decides inheritance by PRESENCE
+(`hasAttr(elem, attrXPathDefaultNS)`), not value — xs:anyURI admits the empty
+string and `getAttr` cannot tell `xpathDefaultNamespace=""` from an absent
+attribute — so an EXPLICIT empty value means "no default element namespace" and
+does NOT inherit; only an ABSENT attribute inherits the resolved schema-level URI.
+The schema-level default is a PER-document setting: `compile.go` resolves it for
+the top-level root and `compile_imports.go` saves/sets/restores it (resolved
+against each loaded root) across `xs:include`/`xs:redefine` (alongside
+elementFormDefault/blockDefault/finalDefault and `includeFile`) and sets it on the
+import sub-compiler from the imported root — so an included/imported schema's IDCs
+inherit ITS root's value, not the including/importing schema's (otherwise an
+included `xpath="emp"` selector would silently resolve to no-namespace and miss
+duplicates). `@ref` on an identity
+constraint (`resolveConstraintRefs`, `compile.go`, run after `checkDuplicateIDCs`
+and before `checkKeyRefRefers`) makes the constraint reuse a referenced
+constraint's selector/fields — and a keyref's `refer` — and adopt its QName
+identity (so a ref'd keyref resolves against a ref'd key on the same host); the
+reference must resolve to an existing constraint of the SAME kind, else a fatal
+schema error. A `@ref` constraint has no name of its own and is skipped in the
+duplicate-name and key-name registries. The ref form is detected by PRESENCE
+(`hasAttr(elem, attrRef)`, since `getAttr` cannot tell an absent attribute from an
+empty one) so a literal `ref=""` is recognized as the (invalid) ref form and
+reported as a fatal error rather than silently dropped. `resolveIDCNameQName`
+first validates `@ref` as a lexical `xs:QName` (`validateQName`) before splitting
+the prefix, so a malformed value such as `:u` (empty prefix) is a fatal error
+(`reportInvalidQNameValue`) instead of being silently resolved as an unprefixed
+reference — `strings.Cut(":u", ":")` would otherwise yield an empty prefix that
+bypasses the unbound-prefix check. `@refer` (`resolveIDCReferQName`) is validated
+the same way, and its malformed/unbound-prefix diagnostics are attributed to the
+constraint's DECLARING file (`idc.Source`, falling back to `c.diagSource()`), so a
+bad `@refer` in an included/redefined schema cites the included file paired with
+its own line number, not the including schema. A prefixed `@ref` whose prefix is not bound in scope is a fatal error
+(`resolveIDCNameQName` → `reportUnboundQNamePrefix`, the same path every other
+QName-valued schema attribute uses), not a silent map to no-namespace; the
+`constraintRefUnbound` flag suppresses the follow-up "unknown constraint"
+diagnostic. The `@ref` form is mutually
+exclusive with the full form: a `@ref` constraint that ALSO carries
+`name`/`xs:selector`/`xs:field`/`refer` is rejected (`reportIDCRefConflict`). The
+`name` and `refer` companions are detected by PRESENCE (`hasAttr`), not value, so
+an empty-but-present `name=""`/`refer=""` is still rejected (consistent with the
+ref-form detection); and `refer` is rejected for EVERY kind (key/unique/keyref),
+not only on `xs:keyref`.
+
+**Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
+a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
+be unique, **except** that the same value may identify a single element more than
+once. An ID's owning element is the element BEARING it — an attribute ID on its
+owning element, an element-content ID on its **parent** (`idOwner`) — so two ID
+attributes of one element, or two `<id>` children of one parent, sharing a value
+is valid, while the same value reaching two different owners is a duplicate. Each
+`xs:IDREF`/`xs:IDREFS` token must resolve to some collected ID. Values are
+decomposed against their type variety (`collectIDFromValue`, mirroring
+`canonicalValueKey`): a list splits into items, a union resolves to its active
+member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
+`xs:IDREFS` (a flat atomic placeholder) is split by name. Element-content
+collection is SKIPPED entirely when the element has CHILD ELEMENTS
+(`hasChildElement`): simple content forbids child elements, so pass 1 already
+rejected such an element structurally and there is no valid simple value here —
+`elemTextContent` ignores the children and a default/fixed would otherwise be
+substituted for non-empty content, fabricating an ID/IDREF on top of the real
+structural error. Otherwise, genuinely-empty element content falls back to the
+declaration's default/fixed value — EXCEPT on a CONFIRMED nilled element: one
+DECLARED nillable (`idcHostDecl(elem).Nillable`) carrying `xsi:nil="true"`
+(checked quietly via `isXsiNilTrue`). A nilled element has no element value, so
+substituting its default/fixed would fabricate a duplicate ID or a dangling IDREF
+and false-reject a valid document; its element-content collection is skipped
+(attribute IDs still apply). The check is by DECLARATION, NOT raw
+`xsi:nil`: a `processContents="lax"` element with no declaration but a resolvable
+`xsi:type` is not validly nilled (xsi:nil requires a nillable declaration), and
+`assessLaxElement` validated its real content, so its ID/IDREF content is still
+collected — raw `xsi:nil` would wrongly drop it and false-accept a duplicate. Element
+typing for this pass uses `assessedElemType` as the SOLE source; attribute typing
+uses `actualAttrType` (populated in `annotateAttrUse` and `validateWildcardAttr`
+for explicit uses and strict/lax wildcard-admitted global attributes) — with NO
+global-declaration fallback. Crucially it reads NEITHER `actualElemType` (ALSO
+written, `assessed=false`, by `annotateSkipChildren` and the lax-no-resolvable-type
+branch purely for pass-2 IDC canonicalization) NOR `actualElemDecl` (written by
+`recordElemDecl` at the particle-MATCH scan BEFORE content validation — so a
+matched-but-UNASSESSED child, e.g. an unsatisfied `minOccurs`, would otherwise be
+misclassified as ID/IDREF and produce a spurious duplicate/dangling on top of the
+real structural error). Only `assessedElemType` reflects genuine assessment, so
+both skip content and matched-but-failed children are excluded. The host
+declaration (`idcHostDecl`, for default/fixed/nillable metadata) is consulted only
+AFTER `elementTypeForID` returns a non-nil assessed type. `annotateElement` takes an `assessed` bool — true at the root,
+content-model matches, xs:anyType/lax children WITH a global declaration, AND a
+`processContents="lax"` element with no declaration but a RESOLVABLE `xsi:type`
+(which per XSD lax IS assessed: validated against that type and counted for pass 3,
+so its `xsi:type="xs:ID"`/`xs:IDREF` content participates); false at
+`skip`/lax-no-resolvable-type sites (writes only `actualElemType`). The lax
+no-declaration assessment lives in ONE shared helper, `assessLaxElement`, called
+from BOTH `matchWildcardParticle` (a directly wildcard-matched lax element) and
+`annotateAnyTypeChildren` (an xs:anyType/lax descendant), so a directly-matched
+lax element is validated and assessed just like a descendant — previously
+`matchWildcardParticle` only recursed into the subtree and never assessed the
+matched element itself, so it both false-accepted invalid `xsi:type` content and
+missed its ID. `assessLaxElement` NEVER lets `xsi:nil="true"` bypass validation: an
+undeclared element has no nillable declaration, so its content is always validated
+against the governing type (a nilled lax element with invalid or type-forbidden
+content is rejected; empty content a type permits stays valid). The STRICT
+wildcard FAILURE path (a strict wildcard matching an element with no global
+declaration) is, like `skip`, NOT assessed: `validateWildcardChild` reports the
+strict error then walks the subtree with `annotateSkipChildren` (canonicalization-
+only, never `assessedElemType`), NOT `annotateAnyTypeChildren` — using the lax
+traversal there would laxly ASSESS globally-declared / xsi:typed descendants of a
+strict-FAILED subtree and fabricate a spurious duplicate-ID/dangling on top of the
+real strict error. So a `skip` wildcard element AND a strict-failed subtree — even
+ones carrying `xsi:type="xs:ID"` or globally-declared `xs:ID` descendants — are
+NEVER assessed and not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element
+IS. This avoids both false-rejecting duplicate skipped/strict-failed IDs and
+false-accepting duplicate (or invalid) lax-assessed xsi:type content. The pass never runs in 1.0
+mode, so the libxml2-compat goldens stay byte-identical. ID/IDREF members inside a
+union ARE covered: `collectIDFromValue`'s union branch resolves the active member
+(`unionActiveMember`) and recurses to the atomic ID/IDREF leaf (and `idFamilyType`
+recurses into union members), so a duplicate union xs:ID across owners and a
+dangling union xs:IDREF both fail. NOT covered: `xs:ENTITY`/`xs:ENTITIES` (need the
+DTD unparsed-entity table). NOTE: this skip-exclusion is for the
+ID/IDREF DATATYPE pass only; pass-2 IDC selectors (`xs:key`/`xs:unique`) still
+match skip-content nodes by XPath — helium deliberately includes skip-matched
+nodes in an ancestor IDC (see `TestIDCFieldSkipWildcardSelectedSelf`), so the
+saxon `Wild.testSet` `wild101–104` "IDC-with-skip" cases (which require the
+opposite) remain a separate, unresolved pass-2 design question.
+
 ### Key Data Model
 
 ```
@@ -347,7 +483,7 @@ Schema { elements, types, groups, attrGroups, globalAttrs, substGroups maps }
 ElementDecl { Name QName, Type *TypeDef, MinOccurs/MaxOccurs, Abstract/Nillable, IDCs, Default/Fixed }
 TypeDef { ContentType (Empty|Simple|ElementOnly|Mixed), ContentModel *ModelGroup, BaseType, Attributes []*AttrUse, Facets, Variety (Atomic|List|Union) }
 ModelGroup { Compositor (Sequence|Choice|All), Particles []*Particle }
-IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespaces, Line, Source (declaring file) }
+IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespaces, Selector/FieldDefaultNS (1.1 xpathDefaultNamespace), IsConstraintRef/ConstraintRef(QName) (1.1 @ref), Line, Source (declaring file) }
 ```
 
 ## RELAX NG

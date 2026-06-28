@@ -341,10 +341,21 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
+	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
+	// schemaXPathDefaultNS is likewise PER document (used by resolveXPathDefaultNS
+	// for the included schema's identity-constraint selector/field XPaths): an
+	// included root's @xpathDefaultNamespace must govern its own IDCs, not inherit
+	// the including schema's. Reset to spec-default (none) plus this document's
+	// value, RESOLVED against the included root now (so an inherited
+	// ##defaultNamespace uses the included root's default namespace).
+	c.schemaXPathDefaultNS = ""
+	if c.version == Version11 {
+		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+	}
 
 	// Set the include file path for duplicate element error reporting.
 	if c.filename != "" {
@@ -384,6 +395,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
+	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
 	return err
 }
@@ -557,10 +569,19 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
+	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
+	// schemaXPathDefaultNS is PER document, like the form/block/final defaults
+	// (see loadInclude): the redefined root's @xpathDefaultNamespace governs its
+	// own identity-constraint XPaths during Phase A, RESOLVED against the redefined
+	// root now (so an inherited ##defaultNamespace uses that root's default ns).
+	c.schemaXPathDefaultNS = ""
+	if c.version == Version11 {
+		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+	}
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
@@ -582,6 +603,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.includeFile = savedIncludeFile
+		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
 	}
 
@@ -593,6 +615,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.includeFile = savedIncludeFile
+		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
 	}
 
@@ -622,6 +645,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
+	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
 	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
 }
@@ -1042,6 +1066,15 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	}
 	if v := getAttr(impRoot, attrFinalDefault); v != "" {
 		impC.schema.finalDefault = parseFinalFlags(v)
+	}
+	// The imported root's @xpathDefaultNamespace governs its own
+	// identity-constraint selector/field XPaths (resolveXPathDefaultNS reads the
+	// sub-compiler's schemaXPathDefaultNS); without this an imported IDC selector
+	// like xpath="emp" would not inherit the imported root's default namespace.
+	// Resolved against the imported root now (so an inherited ##defaultNamespace
+	// uses the imported root's default namespace, not a selector/field's).
+	if impC.version == Version11 {
+		impC.schemaXPathDefaultNS = resolveXPathDefaultNSToken(impRoot, getAttr(impRoot, attrXPathDefaultNS), impC.schema.targetNamespace)
 	}
 
 	registerBuiltinTypes(impC.schema, impC.version)

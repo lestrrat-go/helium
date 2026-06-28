@@ -358,7 +358,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		vc.annotateElement(ctx, child.elem, td)
+		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
@@ -522,7 +522,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			continue
 		}
 		// Annotate child element with its type for pass-2 identity-constraint evaluation.
-		vc.annotateElement(ctx, child.elem, td)
+		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
@@ -846,10 +846,11 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 }
 
 // validateWildcardChild validates a single element matched by a wildcard
-// according to its processContents setting (skip = not assessed; lax = assess
-// only if a global declaration exists; strict = a global declaration is
-// required). It mirrors the per-child logic the run-based matchWildcardParticle
-// applies, factored out so the xs:all matcher can reuse it.
+// according to its processContents setting (skip = not assessed; lax = assess if
+// a governing type can be found — a global declaration OR, with no declaration, a
+// resolvable xsi:type; strict = a global declaration is required). It mirrors the
+// per-child logic the run-based matchWildcardParticle applies, factored out so the
+// xs:all matcher can reuse it.
 func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wildcard, child childElem) error {
 	if wc.ProcessContents == ProcessSkip {
 		vc.annotateSkipChildren(ctx, child.elem)
@@ -860,11 +861,26 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		if wc.ProcessContents == ProcessStrict {
 			msg := "No matching global declaration available, but demanded by the strict wildcard."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+			// Strict assessment FAILED (no declaration), so the element AND its whole
+			// subtree are NOT schema-assessed — exactly like skip content. Walk it
+			// with annotateSkipChildren (canonicalization-only: records pass-2
+			// actualElemType with assessed=false, NEVER assessedElemType/actualAttrType
+			// and reports no diagnostics), so pass 3 does NOT collect xs:ID/xs:IDREF
+			// from this unassessed subtree. annotateAnyTypeChildren must NOT be used
+			// here: it laxly ASSESSES globally-declared / xsi:typed descendants, which
+			// would fabricate a duplicate-ID/dangling diagnostic on top of the real
+			// strict-wildcard failure.
+			vc.annotateSkipChildren(ctx, child.elem)
 			return fmt.Errorf("strict wildcard: no global element decl")
 		}
-		// Lax: no global declaration, not schema-assessed. Still recurse so a
-		// nested global IDC host gets its actual type recorded.
-		return vc.annotateAnyTypeChildren(ctx, child.elem)
+		// Lax with no global declaration: per XSD lax assessment, if a governing
+		// type is found via xsi:type the element must be ·valid· against it and is
+		// schema-assessed (so its xs:ID/xs:IDREF content participates in the
+		// ID/IDREF pass); otherwise it is not assessed and only its subtree is
+		// walked to record descendants' ACTUAL types for pass-2 IDC
+		// canonicalization. assessLaxElement handles both cases and never lets
+		// xsi:nil bypass type validation.
+		return vc.assessLaxElement(ctx, child.elem)
 	}
 	td := effectiveDeclType(edecl, vc.schema)
 	td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
@@ -876,7 +892,7 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
 		return fmt.Errorf("abstract type")
 	}
-	vc.annotateElement(ctx, child.elem, td)
+	vc.annotateElement(ctx, child.elem, td, true)
 	if td == nil {
 		return nil
 	}

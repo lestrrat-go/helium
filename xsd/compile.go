@@ -17,10 +17,18 @@ import (
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
-	version Version        // XSD specification version targeted by this compilation
-	baseDir string         // directory of the schema file, for resolving relative paths
-	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
-	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
+	version Version // XSD specification version targeted by this compilation
+	// schemaXPathDefaultNS is the root xs:schema @xpathDefaultNamespace (XSD 1.1)
+	// ALREADY RESOLVED to a default element-namespace URI against the schema
+	// root's context (so ##defaultNamespace uses the ROOT's default namespace,
+	// not a selector/field that may redeclare it). It is inherited verbatim by
+	// every identity-constraint selector/field that does not set its own. Empty
+	// means no default (unprefixed element = no-namespace). It is re-set per
+	// document for xs:include/xs:redefine/xs:import.
+	schemaXPathDefaultNS string
+	baseDir              string         // directory of the schema file, for resolving relative paths
+	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser               *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -554,6 +562,14 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return c.schema, nil
 	}
 
+	// XSD 1.1 schema-level default element namespace for identity-constraint
+	// XPaths, RESOLVED against the (post-conditional-inclusion) root's context now
+	// (so an inherited ##defaultNamespace uses the root's default namespace, not a
+	// selector/field's).
+	if c.version == Version11 {
+		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(root, getAttr(root, attrXPathDefaultNS), c.schema.targetNamespace)
+	}
+
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
@@ -656,6 +672,11 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// silently collapse the colliding constraints into one registry entry.
 	c.checkDuplicateIDCs(ctx)
 
+	// Resolve XSD 1.1 identity-constraint @ref references (copy the referenced
+	// constraint's selector/fields/refer into the referencing constraint) before
+	// the keyref/@refer check, since a ref'd keyref inherits its target's @refer.
+	c.resolveConstraintRefs(ctx)
+
 	// Resolve every xs:keyref/@refer against the schema-wide registry of
 	// key/unique constraints. An unresolved refer must be a fatal schema error:
 	// otherwise the keyref is silently skipped at validation time and referential
@@ -722,6 +743,9 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 	// bind the wrong constraint when two namespaces share a local name).
 	keyNames := make(map[QName]struct{})
 	for _, idc := range idcs {
+		if idc.IsConstraintRef {
+			continue
+		}
 		if idc.Kind == IDCKey || idc.Kind == IDCUnique {
 			keyNames[idc.QName] = struct{}{}
 		}
@@ -729,6 +753,12 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 
 	for _, idc := range idcs {
 		if idc.Kind != IDCKeyRef {
+			continue
+		}
+		// A @ref keyref whose reference failed to resolve was already reported by
+		// resolveConstraintRefs; its Refer was never copied, so skip it here to
+		// avoid a spurious "no refer" diagnostic.
+		if idc.IsConstraintRef && idc.Refer == "" {
 			continue
 		}
 		// An unbound @refer prefix was already reported as fatal at parse time.
@@ -758,6 +788,78 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 	}
 }
 
+// resolveConstraintRefs resolves XSD 1.1 identity-constraint @ref references. A
+// constraint with @ref reuses a referenced constraint's selector/fields (and,
+// for a keyref, its refer); they are copied in so validation treats the
+// referencing constraint like any other. Two schema errors are enforced: the
+// reference must resolve to an existing identity-constraint (cf. id042), and the
+// referencing element's kind must match the referenced constraint's kind — a
+// key/unique/keyref may only ref a constraint of the same kind (id041).
+func (c *compiler) resolveConstraintRefs(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	idcs := c.collectAllIDCs()
+
+	byName := make(map[QName]*IDConstraint)
+	for _, idc := range idcs {
+		if idc.IsConstraintRef || idc.Name == "" {
+			continue
+		}
+		byName[idc.QName] = idc
+	}
+
+	for _, idc := range idcs {
+		if !idc.IsConstraintRef {
+			continue
+		}
+		// An unbound @ref prefix was already reported as fatal at parse time; the
+		// resolved QName is meaningless, so skip the "unknown constraint" check to
+		// avoid a duplicate diagnostic.
+		if idc.constraintRefUnbound {
+			continue
+		}
+		source := idc.Source
+		if source == "" {
+			source = c.filename
+		}
+		xsdElem := idcKindName(idc.Kind)
+		target, ok := byName[idc.ConstraintRefQName]
+		if !ok {
+			msg := fmt.Sprintf("The identity-constraint '%s' references the unknown identity-constraint '%s'.", xsdElem, idc.ConstraintRef)
+			c.schemaError(ctx, schemaParserErrorAttr(source, idc.Line, xsdElem, xsdElem, attrRef, msg))
+			continue
+		}
+		if target.Kind != idc.Kind {
+			msg := fmt.Sprintf("The identity-constraint reference '%s' points to a %s constraint, but a %s constraint was expected.", idc.ConstraintRef, idcKindName(target.Kind), xsdElem)
+			c.schemaError(ctx, schemaParserErrorAttr(source, idc.Line, xsdElem, xsdElem, attrRef, msg))
+			continue
+		}
+
+		// Copy the referenced constraint's evaluation state. The referencing
+		// constraint keeps its own host/line/source; only the selector/field
+		// machinery (and the keyref refer) is inherited. It also adopts the
+		// referenced constraint's QName identity so a key/unique applied via @ref
+		// is registered in the per-occurrence key table under the same name a
+		// keyref refers to (id044: a ref'd keyref resolves against a ref'd key on
+		// the same host).
+		idc.QName = target.QName
+		idc.Name = target.Name
+		idc.Selector = target.Selector
+		idc.SelectorExpr = target.SelectorExpr
+		idc.SelectorDefaultNS = target.SelectorDefaultNS
+		idc.Fields = target.Fields
+		idc.FieldExprs = target.FieldExprs
+		idc.FieldDefaultNS = target.FieldDefaultNS
+		idc.Namespaces = target.Namespaces
+		if idc.Kind == IDCKeyRef {
+			idc.Refer = target.Refer
+			idc.ReferQName = target.ReferQName
+			idc.referUnbound = target.referUnbound
+		}
+	}
+}
+
 // checkDuplicateIDCs enforces the XSD constraint that identity-constraint
 // definitions (xs:key, xs:unique, xs:keyref) all share a single symbol space:
 // each {targetNamespace}name must be unique across the entire schema, regardless
@@ -784,6 +886,11 @@ func (c *compiler) checkDuplicateIDCs(ctx context.Context) {
 
 	seen := make(map[QName]struct{}, len(idcs))
 	for _, idc := range idcs {
+		// A @ref constraint declares no name of its own, so it does not occupy the
+		// identity-constraint symbol space and cannot be a duplicate.
+		if idc.IsConstraintRef {
+			continue
+		}
 		if _, dup := seen[idc.QName]; !dup {
 			seen[idc.QName] = struct{}{}
 			continue

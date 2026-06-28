@@ -851,8 +851,67 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
-	if name == "" {
+	// Detect the @ref form by PRESENCE, not value: getAttr cannot tell an absent
+	// attribute from an empty one, so a literal ref="" must be recognized as the
+	// (invalid) ref form rather than silently treated as absent and dropped.
+	hasRef := c.version == Version11 && hasAttr(elem, attrRef)
+	if name == "" && !hasRef {
 		return nil
+	}
+
+	// XSD 1.1 identity-constraint @ref: the constraint reuses a referenced
+	// constraint's name/selector/field. The ref form may carry only annotation/id
+	// metadata, so name/selector/field/refer MUST be absent; the referenced
+	// constraint is resolved (and its selector/fields copied in) at compile time
+	// by resolveConstraintRefs.
+	if hasRef {
+		source := c.includeFile
+		if source == "" {
+			source = c.filename
+		}
+		xsdElem := idcKindName(kind)
+		ref := getAttr(elem, attrRef)
+		// An empty @ref names no constraint and is a fatal schema error; drop the
+		// constraint so resolveConstraintRefs does not also report it as unknown.
+		if ref == "" {
+			if source != "" {
+				c.schemaError(ctx, schemaParserErrorAttr(source, elem.Line(), xsdElem, xsdElem, attrRef,
+					"An identity-constraint 'ref' attribute must not be empty."))
+			}
+			return nil
+		}
+		// A @ref constraint must not also declare its own name/selector/field/refer
+		// (the ref form is mutually exclusive with the full form). Companions are
+		// detected by PRESENCE (hasAttr), not value, so an empty-but-present
+		// name=""/refer="" is still rejected, consistent with the ref-form detection.
+		if hasAttr(elem, attrName) {
+			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
+		}
+		if hasAttr(elem, attrRefer) {
+			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
+		}
+		for child := range helium.Children(elem) {
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			if isXSDElement(ce, elemSelector) {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, elemSelector)
+			}
+			if isXSDElement(ce, elemField) {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, elemField)
+			}
+		}
+		idc := &IDConstraint{
+			Kind:            kind,
+			Namespaces:      collectNSContext(elem),
+			Line:            elem.Line(),
+			Source:          source,
+			IsConstraintRef: true,
+			ConstraintRef:   ref,
+		}
+		idc.ConstraintRefQName, idc.constraintRefUnbound = c.resolveIDCNameQName(ctx, elem, ref)
+		return idc
 	}
 	// Source pins the filename of the schema document that declares this
 	// constraint, paired with Line. A constraint parsed inside an
@@ -900,9 +959,11 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 		switch {
 		case isXSDElement(ce, elemSelector):
 			idc.Selector = getAttr(ce, attrXPath)
+			idc.SelectorDefaultNS = c.resolveXPathDefaultNS(ce)
 			selectorLine = ce.Line()
 		case isXSDElement(ce, elemField):
 			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
+			idc.FieldDefaultNS = append(idc.FieldDefaultNS, c.resolveXPathDefaultNS(ce))
 			fieldLines = append(fieldLines, ce.Line())
 		}
 	}
@@ -942,6 +1003,49 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	return idc
 }
 
+// resolveXPathDefaultNSToken resolves a raw @xpathDefaultNamespace value to a
+// default ELEMENT namespace URI against elem's namespace context: empty/##local →
+// no default (""), ##targetNamespace → targetNS, ##defaultNamespace → elem's
+// in-scope default namespace, any other value → the literal URI. ##defaultNamespace
+// is the namespace-context-SENSITIVE case: a schema-level value must be resolved
+// against the SCHEMA ROOT (where the attribute appears), NOT later against a
+// selector/field that may redeclare the default namespace — so schema-level values
+// are pre-resolved at root-read time (see compiler.schemaXPathDefaultNS) and
+// inherited as the already-resolved URI.
+func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) string {
+	switch raw {
+	case "", xpathDefaultNSLocal:
+		return ""
+	case xpathDefaultNSTargetNamespace:
+		return targetNS
+	case xpathDefaultNSDefaultNamespace:
+		return lookupNS(elem, "")
+	default:
+		return raw
+	}
+}
+
+// resolveXPathDefaultNS resolves the effective default element namespace for an
+// identity-constraint selector/field XPath (XSD 1.1). A LOCALLY-PRESENT value on
+// the selector/field element is resolved against THAT element's context. The
+// schema-level @xpathDefaultNamespace is inherited ONLY when the attribute is
+// ABSENT on the element — detected by PRESENCE (hasAttr), since xs:anyURI admits
+// the empty value and getAttr cannot tell an explicit @xpathDefaultNamespace=""
+// from an absent one, so an explicit empty value means "no default element
+// namespace" and does NOT inherit. The inherited value is the schema-level URI
+// ALREADY RESOLVED against the schema root when the root was read, so an inherited
+// ##defaultNamespace uses the root's default namespace, not this selector/field's.
+// An absent value (and 1.0 mode) yields no default. Returns "" for "no default".
+func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) string {
+	if c.version != Version11 {
+		return ""
+	}
+	if !hasAttr(elem, attrXPathDefaultNS) {
+		return c.schemaXPathDefaultNS
+	}
+	return resolveXPathDefaultNSToken(elem, getAttr(elem, attrXPathDefaultNS), c.schema.targetNamespace)
+}
+
 // resolveIDCReferQName resolves an xs:keyref/@refer QName against the constraint
 // element's in-scope namespaces. An unprefixed refer resolves to the in-scope
 // default namespace (falling back to the schema's target namespace), matching how
@@ -954,13 +1058,32 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		// An empty @refer is reported by checkKeyRefRefers.
 		return QName{}, false
 	}
+	// Report against the constraint's DECLARING file (idc.Source, pinned in
+	// parseIDConstraint to c.includeFile/c.filename), paired with idc.Line, so a
+	// malformed/unbound @refer in an INCLUDED or REDEFINED schema cites the
+	// included file — not the including schema — matching the line number used.
+	source := idc.Source
+	if source == "" {
+		source = c.diagSource()
+	}
+	// A malformed @refer (e.g. ":k") is a fatal error, not a silently-resolved
+	// unprefixed reference. The returned bool suppresses checkKeyRefRefers's own
+	// "unknown key" diagnostic, mirroring the unbound-prefix path.
+	if err := validateQName(refer); err != nil {
+		if source != "" {
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' that is not a valid QName.", idc.Name, refer)
+			c.schemaError(ctx,
+				schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+		}
+		return QName{}, true
+	}
 	if prefix, local, found := strings.Cut(refer, ":"); found {
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
-			if c.filename != "" {
+			if source != "" {
 				c.schemaError(ctx,
-					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+					schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			}
 			return QName{}, true
 		}
@@ -972,6 +1095,49 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		ns = defNS
 	}
 	return QName{Local: refer, NS: ns}, false
+}
+
+// resolveIDCNameQName resolves an identity-constraint @ref QName against the
+// element's in-scope namespaces. A prefixed ref resolves its prefix; a prefixed
+// ref whose prefix is not bound in scope is a fatal schema error (reported via
+// reportUnboundQNamePrefix, mirroring every other QName-valued schema attribute)
+// rather than silently mapping to the empty namespace — the returned bool reports
+// that so resolveConstraintRefs can suppress its own "unknown constraint"
+// diagnostic. An unprefixed ref uses the in-scope default namespace, falling back
+// to the schema's target namespace (identity-constraints live in the target
+// namespace).
+func (c *compiler) resolveIDCNameQName(ctx context.Context, elem *helium.Element, ref string) (QName, bool) {
+	// A malformed value (e.g. ":u") must be a fatal error, not silently resolved
+	// as an unprefixed/default-namespace reference (strings.Cut would yield an
+	// empty prefix that bypasses the unbound-prefix check below).
+	if err := validateQName(ref); err != nil {
+		c.reportInvalidQNameValue(ctx, elem, ref)
+		return QName{}, true
+	}
+	if prefix, local, found := strings.Cut(ref, ":"); found {
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
+			return QName{}, true
+		}
+		return QName{Local: local, NS: ns}, false
+	}
+	ns := c.schema.targetNamespace
+	if defNS := lookupNS(elem, ""); defNS != "" {
+		ns = defNS
+	}
+	return QName{Local: ref, NS: ns}, false
+}
+
+// reportIDCRefConflict reports a fatal schema error for an identity-constraint
+// that uses @ref together with a companion (name/selector/field/refer) that the
+// ref form forbids.
+func (c *compiler) reportIDCRefConflict(ctx context.Context, source string, line int, xsdElem, companion string) {
+	if source == "" {
+		return
+	}
+	msg := fmt.Sprintf("An identity-constraint with a 'ref' attribute must not also specify '%s'.", companion)
+	c.schemaError(ctx, schemaParserErrorAttr(source, line, xsdElem, xsdElem, attrRef, msg))
 }
 
 // reportIDCXPathError reports a malformed identity-constraint selector/field

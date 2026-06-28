@@ -203,7 +203,23 @@ type IDConstraint struct {
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)
 
-	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	// SelectorDefaultNS / FieldDefaultNS hold the resolved default element
+	// namespace URI (XSD 1.1 @xpathDefaultNamespace) for the selector and each
+	// field XPath. Empty means no default (XPath 1.0 unprefixed = no-namespace).
+	// FieldDefaultNS is parallel to Fields.
+	SelectorDefaultNS string
+	FieldDefaultNS    []string
+
+	// IsConstraintRef marks an XSD 1.1 identity-constraint that uses @ref to point
+	// at another constraint instead of declaring its own name/selector/field. At
+	// compile time the referenced constraint's selector/fields (and, for keyref,
+	// its refer) are copied in, so validation treats it like any other constraint.
+	IsConstraintRef    bool
+	ConstraintRef      string // lexical @ref QName as written
+	ConstraintRefQName QName  // resolved {ns}local of the referenced constraint
+
+	referUnbound         bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	constraintRefUnbound bool // for @ref: the ref prefix was not bound in scope (already reported)
 }
 
 // Assertion is an XSD 1.1 xs:assert constraint on a complex type: an XPath 3.1

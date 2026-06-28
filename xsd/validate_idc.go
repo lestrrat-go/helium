@@ -207,17 +207,20 @@ func (vc *validationContext) idcHostDecl(elem *helium.Element) *ElementDecl {
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
 func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, edecl *ElementDecl, idc *IDConstraint) (*idcTable, error) {
 	schema := vc.schema
-	// Evaluate selector XPath using pre-compiled expression when available.
+	// Evaluate selector XPath using pre-compiled expression when available. The
+	// selector's resolved @xpathDefaultNamespace (XSD 1.1) governs unprefixed
+	// element name tests; attributes are never affected.
+	selEv := ev.DefaultElementNamespace(idc.SelectorDefaultNS)
 	var selectorResult *xpath1.Result
 	var err error
 	if idc.SelectorExpr != nil {
-		selectorResult, err = ev.Evaluate(ctx, idc.SelectorExpr, elem)
+		selectorResult, err = selEv.Evaluate(ctx, idc.SelectorExpr, elem)
 	} else {
 		compiled, compErr := xpath1.Compile(idc.Selector)
 		if compErr != nil {
 			return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", compErr)
 		}
-		selectorResult, err = ev.Evaluate(ctx, compiled, elem)
+		selectorResult, err = selEv.Evaluate(ctx, compiled, elem)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", err)
@@ -243,9 +246,13 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 		allPresent := true
 		fieldErr := false
 		for i, fieldXPath := range idc.Fields {
+			fieldEv := ev
+			if i < len(idc.FieldDefaultNS) {
+				fieldEv = ev.DefaultElementNamespace(idc.FieldDefaultNS[i])
+			}
 			var fieldResult *xpath1.Result
 			if i < len(idc.FieldExprs) && idc.FieldExprs[i] != nil {
-				fieldResult, err = ev.Evaluate(ctx, idc.FieldExprs[i], node)
+				fieldResult, err = fieldEv.Evaluate(ctx, idc.FieldExprs[i], node)
 			} else {
 				compiled, compErr := xpath1.Compile(fieldXPath)
 				if compErr != nil {
@@ -255,7 +262,7 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					// dangling reference. Surface it like the selector path.
 					return nil, fmt.Errorf("xsd: IDC field XPath %q failed to compile: %w", fieldXPath, compErr)
 				}
-				fieldResult, err = ev.Evaluate(ctx, compiled, node)
+				fieldResult, err = fieldEv.Evaluate(ctx, compiled, node)
 			}
 			if err != nil {
 				// A field XPath that compiles but fails at evaluation (e.g. an
