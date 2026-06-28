@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -247,7 +248,7 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 	var ann map[helium.Node]string
 	if vc.assertAnnotations != nil {
 		ann = make(map[helium.Node]string, len(vc.assertAnnotations))
-		mapAssertAnnotations(elem, ce, vc.assertAnnotations, ann, true)
+		vc.mapAssertAnnotations(elem, ce, vc.assertAnnotations, ann, true)
 	}
 	stripCommentsAndPIs(ce)
 	return ce, ann
@@ -264,9 +265,15 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 // yet assigned during evaluation — its typed value (data(.)) is untyped — while
 // its attributes and all descendant elements (validated earlier) keep their PSVI
 // types. This matches the XSD 1.1 conformance tests (and Saxon).
-func mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string, isRoot bool) {
+func (vc *validationContext) mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string, isRoot bool) {
 	if name, ok := src[orig]; ok && !isRoot {
 		dst[copied] = name
+	}
+	// A DEFAULTED/FIXED empty DESCENDANT element: materialize its effective value
+	// onto the copy so data(c) atomizes the default, not "". The asserted ROOT's own
+	// value is handled by $value and its data(.) is intentionally untyped, so skip it.
+	if !isRoot {
+		vc.materializeAssertDefault(orig, copied)
 	}
 	// Match attributes by expanded QName rather than positional index: the copy
 	// may carry a different attribute ordering or extra namespace declarations.
@@ -292,9 +299,46 @@ func mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst
 		oe, ok1 := helium.AsNode[*helium.Element](oc[i])
 		ce, ok2 := helium.AsNode[*helium.Element](cc[i])
 		if ok1 && ok2 {
-			mapAssertAnnotations(oe, ce, src, dst, false)
+			vc.mapAssertAnnotations(oe, ce, src, dst, false)
 		}
 	}
+}
+
+// materializeAssertDefault inserts the recorded schema default/fixed effective value
+// of an EMPTY descendant element (assertEffectiveValues, keyed by the live node)
+// into its isolated copy, so an ancestor xs:assert's data(thisElement) atomizes the
+// schema-normalized default instead of "". A QName/NOTATION value's prefix is
+// declared on the copy (from the DECLARATION's namespace context) so
+// resolveQNameFromNode resolves it. Only an empty copy is materialized.
+func (vc *validationContext) materializeAssertDefault(orig, copied *helium.Element) {
+	if vc.assertEffectiveValues == nil {
+		return
+	}
+	ev, ok := vc.assertEffectiveValues[orig]
+	if !ok || ev.value == "" {
+		return
+	}
+	if elemTextContent(copied) != "" {
+		return // copy already carries content; do not overwrite
+	}
+	// Declare the value's QName prefix (if any) from the declaration namespace
+	// context so a QName/NOTATION default resolves on the copy.
+	if prefix, _, found := strings.Cut(strings.TrimSpace(ev.value), ":"); found && prefix != "" && ev.ns != nil {
+		if uri, bound := ev.ns[prefix]; bound && !copyHasPrefix(copied, prefix) {
+			copied.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		}
+	}
+	_ = copied.AppendText([]byte(ev.value))
+}
+
+// copyHasPrefix reports whether the element already declares the given prefix.
+func copyHasPrefix(e *helium.Element, prefix string) bool {
+	for _, ns := range e.Namespaces() {
+		if ns.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // stripCommentsAndPIs removes every comment and processing-instruction node from

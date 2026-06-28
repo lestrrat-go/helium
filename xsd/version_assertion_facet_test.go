@@ -2040,3 +2040,42 @@ func TestVersion11AssertSimpleContentRestrictionUnionFacet(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e><c>1 2</c></e>`))
 }
+
+// TestVersion11AssertDescendantDefaultValue verifies that an xs:assert on a PARENT
+// sees the schema DEFAULT/FIXED effective value of an EMPTY descendant element when
+// it atomizes data(c) (round-30). isolatedAssertTree materializes the recorded
+// effective value onto the isolated copy, so data(c) is the schema-normalized default
+// (typed via the child's annotation), matching the child's own $value.
+func TestVersion11AssertDescendantDefaultValue(t *testing.T) {
+	// (a) xs:integer default="5": data(c) eq 5 for an empty <c/>.
+	const intSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="xs:integer" default="5"/>
+      </xs:sequence>
+      <xs:assert test="data(c) eq 5"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), intSchema)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<root><c/></root>`))
+
+	// (b) xs:QName default whose prefix is bound in the DECLARATION's context (on the
+	// schema root). The empty <c/> must atomize data(c) as the QName p:x → urn:p.
+	const qnameSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="xs:QName" default="p:x"/>
+      </xs:sequence>
+      <xs:assert test="namespace-uri-from-QName(data(c)) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), qnameSchema)
+	require.NoError(t, err)
+	// The instance does NOT bind p; the default resolves via the declaration context.
+	require.NoError(t, validateAssertion(t, schema2, `<root><c/></root>`))
+}

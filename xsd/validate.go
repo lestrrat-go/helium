@@ -493,6 +493,20 @@ type validationContext struct {
 	// gets one stable name across all nodes that use it.
 	assertAnonTypes map[string]*TypeDef
 	assertAnonNames map[*TypeDef]string
+	// assertEffectiveValues records, per EMPTY element node that has a schema
+	// default/fixed value, the effective (schema-normalized) value and the namespace
+	// context to resolve a QName/NOTATION default's prefix (the DECLARATION's
+	// context). isolatedAssertTree materializes these onto the isolated copy so
+	// data(c) on a DEFAULTED descendant atomizes the default rather than "" —
+	// matching the asserted element's own $value (which already substitutes it).
+	assertEffectiveValues map[helium.Node]assertEffectiveValue
+}
+
+// assertEffectiveValue is a recorded element default/fixed effective value plus the
+// namespace context used to resolve a QName/NOTATION value's prefix.
+type assertEffectiveValue struct {
+	value string
+	ns    map[string]string
 }
 
 // assertAnonNS is the synthetic namespace for inline anonymous list/union type
@@ -526,6 +540,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		vc.assertAnnotations = make(TypeAnnotations)
 		vc.assertAnonTypes = make(map[string]*TypeDef)
 		vc.assertAnonNames = make(map[*TypeDef]string)
+		vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
 	}
 	return vc
 }
@@ -970,6 +985,17 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 			effectiveValue = *edecl.Fixed
 		} else if edecl.Default != nil {
 			effectiveValue = *edecl.Default
+		}
+	}
+
+	// Record the effective default/fixed value of an EMPTY element so an xs:assert on
+	// an ANCESTOR atomizes data(thisElement) as the schema-normalized default rather
+	// than "" (isolatedAssertTree materializes it onto the copy). A QName/NOTATION
+	// default's prefix resolves in the DECLARATION's namespace context (effectiveValueNS).
+	if isEmpty && effectiveValue != "" && vc.assertEffectiveValues != nil {
+		vc.assertEffectiveValues[elem] = assertEffectiveValue{
+			value: effectiveValue,
+			ns:    effectiveValueNS(elem, edecl, true),
 		}
 	}
 
