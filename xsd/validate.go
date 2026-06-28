@@ -846,18 +846,45 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		}
 		edecl := lookupElemDecl(ce, vc.schema)
 		if edecl == nil {
-			// Lax: no global declaration, so the child (and its subtree) is not
-			// schema-assessed. Still record its own xsi:type ACTUAL type — a parent
-			// IDC selecting this element directly must canonicalize an
-			// xsi:type-introduced field in that type's value space — then recurse so
-			// any deeper anyType descendant with a resolvable global declaration gets
-			// annotated. This child has NO global declaration, so it is NOT
-			// schema-assessed: record actualElemType for canonicalization only
-			// (assessed=false), keeping it out of the ID/IDREF pass.
-			if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-				vc.annotateElement(ctx, ce, actual, false)
+			// processContents="lax" with no global declaration. Per XSD lax
+			// assessment, if a governing type CAN be found (here via xsi:type) the
+			// element must be ·valid· against it and IS schema-assessed; otherwise it
+			// is not assessed and is only recursed into to annotate deeper
+			// descendants for pass-2 canonicalization. (Contrast skip content, which
+			// is NEVER assessed — handled by annotateSkipChildren.)
+			actual, hasType := vc.resolveXsiTypeQuiet(ce)
+			if !hasType {
+				if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+					contentErr = err
+				}
+				continue
 			}
-			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+			if actual != nil && actual.Abstract {
+				vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msgAbstractType)
+				contentErr = fmt.Errorf("abstract type")
+				continue
+			}
+			// Mark assessed=true so the ID/IDREF pass treats xsi:type="xs:ID"/
+			// "xs:IDREF" content here as a real ID (the false-accept this fixes).
+			vc.annotateElement(ctx, ce, actual, true)
+			if actual == nil {
+				continue
+			}
+			nilled, nilErr := vc.checkXsiNil(ctx, ce)
+			if nilErr != nil {
+				contentErr = nilErr
+				continue
+			}
+			if nilled {
+				// An undeclared element is not nillable, so it cannot be validly
+				// nilled and has no assessed content to validate; recurse only to
+				// annotate descendants. The ID/IDREF pass skips nilled content anyway.
+				if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+					contentErr = err
+				}
+				continue
+			}
+			if err := vc.validateElementContent(ctx, ce, nil, actual); err != nil {
 				contentErr = err
 			}
 			continue

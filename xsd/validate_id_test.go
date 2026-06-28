@@ -338,7 +338,7 @@ func TestIDSkipWildcardNotAssessed(t *testing.T) {
 
 	t.Run("skip-wildcard xsi:type=xs:ID duplicates are not flagged", func(t *testing.T) {
 		t.Parallel()
-		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
 			`<wrap><id xsi:type="xs:ID">dup</id></wrap>` +
 			`<wrap><id xsi:type="xs:ID">dup</id></wrap></doc>`
 		require.NoError(t, compileValidate(t, skipAnySchema, inst))
@@ -346,7 +346,7 @@ func TestIDSkipWildcardNotAssessed(t *testing.T) {
 
 	t.Run("skip-wildcard xsi:type=xs:IDREF dangling ref is not flagged", func(t *testing.T) {
 		t.Parallel()
-		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
 			`<wrap><r xsi:type="xs:IDREF">nope</r></wrap></doc>`
 		require.NoError(t, compileValidate(t, skipAnySchema, inst))
 	})
@@ -432,5 +432,122 @@ func TestIDConstraintRefConflictingChildren(t *testing.T) {
 	t.Run("plain ref is accepted", func(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compile(t, `<xs:unique ref="u"/>`))
+	})
+}
+
+// TestIDLaxWildcardXsiTypeAssessed covers PR860-XSD-ID-001: an element admitted
+// through a processContents="lax" wildcard that has no declaration but whose
+// xsi:type resolves to a governing type IS schema-assessed (XSD lax) and so
+// participates in the document-wide ID/IDREF pass. A processContents="skip"
+// wildcard, by contrast, never assesses its content (preserving the earlier fix).
+func TestIDLaxWildcardXsiTypeAssessed(t *testing.T) {
+	compileValidate := func(t *testing.T, processContents, instanceXML string) error {
+		t.Helper()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="` + processContents + `" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		require.NoError(t, err)
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	// Two xsi:type="xs:ID" elements under DIFFERENT parents (different ID owners)
+	// share the value "dup": a genuine duplicate. The xs prefix must be bound in
+	// the instance for xsi:type="xs:ID" to resolve.
+	const dupDifferentOwners = `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+		`<w1><id xsi:type="xs:ID">dup</id></w1>` +
+		`<w2><id xsi:type="xs:ID">dup</id></w2></doc>`
+
+	t.Run("lax wildcard xsi:type=xs:ID duplicate across owners is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, compileValidate(t, "lax", dupDifferentOwners),
+			"lax-assessed xsi:type=xs:ID content must participate in ID uniqueness")
+	})
+
+	t.Run("skip wildcard xsi:type=xs:ID duplicate is NOT rejected", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compileValidate(t, "skip", dupDifferentOwners),
+			"skip content is never assessed, so its xsi:type=xs:ID must not be checked")
+	})
+
+	t.Run("lax wildcard xsi:type=xs:ID under one owner is valid", func(t *testing.T) {
+		t.Parallel()
+		// Two xs:ID elements with the same value under the SAME parent identify the
+		// same element (parent owner), so this is not a duplicate.
+		sameOwner := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+			`<w><id xsi:type="xs:ID">dup</id><id xsi:type="xs:ID">dup</id></w></doc>`
+		require.NoError(t, compileValidate(t, "lax", sameOwner))
+	})
+}
+
+// TestIDNilledElementDefaultNotCollected covers PR860-XSD-ID-002: a nilled
+// element (xsi:nil="true") has no element value, so its declared default/fixed
+// must NOT be substituted into the ID/IDREF pass. Otherwise the fabricated value
+// would false-reject a valid document as a duplicate ID (or a dangling IDREF).
+func TestIDNilledElementDefaultNotCollected(t *testing.T) {
+	compileValidate := func(t *testing.T, schemaXML, instanceXML string) error {
+		t.Helper()
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		require.NoError(t, err)
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	t.Run("nilled ID element default does not duplicate a sibling's ID", func(t *testing.T) {
+		t.Parallel()
+		// Each <grp> bears one <id> (an element-content ID owned by its <grp>). The
+		// first grp's <id> is nilled; without skipping it, its default "p1" would be
+		// collected under grp1 and collide with grp2's legitimate "p1" under grp2.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="grp" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="id" type="xs:ID" nillable="true" default="p1"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+			`<grp><id xsi:nil="true"/></grp>` +
+			`<grp><id>p1</id></grp></doc>`
+		require.NoError(t, compileValidate(t, schemaXML, inst),
+			"a nilled element's default must not be collected as an ID")
+	})
+
+	t.Run("nilled IDREF element default does not dangle", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="r" type="xs:IDREF" nillable="true" default="nomatch"/>
+        <xs:element name="x" type="xs:ID"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+			`<r xsi:nil="true"/><x>realid</x></doc>`
+		require.NoError(t, compileValidate(t, schemaXML, inst),
+			"a nilled IDREF element's default must not be collected as a reference")
 	})
 }

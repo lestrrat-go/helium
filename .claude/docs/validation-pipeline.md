@@ -381,21 +381,29 @@ decomposed against their type variety (`collectIDFromValue`, mirroring
 `canonicalValueKey`): a list splits into items, a union resolves to its active
 member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
 `xs:IDREFS` (a flat atomic placeholder) is split by name. Empty element content
-falls back to the declaration's default/fixed value. Element/attribute typing for
-this pass uses ONLY provenance recorded at genuine pass-1 ASSESSMENT sites:
-`assessedElemType`/`actualElemDecl` for elements and `actualAttrType` for
+falls back to the declaration's default/fixed value — EXCEPT on a nilled element
+(`xsi:nil="true"`, checked quietly via `isXsiNilTrue`): a nilled element has no
+element value, so substituting its default/fixed would fabricate a duplicate ID or
+a dangling IDREF and false-reject a valid document; its element-content collection
+is skipped (attribute IDs still apply on a nilled element). Element/attribute
+typing for this pass uses ONLY provenance recorded at genuine pass-1 ASSESSMENT
+sites: `assessedElemType`/`actualElemDecl` for elements and `actualAttrType` for
 attributes (the latter populated in `annotateAttrUse` and `validateWildcardAttr`
 for explicit uses and strict/lax wildcard-admitted global attributes) — with NO
 global-declaration fallback. Crucially it does NOT read `actualElemType`: that map
-is ALSO written by `annotateSkipChildren` and the lax-no-declaration branch
-(`annotateElement(..., assessed=false)`) purely for pass-2 IDC canonicalization, so
-a `processContents="skip"` element carrying `xsi:type="xs:ID"`/`xs:IDREF` appears
-in `actualElemType` but NOT in `assessedElemType`. `annotateElement` takes an
-`assessed` bool — true at the root, content-model matches, and xs:anyType/lax
-children WITH a global declaration (writes both maps); false at skip/lax-no-decl
-sites (writes only `actualElemType`). So an element/attribute admitted through a
-skip wildcard (never schema-assessed) is NOT treated as xs:ID/xs:IDREF, which
-avoids false-rejecting duplicate skipped IDs or dangling skipped IDREFs. The pass never runs in 1.0
+is ALSO written (with `assessed=false`) by `annotateSkipChildren` and by the
+lax branch for an element with no resolvable governing type, purely for pass-2 IDC
+canonicalization, so such content appears in `actualElemType` but NOT in
+`assessedElemType`. `annotateElement` takes an `assessed` bool — true at the root,
+content-model matches, xs:anyType/lax children WITH a global declaration, AND a
+`processContents="lax"` element with no declaration but a RESOLVABLE `xsi:type`
+(which per XSD lax IS assessed: validated against that type and counted for pass 3,
+so its `xsi:type="xs:ID"`/`xs:IDREF` content participates); false at
+`skip`/lax-no-resolvable-type sites (writes only `actualElemType`). So a `skip`
+wildcard element — even one carrying `xsi:type="xs:ID"` — is NEVER assessed and is
+not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element IS. This avoids both
+false-rejecting duplicate skipped IDs and false-accepting duplicate lax-assessed
+xsi:type IDs. The pass never runs in 1.0
 mode, so the libxml2-compat goldens stay byte-identical. NOT covered:
 `xs:ENTITY`/`xs:ENTITIES` (need the DTD unparsed-entity table) and ID/IDREF
 members inside a union at instance level. NOTE: this skip-exclusion is for the

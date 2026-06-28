@@ -84,7 +84,12 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// the same value (or an attribute ID and an <id> child of one element)
 		// identify the SAME element and are not a duplicate, whereas the same value
 		// reaching two different parents is (saxonData/Id id003, id004).
-		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) {
+		// A nilled element (xsi:nil="true") has NO element value, so its declared
+		// default/fixed must NOT be substituted as an ID/IDREF (that would fabricate
+		// a duplicate ID or a dangling IDREF and false-reject a valid document). Skip
+		// element-content collection for it; attribute IDs still apply on a nilled
+		// element and are handled below.
+		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) && !isXsiNilTrue(elem) {
 			raw := elemTextContent(elem)
 			if raw == "" {
 				if decl := vc.idcHostDecl(elem); decl != nil {
@@ -242,4 +247,23 @@ func (vc *validationContext) elementTypeForID(elem *helium.Element) *TypeDef {
 // is never treated as xs:ID/xs:IDREF.
 func (vc *validationContext) attrTypeForID(a *helium.Attribute) *TypeDef {
 	return vc.actualAttrType[a]
+}
+
+// isXsiNilTrue reports whether elem carries xsi:nil with a true value ("true" or
+// "1", after whitespace collapse), mirroring checkXsiNil's true-detection without
+// reporting any error (an invalid xsi:nil lexical was already diagnosed in pass-1
+// and is treated here as not-nilled). A nilled element has no element value, so
+// the ID/IDREF pass must not substitute its default/fixed as element content.
+func isXsiNilTrue(elem *helium.Element) bool {
+	for _, a := range elem.Attributes() {
+		if a.URI() != lexicon.NamespaceXSI || a.LocalName() != attrNil {
+			continue
+		}
+		switch normalizeWhiteSpace(a.Value(), "collapse") {
+		case "true", "1":
+			return true
+		}
+		return false
+	}
+	return false
 }
