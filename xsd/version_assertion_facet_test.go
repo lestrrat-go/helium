@@ -1973,3 +1973,29 @@ func TestVersion11AssertSimpleContentChildAtomization(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema3, `<e><c>1 2</c></e>`))
 }
+
+// TestVersion11AssertDeepNestedUnionList verifies that assert NODE atomization
+// descends an ARBITRARILY-DEEP (here 80 > the old depth-64 cap) acyclic nested-union
+// chain to the active LIST leaf (PR859-REVIEW-02), matching validation/$value. The
+// chain U1=union(U2,string), …, U80=union(IntList,string); value "1 2" must reach
+// IntList (two xs:int), not stop at the cap and fall back to a xs:string member.
+func TestVersion11AssertDeepNestedUnionList(t *testing.T) {
+	const depth = 80
+	var b strings.Builder
+	b.WriteString(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + "\n")
+	b.WriteString(`  <xs:simpleType name="IntList"><xs:list itemType="xs:int"/></xs:simpleType>` + "\n")
+	for i := depth; i >= 1; i-- {
+		member := "IntList"
+		if i < depth {
+			member = fmt.Sprintf("U%d", i+1)
+		}
+		fmt.Fprintf(&b, `  <xs:simpleType name="U%d"><xs:union memberTypes="%s xs:string"/></xs:simpleType>`+"\n", i, member)
+	}
+	b.WriteString(`  <xs:element name="e"><xs:complexType><xs:attribute name="u" type="U1"/>` + "\n")
+	b.WriteString(`    <xs:assert test="count(data(@u)) = 2 and (data(@u)[1] instance of xs:int)"/>` + "\n")
+	b.WriteString(`  </xs:complexType></xs:element>` + "\n")
+	b.WriteString(`</xs:schema>`)
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), b.String())
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e u="1 2"/>`))
+}

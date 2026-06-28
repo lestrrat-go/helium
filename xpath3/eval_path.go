@@ -231,21 +231,31 @@ func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
 func resolveActiveUnionLeaf(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool) *NodeItemUnionMember {
 	val := ixpath.StringValue(n)
 	nsMap := inScopeNSMap(n)
-	return resolveActiveUnionLeafRec(ctx, ec, n, unionType, qnameNoDefault, val, nsMap, 0)
+	// visited tracks union type NAMES currently being descended, so any finite
+	// acyclic nesting (however deep) is fully walked while a cyclic union graph
+	// still terminates — mirroring the validation side's visited-set guards rather
+	// than capping at an arbitrary depth.
+	visited := map[string]struct{}{unionType: {}}
+	return resolveActiveUnionLeafRec(ctx, ec, n, unionType, qnameNoDefault, val, nsMap, visited)
 }
 
-func resolveActiveUnionLeafRec(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool, val string, nsMap map[string]string, depth int) *NodeItemUnionMember {
-	if depth > 64 { // guard against a pathological/cyclic union graph
-		return nil
-	}
+func resolveActiveUnionLeafRec(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool, val string, nsMap map[string]string, visited map[string]struct{}) *NodeItemUnionMember {
 	for _, m := range ec.schemaDeclarations.UnionMemberTypes(unionType) {
 		// A member that is itself a union: full-validate the value against it, then
-		// descend to its nested active leaf (matches fixedUnionActiveMember).
+		// descend to its nested active leaf (matches fixedUnionActiveMember). A member
+		// already on the descent path is a cycle — skip it (the cyclic graph is
+		// invalid, but node atomization must still terminate).
 		if nested := ec.schemaDeclarations.UnionMemberTypes(m); len(nested) > 0 {
+			if _, seen := visited[m]; seen {
+				continue
+			}
 			if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m, nsMap); err != nil {
 				continue
 			}
-			if leaf := resolveActiveUnionLeafRec(ctx, ec, n, m, qnameNoDefault, val, nsMap, depth+1); leaf != nil {
+			visited[m] = struct{}{}
+			leaf := resolveActiveUnionLeafRec(ctx, ec, n, m, qnameNoDefault, val, nsMap, visited)
+			delete(visited, m)
+			if leaf != nil {
 				return leaf
 			}
 			continue
