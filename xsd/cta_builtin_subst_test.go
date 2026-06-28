@@ -117,4 +117,46 @@ func TestVersion11CTABuiltinHierarchySubstitutability(t *testing.T) {
 		_, err := compile(t, s)
 		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
+
+	// A built-in LIST type is NOT derived from its atomic ITEM type, so a complex
+	// simpleContent alternative based on the list type is NOT substitutable for an
+	// element declared as the item type (XSDCTA-861-001).
+	listVsItem := func(name, listType, itemType string) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="L">
+    <xs:simpleContent>
+      <xs:extension base="xs:` + listType + `"><xs:attribute name="tag" type="xs:string"/></xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e" type="xs:` + itemType + `">
+    <xs:alternative test="true()" type="L"/>
+  </xs:element>
+</xs:schema>`
+			_, err := compile(t, s)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
+	listVsItem("NMTOKENS list not substitutable for NMTOKEN item", "NMTOKENS", "NMTOKEN")
+	listVsItem("IDREFS list not substitutable for IDREF item", "IDREFS", "IDREF")
+	listVsItem("ENTITIES list not substitutable for ENTITY item", "ENTITIES", "ENTITY")
+
+	// The legitimate atomic string-family chain (xs:NMTOKEN ⊂ xs:token) is still
+	// accepted, confirming the list fix did not over-tighten atomic derivations.
+	t.Run("complex simpleContent extending NMTOKEN accepted for declared token", func(t *testing.T) {
+		t.Parallel()
+		const s = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="NM">
+    <xs:simpleContent>
+      <xs:extension base="xs:NMTOKEN"><xs:attribute name="tag" type="xs:string"/></xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e" type="xs:token">
+    <xs:alternative test="true()" type="NM"/>
+  </xs:element>
+</xs:schema>`
+		_, err := compile(t, s)
+		require.NoError(t, err)
+	})
 }

@@ -49,10 +49,13 @@ var builtinSimpleBase = map[string]string{
 	lexicon.TypeID:               lexicon.TypeNCName,
 	lexicon.TypeIDREF:            lexicon.TypeNCName,
 	lexicon.TypeENTITY:           lexicon.TypeNCName,
-	// String-family list types.
-	lexicon.TypeNMTokens: lexicon.TypeNMToken,
-	lexicon.TypeIDREFS:   lexicon.TypeIDREF,
-	lexicon.TypeENTITIES: lexicon.TypeENTITY,
+	// The built-in LIST types derive (by list construction) from xs:anySimpleType,
+	// NOT from their atomic item type — a list type is never ·validly derived· from
+	// its item type. Chaining them to NMTOKEN/IDREF/ENTITY would falsely accept e.g.
+	// an xs:NMTOKENS alternative for a declared xs:NMTOKEN.
+	lexicon.TypeNMTokens: lexicon.TypeAnySimpleType,
+	lexicon.TypeIDREFS:   lexicon.TypeAnySimpleType,
+	lexicon.TypeENTITIES: lexicon.TypeAnySimpleType,
 
 	// Decimal / integer family.
 	lexicon.TypeInteger:            lexicon.TypeDecimal,
