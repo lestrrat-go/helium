@@ -510,7 +510,26 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
 	c.includeFile = savedIncludeFileVC
 	if rootExcluded {
-		return nil
+		// The redefined document's root is vc-excluded, so it contributes NO
+		// Phase-A components. The <xs:redefine> override children (which live in the
+		// REDEFINING schema, not the excluded document) must STILL be validated
+		// against that empty target set: XSD rejects an override whose Phase-A
+		// target does not exist, so an override of a now-absent component is an
+		// error, not a silent no-op. (path is already in includeVisited from above;
+		// c.includeFile/form-defaults are the redefining schema's, correct for
+		// override-local diagnostics and declarations.)
+		emptyKeys := map[redefineKind]map[QName]struct{}{
+			redefineKindSimpleType:  {},
+			redefineKindComplexType: {},
+			redefineKindGroup:       {},
+			redefineKindAttrGroup:   {},
+		}
+		rs := &redefinableSet{
+			keys:     emptyKeys,
+			consumed: make(map[redefineKind]map[QName]struct{}),
+		}
+		c.loadedRedefinable[path] = rs
+		return c.processRedefineOverrides(ctx, redefineElem, rs.keys, rs.consumed)
 	}
 
 	// Check target namespace compatibility (same rules as include).

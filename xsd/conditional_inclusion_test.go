@@ -437,6 +437,37 @@ func TestConditionalInclusion(t *testing.T) {
 		require.Contains(t, combined.String(), "1.1.3")
 	})
 
+	t.Run("xs:redefine of a vc-excluded schema rejects absent-target overrides", func(t *testing.T) {
+		t.Parallel()
+		// The redefined document's root is vc-excluded (minVersion 2.0 > 1.1), so it
+		// contributes NO components. The <xs:redefine> override of "S" therefore
+		// targets a now-absent component and must be REJECTED (not silently accepted
+		// by skipping the override children).
+		const mainXSD = "vc_redef_main.xsd"
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="urn:t">
+  <xs:redefine schemaLocation="vc_redef_base.xsd">
+    <xs:simpleType name="S">
+      <xs:restriction base="S">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+</xs:schema>`)},
+			"vc_redef_base.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="urn:t" vc:minVersion="2.0">
+  <xs:simpleType name="S">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)},
+		}
+		data, err := fsys.ReadFile(mainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		_, compileErr := xsd.NewCompiler().Version(xsd.Version11).Label(mainXSD).FS(fsys).Compile(t.Context(), doc)
+		require.Error(t, compileErr)
+	})
+
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema ` + ns + ` targetNamespace="a" elementFormDefault="qualified">
