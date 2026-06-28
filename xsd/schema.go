@@ -243,7 +243,13 @@ const (
 
 // TypeDef is a schema type definition.
 type TypeDef struct {
-	Name         QName
+	Name QName
+	// IsComplex distinguishes a complex type DEFINITION from a simple one. It is a
+	// reliable discriminator independent of ContentType, because a complex type with
+	// <xs:simpleContent> also carries ContentType == ContentTypeSimple. Set true by
+	// parseComplexType (and for the built-in xs:anyType); a simple type definition
+	// (parseSimpleType, simple built-ins, recovery placeholders) leaves it false.
+	IsComplex    bool
 	ContentType  ContentTypeKind
 	ContentModel *ModelGroup
 	BaseType     *TypeDef

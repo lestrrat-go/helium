@@ -1119,6 +1119,7 @@ func registerBuiltinTypes(s *Schema, version Version) {
 			ContentType: ct,
 		}
 		if name == typeAnyType {
+			td.IsComplex = true
 			td.ContentType = ContentTypeMixed
 			td.AnyAttribute = &Wildcard{
 				Namespace:       WildcardNSAny,

@@ -396,9 +396,12 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 			}
 		}
 	}
-	// Only fall back to the under-strict acceptance when BOTH types are simple
-	// (or the declared type is a union): a simple alternative against a complex
-	// declared type is a definite violation.
-	declSimple := decl.ContentType == ContentTypeSimple || decl.Variety == TypeVarietyUnion
-	return alt.ContentType == ContentTypeSimple && declSimple
+	// Only fall back to the under-strict acceptance when BOTH sides are actual
+	// SIMPLE type DEFINITIONS. IsComplex is the reliable discriminator: a complex
+	// type with <xs:simpleContent> also has ContentType == ContentTypeSimple, so
+	// keying off ContentType would wrongly accept a simple alternative against such a
+	// complex declared type (or vice versa). A simple type can never be derived from
+	// a complex one, so a simple-vs-complex pair that isDerivedFrom did not accept is
+	// always a real violation, not a built-in-hierarchy-linking gap.
+	return !alt.IsComplex && !decl.IsComplex
 }
