@@ -139,3 +139,132 @@ func TestValidateIDIDREF(t *testing.T) {
 		require.Error(t, compileValidate(t, xsd.Version11, idrefSchema, bad))
 	})
 }
+
+// TestIDConstraintRef covers XSD 1.1 identity-constraint @ref: a key/unique/
+// keyref may reference another constraint of the SAME kind, reusing its
+// selector/fields (and, for keyref, its refer). A reference to a missing
+// constraint, or to a constraint of a different kind, is a schema error.
+func TestIDConstraintRef(t *testing.T) {
+	compile := func(t *testing.T, schemaXML string) (*xsd.Schema, error) {
+		t.Helper()
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		return xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	}
+	validate := func(t *testing.T, schema *xsd.Schema, instanceXML string) error {
+		t.Helper()
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	const uniqueRefSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="chap">
+          <xs:unique name="u"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:unique>
+        </xs:element>
+        <xs:element name="appx" type="chap">
+          <xs:unique ref="u"/>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	t.Run("unique ref applies the referenced constraint at the new host", func(t *testing.T) {
+		t.Parallel()
+		schema, err := compile(t, uniqueRefSchema)
+		require.NoError(t, err)
+		// Duplicate @nr inside appx (which uses the ref'd unique) is invalid.
+		bad := `<doc><appx><section nr="1"/><section nr="1"/></appx></doc>`
+		require.Error(t, validate(t, schema, bad))
+		ok := `<doc><appx><section nr="1"/><section nr="2"/></appx></doc>`
+		require.NoError(t, validate(t, schema, ok))
+	})
+
+	t.Run("ref to a nonexistent constraint is a schema error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
+    <xs:unique ref="missing"/>
+  </xs:element>
+</xs:schema>`
+		_, err := compile(t, schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
+	t.Run("ref to a different kind of constraint is a schema error", func(t *testing.T) {
+		t.Parallel()
+		// A key referencing a unique is a kind mismatch.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="chap">
+          <xs:unique name="u"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:unique>
+        </xs:element>
+        <xs:element name="appx" type="chap">
+          <xs:key ref="u"/>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+		_, err := compile(t, schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+}
+
+// TestIDCXPathDefaultNamespace verifies that @xpathDefaultNamespace on an
+// identity-constraint selector resolves unprefixed element name tests against
+// the given namespace, so a uniqueness violation in a namespaced document is
+// detected (it would be missed if the unprefixed name matched no-namespace).
+func TestIDCXPathDefaultNamespace(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:x" xmlns:s="urn:x" elementFormDefault="qualified">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence><xs:element name="emp" type="s:emp" maxOccurs="unbounded"/></xs:sequence>
+    </xs:complexType>
+    <xs:unique name="u">
+      <xs:selector xpath="emp" xpathDefaultNamespace="urn:x"/>
+      <xs:field xpath="nr" xpathDefaultNamespace="urn:x"/>
+    </xs:unique>
+  </xs:element>
+  <xs:complexType name="emp">
+    <xs:sequence><xs:element name="nr" type="xs:int"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err)
+
+	dup := `<doc xmlns="urn:x"><emp><nr>1</nr></emp><emp><nr>1</nr></emp></doc>`
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(dup))
+	require.NoError(t, err)
+	require.Error(t, xsd.NewValidator(schema).Validate(t.Context(), idoc))
+
+	ok := `<doc xmlns="urn:x"><emp><nr>1</nr></emp><emp><nr>2</nr></emp></doc>`
+	idoc2, err := helium.NewParser().Parse(t.Context(), []byte(ok))
+	require.NoError(t, err)
+	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc2))
+}

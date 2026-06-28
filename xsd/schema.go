@@ -210,6 +210,14 @@ type IDConstraint struct {
 	SelectorDefaultNS string
 	FieldDefaultNS    []string
 
+	// IsConstraintRef marks an XSD 1.1 identity-constraint that uses @ref to point
+	// at another constraint instead of declaring its own name/selector/field. At
+	// compile time the referenced constraint's selector/fields (and, for keyref,
+	// its refer) are copied in, so validation treats it like any other constraint.
+	IsConstraintRef    bool
+	ConstraintRef      string // lexical @ref QName as written
+	ConstraintRefQName QName  // resolved {ns}local of the referenced constraint
+
 	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
 }
 

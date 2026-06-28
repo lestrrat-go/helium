@@ -703,8 +703,33 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
-	if name == "" {
+	ref := ""
+	if c.version == Version11 {
+		ref = getAttr(elem, attrRef)
+	}
+	if name == "" && ref == "" {
 		return nil
+	}
+
+	// XSD 1.1 identity-constraint @ref: the constraint reuses a referenced
+	// constraint's name/selector/field. name/selector/field must be absent here;
+	// the referenced constraint is resolved (and its selector/fields copied in)
+	// at compile time by resolveConstraintRefs.
+	if ref != "" {
+		source := c.includeFile
+		if source == "" {
+			source = c.filename
+		}
+		idc := &IDConstraint{
+			Kind:            kind,
+			Namespaces:      collectNSContext(elem),
+			Line:            elem.Line(),
+			Source:          source,
+			IsConstraintRef: true,
+			ConstraintRef:   ref,
+		}
+		idc.ConstraintRefQName = c.resolveIDCNameQName(elem, ref)
+		return idc
 	}
 	// Source pins the filename of the schema document that declares this
 	// constraint, paired with Line. A constraint parsed inside an
@@ -855,6 +880,21 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		ns = defNS
 	}
 	return QName{Local: refer, NS: ns}, false
+}
+
+// resolveIDCNameQName resolves an identity-constraint @ref QName against the
+// element's in-scope namespaces. A prefixed ref resolves its prefix; an
+// unprefixed ref uses the in-scope default namespace, falling back to the
+// schema's target namespace (identity-constraints live in the target namespace).
+func (c *compiler) resolveIDCNameQName(elem *helium.Element, ref string) QName {
+	if prefix, local, found := strings.Cut(ref, ":"); found {
+		return QName{Local: local, NS: lookupNS(elem, prefix)}
+	}
+	ns := c.schema.targetNamespace
+	if defNS := lookupNS(elem, ""); defNS != "" {
+		ns = defNS
+	}
+	return QName{Local: ref, NS: ns}
 }
 
 // reportIDCXPathError reports a malformed identity-constraint selector/field
