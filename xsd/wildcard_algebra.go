@@ -245,6 +245,13 @@ func strongerProcessContents(a, b ProcessContentsKind) ProcessContentsKind {
 // the union even if the other operand excludes it explicitly — see W3C wild083
 // (`surprise` is allowed because the ##defined operand admits it by namespace).
 // ##definedSibling is folded the same way (kept iff both carry it).
+//
+// processContents: the union's {process contents} is the SECOND operand's (b's).
+// The sole caller where this matters is TYPE EXTENSION, which passes
+// wildcardUnion(base, derived) — and per XSD 3.4.2 the extension's effective
+// (complete) attribute wildcard takes the DERIVED wildcard's processContents, NOT
+// the base's. (This is direction-specific and differs from intersectWildcards,
+// which takes the STRONGER of the two; that case is order-independent.)
 func unionWildcards11(a, b *Wildcard) *Wildcard {
 	con := constraintUnion(wildcardConstraint(a), wildcardConstraint(b))
 	var disallowed []QName
@@ -272,7 +279,7 @@ func unionWildcards11(a, b *Wildcard) *Wildcard {
 		}
 		siblings = append(siblings, qn)
 	}
-	return constraintToWildcard(con, a.ProcessContents, a.TargetNS, disallowed,
+	return constraintToWildcard(con, b.ProcessContents, a.TargetNS, disallowed,
 		a.NotQNameDefined && b.NotQNameDefined,
 		a.NotQNameDefinedSibling && b.NotQNameDefinedSibling,
 		siblings)

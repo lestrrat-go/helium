@@ -105,6 +105,61 @@ func TestVersion11RedefineAddsGroupWildcard(t *testing.T) {
 	})
 }
 
+// TestVersion11ExtensionUnionProcessContents covers gauntlet finding
+// PR858-R9-001: the attribute-wildcard UNION for TYPE EXTENSION must take the
+// DERIVED (second operand's) processContents, not the base's. A base wildcard
+// with skip + a 1.1 field (forcing the 1.1 union path) extended by a strict
+// wildcard must yield a strict effective wildcard, so an undeclared attribute is
+// rejected (strict demands a global declaration).
+func TestVersion11ExtensionUnionProcessContents(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" notQName="bad" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="e">
+    <xs:complexContent>
+      <xs:extension base="b">
+        <xs:anyAttribute namespace="##any" processContents="strict"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="e"/>
+</xs:schema>`
+
+	t.Run("extension strict wildcard rejects an undeclared attribute", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<root foo="1"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("extension strict wildcard admits a globally-declared attribute", func(t *testing.T) {
+		t.Parallel()
+		// A strict wildcard accepts an attribute that DOES have a global
+		// declaration, confirming the result is strict (not skip) rather than
+		// rejecting everything.
+		const declSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="g" type="xs:string"/>
+  <xs:complexType name="b">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" notQName="bad" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="e">
+    <xs:complexContent>
+      <xs:extension base="b">
+        <xs:anyAttribute namespace="##any" processContents="strict"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="e"/>
+</xs:schema>`
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), declSchema,
+			`<root g="x"/>`)
+		require.NoError(t, err)
+	})
+}
+
 // TestVersion11UnionRetainsSiblingNames covers gauntlet finding PR858-R6-003: a
 // materialized wildcard UNION (base xs:all with two disjoint ##definedSibling
 // wildcards) must carry the resolved SiblingNames, not just the marker bit. A
