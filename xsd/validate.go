@@ -682,11 +682,16 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	if err != nil {
 		return err
 	}
-	// Check block flags against xsi:type derivation.
+	// Check block flags against xsi:type derivation. A blocked xsi:type is a
+	// validity error (cvc-elt.4.3): fail rather than silently fall back to the
+	// declared type — otherwise a blocked narrowing whose value is also valid under
+	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
+	// block="restriction") would be wrongly accepted. This mirrors the per-child
+	// match sites, which already treat a blocked xsi:type as a content error.
 	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-		td = declType // fall back to declared type
+		return fmt.Errorf("blocked xsi:type")
 	}
 	if td != nil && td.Abstract {
 		msg := msgAbstractType

@@ -946,6 +946,20 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 		}
 		td = td.BaseType
 	}
+	// The BaseType pointer chain is NOT linked for built-in simple types, so it can
+	// bottom out (td == nil) before reaching a built-in base. ALL built-in
+	// simple-type derivation is by RESTRICTION, so when base is a built-in simple
+	// type that derived's effective built-in base is a STRICT subtype of, a blocked
+	// restriction derivation must be rejected — e.g. xsi:type="xs:int" over a
+	// declared xs:integer with block="restriction" (or block="#all"). Without this
+	// the block is bypassed because isDerivedFrom-style pointer walking can't chain
+	// xs:int → xs:integer.
+	if td != base && blocked&BlockRestriction != 0 && isBuiltinSimpleType(base) {
+		db := builtinBaseLocal(derived)
+		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
+			return true
+		}
+	}
 	return false
 }
 
