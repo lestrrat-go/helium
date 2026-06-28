@@ -507,6 +507,41 @@ func TestVersion11AssertionRound3Fixes(t *testing.T) {
 	})
 }
 
+func TestVersion11AssertionFacetSchemaAwareUnionCast(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="SmallInt">
+    <xs:restriction base="xs:int">
+      <xs:maxInclusive value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="SmallIntUnion">
+    <xs:union memberTypes="t:SmallInt"/>
+  </xs:simpleType>
+  <xs:element name="castable">
+    <xs:simpleType>
+      <xs:restriction base="xs:string">
+        <xs:assertion test="$value castable as t:SmallIntUnion"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="cast">
+    <xs:simpleType>
+      <xs:restriction base="xs:string">
+        <xs:assertion test="($value cast as t:SmallIntUnion) instance of t:SmallInt"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<castable xmlns="urn:t">5</castable>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<castable xmlns="urn:t">12</castable>`), xsd.ErrValidationFailed)
+	require.NoError(t, validateAssertion(t, schema, `<cast xmlns="urn:t">5</cast>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<cast xmlns="urn:t">12</cast>`), xsd.ErrValidationFailed)
+}
+
 // TestVersion11AttrMergeExtensionOfRestriction covers the round-4 finding
 // (XSD11-ATTR-MERGE-EXT-001): an EXTENSION whose base is a RESTRICTION that
 // itself inherited a required attribute must still require it. The effective

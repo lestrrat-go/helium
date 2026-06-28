@@ -21,22 +21,6 @@ func evalInstanceOfExpr(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 	return SingleBoolean(matchesSequenceType(seq, e.Type, ec)), nil
 }
 
-// castTargetParts derives the (local, ns) pair used for schema-declaration
-// lookups in the cast/castable schema fallback. It prefers the ALREADY-RESOLVED
-// targetType (Q{ns}local), which correctly reflects an xpathDefaultNamespace
-// applied to an UNPREFIXED type name; it falls back to the lexical type's prefix
-// binding only when targetType is not a resolved expanded name.
-func castTargetParts(targetType string, t AtomicTypeName, ec *evalContext) (local, ns string) {
-	if l, n, ok := schemaAnnotationParts(targetType); ok {
-		return l, n
-	}
-	local = t.Name
-	if t.Prefix != "" && ec != nil && ec.namespaces != nil {
-		ns = ec.namespaces[t.Prefix]
-	}
-	return local, ns
-}
-
 // qnameCastLexical prepares the (lexical, nsMap) used to re-validate an
 // ALREADY-RESOLVED QName VALUE against a schema-aware QName/NOTATION-derived cast
 // target. The source value's prefix may be bound only on the instance node and
@@ -64,6 +48,82 @@ func qnameCastLexical(qv QNameValue, base map[string]string) (string, map[string
 	}
 	ns[prefix] = qv.URI
 	return prefix + ":" + qv.Local, ns
+}
+
+func schemaAwareCast(ctx context.Context, ec *evalContext, av AtomicValue, targetType string) (AtomicValue, error) {
+	return schemaAwareCastRec(ctx, ec, av, targetType, make(map[string]struct{}))
+}
+
+func schemaAwareCastRec(ctx context.Context, ec *evalContext, av AtomicValue, targetType string, seen map[string]struct{}) (AtomicValue, error) {
+	result, err := CastAtomic(av, targetType)
+	if err == nil {
+		return result, nil
+	}
+	if ec == nil || ec.schemaDeclarations == nil {
+		return AtomicValue{}, err
+	}
+	if _, active := seen[targetType]; active {
+		return AtomicValue{}, err
+	}
+	seen[targetType] = struct{}{}
+	defer delete(seen, targetType)
+
+	schemaErr := err
+	if local, ns, ok := schemaAnnotationParts(targetType); ok {
+		annName := QAnnotation(ns, local)
+		if builtinBase := resolveToBuiltinBase(local, ns, ec.schemaDeclarations); builtinBase != "" {
+			result, baseErr := schemaAwareCastViaBuiltin(ctx, ec, av, targetType, annName, builtinBase, err)
+			if baseErr == nil {
+				return result, nil
+			}
+			schemaErr = baseErr
+		}
+	}
+	if members := ec.schemaDeclarations.UnionMemberTypes(targetType); len(members) > 0 {
+		for _, memberType := range members {
+			result, castErr := schemaAwareCastRec(ctx, ec, av, memberType, seen)
+			if castErr == nil {
+				return result, nil
+			}
+		}
+	}
+	return AtomicValue{}, schemaErr
+}
+
+func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicValue, targetType, annName, builtinBase string, fallback error) (AtomicValue, error) {
+	if builtinBase == TypeNOTATION || builtinBase == TypeQName {
+		_, isQV := av.Value.(QNameValue)
+		srcOK := av.TypeName == TypeString || av.TypeName == TypeUntypedAtomic ||
+			av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
+		if !srcOK {
+			return AtomicValue{}, fallback
+		}
+		s, _ := AtomicToString(av)
+		nsForCast := ec.namespaces
+		if qv, isQV := av.Value.(QNameValue); isQV {
+			s, nsForCast = qnameCastLexical(qv, ec.namespaces)
+		}
+		if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); vErr != nil {
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
+		}
+		qv, qErr := castToQName(av, ec)
+		if qErr != nil {
+			return AtomicValue{}, qErr
+		}
+		qv.BaseType = builtinBase
+		qv.TypeName = targetType
+		return qv, nil
+	}
+	result, castErr := CastAtomic(av, builtinBase)
+	if castErr != nil {
+		return AtomicValue{}, castErr
+	}
+	s, _ := AtomicToString(result)
+	if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
+		return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
+	}
+	result.TypeName = targetType
+	return result, nil
 }
 
 func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
@@ -117,61 +177,9 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	}
 	result, err := CastAtomic(av, targetType)
 	if err != nil {
-		// If CastAtomic fails for a non-built-in type, try resolving via schema declarations.
-		if ec.schemaDeclarations != nil {
-			local, ns := castTargetParts(targetType, e.Type, ec)
-			annName := QAnnotation(ns, local)
-			if builtinBase := resolveToBuiltinBase(local, ns, ec.schemaDeclarations); builtinBase != "" {
-				// QName/NOTATION-derived user types need namespace context (the
-				// abstract base cannot be a direct CastAtomic target). Mirror the
-				// castable branch: validate with namespace context and return the
-				// namespace-RESOLVED QName/NOTATION value carrying the user type.
-				if builtinBase == TypeNOTATION || builtinBase == TypeQName {
-					_, isQV := av.Value.(QNameValue)
-					srcOK := av.TypeName == TypeString || av.TypeName == TypeUntypedAtomic ||
-						av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
-					if !srcOK {
-						return nil, err
-					}
-					s, _ := AtomicToString(av)
-					nsForCast := ec.namespaces
-					if qv, isQV := av.Value.(QNameValue); isQV {
-						s, nsForCast = qnameCastLexical(qv, ec.namespaces)
-					}
-					if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); vErr != nil {
-						return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
-					}
-					qv, qErr := castToQName(av, ec)
-					if qErr != nil {
-						return nil, qErr
-					}
-					qv.BaseType = builtinBase
-					qv.TypeName = targetType
-					return SingleAtomic(qv), nil
-				}
-				result, castErr := CastAtomic(av, builtinBase)
-				if castErr != nil {
-					return nil, castErr
-				}
-				// Validate facets for user-defined types using Q{ns}local format.
-				s, _ := AtomicToString(result)
-				if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
-					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
-				}
-				result.TypeName = targetType
-				return SingleAtomic(result), nil
-			}
-			// For union types, try each member type.
-			if members := ec.schemaDeclarations.UnionMemberTypes(targetType); len(members) > 0 {
-				for _, memberType := range members {
-					result, castErr := CastAtomic(av, memberType)
-					if castErr == nil {
-						return SingleAtomic(result), nil
-					}
-				}
-			}
+		if result, err = schemaAwareCast(ctx, ec, av, targetType); err != nil {
+			return nil, err
 		}
-		return nil, err
 	}
 	return SingleAtomic(result), nil
 }
@@ -227,41 +235,7 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		_, castErr := CastAtomic(av, TypeDouble)
 		return SingleBoolean(castErr == nil), nil
 	}
-	_, castErr := CastAtomic(av, targetType)
-	if castErr != nil && ec.schemaDeclarations != nil {
-		local, ns := castTargetParts(targetType, e.Type, ec)
-		annName := QAnnotation(ns, local)
-		if builtinBase := resolveToBuiltinBase(local, ns, ec.schemaDeclarations); builtinBase != "" {
-			// NOTATION and QName derived types require namespace context
-			// for resolution. The abstract base type (xs:NOTATION, xs:QName)
-			// cannot be used as a cast target directly, so validate with
-			// namespace context instead.
-			if builtinBase == TypeNOTATION || builtinBase == TypeQName {
-				// Only string, untypedAtomic, QName, and NOTATION types
-				// (or schema-derived variants holding QNameValue) can be
-				// cast to QName/NOTATION derived types.
-				_, isQV := av.Value.(QNameValue)
-				srcOK := av.TypeName == TypeString || av.TypeName == TypeUntypedAtomic ||
-					av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
-				if srcOK {
-					s, _ := AtomicToString(av)
-					nsForCast := ec.namespaces
-					if qv, isQV := av.Value.(QNameValue); isQV {
-						s, nsForCast = qnameCastLexical(qv, ec.namespaces)
-					}
-					castErr = ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast)
-				}
-			} else {
-				result, baseErr := CastAtomic(av, builtinBase)
-				if baseErr == nil {
-					s, _ := AtomicToString(result)
-					castErr = ec.schemaDeclarations.ValidateCast(ctx, s, annName)
-				} else {
-					castErr = baseErr
-				}
-			}
-		}
-	}
+	_, castErr := schemaAwareCast(ctx, ec, av, targetType)
 	return SingleBoolean(castErr == nil), nil
 }
 
