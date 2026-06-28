@@ -422,8 +422,13 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	if strictBuiltinAwareDerivedFrom(alt, decl) {
 		return true
 	}
-	if decl.Variety == TypeVarietyUnion {
-		for _, m := range decl.MemberTypes {
+	// Use the variety/members RESOLVED through the base chain: a named type that
+	// restricts an inline union keeps union variety only via its base (its direct
+	// Variety/MemberTypes are empty), so reading decl.Variety/decl.MemberTypes
+	// directly would skip the union branch and false-reject a member-derived
+	// alternative. The member check stays strict and recursive (no fallback).
+	if resolveVariety(decl) == TypeVarietyUnion {
+		for _, m := range resolveUnionMembers(decl) {
 			if isValidlySubstitutable(alt, m) {
 				return true
 			}
