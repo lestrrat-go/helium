@@ -345,10 +345,16 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			}
 		}
 
-		// An element ref may only carry (annotation?). ANY other XSD child — an
+		// An element ref may only carry (annotation?). Any other XSD child — an
 		// inline complexType/simpleType, an xs:alternative (XSD 1.1 CTA belongs to
 		// the referenced GLOBAL declaration, not the ref), or any stray XSD element —
-		// is invalid. Report the first such child uniformly.
+		// is invalid. The check is scoped to the XSD namespace because helium
+		// consistently TOLERATES foreign-namespace element children across every
+		// other schema component (complexType, global element, attribute, model
+		// groups all silently ignore them via switch-on-isXSDElement with no default
+		// rejection); rejecting them only here would be inconsistent. The diagnostic
+		// is attributed to the declaring file (c.diagSource), so an included/redefined
+		// schema's violation cites that file, not the top-level label.
 		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
@@ -358,7 +364,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 				continue
 			}
 			if ce.URI() == lexicon.NamespaceXSD && !isXSDElement(ce, elemAnnotation) {
-				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "element",
 					"The content is not valid. Expected is (annotation?)."))
 				break // only report first
 			}
