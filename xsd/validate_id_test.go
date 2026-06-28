@@ -921,3 +921,44 @@ func TestIDSimpleContentWithChildNoSpuriousDangling(t *testing.T) {
 			"a genuinely-empty element's default must still be collected; got: %q", errs)
 	})
 }
+
+// TestIDStrictWildcardFailureNoSpuriousDuplicate covers the post-merge bug where
+// the strict-wildcard / no-global-declaration FAILURE path walked the subtree with
+// annotateAnyTypeChildren, which (after the lax-assessment work) laxly ASSESSES
+// globally-declared descendants and populates assessedElemType. Pass 3 then
+// collected xs:ID values from a subtree whose strict wildcard match already
+// FAILED, fabricating a duplicate-ID on top of the real strict errors. The fix
+// uses canonicalization-only annotateSkipChildren for the strict failure, so the
+// unassessed subtree is never collected.
+func TestIDStrictWildcardFailureNoSpuriousDuplicate(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="id" type="xs:ID"/>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="strict" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err)
+
+	// w1/w2 have no global declaration: the strict wildcard fails for each. Their
+	// globally-declared <id> grandchildren carry duplicate xs:ID "dup", but the
+	// strict-failed subtree is NOT assessed, so no duplicate-ID must be reported.
+	inst := `<doc><w1><id>dup</id></w1><w2><id>dup</id></w2></doc>`
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(inst))
+	require.NoError(t, err)
+
+	var errs string
+	verr := validateWithOutput(t, xsd.NewValidator(schema), idoc, &errs)
+	require.Error(t, verr, "the strict wildcard failure must fail validation")
+	require.Contains(t, errs, "demanded by the strict wildcard",
+		"the real strict-wildcard error must be reported; got: %q", errs)
+	require.NotContains(t, errs, "Duplicate key-sequence",
+		"a strict-failed (unassessed) subtree must not produce a spurious duplicate-ID; got: %q", errs)
+}

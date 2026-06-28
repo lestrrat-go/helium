@@ -861,12 +861,16 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		if wc.ProcessContents == ProcessStrict {
 			msg := "No matching global declaration available, but demanded by the strict wildcard."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
-			// Still recurse into the subtree so any deeper descendant that DOES have
-			// a global declaration gets its ACTUAL type recorded for pass-2 IDC
-			// canonicalization (annotation only; the strict failure already stands).
-			if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
-				return err
-			}
+			// Strict assessment FAILED (no declaration), so the element AND its whole
+			// subtree are NOT schema-assessed — exactly like skip content. Walk it
+			// with annotateSkipChildren (canonicalization-only: records pass-2
+			// actualElemType with assessed=false, NEVER assessedElemType/actualAttrType
+			// and reports no diagnostics), so pass 3 does NOT collect xs:ID/xs:IDREF
+			// from this unassessed subtree. annotateAnyTypeChildren must NOT be used
+			// here: it laxly ASSESSES globally-declared / xsi:typed descendants, which
+			// would fabricate a duplicate-ID/dangling diagnostic on top of the real
+			// strict-wildcard failure.
+			vc.annotateSkipChildren(ctx, child.elem)
 			return fmt.Errorf("strict wildcard: no global element decl")
 		}
 		// Lax with no global declaration: per XSD lax assessment, if a governing

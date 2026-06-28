@@ -452,11 +452,18 @@ matched element itself, so it both false-accepted invalid `xsi:type` content and
 missed its ID. `assessLaxElement` NEVER lets `xsi:nil="true"` bypass validation: an
 undeclared element has no nillable declaration, so its content is always validated
 against the governing type (a nilled lax element with invalid or type-forbidden
-content is rejected; empty content a type permits stays valid). So a `skip`
-wildcard element — even one carrying `xsi:type="xs:ID"` — is NEVER assessed and is
-not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element IS. This avoids both
-false-rejecting duplicate skipped IDs and false-accepting duplicate (or invalid)
-lax-assessed xsi:type content. The pass never runs in 1.0
+content is rejected; empty content a type permits stays valid). The STRICT
+wildcard FAILURE path (a strict wildcard matching an element with no global
+declaration) is, like `skip`, NOT assessed: `validateWildcardChild` reports the
+strict error then walks the subtree with `annotateSkipChildren` (canonicalization-
+only, never `assessedElemType`), NOT `annotateAnyTypeChildren` — using the lax
+traversal there would laxly ASSESS globally-declared / xsi:typed descendants of a
+strict-FAILED subtree and fabricate a spurious duplicate-ID/dangling on top of the
+real strict error. So a `skip` wildcard element AND a strict-failed subtree — even
+ones carrying `xsi:type="xs:ID"` or globally-declared `xs:ID` descendants — are
+NEVER assessed and not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element
+IS. This avoids both false-rejecting duplicate skipped/strict-failed IDs and
+false-accepting duplicate (or invalid) lax-assessed xsi:type content. The pass never runs in 1.0
 mode, so the libxml2-compat goldens stay byte-identical. ID/IDREF members inside a
 union ARE covered: `collectIDFromValue`'s union branch resolves the active member
 (`unionActiveMember`) and recurses to the atomic ID/IDREF leaf (and `idFamilyType`
