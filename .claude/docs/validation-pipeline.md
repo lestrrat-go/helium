@@ -346,7 +346,15 @@ URI (`##targetNamespace`/`##defaultNamespace`/`##local`/literal URI) and stored
 per selector/field (`IDConstraint.SelectorDefaultNS`/`FieldDefaultNS`).
 `evaluateIDC` applies it via the opt-in `xpath1.Evaluator.DefaultElementNamespace`,
 which matches unprefixed ELEMENT name tests against that URI (attributes are
-never affected — they have no default namespace). `@ref` on an identity
+never affected — they have no default namespace). The schema-level
+`@xpathDefaultNamespace` (`compiler.schemaXPathDefaultNS`, read by
+`resolveXPathDefaultNS` when a selector/field has none) is a PER-document setting:
+`compile_imports.go` saves/sets/restores it across `xs:include`/`xs:redefine`
+(alongside elementFormDefault/blockDefault/finalDefault and `includeFile`) and
+sets it on the import sub-compiler from the imported root — so an included/
+imported schema's IDCs inherit ITS root's value, not the including/importing
+schema's (otherwise an included `xpath="emp"` selector would silently resolve to
+no-namespace and miss duplicates). `@ref` on an identity
 constraint (`resolveConstraintRefs`, `compile.go`, run after `checkDuplicateIDCs`
 and before `checkKeyRefRefers`) makes the constraint reuse a referenced
 constraint's selector/fields — and a keyref's `refer` — and adopt its QName
