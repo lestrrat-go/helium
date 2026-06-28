@@ -1547,3 +1547,58 @@ func TestVersion11AssertInlineAnonQNameDescendantElement(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p"><c>p:a p:b</c></e>`))
 }
+
+// TestVersion11AssertUnionActiveMemberFacet verifies that assert NODE atomization
+// selects a union's ACTIVE member with FULL schema-aware validation, not just a
+// lexical cast (PR859-CR20-01). The first member ExactlyTwoInts is an xs:list of
+// xs:int restricted to length=2; for value "1 2 3" every token casts to xs:int but
+// the LIST LENGTH facet fails, so the active member must be the later xs:string —
+// data(@u) is one string, not three ints.
+func TestVersion11AssertUnionActiveMemberFacet(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ExactlyTwoInts">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:int"/>
+      </xs:simpleType>
+      <xs:length value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="ExactlyTwoInts xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 1 and (data(@u) instance of xs:string)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// "1 2 3" fails the length=2 facet of the list member, so xs:string is active.
+	require.NoError(t, validateAssertion(t, schema, `<e u="1 2 3"/>`))
+	// "1 2" satisfies the length=2 list member, which is active → two xs:int items.
+	const schemaXML2 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ExactlyTwoInts">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:int"/>
+      </xs:simpleType>
+      <xs:length value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="ExactlyTwoInts xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 2 and (data(@u)[1] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML2)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e u="1 2"/>`))
+}

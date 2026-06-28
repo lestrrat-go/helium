@@ -239,6 +239,12 @@ type NodeItem struct {
 	// so a union node's ACTIVE member can be resolved value-dependently during
 	// atomization without schema access.
 	UnionMembers []NodeItemUnionMember
+	// ActiveUnionMember is the index into UnionMembers of the value-dependent ACTIVE
+	// member (the first member, in declaration order, the node's value FULLY
+	// validates against — including facets/list-length/assertions), or -1 when none
+	// resolved. Precomputed in nodeItemFor via full schema-aware validation so it
+	// agrees with the $value path's active-member selection.
+	ActiveUnionMember int
 	// QNameNoDefaultNS, when true, atomizes an UNPREFIXED QName/NOTATION value to
 	// NO namespace instead of resolving the node's in-scope default namespace —
 	// XSD value-space semantics (a QName VALUE, unlike a name, does not pick up the

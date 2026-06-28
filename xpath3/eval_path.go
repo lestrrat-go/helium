@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -30,13 +31,13 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 	if ec.vars != nil {
 		// Try exact name first
 		if v, ok := ec.vars.Lookup(e.Name); ok {
-			return enrichNodeItems(ec, v), nil
+			return enrichNodeItems(ctx, ec, v), nil
 		}
 		// If EQName (Q{uri}local), normalize to {uri}local and retry
 		if strings.HasPrefix(e.Name, "Q{") {
 			resolved := e.Name[1:] // strip leading "Q"
 			if v, ok := ec.vars.Lookup(resolved); ok {
-				return enrichNodeItems(ec, v), nil
+				return enrichNodeItems(ctx, ec, v), nil
 			}
 		}
 		// If prefixed, resolve to {uri}local and retry
@@ -45,7 +46,7 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 				local := e.Name[len(e.Prefix)+1:] // strip "prefix:"
 				resolved := helium.ClarkName(uri, local)
 				if v, ok := ec.vars.Lookup(resolved); ok {
-					return enrichNodeItems(ec, v), nil
+					return enrichNodeItems(ctx, ec, v), nil
 				}
 			}
 		}
@@ -55,7 +56,7 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 		if v, ok, err := ec.variableResolver.ResolveVariable(ctx, e.Name); err != nil {
 			return nil, err
 		} else if ok {
-			return enrichNodeItems(ec, v), nil
+			return enrichNodeItems(ctx, ec, v), nil
 		}
 	}
 	return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
@@ -65,7 +66,7 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 // and related fields set from the evalContext's type annotations map. This is
 // needed because variables may store NodeItems created before type annotations
 // were available (e.g., validated after construction).
-func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
+func enrichNodeItems(ctx context.Context, ec *evalContext, seq Sequence) Sequence {
 	if ec == nil || ec.typeAnnotations == nil {
 		return seq
 	}
@@ -85,7 +86,7 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 	i := 0
 	for item := range seqItems(seq) {
 		if ni, ok := item.(NodeItem); ok && ni.TypeAnnotation == "" {
-			enriched := nodeItemFor(ec, ni.Node)
+			enriched := nodeItemFor(ctx, ec, ni.Node)
 			result[i] = enriched
 		} else {
 			result[i] = item
@@ -152,7 +153,7 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 
 	result := make(ItemSlice, len(nodes))
 	for i, n := range nodes {
-		result[i] = nodeItemFor(ec, n)
+		result[i] = nodeItemFor(ctx, ec, n)
 	}
 	return result, nil
 }
@@ -191,12 +192,12 @@ func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 
 	result := make(ItemSlice, len(nodes))
 	for i, n := range nodes {
-		result[i] = nodeItemFor(ec, n)
+		result[i] = nodeItemFor(ctx, ec, n)
 	}
 	return result, nil
 }
 
-func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
+func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
 	ni := NodeItem{Node: n}
 	if ec == nil || ec.typeAnnotations == nil {
 		return ni
@@ -223,9 +224,94 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 				}
 				ni.UnionMembers[i] = meta
 			}
+			ni.ActiveUnionMember = resolveActiveUnionMember(ctx, ec, n, ni)
 		}
 	}
 	return ni
+}
+
+// resolveActiveUnionMember selects a union node's ACTIVE member: the first member,
+// in declaration order, whose value FULLY validates — both the lexical/value cast
+// (and, for a list member, every token plus the list structure) AND the member's
+// own facets/assertions via SchemaDeclarations.ValidateCastWithNS (which is a no-op
+// for built-ins, where the cast check already covers validity). This matches the
+// $value path's active-member selection so data() and $value agree. Returns -1 when
+// no member validates (the caller then falls back to single-value atomization).
+func resolveActiveUnionMember(ctx context.Context, ec *evalContext, n helium.Node, ni NodeItem) int {
+	val := ixpath.StringValue(n)
+	var nsMap map[string]string
+	nsReady := false
+	for i, m := range ni.UnionMembers {
+		if !unionMemberCastOK(val, m, ni.Node, ni.QNameNoDefaultNS) {
+			continue
+		}
+		if ec.schemaDeclarations != nil {
+			if !nsReady {
+				nsMap = inScopeNSMap(n)
+				nsReady = true
+			}
+			if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m.TypeName, nsMap); err != nil {
+				continue
+			}
+		}
+		return i
+	}
+	return -1
+}
+
+// unionMemberCastOK reports whether val is lexically/value-valid for a union member
+// (a list member requires every whitespace token to atomize, an atomic member to
+// cast / a QName/NOTATION member to resolve as a single token). It does NOT check
+// user facets — resolveActiveUnionMember layers ValidateCastWithNS on top — but it
+// is what enforces BUILT-IN member validity (ValidateCast is a no-op for built-ins).
+func unionMemberCastOK(val string, m NodeItemUnionMember, node helium.Node, qnameNoDefault bool) bool {
+	if m.ListItem != "" {
+		tokens := strings.Fields(val)
+		if len(tokens) == 0 {
+			return false
+		}
+		lni := NodeItem{Node: node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: qnameNoDefault}
+		for _, tok := range tokens {
+			if _, err := atomizeListToken(tok, m.ListItem, lni); err != nil {
+				return false
+			}
+		}
+		return true
+	}
+	if m.Atomized == TypeQName || m.Atomized == TypeNOTATION ||
+		m.TypeName == TypeQName || m.TypeName == TypeNOTATION {
+		if len(strings.Fields(val)) != 1 {
+			return false
+		}
+		_, err := resolveQNameFromNode(val, node, qnameNoDefault)
+		return err == nil
+	}
+	t := m.Atomized
+	if t == "" {
+		t = m.TypeName
+	}
+	_, err := CastFromString(val, t)
+	return err == nil
+}
+
+// inScopeNSMap returns the in-scope namespace bindings (prefix → URI) for a node,
+// used to resolve QName prefixes when validating a union member value-dependently.
+func inScopeNSMap(n helium.Node) map[string]string {
+	scope := n
+	if _, ok := scope.(*helium.Element); !ok {
+		if p := n.Parent(); p != nil {
+			scope = p
+		}
+	}
+	e, ok := scope.(*helium.Element)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string)
+	for prefix, ns := range domutil.InScopeNamespaces(e, false) {
+		out[prefix] = ns.URI()
+	}
+	return out
 }
 
 func evalStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {

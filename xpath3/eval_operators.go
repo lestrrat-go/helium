@@ -293,7 +293,7 @@ func evalUnionExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	}
 	result := make(ItemSlice, len(merged))
 	for i, n := range merged {
-		result[i] = nodeItemFor(ec, n)
+		result[i] = nodeItemFor(ctx, ec, n)
 	}
 	return result, nil
 }
@@ -338,7 +338,7 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ctx context.Context, ec *eval
 	}
 	seq := make(ItemSlice, len(result))
 	for i, n := range result {
-		seq[i] = nodeItemFor(ec, n)
+		seq[i] = nodeItemFor(ctx, ec, n)
 	}
 	return seq, nil
 }
@@ -359,7 +359,7 @@ func evalFilterExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 		}
 		result := make(ItemSlice, len(nodes))
 		for i, n := range nodes {
-			result[i] = nodeItemFor(ec, n)
+			result[i] = nodeItemFor(ctx, ec, n)
 		}
 		return result, nil
 	}
@@ -454,7 +454,7 @@ func evalPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	}
 	seq := make(ItemSlice, len(deduped))
 	for i, n := range deduped {
-		seq[i] = nodeItemFor(ec, n)
+		seq[i] = nodeItemFor(ctx, ec, n)
 	}
 	return seq, nil
 }
@@ -493,7 +493,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	}
 	seq := make(ItemSlice, len(deduped))
 	for i, n := range deduped {
-		seq[i] = nodeItemFor(ec, n)
+		seq[i] = nodeItemFor(ctx, ec, n)
 	}
 	return seq, nil
 }
@@ -585,7 +585,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		}
 		seq := make(ItemSlice, len(allNodes))
 		for i, n := range allNodes {
-			seq[i] = nodeItemFor(ec, n)
+			seq[i] = nodeItemFor(ctx, ec, n)
 		}
 		return seq, nil
 	}

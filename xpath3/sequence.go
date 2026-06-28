@@ -248,65 +248,76 @@ func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
 	return cast, nil
 }
 
-// atomizeUnionItems resolves a union-typed node's ACTIVE member value-dependently
-// (XSD: the first member, in declaration order, the node's value validly belongs
-// to) and, when that active member is a LIST, returns the per-item atoms with
-// handled=true. When the active member is ATOMIC (or no member can be confirmed),
-// it returns handled=false so the caller falls back to AtomizeItem for the single
-// value — that path already resolves an atomic union member. A QName/NOTATION list
-// item is resolved against the node's in-scope namespaces (via atomizeListToken).
+// atomizeUnionItems atomizes a union-typed node through its precomputed ACTIVE
+// member (ni.ActiveUnionMember, resolved by full schema-aware validation in
+// nodeItemFor): a LIST active member yields its per-item atoms, an ATOMIC active
+// member yields a single atom TYPED AS THE ACTIVE MEMBER (so data(@u) instance of
+// the member type holds). handled is false only when no member resolved (the caller
+// falls back to AtomizeItem). A QName/NOTATION value is resolved against the node's
+// in-scope namespaces.
 func atomizeUnionItems(ni NodeItem) ([]AtomicValue, bool) {
-	s := ixpath.StringValue(ni.Node)
-	for _, m := range ni.UnionMembers {
-		if m.ListItem != "" {
-			tokens := strings.Fields(s)
-			if len(tokens) == 0 {
-				continue
-			}
-			lni := NodeItem{Node: ni.Node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: ni.QNameNoDefaultNS}
-			atoms := make([]AtomicValue, 0, len(tokens))
-			ok := true
-			for _, tok := range tokens {
-				av, err := atomizeListToken(tok, m.ListItem, lni)
-				if err != nil {
-					ok = false
-					break
-				}
-				atoms = append(atoms, av)
-			}
-			if ok {
-				return atoms, true
-			}
-			continue
-		}
-		if unionAtomicMemberValidates(s, m, ni) {
-			// Active member is atomic — let AtomizeItem produce the single value.
-			return nil, false
-		}
+	if ni.ActiveUnionMember < 0 || ni.ActiveUnionMember >= len(ni.UnionMembers) {
+		return nil, false
 	}
-	return nil, false
+	m := ni.UnionMembers[ni.ActiveUnionMember]
+	s := ixpath.StringValue(ni.Node)
+	if m.ListItem != "" {
+		tokens := strings.Fields(s)
+		lni := NodeItem{Node: ni.Node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: ni.QNameNoDefaultNS}
+		atoms := make([]AtomicValue, 0, len(tokens))
+		for _, tok := range tokens {
+			av, err := atomizeListToken(tok, m.ListItem, lni)
+			if err != nil {
+				return nil, false
+			}
+			atoms = append(atoms, av)
+		}
+		return atoms, true
+	}
+	av, err := atomizeUnionAtomicMember(s, m, ni)
+	if err != nil {
+		return nil, false
+	}
+	return []AtomicValue{av}, true
 }
 
-// unionAtomicMemberValidates reports whether the node's value belongs to an ATOMIC
-// union member, so active-member resolution can stop at it (and the list-expansion
-// of a later member is not wrongly applied). QName/NOTATION members are validated
-// via namespace resolution (a single token that resolves); others via a
-// context-free cast to the member's built-in base.
-func unionAtomicMemberValidates(s string, m NodeItemUnionMember, ni NodeItem) bool {
+// atomizeUnionAtomicMember atomizes a union value through an ATOMIC active member,
+// typing the result as that member (preserving a user type's annotation over its
+// built-in base) so instance-of against the member type holds. A QName/NOTATION
+// member resolves the value against the node's in-scope namespaces.
+func atomizeUnionAtomicMember(s string, m NodeItemUnionMember, ni NodeItem) (AtomicValue, error) {
 	if m.Atomized == TypeQName || m.Atomized == TypeNOTATION ||
 		m.TypeName == TypeQName || m.TypeName == TypeNOTATION {
-		if len(strings.Fields(s)) != 1 {
-			return false
+		qv, err := resolveQNameFromNode(s, ni.Node, ni.QNameNoDefaultNS)
+		if err != nil {
+			return AtomicValue{}, err
 		}
-		_, err := resolveQNameFromNode(s, ni.Node, ni.QNameNoDefaultNS)
-		return err == nil
+		av := AtomicValue{TypeName: m.TypeName, Value: qv}
+		if !IsKnownXSDType(m.TypeName) {
+			base := m.Atomized
+			if base == "" {
+				base = TypeQName
+			}
+			av.BaseType = base
+		}
+		return av, nil
 	}
 	t := m.Atomized
 	if t == "" {
 		t = m.TypeName
 	}
-	_, err := CastFromString(s, t)
-	return err == nil
+	cast, err := CastFromString(s, t)
+	if err != nil {
+		if strings.HasPrefix(m.TypeName, "Q{") {
+			return AtomicValue{TypeName: m.TypeName, Value: s}, nil
+		}
+		return AtomicValue{}, err
+	}
+	if !IsKnownXSDType(m.TypeName) {
+		cast.BaseType = cast.TypeName
+		cast.TypeName = m.TypeName
+	}
+	return cast, nil
 }
 
 // builtinListItemType returns the item type for built-in XSD list types.

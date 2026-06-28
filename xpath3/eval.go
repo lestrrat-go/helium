@@ -287,17 +287,17 @@ func evalWith(evalFn exprEvaluator, ctx context.Context, ec *evalContext, expr E
 	return evalFn(ctx, ec, expr)
 }
 
-func evalContextItemExpr(ec *evalContext) (Sequence, error) {
+func evalContextItemExpr(ctx context.Context, ec *evalContext) (Sequence, error) {
 	if ec.contextItem != nil {
 		return ItemSlice{ec.contextItem}, nil
 	}
 	if ixpath.IsNilNode(ec.node) {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 	}
-	return ItemSlice{nodeItemFor(ec, ec.node)}, nil
+	return ItemSlice{nodeItemFor(ctx, ec, ec.node)}, nil
 }
 
-func evalRootExpr(ec *evalContext) (Sequence, error) {
+func evalRootExpr(ctx context.Context, ec *evalContext) (Sequence, error) {
 	if ixpath.IsNilNode(ec.node) {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 	}
@@ -306,7 +306,7 @@ func evalRootExpr(ec *evalContext) (Sequence, error) {
 	if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
 		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
 	}
-	return ItemSlice{nodeItemFor(ec, root)}, nil
+	return ItemSlice{nodeItemFor(ctx, ec, root)}, nil
 }
 
 func dispatchExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
@@ -318,9 +318,9 @@ func dispatchExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, ex
 	case VariableExpr:
 		return evalVariable(ctx, ec, e)
 	case ContextItemExpr:
-		return evalContextItemExpr(ec)
+		return evalContextItemExpr(ctx, ec)
 	case RootExpr:
-		return evalRootExpr(ec)
+		return evalRootExpr(ctx, ec)
 	case SequenceExpr:
 		return evalSequenceExpr(evalFn, ctx, ec, e)
 	case *LocationPath:

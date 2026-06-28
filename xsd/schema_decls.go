@@ -153,8 +153,7 @@ func (d schemaDecls) ValidateCastWithNS(ctx context.Context, value, typeName str
 }
 
 func (d schemaDecls) validateCast(ctx context.Context, value, typeName string, nsMap map[string]string) error {
-	local, ns := annotationParts(typeName)
-	td, ok := d.schema.LookupType(local, ns)
+	td, ok := d.lookupTypeName(typeName)
 	if !ok || td.ContentType != ContentTypeSimple {
 		return nil
 	}
