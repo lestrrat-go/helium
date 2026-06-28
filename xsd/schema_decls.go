@@ -53,6 +53,21 @@ func (d schemaDecls) lookupTypeName(typeName string) (*TypeDef, bool) {
 	return d.schema.LookupType(local, ns)
 }
 
+// lookupAtomizationType resolves a type name to the *TypeDef that drives ATOMIZATION
+// of a node annotated with it. For a simpleContent COMPLEX type it returns the
+// EFFECTIVE content simple type (effectiveContentSimpleType) — the narrowed
+// content (a nested/simpleContent restriction to xs:QName, a list, a union, …) —
+// rather than the raw complex type, so data()/list/union node atomization matches
+// validation and $value (which both type the content via the same effective type).
+// A non-simpleContent type is returned unchanged.
+func (d schemaDecls) lookupAtomizationType(typeName string) (*TypeDef, bool) {
+	td, ok := d.lookupTypeName(typeName)
+	if !ok {
+		return nil, false
+	}
+	return effectiveContentSimpleType(td), true
+}
+
 // typeName returns the annotation name for td, preferring a registered synthetic
 // anonymous name so an inline list item / union member round-trips back to its
 // actual *TypeDef.
@@ -110,6 +125,9 @@ func (d schemaDecls) LookupSchemaType(local, ns string) (string, bool) {
 	if !ok {
 		return "", false
 	}
+	// For a simpleContent COMPLEX type, atomization walks the NARROWED content
+	// simple type, not the complex type's own (complex) base chain.
+	td = effectiveContentSimpleType(td)
 	if td.BaseType != nil {
 		return d.typeName(td.BaseType), true
 	}
@@ -199,7 +217,7 @@ func (d schemaDecls) validateCast(ctx context.Context, value, typeName string, n
 
 // ListItemType returns the item type name for a list type.
 func (d schemaDecls) ListItemType(typeName string) (string, bool) {
-	td, ok := d.lookupTypeName(typeName)
+	td, ok := d.lookupAtomizationType(typeName)
 	if !ok {
 		return "", false
 	}
@@ -213,7 +231,7 @@ func (d schemaDecls) ListItemType(typeName string) (string, bool) {
 
 // UnionMemberTypes returns the member type names for a union type.
 func (d schemaDecls) UnionMemberTypes(typeName string) []string {
-	td, ok := d.lookupTypeName(typeName)
+	td, ok := d.lookupAtomizationType(typeName)
 	if !ok || td.Variety != TypeVarietyUnion {
 		return nil
 	}

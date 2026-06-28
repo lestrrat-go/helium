@@ -1893,3 +1893,83 @@ func TestVersion11AssertCastMultiItemTypedValue(t *testing.T) {
 	// data() agreement (multi-item) — sanity that the same node expands consistently.
 	run(t, listSchema, `count(data(@u)) = 2`, `<e u="1 2"/>`)
 }
+
+// TestVersion11AssertSimpleContentChildAtomization verifies that data(c) on a
+// DESCENDANT element c whose simpleContent COMPLEX type narrows its content to
+// xs:QName / a list / a union atomizes THROUGH the narrowed content type
+// (PR859-FINAL-01), agreeing with $value — instead of through the complex type's raw
+// base. schemaDecls resolves the simpleContent complex type via
+// effectiveContentSimpleType before returning atomization metadata.
+func TestVersion11AssertSimpleContentChildAtomization(t *testing.T) {
+	// (a) simpleContent narrowed to xs:QName: data(c) must be a QName, so
+	// namespace-uri-from-QName resolves the instance prefix.
+	const qnameSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="qnameContent">
+    <xs:simpleContent>
+      <xs:extension base="xs:QName"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="qnameContent"/>
+      </xs:sequence>
+      <xs:assert test="namespace-uri-from-QName(data(c)) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), qnameSchema)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p"><c>p:x</c></e>`))
+
+	// (b) simpleContent whose content is a list of xs:int: data(c) is the item
+	// sequence, so count and numeric typing hold.
+	const listSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:complexType name="listContent">
+    <xs:simpleContent>
+      <xs:extension base="IntList"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="listContent"/>
+      </xs:sequence>
+      <xs:assert test="count(data(c)) = 3 and sum(data(c)) = 6"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), listSchema)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e><c>1 2 3</c></e>`))
+
+	// (c) simpleContent whose content is a union(IntList, xs:string): data(c) for
+	// "1 2" resolves the active LIST member → two xs:int.
+	const unionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="unionContent">
+    <xs:simpleContent>
+      <xs:extension base="u"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="unionContent"/>
+      </xs:sequence>
+      <xs:assert test="count(data(c)) = 2 and (data(c)[1] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema3, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), unionSchema)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema3, `<e><c>1 2</c></e>`))
+}
