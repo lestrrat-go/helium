@@ -50,8 +50,14 @@ func (c *compiler) parseTypeAlternatives(ctx context.Context, elem *helium.Eleme
 // A missing type (neither @type nor inline) or a malformed @test is a fatal
 // schema error (returns nil).
 func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Element) *TypeAlternative {
+	// The XSD 1.1 default xpath-default-namespace is ##local (no default element
+	// namespace), so the schema document's XML default namespace (xmlns="…") must
+	// NOT seed the "" binding — only an effective xpathDefaultNamespace may. Drop it
+	// here; effectiveXPathDefaultNS below re-adds "" when xpathDefaultNamespace applies.
+	nsCtx := collectNSContext(elem)
+	delete(nsCtx, "")
 	alt := &TypeAlternative{
-		Namespaces: collectNSContext(elem),
+		Namespaces: nsCtx,
 		Line:       elem.Line(),
 		Source:     c.diagSource(),
 		// fn:static-base-uri() exposes the SCHEMA document URI, never the diagnostic
@@ -61,11 +67,13 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 
 	// XSD 1.1 requires EXACTLY ONE governing-type source: either a @type attribute
 	// or a single inline <xs:complexType>/<xs:simpleType> child, never both and never
-	// two inline types.
+	// two inline types. Presence is tested with hasAttr so a present-but-empty
+	// @type="" is treated as a (malformed) type source, not as "inline only".
+	hasType := hasAttr(elem, attrType)
 	typeRef := getAttr(elem, attrType)
 	inlineCount := countInlineAlternativeTypes(elem)
 	switch {
-	case typeRef != "" && inlineCount > 0:
+	case hasType && inlineCount > 0:
 		if c.filename != "" {
 			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
 				"An xs:alternative must not have both a 'type' attribute and an inline type definition."))
@@ -77,9 +85,15 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 				"An xs:alternative must not have more than one inline type definition."))
 		}
 		return nil
+	case hasType && normalizeWhiteSpace(typeRef, "collapse") == "":
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative, attrType,
+				"The value '"+typeRef+"' is not a valid QName."))
+		}
+		return nil
 	}
 
-	if typeRef != "" {
+	if hasType {
 		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
 		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
 			alt:      alt,

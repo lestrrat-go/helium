@@ -75,7 +75,10 @@ func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Elemen
 	}
 	seen := make(map[QName]struct{})
 	for _, a := range elem.Attributes() {
-		if isSpecialAttr(a) {
+		// The CTA context node keeps every real attribute (XDM excludes only
+		// namespace declarations); unlike isSpecialAttr this RETAINS xml:* attributes
+		// (xml:lang/xml:base/xml:space), so a test like @xml:lang='de' can drive CTA.
+		if isNamespaceDeclAttr(a) {
 			continue
 		}
 		seen[QName{Local: a.LocalName(), NS: a.URI()}] = struct{}{}
@@ -90,6 +93,14 @@ func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Elemen
 		addSynthAttr(synth, a)
 	}
 	return synth
+}
+
+// isNamespaceDeclAttr reports whether a is a namespace declaration (xmlns or
+// xmlns:prefix). Unlike isSpecialAttr it does NOT treat xml:*/xsi:* attributes as
+// special, so the CTA context node retains them.
+func isNamespaceDeclAttr(a *helium.Attribute) bool {
+	p := a.Prefix()
+	return p == "xmlns" || (p == "" && a.LocalName() == "xmlns")
 }
 
 // addSynthAttr copies attribute a onto the synthetic context element synth,

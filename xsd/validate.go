@@ -1338,6 +1338,14 @@ func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Eleme
 func (vc *validationContext) validateNilledElement(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	dn := elemDisplayName(elem)
 
+	// XSD 1.1: a governing type of xs:error has an empty value space, so the element
+	// is invalid regardless of xsi:nil — the nilled path must NOT let it through.
+	if vc.version == Version11 && isErrorType(td) {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
+			"The element is not valid: the conditional type assignment selected the type xs:error.")
+		return fmt.Errorf("xs:error type selected")
+	}
+
 	if !edecl.Nillable {
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
 			"Element is not nillable.")
