@@ -51,6 +51,19 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 		return instance == fixed
 	}
 
+	// XSD 1.1: a simpleContent complex type's fixed value lives in its NARROWED
+	// content simple type, not the outer complex type's own base chain — compare in
+	// the effective content type so e.g. a content type restricted to xs:QName uses
+	// QName VALUE-space equality (a different prefix bound to the same URI matches).
+	// effectiveContentSimpleType returns a non-simpleContent type unchanged, so the
+	// simple (attribute / element / list-item / union-member) callers are
+	// unaffected. Centralized here so EVERY caller — runtime element/attribute fixed
+	// checks AND the compile-time content-model restriction check
+	// (restriction_particle.go) — is consistent. XSD 1.0 keeps the raw declared type.
+	if version == Version11 {
+		td = effectiveContentSimpleType(td)
+	}
+
 	// Branch on variety *before* normalizing with the type's own whiteSpace
 	// facet. A union type has no meaningful whiteSpace of its own — each member
 	// applies its own facet — so normalizing here (the union default is
@@ -959,17 +972,8 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		if fixedType == nil {
 			fixedType = td
 		}
-		// XSD 1.1: for a simpleContent complex type the fixed value lives in the
-		// NARROWED content simple type (ContentSimpleType), not the outer complex
-		// type's own base chain. Compare in the EFFECTIVE content simple type so the
-		// comparison runs in the right value space — e.g. QName value-space equality
-		// accepts a different prefix bound to the same namespace, and a narrowing
-		// facet applies. effectiveContentSimpleType returns a non-simpleContent type
-		// unchanged, so a plain simple-typed element is unaffected. XSD 1.0 keeps the
-		// historical declared-type comparison, byte-identical.
-		if vc.version == Version11 {
-			fixedType = effectiveContentSimpleType(fixedType)
-		}
+		// In XSD 1.1 fixedValueMatches itself narrows a simpleContent type to its
+		// effective content simple type, so the raw declared type is passed here.
 		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)

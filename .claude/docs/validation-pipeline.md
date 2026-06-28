@@ -82,14 +82,19 @@ falls back to raw string equality. The element fixed-value comparison uses the
 element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
 declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
 even when the instance's `xsi:type` collapses whitespace — element content is still
-validated against the actual type. In XSD **1.1** the comparison type is first
-passed through `effectiveContentSimpleType`, so for a simpleContent complex type the
-fixed value is compared in its NARROWED content simple type (`ContentSimpleType`) —
-e.g. a content type restricted to `xs:QName` accepts a different-prefix/same-URI
-instance value by QName value-space equality instead of being rejected by a lexical
-comparison against the outer complex type's own base chain. `effectiveContentSimpleType`
-returns a non-simpleContent type unchanged, so a plain simple-typed element is
-unaffected; XSD 1.0 keeps the historical declared-type comparison, byte-identical. In `fixedUnionMatches`, when the fixed and
+validated against the actual type. In XSD **1.1** `fixedValueMatches` itself narrows
+its comparison type via `effectiveContentSimpleType` (gated on `version == Version11`,
+right after the nil-`td` guard), so for a simpleContent complex type the fixed value
+is compared in its NARROWED content simple type (`ContentSimpleType`) — e.g. a content
+type restricted to `xs:QName` accepts a different-prefix/same-URI value by QName
+value-space equality instead of a lexical comparison against the outer complex type's
+own base chain. This is CENTRALIZED in `fixedValueMatches` so every caller is
+consistent: the runtime non-empty element fixed check, the attribute fixed checks,
+and the COMPILE-TIME content-model restriction check (`restriction_particle.go`
+NameAndTypeOK, where a base/derived element `fixed` must be value-space equal).
+`effectiveContentSimpleType` returns a non-simpleContent type unchanged, so the
+simple (attribute / list-item / union-member) callers are unaffected; XSD 1.0 keeps
+the historical declared-type comparison, byte-identical. In `fixedUnionMatches`, when the fixed and
 instance values resolve to *different* active members, the cross-member
 comparison (`crossMemberValueEqual`) is **recursive over variety**: when both
 active members are **lists** (e.g. `memberTypes="intList decimalList"`) each value

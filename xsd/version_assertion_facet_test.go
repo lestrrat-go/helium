@@ -1314,6 +1314,58 @@ func TestVersion11FixedSimpleContentQNameValueSpace(t *testing.T) {
 	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns:q="urn:other">q:x</e>`), xsd.ErrValidationFailed)
 }
 
+// TestVersion11CompileFixedSimpleContentQNameValueSpace verifies the COMPILE-TIME
+// content-model restriction check (restriction_particle.go NameAndTypeOK) compares
+// an element's base/derived fixed values in the EFFECTIVE content simple type
+// (PR859-CR18-01). The element's type is a simpleContent complex type narrowed (via
+// a nested xs:simpleType) to xs:QName, whose OWN base chain does not reach xs:QName;
+// without the centralized effectiveContentSimpleType in fixedValueMatches the
+// derivation is rejected lexically. base fixed="p:x" and derived fixed="q:x" with
+// both prefixes bound to the SAME URI is a valid restriction; a different-URI
+// derived fixed is not.
+func TestVersion11CompileFixedSimpleContentQNameValueSpace(t *testing.T) {
+	schemaXML := func(derivedFixed, extraNS string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:x" xmlns:q="urn:x" ` + extraNS + `>
+  <xs:complexType name="anyBase">
+    <xs:simpleContent>
+      <xs:extension base="xs:anySimpleType"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="qnameContent">
+    <xs:simpleContent>
+      <xs:restriction base="anyBase">
+        <xs:simpleType>
+          <xs:restriction base="xs:QName"/>
+        </xs:simpleType>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:sequence>
+      <xs:element name="c" type="qnameContent" fixed="p:x"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="D">
+    <xs:complexContent>
+      <xs:restriction base="B">
+        <xs:sequence>
+          <xs:element name="c" type="qnameContent" fixed="` + derivedFixed + `"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="D"/>
+</xs:schema>`
+	}
+	// q:x (q bound to urn:x, same URI as p) is QName value-space equal to p:x —
+	// the restriction is ACCEPTED at compile time.
+	_, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML("q:x", ""))
+	require.NoError(t, err)
+	// z:x (z bound to a DIFFERENT URI) is not value-space equal — REJECTED.
+	_, err = compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML("z:x", `xmlns:z="urn:other"`))
+	require.Error(t, err)
+}
+
 // TestVersion11AssertCastInstanceBoundQName verifies that casting an
 // ALREADY-RESOLVED xs:QName value (from data(@q)) to a QName-derived USER type
 // succeeds even when the value's prefix is declared ONLY on the instance node and
