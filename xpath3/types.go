@@ -106,10 +106,11 @@ func deepCloneItem(item Item) Item {
 		}
 		return item
 	case NodeItem:
-		if v.UnionMemberTypes == nil {
+		if v.UnionMemberTypes == nil && v.UnionMembers == nil {
 			return item
 		}
 		v.UnionMemberTypes = append([]string(nil), v.UnionMemberTypes...)
+		v.UnionMembers = append([]NodeItemUnionMember(nil), v.UnionMembers...)
 		return v
 	case FunctionItem:
 		if v.ParamTypes == nil && v.ReturnType == nil {
@@ -233,6 +234,11 @@ type NodeItem struct {
 	ListItemType     string   // non-empty when the type is a list; the item type name
 	ListItemAtomized string   // built-in base of the list item type (e.g. xs:QName for a QName-derived item)
 	UnionMemberTypes []string // member type names for union types (for atomization)
+	// UnionMembers carries per-member atomization metadata (built-in base, and list
+	// item info when a member is itself a list), precomputed from SchemaDeclarations
+	// so a union node's ACTIVE member can be resolved value-dependently during
+	// atomization without schema access.
+	UnionMembers []NodeItemUnionMember
 	// QNameNoDefaultNS, when true, atomizes an UNPREFIXED QName/NOTATION value to
 	// NO namespace instead of resolving the node's in-scope default namespace —
 	// XSD value-space semantics (a QName VALUE, unlike a name, does not pick up the
@@ -240,6 +246,16 @@ type NodeItem struct {
 	// option (used by xsd assertions); off by default so general XPath/XQuery and
 	// XSLT atomization keep the default-namespace behavior.
 	QNameNoDefaultNS bool
+}
+
+// NodeItemUnionMember carries per-member atomization metadata for a union-typed
+// node, precomputed from SchemaDeclarations so value-dependent active-member
+// resolution during atomization needs no schema access.
+type NodeItemUnionMember struct {
+	TypeName     string // member type annotation name
+	Atomized     string // built-in base of an atomic member (for typing)
+	ListItem     string // non-empty if the member is a list: its item type name
+	ListItemAtom string // built-in base of the list item (e.g. xs:QName)
 }
 
 func (NodeItem) itemTag() {}

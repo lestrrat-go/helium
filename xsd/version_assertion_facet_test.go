@@ -1429,3 +1429,121 @@ func TestVersion11AssertListOfQName(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p" qs="p:a p:b"/>`))
 }
+
+// TestVersion11AssertInlineAnonQNameList verifies that an INLINE ANONYMOUS
+// xs:list itemType="xs:QName" preserves its list-item metadata for assert node
+// atomization (PR859-CR19-01): the anonymous type has no schema-table name, so it
+// is registered under a synthetic annotation name and schemaDecls recovers the
+// item type. count(data(@qs)) is 2, and each item resolves namespace-aware.
+func TestVersion11AssertInlineAnonQNameList(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c">
+          <xs:complexType>
+            <xs:attribute name="qs">
+              <xs:simpleType>
+                <xs:list itemType="xs:QName"/>
+              </xs:simpleType>
+            </xs:attribute>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:assert test="count(data(c/@qs)) = 2 and namespace-uri-from-QName(data(c/@qs)[2]) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p"><c qs="p:a p:b"/></e>`))
+}
+
+// TestVersion11AssertInlineAnonQNameUnion verifies that an INLINE ANONYMOUS
+// xs:union memberTypes="xs:QName xs:string" preserves its union-member metadata
+// for assert node atomization (PR859-CR19-01): without it the anonymous type
+// collapses to xs:anyType and a QName-valued union node fails XPTY0004.
+func TestVersion11AssertInlineAnonQNameUnion(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="q">
+        <xs:simpleType>
+          <xs:union memberTypes="xs:QName xs:string"/>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:assert test="namespace-uri-from-QName(data(@q)) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p" q="p:x"/>`))
+}
+
+// TestVersion11AssertUnionActiveMemberList verifies that assert NODE atomization
+// resolves a union's ACTIVE member value-dependently (PR859-CR19-02): for
+// memberTypes="IntList xs:string" with value "1 2" the active member is the LIST,
+// so data(@u) is two xs:int items, not one string. (Distinct from the $value path,
+// which was already correct.)
+func TestVersion11AssertUnionActiveMemberList(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 2 and (data(@u)[1] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e u="1 2"/>`))
+	// A string-only value resolves to the xs:string member: one atom, not a list.
+	const schemaXML2 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="u"/>
+      <xs:assert test="count(data(@u)) = 1"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML2)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e u="not ints here"/>`))
+}
+
+// TestVersion11AssertInlineAnonQNameDescendantElement verifies the PR859-CR19
+// metadata fixes apply to a DESCENDANT ELEMENT (not just an attribute): a child
+// element typed by an inline anonymous xs:list itemType="xs:QName" atomizes to its
+// per-item QName sequence via data(c).
+func TestVersion11AssertInlineAnonQNameDescendantElement(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c">
+          <xs:simpleType>
+            <xs:list itemType="xs:QName"/>
+          </xs:simpleType>
+        </xs:element>
+      </xs:sequence>
+      <xs:assert test="count(data(c)) = 2 and namespace-uri-from-QName(data(c)[1]) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns:p="urn:p"><c>p:a p:b</c></e>`))
+}

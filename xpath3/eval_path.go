@@ -211,6 +211,18 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 		}
 		if members := ec.schemaDeclarations.UnionMemberTypes(ni.TypeAnnotation); len(members) > 0 {
 			ni.UnionMemberTypes = members
+			ni.UnionMembers = make([]NodeItemUnionMember, len(members))
+			for i, m := range members {
+				meta := NodeItemUnionMember{
+					TypeName: m,
+					Atomized: atomizedTypeForAnnotation(m, ec.schemaDeclarations),
+				}
+				if li, ok := ec.schemaDeclarations.ListItemType(m); ok {
+					meta.ListItem = li
+					meta.ListItemAtom = atomizedTypeForAnnotation(li, ec.schemaDeclarations)
+				}
+				ni.UnionMembers[i] = meta
+			}
 		}
 	}
 	return ni

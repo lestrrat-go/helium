@@ -34,16 +34,25 @@ type NodeItem struct {
     ListItemType     string
     ListItemAtomized string
     UnionMemberTypes []string
+    UnionMembers     []NodeItemUnionMember
     QNameNoDefaultNS bool
+}
+
+type NodeItemUnionMember struct {
+    TypeName     string // member type annotation name
+    Atomized     string // built-in base of an atomic member
+    ListItem     string // non-empty if the member is itself a list
+    ListItemAtom string // built-in base of the list item
 }
 ```
 
 - `TypeAnnotation` → schema-aware node type annotation (`xs:*` or `Q{ns}local`)
 - `AtomizedType` → built-in base type used when atomizing schema-derived node types
 - `ListItemType` → item type name for a list-typed node; `ListItemAtomized` → that item type's built-in base (e.g. `xs:QName` for a QName-derived list item), so list-token atomization (`atomizeListToken`) can resolve QName/NOTATION items namespace-aware; `UnionMemberTypes` → member type names for a union-typed node
+- `UnionMembers` → per-member atomization metadata (built-in base + list-item info), precomputed from `SchemaDeclarations` in `nodeItemFor` so a union node's ACTIVE member can be resolved value-dependently during atomization with no schema access
 - `QNameNoDefaultNS` → set from `Evaluator.QNameValueNoDefaultNamespace()`; when true an UNPREFIXED QName/NOTATION value atomizes to no namespace (XSD value-space semantics) instead of the node's default namespace
 
-`resolveQNameFromNode` predeclares the `xml` prefix (→ the XML namespace) without requiring a binding on any node, matching `xsd.resolveLexicalQName`, so an xs:QName value such as `xml:lang`/`xml:space` atomizes correctly. List-typed node atomization (`atomizeListToken`, used by both `atomizeStream` and the value-comparison atom iterator) splits whitespace tokens and, when the item type's built-in base is `xs:QName`/`xs:NOTATION`, resolves each token against the node's in-scope namespaces (preserving the user/list-item type name and its built-in base) rather than the context-free `CastFromString`, so a list of xs:QName atomizes in a schema-aware assertion.
+`resolveQNameFromNode` predeclares the `xml` prefix (→ the XML namespace) without requiring a binding on any node, matching `xsd.resolveLexicalQName`, so an xs:QName value such as `xml:lang`/`xml:space` atomizes correctly. List-typed node atomization (`atomizeListToken`, used by both `atomizeStream` and the value-comparison atom iterator) splits whitespace tokens and, when the item type's built-in base is `xs:QName`/`xs:NOTATION`, resolves each token against the node's in-scope namespaces (preserving the user/list-item type name and its built-in base) rather than the context-free `CastFromString`, so a list of xs:QName atomizes in a schema-aware assertion. A UNION-typed node whose ACTIVE member is a LIST is expanded value-dependently (`atomizeUnionItems`, used by both the stream and comparison paths): members are tried in declaration order and the first whose value validates (all list tokens cast, or an atomic member validates) wins; a list active member yields its per-item atoms, an atomic active member falls back to `AtomizeItem` for the single value. All of this only activates when `UnionMembers`/`ListItemType` are populated (schema-aware atomization), so non-schema-aware xpath3/xslt3 behavior is unchanged.
 
 ## AtomicValue
 

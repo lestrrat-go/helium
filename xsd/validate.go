@@ -484,7 +484,20 @@ type validationContext struct {
 	// comparison would cast to xs:string), and "instance of" tests see the
 	// declared type.
 	assertAnnotations TypeAnnotations
+	// assertAnonTypes / assertAnonNames register INLINE ANONYMOUS list/union simple
+	// types under stable synthetic annotation names (Q{assertAnonNS}N). An anonymous
+	// type has no schema-table name, so xsdTypeName collapses it to a named ancestor
+	// (or xs:anyType) and its list-item / union-member metadata would be lost to
+	// xs:assert node atomization. Recording the actual *TypeDef lets schemaDecls
+	// recover that metadata. assertAnonNames dedups by *TypeDef so one inline type
+	// gets one stable name across all nodes that use it.
+	assertAnonTypes map[string]*TypeDef
+	assertAnonNames map[*TypeDef]string
 }
+
+// assertAnonNS is the synthetic namespace for inline anonymous list/union type
+// annotation names recorded for xs:assert node atomization (see assertAnonTypes).
+const assertAnonNS = "urn:x-helium:assert-anon"
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
 // key/unique tables built for the SAME host-element occurrence (XSD
@@ -511,6 +524,8 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 	}
 	if version == Version11 {
 		vc.assertAnnotations = make(TypeAnnotations)
+		vc.assertAnonTypes = make(map[string]*TypeDef)
+		vc.assertAnonNames = make(map[*TypeDef]string)
 	}
 	return vc
 }
@@ -1748,6 +1763,39 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
+// assertAnnotationName returns the PSVI annotation name recorded for a node in the
+// xs:assert evaluation tree. For a named type it is xsdTypeName; for an INLINE
+// ANONYMOUS list/union simple type (whose list-item / union-member metadata would
+// be lost once xsdTypeName collapses it to a named ancestor) it mints a stable
+// synthetic name and registers the actual *TypeDef so schemaDecls can recover the
+// metadata. Anonymous item/member types are registered recursively for the same
+// reason. Used ONLY for the assert annotations map; the user-facing annotations map
+// keeps xsdTypeName, byte-identical.
+func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
+	if td == nil || vc.assertAnonNames == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.assertAnonNames[td]; ok {
+		return name
+	}
+	if td.Name.Local == "" && td.Name.NS == "" {
+		switch resolveVariety(td) {
+		case TypeVarietyList, TypeVarietyUnion:
+			name := fmt.Sprintf("Q{%s}%d", assertAnonNS, len(vc.assertAnonTypes)+1)
+			vc.assertAnonTypes[name] = td
+			vc.assertAnonNames[td] = name
+			if td.ItemType != nil {
+				vc.assertAnnotationName(td.ItemType)
+			}
+			for _, m := range td.MemberTypes {
+				vc.assertAnnotationName(m)
+			}
+			return name
+		}
+	}
+	return xsdTypeName(td)
+}
+
 // annotateElement records a type annotation for an element node.
 func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
 	// Always record the actual *TypeDef (post-xsi:type) for pass-2 IDC field
@@ -1756,7 +1804,7 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 		vc.actualElemType[elem] = td
 	}
 	if vc.assertAnnotations != nil {
-		vc.assertAnnotations[elem] = xsdTypeName(td)
+		vc.assertAnnotations[elem] = vc.assertAnnotationName(td)
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
@@ -1797,11 +1845,10 @@ func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attrib
 	if !ok {
 		return
 	}
-	name := xsdTypeName(td)
 	if vc.assertAnnotations != nil {
-		vc.assertAnnotations[a] = name
+		vc.assertAnnotations[a] = vc.assertAnnotationName(td)
 	}
 	if vc.cfg != nil && vc.cfg.annotations != nil {
-		(*vc.cfg.annotations)[a] = name
+		(*vc.cfg.annotations)[a] = xsdTypeName(td)
 	}
 }

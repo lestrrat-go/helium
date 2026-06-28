@@ -32,6 +32,37 @@ type castGuardEntry struct {
 type schemaDecls struct {
 	schema  *Schema
 	version Version
+	// anon / anonNames carry inline ANONYMOUS list/union simple types registered
+	// for xs:assert node atomization (see validationContext.assertAnonTypes), keyed
+	// by their synthetic annotation name and by *TypeDef respectively. They let the
+	// list-item / union-member lookups recover metadata an anonymous type has no
+	// schema-table entry for.
+	anon      map[string]*TypeDef
+	anonNames map[*TypeDef]string
+}
+
+// lookupTypeName resolves an annotation-format type name to its *TypeDef,
+// consulting the anonymous-type registry before the schema's named-type table.
+func (d schemaDecls) lookupTypeName(typeName string) (*TypeDef, bool) {
+	if d.anon != nil {
+		if td, ok := d.anon[typeName]; ok {
+			return td, true
+		}
+	}
+	local, ns := annotationParts(typeName)
+	return d.schema.LookupType(local, ns)
+}
+
+// typeName returns the annotation name for td, preferring a registered synthetic
+// anonymous name so an inline list item / union member round-trips back to its
+// actual *TypeDef.
+func (d schemaDecls) typeName(td *TypeDef) string {
+	if d.anonNames != nil {
+		if name, ok := d.anonNames[td]; ok {
+			return name
+		}
+	}
+	return xsdTypeName(td)
 }
 
 // LookupSchemaElement returns the annotation-format type name of a global element.
@@ -69,14 +100,20 @@ func (d schemaDecls) LookupSchemaAttribute(local, ns string) (string, bool) {
 // LookupSchemaType returns the annotation-format name of td's BASE type (its
 // supertype), which is what xpath3 atomization walks to reach a builtin base.
 func (d schemaDecls) LookupSchemaType(local, ns string) (string, bool) {
-	td, ok := d.schema.LookupType(local, ns)
+	var td *TypeDef
+	var ok bool
+	if d.anon != nil && ns == assertAnonNS {
+		td, ok = d.anon["Q{"+ns+"}"+local]
+	} else {
+		td, ok = d.schema.LookupType(local, ns)
+	}
 	if !ok {
 		return "", false
 	}
 	if td.BaseType != nil {
-		return xsdTypeName(td.BaseType), true
+		return d.typeName(td.BaseType), true
 	}
-	return xsdTypeName(td), true
+	return d.typeName(td), true
 }
 
 // IsSubtypeOf reports whether typeName is the same as, or a subtype of,
@@ -155,14 +192,13 @@ func (d schemaDecls) validateCast(ctx context.Context, value, typeName string, n
 
 // ListItemType returns the item type name for a list type.
 func (d schemaDecls) ListItemType(typeName string) (string, bool) {
-	local, ns := annotationParts(typeName)
-	td, ok := d.schema.LookupType(local, ns)
+	td, ok := d.lookupTypeName(typeName)
 	if !ok {
 		return "", false
 	}
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if cur.Variety == TypeVarietyList && cur.ItemType != nil {
-			return xsdTypeName(cur.ItemType), true
+			return d.typeName(cur.ItemType), true
 		}
 	}
 	return "", false
@@ -170,14 +206,13 @@ func (d schemaDecls) ListItemType(typeName string) (string, bool) {
 
 // UnionMemberTypes returns the member type names for a union type.
 func (d schemaDecls) UnionMemberTypes(typeName string) []string {
-	local, ns := annotationParts(typeName)
-	td, ok := d.schema.LookupType(local, ns)
+	td, ok := d.lookupTypeName(typeName)
 	if !ok || td.Variety != TypeVarietyUnion {
 		return nil
 	}
 	members := make([]string, 0, len(td.MemberTypes))
 	for _, m := range td.MemberTypes {
-		members = append(members, xsdTypeName(m))
+		members = append(members, d.typeName(m))
 	}
 	return members
 }
@@ -205,5 +240,5 @@ func (vc *validationContext) assertSchemaDecls() xpath3.SchemaDeclarations {
 	if vc.schema == nil {
 		return nil
 	}
-	return schemaDecls{schema: vc.schema, version: vc.version}
+	return schemaDecls{schema: vc.schema, version: vc.version, anon: vc.assertAnonTypes, anonNames: vc.assertAnonNames}
 }

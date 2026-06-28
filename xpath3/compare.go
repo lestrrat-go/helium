@@ -396,6 +396,17 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 				it.stack = append(it.stack, atomicSeqFrame{seq: listSeq})
 				continue
 			}
+			// Union whose ACTIVE member is a list: expand value-dependently.
+			if len(ni.UnionMembers) > 0 {
+				if atoms, handled := atomizeUnionItems(ni); handled {
+					listSeq := make(ItemSlice, len(atoms))
+					for i, av := range atoms {
+						listSeq[i] = av
+					}
+					it.stack = append(it.stack, atomicSeqFrame{seq: listSeq})
+					continue
+				}
+			}
 		}
 
 		atom, err := AtomizeItem(item)
