@@ -395,20 +395,23 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 }
 
 // isValidlySubstitutable reports whether a type alternative's type alt may govern
-// an element whose declared type is decl. xs:error is always permitted (it makes
-// the element invalid by design). Otherwise alt must be validly derived from decl
-// (Type Derivation OK), which — for a union declared type — includes alt being
-// derived from one of the union's member types.
+// an element whose declared type is decl. An alternative type T is validly
+// substitutable for the declared type D iff ANY of:
 //
-// The check is deliberately under-strict for SIMPLE alternative types against a
-// SIMPLE-or-union declared type: the XSD built-in simple-type hierarchy (e.g.
-// xs:nonNegativeInteger ⊂ xs:integer) is not linked via BaseType pointers, so
-// isDerivedFrom cannot confirm those legitimate derivations. Rather than risk
-// false-rejecting a valid schema, an unconfirmed simple-vs-simple derivation is
-// accepted. A simple alternative against a COMPLEX declared type (or an unrelated
-// complex alternative type) is firmly rejected — a simple type can never be derived
-// from a complex one, so that is always a real violation, not a hierarchy-linking
-// gap.
+//  1. T is xs:error (always permitted — it makes the element invalid by design);
+//  2. strictBuiltinAwareDerivedFrom(T, D) — genuine Type Derivation OK, covering
+//     identity (T == D), user restriction/extension chains (pointer-linked via
+//     isDerivedFrom), the built-in simple-type hierarchy (built-ins are not
+//     BaseType-linked), and the xs:anySimpleType simple-content rule;
+//  3. D is a union and T is validly substitutable for some member type, applying
+//     this same predicate RECURSIVELY (so nested union members are handled).
+//
+// There is deliberately NO permissive "any two simple types" fallback: a genuine
+// USER derivation IS caught by isDerivedFrom (user BaseType chains are linked by
+// resolveRefs), so the former fallback only ever masked NON-derivations (e.g.
+// xs:string for a user SmallInt, or for union(SmallInt, xs:boolean)). The W3C
+// suite is the safety net — if a real derivation is missed, isDerivedFrom must be
+// extended to cover it rather than reinstating the fallback.
 func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	if alt == nil || decl == nil {
 		return true
@@ -416,44 +419,15 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	if isErrorType(alt) {
 		return true
 	}
-	// strictBuiltinAwareDerivedFrom is isDerivedFrom plus the built-in simple-type
-	// hierarchy (built-ins are not BaseType-linked, so isDerivedFrom alone cannot
-	// chain e.g. xs:nonNegativeInteger → xs:integer). It accepts a complex
-	// simpleContent alternative whose content extends/restricts a built-in subtype of
-	// the declared built-in type, and a direct simple alternative that genuinely
-	// derives from it — but NOT an unrelated atomic (xs:string vs xs:integer) or a
-	// list vs its item type (xs:NMTOKENS vs xs:NMTOKEN).
 	if strictBuiltinAwareDerivedFrom(alt, decl) {
 		return true
 	}
-	// A union declared type: an alternative is substitutable iff it is validly
-	// derived from one of the union's member types (the union itself was already
-	// covered by strictBuiltinAwareDerivedFrom above). The member set is decisive —
-	// an alternative unrelated to every member is REJECTED, not accepted by the
-	// permissive simple-vs-simple fallback (which would false-accept e.g. xs:string
-	// for union(xs:integer, xs:boolean)).
 	if decl.Variety == TypeVarietyUnion {
 		for _, m := range decl.MemberTypes {
 			if isValidlySubstitutable(alt, m) {
 				return true
 			}
 		}
-		return false
 	}
-	// When decl is a BUILT-IN simple type the built-in hierarchy is DECISIVE: the
-	// check above already accepted every genuine built-in derivation (including
-	// xs:anySimpleType via its simple-content rule), so reaching here means alt is NOT
-	// derived from decl and must be rejected — there is NO permissive simple-vs-simple
-	// fallback (that would false-accept xs:NMTOKENS for xs:NMTOKEN, or xs:string for
-	// xs:integer).
-	if isBuiltinSimpleType(decl) {
-		return false
-	}
-	// USER-defined simple decl: its BaseType chain IS linked, so strictBuiltinAware-
-	// DerivedFrom already saw any real derivation. An unconfirmed simple-vs-simple
-	// pair is the rare hierarchy-gap case (e.g. a user restriction of a built-in
-	// against another) — accept conservatively when BOTH sides are simple type
-	// DEFINITIONS. IsComplex is the reliable discriminator (a complex type with
-	// <xs:simpleContent> also has ContentType == ContentTypeSimple).
-	return !alt.IsComplex && !decl.IsComplex
+	return false
 }
