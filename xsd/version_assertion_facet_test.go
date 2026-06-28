@@ -542,6 +542,29 @@ func TestVersion11AssertionFacetSchemaAwareUnionCast(t *testing.T) {
 	require.ErrorIs(t, validateAssertion(t, schema, `<cast xmlns="urn:t">12</cast>`), xsd.ErrValidationFailed)
 }
 
+func TestVersion11AssertionFacetSchemaAwareUntypedComparison(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="SmallInt">
+    <xs:restriction base="xs:int">
+      <xs:maxInclusive value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="t:SmallInt">
+        <xs:assertion test="$value = xs:untypedAtomic('5')"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">5</e>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">6</e>`), xsd.ErrValidationFailed)
+}
+
 // TestVersion11AttrMergeExtensionOfRestriction covers the round-4 finding
 // (XSD11-ATTR-MERGE-EXT-001): an EXTENSION whose base is a RESTRICTION that
 // itself inherited a required attribute must still require it. The effective

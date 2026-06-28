@@ -122,6 +122,7 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 	if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
 		return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 	}
+	result.BaseType = builtinBase
 	result.TypeName = targetType
 	return result, nil
 }

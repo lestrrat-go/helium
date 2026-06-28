@@ -12,6 +12,7 @@ import (
 
 const (
 	testBuiltinUnion = "Q{}BuiltinUnion"
+	testMyTime       = "Q{}MyTime"
 	testSmallInt     = "Q{}SmallInt"
 	testUserUnion    = "Q{}UserUnion"
 )
@@ -27,6 +28,8 @@ func (unionCastDecls) LookupSchemaType(local, ns string) (string, bool) {
 	switch local {
 	case "BuiltinUnion":
 		return testBuiltinUnion, true
+	case "MyTime":
+		return xpath3.TypeTime, true
 	case "SmallInt":
 		return xpath3.TypeInt, true
 	case "UserUnion":
@@ -96,5 +99,34 @@ func TestSchemaAwareCastUserUnionUsesUserMember(t *testing.T) {
 	require.Equal(t, testSmallInt, av.TypeName)
 
 	_, err = eval.Evaluate(t.Context(), mustCompile(t, `'12' cast as UserUnion`), nil)
+	require.Error(t, err)
+}
+
+func TestSchemaAwareCastPreservesBuiltinBase(t *testing.T) {
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		SchemaDeclarations(unionCastDecls{})
+
+	res, err := eval.Evaluate(t.Context(), mustCompile(t, `'10:00:00' cast as MyTime`), nil)
+	require.NoError(t, err)
+
+	av, ok := res.Sequence().Get(0).(xpath3.AtomicValue)
+	require.True(t, ok)
+	require.Equal(t, testMyTime, av.TypeName)
+	require.Equal(t, xpath3.TypeTime, av.BaseType)
+
+	res, err = eval.Evaluate(t.Context(), mustCompile(t, `('10:00:00' cast as MyTime) = xs:time('10:00:00')`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "true", res.StringValue())
+}
+
+func TestSchemaAwareGeneralComparisonCastsUntypedToUserType(t *testing.T) {
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		SchemaDeclarations(unionCastDecls{})
+
+	res, err := eval.Evaluate(t.Context(), mustCompile(t, `('5' cast as SmallInt) = xs:untypedAtomic('5')`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "true", res.StringValue())
+
+	_, err = eval.Evaluate(t.Context(), mustCompile(t, `('5' cast as SmallInt) = xs:untypedAtomic('12')`), nil)
 	require.Error(t, err)
 }

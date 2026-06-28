@@ -170,6 +170,9 @@ Compare node identity or document order.
 - untypedAtomic vs string → compare as string
 - untypedAtomic vs numeric → cast untypedAtomic to double
 - untypedAtomic vs untypedAtomic → compare as string
+- untypedAtomic vs schema USER type → cast through the schema-aware cast helper
+  (`SchemaDeclarations` builtin-base/facet/union path), preserving the user type's
+  builtin `BaseType` for the subsequent value comparison
 - Numeric promotion: integer → decimal → float → double
 
 ```go
@@ -217,7 +220,8 @@ shared schema-aware cast helper. The helper resolves the target's builtin base:
 a QName/NOTATION-derived base validates via
 `SchemaDeclarations.ValidateCastWithNS` and, for `cast`, returns the
 namespace-resolved `QNameValue` carrying the user type annotation; other bases
-cast through the builtin and then `ValidateCast` the facets. Union targets from
+cast through the builtin, `ValidateCast` the facets, and return the user type
+annotation with `BaseType` set to that builtin base. Union targets from
 `SchemaDeclarations.UnionMemberTypes` are tried recursively through that same
 schema-aware path for both `cast` and `castable`, so a union member that is
 itself a user-defined type still resolves its builtin base and facets. `cast`
