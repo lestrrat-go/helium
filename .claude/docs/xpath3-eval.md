@@ -185,7 +185,7 @@ func CastAtomic(src AtomicValue, targetType string) (AtomicValue, error)
 func CastFromString(s, targetType string) (AtomicValue, error)
 ```
 
-Supported casts per XPath 3.1 Section 18. All atomic types in `xpath3-types.md`. QName casts require namespace context from evalContext.
+Supported casts per XPath 3.1 Section 18. All atomic types in `xpath3-types.md`. QName casts require namespace context from evalContext. For a USER-defined target type, when context-free `CastAtomic` fails and `evalContext.schemaDeclarations` is set, `evalCastExpr`/`evalCastableExpr` resolve the type's builtin base: a QName/NOTATION-derived base validates via `SchemaDeclarations.ValidateCastWithNS` and (for `cast`) returns the namespace-RESOLVED `QNameValue` carrying the user type annotation; other bases cast through the builtin then `ValidateCast` the facets. This schema-aware path is additive — with no `schemaDeclarations` the cast behaves exactly as before.
 
 ## State Management
 

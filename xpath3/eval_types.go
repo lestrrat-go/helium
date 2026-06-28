@@ -72,14 +72,37 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 			if e.Type.Prefix != "" && ec.namespaces != nil {
 				ns = ec.namespaces[e.Type.Prefix]
 			}
+			annName := QAnnotation(ns, e.Type.Name)
 			if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
+				// QName/NOTATION-derived user types need namespace context (the
+				// abstract base cannot be a direct CastAtomic target). Mirror the
+				// castable branch: validate with namespace context and return the
+				// namespace-RESOLVED QName/NOTATION value carrying the user type.
+				if builtinBase == TypeNOTATION || builtinBase == TypeQName {
+					_, isQV := av.Value.(QNameValue)
+					srcOK := av.TypeName == TypeString || av.TypeName == TypeUntypedAtomic ||
+						av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
+					if !srcOK {
+						return nil, err
+					}
+					s, _ := AtomicToString(av)
+					if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, ec.namespaces); vErr != nil {
+						return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
+					}
+					qv, qErr := castToQName(av, ec)
+					if qErr != nil {
+						return nil, qErr
+					}
+					qv.BaseType = builtinBase
+					qv.TypeName = targetType
+					return SingleAtomic(qv), nil
+				}
 				result, castErr := CastAtomic(av, builtinBase)
 				if castErr != nil {
 					return nil, castErr
 				}
 				// Validate facets for user-defined types using Q{ns}local format.
 				s, _ := AtomicToString(result)
-				annName := QAnnotation(ns, e.Type.Name)
 				if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
 					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 				}

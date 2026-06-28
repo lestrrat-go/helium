@@ -943,6 +943,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
 	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified
 	impC.schema.attrFormQualified = getAttr(impRoot, attrAttributeFormDefault) == attrValQualified
+	// The imported schema's root xpathDefaultNamespace governs its OWN assertions
+	// (like the direct compile/include/redefine paths). The raw value is stored;
+	// resolveXPathDefaultNS whitespace-collapses it and resolves the ## sentinels.
+	impC.schemaXPathDefaultNS = getAttr(impRoot, attrXPathDefaultNamespace)
 	if v := getAttr(impRoot, attrBlockDefault); v != "" {
 		impC.schema.blockDefault = parseBlockFlags(v)
 	}

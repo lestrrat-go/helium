@@ -763,19 +763,26 @@ func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, deriva
 		return inline
 	case inline != nil:
 		// Compose: restrict the inline type with the sibling facets.
-		return &TypeDef{
+		syn := &TypeDef{
 			ContentType: ContentTypeSimple,
 			Derivation:  DerivationRestriction,
 			BaseType:    inline,
 			Facets:      fs,
 		}
+		// Record the synthetic type so checkFacetConsistency runs its facet
+		// applicability / value-against-base checks (an inapplicable sibling facet,
+		// e.g. xs:minInclusive on an xs:string base, must be rejected at compile).
+		c.recordTypeDefSource(syn, derivation.Line(), true, elemSimpleType)
+		return syn
 	case fs != nil:
-		return &TypeDef{
+		syn := &TypeDef{
 			ContentType: ContentTypeSimple,
 			Derivation:  DerivationRestriction,
 			BaseType:    owner,
 			Facets:      fs,
 		}
+		c.recordTypeDefSource(syn, derivation.Line(), true, elemSimpleType)
+		return syn
 	default:
 		return nil
 	}

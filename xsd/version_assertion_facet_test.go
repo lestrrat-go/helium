@@ -2,6 +2,8 @@ package xsd_test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1122,4 +1124,113 @@ func TestVersion11XPathDefaultNSWhitespace(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, validateAssertion(t, schema, `<outer xmlns="urn:t"><inner>x</inner></outer>`))
 	})
+}
+
+// TestVersion11ImportedXPathDefaultNS verifies that an IMPORTED schema's root
+// xpathDefaultNamespace governs its own assertions, so an imported
+// `xs:assert test="exists(child)"` with unprefixed names resolves namespaced
+// children (PR859-01).
+func TestVersion11ImportedXPathDefaultNS(t *testing.T) {
+	imported := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:imp" elementFormDefault="qualified"
+    xpathDefaultNamespace="##targetNamespace">
+  <xs:element name="outer">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="inner" type="xs:string"/>
+      </xs:sequence>
+      <xs:assert test="exists(inner)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	main := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:main" xmlns:imp="urn:imp" elementFormDefault="qualified">
+  <xs:import namespace="urn:imp" schemaLocation="imported.xsd"/>
+  <xs:element name="root" type="imp:outer"/>
+</xs:schema>`
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "imported.xsd"), []byte(imported), 0o600))
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).FS(os.DirFS(dir)).Compile(t.Context(), doc)
+	require.NoError(t, err)
+	// The imported assert's unprefixed `inner` resolves to urn:imp.
+	require.NoError(t, validateAssertion(t, schema,
+		`<root xmlns="urn:main"><inner xmlns="urn:imp">x</inner></root>`))
+}
+
+// TestVersion11SimpleContentInapplicableFacetRejected verifies that a synthetic
+// simpleContent restriction type with a DIRECT sibling facet is facet-consistency
+// checked: an inapplicable facet (xs:minInclusive on an xs:string base) is a
+// compile error (PR859-02).
+func TestVersion11SimpleContentInapplicableFacetRejected(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base">
+          <xs:minInclusive value="5"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	_, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
+// TestVersion11UnionActiveListMemberValue verifies that union $value typing
+// produces the list-item sequence when the active member is a LIST (PR859-03):
+// here the union value "1 2" is active in IntList, so $value is two xs:int items
+// (count = 2) rather than one untyped atomic.
+func TestVersion11UnionActiveListMemberValue(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="u">
+        <xs:assertion test="count($value) eq 2 and ($value[1] instance of xs:int)"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e>1 2</e>`))
+}
+
+// TestVersion11AssertCastUserQNameType verifies that `cast as t:QNameDerived`
+// inside an assertion resolves the prefix via namespace context (PR859-04):
+// the cast path, like castable, must be namespace-aware for QName-derived user
+// types. The prefix is resolved against the assertion's STATIC namespaces (the
+// schema's in-scope bindings), so p is declared on the schema, not the instance.
+func TestVersion11AssertCastUserQNameType(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" xmlns:p="urn:p" elementFormDefault="qualified">
+  <xs:simpleType name="myQName">
+    <xs:restriction base="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:string"/>
+      <xs:assert test="namespace-uri-from-QName(@a cast as t:myQName) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t" a="p:y"/>`))
 }

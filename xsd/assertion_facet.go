@@ -19,16 +19,30 @@ import (
 // a value that cannot be re-cast (e.g. a type xpath3 does not model) falls back
 // to xs:untypedAtomic, which still atomizes and casts correctly in comparisons.
 func buildValueSequence(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, vc *validationContext) xpath3.Sequence {
-	switch resolveVariety(td) {
+	// Resolve a union down to the value's ACTIVE member first, so list-vs-atomic
+	// dispatch sees the real variety: a union whose active member is a LIST (e.g.
+	// memberTypes="IntList xs:string" with value "1 2") must produce the list-item
+	// sequence, not a single xs:untypedAtomic.
+	effTD := td
+	if td != nil && resolveVariety(td) == TypeVarietyUnion {
+		var schema *Schema
+		if vc != nil {
+			schema = vc.schema
+		}
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), schema, vc.version); active != nil {
+			effTD = active
+		}
+	}
+	switch resolveVariety(effTD) {
 	case TypeVarietyList:
-		itemType := resolveItemType(td)
+		itemType := resolveItemType(effTD)
 		var items xpath3.ItemSlice
 		for _, item := range valuepkg.XSDFields(value) {
 			items = append(items, typedAtomic(ctx, item, valueNS, itemType, vc))
 		}
 		return items
 	default:
-		return xpath3.ItemSlice{typedAtomic(ctx, value, valueNS, td, vc)}
+		return xpath3.ItemSlice{typedAtomic(ctx, value, valueNS, effTD, vc)}
 	}
 }
 
