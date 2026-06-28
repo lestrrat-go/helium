@@ -426,22 +426,28 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	if strictBuiltinAwareDerivedFrom(alt, decl) {
 		return true
 	}
+	// A union declared type: an alternative is substitutable iff it is validly
+	// derived from one of the union's member types (the union itself was already
+	// covered by strictBuiltinAwareDerivedFrom above). The member set is decisive —
+	// an alternative unrelated to every member is REJECTED, not accepted by the
+	// permissive simple-vs-simple fallback (which would false-accept e.g. xs:string
+	// for union(xs:integer, xs:boolean)).
 	if decl.Variety == TypeVarietyUnion {
 		for _, m := range decl.MemberTypes {
 			if isValidlySubstitutable(alt, m) {
 				return true
 			}
 		}
+		return false
 	}
 	// When decl is a BUILT-IN simple type the built-in hierarchy is DECISIVE: the
-	// check above already accepted every genuine built-in derivation, so reaching
-	// here means alt is NOT derived from decl and must be rejected — there is NO
-	// permissive simple-vs-simple fallback (that would false-accept xs:NMTOKENS for
-	// xs:NMTOKEN, or xs:string for xs:integer). The sole exception is xs:anySimpleType,
-	// the root of the simple-type hierarchy, from which every non-complex simple type
-	// is validly derived.
+	// check above already accepted every genuine built-in derivation (including
+	// xs:anySimpleType via its simple-content rule), so reaching here means alt is NOT
+	// derived from decl and must be rejected — there is NO permissive simple-vs-simple
+	// fallback (that would false-accept xs:NMTOKENS for xs:NMTOKEN, or xs:string for
+	// xs:integer).
 	if isBuiltinSimpleType(decl) {
-		return decl.Name.Local == lexicon.TypeAnySimpleType && !alt.IsComplex
+		return false
 	}
 	// USER-defined simple decl: its BaseType chain IS linked, so strictBuiltinAware-
 	// DerivedFrom already saw any real derivation. An unconfirmed simple-vs-simple

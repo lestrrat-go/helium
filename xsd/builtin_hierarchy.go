@@ -114,5 +114,17 @@ func strictBuiltinAwareDerivedFrom(sub, super *TypeDef) bool {
 	if isDerivedFrom(sub, super) {
 		return true
 	}
-	return isBuiltinSimpleType(super) && builtinSimpleDerivedFrom(builtinBaseLocal(sub), super.Name.Local)
+	if !isBuiltinSimpleType(super) {
+		return false
+	}
+	// xs:anySimpleType is the root of the simple-type hierarchy: EVERY simple type —
+	// and every complex type with simple content — is validly derived from it,
+	// including USER list/union types whose BaseType is not pointer-linked to it (so
+	// builtinBaseLocal cannot see them). A type "has simple content" iff its
+	// {content type} is a simple type, i.e. ContentType == ContentTypeSimple (true
+	// for atomic/list/union simple types AND complex types with <xs:simpleContent>).
+	if super.Name.Local == lexicon.TypeAnySimpleType {
+		return sub != nil && sub.ContentType == ContentTypeSimple
+	}
+	return builtinSimpleDerivedFrom(builtinBaseLocal(sub), super.Name.Local)
 }

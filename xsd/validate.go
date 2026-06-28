@@ -861,6 +861,14 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			contentErr = xsiErr
 			continue
 		}
+		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+		// for a global element assessed through xs:anyType too.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
+				"The xsi:type definition is blocked by the element declaration.")
+			contentErr = fmt.Errorf("blocked xsi:type")
+			continue
+		}
 		if td != nil && td.Abstract {
 			msg := msgAbstractType
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msg)

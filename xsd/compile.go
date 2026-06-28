@@ -1143,7 +1143,12 @@ func registerBuiltinTypes11(s *Schema) {
 	}
 	add := func(local string, base *TypeDef) {
 		qn := QName{Local: local, NS: lexicon.NamespaceXSD}
-		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: base}
+		// All five XSD 1.1 built-in datatypes below are derived from their base by
+		// RESTRICTION. Recording Derivation (these built-ins ARE BaseType-linked, so
+		// the pointer walk reaches the base) lets isDerivationBlocked enforce
+		// block="restriction"/"#all" on e.g. xsi:type="xs:dateTimeStamp" over a
+		// declared xs:dateTime.
+		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: base, Derivation: DerivationRestriction}
 	}
 	add(lexicon.TypeDateTimeStamp, builtin(lexicon.TypeDateTime))
 	add(lexicon.TypeDayTimeDuration, builtin(lexicon.TypeDuration))

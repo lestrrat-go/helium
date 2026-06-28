@@ -306,11 +306,19 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
 		// The host declaration was already recorded during the initial scan above
 		// (before any early return). Nothing to record here.
-		td := effectiveDeclType(actualDecl, vc.schema)
-		td = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, td)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td, vc.hasTypeTable(actualDecl))
+		declType := effectiveDeclType(actualDecl, vc.schema)
+		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
+			continue
+		}
+		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+		// here just like at matchElementParticle/root.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+				"The xsi:type definition is blocked by the element declaration.")
+			contentErr = fmt.Errorf("blocked xsi:type")
 			continue
 		}
 		if td != nil && td.Abstract {
@@ -798,11 +806,19 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 			}
 			continue
 		}
-		td := effectiveDeclType(edecl, vc.schema)
-		td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td, vc.hasTypeTable(edecl))
+		declType := effectiveDeclType(edecl, vc.schema)
+		declType = vc.applyTypeAlternatives(ctx, child.elem, edecl, declType)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
+			continue
+		}
+		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+		// for a strict wildcard-matched global element too.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+				"The xsi:type definition is blocked by the element declaration.")
+			contentErr = fmt.Errorf("blocked xsi:type")
 			continue
 		}
 		if td != nil && td.Abstract {
