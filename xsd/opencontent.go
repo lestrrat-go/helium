@@ -87,17 +87,34 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 // wildcard, so the wildcard never claims a child a sibling element declaration
 // would match. Runs after group refs are expanded so nested/group-contributed
 // siblings are included.
+//
+// It must visit ALL parsed complex types, not just NAMED ones (c.schema.types):
+// an inline ANONYMOUS complexType (e.g. on a local element declaration) also
+// carries content models with ##definedSibling wildcards. Anonymous types are
+// recorded in c.typeDefSources by parseComplexType, so iterate that map's keys
+// in addition to the named types, deduplicating by *TypeDef pointer.
 func (c *compiler) resolveDefinedSiblings() {
-	for _, td := range c.schema.types {
+	visited := make(map[*TypeDef]struct{})
+	resolve := func(td *TypeDef) {
 		if td == nil || td.ContentModel == nil {
-			continue
+			return
 		}
+		if _, seen := visited[td]; seen {
+			return
+		}
+		visited[td] = struct{}{}
 		names := collectModelElementNames(td.ContentModel, c.schema)
 		var siblings []QName
 		for qn := range names {
 			siblings = append(siblings, qn)
 		}
 		assignDefinedSiblings(td.ContentModel, siblings)
+	}
+	for _, td := range c.schema.types {
+		resolve(td)
+	}
+	for td := range c.typeDefSources {
+		resolve(td)
 	}
 }
 

@@ -618,3 +618,35 @@ func TestVersion11ExtensionUnionDefined(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestVersion11DefinedSiblingInlineType covers gauntlet finding PR858-R3-001:
+// an INLINE ANONYMOUS complexType carrying an xs:any with
+// @notQName="##definedSibling" must have its SiblingNames resolved too (not just
+// named schema types), so the wildcard does not falsely admit a second
+// sibling-named child.
+func TestVersion11DefinedSiblingInlineType(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+        <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("inline type wildcard rejects a duplicate sibling-named child", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e><a>x</a><a>y</a></e>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("inline type wildcard admits a non-sibling child", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<e><a>x</a><b/></e>`)
+		require.NoError(t, err)
+	})
+}
