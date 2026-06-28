@@ -345,7 +345,10 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			}
 		}
 
-		// First child not allowed with ref (except annotation).
+		// An element ref may only carry (annotation?). ANY other XSD child — an
+		// inline complexType/simpleType, an xs:alternative (XSD 1.1 CTA belongs to
+		// the referenced GLOBAL declaration, not the ref), or any stray XSD element —
+		// is invalid. Report the first such child uniformly.
 		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
@@ -354,7 +357,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			if !ok {
 				continue
 			}
-			if isXSDElement(ce, elemComplexType) || isXSDElement(ce, elemSimpleType) {
+			if ce.URI() == lexicon.NamespaceXSD && !isXSDElement(ce, elemAnnotation) {
 				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The content is not valid. Expected is (annotation?)."))
 				break // only report first
