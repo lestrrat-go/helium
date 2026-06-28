@@ -84,23 +84,28 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// the same value (or an attribute ID and an <id> child of one element)
 		// identify the SAME element and are not a duplicate, whereas the same value
 		// reaching two different parents is (saxonData/Id id003, id004).
-		// A nilled element (xsi:nil="true") has NO element value, so its declared
-		// default/fixed must NOT be substituted as an ID/IDREF (that would fabricate
-		// a duplicate ID or a dangling IDREF and false-reject a valid document). Skip
-		// element-content collection for it; attribute IDs still apply on a nilled
-		// element and are handled below.
-		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) && !isXsiNilTrue(elem) {
-			raw := elemTextContent(elem)
-			if raw == "" {
-				if decl := vc.idcHostDecl(elem); decl != nil {
-					if decl.Fixed != nil {
-						raw = *decl.Fixed
-					} else if decl.Default != nil {
-						raw = *decl.Default
+		// A CONFIRMED nilled element — one DECLARED nillable carrying
+		// xsi:nil="true" — has NO element value, so its declared default/fixed must
+		// NOT be substituted as an ID/IDREF (that would fabricate a duplicate ID or
+		// a dangling IDREF and false-reject a valid document). Skip its
+		// element-content collection. The check is by DECLARATION, not raw xsi:nil:
+		// a processContents="lax" element with no declaration but a resolvable
+		// xsi:type is NOT validly nilled (xsi:nil requires a nillable declaration) —
+		// assessLaxElement validated its real content, so its xs:ID/xs:IDREF value
+		// must still be collected. Attribute IDs always apply (handled below).
+		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) {
+			hostDecl := vc.idcHostDecl(elem)
+			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
+				raw := elemTextContent(elem)
+				if raw == "" && hostDecl != nil {
+					if hostDecl.Fixed != nil {
+						raw = *hostDecl.Fixed
+					} else if hostDecl.Default != nil {
+						raw = *hostDecl.Default
 					}
 				}
+				vc.collectIDFromValue(ctx, col, td, raw, idOwner(elem, true), elem, elem, "")
 			}
-			vc.collectIDFromValue(ctx, col, td, raw, idOwner(elem, true), elem, elem, "")
 		}
 
 		// Attributes typed as ID/IDREF (including via list/union). An attribute ID

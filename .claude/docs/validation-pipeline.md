@@ -346,8 +346,12 @@ URI (`##targetNamespace`/`##defaultNamespace`/`##local`/literal URI) and stored
 per selector/field (`IDConstraint.SelectorDefaultNS`/`FieldDefaultNS`).
 `evaluateIDC` applies it via the opt-in `xpath1.Evaluator.DefaultElementNamespace`,
 which matches unprefixed ELEMENT name tests against that URI (attributes are
-never affected — they have no default namespace). The schema-level
-`@xpathDefaultNamespace` (`compiler.schemaXPathDefaultNS`, read by
+never affected — they have no default namespace). `resolveXPathDefaultNS` decides
+inheritance by PRESENCE (`hasAttr(elem, attrXPathDefaultNS)`), not value — xs:anyURI
+admits the empty string and `getAttr` cannot tell `xpathDefaultNamespace=""` from an
+absent attribute — so an EXPLICIT empty value means "no default element namespace"
+and does NOT inherit the schema-level default; only an ABSENT attribute inherits.
+The schema-level `@xpathDefaultNamespace` (`compiler.schemaXPathDefaultNS`, read by
 `resolveXPathDefaultNS` when a selector/field has none) is a PER-document setting:
 `compile_imports.go` saves/sets/restores it across `xs:include`/`xs:redefine`
 (alongside elementFormDefault/blockDefault/finalDefault and `includeFile`) and
@@ -388,11 +392,16 @@ decomposed against their type variety (`collectIDFromValue`, mirroring
 `canonicalValueKey`): a list splits into items, a union resolves to its active
 member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
 `xs:IDREFS` (a flat atomic placeholder) is split by name. Empty element content
-falls back to the declaration's default/fixed value — EXCEPT on a nilled element
-(`xsi:nil="true"`, checked quietly via `isXsiNilTrue`): a nilled element has no
+falls back to the declaration's default/fixed value — EXCEPT on a CONFIRMED nilled
+element: one DECLARED nillable (`idcHostDecl(elem).Nillable`) carrying
+`xsi:nil="true"` (checked quietly via `isXsiNilTrue`). A nilled element has no
 element value, so substituting its default/fixed would fabricate a duplicate ID or
 a dangling IDREF and false-reject a valid document; its element-content collection
-is skipped (attribute IDs still apply on a nilled element). Element/attribute
+is skipped (attribute IDs still apply). The check is by DECLARATION, NOT raw
+`xsi:nil`: a `processContents="lax"` element with no declaration but a resolvable
+`xsi:type` is not validly nilled (xsi:nil requires a nillable declaration), and
+`assessLaxElement` validated its real content, so its ID/IDREF content is still
+collected — raw `xsi:nil` would wrongly drop it and false-accept a duplicate. Element/attribute
 typing for this pass uses ONLY provenance recorded at genuine pass-1 ASSESSMENT
 sites: `assessedElemType`/`actualElemDecl` for elements and `actualAttrType` for
 attributes (the latter populated in `annotateAttrUse` and `validateWildcardAttr`

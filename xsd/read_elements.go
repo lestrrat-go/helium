@@ -857,17 +857,22 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 
 // resolveXPathDefaultNS resolves the effective default element namespace for an
 // identity-constraint selector/field XPath (XSD 1.1). The value on the
-// selector/field element wins; otherwise the schema-level @xpathDefaultNamespace
-// is inherited. The special keywords resolve as: ##targetNamespace → the
-// schema's target namespace, ##defaultNamespace → the in-scope default namespace
-// at the element, ##local → no namespace; any other value is a literal URI. An
-// absent value (and 1.0 mode) yields no default. Returns "" for "no default".
+// selector/field element wins; the schema-level @xpathDefaultNamespace is
+// inherited ONLY when the attribute is ABSENT on the element — detected by
+// PRESENCE (hasAttr), since xs:anyURI admits the empty value and getAttr cannot
+// tell an explicit @xpathDefaultNamespace="" from an absent one. An explicit
+// empty value therefore means "no default element namespace" and does NOT inherit
+// the schema-level default. The special keywords resolve as: ##targetNamespace →
+// the schema's target namespace, ##defaultNamespace → the in-scope default
+// namespace at the element, ##local → no namespace; any other value is a literal
+// URI. An absent value (and 1.0 mode) yields no default. Returns "" for "no
+// default".
 func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) string {
 	if c.version != Version11 {
 		return ""
 	}
 	raw := getAttr(elem, attrXPathDefaultNS)
-	if raw == "" {
+	if !hasAttr(elem, attrXPathDefaultNS) {
 		raw = c.schemaXPathDefaultNS
 	}
 	switch raw {

@@ -269,6 +269,52 @@ func TestIDCXPathDefaultNamespace(t *testing.T) {
 	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc2))
 }
 
+// TestIDCXPathDefaultNamespaceEmptyOverride covers PR860-IDC-006: an explicit
+// xpathDefaultNamespace="" on a selector/field is a real value (xs:anyURI admits
+// the empty string) meaning "no default element namespace", and must NOT inherit
+// the schema-level default. Here the root sets ##targetNamespace but the selector/
+// field override it to empty, so unprefixed name tests must match no-namespace
+// elements (the unqualified local emp/nr), catching the duplicate.
+func TestIDCXPathDefaultNamespaceEmptyOverride(t *testing.T) {
+	t.Parallel()
+	// elementFormDefault defaults to unqualified, so local emp/nr are no-namespace
+	// while the global doc is in urn:x.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:x" xmlns:s="urn:x" xpathDefaultNamespace="##targetNamespace">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence><xs:element name="emp" type="empType" maxOccurs="unbounded"/></xs:sequence>
+    </xs:complexType>
+    <xs:unique name="u">
+      <xs:selector xpath="emp" xpathDefaultNamespace=""/>
+      <xs:field xpath="nr" xpathDefaultNamespace=""/>
+    </xs:unique>
+  </xs:element>
+  <xs:complexType name="empType">
+    <xs:sequence><xs:element name="nr" type="xs:int"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err)
+
+	// doc is {urn:x}doc; the local emp/nr are unqualified (no namespace). With the
+	// empty selector/field default the unprefixed "emp"/"nr" match these
+	// no-namespace nodes, so the duplicate nr is caught. (Inheriting ##targetNamespace
+	// would resolve "emp" to {urn:x}emp, match nothing, and miss the duplicate.)
+	dup := `<s:doc xmlns:s="urn:x"><emp><nr>1</nr></emp><emp><nr>1</nr></emp></s:doc>`
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(dup))
+	require.NoError(t, err)
+	require.Error(t, xsd.NewValidator(schema).Validate(t.Context(), idoc),
+		"explicit xpathDefaultNamespace=\"\" must not inherit the schema-level default")
+
+	ok := `<s:doc xmlns:s="urn:x"><emp><nr>1</nr></emp><emp><nr>2</nr></emp></s:doc>`
+	idoc2, err := helium.NewParser().Parse(t.Context(), []byte(ok))
+	require.NoError(t, err)
+	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc2))
+}
+
 // TestIDSkipWildcardNotAssessed verifies that elements/attributes admitted
 // through a processContents="skip" wildcard are NOT treated as xs:ID/xs:IDREF by
 // the document-wide ID pass: skip content is not schema-assessed, so duplicate
@@ -493,6 +539,26 @@ func TestIDLaxWildcardXsiTypeAssessed(t *testing.T) {
 		sameOwner := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
 			`<w><id xsi:type="xs:ID">dup</id><id xsi:type="xs:ID">dup</id></w></doc>`
 		require.NoError(t, compileValidate(t, "lax", sameOwner))
+	})
+
+	// PR860-XSD-ID-005: a lax no-declaration element is not validly nillable (no
+	// nillable declaration), so xsi:nil="true" must NOT exempt its real content
+	// from the ID/IDREF pass — raw xsi:nil must not drop it.
+	t.Run("lax wildcard xsi:nil=true xs:ID with valid content still collides", func(t *testing.T) {
+		t.Parallel()
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+			`<w1><id xsi:type="xs:ID" xsi:nil="true">dup</id></w1>` +
+			`<w2><id xsi:type="xs:ID" xsi:nil="true">dup</id></w2></doc>`
+		require.Error(t, compileValidate(t, "lax", inst),
+			"a lax element with xsi:nil but a resolvable xsi:type is not nilled; its ID content must still be checked")
+	})
+
+	t.Run("lax wildcard xsi:nil=true xs:IDREF with valid content still dangles", func(t *testing.T) {
+		t.Parallel()
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+			`<r xsi:type="xs:IDREF" xsi:nil="true">nomatch</r></doc>`
+		require.Error(t, compileValidate(t, "lax", inst),
+			"a lax element with xsi:nil but a resolvable xsi:type is not nilled; its IDREF must still resolve")
 	})
 }
 
