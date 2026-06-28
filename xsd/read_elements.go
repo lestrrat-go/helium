@@ -703,32 +703,42 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
-	ref := ""
-	if c.version == Version11 {
-		ref = getAttr(elem, attrRef)
-	}
-	if name == "" && ref == "" {
+	// Detect the @ref form by PRESENCE, not value: getAttr cannot tell an absent
+	// attribute from an empty one, so a literal ref="" must be recognized as the
+	// (invalid) ref form rather than silently treated as absent and dropped.
+	hasRef := c.version == Version11 && hasAttr(elem, attrRef)
+	if name == "" && !hasRef {
 		return nil
 	}
 
 	// XSD 1.1 identity-constraint @ref: the constraint reuses a referenced
 	// constraint's name/selector/field. The ref form may carry only annotation/id
-	// metadata, so name/selector/field (and, for keyref, refer) MUST be absent;
-	// the referenced constraint is resolved (and its selector/fields copied in)
-	// at compile time by resolveConstraintRefs.
-	if ref != "" {
+	// metadata, so name/selector/field/refer MUST be absent; the referenced
+	// constraint is resolved (and its selector/fields copied in) at compile time
+	// by resolveConstraintRefs.
+	if hasRef {
 		source := c.includeFile
 		if source == "" {
 			source = c.filename
 		}
 		xsdElem := idcKindName(kind)
+		ref := getAttr(elem, attrRef)
+		// An empty @ref names no constraint and is a fatal schema error; drop the
+		// constraint so resolveConstraintRefs does not also report it as unknown.
+		if ref == "" {
+			if source != "" {
+				c.schemaError(ctx, schemaParserErrorAttr(source, elem.Line(), xsdElem, xsdElem, attrRef,
+					"An identity-constraint 'ref' attribute must not be empty."))
+			}
+			return nil
+		}
 		// A @ref constraint must not also declare its own name/selector/field/refer
-		// (the ref form is mutually exclusive with the full form). Reject each
-		// offending companion as a fatal schema error.
+		// (the ref form is mutually exclusive with the full form). refer is rejected
+		// for EVERY kind, not just keyref — the ref form forbids it regardless.
 		if name != "" {
 			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
 		}
-		if kind == IDCKeyRef && getAttr(elem, attrRefer) != "" {
+		if hasAttr(elem, attrRefer) {
 			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
 		}
 		for child := range helium.Children(elem) {

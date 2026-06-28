@@ -551,3 +551,119 @@ func TestIDNilledElementDefaultNotCollected(t *testing.T) {
 			"a nilled IDREF element's default must not be collected as a reference")
 	})
 }
+
+// TestIDLaxWildcardNilledStillValidated covers PR860-REVIEW-001: an undeclared
+// processContents="lax" element with a resolvable xsi:type and xsi:nil="true"
+// must STILL be validated against the governing type — an undeclared element has
+// no nillable declaration, so xsi:nil cannot exempt it from type validation.
+func TestIDLaxWildcardNilledStillValidated(t *testing.T) {
+	compileValidate := func(t *testing.T, instanceXML string) error {
+		t.Helper()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType><xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		require.NoError(t, err)
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	t.Run("nilled lax element with invalid content is rejected", func(t *testing.T) {
+		t.Parallel()
+		// xsi:nil="true" must not bypass validation: "not-int" is not a valid xs:int.
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+			`<id xsi:type="xs:int" xsi:nil="true">not-int</id></doc>`
+		require.Error(t, compileValidate(t, inst),
+			"nilled undeclared lax element must still be validated against xsi:type")
+	})
+
+	t.Run("nilled lax element with empty content the type forbids is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Empty content is not a valid xs:int, and there is no nillable declaration
+		// to make the element legitimately nil.
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+			`<id xsi:type="xs:int" xsi:nil="true"></id></doc>`
+		require.Error(t, compileValidate(t, inst))
+	})
+
+	t.Run("nilled lax element with empty content the type permits is valid", func(t *testing.T) {
+		t.Parallel()
+		// Empty content IS a valid xs:string, so the element validates.
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+			`<id xsi:type="xs:string" xsi:nil="true"></id></doc>`
+		require.NoError(t, compileValidate(t, inst))
+	})
+}
+
+// TestIDConstraintEmptyRef covers PR860-REVIEW-002: an identity-constraint with
+// a present-but-empty ref="" is the (invalid) ref form and must be a fatal schema
+// error, not silently dropped.
+func TestIDConstraintEmptyRef(t *testing.T) {
+	t.Parallel()
+	compile := func(t *testing.T, idc string) error {
+		t.Helper()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
+    ` + idc + `
+  </xs:element>
+</xs:schema>`
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		return err
+	}
+
+	require.ErrorIs(t, compile(t, `<xs:unique ref=""/>`), xsd.ErrCompilationFailed)
+	require.ErrorIs(t, compile(t, `<xs:key ref=""/>`), xsd.ErrCompilationFailed)
+	require.ErrorIs(t, compile(t, `<xs:keyref ref=""/>`), xsd.ErrCompilationFailed)
+}
+
+// TestIDConstraintRefForbidsReferAllKinds covers PR860-REVIEW-003: the ref form
+// forbids @refer for EVERY kind (key/unique/keyref), not just keyref.
+func TestIDConstraintRefForbidsReferAllKinds(t *testing.T) {
+	compile := func(t *testing.T, appxIDC string) error {
+		t.Helper()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="chap">
+          <xs:key name="k"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:key>
+        </xs:element>
+        <xs:element name="appx" type="chap">
+          ` + appxIDC + `
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		return err
+	}
+
+	t.Run("key ref with refer is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, `<xs:key ref="k" refer="k"/>`), xsd.ErrCompilationFailed)
+	})
+	t.Run("unique ref with refer is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, `<xs:unique ref="k" refer="k"/>`), xsd.ErrCompilationFailed)
+	})
+}

@@ -785,15 +785,22 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 				msg := "No matching global declaration available, but demanded by the strict wildcard."
 				vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
 				contentErr = fmt.Errorf("strict wildcard: no global element decl")
+				// Still recurse into the subtree so any deeper descendant that DOES
+				// have a global declaration gets its ACTUAL type recorded for pass-2
+				// IDC canonicalization.
+				if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
+					contentErr = err
+				}
+				continue
 			}
-			// Lax: this element has no global declaration, so it is not
-			// schema-assessed. Still recurse into its subtree so any deeper
-			// descendant that DOES have a global declaration gets its ACTUAL
-			// type (honoring xsi:type) recorded via annotateElement before
-			// pass-2 IDC evaluation — otherwise a nested global IDC host's
-			// fields would be canonicalized with declared (or raw) types and
-			// xsi:type overrides on descendants would be missed.
-			if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
+			// Lax with no global declaration: per XSD lax assessment, if a governing
+			// type is found via xsi:type the element must be ·valid· against it and
+			// is schema-assessed (so its xs:ID/xs:IDREF content participates in the
+			// ID/IDREF pass); otherwise it is not assessed and only its subtree is
+			// walked to record descendants' ACTUAL types for pass-2 IDC
+			// canonicalization. assessLaxElement handles both cases and never lets
+			// xsi:nil bypass type validation.
+			if err := vc.assessLaxElement(ctx, child.elem); err != nil {
 				contentErr = err
 			}
 			continue

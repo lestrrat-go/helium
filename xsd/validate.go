@@ -826,6 +826,39 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 	return nil
 }
 
+// assessLaxElement performs XSD lax assessment of an element that matched a
+// processContents="lax" wildcard (or is a child of an xs:anyType element) and has
+// NO element declaration. Per XSD lax: if a governing type can be found — here via
+// xsi:type — the element must be ·valid· against it and IS schema-assessed, so it
+// is validated against that type and recorded with assessed=true (its
+// xs:ID/xs:IDREF content then participates in the document-wide ID/IDREF pass).
+// With no resolvable xsi:type the element is not assessed; only its subtree is
+// walked to annotate deeper descendants for pass-2 IDC canonicalization.
+//
+// An undeclared element has no nillable declaration, so xsi:nil cannot make it
+// nil: its content is ALWAYS validated against the governing type (a nilled
+// element with non-empty content, or empty content the type forbids such as
+// xs:int, is rejected; empty content a type permits stays valid). checkXsiNil
+// still runs to surface a malformed xsi:nil boolean.
+func (vc *validationContext) assessLaxElement(ctx context.Context, ce *helium.Element) error {
+	actual, hasType := vc.resolveXsiTypeQuiet(ce)
+	if !hasType {
+		return vc.annotateAnyTypeChildren(ctx, ce)
+	}
+	if actual != nil && actual.Abstract {
+		vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, ce, actual, true)
+	if actual == nil {
+		return nil
+	}
+	if _, nilErr := vc.checkXsiNil(ctx, ce); nilErr != nil {
+		return nilErr
+	}
+	return vc.validateElementContent(ctx, ce, nil, actual)
+}
+
 // annotateAnyTypeChildren lax-validates the child elements of an xs:anyType (or
 // other mixed, model-group-less) element. There is no content model to walk, so
 // children are validated like elements matched by a lax wildcard: each child's
@@ -846,45 +879,9 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		}
 		edecl := lookupElemDecl(ce, vc.schema)
 		if edecl == nil {
-			// processContents="lax" with no global declaration. Per XSD lax
-			// assessment, if a governing type CAN be found (here via xsi:type) the
-			// element must be ·valid· against it and IS schema-assessed; otherwise it
-			// is not assessed and is only recursed into to annotate deeper
-			// descendants for pass-2 canonicalization. (Contrast skip content, which
-			// is NEVER assessed — handled by annotateSkipChildren.)
-			actual, hasType := vc.resolveXsiTypeQuiet(ce)
-			if !hasType {
-				if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
-					contentErr = err
-				}
-				continue
-			}
-			if actual != nil && actual.Abstract {
-				vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msgAbstractType)
-				contentErr = fmt.Errorf("abstract type")
-				continue
-			}
-			// Mark assessed=true so the ID/IDREF pass treats xsi:type="xs:ID"/
-			// "xs:IDREF" content here as a real ID (the false-accept this fixes).
-			vc.annotateElement(ctx, ce, actual, true)
-			if actual == nil {
-				continue
-			}
-			nilled, nilErr := vc.checkXsiNil(ctx, ce)
-			if nilErr != nil {
-				contentErr = nilErr
-				continue
-			}
-			if nilled {
-				// An undeclared element is not nillable, so it cannot be validly
-				// nilled and has no assessed content to validate; recurse only to
-				// annotate descendants. The ID/IDREF pass skips nilled content anyway.
-				if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
-					contentErr = err
-				}
-				continue
-			}
-			if err := vc.validateElementContent(ctx, ce, nil, actual); err != nil {
+			// Lax with no global declaration: assess the child against its xsi:type
+			// (if resolvable), else recurse to annotate deeper descendants.
+			if err := vc.assessLaxElement(ctx, ce); err != nil {
 				contentErr = err
 			}
 			continue

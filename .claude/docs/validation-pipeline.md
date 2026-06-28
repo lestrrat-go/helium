@@ -361,13 +361,18 @@ constraint's selector/fields — and a keyref's `refer` — and adopt its QName
 identity (so a ref'd keyref resolves against a ref'd key on the same host); the
 reference must resolve to an existing constraint of the SAME kind, else a fatal
 schema error. A `@ref` constraint has no name of its own and is skipped in the
-duplicate-name and key-name registries. A prefixed `@ref` whose prefix is not
-bound in scope is a fatal error (`resolveIDCNameQName` → `reportUnboundQNamePrefix`,
-the same path every other QName-valued schema attribute uses), not a silent map to
-no-namespace; the `constraintRefUnbound` flag suppresses the follow-up
-"unknown constraint" diagnostic. The `@ref` form is mutually exclusive with the
-full form: a `@ref` constraint that ALSO carries `name`/`xs:selector`/`xs:field`/
-(keyref) `refer` is rejected (`reportIDCRefConflict`).
+duplicate-name and key-name registries. The ref form is detected by PRESENCE
+(`hasAttr(elem, attrRef)`, since `getAttr` cannot tell an absent attribute from an
+empty one) so a literal `ref=""` is recognized as the (invalid) ref form and
+reported as a fatal error rather than silently dropped. A prefixed `@ref` whose
+prefix is not bound in scope is a fatal error (`resolveIDCNameQName` →
+`reportUnboundQNamePrefix`, the same path every other QName-valued schema attribute
+uses), not a silent map to no-namespace; the `constraintRefUnbound` flag suppresses
+the follow-up "unknown constraint" diagnostic. The `@ref` form is mutually
+exclusive with the full form: a `@ref` constraint that ALSO carries
+`name`/`xs:selector`/`xs:field`/`refer` is rejected (`reportIDCRefConflict`) — and
+`refer` is rejected for EVERY kind (key/unique/keyref), detected via `hasAttr`, not
+only on `xs:keyref`.
 
 **Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
 a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
@@ -399,11 +404,21 @@ content-model matches, xs:anyType/lax children WITH a global declaration, AND a
 `processContents="lax"` element with no declaration but a RESOLVABLE `xsi:type`
 (which per XSD lax IS assessed: validated against that type and counted for pass 3,
 so its `xsi:type="xs:ID"`/`xs:IDREF` content participates); false at
-`skip`/lax-no-resolvable-type sites (writes only `actualElemType`). So a `skip`
+`skip`/lax-no-resolvable-type sites (writes only `actualElemType`). The lax
+no-declaration assessment lives in ONE shared helper, `assessLaxElement`, called
+from BOTH `matchWildcardParticle` (a directly wildcard-matched lax element) and
+`annotateAnyTypeChildren` (an xs:anyType/lax descendant), so a directly-matched
+lax element is validated and assessed just like a descendant — previously
+`matchWildcardParticle` only recursed into the subtree and never assessed the
+matched element itself, so it both false-accepted invalid `xsi:type` content and
+missed its ID. `assessLaxElement` NEVER lets `xsi:nil="true"` bypass validation: an
+undeclared element has no nillable declaration, so its content is always validated
+against the governing type (a nilled lax element with invalid or type-forbidden
+content is rejected; empty content a type permits stays valid). So a `skip`
 wildcard element — even one carrying `xsi:type="xs:ID"` — is NEVER assessed and is
 not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element IS. This avoids both
-false-rejecting duplicate skipped IDs and false-accepting duplicate lax-assessed
-xsi:type IDs. The pass never runs in 1.0
+false-rejecting duplicate skipped IDs and false-accepting duplicate (or invalid)
+lax-assessed xsi:type content. The pass never runs in 1.0
 mode, so the libxml2-compat goldens stay byte-identical. NOT covered:
 `xs:ENTITY`/`xs:ENTITIES` (need the DTD unparsed-entity table) and ID/IDREF
 members inside a union at instance level. NOTE: this skip-exclusion is for the
