@@ -526,6 +526,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Register built-in types.
 	registerBuiltinTypes(c.schema, c.version)
 
+	// Conditional inclusion (XSD 1.1 version-control namespace): prune any
+	// elements excluded by their vc: attributes for the active version BEFORE the
+	// tree is interpreted, so a removed element (e.g. a 1.1-only xs:assert under a
+	// 1.0 processor, or a 1.0 fallback under 1.1) is never compiled. It needs the
+	// built-in type registry (typeAvailable) so it runs after registerBuiltinTypes.
+	c.applyConditionalInclusion(ctx, root)
+
 	// First pass: collect all named types and global elements.
 	if err := c.parseSchemaChildren(ctx, root); err != nil {
 		return nil, err
