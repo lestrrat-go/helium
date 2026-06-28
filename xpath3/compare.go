@@ -397,7 +397,7 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 				continue
 			}
 			// Union whose ACTIVE member is a list: expand value-dependently.
-			if len(ni.UnionMembers) > 0 {
+			if ni.ActiveUnionMember != nil {
 				if atoms, handled := atomizeUnionItems(ni); handled {
 					listSeq := make(ItemSlice, len(atoms))
 					for i, av := range atoms {

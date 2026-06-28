@@ -212,58 +212,77 @@ func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
 		}
 		if members := ec.schemaDeclarations.UnionMemberTypes(ni.TypeAnnotation); len(members) > 0 {
 			ni.UnionMemberTypes = members
-			ni.UnionMembers = make([]NodeItemUnionMember, len(members))
-			for i, m := range members {
-				meta := NodeItemUnionMember{
-					TypeName: m,
-					Atomized: atomizedTypeForAnnotation(m, ec.schemaDeclarations),
-				}
-				if li, ok := ec.schemaDeclarations.ListItemType(m); ok {
-					meta.ListItem = li
-					meta.ListItemAtom = atomizedTypeForAnnotation(li, ec.schemaDeclarations)
-				}
-				ni.UnionMembers[i] = meta
+			if leaf := resolveActiveUnionLeaf(ctx, ec, n, ni.TypeAnnotation, ni.QNameNoDefaultNS); leaf != nil {
+				ni.ActiveUnionMember = leaf
 			}
-			ni.ActiveUnionMember = resolveActiveUnionMember(ctx, ec, n, ni)
 		}
 	}
 	return ni
 }
 
-// resolveActiveUnionMember selects a union node's ACTIVE member: the first member,
-// in declaration order, whose value FULLY validates — both the lexical/value cast
-// (and, for a list member, every token plus the list structure) AND the member's
-// own facets/assertions via SchemaDeclarations.ValidateCastWithNS (which is a no-op
-// for built-ins, where the cast check already covers validity). This matches the
-// $value path's active-member selection so data() and $value agree. Returns -1 when
-// no member validates (the caller then falls back to single-value atomization).
-func resolveActiveUnionMember(ctx context.Context, ec *evalContext, n helium.Node, ni NodeItem) int {
+// resolveActiveUnionLeaf resolves a union node's value-dependent ACTIVE LEAF member:
+// the first DIRECT member (declaration order) the value fully validates against;
+// when that member is ITSELF a union it descends recursively to find the nested
+// leaf, mirroring fixedUnionActiveMember so data() and $value agree for arbitrarily
+// nested unions. Full validation = the lexical/value cast (and, for a list member,
+// every token plus the list structure) AND the member's own facets/assertions via
+// SchemaDeclarations.ValidateCastWithNS (a no-op for built-ins, where the cast check
+// already covers validity). Returns nil when no member validates.
+func resolveActiveUnionLeaf(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool) *NodeItemUnionMember {
 	val := ixpath.StringValue(n)
-	var nsMap map[string]string
-	nsReady := false
-	for i, m := range ni.UnionMembers {
-		if !unionMemberCastOK(val, m, ni.Node, ni.QNameNoDefaultNS) {
-			continue
-		}
-		if ec.schemaDeclarations != nil {
-			if !nsReady {
-				nsMap = inScopeNSMap(n)
-				nsReady = true
-			}
-			if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m.TypeName, nsMap); err != nil {
-				continue
-			}
-		}
-		return i
-	}
-	return -1
+	nsMap := inScopeNSMap(n)
+	return resolveActiveUnionLeafRec(ctx, ec, n, unionType, qnameNoDefault, val, nsMap, 0)
 }
 
-// unionMemberCastOK reports whether val is lexically/value-valid for a union member
-// (a list member requires every whitespace token to atomize, an atomic member to
-// cast / a QName/NOTATION member to resolve as a single token). It does NOT check
-// user facets — resolveActiveUnionMember layers ValidateCastWithNS on top — but it
-// is what enforces BUILT-IN member validity (ValidateCast is a no-op for built-ins).
+func resolveActiveUnionLeafRec(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool, val string, nsMap map[string]string, depth int) *NodeItemUnionMember {
+	if depth > 64 { // guard against a pathological/cyclic union graph
+		return nil
+	}
+	for _, m := range ec.schemaDeclarations.UnionMemberTypes(unionType) {
+		// A member that is itself a union: full-validate the value against it, then
+		// descend to its nested active leaf (matches fixedUnionActiveMember).
+		if nested := ec.schemaDeclarations.UnionMemberTypes(m); len(nested) > 0 {
+			if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m, nsMap); err != nil {
+				continue
+			}
+			if leaf := resolveActiveUnionLeafRec(ctx, ec, n, m, qnameNoDefault, val, nsMap, depth+1); leaf != nil {
+				return leaf
+			}
+			continue
+		}
+		meta := unionMemberMeta(ec.schemaDeclarations, m)
+		if !unionMemberCastOK(val, meta, n, qnameNoDefault) {
+			continue
+		}
+		if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m, nsMap); err != nil {
+			continue
+		}
+		leaf := meta
+		return &leaf
+	}
+	return nil
+}
+
+// unionMemberMeta builds the per-member atomization metadata (built-in base, and
+// list-item info when the member is a list) for a union member type name.
+func unionMemberMeta(decls SchemaDeclarations, member string) NodeItemUnionMember {
+	meta := NodeItemUnionMember{
+		TypeName: member,
+		Atomized: atomizedTypeForAnnotation(member, decls),
+	}
+	if li, ok := decls.ListItemType(member); ok {
+		meta.ListItem = li
+		meta.ListItemAtom = atomizedTypeForAnnotation(li, decls)
+	}
+	return meta
+}
+
+// unionMemberCastOK reports whether val is lexically/value-valid for a NON-UNION
+// union member (a list member requires every whitespace token to atomize, an atomic
+// member to cast / a QName/NOTATION member to resolve as a single token). It does
+// NOT check user facets — resolveActiveUnionLeafRec layers ValidateCastWithNS on top
+// — but it is what enforces BUILT-IN member validity (ValidateCast is a no-op for
+// built-ins).
 func unionMemberCastOK(val string, m NodeItemUnionMember, node helium.Node, qnameNoDefault bool) bool {
 	if m.ListItem != "" {
 		tokens := strings.Fields(val)

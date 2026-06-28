@@ -178,7 +178,7 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 		// Union types whose ACTIVE member is a list: resolve the active member
 		// value-dependently and expand it to multiple atoms. An atomic active member
 		// (or no matching member) falls through to AtomizeItem for the single value.
-		if ni, ok := item.(NodeItem); ok && len(ni.UnionMembers) > 0 {
+		if ni, ok := item.(NodeItem); ok && ni.ActiveUnionMember != nil {
 			if atoms, handled := atomizeUnionItems(ni); handled {
 				for _, av := range atoms {
 					cont, yerr := yield(av)
@@ -256,10 +256,10 @@ func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
 // falls back to AtomizeItem). A QName/NOTATION value is resolved against the node's
 // in-scope namespaces.
 func atomizeUnionItems(ni NodeItem) ([]AtomicValue, bool) {
-	if ni.ActiveUnionMember < 0 || ni.ActiveUnionMember >= len(ni.UnionMembers) {
+	if ni.ActiveUnionMember == nil {
 		return nil, false
 	}
-	m := ni.UnionMembers[ni.ActiveUnionMember]
+	m := *ni.ActiveUnionMember
 	s := ixpath.StringValue(ni.Node)
 	if m.ListItem != "" {
 		tokens := strings.Fields(s)

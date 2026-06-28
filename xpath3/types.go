@@ -106,11 +106,12 @@ func deepCloneItem(item Item) Item {
 		}
 		return item
 	case NodeItem:
-		if v.UnionMemberTypes == nil && v.UnionMembers == nil {
+		if v.UnionMemberTypes == nil {
 			return item
 		}
 		v.UnionMemberTypes = append([]string(nil), v.UnionMemberTypes...)
-		v.UnionMembers = append([]NodeItemUnionMember(nil), v.UnionMembers...)
+		// ActiveUnionMember points at an immutable NodeItemUnionMember (never mutated
+		// after construction), so the pointer is safely shared across clones.
 		return v
 	case FunctionItem:
 		if v.ParamTypes == nil && v.ReturnType == nil {
@@ -234,17 +235,13 @@ type NodeItem struct {
 	ListItemType     string   // non-empty when the type is a list; the item type name
 	ListItemAtomized string   // built-in base of the list item type (e.g. xs:QName for a QName-derived item)
 	UnionMemberTypes []string // member type names for union types (for atomization)
-	// UnionMembers carries per-member atomization metadata (built-in base, and list
-	// item info when a member is itself a list), precomputed from SchemaDeclarations
-	// so a union node's ACTIVE member can be resolved value-dependently during
-	// atomization without schema access.
-	UnionMembers []NodeItemUnionMember
-	// ActiveUnionMember is the index into UnionMembers of the value-dependent ACTIVE
-	// member (the first member, in declaration order, the node's value FULLY
-	// validates against — including facets/list-length/assertions), or -1 when none
-	// resolved. Precomputed in nodeItemFor via full schema-aware validation so it
+	// ActiveUnionMember is the value-dependent ACTIVE LEAF member of a union-typed
+	// node, precomputed in nodeItemFor via full schema-aware validation (nil when the
+	// node is not a union or no member resolved). It is the resolved LEAF — when the
+	// first validating member is itself a union, resolution descends into it (mirror
+	// of fixedUnionActiveMember) so a nested union reaches its atomic/list leaf. This
 	// agrees with the $value path's active-member selection.
-	ActiveUnionMember int
+	ActiveUnionMember *NodeItemUnionMember
 	// QNameNoDefaultNS, when true, atomizes an UNPREFIXED QName/NOTATION value to
 	// NO namespace instead of resolving the node's in-scope default namespace —
 	// XSD value-space semantics (a QName VALUE, unlike a name, does not pick up the

@@ -1602,3 +1602,53 @@ func TestVersion11AssertUnionActiveMemberFacet(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema2, `<e u="1 2"/>`))
 }
+
+// TestVersion11AssertNestedUnionActiveLeaf verifies that assert NODE atomization
+// descends through NESTED unions to the active LEAF member (PR859-CR21), matching
+// $value (fixedUnionActiveMember recurses). Outer = union(Inner, xs:boolean);
+// Inner = union(IntList, xs:string); value "1 2" → the active leaf is IntList, so
+// data(@u) is two xs:int (not one atomic value typed as the direct member Inner).
+func TestVersion11AssertNestedUnionActiveLeaf(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="Inner">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="Outer">
+    <xs:union memberTypes="Inner xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="Outer"/>
+      <xs:assert test="count(data(@u)) = 2 and (data(@u)[1] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e u="1 2"/>`))
+	// "true" resolves through Inner's xs:string member first (string accepts "true"
+	// before xs:boolean is reached at the Outer level): one atomic value, count 1.
+	const schemaXML2 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="Inner">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="Outer">
+    <xs:union memberTypes="Inner xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="u" type="Outer"/>
+      <xs:assert test="count(data(@u)) = 1 and (data(@u) instance of xs:string)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema2, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML2)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema2, `<e u="hello world"/>`))
+}
