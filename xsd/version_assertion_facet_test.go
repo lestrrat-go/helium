@@ -783,3 +783,32 @@ func TestVersion11FixedDefaultQNameNS(t *testing.T) {
 		require.NoError(t, validateAssertion(t, schema, `<e/>`))
 	})
 }
+
+// TestVersion10QNameDefaultAttrNoRewrite guards the XSD 1.0 byte-identical
+// requirement: the QName default/fixed attribute materialization (a 1.1-only
+// fix) must NOT run in 1.0. A default xs:QName attribute whose schema prefix
+// collides with a different instance binding must be inserted exactly as
+// authored — no fresh-prefix namespace-declaration rewrite.
+func TestVersion10QNameDefaultAttrNoRewrite(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:schema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName" default="p:x"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	// Default XSD 1.0 compiler (no Version11).
+	schema, err := compileAssertion(t, xsd.NewCompiler(), schemaXML)
+	require.NoError(t, err)
+
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(`<e xmlns:p="urn:instance"/>`))
+	require.NoError(t, err)
+	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc))
+
+	out, err := helium.WriteString(idoc)
+	require.NoError(t, err)
+	// The default is inserted as authored; no fresh-prefix rewrite.
+	require.Contains(t, out, `a="p:x"`)
+	require.NotContains(t, out, "p_gen0")
+	require.NotContains(t, out, "urn:schema") // no schema-prefix declaration leaked into the instance
+}

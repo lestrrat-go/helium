@@ -1281,17 +1281,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if _, ok := present[au.Name]; ok {
 			continue
 		}
-		// A QName/NOTATION default/fixed value was authored in the schema, so its
-		// lexical prefix denotes the schema's namespace. Once materialized on the
+		// XSD 1.1: a QName/NOTATION default/fixed value was authored in the schema, so
+		// its lexical prefix denotes the schema's namespace. Once materialized on the
 		// instance, an xs:assert / IDC that atomizes the attribute resolves the
 		// prefix against the INSTANCE's in-scope namespaces — so ensure that prefix
 		// is bound to the declaration's URI on the element (rewriting to a fresh
-		// prefix if the instance already binds it to a different URI).
-		declNS := au.FixedNS
-		if au.Default != nil {
-			declNS = au.DefaultNS
+		// prefix if the instance already binds it to a different URI). Gated to 1.1
+		// so XSD 1.0 inserts the value exactly as authored (byte-identical
+		// serialization — no namespace-declaration rewrite).
+		if vc.version == Version11 {
+			declNS := au.FixedNS
+			if au.Default != nil {
+				declNS = au.DefaultNS
+			}
+			defVal = vc.materializeQNameAttrValue(elem, au, defVal, declNS)
 		}
-		defVal = vc.materializeQNameAttrValue(elem, au, defVal, declNS)
 		// Insert the default/fixed value as an attribute on the element. A
 		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
 		// "qualified") must be inserted with its namespace so later consumers
