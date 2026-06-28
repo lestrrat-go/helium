@@ -299,16 +299,17 @@ func (c *compiler) resolveVCQName(elem *helium.Element, qname string) (string, s
 }
 
 // typeAvailable reports whether the type named {ns}local is a built-in known to
-// the active processor version. Only XSD-namespace built-ins count: the schema's
-// type registry already holds exactly the built-ins for the active version
-// (xs:error and the other 1.1 types are registered only in 1.1 mode), so an
-// unknown or non-XSD type is unavailable.
+// the active processor version. Only XSD-namespace built-ins count, checked
+// against the IMMUTABLE per-version capability set (builtinTypeAvailable) — NOT
+// c.schema.types, which can already hold user/included declarations: a 1.0 schema
+// that declares a type literally named {XSD}error must not make
+// vc:typeAvailable="xs:error" true (capability detection, not "is it declared").
+// A non-XSD or unknown type is unavailable.
 func (c *compiler) typeAvailable(ns, local string) bool {
 	if ns != lexicon.NamespaceXSD {
 		return false
 	}
-	_, ok := c.schema.types[QName{Local: local, NS: lexicon.NamespaceXSD}]
-	return ok
+	return builtinTypeAvailable(local, c.version)
 }
 
 // facetAvailable reports whether the facet named {ns}local is recognized by the

@@ -496,6 +496,49 @@ func TestConditionalInclusion(t *testing.T) {
 		require.NoError(t, validate(t, s11, `<temp x="304"/>`))
 	})
 
+	t.Run("typeAvailable uses built-in capability, not included-schema declarations", func(t *testing.T) {
+		t.Parallel()
+		// The INCLUDING schema (targetNamespace = the XSD namespace) declares a user
+		// type literally named {XSD}error, which shares the compiler's type registry
+		// with the chameleon include. The include gates element "gated" on
+		// vc:typeAvailable="xs:error". Under Version10 xs:error is NOT a built-in, so
+		// "gated" must be PRUNED — the leaked user {XSD}error must not make it
+		// "available" (capability detection, not "is it declared somewhere").
+		const xsdNS = "http://www.w3.org/2001/XMLSchema"
+		const mainXSD = "leak_main.xsd"
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + ` targetNamespace="` + xsdNS + `">
+  <xs:simpleType name="error"><xs:restriction base="xs:string"/></xs:simpleType>
+  <xs:include schemaLocation="leak_inc.xsd"/>
+</xs:schema>`)},
+			"leak_inc.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + ns + `>
+  <xs:element name="gated" type="xs:string" vc:typeAvailable="xs:error"/>
+</xs:schema>`)},
+		}
+		data, err := fsys.ReadFile(mainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		s10, err := xsd.NewCompiler().Version(xsd.Version10).Label(mainXSD).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		// "gated" is {XSD}gated (the chameleon include adopts the XSD-ns target). It
+		// must be pruned under 1.0, so an instance of it is invalid (undeclared).
+		require.Error(t, validate(t, s10, `<gated xmlns="`+xsdNS+`">x</gated>`))
+	})
+
+	t.Run("typeAvailable=xs:error is version-keyed (pruned 1.0, kept 1.1)", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema ` + ns + ` targetNamespace="urn:x" elementFormDefault="qualified">
+  <xs:element name="gated" type="xs:string" vc:typeAvailable="xs:error"/>
+</xs:schema>`
+		s10, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version10), schema)
+		require.NoError(t, err)
+		require.Error(t, validate(t, s10, `<gated xmlns="urn:x">x</gated>`)) // pruned under 1.0
+		s11, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), schema)
+		require.NoError(t, err)
+		require.NoError(t, validate(t, s11, `<gated xmlns="urn:x">x</gated>`)) // kept under 1.1
+	})
+
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema ` + ns + ` targetNamespace="a" elementFormDefault="qualified">

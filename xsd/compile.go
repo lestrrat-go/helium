@@ -1115,27 +1115,73 @@ func parseOccurs(s string, defaultVal int) int {
 	return n
 }
 
-func registerBuiltinTypes(s *Schema, version Version) {
-	builtins := []string{
-		"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
-		lexicon.TypeInteger, lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger,
-		lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
-		lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort, lexicon.TypeUnsignedByte,
-		lexicon.TypePositiveInteger,
-		lexicon.TypeNormalizedString, "token", "language", "Name", "NCName",
-		"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
-		"date", "dateTime", "time", "duration",
-		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
-		"hexBinary", "base64Binary",
-		"anyURI", lexicon.TypeQName, lexicon.TypeNotation,
-		typeAnyType, "anySimpleType",
+// builtinTypeNames is the immutable list of XSD 1.0 built-in datatype local names
+// (in the XSD namespace). It is the SINGLE SOURCE for both registration
+// (registerBuiltinTypes) and processor-capability detection (builtinTypeAvailable
+// / vc:typeAvailable). Capability must consult this fixed set, NOT c.schema.types,
+// because that map can already hold user declarations from the including schema
+// (shared across nested include/redefine) — a 1.0 schema that defines a type
+// literally named {XSD}error must NOT make vc:typeAvailable="xs:error" true.
+var builtinTypeNames = []string{
+	"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
+	lexicon.TypeInteger, lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger,
+	lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
+	lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort, lexicon.TypeUnsignedByte,
+	lexicon.TypePositiveInteger,
+	lexicon.TypeNormalizedString, "token", "language", "Name", "NCName",
+	"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
+	"date", "dateTime", "time", "duration",
+	"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
+	"hexBinary", "base64Binary",
+	"anyURI", lexicon.TypeQName, lexicon.TypeNotation,
+	typeAnyType, "anySimpleType",
+}
+
+// builtinType11Bases maps each XSD 1.1-only built-in datatype local name to its
+// primitive base local name. SINGLE SOURCE for both registration
+// (registerBuiltinTypes11, which links BaseType) and the 1.1 capability set
+// (builtinTypeAvailable). Keeping the names here (not duplicated in a separate
+// list) prevents drift between what is registered and what is reported available.
+var builtinType11Bases = map[string]string{
+	lexicon.TypeDateTimeStamp:     lexicon.TypeDateTime,
+	lexicon.TypeDayTimeDuration:   lexicon.TypeDuration,
+	lexicon.TypeYearMonthDuration: lexicon.TypeDuration,
+	lexicon.TypeAnyAtomicType:     "anySimpleType",
+	lexicon.TypeError:             "anySimpleType",
+}
+
+// builtinTypeSet10 is the precomputed lookup set of the 1.0 built-in names.
+var builtinTypeSet10 = newStringSet(builtinTypeNames)
+
+func newStringSet(names []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		m[n] = struct{}{}
 	}
-	for _, name := range builtins {
+	return m
+}
+
+// builtinTypeAvailable reports whether the XSD-namespace type local name is a
+// built-in KNOWN TO THE PROCESSOR for the active version: the 1.0 built-ins in
+// every version, plus the 1.1-only types in Version11. This is a fixed-capability
+// check, independent of any user/included schema declarations.
+func builtinTypeAvailable(local string, version Version) bool {
+	if _, ok := builtinTypeSet10[local]; ok {
+		return true
+	}
+	if version != Version11 {
+		return false
+	}
+	_, ok := builtinType11Bases[local]
+	return ok
+}
+
+func registerBuiltinTypes(s *Schema, version Version) {
+	for _, name := range builtinTypeNames {
 		qn := QName{Local: name, NS: lexicon.NamespaceXSD}
-		ct := ContentTypeSimple
 		td := &TypeDef{
 			Name:        qn,
-			ContentType: ct,
+			ContentType: ContentTypeSimple,
 		}
 		if name == typeAnyType {
 			td.ContentType = ContentTypeMixed
@@ -1159,13 +1205,8 @@ func registerBuiltinTypes11(s *Schema) {
 	builtin := func(local string) *TypeDef {
 		return s.types[QName{Local: local, NS: lexicon.NamespaceXSD}]
 	}
-	add := func(local string, base *TypeDef) {
+	for local, baseLocal := range builtinType11Bases {
 		qn := QName{Local: local, NS: lexicon.NamespaceXSD}
-		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: base}
+		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: builtin(baseLocal)}
 	}
-	add(lexicon.TypeDateTimeStamp, builtin(lexicon.TypeDateTime))
-	add(lexicon.TypeDayTimeDuration, builtin(lexicon.TypeDuration))
-	add(lexicon.TypeYearMonthDuration, builtin(lexicon.TypeDuration))
-	add(lexicon.TypeAnyAtomicType, builtin("anySimpleType"))
-	add(lexicon.TypeError, builtin("anySimpleType"))
 }
