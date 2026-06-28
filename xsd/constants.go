@@ -67,6 +67,8 @@ const (
 	attrMode                 = "mode" // XSD 1.1: xs:openContent mode
 	attrName                 = "name"
 	attrNamespace            = "namespace"
+	attrNotNamespace         = "notNamespace" // XSD 1.1: wildcard negated-namespace list
+	attrNotQName             = "notQName"     // XSD 1.1: wildcard disallowed-names list
 	attrNillable             = "nillable"
 	attrNil                  = "nil"
 	attrProcessContents      = "processContents"
@@ -80,10 +82,13 @@ const (
 	attrType                 = "type"
 	attrUse                  = "use"
 	attrXPath                = "xpath"
-	// attrXPathDefaultNamespace is the XSD 1.1 xpathDefaultNamespace attribute
-	// (on xs:schema, xs:alternative, xs:assert, …) that supplies the default
-	// element namespace for the XPath expression's unprefixed names.
+	// attrXPathDefaultNamespace and attrXPathDefaultNS are two names for the SAME
+	// XSD 1.1 xpathDefaultNamespace attribute (on xs:schema, xs:alternative,
+	// xs:assert, xs:selector, xs:field) supplying the default element namespace for
+	// an XPath expression's unprefixed names. CTA code uses the first, IDC code the
+	// second; both are kept to avoid churning every reference site.
 	attrXPathDefaultNamespace = "xpathDefaultNamespace"
+	attrXPathDefaultNS        = "xpathDefaultNamespace"
 )
 
 // XSD 1.1 xpathDefaultNamespace keyword values (in addition to a literal URI).

@@ -204,7 +204,23 @@ type IDConstraint struct {
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)
 
-	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	// SelectorDefaultNS / FieldDefaultNS hold the resolved default element
+	// namespace URI (XSD 1.1 @xpathDefaultNamespace) for the selector and each
+	// field XPath. Empty means no default (XPath 1.0 unprefixed = no-namespace).
+	// FieldDefaultNS is parallel to Fields.
+	SelectorDefaultNS string
+	FieldDefaultNS    []string
+
+	// IsConstraintRef marks an XSD 1.1 identity-constraint that uses @ref to point
+	// at another constraint instead of declaring its own name/selector/field. At
+	// compile time the referenced constraint's selector/fields (and, for keyref,
+	// its refer) are copied in, so validation treats it like any other constraint.
+	IsConstraintRef    bool
+	ConstraintRef      string // lexical @ref QName as written
+	ConstraintRefQName QName  // resolved {ns}local of the referenced constraint
+
+	referUnbound         bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	constraintRefUnbound bool // for @ref: the ref prefix was not bound in scope (already reported)
 }
 
 // Assertion is an XSD 1.1 xs:assert constraint on a complex type: an XPath 3.1
@@ -389,6 +405,12 @@ const (
 	WildcardNSNotAbsent       = "##not-absent"
 )
 
+// XSD 1.1 wildcard notQName keyword tokens (xs:any/@notQName, xs:anyAttribute/@notQName).
+const (
+	WildcardQNameDefined        = "##defined"
+	WildcardQNameDefinedSibling = "##definedSibling"
+)
+
 // Wildcard represents an xs:any or xs:anyAttribute wildcard.
 type Wildcard struct {
 	// Namespace constraint: "##any", "##other", "##local",
@@ -396,4 +418,26 @@ type Wildcard struct {
 	Namespace       string
 	ProcessContents ProcessContentsKind
 	TargetNS        string // schema's target namespace, for resolving ##other/##targetNamespace
+
+	// XSD 1.1 additions (xsd.Version11 only; nil/false in 1.0).
+	//
+	// NotNamespace is the resolved set of namespace URIs the wildcard EXCLUDES
+	// (from @notNamespace). "" represents the absent namespace (##local). When
+	// non-nil the wildcard's positive namespace variety is "not these" — it
+	// matches any namespace not in the list. @namespace and @notNamespace are
+	// mutually exclusive, so when this is set Namespace defaults to ##any.
+	NotNamespace []string
+	// NotQName is the resolved set of element/attribute QNames the wildcard
+	// EXCLUDES (the QName members of @notQName).
+	NotQName []QName
+	// NotQNameDefined is true when @notQName contains ##defined: the wildcard
+	// excludes any name with a global element (xs:any) or attribute
+	// (xs:anyAttribute) declaration.
+	NotQNameDefined bool
+	// NotQNameDefinedSibling is true when @notQName contains ##definedSibling
+	// (xs:any only): the wildcard excludes the names of element declarations
+	// that are siblings in the same content model. SiblingNames holds those
+	// names, resolved after the content model is built.
+	NotQNameDefinedSibling bool
+	SiblingNames           []QName
 }

@@ -78,11 +78,14 @@ func TestVersion11CTAReviewR3(t *testing.T) {
 	// context so a test can discriminate on it.
 	t.Run("xml:lang drives CTA", func(t *testing.T) {
 		t.Parallel()
+		// In XSD 1.1 an undeclared xml:* attribute is not auto-allowed, so the type
+		// must permit it (here via an anyAttribute wildcard) — independent of the CTA
+		// context retaining it for the @test.
 		const s = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:complexType name="Holder"><xs:sequence/><xs:attribute name="value" type="xs:integer"/></xs:complexType>
+  <xs:complexType name="Holder"><xs:sequence/><xs:attribute name="value" type="xs:integer"/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:complexType>
   <xs:complexType name="PosHolder">
     <xs:complexContent>
-      <xs:restriction base="Holder"><xs:sequence/><xs:attribute name="value" type="xs:positiveInteger"/></xs:restriction>
+      <xs:restriction base="Holder"><xs:sequence/><xs:attribute name="value" type="xs:positiveInteger"/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:restriction>
     </xs:complexContent>
   </xs:complexType>
   <xs:element name="e" type="Holder">

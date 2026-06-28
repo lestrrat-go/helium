@@ -157,9 +157,31 @@ func (dc *deepCopier) filtered(src Node, parent *Element, state any) bool {
 }
 
 func (dc *deepCopier) record(src, cp Node) {
+	// A faithful deep copy preserves source line numbers so diagnostics emitted
+	// against a copied tree (e.g. xsd's conditional-inclusion clone) keep their
+	// original locations instead of reporting line 0. record runs for every node
+	// the copier produces (elements via copyElement, text/comment/PI/CDATA/
+	// entity-ref via recorded, and the default CopyNode branch), so this is the
+	// single chokepoint that covers them all.
+	copyLine(src, cp)
 	if dc.opts.onCopy != nil {
 		dc.opts.onCopy(src, cp)
 	}
+}
+
+// copyLine carries src's source line number onto its copy cp. Every helium node
+// type embeds docnode (reachable via baseDocNode), including the virtual
+// NamespaceNodeWrapper, so this works uniformly; the nil guards are belt-and-
+// suspenders.
+func copyLine(src, cp Node) {
+	if src == nil || cp == nil {
+		return
+	}
+	sdn, cdn := src.baseDocNode(), cp.baseDocNode()
+	if sdn == nil || cdn == nil {
+		return
+	}
+	cdn.SetLine(sdn.Line())
 }
 
 // recorded records the mapping and returns cp for convenient inline use.
@@ -296,10 +318,16 @@ func (dc *deepCopier) copyAttributes(src, elem *Element) error {
 			if _, err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return err
 			}
-			continue
-		}
-		if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+		} else if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
 			return err
+		}
+		// Preserve the source attribute's line. SetAttribute* returns the element,
+		// so look the copy back up by expanded name. This is the attribute analogue
+		// of record()'s line preservation, but done HERE (not via dc.record) so it
+		// stays metadata-only and does not start surfacing attributes to onCopy
+		// callbacks, which only expect element/text/etc. nodes.
+		if cp, ok := elem.FindAttribute(NSPredicate{Local: a.LocalName(), NamespaceURI: a.URI()}); ok {
+			copyLine(a, cp)
 		}
 	}
 	return nil

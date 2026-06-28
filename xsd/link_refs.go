@@ -237,6 +237,20 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for td, qns := range c.attrGroupRefs {
 		for _, qn := range qns {
 			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
+			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
+			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
+			// "complete wildcard"). Gated on Version11 so 1.0 (which drops group
+			// wildcards) is unchanged.
+			if c.version != Version11 {
+				continue
+			}
+			if gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{}); gw != nil {
+				if td.AnyAttribute == nil {
+					td.AnyAttribute = gw
+				} else {
+					td.AnyAttribute = intersectWildcards(td.AnyAttribute, gw)
+				}
+			}
 		}
 	}
 
@@ -341,7 +355,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 				td.AnyAttribute = td.BaseType.AnyAttribute
 			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
 			}
 			continue
 		}
@@ -408,8 +422,16 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 			td.AnyAttribute = td.BaseType.AnyAttribute
 		} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-			td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+			td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
 		}
+	}
+
+	// XSD 1.1: resolve ##definedSibling on element wildcards now that content
+	// models (including expanded group refs) are fully built — BEFORE the
+	// restriction-derivation checks below, which compare base/derived wildcards'
+	// resolved SiblingNames.
+	if c.version == Version11 {
+		c.resolveDefinedSiblings()
 	}
 
 	// Check restriction attribute compatibility.
@@ -486,6 +508,44 @@ func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*
 		uses = appendAttrUses(uses, c.expandAttrGroupUses(refQN, visited))
 	}
 	return uses
+}
+
+// attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
+// attribute group: its OWN xs:anyAttribute (if any) INTERSECTED with the
+// complete wildcards of every nested xs:attributeGroup ref child. visited guards
+// against reference cycles. Returns nil if neither the group nor any referenced
+// group declares a wildcard.
+func (c *compiler) attrGroupCompleteWildcard(qn QName, visited map[QName]struct{}) *Wildcard {
+	if _, seen := visited[qn]; seen {
+		return nil
+	}
+	visited[qn] = struct{}{}
+
+	result := c.attrGroupWildcards[qn]
+	for _, refQN := range c.attrGroupRefChildren[qn] {
+		nested := c.attrGroupCompleteWildcard(refQN, visited)
+		if nested == nil {
+			continue
+		}
+		if result == nil {
+			result = nested
+			continue
+		}
+		result = intersectWildcards(result, nested)
+	}
+	return result
+}
+
+// combineGroupWildcards intersects two possibly-nil attribute-group wildcards,
+// returning nil when both are nil and the non-nil one when only one is present.
+func combineGroupWildcards(a, b *Wildcard) *Wildcard {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	return intersectWildcards(a, b)
 }
 
 // appendAttrUses merges the attribute uses in extra into dst applying
@@ -1102,9 +1162,11 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
-		} else if td.BaseType.AnyAttribute == nil || !wildcardMatches(td.BaseType.AnyAttribute, au.Name.NS) {
-			// No matching attribute, and no base wildcard whose namespace
-			// constraint admits this derived attribute's namespace.
+		} else if td.BaseType.AnyAttribute == nil || !wildcardAllowsExpandedName(td.BaseType.AnyAttribute, au.Name.Local, au.Name.NS, c.schema, true) {
+			// No matching attribute, and no base wildcard that ADMITS this derived
+			// attribute's expanded name — the full test honors the base wildcard's
+			// notNamespace/notQName/##defined, not just its namespace constraint, so
+			// a derived attribute the base wildcard excludes by name is rejected.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
 			c.schemaError(ctx, schemaComponentError(file, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))
@@ -1135,7 +1197,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
-			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
+			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute, c.schema, true) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
 			}
@@ -1199,7 +1261,20 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 //   - "not(ns)"   → ##other: matches everything except ns and absent
 //   - "not(absent)" → matches everything except absent (empty namespace)
 //   - "set"       → finite set of namespace URIs (empty string = absent)
-func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
+func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
+	// Route to the general constraint algebra for EVERY XSD 1.1 union, not just
+	// those whose operands carry a notNamespace/notQName field. The 1.0 case
+	// analysis below keys processContents on w1 and APPROXIMATES some namespace
+	// unions (e.g. ##other|##local as ##any), both wrong for 1.1: the extension
+	// union must take the DERIVED (w2) processContents (XSD 3.4.2), and an xs:all
+	// restriction's base-wildcard union must compute the EXACT namespace set so a
+	// target-namespace element is not falsely admitted. The 1.0 path is kept
+	// STRICTLY for Version10 so existing goldens stay byte-identical; the
+	// 1.1-field guard remains as a defensive fallback.
+	if version == Version11 || wildcardHas11Fields(w1) || wildcardHas11Fields(w2) {
+		return unionWildcards11(w1, w2)
+	}
+
 	pc := w1.ProcessContents
 	tns := w1.TargetNS
 
@@ -1515,6 +1590,20 @@ func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.El
 		return
 	}
 	msg := fmt.Sprintf("The QName value '%s' uses the namespace prefix '%s', which is not bound to a namespace.", ref, prefix)
+	c.schemaError(ctx,
+		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
+}
+
+// reportInvalidQNameValue emits a fatal schema-compilation error for a
+// QName-valued attribute whose value is not a lexically valid xs:QName (e.g. a
+// leading colon like ":u"). Without this such a value would slip past the
+// prefix-resolution path (strings.Cut yields an empty prefix that bypasses the
+// unbound-prefix check) and resolve as an unprefixed reference.
+func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, ref string) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("The QName value '%s' is not a valid QName.", ref)
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 }

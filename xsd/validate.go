@@ -447,12 +447,17 @@ type validationContext struct {
 	// contributed by xsi:type is canonicalized in the correct value space.
 	actualElemType map[*helium.Element]*TypeDef
 	// actualElemDecl records the resolved *ElementDecl matched for each element
-	// instance during pass-1 content validation, including LOCAL declarations
-	// buried inside content models (which lookupElemDecl, finding only GLOBAL
-	// declarations, cannot recover). Pass-2 identity-constraint evaluation
-	// consults this map BEFORE falling back to lookupElemDecl, so xs:key/
-	// xs:unique/xs:keyref declared on a local element are evaluated rather than
-	// silently skipped.
+	// instance during pass-1, including LOCAL declarations buried inside content
+	// models (which lookupElemDecl, finding only GLOBAL declarations, cannot
+	// recover). It is written AS SOON AS a child MATCHES a particle (recordElemDecl)
+	// — BEFORE the child's content is validated/assessed — so a partially-satisfied
+	// occurrence (e.g. an unsatisfied minOccurs) still records the matched decl.
+	// Pass-2 identity-constraint evaluation consults this map (for the host decl and
+	// its IDCs / default / fixed / nillable metadata) BEFORE falling back to
+	// lookupElemDecl, so xs:key/xs:unique/xs:keyref declared on a local element are
+	// evaluated rather than silently skipped. Because it is written pre-assessment,
+	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
+	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
 	// attrInheritable records, for XSD 1.1, the instance attribute nodes matched to
 	// an AttrUse whose {inheritable} is true. The top-down validation walk populates
@@ -460,6 +465,29 @@ type validationContext struct {
 	// so inheritedAttributes can resolve a CTA/assertion @test against inherited
 	// ancestor attributes.
 	attrInheritable map[*helium.Attribute]struct{}
+	// assessedElemType records the ACTUAL *TypeDef of each element that was truly
+	// SCHEMA-ASSESSED during pass-1 — the validation root, a content-model particle
+	// match whose content was actually validated, or an xs:anyType/lax child WITH a
+	// matching global declaration (all post-xsi:type). It is the element-side
+	// counterpart of actualAttrType. It is deliberately NOT populated by
+	// annotateSkipChildren or the lax-no-declaration branch (which write
+	// actualElemType purely for pass-2 IDC canonicalization), NOR at the
+	// recordElemDecl match site (which fires before assessment), so an element
+	// admitted through a processContents="skip" wildcard — even one carrying
+	// xsi:type="xs:ID" — and a matched-but-unassessed child (e.g. an unsatisfied
+	// minOccurs) are both absent here. The XSD 1.1 ID/IDREF pass uses ONLY this map
+	// for element typing (never actualElemType and never actualElemDecl), so neither
+	// skip content nor matched-but-failed children are mistaken for an xs:ID/xs:IDREF.
+	assessedElemType map[*helium.Element]*TypeDef
+	// actualAttrType records the declared *TypeDef of each attribute that was
+	// actually SCHEMA-ASSESSED during pass-1 — matched by an explicit attribute
+	// use, or admitted by a strict/lax xs:anyAttribute wildcard with a matching
+	// global declaration, or inserted as a default/fixed value. An attribute
+	// admitted by a processContents="skip" wildcard is NOT assessed and is
+	// therefore absent here. The XSD 1.1 ID/IDREF pass consults ONLY this map so a
+	// skip-admitted attribute is never mistaken for an xs:ID/xs:IDREF via a global
+	// fallback (which would false-reject duplicate skipped IDs).
+	actualAttrType map[*helium.Attribute]*TypeDef
 }
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
@@ -477,14 +505,16 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		version = schema.version
 	}
 	return &validationContext{
-		schema:          schema,
-		version:         version,
-		cfg:             cfg,
-		filename:        filename,
-		errorHandler:    handler,
-		actualElemType:  make(map[*helium.Element]*TypeDef),
-		actualElemDecl:  make(map[*helium.Element]*ElementDecl),
-		attrInheritable: make(map[*helium.Attribute]struct{}),
+		schema:           schema,
+		version:          version,
+		cfg:              cfg,
+		filename:         filename,
+		errorHandler:     handler,
+		actualElemType:   make(map[*helium.Element]*TypeDef),
+		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
+		attrInheritable:  make(map[*helium.Attribute]struct{}),
+		assessedElemType: make(map[*helium.Element]*TypeDef),
+		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
 	}
 }
 
@@ -636,6 +666,15 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return nil
 	}))
 
+	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
+	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these
+	// datatype constraints in 1.0, and the libxml2-compat goldens depend on that).
+	if vc.version == Version11 {
+		if !vc.validateIDIDREF(ctx, doc) {
+			valid = false
+		}
+	}
+
 	return valid
 }
 
@@ -700,7 +739,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	}
 
 	// Annotate root element with its type and record its declaration.
-	vc.annotateElement(ctx, elem, td)
+	vc.annotateElement(ctx, elem, td, true)
 	vc.recordElemDecl(elem, edecl)
 
 	nilled, err := vc.checkXsiNil(ctx, elem)
@@ -817,6 +856,39 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 	return nil
 }
 
+// assessLaxElement performs XSD lax assessment of an element that matched a
+// processContents="lax" wildcard (or is a child of an xs:anyType element) and has
+// NO element declaration. Per XSD lax: if a governing type can be found — here via
+// xsi:type — the element must be ·valid· against it and IS schema-assessed, so it
+// is validated against that type and recorded with assessed=true (its
+// xs:ID/xs:IDREF content then participates in the document-wide ID/IDREF pass).
+// With no resolvable xsi:type the element is not assessed; only its subtree is
+// walked to annotate deeper descendants for pass-2 IDC canonicalization.
+//
+// An undeclared element has no nillable declaration, so xsi:nil cannot make it
+// nil: its content is ALWAYS validated against the governing type (a nilled
+// element with non-empty content, or empty content the type forbids such as
+// xs:int, is rejected; empty content a type permits stays valid). checkXsiNil
+// still runs to surface a malformed xsi:nil boolean.
+func (vc *validationContext) assessLaxElement(ctx context.Context, ce *helium.Element) error {
+	actual, hasType := vc.resolveXsiTypeQuiet(ce)
+	if !hasType {
+		return vc.annotateAnyTypeChildren(ctx, ce)
+	}
+	if actual != nil && actual.Abstract {
+		vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, ce, actual, true)
+	if actual == nil {
+		return nil
+	}
+	if _, nilErr := vc.checkXsiNil(ctx, ce); nilErr != nil {
+		return nilErr
+	}
+	return vc.validateElementContent(ctx, ce, nil, actual)
+}
+
 // annotateAnyTypeChildren lax-validates the child elements of an xs:anyType (or
 // other mixed, model-group-less) element. There is no content model to walk, so
 // children are validated like elements matched by a lax wildcard: each child's
@@ -837,16 +909,9 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		}
 		edecl := lookupElemDecl(ce, vc.schema)
 		if edecl == nil {
-			// Lax: no global declaration, so the child (and its subtree) is not
-			// schema-assessed. Still record its own xsi:type ACTUAL type — a parent
-			// IDC selecting this element directly must canonicalize an
-			// xsi:type-introduced field in that type's value space — then recurse so
-			// any deeper anyType descendant with a resolvable global declaration gets
-			// annotated.
-			if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-				vc.annotateElement(ctx, ce, actual)
-			}
-			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+			// Lax with no global declaration: assess the child against its xsi:type
+			// (if resolvable), else recurse to annotate deeper descendants.
+			if err := vc.assessLaxElement(ctx, ce); err != nil {
 				contentErr = err
 			}
 			continue
@@ -875,7 +940,7 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		vc.annotateElement(ctx, ce, td)
+		vc.annotateElement(ctx, ce, td, true)
 		if td == nil {
 			continue
 		}
@@ -912,8 +977,11 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 // xsi:type-introduced field (e.g. an inline xs:integer attribute) is canonicalized
 // in the actual type's value space rather than compared lexically.
 func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	// Skipped content is NOT schema-assessed: annotate for pass-2 IDC
+	// canonicalization only (assessed=false), so a skipped element carrying
+	// xsi:type="xs:ID"/"xs:IDREF" is never picked up by the ID/IDREF pass.
 	if actual, ok := vc.resolveXsiTypeQuiet(elem); ok {
-		vc.annotateElement(ctx, elem, actual)
+		vc.annotateElement(ctx, elem, actual, false)
 	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -926,9 +994,10 @@ func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *hel
 		// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
 		// an unresolvable or non-derived xsi:type must not raise a validity error.
 		// Only an xsi:type override contributes an actual type distinct from what
-		// pass-2 can already derive from the content model, so record only that.
+		// pass-2 can already derive from the content model, so record only that
+		// (assessed=false — skipped content is not schema-assessed).
 		if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-			vc.annotateElement(ctx, ce, actual)
+			vc.annotateElement(ctx, ce, actual, false)
 		}
 		vc.annotateSkipChildren(ctx, ce)
 	}
@@ -1032,16 +1101,22 @@ func collectChildElements(elem *helium.Element) []childElem {
 	return children
 }
 
-func isSpecialAttr(a *helium.Attribute) bool {
+// isSpecialAttr reports whether an attribute is always permitted regardless of
+// the type's attribute declarations. In XSD 1.1 the XML-namespace
+// attributes (xml:lang/space/base/id) are NOT implicitly allowed: they are
+// subject to ordinary attribute-use and wildcard matching, so a wildcard's
+// @notQName can legitimately exclude e.g. xml:space. Only xmlns and the xsi:
+// processor attributes remain unconditionally special. In 1.0 the historical
+// lenient behavior (XML namespace always allowed) is preserved.
+func (vc *validationContext) isSpecialAttr(a *helium.Attribute) bool {
 	p := a.Prefix()
 	if p == "xmlns" || (p == "" && a.LocalName() == "xmlns") {
 		return true
 	}
-	uri := a.URI()
-	if uri == lexicon.NamespaceXSI {
+	if a.URI() == lexicon.NamespaceXSI {
 		return true
 	}
-	if uri == lexicon.NamespaceXML {
+	if vc.version != Version11 && a.URI() == lexicon.NamespaceXML {
 		return true
 	}
 	return false
@@ -1069,7 +1144,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		// No attribute declarations — check that instance has no attributes
 		// (except xsi: namespace attributes and xmlns which are always allowed).
 		for _, a := range elem.Attributes() {
-			if isSpecialAttr(a) {
+			if vc.isSpecialAttr(a) {
 				continue
 			}
 			ad := attrDisplayName(a)
@@ -1111,7 +1186,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
-		if isSpecialAttr(a) {
+		if vc.isSpecialAttr(a) {
 			continue
 		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
@@ -1156,7 +1231,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
-		if td.AnyAttribute != nil && wildcardMatchesAttr(td.AnyAttribute, a.URI()) {
+		if td.AnyAttribute != nil && wildcardAllowsExpandedName(td.AnyAttribute, a.LocalName(), a.URI(), vc.schema, true) {
 			if err := vc.validateWildcardAttr(ctx, a, elem, td.AnyAttribute); err != nil {
 				hasErr = true
 			}
@@ -1263,6 +1338,13 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
 
+	// This wildcard-admitted attribute IS schema-assessed (strict/lax with a
+	// matching global declaration — skip already returned above), so record its
+	// type for the XSD 1.1 ID/IDREF pass.
+	if ok && vc.actualAttrType != nil {
+		vc.actualAttrType[a] = attrTD
+	}
+
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
@@ -1293,11 +1375,6 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		vc.attrInheritable[a] = struct{}{}
 	}
 	return nil
-}
-
-// wildcardMatchesAttr checks if an attribute namespace matches an anyAttribute wildcard.
-func wildcardMatchesAttr(wc *Wildcard, attrNS string) bool {
-	return wildcardMatches(wc, attrNS)
 }
 
 // lookupElemDecl finds the global element declaration for an instance element.
@@ -1585,12 +1662,20 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
-// annotateElement records a type annotation for an element node.
-func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
-	// Always record the actual *TypeDef (post-xsi:type) for pass-2 IDC field
-	// type resolution, independent of the optional user-facing annotations map.
-	if vc.actualElemType != nil && td != nil {
-		vc.actualElemType[elem] = td
+// annotateElement records a type annotation for an element node. assessed reports
+// whether the element was actually SCHEMA-ASSESSED (vs annotated purely for pass-2
+// IDC canonicalization, as for skip/lax-no-declaration content): only an assessed
+// element is recorded in assessedElemType, which the XSD 1.1 ID/IDREF pass
+// consults. actualElemType is always recorded (post-xsi:type) for pass-2 IDC field
+// canonicalization, independent of assessment.
+func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef, assessed bool) {
+	if td != nil {
+		if vc.actualElemType != nil {
+			vc.actualElemType[elem] = td
+		}
+		if assessed && vc.assessedElemType != nil {
+			vc.assessedElemType[elem] = td
+		}
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
@@ -1624,11 +1709,16 @@ func (vc *validationContext) attrUseType(au *AttrUse) (*TypeDef, bool) {
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
 func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
-	if vc.cfg == nil || vc.cfg.annotations == nil {
-		return
-	}
 	td, ok := vc.attrUseType(au)
 	if !ok {
+		return
+	}
+	// Record the assessed attribute's type for the XSD 1.1 ID/IDREF pass,
+	// independent of the optional user-facing annotations map.
+	if vc.actualAttrType != nil {
+		vc.actualAttrType[a] = td
+	}
+	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
 	(*vc.cfg.annotations)[a] = xsdTypeName(td)
