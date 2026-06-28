@@ -703,6 +703,16 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 }
 
 func (vc *validationContext) validateElementContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	// XSD 1.1: a governing type of xs:error (selected by conditional type
+	// assignment, or referenced directly) has an empty value space, so any element
+	// it governs is invalid. This is the single choke point for every type-selection
+	// site (root and the per-child content-model matches).
+	if vc.version == Version11 && isErrorType(td) {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+			"The element is not valid: the conditional type assignment selected the type xs:error.")
+		return fmt.Errorf("xs:error type selected")
+	}
+
 	// Validate attributes and annotate them.
 	if err := vc.validateAttributes(ctx, elem, td); err != nil {
 		return err

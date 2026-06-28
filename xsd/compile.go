@@ -136,6 +136,13 @@ type compiler struct {
 	// recompute its Phase-A delta (the components are already merged), so it
 	// validates and consumes its overrides against this cached set instead.
 	loadedRedefinable map[string]*redefinableSet
+	// xpathDefaultNS holds the schema-level xpathDefaultNamespace (XSD 1.1) raw
+	// lexical value (a URI or one of the ##targetNamespace/##defaultNamespace/##local
+	// keywords). It is inherited by xs:alternative/xs:assert XPath expressions that
+	// do not carry their own xpathDefaultNamespace. xpathDefaultNSSet distinguishes
+	// "absent" from "present and empty".
+	xpathDefaultNS    string
+	xpathDefaultNSSet bool
 }
 
 // redefinableSet caches the redefinable component names a schema document
@@ -500,6 +507,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.version = c.version
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
+	if hasAttr(root, attrXPathDefaultNamespace) {
+		c.xpathDefaultNS = getAttr(root, attrXPathDefaultNamespace)
+		c.xpathDefaultNSSet = true
+	}
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 

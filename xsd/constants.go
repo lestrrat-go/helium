@@ -79,6 +79,17 @@ const (
 	attrType                 = "type"
 	attrUse                  = "use"
 	attrXPath                = "xpath"
+	// attrXPathDefaultNamespace is the XSD 1.1 xpathDefaultNamespace attribute
+	// (on xs:schema, xs:alternative, xs:assert, …) that supplies the default
+	// element namespace for the XPath expression's unprefixed names.
+	attrXPathDefaultNamespace = "xpathDefaultNamespace"
+)
+
+// XSD 1.1 xpathDefaultNamespace keyword values (in addition to a literal URI).
+const (
+	xpathDefaultNSTargetNamespace  = "##targetNamespace"
+	xpathDefaultNSDefaultNamespace = "##defaultNamespace"
+	xpathDefaultNSLocal            = "##local"
 )
 
 const (

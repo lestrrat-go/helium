@@ -44,31 +44,58 @@ func (c *compiler) parseTypeAlternatives(ctx context.Context, elem *helium.Eleme
 	return alts
 }
 
-// parseTypeAlternative reads a single <xs:alternative>. A missing @type or a
-// malformed @test is a fatal schema error (returns nil); an inline anonymous
-// type is not yet supported.
+// parseTypeAlternative reads a single <xs:alternative>. The governing type is
+// supplied either by the @type attribute (a named reference resolved in
+// resolveRefs) or by an inline anonymous <xs:complexType>/<xs:simpleType> child.
+// A missing type (neither @type nor inline) or a malformed @test is a fatal
+// schema error (returns nil).
 func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Element) *TypeAlternative {
-	typeRef := getAttr(elem, attrType)
-	if typeRef == "" {
-		if c.filename != "" {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
-				"An inline type or a 'type' attribute is required on xs:alternative (inline types are not yet supported)."))
-		}
-		return nil
-	}
 	alt := &TypeAlternative{
 		Namespaces: collectNSContext(elem),
 		Line:       elem.Line(),
 		Source:     c.diagSource(),
-		TypeName:   c.resolveQName(ctx, elem, typeRef),
 	}
-	c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
-		alt:      alt,
-		qn:       alt.TypeName,
-		line:     elem.Line(),
-		source:   c.diagSource(),
-		elemName: elem.LocalName(),
-	})
+
+	typeRef := getAttr(elem, attrType)
+	if typeRef != "" {
+		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
+		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
+			alt:      alt,
+			qn:       alt.TypeName,
+			line:     elem.Line(),
+			source:   c.diagSource(),
+			elemName: elem.LocalName(),
+		})
+	} else {
+		// No @type: an inline anonymous <xs:complexType> or <xs:simpleType> child
+		// supplies the governing type. It is compiled through the same path as an
+		// inline type on an element/attribute declaration, so any refs it carries
+		// (e.g. an extension @base) resolve later in resolveRefs.
+		td, found, err := c.parseInlineAlternativeType(ctx, elem)
+		switch {
+		case err != nil:
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+					err.Error()))
+			}
+			return nil
+		case !found:
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+					"An inline type or a 'type' attribute is required on xs:alternative."))
+			}
+			return nil
+		}
+		alt.Type = td
+	}
+
+	// XSD 1.1 xpathDefaultNamespace: the effective value (local on the alternative,
+	// else inherited from the <xs:schema> element) supplies the XPath default
+	// element namespace, exposed to xpath3 as the "" (default-namespace) binding so
+	// an unprefixed name test in @test matches that namespace.
+	if xdn, ok := c.effectiveXPathDefaultNS(elem); ok {
+		alt.Namespaces[""] = xdn
+	}
 
 	// A testless alternative is the unconditional default; it carries no compiled
 	// expression and always matches.
@@ -94,6 +121,67 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 	return alt
 }
 
+// parseInlineAlternativeType compiles the inline anonymous <xs:complexType> or
+// <xs:simpleType> child of an <xs:alternative>. found reports whether such a child
+// was present; when found is false the caller reports the missing-type error. A
+// malformed inline type returns a non-nil error.
+func (c *compiler) parseInlineAlternativeType(ctx context.Context, elem *helium.Element) (*TypeDef, bool, error) {
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		switch {
+		case isXSDElement(ce, elemComplexType):
+			td, err := c.parseComplexType(ctx, ce)
+			return td, true, err
+		case isXSDElement(ce, elemSimpleType):
+			td, err := c.parseSimpleType(ctx, ce)
+			return td, true, err
+		}
+	}
+	return nil, false, nil
+}
+
+// effectiveXPathDefaultNS resolves the XSD 1.1 xpathDefaultNamespace in effect for
+// an XPath-bearing schema element (here an xs:alternative): the value declared on
+// the element itself wins, otherwise the schema-level value is inherited. The
+// returned string is the resolved namespace URI (empty for ##local); ok is false
+// when no xpathDefaultNamespace is in effect, in which case the caller leaves the
+// default-element-namespace binding untouched. The ##targetNamespace/
+// ##defaultNamespace/##local keywords are resolved against the element's context.
+func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) {
+	raw := ""
+	switch {
+	case hasAttr(elem, attrXPathDefaultNamespace):
+		raw = getAttr(elem, attrXPathDefaultNamespace)
+	case c.xpathDefaultNSSet:
+		raw = c.xpathDefaultNS
+	default:
+		return "", false
+	}
+	switch raw {
+	case xpathDefaultNSTargetNamespace:
+		return c.schema.targetNamespace, true
+	case xpathDefaultNSLocal:
+		return "", true
+	case xpathDefaultNSDefaultNamespace:
+		// The in-scope default namespace (xmlns="…") at the alternative element.
+		return collectNSContext(elem)[""], true
+	default:
+		return raw, true
+	}
+}
+
+// isErrorType reports whether td is the XSD 1.1 built-in xs:error type, whose
+// value space and lexical space are empty so any element it governs is invalid.
+func isErrorType(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == lexicon.TypeError
+}
+
 // resolveAltTypeRefs resolves each xs:alternative's @type reference against the
 // registered named types, reporting a fatal schema error for an unresolved type.
 // Run from resolveRefs after the named-type table is populated.
@@ -117,13 +205,26 @@ func (c *compiler) resolveAltTypeRefs(ctx context.Context) {
 // returned unchanged. xsi:type takes precedence over CTA, so this is a no-op when
 // an xsi:type attribute is present.
 func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *helium.Element, edecl *ElementDecl, declType *TypeDef) *TypeDef {
-	if vc.version != Version11 || edecl == nil || len(edecl.Alternatives) == 0 {
+	if vc.version != Version11 || edecl == nil {
+		return declType
+	}
+	// Conditional type assignment is a property of the referenced GLOBAL element
+	// declaration, so an <xs:element ref="g"> particle does not carry the type
+	// table (its ElementDecl is a ref, like IDCs). Fall back to the global
+	// declaration's alternatives, mirroring idcHostDecl's ref handling.
+	alts := edecl.Alternatives
+	if len(alts) == 0 && edecl.IsRef {
+		if g, ok := vc.schema.LookupElement(edecl.Name.Local, edecl.Name.NS); ok && g != edecl {
+			alts = g.Alternatives
+		}
+	}
+	if len(alts) == 0 {
 		return declType
 	}
 	if elementHasXsiType(elem) {
 		return declType
 	}
-	for _, alt := range edecl.Alternatives {
+	for _, alt := range alts {
 		// A testless alternative is the unconditional default.
 		if alt.compiled == nil {
 			if alt.Test == "" && alt.Type != nil {
