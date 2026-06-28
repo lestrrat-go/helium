@@ -650,3 +650,79 @@ func TestVersion11DefinedSiblingInlineType(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestVersion11AttrGroupIntersectionProcessContents covers gauntlet finding
+// PR858-R4-001: the attribute-wildcard INTERSECTION across attribute groups must
+// carry the STRONGER processContents, so the result is order-independent. A skip
+// group intersected with a strict group yields a strict wildcard either way: an
+// undeclared wildcard attribute is rejected regardless of the group ref order.
+func TestVersion11AttrGroupIntersectionProcessContents(t *testing.T) {
+	schema := func(firstRef, secondRef string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="t"/>
+  <xs:complexType name="t">
+    <xs:sequence/>
+    <xs:attributeGroup ref="` + firstRef + `"/>
+    <xs:attributeGroup ref="` + secondRef + `"/>
+  </xs:complexType>
+  <xs:attributeGroup name="askip">
+    <xs:anyAttribute namespace="##any" processContents="skip"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="bstrict">
+    <xs:anyAttribute namespace="##any" processContents="strict"/>
+  </xs:attributeGroup>
+</xs:schema>`
+	}
+
+	t.Run("skip-then-strict rejects an undeclared wildcard attribute", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema("askip", "bstrict"),
+			`<e foo:x="1" xmlns:foo="urn:foo"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("strict-then-skip rejects the same attribute (order-independent)", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema("bstrict", "askip"),
+			`<e foo:x="1" xmlns:foo="urn:foo"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+}
+
+// TestVersion11RestrictionDisjointWildcardProcessContents covers gauntlet finding
+// PR858-R4-002: a derived wildcard's processContents must be at least as strong
+// as every INTERSECTING base wildcard, not merely the weakest base wildcard in
+// the whole union. A skip derived wildcard may not restrict a strict base
+// wildcard in the same namespace even though a DISJOINT base wildcard is skip.
+func TestVersion11RestrictionDisjointWildcardProcessContents(t *testing.T) {
+	schema := func(derivedPC string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="1"/>
+      <xs:any namespace="urn:bb" processContents="skip" minOccurs="0" maxOccurs="1"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:all>
+          <xs:any namespace="urn:a" processContents="` + derivedPC + `" minOccurs="0" maxOccurs="1"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`
+	}
+
+	t.Run("skip derived wildcard cannot restrict a strict same-namespace base wildcard", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, schema("skip"))
+	})
+
+	t.Run("strict derived wildcard restricting the strict base wildcard compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema("strict"))
+	})
+}

@@ -530,16 +530,12 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 	var baseUnion *Wildcard
 	baseWildMax := 0
 	baseUnbounded := false
-	weakest := -1 // weakest processContents strength across base wildcards
 	for _, bw := range baseWilds {
 		wc, _ := bw.Term.(*Wildcard)
 		if baseUnion == nil {
 			baseUnion = wc
 		} else {
 			baseUnion = wildcardUnion(baseUnion, wc)
-		}
-		if s := processContentsStrength(wc.ProcessContents); weakest < 0 || s < weakest {
-			weakest = processContentsStrength(wc.ProcessContents)
 		}
 		if bw.MaxOccurs == Unbounded {
 			baseUnbounded = true
@@ -594,8 +590,20 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 			if baseUnion == nil {
 				return false
 			}
-			if processContentsStrength(rt.ProcessContents) < weakest {
-				return false
+			// The derived wildcard's processContents must be at least as strong as
+			// EVERY base wildcard whose namespace it INTERSECTS — not merely the
+			// weakest base wildcard in the whole union. Otherwise a skip derived
+			// wildcard could restrict a strict base wildcard in the same namespace
+			// just because some OTHER, disjoint base wildcard happens to be skip.
+			rtCon := wildcardConstraint(rt)
+			for _, bw := range baseWilds {
+				bwc, _ := bw.Term.(*Wildcard)
+				if !constraintsIntersect(rtCon, wildcardConstraint(bwc)) {
+					continue
+				}
+				if processContentsStrength(rt.ProcessContents) < processContentsStrength(bwc.ProcessContents) {
+					return false
+				}
 			}
 			if !wildcardConstraintSubset(rt, baseUnion) {
 				return false

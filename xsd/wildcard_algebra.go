@@ -207,13 +207,25 @@ func notQNameUnion(a, b []QName) []QName {
 // intersectWildcards computes the XSD 1.1 attribute-wildcard INTERSECTION of two
 // wildcards: a name is admitted iff BOTH admit it. The namespace constraints are
 // intersected; the notQName disallowed-name sets are unioned (excluded by
-// either); ##defined applies if either has it.
+// either); ##defined applies if either has it. The result's processContents is
+// the STRONGER of the two (strict > lax > skip) so the intersection is
+// order-independent — a strict operand must not be weakened to skip just because
+// it was listed second.
 func intersectWildcards(a, b *Wildcard) *Wildcard {
 	con := constraintIntersect(wildcardConstraint(a), wildcardConstraint(b))
-	return constraintToWildcard(con, a.ProcessContents, a.TargetNS,
+	return constraintToWildcard(con, strongerProcessContents(a.ProcessContents, b.ProcessContents), a.TargetNS,
 		notQNameUnion(a.NotQName, b.NotQName),
 		a.NotQNameDefined || b.NotQNameDefined,
 		a.NotQNameDefinedSibling || b.NotQNameDefinedSibling)
+}
+
+// strongerProcessContents returns whichever processContents value enforces more
+// validation (strict > lax > skip).
+func strongerProcessContents(a, b ProcessContentsKind) ProcessContentsKind {
+	if processContentsStrength(a) >= processContentsStrength(b) {
+		return a
+	}
+	return b
 }
 
 // unionWildcards11 computes the namespace-constraint UNION honoring 1.1 fields
