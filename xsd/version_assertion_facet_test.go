@@ -418,3 +418,87 @@ func TestVersion11AssertionGauntletFixes(t *testing.T) {
 		require.ErrorIs(t, validateAssertion(t, schema, `<e a="x">circle</e>`), xsd.ErrValidationFailed)
 	})
 }
+
+// TestVersion11AssertionRound3Fixes covers the round-3 gauntlet findings:
+// (1) topological (not source-order) restriction attribute merging across a
+// forward-referenced chain; (2) version-aware SchemaDeclarations.ValidateCast so a
+// 1.1-only lexical form is castable inside an assertion; (3) xs:assert $value
+// honoring the element's default/fixed effective value for an empty element.
+func TestVersion11AssertionRound3Fixes(t *testing.T) {
+	t.Run("forward-referenced restriction chain inherits required attribute", func(t *testing.T) {
+		t.Parallel()
+		// D restricts B, B restricts A; B is declared AFTER D in source order. A
+		// declares a required attribute that B and D inherit. Source-order merging
+		// would let D miss it (B not yet merged when D is processed); topological
+		// merging inherits it regardless of declaration order.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="d" type="D"/>
+  <xs:complexType name="D">
+    <xs:simpleContent>
+      <xs:restriction base="B"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:restriction base="A"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="A">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="req" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<d req="x">ok</d>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<d>ok</d>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("user-defined castable inside assertion uses the schema version", func(t *testing.T) {
+		t.Parallel()
+		// year 0000 is a 1.1-only lexical form. `$value castable as t:myDate` must
+		// use the schema's 1.1 rules, not TypeDef.Validate's hardcoded 1.0 default.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="myDate">
+    <xs:restriction base="xs:date"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="xs:string">
+        <xs:assertion test="$value castable as t:myDate"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">0000-01-01</e>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">not-a-date</e>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("xs:assert $value honors element default for empty content", func(t *testing.T) {
+		t.Parallel()
+		// An empty element with default="5" must expose $value=5 to the assert,
+		// not the raw empty text (which would make $value the empty sequence).
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" default="5">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:integer">
+          <xs:assert test="$value eq 5"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e/>`))
+		// Non-empty content uses the actual value, so 7 fails the assert.
+		require.ErrorIs(t, validateAssertion(t, schema, `<e>7</e>`), xsd.ErrValidationFailed)
+	})
+}

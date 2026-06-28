@@ -725,9 +725,11 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 	}
 
 	// XSD 1.1: xs:assert constraints are evaluated against the element once its
-	// attributes and content have been validated.
+	// attributes and content have been validated. edecl carries the element's
+	// default/fixed value so $value reflects the effective simple value for an
+	// empty element.
 	if vc.version == Version11 {
-		return vc.checkAssertions(ctx, elem, td)
+		return vc.checkAssertions(ctx, elem, edecl, td)
 	}
 	return nil
 }

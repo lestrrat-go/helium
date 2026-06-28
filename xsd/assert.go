@@ -124,11 +124,11 @@ func (c *compiler) parseAssertion(ctx context.Context, elem *helium.Element, ele
 // strict processor forbids (the assertion's context tree is the element and its
 // descendants only). This does not affect assertions that stay within the
 // element subtree.
-func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	if !typeHasAssertions(td) {
 		return nil
 	}
-	valueSeq := vc.assertValueSequence(ctx, elem, td)
+	valueSeq := vc.assertValueSequence(ctx, elem, edecl, td)
 	// XSD 1.1 §3.13.4.2: an xs:assert test is evaluated against a tree whose root
 	// is the element being assessed, isolated from the rest of the document and
 	// stripped of comment/PI nodes. Build that isolated tree once (carrying the
@@ -323,9 +323,12 @@ func childNodes(n helium.Node) []helium.Node {
 
 // assertValueSequence builds the $value binding for an xs:assert on elem's type:
 // the typed simple value when td has simple content, otherwise the empty
-// sequence (complex content). The text content is whitespace-normalized per the
-// type's effective whiteSpace facet before typing.
-func (vc *validationContext) assertValueSequence(ctx context.Context, elem *helium.Element, td *TypeDef) xpath3.Sequence {
+// sequence (complex content). For an EMPTY element the declaration's fixed/default
+// effective value is substituted first (mirroring validateSimpleContent), so
+// $value reflects the schema-normalized value rather than the raw empty text. The
+// value is then whitespace-normalized per the content type's effective whiteSpace
+// facet before typing.
+func (vc *validationContext) assertValueSequence(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) xpath3.Sequence {
 	if td == nil || td.ContentType != ContentTypeSimple {
 		return xpath3.EmptySequence()
 	}
@@ -335,6 +338,14 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	if td.ContentSimpleType != nil {
 		valueType = td.ContentSimpleType
 	}
-	raw := normalizeWhiteSpace(elemTextContent(elem), resolveWhiteSpace(valueType))
+	value := elemTextContent(elem)
+	if value == "" && edecl != nil {
+		if edecl.Fixed != nil {
+			value = *edecl.Fixed
+		} else if edecl.Default != nil {
+			value = *edecl.Default
+		}
+	}
+	raw := normalizeWhiteSpace(value, resolveWhiteSpace(valueType))
 	return buildValueSequence(ctx, raw, collectNSContext(elem), valueType, vc.version)
 }

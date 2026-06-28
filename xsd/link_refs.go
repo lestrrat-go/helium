@@ -439,8 +439,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// derived type's OWN declarations against the base. Gated to 1.1 so XSD 1.0 stays
 	// byte-identical.
 	if c.version == Version11 {
+		merged := make(map[*TypeDef]bool)
+		visiting := make(map[*TypeDef]bool)
 		for _, td := range restrictionTypes {
-			c.mergeRestrictionAttrs(td)
+			c.mergeRestrictionAttrs(td, merged, visiting)
 		}
 	}
 
@@ -1169,15 +1171,38 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 	}
 }
 
-// mergeRestrictionAttrs folds the base type's attribute uses that the derived
-// restriction does not itself redeclare into td.Attributes, applying XSD 1.1
-// restriction semantics: a derived declaration (including use="prohibited")
+// mergeRestrictionAttrs folds the base type's EFFECTIVE attribute uses that the
+// derived restriction does not itself redeclare into td.Attributes, applying XSD
+// 1.1 restriction semantics: a derived declaration (including use="prohibited")
 // overrides the base use of the same expanded QName; an absent derived
 // declaration inherits the base use verbatim. An attribute wildcard is inherited
 // when the derived type declares none. Validation already handles prohibited uses
 // (rejecting a present instance attribute), so they are kept in the merged set.
-func (c *compiler) mergeRestrictionAttrs(td *TypeDef) {
+//
+// The merge is TOPOLOGICAL, not source-order: before inheriting from a base that
+// is ITSELF a restriction, that base is merged first (recursively) so its own
+// inherited attributes are already present. This makes the result independent of
+// the order types appear in the schema — a forward-referenced chain
+// (D restricts B, B restricts A, with B declared after D) still gives D every
+// attribute A contributes. merged memoizes completed types (each merges once);
+// visiting guards a cyclic base chain (an invalid schema reported elsewhere) from
+// infinite recursion. Extension bases were already fully merged in the
+// depth-sorted extension pass, so only restriction bases are recursed into.
+func (c *compiler) mergeRestrictionAttrs(td *TypeDef, merged, visiting map[*TypeDef]bool) {
+	if td == nil || merged[td] {
+		return
+	}
+	if visiting[td] {
+		return // cyclic base chain; the circular-type check reports the error
+	}
+	visiting[td] = true
 	base := td.BaseType
+	if base != nil && base.Derivation == DerivationRestriction {
+		c.mergeRestrictionAttrs(base, merged, visiting)
+	}
+	delete(visiting, td)
+	merged[td] = true
+
 	if base == nil {
 		return
 	}

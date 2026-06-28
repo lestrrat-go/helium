@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -15,7 +16,8 @@ import (
 // xslt3's schemaRegistry but over a single schema. Type names use the annotation
 // format: "xs:local" for builtins, "Q{ns}local" (or "Q{}local") for user types.
 type schemaDecls struct {
-	schema *Schema
+	schema  *Schema
+	version Version
 }
 
 // LookupSchemaElement returns the annotation-format type name of a global element.
@@ -105,7 +107,17 @@ func (d schemaDecls) validateCast(ctx context.Context, value, typeName string, n
 	if !ok || td.ContentType != ContentTypeSimple {
 		return nil
 	}
-	return td.Validate(ctx, value, nsMap)
+	// Validate with the SCHEMA's version, not TypeDef.Validate's hardcoded 1.0
+	// default — inside a 1.1 assertion a user-defined cast/castable must accept
+	// 1.1-only lexical forms (e.g. year 0000). suppressDepth keeps the throwaway
+	// context from emitting diagnostics; validateValue still returns the error.
+	vc := &validationContext{
+		schema:        d.schema,
+		version:       d.version,
+		errorHandler:  helium.NilErrorHandler{},
+		suppressDepth: 1,
+	}
+	return validateValue(ctx, value, nsMap, td, "", "", 0, vc)
 }
 
 // ListItemType returns the item type name for a list type.
@@ -160,5 +172,5 @@ func (vc *validationContext) assertSchemaDecls() xpath3.SchemaDeclarations {
 	if vc.schema == nil {
 		return nil
 	}
-	return schemaDecls{schema: vc.schema}
+	return schemaDecls{schema: vc.schema, version: vc.version}
 }
