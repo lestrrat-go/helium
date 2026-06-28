@@ -1416,13 +1416,19 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 // if the xsi:type value doesn't resolve or is not derived from the declared type.
 func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef) (*TypeDef, error) {
 	var xsiTypeVal string
+	var present bool
 	for _, a := range elem.Attributes() {
 		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
 			xsiTypeVal = a.Value()
+			present = true
 			break
 		}
 	}
-	if xsiTypeVal == "" {
+	// Only an ABSENT xsi:type falls back to the declared type. A present-but-empty
+	// (or whitespace-only) xsi:type is a malformed QName and must report a validity
+	// error rather than silently fall back — otherwise xsi:type="" would suppress a
+	// CTA-selected type (e.g. xs:error) yet still validate under the declared type.
+	if !present {
 		return declaredType, nil
 	}
 
