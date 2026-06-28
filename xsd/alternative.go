@@ -133,9 +133,12 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 		alt.Namespaces[""] = xdn
 	}
 
-	// A testless alternative is the unconditional default; it carries no compiled
-	// expression and always matches.
-	if test := getAttr(elem, attrTest); test != "" {
+	// A testless alternative (no @test attribute at all) is the unconditional
+	// default; it carries no compiled expression and always matches. Presence is
+	// tested with hasAttr so a present-but-empty test="" is compiled (and fails) as
+	// an invalid XPath rather than being silently treated as the default.
+	if hasAttr(elem, attrTest) {
+		test := getAttr(elem, attrTest)
 		alt.Test = test
 		compiled, err := xpath3.NewCompiler().Compile(test)
 		if err != nil {

@@ -846,7 +846,12 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			}
 			continue
 		}
-		td, xsiErr := vc.resolveXsiType(ctx, ce, effectiveDeclType(edecl, vc.schema))
+		// XSD 1.1 conditional type assignment applies to a global element reached
+		// through xs:anyType too: select the alternative type BEFORE resolving
+		// xsi:type (xsi:type still wins), mirroring the established order at the
+		// explicit-particle/wildcard match sites.
+		declType := vc.applyTypeAlternatives(ctx, ce, edecl, effectiveDeclType(edecl, vc.schema))
+		td, xsiErr := vc.resolveXsiType(ctx, ce, declType)
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
