@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -360,7 +360,7 @@ func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *
 			wc.NotQNameDefinedSibling = true
 			continue
 		}
-		if !isValidQNameLexical(tok) {
+		if !xmlchar.IsValidQName(tok) {
 			reject(fmt.Sprintf("The value '%s' is not a valid QName.", tok))
 			continue
 		}
@@ -374,44 +374,6 @@ func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *
 		}
 		wc.NotQName = append(wc.NotQName, qn)
 	}
-}
-
-// isValidQNameLexical reports whether s is a lexically valid xs:QName: an
-// optional single NCName prefix, a colon, and an NCName local part (or just an
-// NCName with no colon). It rejects empty parts and multi-colon forms like
-// "a:b:c".
-func isValidQNameLexical(s string) bool {
-	if s == "" {
-		return false
-	}
-	if prefix, local, found := strings.Cut(s, ":"); found {
-		return isNCName(prefix) && isNCName(local)
-	}
-	return isNCName(s)
-}
-
-// isNCName reports whether s is a valid XML NCName (a Name with no colon). A
-// pragmatic check sufficient for schema QName tokens: first char a letter or
-// underscore, rest letters/digits/.-_ , and no colon.
-func isNCName(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i, r := range s {
-		if r == ':' {
-			return false
-		}
-		if i == 0 {
-			if r != '_' && !unicode.IsLetter(r) {
-				return false
-			}
-			continue
-		}
-		if r != '_' && r != '-' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			return false
-		}
-	}
-	return true
 }
 
 func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, opts elementDeclReadOptions) (*ElementDecl, error) {

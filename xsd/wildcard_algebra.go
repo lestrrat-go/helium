@@ -156,10 +156,13 @@ func constraintsIntersect(a, b wcConstraint) bool {
 }
 
 // constraintToWildcard materializes a normalized constraint onto a fresh
-// *Wildcard, carrying the supplied processContents/targetNS and notQName
-// disallowed-name set.
-func constraintToWildcard(con wcConstraint, pc ProcessContentsKind, tns string, notQName []QName, defined, definedSibling bool) *Wildcard {
-	wc := &Wildcard{ProcessContents: pc, TargetNS: tns, NotQName: notQName, NotQNameDefined: defined, NotQNameDefinedSibling: definedSibling}
+// *Wildcard, carrying the supplied processContents/targetNS, notQName
+// disallowed-name set, and resolved ##definedSibling names. siblingNames MUST be
+// carried through union/intersection alongside the NotQNameDefinedSibling marker
+// — dropping it would let a materialized wildcard re-admit sibling-named children
+// the operands excluded.
+func constraintToWildcard(con wcConstraint, pc ProcessContentsKind, tns string, notQName []QName, defined, definedSibling bool, siblingNames []QName) *Wildcard {
+	wc := &Wildcard{ProcessContents: pc, TargetNS: tns, NotQName: notQName, NotQNameDefined: defined, NotQNameDefinedSibling: definedSibling, SiblingNames: siblingNames}
 	if con.neg {
 		// Negation: a non-nil NotNamespace signals "match all except set".
 		// An empty set means ##any.
@@ -207,16 +210,18 @@ func notQNameUnion(a, b []QName) []QName {
 // intersectWildcards computes the XSD 1.1 attribute-wildcard INTERSECTION of two
 // wildcards: a name is admitted iff BOTH admit it. The namespace constraints are
 // intersected; the notQName disallowed-name sets are unioned (excluded by
-// either); ##defined applies if either has it. The result's processContents is
-// the STRONGER of the two (strict > lax > skip) so the intersection is
-// order-independent — a strict operand must not be weakened to skip just because
-// it was listed second.
+// either); ##defined applies if either has it; and the ##definedSibling
+// exclusions are UNIONED (a sibling name either operand excludes is excluded by
+// the intersection). The result's processContents is the STRONGER of the two
+// (strict > lax > skip) so the intersection is order-independent — a strict
+// operand must not be weakened to skip just because it was listed second.
 func intersectWildcards(a, b *Wildcard) *Wildcard {
 	con := constraintIntersect(wildcardConstraint(a), wildcardConstraint(b))
 	return constraintToWildcard(con, strongerProcessContents(a.ProcessContents, b.ProcessContents), a.TargetNS,
 		notQNameUnion(a.NotQName, b.NotQName),
 		a.NotQNameDefined || b.NotQNameDefined,
-		a.NotQNameDefinedSibling || b.NotQNameDefinedSibling)
+		a.NotQNameDefinedSibling || b.NotQNameDefinedSibling,
+		notQNameUnion(a.SiblingNames, b.SiblingNames))
 }
 
 // strongerProcessContents returns whichever processContents value enforces more
@@ -252,9 +257,25 @@ func unionWildcards11(a, b *Wildcard) *Wildcard {
 		}
 		disallowed = append(disallowed, qn)
 	}
+	// ##definedSibling names: the union excludes a sibling name only if NEITHER
+	// operand admits it (same rule as the explicit notQName candidates). When the
+	// folded marker survives (both operands carry ##definedSibling), these
+	// retained names back the subset/exclusion checks; when it does not, the
+	// candidates are admitted by one side and so drop out here.
+	var siblings []QName
+	for _, qn := range notQNameUnion(a.SiblingNames, b.SiblingNames) {
+		if wildcardAdmitsNameIgnoringDefined(a, qn.Local, qn.NS) {
+			continue
+		}
+		if wildcardAdmitsNameIgnoringDefined(b, qn.Local, qn.NS) {
+			continue
+		}
+		siblings = append(siblings, qn)
+	}
 	return constraintToWildcard(con, a.ProcessContents, a.TargetNS, disallowed,
 		a.NotQNameDefined && b.NotQNameDefined,
-		a.NotQNameDefinedSibling && b.NotQNameDefinedSibling)
+		a.NotQNameDefinedSibling && b.NotQNameDefinedSibling,
+		siblings)
 }
 
 // wildcardAdmitsNameIgnoringDefined reports whether the wildcard admits a name by

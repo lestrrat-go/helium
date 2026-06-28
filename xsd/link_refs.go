@@ -530,6 +530,18 @@ func (c *compiler) attrGroupCompleteWildcard(qn QName, visited map[QName]struct{
 	return result
 }
 
+// combineGroupWildcards intersects two possibly-nil attribute-group wildcards,
+// returning nil when both are nil and the non-nil one when only one is present.
+func combineGroupWildcards(a, b *Wildcard) *Wildcard {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	return intersectWildcards(a, b)
+}
+
 // appendAttrUses merges the attribute uses in extra into dst applying
 // attribute-group override semantics: a use already present in dst (by expanded
 // QName) is kept and the incoming inherited use is discarded (closer wins). A

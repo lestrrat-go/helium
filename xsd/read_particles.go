@@ -77,6 +77,16 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		return nil
 	}
 	var attrs []*AttrUse
+	// XSD 1.1: an xs:anyAttribute, if present, must be the OPTIONAL FINAL child of
+	// the group (XSD 3.6.2), and there may be at most one. anyAttributeSeen tracks
+	// it so a later attribute/attributeGroup child, or a second wildcard, is
+	// rejected. Gated on Version11 (1.0 ignores group wildcards entirely, so its
+	// grammar handling stays byte-identical).
+	var anyAttributeSeen bool
+	reportAfterWildcard := func(ce *helium.Element) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
+			fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName())))
+	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -86,6 +96,10 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			continue
 		}
 		if isXSDElement(ce, elemAttribute) {
+			if c.version == Version11 && anyAttributeSeen {
+				reportAfterWildcard(ce)
+				continue
+			}
 			// A use="prohibited" attribute declared directly inside an
 			// <xs:attributeGroup> is pointless: it cannot remove a use the group
 			// itself declares, and propagating it as a blocking use would wrongly
@@ -103,6 +117,19 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			attrs = append(attrs, au)
 			continue
 		}
+		// XSD 1.1: capture an xs:anyAttribute wildcard declared in the group so a
+		// referencing type can intersect it into its effective attribute wildcard.
+		// It must be the final child and unique.
+		if c.version == Version11 && isXSDElement(ce, elemAnyAttribute) {
+			if anyAttributeSeen {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
+					fmt.Sprintf("An attribute group definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName())))
+				continue
+			}
+			anyAttributeSeen = true
+			c.attrGroupWildcards[qn] = c.parseAnyAttribute(ctx, ce)
+			continue
+		}
 		// Record nested xs:attributeGroup ref children so checkAttrGroupDuplicates
 		// can flatten the transitively-referenced groups and detect a duplicate
 		// attribute use introduced through a reference (ag-props-correct.2).
@@ -114,13 +141,11 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// override path (compile_imports.go), not here, so any self-reference that
 		// reaches this point is genuinely circular and is reported and dropped (the
 		// reference is cut to avoid further confusion, matching libxml2).
-		// XSD 1.1: capture an xs:anyAttribute wildcard declared in the group so a
-		// referencing type can intersect it into its effective attribute wildcard.
-		if c.version == Version11 && isXSDElement(ce, elemAnyAttribute) {
-			c.attrGroupWildcards[qn] = c.parseAnyAttribute(ctx, ce)
-			continue
-		}
 		if isXSDElement(ce, elemAttributeGroup) {
+			if c.version == Version11 && anyAttributeSeen {
+				reportAfterWildcard(ce)
+				continue
+			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				refQN := c.resolveQName(ctx, ce, ref)
 				if refQN == qn {
