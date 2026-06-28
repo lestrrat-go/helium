@@ -322,6 +322,34 @@ func TestIDSkipWildcardNotAssessed(t *testing.T) {
 		inst := `<doc><wrap><n>dup</n></wrap><wrap><n>dup</n></wrap></doc>`
 		require.NoError(t, compileValidate(t, schemaXML, inst))
 	})
+
+	// A skip subtree is annotated (actualElemType) for pass-2 IDC canonicalization
+	// when it carries xsi:type, but that annotation must NOT leak into the
+	// document-wide ID/IDREF pass: skip content is not schema-assessed.
+	const skipAnySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("skip-wildcard xsi:type=xs:ID duplicates are not flagged", func(t *testing.T) {
+		t.Parallel()
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+			`<wrap><id xsi:type="xs:ID">dup</id></wrap>` +
+			`<wrap><id xsi:type="xs:ID">dup</id></wrap></doc>`
+		require.NoError(t, compileValidate(t, skipAnySchema, inst))
+	})
+
+	t.Run("skip-wildcard xsi:type=xs:IDREF dangling ref is not flagged", func(t *testing.T) {
+		t.Parallel()
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+			`<wrap><r xsi:type="xs:IDREF">nope</r></wrap></doc>`
+		require.NoError(t, compileValidate(t, skipAnySchema, inst))
+	})
 }
 
 // TestIDConstraintRefUnboundPrefix verifies that an identity-constraint @ref

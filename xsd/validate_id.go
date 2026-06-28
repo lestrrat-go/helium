@@ -215,14 +215,17 @@ func (vc *validationContext) recordIDRef(col *idCollector, tok string, elem *hel
 }
 
 // elementTypeForID resolves the effective type of an instance element for the
-// purpose of ID/IDREF collection, using ONLY the provenance recorded during
-// pass-1 content validation (which already accounts for xsi:type). It does NOT
-// fall back to a global element-declaration lookup: an element admitted through a
-// processContents="skip" wildcard is not schema-assessed and so has no recorded
-// type — treating it as its global declaration's type would wrongly subject its
-// (un-assessed) ID-typed content to uniqueness checking.
+// purpose of ID/IDREF collection, using ONLY provenance recorded at genuine
+// pass-1 ASSESSMENT sites: assessedElemType (root, content-model matches, and
+// xs:anyType/lax children with a global declaration — all post-xsi:type) and
+// actualElemDecl (likewise written only at assessed sites). It deliberately does
+// NOT consult actualElemType, which is ALSO populated for processContents="skip"
+// (and lax-no-declaration) subtrees purely for pass-2 IDC canonicalization: a
+// skipped element is not schema-assessed, so even one carrying xsi:type="xs:ID"
+// must not be subjected to ID uniqueness. It also never falls back to a global
+// element-declaration lookup, for the same reason.
 func (vc *validationContext) elementTypeForID(elem *helium.Element) *TypeDef {
-	if td := vc.actualElemType[elem]; td != nil {
+	if td := vc.assessedElemType[elem]; td != nil {
 		return td
 	}
 	if decl := vc.actualElemDecl[elem]; decl != nil && decl.Type != nil {

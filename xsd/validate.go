@@ -454,6 +454,17 @@ type validationContext struct {
 	// xs:unique/xs:keyref declared on a local element are evaluated rather than
 	// silently skipped.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// assessedElemType records the ACTUAL *TypeDef of each element that was truly
+	// SCHEMA-ASSESSED during pass-1 — the validation root, a content-model particle
+	// match, or an xs:anyType/lax child WITH a matching global declaration. It is
+	// the element-side counterpart of actualAttrType. It is deliberately NOT
+	// populated by annotateSkipChildren or the lax-no-declaration branch (which
+	// write actualElemType purely for pass-2 IDC canonicalization), so an element
+	// admitted through a processContents="skip" wildcard — even one carrying
+	// xsi:type="xs:ID" — is absent here. The XSD 1.1 ID/IDREF pass consults ONLY
+	// this map (plus actualElemDecl, itself written only at assessed sites), never
+	// actualElemType, so skip content is never mistaken for an xs:ID/xs:IDREF.
+	assessedElemType map[*helium.Element]*TypeDef
 	// actualAttrType records the declared *TypeDef of each attribute that was
 	// actually SCHEMA-ASSESSED during pass-1 — matched by an explicit attribute
 	// use, or admitted by a strict/lax xs:anyAttribute wildcard with a matching
@@ -480,14 +491,15 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		version = schema.version
 	}
 	return &validationContext{
-		schema:         schema,
-		version:        version,
-		cfg:            cfg,
-		filename:       filename,
-		errorHandler:   handler,
-		actualElemType: make(map[*helium.Element]*TypeDef),
-		actualElemDecl: make(map[*helium.Element]*ElementDecl),
-		actualAttrType: make(map[*helium.Attribute]*TypeDef),
+		schema:           schema,
+		version:          version,
+		cfg:              cfg,
+		filename:         filename,
+		errorHandler:     handler,
+		actualElemType:   make(map[*helium.Element]*TypeDef),
+		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
+		assessedElemType: make(map[*helium.Element]*TypeDef),
+		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
 	}
 }
 
@@ -707,7 +719,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	}
 
 	// Annotate root element with its type and record its declaration.
-	vc.annotateElement(ctx, elem, td)
+	vc.annotateElement(ctx, elem, td, true)
 	vc.recordElemDecl(elem, edecl)
 
 	nilled, err := vc.checkXsiNil(ctx, elem)
@@ -839,9 +851,11 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			// IDC selecting this element directly must canonicalize an
 			// xsi:type-introduced field in that type's value space — then recurse so
 			// any deeper anyType descendant with a resolvable global declaration gets
-			// annotated.
+			// annotated. This child has NO global declaration, so it is NOT
+			// schema-assessed: record actualElemType for canonicalization only
+			// (assessed=false), keeping it out of the ID/IDREF pass.
 			if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-				vc.annotateElement(ctx, ce, actual)
+				vc.annotateElement(ctx, ce, actual, false)
 			}
 			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
 				contentErr = err
@@ -859,7 +873,7 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		vc.annotateElement(ctx, ce, td)
+		vc.annotateElement(ctx, ce, td, true)
 		if td == nil {
 			continue
 		}
@@ -896,8 +910,11 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 // xsi:type-introduced field (e.g. an inline xs:integer attribute) is canonicalized
 // in the actual type's value space rather than compared lexically.
 func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	// Skipped content is NOT schema-assessed: annotate for pass-2 IDC
+	// canonicalization only (assessed=false), so a skipped element carrying
+	// xsi:type="xs:ID"/"xs:IDREF" is never picked up by the ID/IDREF pass.
 	if actual, ok := vc.resolveXsiTypeQuiet(elem); ok {
-		vc.annotateElement(ctx, elem, actual)
+		vc.annotateElement(ctx, elem, actual, false)
 	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -910,9 +927,10 @@ func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *hel
 		// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
 		// an unresolvable or non-derived xsi:type must not raise a validity error.
 		// Only an xsi:type override contributes an actual type distinct from what
-		// pass-2 can already derive from the content model, so record only that.
+		// pass-2 can already derive from the content model, so record only that
+		// (assessed=false — skipped content is not schema-assessed).
 		if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-			vc.annotateElement(ctx, ce, actual)
+			vc.annotateElement(ctx, ce, actual, false)
 		}
 		vc.annotateSkipChildren(ctx, ce)
 	}
@@ -1528,12 +1546,20 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
-// annotateElement records a type annotation for an element node.
-func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
-	// Always record the actual *TypeDef (post-xsi:type) for pass-2 IDC field
-	// type resolution, independent of the optional user-facing annotations map.
-	if vc.actualElemType != nil && td != nil {
-		vc.actualElemType[elem] = td
+// annotateElement records a type annotation for an element node. assessed reports
+// whether the element was actually SCHEMA-ASSESSED (vs annotated purely for pass-2
+// IDC canonicalization, as for skip/lax-no-declaration content): only an assessed
+// element is recorded in assessedElemType, which the XSD 1.1 ID/IDREF pass
+// consults. actualElemType is always recorded (post-xsi:type) for pass-2 IDC field
+// canonicalization, independent of assessment.
+func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef, assessed bool) {
+	if td != nil {
+		if vc.actualElemType != nil {
+			vc.actualElemType[elem] = td
+		}
+		if assessed && vc.assessedElemType != nil {
+			vc.assessedElemType[elem] = td
+		}
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return

@@ -319,7 +319,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		vc.annotateElement(ctx, child.elem, td)
+		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
@@ -466,7 +466,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			continue
 		}
 		// Annotate child element with its type for pass-2 identity-constraint evaluation.
-		vc.annotateElement(ctx, child.elem, td)
+		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
@@ -812,7 +812,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 			continue
 		}
 		// Annotate wildcard-matched element with its type.
-		vc.annotateElement(ctx, child.elem, td)
+		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
