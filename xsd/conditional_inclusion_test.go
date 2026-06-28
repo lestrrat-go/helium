@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -264,6 +265,52 @@ func TestConditionalInclusion(t *testing.T) {
 </xs:schema>`
 		_, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), schema)
 		require.Error(t, err)
+	})
+
+	t.Run("high-precision decimal bounds compare exactly (no float rounding)", func(t *testing.T) {
+		t.Parallel()
+		// maxVersion is just above 1.1 — 1.1 < max, so the element is KEPT under
+		// 1.1. A float64 parse would round this to 1.1 and wrongly exclude it.
+		keep := `<xs:schema ` + ns + `>
+  <xs:element name="temp">
+    <xs:complexType>
+       <xs:sequence/>
+       <xs:attribute name="x" use="required" vc:maxVersion="1.1000000000000000000000000000000000001"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		sk, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), keep)
+		require.NoError(t, err)
+		require.NoError(t, validate(t, sk, `<temp x="204"/>`))
+
+		// A many-digit (but lexically valid) decimal is NOT malformed: it would
+		// overflow a float64, but exact comparison treats it as a huge minVersion,
+		// so 1.1 < min and the element is pruned (attribute not allowed) — and the
+		// schema still compiles without a "malformed decimal" error.
+		bigMin := "9" + strings.Repeat("0", 400)
+		prune := `<xs:schema ` + ns + `>
+  <xs:element name="temp">
+    <xs:complexType>
+       <xs:sequence/>
+       <xs:attribute name="x" use="required" vc:minVersion="` + bigMin + `"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		sp, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), prune)
+		require.NoError(t, err)
+		require.Error(t, validate(t, sp, `<temp x="204"/>`))
+	})
+
+	t.Run("excluded root with a bogus blockDefault compiles to empty (no error)", func(t *testing.T) {
+		t.Parallel()
+		// The root is vc-excluded under 1.1, so its (never-used) blockDefault must
+		// not be validated; the schema compiles to an empty (valid) schema.
+		schema := `<xs:schema ` + ns + ` vc:maxVersion="0.9" blockDefault="bogus">
+  <xs:element name="temp" type="xs:string"/>
+</xs:schema>`
+		s, err := compileVC(t, xsd.NewCompiler().Version(xsd.Version11), schema)
+		require.NoError(t, err)
+		require.Error(t, validate(t, s, `<temp>hi</temp>`)) // temp was pruned with the root
 	})
 
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {

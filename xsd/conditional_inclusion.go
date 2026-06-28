@@ -2,12 +2,12 @@ package xsd
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // Conditional inclusion (XSD 1.1, version-control namespace
@@ -86,9 +86,12 @@ func facetNameSet(s string) map[string]struct{} {
 //
 // If the root <xs:schema> element itself is conditionally excluded, the whole
 // document contributes nothing: all of its element children are dropped, leaving
-// an empty (but valid) schema.
-func (c *compiler) applyConditionalInclusion(ctx context.Context, root *helium.Element) {
-	pv := c.processorVersionDecimal()
+// an empty (but valid) schema, and the function returns true so the caller can
+// short-circuit BEFORE interpreting/validating the root's other (non-preserved)
+// attributes (e.g. blockDefault/finalDefault) — an excluded root must not error
+// on attributes it would never use.
+func (c *compiler) applyConditionalInclusion(ctx context.Context, root *helium.Element) bool {
+	pv := c.processorVersionString()
 
 	if c.vcExcluded(ctx, root, pv) {
 		var kids []helium.Node
@@ -100,7 +103,7 @@ func (c *compiler) applyConditionalInclusion(ctx context.Context, root *helium.E
 				helium.UnlinkNode(mn)
 			}
 		}
-		return
+		return true
 	}
 
 	var toRemove []*helium.Element
@@ -108,12 +111,13 @@ func (c *compiler) applyConditionalInclusion(ctx context.Context, root *helium.E
 	for _, elem := range toRemove {
 		helium.UnlinkNode(elem)
 	}
+	return false
 }
 
 // collectConditionalExclusions walks the element children of parent, recording
 // every element excluded by its vc: attributes into out. A pruned element's
 // subtree is not descended into (the whole subtree goes away with it).
-func (c *compiler) collectConditionalExclusions(ctx context.Context, parent *helium.Element, pv float64, out *[]*helium.Element) {
+func (c *compiler) collectConditionalExclusions(ctx context.Context, parent *helium.Element, pv string, out *[]*helium.Element) {
 	for ch := range helium.Children(parent) {
 		if ch.Type() != helium.ElementNode {
 			continue
@@ -130,28 +134,35 @@ func (c *compiler) collectConditionalExclusions(ctx context.Context, parent *hel
 	}
 }
 
-// processorVersionDecimal returns the active processor version as the decimal
-// value used to compare against vc:minVersion/vc:maxVersion.
-func (c *compiler) processorVersionDecimal() float64 {
+// processorVersionString returns the active processor version as the exact
+// xs:decimal lexical string ("1.0" or "1.1") used to compare against
+// vc:minVersion/vc:maxVersion. A string (not a float64) so the comparison is
+// done with exact arbitrary-precision arithmetic (value.CompareDecimal /
+// math/big.Rat) — xs:decimal is exact, and a float would mis-round a
+// high-precision bound (e.g. "1.1000…001") or overflow a many-digit one.
+func (c *compiler) processorVersionString() string {
 	if c.version == Version11 {
-		return 1.1
+		return "1.1"
 	}
-	return 1.0
+	return "1.0"
 }
 
 // vcExcluded reports whether elem is conditionally excluded for processor
-// version pv. Every present vc: condition is evaluated (so malformed values are
-// still diagnosed under 1.1); the element is excluded if ANY condition fails.
-func (c *compiler) vcExcluded(ctx context.Context, elem *helium.Element, pv float64) bool {
+// version pv (an exact xs:decimal string). Every present vc: condition is
+// evaluated (so malformed values are still diagnosed under 1.1); the element is
+// excluded if ANY condition fails. vc:minVersion/vc:maxVersion are compared
+// exactly via value.CompareDecimal: keep iff minVersion <= pv < maxVersion, so
+// exclude iff pv < minVersion or pv >= maxVersion.
+func (c *compiler) vcExcluded(ctx context.Context, elem *helium.Element, pv string) bool {
 	excluded := false
 
 	if v, ok := getVCAttr(elem, vcMinVersion); ok {
-		if d, valid := c.vcDecimal(ctx, elem, vcMinVersion, v); valid && pv < d {
+		if d, valid := c.vcDecimal(ctx, elem, vcMinVersion, v); valid && value.CompareDecimal(pv, d) < 0 {
 			excluded = true
 		}
 	}
 	if v, ok := getVCAttr(elem, vcMaxVersion); ok {
-		if d, valid := c.vcDecimal(ctx, elem, vcMaxVersion, v); valid && pv >= d {
+		if d, valid := c.vcDecimal(ctx, elem, vcMaxVersion, v); valid && value.CompareDecimal(pv, d) >= 0 {
 			excluded = true
 		}
 	}
@@ -179,19 +190,23 @@ func (c *compiler) vcExcluded(ctx context.Context, elem *helium.Element, pv floa
 	return excluded
 }
 
-// vcDecimal parses a vc:minVersion/vc:maxVersion value as an xs:decimal. A
-// malformed value is a fatal schema error UNDER 1.1 only; under 1.0 it is
-// tolerated (valid=false so the caller skips the condition).
-func (c *compiler) vcDecimal(ctx context.Context, elem *helium.Element, attr, value string) (float64, bool) {
-	s := strings.TrimSpace(value)
-	if d, ok := parseXSDDecimal(s); ok {
-		return d, true
+// vcDecimal validates a vc:minVersion/vc:maxVersion value as an xs:decimal and
+// returns the whitespace-trimmed lexical string for exact comparison. "Malformed"
+// means not a valid xs:decimal lexical form (a bad sign/dot/non-digit) — NOT a
+// magnitude that a float could not hold; a many-digit or high-precision decimal
+// is valid and compared exactly by the caller. A malformed value is a fatal
+// schema error UNDER 1.1 only; under 1.0 it is tolerated (valid=false so the
+// caller skips the condition).
+func (c *compiler) vcDecimal(ctx context.Context, elem *helium.Element, attr, val string) (string, bool) {
+	s := strings.TrimSpace(val)
+	if isValidXSDDecimal(s) {
+		return s, true
 	}
 	if c.version == Version11 && c.filename != "" {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), elem.LocalName(),
-			"vc:"+attr, "The value '"+value+"' is not a valid xs:decimal."))
+			"vc:"+attr, "The value '"+val+"' is not a valid xs:decimal."))
 	}
-	return 0, false
+	return "", false
 }
 
 // vcAllAvailable evaluates a vc:typeAvailable/typeUnavailable (facet=false) or
@@ -288,19 +303,24 @@ func getVCAttr(elem *helium.Element, name string) (string, bool) {
 	return attr.Value(), true
 }
 
-// parseXSDDecimal reports whether s is a valid xs:decimal lexical form and, if
-// so, returns its float64 value. It is intentionally stricter than
-// strconv.ParseFloat: scientific notation, INF, and NaN are NOT valid decimals.
-func parseXSDDecimal(s string) (float64, bool) {
+// isValidXSDDecimal reports whether s is a valid xs:decimal LEXICAL form:
+//
+//	(+|-)? ( digits ('.' digits?)? | '.' digits )
+//
+// It validates form only — magnitude is irrelevant (xs:decimal is unbounded), so
+// an arbitrary-precision value passes and is compared exactly by the caller via
+// value.CompareDecimal (math/big.Rat). Scientific notation, INF, and NaN are not
+// valid decimals.
+func isValidXSDDecimal(s string) bool {
 	if s == "" {
-		return 0, false
+		return false
 	}
 	body := s
 	if body[0] == '+' || body[0] == '-' {
 		body = body[1:]
 	}
 	if body == "" {
-		return 0, false
+		return false
 	}
 	digits := false
 	dot := false
@@ -311,19 +331,12 @@ func parseXSDDecimal(s string) (float64, bool) {
 			digits = true
 		case ch == '.':
 			if dot {
-				return 0, false
+				return false
 			}
 			dot = true
 		default:
-			return 0, false
+			return false
 		}
 	}
-	if !digits {
-		return 0, false
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, false
-	}
-	return f, true
+	return digits
 }
