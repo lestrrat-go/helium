@@ -38,7 +38,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `restr
 
 ### Validate: Document + Schema → Errors
 
-**Two-pass validation:**
+**Three-pass validation** (pass 3 runs only in XSD 1.1 mode):
 
 **Pass 1 — Content Model** (`validateDocument` via `helium.Walk()`):
 - For each element:
@@ -339,6 +339,39 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     `n="+5"` pair under an `xs:any processContents="skip"` wrapper collide in
     xs:integer value space rather than being wrongly accepted as unique.
 
+**XSD 1.1 identity-constraint extras** (compile time): `@xpathDefaultNamespace`
+on `xs:selector`/`xs:field` (or inherited from the root `xs:schema`) is resolved
+by `resolveXPathDefaultNS` (`read_elements.go`) to a default ELEMENT namespace
+URI (`##targetNamespace`/`##defaultNamespace`/`##local`/literal URI) and stored
+per selector/field (`IDConstraint.SelectorDefaultNS`/`FieldDefaultNS`).
+`evaluateIDC` applies it via the opt-in `xpath1.Evaluator.DefaultElementNamespace`,
+which matches unprefixed ELEMENT name tests against that URI (attributes are
+never affected — they have no default namespace). `@ref` on an identity
+constraint (`resolveConstraintRefs`, `compile.go`, run after `checkDuplicateIDCs`
+and before `checkKeyRefRefers`) makes the constraint reuse a referenced
+constraint's selector/fields — and a keyref's `refer` — and adopt its QName
+identity (so a ref'd keyref resolves against a ref'd key on the same host); the
+reference must resolve to an existing constraint of the SAME kind, else a fatal
+schema error. A `@ref` constraint has no name of its own and is skipped in the
+duplicate-name and key-name registries.
+
+**Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
+a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
+be unique, **except** that the same value may identify a single element more than
+once. An ID's owning element is the element BEARING it — an attribute ID on its
+owning element, an element-content ID on its **parent** (`idOwner`) — so two ID
+attributes of one element, or two `<id>` children of one parent, sharing a value
+is valid, while the same value reaching two different owners is a duplicate. Each
+`xs:IDREF`/`xs:IDREFS` token must resolve to some collected ID. Values are
+decomposed against their type variety (`collectIDFromValue`, mirroring
+`canonicalValueKey`): a list splits into items, a union resolves to its active
+member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
+`xs:IDREFS` (a flat atomic placeholder) is split by name. Empty element content
+falls back to the declaration's default/fixed value. The pass never runs in 1.0
+mode, so the libxml2-compat goldens stay byte-identical. NOT covered:
+`xs:ENTITY`/`xs:ENTITIES` (need the DTD unparsed-entity table) and ID/IDREF
+members inside a union at instance level.
+
 ### Key Data Model
 
 ```
@@ -346,7 +379,7 @@ Schema { elements, types, groups, attrGroups, globalAttrs, substGroups maps }
 ElementDecl { Name QName, Type *TypeDef, MinOccurs/MaxOccurs, Abstract/Nillable, IDCs, Default/Fixed }
 TypeDef { ContentType (Empty|Simple|ElementOnly|Mixed), ContentModel *ModelGroup, BaseType, Attributes []*AttrUse, Facets, Variety (Atomic|List|Union) }
 ModelGroup { Compositor (Sequence|Choice|All), Particles []*Particle }
-IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespaces, Line, Source (declaring file) }
+IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespaces, Selector/FieldDefaultNS (1.1 xpathDefaultNamespace), IsConstraintRef/ConstraintRef(QName) (1.1 @ref), Line, Source (declaring file) }
 ```
 
 ## RELAX NG
