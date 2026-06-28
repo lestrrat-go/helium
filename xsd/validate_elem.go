@@ -308,7 +308,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		// (before any early return). Nothing to record here.
 		td := effectiveDeclType(actualDecl, vc.schema)
 		td = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, td)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td, vc.hasTypeTable(actualDecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
@@ -447,7 +447,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// above (before any early return). Nothing to record here.
 		declType := effectiveDeclType(actualDecl, vc.schema)
 		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
@@ -800,7 +800,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 		}
 		td := effectiveDeclType(edecl, vc.schema)
 		td = vc.applyTypeAlternatives(ctx, child.elem, edecl, td)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue

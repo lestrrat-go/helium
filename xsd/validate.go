@@ -678,7 +678,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// different governing type. xsi:type (resolved next) still takes precedence.
 	declType = vc.applyTypeAlternatives(ctx, elem, edecl, declType)
 
-	td, err := vc.resolveXsiType(ctx, elem, declType)
+	td, err := vc.resolveXsiType(ctx, elem, declType, vc.hasTypeTable(edecl))
 	if err != nil {
 		return err
 	}
@@ -851,7 +851,7 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		// xsi:type (xsi:type still wins), mirroring the established order at the
 		// explicit-particle/wildcard match sites.
 		declType := vc.applyTypeAlternatives(ctx, ce, edecl, effectiveDeclType(edecl, vc.schema))
-		td, xsiErr := vc.resolveXsiType(ctx, ce, declType)
+		td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
@@ -1414,7 +1414,13 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 // resolves it to a type definition in the schema. Returns the resolved type
 // or the original declaredType if no xsi:type is present. Returns an error
 // if the xsi:type value doesn't resolve or is not derived from the declared type.
-func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef) (*TypeDef, error) {
+// ctaActive must be true when conditional type assignment is in effect for elem
+// (Version11 and the element declaration has a {type table}). It scopes the
+// empty-xsi:type handling: only then does a present-but-empty xsi:type hard-error,
+// so it cannot suppress a CTA-selected type (e.g. xs:error). Everywhere else an
+// empty xsi:type falls back to the declared type, byte-identical to pre-CTA
+// behavior (XSD 1.0 and no-alternative 1.1).
+func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef, ctaActive bool) (*TypeDef, error) {
 	var xsiTypeVal string
 	var present bool
 	for _, a := range elem.Attributes() {
@@ -1424,11 +1430,16 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 			break
 		}
 	}
-	// Only an ABSENT xsi:type falls back to the declared type. A present-but-empty
-	// (or whitespace-only) xsi:type is a malformed QName and must report a validity
-	// error rather than silently fall back — otherwise xsi:type="" would suppress a
-	// CTA-selected type (e.g. xs:error) yet still validate under the declared type.
+	// An ABSENT xsi:type always falls back to the declared type (under CTA this is
+	// the already-selected type, so it must not error).
 	if !present {
+		return declaredType, nil
+	}
+	// A present-but-empty xsi:type historically also falls back to the declared
+	// type. Preserve that EXCEPT when CTA is active, where it must instead report the
+	// invalid-QName validity error so it cannot bypass a CTA-selected type (e.g.
+	// xs:error). A non-empty value always proceeds to QName resolution below.
+	if xsiTypeVal == "" && !ctaActive {
 		return declaredType, nil
 	}
 

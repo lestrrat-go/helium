@@ -266,20 +266,35 @@ func (c *compiler) resolveAltTypeRefs(ctx context.Context) {
 // the governing type is the one chosen by the alternatives; otherwise declType is
 // returned unchanged. xsi:type takes precedence over CTA, so this is a no-op when
 // an xsi:type attribute is present.
-func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *helium.Element, edecl *ElementDecl, declType *TypeDef) *TypeDef {
+// effectiveAlternatives returns the XSD 1.1 conditional-type-assignment {type
+// table} in effect for an element declaration: its own alternatives, or — for an
+// <xs:element ref="g"> particle whose ElementDecl is a ref that does not carry the
+// table — the referenced GLOBAL declaration's alternatives (mirroring idcHostDecl's
+// ref handling). Returns nil outside XSD 1.1 or when no alternatives apply.
+func (vc *validationContext) effectiveAlternatives(edecl *ElementDecl) []*TypeAlternative {
 	if vc.version != Version11 || edecl == nil {
-		return declType
+		return nil
 	}
-	// Conditional type assignment is a property of the referenced GLOBAL element
-	// declaration, so an <xs:element ref="g"> particle does not carry the type
-	// table (its ElementDecl is a ref, like IDCs). Fall back to the global
-	// declaration's alternatives, mirroring idcHostDecl's ref handling.
-	alts := edecl.Alternatives
-	if len(alts) == 0 && edecl.IsRef {
+	if len(edecl.Alternatives) > 0 {
+		return edecl.Alternatives
+	}
+	if edecl.IsRef {
 		if g, ok := vc.schema.LookupElement(edecl.Name.Local, edecl.Name.NS); ok && g != edecl {
-			alts = g.Alternatives
+			return g.Alternatives
 		}
 	}
+	return nil
+}
+
+// hasTypeTable reports whether edecl has an effective conditional-type-assignment
+// {type table}. Used to scope xsi:type handling: a present-but-empty xsi:type may
+// only hard-error where it would otherwise suppress a CTA-selected type.
+func (vc *validationContext) hasTypeTable(edecl *ElementDecl) bool {
+	return len(vc.effectiveAlternatives(edecl)) > 0
+}
+
+func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *helium.Element, edecl *ElementDecl, declType *TypeDef) *TypeDef {
+	alts := vc.effectiveAlternatives(edecl)
 	if len(alts) == 0 {
 		return declType
 	}
