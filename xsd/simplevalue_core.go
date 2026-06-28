@@ -137,6 +137,22 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	// Apply whitespace normalization per the type's whiteSpace facet.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 
+	if err := validateValueByVariety(ctx, value, trimmed, valueNS, td, elemName, filename, line, vc); err != nil {
+		return err
+	}
+
+	// XSD 1.1 <xs:assertion> simple-type facet: evaluated only after the value is
+	// known lexically and facet valid, with $value bound to the typed value.
+	if vc.version == Version11 {
+		return checkSimpleTypeAssertions(ctx, trimmed, valueNS, td, elemName, filename, line, vc)
+	}
+	return nil
+}
+
+// validateValueByVariety validates a value's lexical space and facets per td's
+// variety, excluding the XSD 1.1 assertion facet (handled by validateValue once
+// the value is otherwise valid).
+func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	// Check if this is a list type.
 	if resolveVariety(td) == TypeVarietyList {
 		return validateListValue(ctx, trimmed, valueNS, td, elemName, filename, line, vc)

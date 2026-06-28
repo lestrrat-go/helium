@@ -8,6 +8,51 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// resolveXPathDefaultNS computes the effective default element namespace for an
+// XPath-bearing XSD 1.1 element (xs:assert/xs:assertion). The xpathDefaultNamespace
+// attribute on the element wins; otherwise the schema-level default
+// (c.schemaXPathDefaultNS) applies. It returns (uri, true) when a default is in
+// effect (an empty uri means "no namespace", e.g. ##local) and ("", false) when
+// no xpathDefaultNamespace is specified anywhere, in which case unprefixed element
+// name tests match no-namespace nodes (XPath 3.1 §3.3.2.1). The special tokens
+// ##targetNamespace, ##defaultNamespace and ##local are resolved against the
+// schema target namespace and the element's in-scope default xmlns.
+func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) (string, bool) {
+	raw := getAttr(elem, attrXPathDefaultNamespace)
+	if raw == "" {
+		raw = c.schemaXPathDefaultNS
+	}
+	if raw == "" {
+		return "", false
+	}
+	switch raw {
+	case xpathDefaultNSLocal:
+		return "", true
+	case xpathDefaultNSTargetNamespace:
+		return c.schema.targetNamespace, true
+	case xpathDefaultNSDefaultNamespace:
+		// The default namespace in scope at the element (an xmlns="..." default).
+		return collectNSContext(elem)[""], true
+	default:
+		return raw, true
+	}
+}
+
+// assertionNamespaces captures the in-scope namespace bindings for an XPath in an
+// xs:assert/xs:assertion, then sets the default element namespace per
+// xpathDefaultNamespace. The default element namespace for an XSD XPath is
+// governed SOLELY by xpathDefaultNamespace, not by an xmlns="..." default in the
+// schema document, so the bare xmlns default (key "") is removed unless
+// xpathDefaultNamespace reinstates one.
+func (c *compiler) assertionNamespaces(elem *helium.Element) map[string]string {
+	ns := collectNSContext(elem)
+	delete(ns, "")
+	if def, ok := c.resolveXPathDefaultNS(elem); ok && def != "" {
+		ns[""] = def
+	}
+	return ns
+}
+
 // parseAssert reads an XSD 1.1 <xs:assert> element, capturing its @test
 // expression and the in-scope namespace bindings, and pre-compiling the test as
 // an XPath 3.1 expression. A missing @test or a malformed XPath is a fatal
@@ -18,9 +63,16 @@ import (
 // Callers must only invoke this in XSD 1.1 mode; xs:assert is not part of the
 // 1.0 grammar.
 func (c *compiler) parseAssert(ctx context.Context, elem *helium.Element) *Assertion {
+	return c.parseAssertion(ctx, elem, elemAssert)
+}
+
+// parseAssertion is the shared reader behind parseAssert (xs:assert on complex
+// types) and the xs:assertion simple-type facet. elemKind selects the element
+// name used in diagnostics.
+func (c *compiler) parseAssertion(ctx context.Context, elem *helium.Element, elemKind string) *Assertion {
 	if !hasAttr(elem, attrTest) {
 		if c.filename != "" {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAssert,
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemKind,
 				"The attribute 'test' is required but missing."))
 		}
 		return nil
@@ -28,21 +80,21 @@ func (c *compiler) parseAssert(ctx context.Context, elem *helium.Element) *Asser
 	test := getAttr(elem, attrTest)
 	a := &Assertion{
 		Test:       test,
-		Namespaces: collectNSContext(elem),
+		Namespaces: c.assertionNamespaces(elem),
 		Line:       elem.Line(),
 		Source:     c.diagSource(),
 	}
 	compiled, err := xpath3.NewCompiler().Compile(test)
 	if err != nil {
 		if c.filename != "" {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAssert,
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemKind,
 				fmt.Sprintf("The XPath expression '%s' of the assertion is not valid: %v.", test, err)))
 		}
 		return nil
 	}
 	if err := compiled.Validate(a.Namespaces); err != nil {
 		if c.filename != "" {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAssert,
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemKind,
 				fmt.Sprintf("The XPath expression '%s' of the assertion has an unbound namespace prefix: %v.", test, err)))
 		}
 		return nil
@@ -62,20 +114,40 @@ func (c *compiler) parseAssert(ctx context.Context, elem *helium.Element) *Asser
 // (StrictPrefixes is intentionally NOT set) so common assertion idioms such as
 // xs:integer(...) or string-length(...) work without redeclaration.
 //
+// When the element's type has SIMPLE content (a simpleContent complex type, or a
+// simple type used directly), $value is bound to the typed atomic value of the
+// content per XSD 1.1 §3.13.4 (a sequence for a list type). For complex content
+// $value is the empty sequence.
+//
 // Known limitation: the test is evaluated against the element as it sits in the
 // full document, so an expression could navigate to ancestors/siblings, which a
 // strict processor forbids (the assertion's context tree is the element and its
 // descendants only). This does not affect assertions that stay within the
 // element subtree.
 func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+	if !typeHasAssertions(td) {
+		return nil
+	}
+	valueSeq := vc.assertValueSequence(ctx, elem, td)
+	// XSD 1.1 §3.13.4.2: an xs:assert test is evaluated against a tree whose root
+	// is the element being assessed, isolated from the rest of the document and
+	// stripped of comment/PI nodes. Build that isolated tree once (carrying the
+	// PSVI type annotations onto the copy) and evaluate every assertion against it
+	// so an expression cannot navigate to ancestors/siblings.
+	root, annotations := vc.isolatedAssertTree(elem)
 	var firstErr error
 	for cur := range baseChain(td) {
 		for _, a := range cur.Assertions {
 			if a.compiled == nil {
 				continue
 			}
-			ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Namespaces(a.Namespaces)
-			res, err := ev.Evaluate(ctx, a.compiled, elem)
+			ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				Namespaces(a.Namespaces).
+				Variables(map[string]xpath3.Sequence{"value": valueSeq})
+			if annotations != nil {
+				ev = ev.TypeAnnotations(annotations)
+			}
+			res, err := ev.Evaluate(ctx, a.compiled, root)
 			if err != nil {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
 					fmt.Sprintf("Failed to evaluate the assertion '%s': %v.", a.Test, err))
@@ -103,4 +175,150 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 		}
 	}
 	return firstErr
+}
+
+// typeHasAssertions reports whether td or any type up its base chain declares an
+// xs:assert constraint.
+func typeHasAssertions(td *TypeDef) bool {
+	for cur := range baseChain(td) {
+		if len(cur.Assertions) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isolatedAssertTree builds the isolated XDM tree an xs:assert is evaluated
+// against: a deep copy of elem rooted in a fresh document, with comment and
+// processing-instruction nodes removed (XSD 1.1 §3.13.4.2). The returned
+// annotation map carries the PSVI type annotations from the live tree onto the
+// corresponding copied element/attribute nodes so typed atomization (e.g. a
+// typed attribute in a value comparison) still works. If the copy fails for any
+// reason it falls back to the live element and annotations (the documented
+// non-isolated behavior) rather than skipping the assertion.
+func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.Node, map[helium.Node]string) {
+	live := map[helium.Node]string(vc.assertAnnotations)
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	copied, err := helium.CopyNode(elem, doc)
+	if err != nil {
+		return elem, live
+	}
+	ce, ok := helium.AsNode[*helium.Element](copied)
+	if !ok {
+		return elem, live
+	}
+	// The copy is left parentless (NOT linked as a document child): per XSD 1.1
+	// the element is the ROOT of the assertion tree, so an absolute-path
+	// expression ("/" or "//"), whose root must be a document node, raises
+	// XPDY0050 — the assertion cannot navigate outside the element's subtree.
+
+	// Materialize the original element's in-scope namespaces onto the copy root.
+	// CopyNode re-declares only an element's own (and active) namespaces, so a
+	// prefix declared on a now-excluded ancestor would otherwise be unbound on the
+	// copy — breaking node-scope resolution of a QName-valued attribute/content
+	// (e.g. @name = "xsd:element").
+	existing := make(map[string]bool)
+	for _, ns := range ce.Namespaces() {
+		existing[ns.Prefix()] = true
+	}
+	for prefix, uri := range collectNSContext(elem) {
+		if prefix == "" || existing[prefix] {
+			continue
+		}
+		ce.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+	}
+
+	var ann map[helium.Node]string
+	if vc.assertAnnotations != nil {
+		ann = make(map[helium.Node]string, len(vc.assertAnnotations))
+		mapAssertAnnotations(elem, ce, vc.assertAnnotations, ann)
+	}
+	stripCommentsAndPIs(ce)
+	return ce, ann
+}
+
+// mapAssertAnnotations walks the live element orig and its structurally identical
+// copy in parallel (helium.CopyNode preserves child node types and order), copying
+// each element's and attribute's type annotation from src (keyed by live node) into
+// dst (keyed by copied node). It runs BEFORE comment/PI stripping so the two trees
+// still align node-for-node.
+func mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string) {
+	if name, ok := src[orig]; ok {
+		dst[copied] = name
+	}
+	// Match attributes by expanded QName rather than positional index: the copy
+	// may carry a different attribute ordering or extra namespace declarations.
+	ca := copied.Attributes()
+	for _, oattr := range orig.Attributes() {
+		name, ok := src[oattr]
+		if !ok {
+			continue
+		}
+		for _, cattr := range ca {
+			if cattr.LocalName() == oattr.LocalName() && cattr.URI() == oattr.URI() {
+				dst[cattr] = name
+				break
+			}
+		}
+	}
+	oc := childNodes(orig)
+	cc := childNodes(copied)
+	for i := range oc {
+		if i >= len(cc) {
+			break
+		}
+		oe, ok1 := helium.AsNode[*helium.Element](oc[i])
+		ce, ok2 := helium.AsNode[*helium.Element](cc[i])
+		if ok1 && ok2 {
+			mapAssertAnnotations(oe, ce, src, dst)
+		}
+	}
+}
+
+// stripCommentsAndPIs removes every comment and processing-instruction node from
+// elem's subtree, so an assertion XPath (e.g. .//comment()) sees the XSD 1.1
+// assertion data model, which excludes them.
+func stripCommentsAndPIs(elem *helium.Element) {
+	var doomed []helium.Node
+	var collect func(n *helium.Element)
+	collect = func(n *helium.Element) {
+		for _, child := range childNodes(n) {
+			switch child.Type() {
+			case helium.CommentNode, helium.ProcessingInstructionNode:
+				doomed = append(doomed, child)
+			case helium.ElementNode:
+				if ce, ok := helium.AsNode[*helium.Element](child); ok {
+					collect(ce)
+				}
+			}
+		}
+	}
+	collect(elem)
+	for _, n := range doomed {
+		if mn, ok := n.(helium.MutableNode); ok {
+			helium.UnlinkNode(mn)
+		}
+	}
+}
+
+// childNodes materializes a node's children into a slice (a stable snapshot so a
+// later structural edit — comment stripping — does not disturb iteration).
+func childNodes(n helium.Node) []helium.Node {
+	var out []helium.Node
+	for child := range helium.Children(n) {
+		out = append(out, child)
+	}
+	return out
+}
+
+// assertValueSequence builds the $value binding for an xs:assert on elem's type:
+// the typed simple value when td has simple content, otherwise the empty
+// sequence (complex content). The text content is whitespace-normalized per the
+// type's effective whiteSpace facet before typing.
+func (vc *validationContext) assertValueSequence(ctx context.Context, elem *helium.Element, td *TypeDef) xpath3.Sequence {
+	if td == nil || td.ContentType != ContentTypeSimple {
+		return xpath3.EmptySequence()
+	}
+	raw := normalizeWhiteSpace(elemTextContent(elem), resolveWhiteSpace(td))
+	return buildValueSequence(ctx, raw, collectNSContext(elem), td, vc.version)
 }

@@ -454,6 +454,14 @@ type validationContext struct {
 	// xs:unique/xs:keyref declared on a local element are evaluated rather than
 	// silently skipped.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// assertAnnotations maps element and attribute nodes to their XSD type name
+	// (the xpath3 annotation form, e.g. "xs:integer"). It is populated during
+	// validation in XSD 1.1 mode (nil otherwise) so xs:assert tests evaluate
+	// against a PSVI-typed tree: a typed attribute like @length atomizes to
+	// xs:nonNegativeInteger rather than xs:untypedAtomic (which a value
+	// comparison would cast to xs:string), and "instance of" tests see the
+	// declared type.
+	assertAnnotations TypeAnnotations
 }
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
@@ -470,7 +478,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 	if schema != nil {
 		version = schema.version
 	}
-	return &validationContext{
+	vc := &validationContext{
 		schema:         schema,
 		version:        version,
 		cfg:            cfg,
@@ -479,6 +487,10 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		actualElemType: make(map[*helium.Element]*TypeDef),
 		actualElemDecl: make(map[*helium.Element]*ElementDecl),
 	}
+	if version == Version11 {
+		vc.assertAnnotations = make(TypeAnnotations)
+	}
+	return vc
 }
 
 // validationErrors is a synchronous ErrorHandler that accumulates error
@@ -1509,6 +1521,9 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 	if vc.actualElemType != nil && td != nil {
 		vc.actualElemType[elem] = td
 	}
+	if vc.assertAnnotations != nil {
+		vc.assertAnnotations[elem] = xsdTypeName(td)
+	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
@@ -1541,12 +1556,18 @@ func (vc *validationContext) attrUseType(au *AttrUse) (*TypeDef, bool) {
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
 func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
-	if vc.cfg == nil || vc.cfg.annotations == nil {
+	if vc.assertAnnotations == nil && (vc.cfg == nil || vc.cfg.annotations == nil) {
 		return
 	}
 	td, ok := vc.attrUseType(au)
 	if !ok {
 		return
 	}
-	(*vc.cfg.annotations)[a] = xsdTypeName(td)
+	name := xsdTypeName(td)
+	if vc.assertAnnotations != nil {
+		vc.assertAnnotations[a] = name
+	}
+	if vc.cfg != nil && vc.cfg.annotations != nil {
+		(*vc.cfg.annotations)[a] = name
+	}
 }

@@ -324,10 +324,17 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
+	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
+	// xpathDefaultNamespace is a PER-document default for the contained
+	// xs:assert/xs:assertion. An included (chameleon) schema's own root value
+	// applies to its asserts, and its ##targetNamespace resolves against the
+	// effective (including schema's) target namespace, which c.schema.targetNamespace
+	// already carries during include processing.
+	c.schemaXPathDefaultNS = getAttr(incRoot, attrXPathDefaultNamespace)
 
 	// Set the include file path for duplicate element error reporting.
 	if c.filename != "" {
@@ -366,6 +373,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
+	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
 	return err
 }
@@ -504,10 +512,12 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
+	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
+	c.schemaXPathDefaultNS = getAttr(incRoot, attrXPathDefaultNamespace)
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
@@ -528,6 +538,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.includeFile = savedIncludeFile
+		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
 	}
 
@@ -539,6 +550,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.includeFile = savedIncludeFile
+		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		return err
 	}
 
@@ -568,6 +580,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
+	c.schemaXPathDefaultNS = savedXPathDefaultNS
 
 	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
 }
