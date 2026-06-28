@@ -453,3 +453,168 @@ func TestVersion11RestrictionPerBaseWildcardMax(t *testing.T) {
 		mustCompile11OK(t, schema("2"))
 	})
 }
+
+// TestVersion11RestrictionConcreteElemWildcardCardinality covers gauntlet
+// finding PR858-R2-001: a CONCRETE derived element admitted by a base WILDCARD
+// (not mapped to a base element) must participate in wildcard cardinality
+// accounting — both its MAX (so extra concrete elements cannot overload a base
+// wildcard's maxOccurs) and its MIN (so a required concrete element satisfies a
+// base wildcard's minOccurs instead of being ignored).
+func TestVersion11RestrictionConcreteElemWildcardCardinality(t *testing.T) {
+	t.Run("two concrete derived elements exceed a max-1 base wildcard (rejected)", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:any namespace="##any" minOccurs="0" maxOccurs="1" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:all>
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+          <xs:element name="c" type="xs:string" minOccurs="0"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`)
+	})
+
+	t.Run("one concrete derived element within a max-1 base wildcard (compiles)", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:any namespace="##any" minOccurs="0" maxOccurs="1" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:all>
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`)
+	})
+
+	t.Run("a required concrete element satisfies a min-1 base wildcard (compiles)", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:any namespace="##any" minOccurs="1" maxOccurs="1" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="b">
+        <xs:all>
+          <xs:element name="a" type="xs:string" minOccurs="1"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="r"/>
+</xs:schema>`)
+	})
+}
+
+// TestVersion11RestrictionDefinedSiblingNames covers gauntlet finding
+// PR858-R2-002: when BOTH base and derived wildcards carry ##definedSibling but
+// resolve to DIFFERENT sibling-name sets, the derived may not re-admit a name
+// the base excludes. Comparing the marker bit alone is insufficient.
+func TestVersion11RestrictionDefinedSiblingNames(t *testing.T) {
+	schema := func(includeSibling bool) string {
+		derivedAll := `        <xs:all>
+          <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:all>`
+		if includeSibling {
+			derivedAll = `        <xs:all>
+          <xs:element name="a" type="xs:int" minOccurs="0"/>
+          <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:all>`
+		}
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="b">
+    <xs:all>
+      <xs:element name="a" type="xs:int" minOccurs="0"/>
+      <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="t:b">
+` + derivedAll + `
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="t:r"/>
+</xs:schema>`
+	}
+
+	t.Run("derived dropping a sibling narrows ##definedSibling exclusions (rejected)", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11Fail(t, schema(false))
+	})
+
+	t.Run("derived keeping the same sibling set compiles", func(t *testing.T) {
+		t.Parallel()
+		mustCompile11OK(t, schema(true))
+	})
+}
+
+// TestVersion11ExtensionUnionDefined covers the cos-aw-union {disallowed names}
+// rule for the attribute-wildcard UNION on extension (XSD 1.1 §3.10.6.3, the
+// area gauntlet finding PR858-R2-003 touched). ##defined is folded ONLY as a
+// whole (kept iff BOTH operands carry it); it does NOT make an individual QName
+// disallowed for the union. So a global attribute one operand excludes via
+// ##defined but admits by namespace, while the OTHER operand excludes it
+// explicitly, is still ADMITTED by the union (mirrors W3C wild083's `surprise`).
+// A QName excluded EXPLICITLY by BOTH operands stays disallowed.
+func TestVersion11ExtensionUnionDefined(t *testing.T) {
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t">
+  <xs:attribute name="foo" type="xs:string"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##any" notQName="##defined t:dup" processContents="skip"/>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="t:B">
+        <xs:anyAttribute namespace="##any" notQName="t:foo t:dup" processContents="skip"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="t:E"/>
+</xs:schema>`
+
+	t.Run("union ADMITS a global attr excluded by ##defined in one operand only (accepted)", func(t *testing.T) {
+		t.Parallel()
+		// t:foo is excluded by B via ##defined (B admits it by namespace) and by E
+		// explicitly. Per cos-aw-union it is still admitted by the union.
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<t:e xmlns:t="urn:t" t:foo="x"/>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("union excludes a name BOTH operands disallow explicitly (rejected)", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<t:e xmlns:t="urn:t" t:dup="x"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("union admits an ordinary attribute (accepted)", func(t *testing.T) {
+		t.Parallel()
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schema,
+			`<t:e xmlns:t="urn:t" xmlns:o="urn:other" o:bar="x"/>`)
+		require.NoError(t, err)
+	})
+}

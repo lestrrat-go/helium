@@ -555,14 +555,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// final, element-consistency) in its original order below.
 	c.buildSubstGroups()
 
-	// Second pass: resolve type references.
+	// Second pass: resolve type references. (XSD 1.1 ##definedSibling resolution
+	// runs INSIDE resolveRefs, after group-ref expansion but before the
+	// restriction-derivation checks, so those checks see resolved SiblingNames.)
 	c.resolveRefs(ctx)
-
-	// XSD 1.1: resolve ##definedSibling on element wildcards now that content
-	// models (including expanded group refs) are fully built.
-	if c.version == Version11 {
-		c.resolveDefinedSiblings()
-	}
 
 	// Reject circular simple-type definitions (a union/list/restriction that
 	// reaches itself) BEFORE any check that walks the variety/base chain. A

@@ -216,21 +216,26 @@ func intersectWildcards(a, b *Wildcard) *Wildcard {
 		a.NotQNameDefinedSibling || b.NotQNameDefinedSibling)
 }
 
-// unionWildcards11 computes the namespace-constraint UNION honoring 1.1 fields.
-// A name is admitted iff EITHER operand admits it. The namespace constraints are
-// unioned directly. The disallowed-name set cannot be a plain set intersection:
-// a name N is disallowed by the union only if NEITHER operand admits it (its
-// namespace is out of range OR it is in that operand's disallowed set). So the
-// candidate disallowed names (the operands' combined notQName entries) are
-// filtered to those neither operand admits.
+// unionWildcards11 computes the namespace-constraint UNION honoring 1.1 fields
+// (XSD 1.1 §3.10.6.3, cos-aw-union). The namespace constraints are unioned
+// directly. For the {disallowed names}, a candidate QName (drawn from the
+// operands' explicit notQName lists) is in the union iff NEITHER operand admits
+// it via its NAMESPACE constraint AND explicit notQName list. Crucially, the
+// per-QName test IGNORES ##defined: per the spec, ##defined is folded only as a
+// whole (the union keeps ##defined iff BOTH operands carry it), and it does NOT
+// make an individual QName "disallowed" for the union. So a name one operand
+// excludes only via ##defined, but admits namespace-wise, is still admitted by
+// the union even if the other operand excludes it explicitly — see W3C wild083
+// (`surprise` is allowed because the ##defined operand admits it by namespace).
+// ##definedSibling is folded the same way (kept iff both carry it).
 func unionWildcards11(a, b *Wildcard) *Wildcard {
 	con := constraintUnion(wildcardConstraint(a), wildcardConstraint(b))
 	var disallowed []QName
 	for _, qn := range notQNameUnion(a.NotQName, b.NotQName) {
-		if wildcardAllowsExpandedName(a, qn.Local, qn.NS, nil, true) {
+		if wildcardAdmitsNameIgnoringDefined(a, qn.Local, qn.NS) {
 			continue
 		}
-		if wildcardAllowsExpandedName(b, qn.Local, qn.NS, nil, true) {
+		if wildcardAdmitsNameIgnoringDefined(b, qn.Local, qn.NS) {
 			continue
 		}
 		disallowed = append(disallowed, qn)
@@ -238,6 +243,14 @@ func unionWildcards11(a, b *Wildcard) *Wildcard {
 	return constraintToWildcard(con, a.ProcessContents, a.TargetNS, disallowed,
 		a.NotQNameDefined && b.NotQNameDefined,
 		a.NotQNameDefinedSibling && b.NotQNameDefinedSibling)
+}
+
+// wildcardAdmitsNameIgnoringDefined reports whether the wildcard admits a name by
+// its NAMESPACE constraint and explicit @notQName/##definedSibling exclusions,
+// DELIBERATELY ignoring ##defined. This is the per-QName admission test the
+// cos-aw-union {disallowed names} rule uses (##defined is folded separately).
+func wildcardAdmitsNameIgnoringDefined(wc *Wildcard, local, ns string) bool {
+	return wildcardMatches(wc, ns) && !wildcardExcludesName(wc, local, ns)
 }
 
 // wildcardConstraintSubset11 reports whether sub's namespace constraint is a
@@ -291,10 +304,23 @@ func wildcardConstraintSubset11(sub, super *Wildcard) bool {
 	if super.NotQNameDefined && !sub.NotQNameDefined {
 		return false
 	}
-	// A derived wildcard may not drop ##definedSibling: super excluding sibling
-	// names that sub re-admits is not a valid restriction.
-	if super.NotQNameDefinedSibling && !sub.NotQNameDefinedSibling {
-		return false
+	// ##definedSibling: a derived wildcard may neither DROP the marker nor (when
+	// both carry it) resolve to a NARROWER sibling-name set. Comparing the marker
+	// bit alone is insufficient — base and derived live in different content
+	// models, so their resolved SiblingNames can differ. Every sibling name super
+	// excludes (within a namespace sub admits) must also be excluded by sub.
+	if super.NotQNameDefinedSibling {
+		if !sub.NotQNameDefinedSibling {
+			return false
+		}
+		for _, qn := range super.SiblingNames {
+			if !wildcardMatches(sub, qn.NS) {
+				continue // sub doesn't admit this namespace anyway
+			}
+			if !wildcardExcludesName(sub, qn.Local, qn.NS) {
+				return false
+			}
+		}
 	}
 	return true
 }

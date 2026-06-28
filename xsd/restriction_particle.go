@@ -550,6 +550,14 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 
 	used := make([]bool, len(baseElems))
 	var derivedWilds []*Particle
+	// derivedElems holds CONCRETE derived elements that are not mapped to a base
+	// element but are admitted by a base WILDCARD. They consume from the base
+	// wildcards' capacity exactly like a derived wildcard confined to their single
+	// name, so they MUST take part in the cardinality accounting below (combined
+	// totals and per-base min/max) — otherwise extra concrete elements could
+	// overload a base wildcard's maxOccurs (false-accept) and concrete elements
+	// would be ignored when satisfying a base wildcard's minOccurs (false-reject).
+	var derivedElems []*Particle
 	derivedWildMax := 0
 	derivedUnbounded := false
 	for _, rp := range rParticles {
@@ -575,6 +583,12 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 			// Not a base element — must be admitted by the base wildcard union.
 			if baseUnion == nil || !wildcardAllowsName(baseUnion, rt.Name, schema) {
 				return false
+			}
+			derivedElems = append(derivedElems, rp)
+			if rp.MaxOccurs == Unbounded {
+				derivedUnbounded = true
+			} else {
+				derivedWildMax += rp.MaxOccurs
 			}
 		case *Wildcard:
 			if baseUnion == nil {
@@ -624,6 +638,14 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 				guaranteed += dw.MinOccurs
 			}
 		}
+		// A concrete derived element whose name this base wildcard admits places
+		// its required occurrences in the base wildcard's namespace region.
+		for _, de := range derivedElems {
+			det, _ := de.Term.(*ElementDecl)
+			if wildcardAllowsName(bwc, det.Name, schema) {
+				guaranteed += de.MinOccurs
+			}
+		}
 		if guaranteed < bw.MinOccurs {
 			return false
 		}
@@ -660,6 +682,21 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 				break
 			}
 			capacity += dw.MaxOccurs
+		}
+		// Concrete derived elements admitted by this base wildcard also draw on
+		// its capacity.
+		if !over {
+			for _, de := range derivedElems {
+				det, _ := de.Term.(*ElementDecl)
+				if !wildcardAllowsName(bwc, det.Name, schema) {
+					continue
+				}
+				if de.MaxOccurs == Unbounded {
+					over = true
+					break
+				}
+				capacity += de.MaxOccurs
+			}
 		}
 		if over || capacity > bw.MaxOccurs {
 			return false
