@@ -757,6 +757,12 @@ func (c *compiler) resolveConstraintRefs(ctx context.Context) {
 		if !idc.IsConstraintRef {
 			continue
 		}
+		// An unbound @ref prefix was already reported as fatal at parse time; the
+		// resolved QName is meaningless, so skip the "unknown constraint" check to
+		// avoid a duplicate diagnostic.
+		if idc.constraintRefUnbound {
+			continue
+		}
 		source := idc.Source
 		if source == "" {
 			source = c.filename

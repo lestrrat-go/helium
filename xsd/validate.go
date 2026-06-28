@@ -454,6 +454,15 @@ type validationContext struct {
 	// xs:unique/xs:keyref declared on a local element are evaluated rather than
 	// silently skipped.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// actualAttrType records the declared *TypeDef of each attribute that was
+	// actually SCHEMA-ASSESSED during pass-1 — matched by an explicit attribute
+	// use, or admitted by a strict/lax xs:anyAttribute wildcard with a matching
+	// global declaration, or inserted as a default/fixed value. An attribute
+	// admitted by a processContents="skip" wildcard is NOT assessed and is
+	// therefore absent here. The XSD 1.1 ID/IDREF pass consults ONLY this map so a
+	// skip-admitted attribute is never mistaken for an xs:ID/xs:IDREF via a global
+	// fallback (which would false-reject duplicate skipped IDs).
+	actualAttrType map[*helium.Attribute]*TypeDef
 }
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
@@ -478,6 +487,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		errorHandler:   handler,
 		actualElemType: make(map[*helium.Element]*TypeDef),
 		actualElemDecl: make(map[*helium.Element]*ElementDecl),
+		actualAttrType: make(map[*helium.Attribute]*TypeDef),
 	}
 }
 
@@ -1227,6 +1237,13 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
 
+	// This wildcard-admitted attribute IS schema-assessed (strict/lax with a
+	// matching global declaration — skip already returned above), so record its
+	// type for the XSD 1.1 ID/IDREF pass.
+	if ok && vc.actualAttrType != nil {
+		vc.actualAttrType[a] = attrTD
+	}
+
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
@@ -1550,11 +1567,16 @@ func (vc *validationContext) attrUseType(au *AttrUse) (*TypeDef, bool) {
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
 func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
-	if vc.cfg == nil || vc.cfg.annotations == nil {
-		return
-	}
 	td, ok := vc.attrUseType(au)
 	if !ok {
+		return
+	}
+	// Record the assessed attribute's type for the XSD 1.1 ID/IDREF pass,
+	// independent of the optional user-facing annotations map.
+	if vc.actualAttrType != nil {
+		vc.actualAttrType[a] = td
+	}
+	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
 	(*vc.cfg.annotations)[a] = xsdTypeName(td)

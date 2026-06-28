@@ -218,7 +218,8 @@ type IDConstraint struct {
 	ConstraintRef      string // lexical @ref QName as written
 	ConstraintRefQName QName  // resolved {ns}local of the referenced constraint
 
-	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	referUnbound         bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	constraintRefUnbound bool // for @ref: the ref prefix was not bound in scope (already reported)
 }
 
 // Assertion is an XSD 1.1 xs:assert constraint on a complex type: an XPath 3.1

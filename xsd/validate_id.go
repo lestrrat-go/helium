@@ -104,7 +104,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 			if isSpecialAttr(a) {
 				continue
 			}
-			atd := vc.attrTypeForID(td, a)
+			atd := vc.attrTypeForID(a)
 			if atd == nil || !idFamilyType(atd) {
 				continue
 			}
@@ -215,8 +215,12 @@ func (vc *validationContext) recordIDRef(col *idCollector, tok string, elem *hel
 }
 
 // elementTypeForID resolves the effective type of an instance element for the
-// purpose of ID/IDREF collection, preferring the actual type recorded during
-// pass-1 content validation (which already accounts for xsi:type).
+// purpose of ID/IDREF collection, using ONLY the provenance recorded during
+// pass-1 content validation (which already accounts for xsi:type). It does NOT
+// fall back to a global element-declaration lookup: an element admitted through a
+// processContents="skip" wildcard is not schema-assessed and so has no recorded
+// type — treating it as its global declaration's type would wrongly subject its
+// (un-assessed) ID-typed content to uniqueness checking.
 func (vc *validationContext) elementTypeForID(elem *helium.Element) *TypeDef {
 	if td := vc.actualElemType[elem]; td != nil {
 		return td
@@ -224,25 +228,15 @@ func (vc *validationContext) elementTypeForID(elem *helium.Element) *TypeDef {
 	if decl := vc.actualElemDecl[elem]; decl != nil && decl.Type != nil {
 		return decl.Type
 	}
-	if decl := lookupElemDecl(elem, vc.schema); decl != nil {
-		return decl.Type
-	}
 	return nil
 }
 
 // attrTypeForID resolves the declared type of an instance attribute for ID/IDREF
-// collection: the owning element's complex-type attribute uses first, then a
-// matching global attribute declaration (which covers attributes admitted via an
-// xs:anyAttribute wildcard).
-func (vc *validationContext) attrTypeForID(elemType *TypeDef, a *helium.Attribute) *TypeDef {
-	aqn := QName{Local: a.LocalName(), NS: a.URI()}
-	if elemType != nil {
-		if td := attrUseType(elemType, aqn, vc.schema); td != nil {
-			return td
-		}
-	}
-	if ga, ok := vc.schema.globalAttrs[aqn]; ok {
-		return attrUseTypeDef(ga, vc.schema)
-	}
-	return nil
+// collection, using ONLY the type recorded for an attribute that was actually
+// schema-assessed during pass-1 (explicit use, or strict/lax wildcard with a
+// matching global declaration, or an inserted default/fixed). An attribute
+// admitted by a processContents="skip" wildcard is absent from this map and so
+// is never treated as xs:ID/xs:IDREF.
+func (vc *validationContext) attrTypeForID(a *helium.Attribute) *TypeDef {
+	return vc.actualAttrType[a]
 }

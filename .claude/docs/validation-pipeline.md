@@ -353,7 +353,13 @@ constraint's selector/fields — and a keyref's `refer` — and adopt its QName
 identity (so a ref'd keyref resolves against a ref'd key on the same host); the
 reference must resolve to an existing constraint of the SAME kind, else a fatal
 schema error. A `@ref` constraint has no name of its own and is skipped in the
-duplicate-name and key-name registries.
+duplicate-name and key-name registries. A prefixed `@ref` whose prefix is not
+bound in scope is a fatal error (`resolveIDCNameQName` → `reportUnboundQNamePrefix`,
+the same path every other QName-valued schema attribute uses), not a silent map to
+no-namespace; the `constraintRefUnbound` flag suppresses the follow-up
+"unknown constraint" diagnostic. The `@ref` form is mutually exclusive with the
+full form: a `@ref` constraint that ALSO carries `name`/`xs:selector`/`xs:field`/
+(keyref) `refer` is rejected (`reportIDCRefConflict`).
 
 **Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
 a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
@@ -367,10 +373,22 @@ decomposed against their type variety (`collectIDFromValue`, mirroring
 `canonicalValueKey`): a list splits into items, a union resolves to its active
 member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
 `xs:IDREFS` (a flat atomic placeholder) is split by name. Empty element content
-falls back to the declaration's default/fixed value. The pass never runs in 1.0
+falls back to the declaration's default/fixed value. Element/attribute typing for
+this pass uses ONLY the provenance recorded during pass-1 — `actualElemType`/
+`actualElemDecl` for elements and the new `actualAttrType` map for attributes
+(populated in `annotateAttrUse` and `validateWildcardAttr` for explicit uses and
+strict/lax wildcard-admitted global attributes) — with NO global-declaration
+fallback. So an element/attribute admitted through a `processContents="skip"`
+wildcard (never schema-assessed, never recorded) is NOT treated as xs:ID/xs:IDREF,
+which avoids false-rejecting duplicate skipped IDs. The pass never runs in 1.0
 mode, so the libxml2-compat goldens stay byte-identical. NOT covered:
 `xs:ENTITY`/`xs:ENTITIES` (need the DTD unparsed-entity table) and ID/IDREF
-members inside a union at instance level.
+members inside a union at instance level. NOTE: this skip-exclusion is for the
+ID/IDREF DATATYPE pass only; pass-2 IDC selectors (`xs:key`/`xs:unique`) still
+match skip-content nodes by XPath — helium deliberately includes skip-matched
+nodes in an ancestor IDC (see `TestIDCFieldSkipWildcardSelectedSelf`), so the
+saxon `Wild.testSet` `wild101–104` "IDC-with-skip" cases (which require the
+opposite) remain a separate, unresolved pass-2 design question.
 
 ### Key Data Model
 

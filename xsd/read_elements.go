@@ -712,13 +712,36 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	}
 
 	// XSD 1.1 identity-constraint @ref: the constraint reuses a referenced
-	// constraint's name/selector/field. name/selector/field must be absent here;
+	// constraint's name/selector/field. The ref form may carry only annotation/id
+	// metadata, so name/selector/field (and, for keyref, refer) MUST be absent;
 	// the referenced constraint is resolved (and its selector/fields copied in)
 	// at compile time by resolveConstraintRefs.
 	if ref != "" {
 		source := c.includeFile
 		if source == "" {
 			source = c.filename
+		}
+		xsdElem := idcKindName(kind)
+		// A @ref constraint must not also declare its own name/selector/field/refer
+		// (the ref form is mutually exclusive with the full form). Reject each
+		// offending companion as a fatal schema error.
+		if name != "" {
+			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
+		}
+		if kind == IDCKeyRef && getAttr(elem, attrRefer) != "" {
+			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
+		}
+		for child := range helium.Children(elem) {
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			if isXSDElement(ce, elemSelector) {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, elemSelector)
+			}
+			if isXSDElement(ce, elemField) {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, elemField)
+			}
 		}
 		idc := &IDConstraint{
 			Kind:            kind,
@@ -728,7 +751,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			IsConstraintRef: true,
 			ConstraintRef:   ref,
 		}
-		idc.ConstraintRefQName = c.resolveIDCNameQName(elem, ref)
+		idc.ConstraintRefQName, idc.constraintRefUnbound = c.resolveIDCNameQName(ctx, elem, ref)
 		return idc
 	}
 	// Source pins the filename of the schema document that declares this
@@ -883,18 +906,39 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 }
 
 // resolveIDCNameQName resolves an identity-constraint @ref QName against the
-// element's in-scope namespaces. A prefixed ref resolves its prefix; an
-// unprefixed ref uses the in-scope default namespace, falling back to the
-// schema's target namespace (identity-constraints live in the target namespace).
-func (c *compiler) resolveIDCNameQName(elem *helium.Element, ref string) QName {
+// element's in-scope namespaces. A prefixed ref resolves its prefix; a prefixed
+// ref whose prefix is not bound in scope is a fatal schema error (reported via
+// reportUnboundQNamePrefix, mirroring every other QName-valued schema attribute)
+// rather than silently mapping to the empty namespace — the returned bool reports
+// that so resolveConstraintRefs can suppress its own "unknown constraint"
+// diagnostic. An unprefixed ref uses the in-scope default namespace, falling back
+// to the schema's target namespace (identity-constraints live in the target
+// namespace).
+func (c *compiler) resolveIDCNameQName(ctx context.Context, elem *helium.Element, ref string) (QName, bool) {
 	if prefix, local, found := strings.Cut(ref, ":"); found {
-		return QName{Local: local, NS: lookupNS(elem, prefix)}
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
+			return QName{}, true
+		}
+		return QName{Local: local, NS: ns}, false
 	}
 	ns := c.schema.targetNamespace
 	if defNS := lookupNS(elem, ""); defNS != "" {
 		ns = defNS
 	}
-	return QName{Local: ref, NS: ns}
+	return QName{Local: ref, NS: ns}, false
+}
+
+// reportIDCRefConflict reports a fatal schema error for an identity-constraint
+// that uses @ref together with a companion (name/selector/field/refer) that the
+// ref form forbids.
+func (c *compiler) reportIDCRefConflict(ctx context.Context, source string, line int, xsdElem, companion string) {
+	if source == "" {
+		return
+	}
+	msg := fmt.Sprintf("An identity-constraint with a 'ref' attribute must not also specify '%s'.", companion)
+	c.schemaError(ctx, schemaParserErrorAttr(source, line, xsdElem, xsdElem, attrRef, msg))
 }
 
 // reportIDCXPathError reports a malformed identity-constraint selector/field

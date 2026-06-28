@@ -268,3 +268,141 @@ func TestIDCXPathDefaultNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc2))
 }
+
+// TestIDSkipWildcardNotAssessed verifies that elements/attributes admitted
+// through a processContents="skip" wildcard are NOT treated as xs:ID/xs:IDREF by
+// the document-wide ID pass: skip content is not schema-assessed, so duplicate
+// "ID" values there must not be flagged even when a global declaration of the
+// same name would otherwise classify them as xs:ID.
+func TestIDSkipWildcardNotAssessed(t *testing.T) {
+	compileValidate := func(t *testing.T, schemaXML, instanceXML string) error {
+		t.Helper()
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		require.NoError(t, err)
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	t.Run("skip-wildcard attributes are not global-classified as ID", func(t *testing.T) {
+		t.Parallel()
+		// A GLOBAL attribute named "id" of type xs:ID exists, so a naive global
+		// fallback would type the skip-content @id attributes as xs:ID and reject
+		// the duplicate. Under skip they are unassessed, so this is valid.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="id" type="xs:ID"/>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		inst := `<doc><a id="dup"/><b id="dup"/></doc>`
+		require.NoError(t, compileValidate(t, schemaXML, inst))
+	})
+
+	t.Run("skip-wildcard element content is not global-classified as ID", func(t *testing.T) {
+		t.Parallel()
+		// A GLOBAL element "n" of type xs:ID exists; under skip the <n> elements are
+		// unassessed, so duplicate text content must not be flagged.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="n" type="xs:ID"/>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		inst := `<doc><wrap><n>dup</n></wrap><wrap><n>dup</n></wrap></doc>`
+		require.NoError(t, compileValidate(t, schemaXML, inst))
+	})
+}
+
+// TestIDConstraintRefUnboundPrefix verifies that an identity-constraint @ref
+// using a namespace prefix that is not bound in scope is a fatal schema error
+// rather than silently resolving to the no-namespace constraint set.
+func TestIDConstraintRefUnboundPrefix(t *testing.T) {
+	t.Parallel()
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="chap">
+          <xs:unique name="u"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:unique>
+        </xs:element>
+        <xs:element name="appx" type="chap">
+          <xs:unique ref="bad:u"/>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
+// TestIDConstraintRefConflictingChildren verifies that an identity-constraint
+// using @ref must not also carry name / selector / field / (keyref) refer — the
+// ref form is mutually exclusive with the full form.
+func TestIDConstraintRefConflictingChildren(t *testing.T) {
+	compile := func(t *testing.T, appxIDC string) error {
+		t.Helper()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="chap">
+          <xs:unique name="u"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:unique>
+        </xs:element>
+        <xs:element name="appx" type="chap">
+          ` + appxIDC + `
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+		return err
+	}
+
+	t.Run("ref with name is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, `<xs:unique ref="u" name="dup"/>`), xsd.ErrCompilationFailed)
+	})
+	t.Run("ref with selector is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, `<xs:unique ref="u"><xs:selector xpath="section"/></xs:unique>`), xsd.ErrCompilationFailed)
+	})
+	t.Run("ref with field is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, `<xs:unique ref="u"><xs:field xpath="@nr"/></xs:unique>`), xsd.ErrCompilationFailed)
+	})
+	t.Run("plain ref is accepted", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compile(t, `<xs:unique ref="u"/>`))
+	})
+}
