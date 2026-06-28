@@ -157,9 +157,31 @@ func (dc *deepCopier) filtered(src Node, parent *Element, state any) bool {
 }
 
 func (dc *deepCopier) record(src, cp Node) {
+	// A faithful deep copy preserves source line numbers so diagnostics emitted
+	// against a copied tree (e.g. xsd's conditional-inclusion clone) keep their
+	// original locations instead of reporting line 0. record runs for every node
+	// the copier produces (elements via copyElement, text/comment/PI/CDATA/
+	// entity-ref via recorded, and the default CopyNode branch), so this is the
+	// single chokepoint that covers them all.
+	copyLine(src, cp)
 	if dc.opts.onCopy != nil {
 		dc.opts.onCopy(src, cp)
 	}
+}
+
+// copyLine carries src's source line number onto its copy cp. Every helium node
+// type embeds docnode (reachable via baseDocNode), including the virtual
+// NamespaceNodeWrapper, so this works uniformly; the nil guards are belt-and-
+// suspenders.
+func copyLine(src, cp Node) {
+	if src == nil || cp == nil {
+		return
+	}
+	sdn, cdn := src.baseDocNode(), cp.baseDocNode()
+	if sdn == nil || cdn == nil {
+		return
+	}
+	cdn.SetLine(sdn.Line())
 }
 
 // recorded records the mapping and returns cp for convenient inline use.

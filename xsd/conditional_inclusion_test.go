@@ -539,6 +539,40 @@ func TestConditionalInclusion(t *testing.T) {
 		require.NoError(t, validate(t, s11, `<gated xmlns="urn:x">x</gated>`)) // kept under 1.1
 	})
 
+	t.Run("clone path preserves source line in diagnostics", func(t *testing.T) {
+		t.Parallel()
+		// A no-op vc:minVersion="1.0" forces the caller-document clone path
+		// (documentHasVCDirective is true). A duplicate global element must still
+		// report its REAL source line — the deep copier preserves Node.Line(), so the
+		// diagnostic is "(string):3", NOT the "(string):0" line-loss regression.
+		const schemaVC = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning" vc:minVersion="1.0">
+  <xs:element name="dup" type="xs:string"/>
+  <xs:element name="dup" type="xs:string"/>
+</xs:schema>`
+		const schemaNoVC = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="dup" type="xs:string"/>
+  <xs:element name="dup" type="xs:string"/>
+</xs:schema>`
+		errText := func(s string) string {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(s))
+			require.NoError(t, err)
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			_, _ = xsd.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
+			require.NoError(t, collector.Close())
+			var b strings.Builder
+			for _, e := range collector.Errors() {
+				b.WriteString(e.Error())
+				b.WriteByte('\n')
+			}
+			return b.String()
+		}
+		vc := errText(schemaVC)
+		require.Contains(t, vc, "(string):3")    // real line preserved on the clone
+		require.NotContains(t, vc, "(string):0") // not the line-0 regression
+		// The clone path's line matches the no-clone baseline exactly.
+		require.Contains(t, errText(schemaNoVC), "(string):3")
+	})
+
 	t.Run("conditional element declarations: only one root survives (ibm s4_2_2)", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema ` + ns + ` targetNamespace="a" elementFormDefault="qualified">
