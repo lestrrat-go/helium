@@ -407,13 +407,19 @@ is valid, while the same value reaching two different owners is a duplicate. Eac
 decomposed against their type variety (`collectIDFromValue`, mirroring
 `canonicalValueKey`): a list splits into items, a union resolves to its active
 member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
-`xs:IDREFS` (a flat atomic placeholder) is split by name. Empty element content
-falls back to the declaration's default/fixed value — EXCEPT on a CONFIRMED nilled
-element: one DECLARED nillable (`idcHostDecl(elem).Nillable`) carrying
-`xsi:nil="true"` (checked quietly via `isXsiNilTrue`). A nilled element has no
-element value, so substituting its default/fixed would fabricate a duplicate ID or
-a dangling IDREF and false-reject a valid document; its element-content collection
-is skipped (attribute IDs still apply). The check is by DECLARATION, NOT raw
+`xs:IDREFS` (a flat atomic placeholder) is split by name. Element-content
+collection is SKIPPED entirely when the element has CHILD ELEMENTS
+(`hasChildElement`): simple content forbids child elements, so pass 1 already
+rejected such an element structurally and there is no valid simple value here —
+`elemTextContent` ignores the children and a default/fixed would otherwise be
+substituted for non-empty content, fabricating an ID/IDREF on top of the real
+structural error. Otherwise, genuinely-empty element content falls back to the
+declaration's default/fixed value — EXCEPT on a CONFIRMED nilled element: one
+DECLARED nillable (`idcHostDecl(elem).Nillable`) carrying `xsi:nil="true"`
+(checked quietly via `isXsiNilTrue`). A nilled element has no element value, so
+substituting its default/fixed would fabricate a duplicate ID or a dangling IDREF
+and false-reject a valid document; its element-content collection is skipped
+(attribute IDs still apply). The check is by DECLARATION, NOT raw
 `xsi:nil`: a `processContents="lax"` element with no declaration but a resolvable
 `xsi:type` is not validly nilled (xsi:nil requires a nillable declaration), and
 `assessLaxElement` validated its real content, so its ID/IDREF content is still

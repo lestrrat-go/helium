@@ -93,10 +93,20 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// xsi:type is NOT validly nilled (xsi:nil requires a nillable declaration) —
 		// assessLaxElement validated its real content, so its xs:ID/xs:IDREF value
 		// must still be collected. Attribute IDs always apply (handled below).
-		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) {
+		// Only collect from genuinely-valid simple content. Simple content forbids
+		// CHILD ELEMENTS; if the element has any, pass 1 already rejected it
+		// structurally and there is no valid simple value here — `elemTextContent`
+		// would ignore the children (and a default/fixed would be substituted for a
+		// non-empty element), fabricating an ID/IDREF that never existed. Skipping
+		// such elements avoids piling a spurious duplicate/dangling on top of the
+		// real structural error.
+		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) && !hasChildElement(elem) {
 			hostDecl := vc.idcHostDecl(elem)
 			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
 				raw := elemTextContent(elem)
+				// A default/fixed value is only the element's value when the content is
+				// genuinely empty (no text, no children — children already excluded
+				// above).
 				if raw == "" && hostDecl != nil {
 					if hostDecl.Fixed != nil {
 						raw = *hostDecl.Fixed
@@ -268,6 +278,19 @@ func isXsiNilTrue(elem *helium.Element) bool {
 			return true
 		}
 		return false
+	}
+	return false
+}
+
+// hasChildElement reports whether elem has any child ELEMENT node. Simple content
+// forbids child elements; when one is present, pass 1 already rejected the element
+// structurally, so the ID/IDREF pass must not treat its (children-ignoring) text
+// or a substituted default/fixed as a valid simple ID/IDREF value.
+func hasChildElement(elem *helium.Element) bool {
+	for child := range helium.Children(elem) {
+		if child.Type() == helium.ElementNode {
+			return true
+		}
 	}
 	return false
 }

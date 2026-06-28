@@ -869,3 +869,55 @@ func TestIDMinOccursFailureNoSpuriousDangling(t *testing.T) {
 	require.NotContains(t, errs, "There is no ID/IDREF binding",
 		"a matched-but-unassessed child must not produce a spurious dangling-IDREF error; got: %q", errs)
 }
+
+// TestIDSimpleContentWithChildNoSpuriousDangling covers PR860-IDPASS-STRUCTURAL-
+// SIMPLE: a simple-typed ID/IDREF element that pass 1 already rejected for having
+// CHILD ELEMENTS must not also produce a fabricated ID/IDREF in pass 3.
+// elemTextContent ignores child elements, and a default/fixed must not stand in
+// for non-empty (children-bearing) content — so collection is skipped when the
+// element has child elements. A genuinely-empty element still uses its default.
+func TestIDSimpleContentWithChildNoSpuriousDangling(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="r" type="xs:IDREF" default="missing" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err)
+
+	validate := func(t *testing.T, inst string) (string, error) {
+		t.Helper()
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(inst))
+		require.NoError(t, err)
+		var errs string
+		verr := validateWithOutput(t, xsd.NewValidator(schema), idoc, &errs)
+		return errs, verr
+	}
+
+	t.Run("child element present reports only the structural error", func(t *testing.T) {
+		t.Parallel()
+		// <r> has a child element: simple content is violated (pass 1). Its default
+		// "missing" must NOT be fabricated into a dangling IDREF.
+		errs, verr := validate(t, `<doc><r><bad/></r></doc>`)
+		require.Error(t, verr, "simple content with a child element must fail validation")
+		require.NotContains(t, errs, "There is no ID/IDREF binding",
+			"a structurally-invalid simple element must not produce a spurious dangling IDREF; got: %q", errs)
+	})
+
+	t.Run("genuinely empty element still uses its default", func(t *testing.T) {
+		t.Parallel()
+		// An empty <r/> takes its default "missing"; that value IS still collected
+		// and (here) reported as a dangling IDREF — confirming the default path works.
+		errs, verr := validate(t, `<doc><r/></doc>`)
+		require.Error(t, verr)
+		require.Contains(t, errs, "There is no ID/IDREF binding",
+			"a genuinely-empty element's default must still be collected; got: %q", errs)
+	})
+}
