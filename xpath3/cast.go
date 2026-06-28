@@ -95,11 +95,20 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	// cast helpers, which key on builtin TypeName — so a user-typed atom would wrongly
 	// fail XPTY0004. Normalize such a source to its recorded builtin BaseType
 	// (preserving the Value) so it casts exactly like its base, keeping data() and
-	// $value consistent. Built-in atoms (BaseType empty or a known XSD type name) are
-	// unaffected.
-	if v.BaseType != "" && !IsKnownXSDType(v.TypeName) {
+	// $value consistent. The BaseType must itself be a KNOWN XSD builtin — an arbitrary
+	// non-XSD BaseType on a public/custom atom must NOT change dispatch (it stays opaque
+	// and falls through to the normal XPTY0004 path). Built-in atoms (empty/known-XSD
+	// TypeName) are unaffected.
+	if v.BaseType != "" && IsKnownXSDType(v.BaseType) && !IsKnownXSDType(v.TypeName) {
 		v = AtomicValue{TypeName: v.BaseType, Value: v.Value}
 		if v.TypeName == targetType {
+			// Re-run the xs:dateTimeStamp mandatory-timezone invariant: normalization
+			// can surface TypeDateTimeStamp from a user type, and this identity return
+			// must enforce the guard just like the built-in fast path above (which only
+			// saw the original user TypeName).
+			if err := validateDateTimeStampSource(v); err != nil {
+				return AtomicValue{}, err
+			}
 			return v, nil
 		}
 	}
