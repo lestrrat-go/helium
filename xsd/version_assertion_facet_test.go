@@ -1268,11 +1268,13 @@ func TestVersion11AssertCastUserQNameType(t *testing.T) {
 
 // TestVersion11SimpleContentNestedTypeKeepsBaseFacets verifies that a
 // simpleContent restriction whose content is given by a nested <xs:simpleType>
-// still enforces the BASE complex type's content facets (PR859-CR15-01). The base
-// content is xs:string with maxLength=2; the derived restriction supplies a nested
-// xs:string with minLength=1. A 3-character value satisfies the nested minLength
-// but MUST be rejected by the inherited maxLength=2 — the nested type restricts,
-// it does not replace, the base content type (XSD 3.4.2.2).
+// still enforces the BASE complex type's content facets through later derivation
+// hops (PR859-CR15-01/REVIEW2-01). The base content is xs:string with
+// maxLength=2; the derived restriction supplies a nested xs:string with
+// minLength=1; the element extends that derived type. A 3-character value
+// satisfies the nested minLength but MUST be rejected by the inherited maxLength=2
+// — the nested type restricts, it does not replace, the base content type (XSD
+// 3.4.2.2).
 func TestVersion11SimpleContentNestedTypeKeepsBaseFacets(t *testing.T) {
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="base">
@@ -1286,16 +1288,21 @@ func TestVersion11SimpleContentNestedTypeKeepsBaseFacets(t *testing.T) {
       </xs:restriction>
     </xs:simpleContent>
   </xs:complexType>
+  <xs:complexType name="mid">
+    <xs:simpleContent>
+      <xs:restriction base="base">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
   <xs:element name="e">
     <xs:complexType>
       <xs:simpleContent>
-        <xs:restriction base="base">
-          <xs:simpleType>
-            <xs:restriction base="xs:string">
-              <xs:minLength value="1"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:restriction>
+        <xs:extension base="mid"/>
       </xs:simpleContent>
     </xs:complexType>
   </xs:element>

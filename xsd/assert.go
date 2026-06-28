@@ -94,11 +94,8 @@ func (c *compiler) parseAssertion(ctx context.Context, elem *helium.Element, ele
 // content per XSD 1.1 §3.13.4 (a sequence for a list type). For complex content
 // $value is the empty sequence.
 //
-// Known limitation: the test is evaluated against the element as it sits in the
-// full document, so an expression could navigate to ancestors/siblings, which a
-// strict processor forbids (the assertion's context tree is the element and its
-// descendants only). This does not affect assertions that stay within the
-// element subtree.
+// The test is evaluated against an isolated copy rooted at the assessed element
+// and stripped of comment/PI nodes, so it cannot navigate to ancestors/siblings.
 func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	if !typeHasAssertions(td) {
 		return nil

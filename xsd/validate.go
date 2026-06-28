@@ -1165,22 +1165,8 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 				return err
 			}
 		}
-		// A nested <xs:simpleType> restriction (or a nested type narrowed further by
-		// sibling facets) restricts the base content type per XSD §3.4.2.2; it does
-		// not REPLACE it. effectiveContentSimpleType returns such an inline type with
-		// its own declared base chain, so the base complex type's inherited content
-		// facets (e.g. a maxLength on the base) would otherwise be bypassed. Validate
-		// the value against the base content type as well so both sets apply. The
-		// facet-only synthetic case (ContentSimpleType.BaseType == td) is already
-		// re-based onto the effective base content by effectiveContentSimpleType, so
-		// it is excluded here to avoid redundant work.
-		if td != nil && td.ContentSimpleType != nil && td.ContentSimpleType.BaseType != td {
-			baseContent := effectiveContentSimpleType(td.BaseType)
-			if baseContent != effTD && simpleContentNeedsValidation(baseContent) {
-				if err := validateValue(ctx, effectiveValue, valueNS, baseContent, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
-					return err
-				}
-			}
+		if err := vc.validateNestedSimpleContentBases(ctx, elem, effectiveValue, valueNS, td, effTD); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -1190,6 +1176,36 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 	}
 
+	return nil
+}
+
+func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Context, elem *helium.Element, value string, ns map[string]string, td, effTD *TypeDef) error {
+	visited := make(map[*TypeDef]struct{})
+	for cur := td; cur != nil && cur.IsSimpleContent; cur = cur.BaseType {
+		if _, seen := visited[cur]; seen {
+			return nil
+		}
+		visited[cur] = struct{}{}
+		// A nested <xs:simpleType> restriction (or a nested type narrowed further by
+		// sibling facets) restricts the base content type per XSD §3.4.2.2; it does
+		// not REPLACE it. effectiveContentSimpleType returns such an inline type with
+		// its own declared base chain, so any ancestor complex type's inherited content
+		// facets would otherwise be bypassed after a further derivation hop. Validate
+		// each such ancestor base content type as well so both sets apply. The
+		// facet-only synthetic case (ContentSimpleType.BaseType == cur) is already
+		// re-based onto the effective base content by effectiveContentSimpleType, so
+		// it is excluded here to avoid redundant work.
+		if cur.ContentSimpleType == nil || cur.ContentSimpleType.BaseType == cur {
+			continue
+		}
+		baseContent := effectiveContentSimpleType(cur.BaseType)
+		if baseContent == effTD || !simpleContentNeedsValidation(baseContent) {
+			continue
+		}
+		if err := validateValue(ctx, value, ns, baseContent, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
