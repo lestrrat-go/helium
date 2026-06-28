@@ -224,8 +224,10 @@ cast through the builtin, `ValidateCast` the facets, and return the user type
 annotation with `BaseType` set to that builtin base. Union targets from
 `SchemaDeclarations.UnionMemberTypes` are tried recursively through that same
 schema-aware path for both `cast` and `castable`, so a union member that is
-itself a user-defined type still resolves its builtin base and facets. `cast`
-returns the atomic value for the matching member.
+itself a user-defined type still resolves its builtin base and facets. After a
+member accepts, the helper validates the original lexical value against the
+target union too, so facets/assertions on the union restriction itself can still
+reject the cast. `cast` returns the atomic value for the matching member.
 
 When the cast source is itself an already-resolved `QNameValue` (e.g. `data(@q)`
 where the prefix is declared only on the instance node, absent from the

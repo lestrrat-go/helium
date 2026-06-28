@@ -13,6 +13,7 @@ import (
 const (
 	testBuiltinUnion = "Q{}BuiltinUnion"
 	testMyTime       = "Q{}MyTime"
+	testRejectUnion  = "Q{}RejectUnion"
 	testSmallInt     = "Q{}SmallInt"
 	testUserUnion    = "Q{}UserUnion"
 )
@@ -30,6 +31,8 @@ func (unionCastDecls) LookupSchemaType(local, ns string) (string, bool) {
 		return testBuiltinUnion, true
 	case "MyTime":
 		return xpath3.TypeTime, true
+	case "RejectUnion":
+		return testRejectUnion, true
 	case "SmallInt":
 		return xpath3.TypeInt, true
 	case "UserUnion":
@@ -42,6 +45,9 @@ func (unionCastDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 	return typeName == baseTypeName
 }
 func (unionCastDecls) ValidateCast(_ context.Context, value, typeName string) error {
+	if typeName == testRejectUnion && value == "7" {
+		return errors.New("RejectUnion rejects 7")
+	}
 	if typeName != testSmallInt {
 		return nil
 	}
@@ -62,6 +68,8 @@ func (unionCastDecls) UnionMemberTypes(typeName string) []string {
 	switch typeName {
 	case testBuiltinUnion:
 		return []string{xpath3.TypeInt, xpath3.TypeString}
+	case testRejectUnion:
+		return []string{testSmallInt}
 	case testUserUnion:
 		return []string{testSmallInt}
 	default:
@@ -84,6 +92,10 @@ func TestSchemaAwareCastableUserUnion(t *testing.T) {
 	res, err = eval.Evaluate(t.Context(), mustCompile(t, `'12' castable as UserUnion`), nil)
 	require.NoError(t, err)
 	require.Equal(t, "false", res.StringValue())
+
+	res, err = eval.Evaluate(t.Context(), mustCompile(t, `'7' castable as RejectUnion`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "false", res.StringValue())
 }
 
 func TestSchemaAwareCastUserUnionUsesUserMember(t *testing.T) {
@@ -99,6 +111,9 @@ func TestSchemaAwareCastUserUnionUsesUserMember(t *testing.T) {
 	require.Equal(t, testSmallInt, av.TypeName)
 
 	_, err = eval.Evaluate(t.Context(), mustCompile(t, `'12' cast as UserUnion`), nil)
+	require.Error(t, err)
+
+	_, err = eval.Evaluate(t.Context(), mustCompile(t, `'7' cast as RejectUnion`), nil)
 	require.Error(t, err)
 }
 

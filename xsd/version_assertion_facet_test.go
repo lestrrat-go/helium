@@ -519,6 +519,11 @@ func TestVersion11AssertionFacetSchemaAwareUnionCast(t *testing.T) {
   <xs:simpleType name="SmallIntUnion">
     <xs:union memberTypes="t:SmallInt"/>
   </xs:simpleType>
+  <xs:simpleType name="RejectSevenUnion">
+    <xs:restriction base="t:SmallIntUnion">
+      <xs:assertion test="$value ne 7"/>
+    </xs:restriction>
+  </xs:simpleType>
   <xs:element name="castable">
     <xs:simpleType>
       <xs:restriction base="xs:string">
@@ -533,6 +538,20 @@ func TestVersion11AssertionFacetSchemaAwareUnionCast(t *testing.T) {
       </xs:restriction>
     </xs:simpleType>
   </xs:element>
+  <xs:element name="targetCastable">
+    <xs:simpleType>
+      <xs:restriction base="xs:string">
+        <xs:assertion test="$value castable as t:RejectSevenUnion"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="targetCast">
+    <xs:simpleType>
+      <xs:restriction base="xs:string">
+        <xs:assertion test="($value cast as t:RejectSevenUnion) instance of t:SmallInt"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
 </xs:schema>`
 	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
 	require.NoError(t, err)
@@ -540,6 +559,10 @@ func TestVersion11AssertionFacetSchemaAwareUnionCast(t *testing.T) {
 	require.ErrorIs(t, validateAssertion(t, schema, `<castable xmlns="urn:t">12</castable>`), xsd.ErrValidationFailed)
 	require.NoError(t, validateAssertion(t, schema, `<cast xmlns="urn:t">5</cast>`))
 	require.ErrorIs(t, validateAssertion(t, schema, `<cast xmlns="urn:t">12</cast>`), xsd.ErrValidationFailed)
+	require.NoError(t, validateAssertion(t, schema, `<targetCastable xmlns="urn:t">5</targetCastable>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<targetCastable xmlns="urn:t">7</targetCastable>`), xsd.ErrValidationFailed)
+	require.NoError(t, validateAssertion(t, schema, `<targetCast xmlns="urn:t">5</targetCast>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<targetCast xmlns="urn:t">7</targetCast>`), xsd.ErrValidationFailed)
 }
 
 func TestVersion11AssertionFacetSchemaAwareUntypedComparison(t *testing.T) {

@@ -83,11 +83,35 @@ func schemaAwareCastRec(ctx context.Context, ec *evalContext, av AtomicValue, ta
 		for _, memberType := range members {
 			result, castErr := schemaAwareCastRec(ctx, ec, av, memberType, seen)
 			if castErr == nil {
+				if targetErr := schemaAwareValidateTarget(ctx, ec, av, targetType); targetErr != nil {
+					return AtomicValue{}, targetErr
+				}
 				return result, nil
 			}
 		}
 	}
 	return AtomicValue{}, schemaErr
+}
+
+func schemaAwareValidateTarget(ctx context.Context, ec *evalContext, av AtomicValue, targetType string) error {
+	local, ns, ok := schemaAnnotationParts(targetType)
+	if !ok {
+		return nil
+	}
+	s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
+	annName := QAnnotation(ns, local)
+	if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); err != nil {
+		return &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, err)}
+	}
+	return nil
+}
+
+func schemaAwareCastLexical(av AtomicValue, base map[string]string) (string, map[string]string) {
+	s, _ := AtomicToString(av)
+	if qv, isQV := av.Value.(QNameValue); isQV {
+		return qnameCastLexical(qv, base)
+	}
+	return s, base
 }
 
 func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicValue, targetType, annName, builtinBase string, fallback error) (AtomicValue, error) {
@@ -98,11 +122,7 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 		if !srcOK {
 			return AtomicValue{}, fallback
 		}
-		s, _ := AtomicToString(av)
-		nsForCast := ec.namespaces
-		if qv, isQV := av.Value.(QNameValue); isQV {
-			s, nsForCast = qnameCastLexical(qv, ec.namespaces)
-		}
+		s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
 		if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); vErr != nil {
 			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
 		}
