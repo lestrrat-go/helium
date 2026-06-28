@@ -629,6 +629,15 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return nil
 	}))
 
+	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
+	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these
+	// datatype constraints in 1.0, and the libxml2-compat goldens depend on that).
+	if vc.version == Version11 {
+		if !vc.validateIDIDREF(ctx, doc) {
+			valid = false
+		}
+	}
+
 	return valid
 }
 
