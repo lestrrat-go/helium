@@ -229,17 +229,23 @@ func (d schemaDecls) ListItemType(typeName string) (string, bool) {
 	return "", false
 }
 
-// UnionMemberTypes returns the member type names for a union type.
+// UnionMemberTypes returns the member type names for a union type. Variety and the
+// member list are resolved via resolveVariety / resolveUnionMembers (which walk the
+// base chain), NOT the type's direct fields — so a synthetic facet-only restriction
+// over a union base (e.g. a simpleContent restriction with a direct xs:pattern over a
+// union content type, whose effective content type carries only BaseType) still
+// reports its union members, matching how validation / $value / CTA resolve variety.
 func (d schemaDecls) UnionMemberTypes(typeName string) []string {
 	td, ok := d.lookupAtomizationType(typeName)
-	if !ok || td.Variety != TypeVarietyUnion {
+	if !ok || resolveVariety(td) != TypeVarietyUnion {
 		return nil
 	}
-	members := make([]string, 0, len(td.MemberTypes))
-	for _, m := range td.MemberTypes {
-		members = append(members, d.typeName(m))
+	members := resolveUnionMembers(td)
+	out := make([]string, 0, len(members))
+	for _, m := range members {
+		out = append(out, d.typeName(m))
 	}
-	return members
+	return out
 }
 
 // annotationParts parses an annotation-format type name. "xs:local" returns

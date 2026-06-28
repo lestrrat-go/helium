@@ -1999,3 +1999,44 @@ func TestVersion11AssertDeepNestedUnionList(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validateAssertion(t, schema, `<e u="1 2"/>`))
 }
+
+// TestVersion11AssertSimpleContentRestrictionUnionFacet verifies that a simpleContent
+// RESTRICTION over a UNION base WITH A DIRECT FACET keeps its union metadata for assert
+// node atomization (PR859-REVIEW-02 / round-29). effectiveContentSimpleType builds a
+// synthetic facet-only simple type whose union variety/members live only up its base
+// chain, so UnionMemberTypes must resolve via resolveVariety/resolveUnionMembers (not
+// the direct fields). For value "1 2" the active member is the list IntList →
+// count(data(c)) = 2 (agreeing with $value), not a single atom.
+func TestVersion11AssertSimpleContentRestrictionUnionFacet(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="IntList xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="uBase">
+    <xs:simpleContent>
+      <xs:extension base="u"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="uContent">
+    <xs:simpleContent>
+      <xs:restriction base="uBase">
+        <xs:pattern value=".*"/>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="uContent"/>
+      </xs:sequence>
+      <xs:assert test="count(data(c)) = 2 and (data(c)[1] instance of xs:int)"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e><c>1 2</c></e>`))
+}
