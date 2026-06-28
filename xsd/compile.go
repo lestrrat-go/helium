@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // compiler holds state during schema compilation.
@@ -52,6 +53,12 @@ type compiler struct {
 	// through a referenced group — not just direct xs:attribute children — is
 	// reported (ag-props-correct.2).
 	attrGroupRefChildren map[QName][]QName
+	// XSD 1.1: the xs:anyAttribute wildcard declared directly inside a GLOBAL
+	// attribute group, keyed by the group's QName. A type referencing the group
+	// intersects this wildcard (and those of nested group refs) into its
+	// effective attribute wildcard. Populated only in Version11 so 1.0 behavior
+	// (group wildcards dropped) is unchanged.
+	attrGroupWildcards map[QName]*Wildcard
 	// per-edge source info for the nested xs:attributeGroup ref children recorded in
 	// attrGroupRefChildren, keyed by the containing group's QName and index-aligned
 	// with the corresponding attrGroupRefChildren slice. Each entry records the
@@ -462,6 +469,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		groupSources:             make(map[QName]groupSource),
 		attrGroupSources:         make(map[QName]attrGroupSource),
+		attrGroupWildcards:       make(map[QName]*Wildcard),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
@@ -511,9 +519,53 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 
+	// Register built-in types. Done BEFORE conditional inclusion so the pre-pass
+	// can test type/facet availability against the active version's registry.
+	registerBuiltinTypes(c.schema, c.version)
+
+	// Conditional inclusion UNLINKS vc:-excluded elements from the schema tree.
+	// The top-level `doc` is CALLER-OWNED, so pruning it in place would make
+	// Compile side-effecting and non-idempotent (e.g. compiling the same parsed
+	// document under Version10 then Version11 would no longer see the 1.1 branch).
+	// Defend the caller's DOM by compiling against a deep copy — but ONLY when a vc
+	// directive is actually present, so the overwhelmingly common vc-free schema
+	// keeps the fast no-copy path (no perf regression). The clone preserves
+	// doc.URL() so relative include/import/redefine schemaLocation resolution is
+	// unchanged. (Nested include/import/redefine documents are parsed fresh on
+	// every Compile, so the pre-pass may prune those in place.)
+	if documentHasVCDirective(root) {
+		clone, cerr := helium.CopyDoc(doc)
+		if cerr != nil {
+			return nil, fmt.Errorf("xsd: failed to copy schema document for conditional inclusion: %w", cerr)
+		}
+		clone.SetURL(doc.URL())
+		root = findDocumentElement(clone)
+		if root == nil || !isXSDElement(root, elemSchema) {
+			return nil, fmt.Errorf("xsd: empty document")
+		}
+	}
+
+	// Conditional inclusion (XSD 1.1 version-control namespace): prune any
+	// elements excluded by their vc: attributes for the active version BEFORE the
+	// tree is interpreted, so a removed element (e.g. a 1.1-only xs:assert under a
+	// 1.0 processor, or a 1.0 fallback under 1.1) is never compiled. If the ROOT
+	// <xs:schema> is itself vc-excluded the whole document contributes nothing:
+	// return an empty (valid) schema WITHOUT interpreting or validating its other
+	// (non-preserved) root attributes — an excluded root must not fail compilation
+	// on, say, a bogus blockDefault it would never use. A MALFORMED 1.1 vc value on
+	// the excluded root is still a schema error (reported during the pre-pass), so
+	// surface it instead of swallowing it behind the empty-schema short-circuit.
+	if c.applyConditionalInclusion(ctx, root) {
+		if c.errorCount > 0 {
+			return nil, ErrCompilationFailed
+		}
+		return c.schema, nil
+	}
+
 	// XSD 1.1 schema-level default element namespace for identity-constraint
-	// XPaths, RESOLVED against the root's context now (so an inherited
-	// ##defaultNamespace uses the root's default namespace, not a selector/field's).
+	// XPaths, RESOLVED against the (post-conditional-inclusion) root's context now
+	// (so an inherited ##defaultNamespace uses the root's default namespace, not a
+	// selector/field's).
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(root, getAttr(root, attrXPathDefaultNS), c.schema.targetNamespace)
 	}
@@ -538,9 +590,6 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		}
 	}
 
-	// Register built-in types.
-	registerBuiltinTypes(c.schema, c.version)
-
 	// First pass: collect all named types and global elements.
 	if err := c.parseSchemaChildren(ctx, root); err != nil {
 		return nil, err
@@ -563,7 +612,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// final, element-consistency) in its original order below.
 	c.buildSubstGroups()
 
-	// Second pass: resolve type references.
+	// Second pass: resolve type references. (XSD 1.1 ##definedSibling resolution
+	// runs INSIDE resolveRefs, after group-ref expansion but before the
+	// restriction-derivation checks, so those checks see resolved SiblingNames.)
 	c.resolveRefs(ctx)
 
 	// Reject circular simple-type definitions (a union/list/restriction that
@@ -1063,13 +1114,21 @@ func getAttrNS(elem *helium.Element, ns, name string) string {
 // Otherwise a vc:minVersion="1.1" (or higher) hint on the root <xs:schema>
 // upgrades to 1.1; absent any hint, the default is Version10. vc:maxVersion is
 // not consulted for processor selection — it gates per-element conditional
-// inclusion (deferred), not the overall version.
+// inclusion, not the overall version.
+//
+// The hint is parsed with the SAME rules the conditional-inclusion pre-pass uses
+// for vc decimals: ASCII XML whitespace trim only (NOT strings.TrimSpace, which
+// also strips NBSP) and EXACT xs:decimal comparison (isValidXSDDecimal +
+// value.CompareDecimal, not float64). So an NBSP-padded value or a malformed
+// decimal does NOT auto-select 1.1 (treated as no hint → default 1.0), and a
+// high-precision value just below 1.1 is not float-rounded up into 1.1.
 func resolveVersion(cfg *compileConfig, root *helium.Element) Version {
 	if cfg != nil && cfg.versionSet {
 		return cfg.version
 	}
 	if v := getAttrNS(root, lexicon.NamespaceXSDVersioning, "minVersion"); v != "" {
-		if minVer, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && minVer >= 1.1 {
+		s := strings.Trim(v, " \t\r\n")
+		if isValidXSDDecimal(s) && value.CompareDecimal(s, "1.1") >= 0 {
 			return Version11
 		}
 	}
@@ -1172,27 +1231,73 @@ func parseOccurs(s string, defaultVal int) int {
 	return n
 }
 
-func registerBuiltinTypes(s *Schema, version Version) {
-	builtins := []string{
-		"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
-		lexicon.TypeInteger, lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger,
-		lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
-		lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort, lexicon.TypeUnsignedByte,
-		lexicon.TypePositiveInteger,
-		lexicon.TypeNormalizedString, "token", "language", "Name", "NCName",
-		"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
-		"date", "dateTime", "time", "duration",
-		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
-		"hexBinary", "base64Binary",
-		"anyURI", lexicon.TypeQName, lexicon.TypeNotation,
-		typeAnyType, "anySimpleType",
+// builtinTypeNames is the immutable list of XSD 1.0 built-in datatype local names
+// (in the XSD namespace). It is the SINGLE SOURCE for both registration
+// (registerBuiltinTypes) and processor-capability detection (builtinTypeAvailable
+// / vc:typeAvailable). Capability must consult this fixed set, NOT c.schema.types,
+// because that map can already hold user declarations from the including schema
+// (shared across nested include/redefine) — a 1.0 schema that defines a type
+// literally named {XSD}error must NOT make vc:typeAvailable="xs:error" true.
+var builtinTypeNames = []string{
+	"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
+	lexicon.TypeInteger, lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger,
+	lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
+	lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort, lexicon.TypeUnsignedByte,
+	lexicon.TypePositiveInteger,
+	lexicon.TypeNormalizedString, "token", "language", "Name", "NCName",
+	"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
+	"date", "dateTime", "time", "duration",
+	"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
+	"hexBinary", "base64Binary",
+	"anyURI", lexicon.TypeQName, lexicon.TypeNotation,
+	typeAnyType, "anySimpleType",
+}
+
+// builtinType11Bases maps each XSD 1.1-only built-in datatype local name to its
+// primitive base local name. SINGLE SOURCE for both registration
+// (registerBuiltinTypes11, which links BaseType) and the 1.1 capability set
+// (builtinTypeAvailable). Keeping the names here (not duplicated in a separate
+// list) prevents drift between what is registered and what is reported available.
+var builtinType11Bases = map[string]string{
+	lexicon.TypeDateTimeStamp:     lexicon.TypeDateTime,
+	lexicon.TypeDayTimeDuration:   lexicon.TypeDuration,
+	lexicon.TypeYearMonthDuration: lexicon.TypeDuration,
+	lexicon.TypeAnyAtomicType:     "anySimpleType",
+	lexicon.TypeError:             "anySimpleType",
+}
+
+// builtinTypeSet10 is the precomputed lookup set of the 1.0 built-in names.
+var builtinTypeSet10 = newStringSet(builtinTypeNames)
+
+func newStringSet(names []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		m[n] = struct{}{}
 	}
-	for _, name := range builtins {
+	return m
+}
+
+// builtinTypeAvailable reports whether the XSD-namespace type local name is a
+// built-in KNOWN TO THE PROCESSOR for the active version: the 1.0 built-ins in
+// every version, plus the 1.1-only types in Version11. This is a fixed-capability
+// check, independent of any user/included schema declarations.
+func builtinTypeAvailable(local string, version Version) bool {
+	if _, ok := builtinTypeSet10[local]; ok {
+		return true
+	}
+	if version != Version11 {
+		return false
+	}
+	_, ok := builtinType11Bases[local]
+	return ok
+}
+
+func registerBuiltinTypes(s *Schema, version Version) {
+	for _, name := range builtinTypeNames {
 		qn := QName{Local: name, NS: lexicon.NamespaceXSD}
-		ct := ContentTypeSimple
 		td := &TypeDef{
 			Name:        qn,
-			ContentType: ct,
+			ContentType: ContentTypeSimple,
 		}
 		if name == typeAnyType {
 			td.ContentType = ContentTypeMixed
@@ -1216,13 +1321,8 @@ func registerBuiltinTypes11(s *Schema) {
 	builtin := func(local string) *TypeDef {
 		return s.types[QName{Local: local, NS: lexicon.NamespaceXSD}]
 	}
-	add := func(local string, base *TypeDef) {
+	for local, baseLocal := range builtinType11Bases {
 		qn := QName{Local: local, NS: lexicon.NamespaceXSD}
-		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: base}
+		s.types[qn] = &TypeDef{Name: qn, ContentType: ContentTypeSimple, BaseType: builtin(baseLocal)}
 	}
-	add(lexicon.TypeDateTimeStamp, builtin(lexicon.TypeDateTime))
-	add(lexicon.TypeDayTimeDuration, builtin(lexicon.TypeDuration))
-	add(lexicon.TypeYearMonthDuration, builtin(lexicon.TypeDuration))
-	add(lexicon.TypeAnyAtomicType, builtin("anySimpleType"))
-	add(lexicon.TypeError, builtin("anySimpleType"))
 }

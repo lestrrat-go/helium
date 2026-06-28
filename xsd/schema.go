@@ -391,6 +391,12 @@ const (
 	WildcardNSNotAbsent       = "##not-absent"
 )
 
+// XSD 1.1 wildcard notQName keyword tokens (xs:any/@notQName, xs:anyAttribute/@notQName).
+const (
+	WildcardQNameDefined        = "##defined"
+	WildcardQNameDefinedSibling = "##definedSibling"
+)
+
 // Wildcard represents an xs:any or xs:anyAttribute wildcard.
 type Wildcard struct {
 	// Namespace constraint: "##any", "##other", "##local",
@@ -398,4 +404,26 @@ type Wildcard struct {
 	Namespace       string
 	ProcessContents ProcessContentsKind
 	TargetNS        string // schema's target namespace, for resolving ##other/##targetNamespace
+
+	// XSD 1.1 additions (xsd.Version11 only; nil/false in 1.0).
+	//
+	// NotNamespace is the resolved set of namespace URIs the wildcard EXCLUDES
+	// (from @notNamespace). "" represents the absent namespace (##local). When
+	// non-nil the wildcard's positive namespace variety is "not these" — it
+	// matches any namespace not in the list. @namespace and @notNamespace are
+	// mutually exclusive, so when this is set Namespace defaults to ##any.
+	NotNamespace []string
+	// NotQName is the resolved set of element/attribute QNames the wildcard
+	// EXCLUDES (the QName members of @notQName).
+	NotQName []QName
+	// NotQNameDefined is true when @notQName contains ##defined: the wildcard
+	// excludes any name with a global element (xs:any) or attribute
+	// (xs:anyAttribute) declaration.
+	NotQNameDefined bool
+	// NotQNameDefinedSibling is true when @notQName contains ##definedSibling
+	// (xs:any only): the wildcard excludes the names of element declarations
+	// that are siblings in the same content model. SiblingNames holds those
+	// names, resolved after the content model is built.
+	NotQNameDefinedSibling bool
+	SiblingNames           []QName
 }

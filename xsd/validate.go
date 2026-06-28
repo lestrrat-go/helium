@@ -1066,16 +1066,22 @@ func collectChildElements(elem *helium.Element) []childElem {
 	return children
 }
 
-func isSpecialAttr(a *helium.Attribute) bool {
+// isSpecialAttr reports whether an attribute is always permitted regardless of
+// the type's attribute declarations. In XSD 1.1 the XML-namespace
+// attributes (xml:lang/space/base/id) are NOT implicitly allowed: they are
+// subject to ordinary attribute-use and wildcard matching, so a wildcard's
+// @notQName can legitimately exclude e.g. xml:space. Only xmlns and the xsi:
+// processor attributes remain unconditionally special. In 1.0 the historical
+// lenient behavior (XML namespace always allowed) is preserved.
+func (vc *validationContext) isSpecialAttr(a *helium.Attribute) bool {
 	p := a.Prefix()
 	if p == "xmlns" || (p == "" && a.LocalName() == "xmlns") {
 		return true
 	}
-	uri := a.URI()
-	if uri == lexicon.NamespaceXSI {
+	if a.URI() == lexicon.NamespaceXSI {
 		return true
 	}
-	if uri == lexicon.NamespaceXML {
+	if vc.version != Version11 && a.URI() == lexicon.NamespaceXML {
 		return true
 	}
 	return false
@@ -1103,7 +1109,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		// No attribute declarations — check that instance has no attributes
 		// (except xsi: namespace attributes and xmlns which are always allowed).
 		for _, a := range elem.Attributes() {
-			if isSpecialAttr(a) {
+			if vc.isSpecialAttr(a) {
 				continue
 			}
 			ad := attrDisplayName(a)
@@ -1145,7 +1151,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
-		if isSpecialAttr(a) {
+		if vc.isSpecialAttr(a) {
 			continue
 		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
@@ -1185,7 +1191,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
-		if td.AnyAttribute != nil && wildcardMatchesAttr(td.AnyAttribute, a.URI()) {
+		if td.AnyAttribute != nil && wildcardAllowsExpandedName(td.AnyAttribute, a.LocalName(), a.URI(), vc.schema, true) {
 			if err := vc.validateWildcardAttr(ctx, a, elem, td.AnyAttribute); err != nil {
 				hasErr = true
 			}
@@ -1316,11 +1322,6 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	}
 
 	return nil
-}
-
-// wildcardMatchesAttr checks if an attribute namespace matches an anyAttribute wildcard.
-func wildcardMatchesAttr(wc *Wildcard, attrNS string) bool {
-	return wildcardMatches(wc, attrNS)
 }
 
 // lookupElemDecl finds the global element declaration for an instance element.

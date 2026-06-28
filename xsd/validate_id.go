@@ -121,7 +121,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// Attributes typed as ID/IDREF (including via list/union). An attribute ID
 		// is owned by its bearing element.
 		for _, a := range elem.Attributes() {
-			if isSpecialAttr(a) {
+			if vc.isSpecialAttr(a) {
 				continue
 			}
 			atd := vc.attrTypeForID(a)

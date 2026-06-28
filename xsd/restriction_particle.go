@@ -78,7 +78,7 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	derivedP := &Particle{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG}
 	baseP := &Particle{MinOccurs: baseMG.MinOccurs, MaxOccurs: baseMG.MaxOccurs, Term: baseMG}
 
-	if particleValidRestriction(ctx, derivedP, baseP, c.version) {
+	if particleValidRestriction(ctx, derivedP, baseP, c.schema, c.version) {
 		return
 	}
 
@@ -102,7 +102,7 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 // restriction of the base particle b. Returning true means "accepted" — and, per
 // the conservative contract above, it also returns true for any case the
 // recursion is not confident enough to reject.
-func particleValidRestriction(ctx context.Context, r, b *Particle, version Version) bool {
+func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schema, version Version) bool {
 	switch rt := r.Term.(type) {
 	case *ElementDecl:
 		switch bt := b.Term.(type) {
@@ -115,12 +115,12 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 				return false
 			}
-			return wildcardAllowsName(bt, rt.Name)
+			return wildcardAllowsName(bt, rt.Name, schema)
 		case *ModelGroup:
 			// Recurse-As-If-Group (XSD §3.9.6): a derived element against a base
 			// model group. Treat the element as a singleton group and map it through
 			// the base group's compositor-specific children.
-			return elementRestrictsGroup(ctx, r, b, bt, version)
+			return elementRestrictsGroup(ctx, r, b, bt, schema, version)
 		}
 	case *Wildcard:
 		switch bt := b.Term.(type) {
@@ -135,7 +135,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 			if processContentsStrength(rt.ProcessContents) < processContentsStrength(bt.ProcessContents) {
 				return false
 			}
-			return wildcardConstraintSubset(rt, bt)
+			return wildcardConstraintSubset(rt, bt, schema, false)
 		case *ElementDecl:
 			// A wildcard can never be a restriction of a single element. This is a
 			// clear violation.
@@ -147,14 +147,14 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
 		case *ModelGroup:
-			return groupRestrictsGroup(ctx, r, rt, b, bt, version)
+			return groupRestrictsGroup(ctx, r, rt, b, bt, schema, version)
 		case *Wildcard:
 			// NSRecurseCheckCardinality (XSD §3.9.6): the derived group's effective
 			// occurrence range must be within the base wildcard's range, and every
 			// element/wildcard LEAF inside the derived group must be admitted by the
 			// base wildcard (namespace) and within its cardinality. The base
 			// wildcard is reached through the base particle b (b.Term).
-			return groupRestrictsWildcard(r, rt, b)
+			return groupRestrictsWildcard(r, rt, b, schema)
 		case *ElementDecl:
 			// A derived model GROUP restricting a base single ELEMENT. This is only a
 			// valid restriction when the group is a "pointless" wrapper that emits
@@ -163,7 +163,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 			// element} so it stays valid against the base element. A group that can
 			// emit a different element, two-or-more elements, or zero elements where
 			// the base requires one admits content the base does not.
-			return groupRestrictsElement(ctx, r, rt, b, bt, version)
+			return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
 		}
 	}
 	return true
@@ -216,23 +216,39 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 // groupRestrictsGroup handles the model-group cases (recurse / map-and-sum). It
 // requires the derived group's occurrence range to be a valid restriction of the
 // base's, then dispatches on compositor.
-func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup, version Version) bool {
+// groupHasWildcard reports whether a model group has a direct wildcard particle.
+func groupHasWildcard(g *ModelGroup) bool {
+	for _, p := range g.Particles {
+		if _, ok := p.Term.(*Wildcard); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
 	switch {
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorSequence:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 			return false
 		}
-		return recurseOrdered(ctx, rg.Particles, bg.Particles, version)
+		return recurseOrdered(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorAll && bg.Compositor == CompositorAll:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 			return false
 		}
-		return recurseAll(ctx, rg.Particles, bg.Particles, version)
+		// XSD 1.1: an xs:all may contain element wildcards. recurseAll maps each
+		// derived particle to ONE base particle, but a derived wildcard may need
+		// the UNION of the base all's wildcards, so use the wildcard-aware check.
+		if version == Version11 && (groupHasWildcard(rg) || groupHasWildcard(bg)) {
+			return allRestrictsWithWildcards(ctx, rg.Particles, bg.Particles, schema, version)
+		}
+		return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorChoice && bg.Compositor == CompositorChoice:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 			return false
 		}
-		return recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, version)
+		return recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorChoice:
 		// MapAndSum (XSD §3.9.6): a derived SEQUENCE restricting a base CHOICE. Every
 		// member of the derived sequence must be a valid restriction of SOME branch
@@ -257,7 +273,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 				continue
 			}
 			if !slices.ContainsFunc(bg.Particles, func(bp *Particle) bool {
-				return particleValidRestriction(ctx, rp, bp, version)
+				return particleValidRestriction(ctx, rp, bp, schema, version)
 			}) {
 				return false
 			}
@@ -308,7 +324,13 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 				return false
 			}
-			return recurseAll(ctx, rg.Particles, bg.Particles, version)
+			// XSD 1.1 all-with-wildcards: a derived wildcard may be covered by the
+			// UNION of the base all's wildcards, which recurseAll's 1:1 mapping
+			// cannot express.
+			if version == Version11 && (groupHasWildcard(rg) || groupHasWildcard(bg)) {
+				return allRestrictsWithWildcards(ctx, rg.Particles, bg.Particles, schema, version)
+			}
+			return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 		}
 		// Remaining mixed pairs: choice:sequence, choice:all, all:sequence,
 		// all:choice — no §3.9.6 derivation rule. Before rejecting, fold away
@@ -320,7 +342,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		rr := reduceSingletonGroup(r)
 		bb := reduceSingletonGroup(b)
 		if rr != r || bb != b {
-			return particleValidRestriction(ctx, rr, bb, version)
+			return particleValidRestriction(ctx, rr, bb, schema, version)
 		}
 		return false
 	}
@@ -368,7 +390,7 @@ func reduceSingletonGroup(p *Particle) *Particle {
 // particle is consumed left-to-right: it either restricts the next derived
 // particle (advancing both) or is skipped only if it is emptiable. Every derived
 // particle must be consumed, and any trailing base particles must be emptiable.
-func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, version Version) bool {
+func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	// A derived particle that emits no elements (maxOccurs=0, a prohibited
 	// particle) matches nothing and demands nothing of the base: it neither needs
 	// a base counterpart nor blocks subsumption. Drop such particles before the
@@ -382,7 +404,7 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, ver
 		if particleEmitsNothing(bp) {
 			continue
 		}
-		if ri < len(rParticles) && particleValidRestriction(ctx, rParticles[ri], bp, version) {
+		if ri < len(rParticles) && particleValidRestriction(ctx, rParticles[ri], bp, schema, version) {
 			ri++
 			continue
 		}
@@ -425,7 +447,7 @@ func nonEmittingFiltered(particles []*Particle) []*Particle {
 // alternatives may be dropped freely (narrowing a choice to fewer branches is a
 // valid restriction). A derived alternative with no matching base alternative is
 // a clear violation (it admits content the base choice does not).
-func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Particle, version Version) bool {
+func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	for _, rp := range rParticles {
 		// A prohibited derived alternative emits nothing — it admits no content the
 		// base must accept, so it needs no matching base alternative.
@@ -434,7 +456,7 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 		}
 		matched := false
 		for _, bp := range bParticles {
-			if particleValidRestriction(ctx, rp, bp, version) {
+			if particleValidRestriction(ctx, rp, bp, schema, version) {
 				matched = true
 				break
 			}
@@ -449,7 +471,7 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 // recurseAll handles all→all: every derived particle must restrict a DISTINCT
 // base particle (order is irrelevant in an all group), and every base particle
 // not matched must be emptiable.
-func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version Version) bool {
+func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	used := make([]bool, len(bParticles))
 	for _, rp := range rParticles {
 		// A prohibited derived particle emits nothing — it needs no base counterpart.
@@ -461,7 +483,7 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version
 			if used[bi] {
 				continue
 			}
-			if particleValidRestriction(ctx, rp, bp, version) {
+			if particleValidRestriction(ctx, rp, bp, schema, version) {
 				used[bi] = true
 				matched = true
 				break
@@ -485,6 +507,237 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version
 	return true
 }
 
+// allRestrictsWithWildcards checks a derived all/sequence restricting a base
+// xs:all when wildcards are involved (XSD 1.1). Unlike recurseAll's 1:1 mapping,
+// a derived wildcard may be covered by the UNION of the base all's wildcards
+// (the base all admits wildcard content collectively). Each derived ELEMENT must
+// restrict a distinct base element OR be admitted by the base wildcard union;
+// each derived WILDCARD must be a namespace/notQName subset of the base wildcard
+// union with at-least-as-strong processContents and total cardinality within the
+// base wildcards' combined range; every unmatched base element must be emptiable.
+func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
+	var baseElems, baseWilds []*Particle
+	for _, bp := range bParticles {
+		switch bp.Term.(type) {
+		case *ElementDecl:
+			baseElems = append(baseElems, bp)
+		case *Wildcard:
+			baseWilds = append(baseWilds, bp)
+		}
+	}
+
+	// Build the union of the base all's wildcards and its combined cardinality.
+	var baseUnion *Wildcard
+	baseWildMax := 0
+	baseUnbounded := false
+	for _, bw := range baseWilds {
+		wc, _ := bw.Term.(*Wildcard)
+		if baseUnion == nil {
+			baseUnion = wc
+		} else {
+			baseUnion = wildcardUnion(baseUnion, wc, version)
+		}
+		if bw.MaxOccurs == Unbounded {
+			baseUnbounded = true
+		} else {
+			baseWildMax += bw.MaxOccurs
+		}
+	}
+
+	used := make([]bool, len(baseElems))
+	var derivedWilds []*Particle
+	// derivedElems holds CONCRETE derived elements that are not mapped to a base
+	// element but are admitted by a base WILDCARD. They consume from the base
+	// wildcards' capacity exactly like a derived wildcard confined to their single
+	// name, so they MUST take part in the cardinality accounting below (combined
+	// totals and per-base min/max) — otherwise extra concrete elements could
+	// overload a base wildcard's maxOccurs (false-accept) and concrete elements
+	// would be ignored when satisfying a base wildcard's minOccurs (false-reject).
+	var derivedElems []*Particle
+	derivedWildMax := 0
+	derivedUnbounded := false
+	for _, rp := range rParticles {
+		if particleEmitsNothing(rp) {
+			continue
+		}
+		switch rt := rp.Term.(type) {
+		case *ElementDecl:
+			matched := false
+			for i, bp := range baseElems {
+				if used[i] {
+					continue
+				}
+				if particleValidRestriction(ctx, rp, bp, schema, version) {
+					used[i] = true
+					matched = true
+					break
+				}
+			}
+			if matched {
+				continue
+			}
+			// Not a base element — must be admitted by the base wildcard union.
+			if baseUnion == nil || !wildcardAllowsName(baseUnion, rt.Name, schema) {
+				return false
+			}
+			derivedElems = append(derivedElems, rp)
+			if rp.MaxOccurs == Unbounded {
+				derivedUnbounded = true
+			} else {
+				derivedWildMax += rp.MaxOccurs
+			}
+		case *Wildcard:
+			if baseUnion == nil {
+				return false
+			}
+			// The derived wildcard's processContents must be at least as strong as
+			// EVERY base wildcard whose namespace it INTERSECTS — not merely the
+			// weakest base wildcard in the whole union. Otherwise a skip derived
+			// wildcard could restrict a strict base wildcard in the same namespace
+			// just because some OTHER, disjoint base wildcard happens to be skip.
+			rtCon := wildcardConstraint(rt)
+			for _, bw := range baseWilds {
+				bwc, _ := bw.Term.(*Wildcard)
+				if !constraintsIntersect(rtCon, wildcardConstraint(bwc)) {
+					continue
+				}
+				if processContentsStrength(rt.ProcessContents) < processContentsStrength(bwc.ProcessContents) {
+					return false
+				}
+			}
+			if !wildcardConstraintSubset(rt, baseUnion, schema, false) {
+				return false
+			}
+			derivedWilds = append(derivedWilds, rp)
+			if rp.MaxOccurs == Unbounded {
+				derivedUnbounded = true
+			} else {
+				derivedWildMax += rp.MaxOccurs
+			}
+		case *ModelGroup:
+			// Nested group inside the derived side — accept conservatively.
+		}
+	}
+
+	// Every unmatched base element must be emptiable.
+	for i, bp := range baseElems {
+		if used[i] {
+			continue
+		}
+		if !particleEmptiable(bp) && !particleEmitsNothing(bp) {
+			return false
+		}
+	}
+
+	// Per-base-wildcard MINIMUM cardinality: each base wildcard requires at least
+	// minOccurs elements in ITS namespace. The derived content GUARANTEED to land
+	// in that namespace is the sum of minOccurs of the derived wildcards whose
+	// namespace is wholly contained in the base wildcard's (a derived wildcard
+	// spanning a wider namespace might place its content elsewhere, so it cannot
+	// be counted as guaranteed). If that guaranteed minimum is below the base
+	// wildcard's minOccurs, a too-small document valid against the derived type is
+	// rejected by the base type — an invalid restriction.
+	for _, bw := range baseWilds {
+		bwc, _ := bw.Term.(*Wildcard)
+		guaranteed := 0
+		for _, dw := range derivedWilds {
+			dwc, _ := dw.Term.(*Wildcard)
+			if wildcardConstraintSubset(dwc, bwc, schema, false) {
+				guaranteed += dw.MinOccurs
+			}
+		}
+		// A concrete derived element whose name this base wildcard admits places
+		// its required occurrences in the base wildcard's namespace region.
+		for _, de := range derivedElems {
+			det, _ := de.Term.(*ElementDecl)
+			if wildcardAllowsName(bwc, det.Name, schema) {
+				guaranteed += de.MinOccurs
+			}
+		}
+		if guaranteed < bw.MinOccurs {
+			return false
+		}
+	}
+
+	// Per-base-wildcard MAXIMUM cardinality: a base wildcard that EXCLUSIVELY owns
+	// its namespace region (no other base wildcard's namespace intersects it) caps
+	// the elements admitted in that region at its own maxOccurs. The most a derived
+	// wildcard could place there is bounded by its maxOccurs whenever its namespace
+	// intersects the base wildcard's (a spanning derived wildcard could direct ALL
+	// its content into this region). If the derived wildcards intersecting an
+	// exclusive base wildcard can collectively emit more than the base wildcard
+	// allows, a too-large document valid against the derived type is rejected by
+	// the base type — an invalid restriction. The exclusivity guard keeps the check
+	// from false-rejecting valid restrictions of OVERLAPPING base wildcards (where
+	// a region's capacity is shared across several base wildcards).
+	for _, bw := range baseWilds {
+		if bw.MaxOccurs == Unbounded {
+			continue
+		}
+		bwc, _ := bw.Term.(*Wildcard)
+		if !baseWildcardExclusive(bw, bwc, baseWilds) {
+			continue
+		}
+		capacity := 0
+		over := false
+		for _, dw := range derivedWilds {
+			dwc, _ := dw.Term.(*Wildcard)
+			if !constraintsIntersect(wildcardConstraint(dwc), wildcardConstraint(bwc)) {
+				continue
+			}
+			if dw.MaxOccurs == Unbounded {
+				over = true
+				break
+			}
+			capacity += dw.MaxOccurs
+		}
+		// Concrete derived elements admitted by this base wildcard also draw on
+		// its capacity.
+		if !over {
+			for _, de := range derivedElems {
+				det, _ := de.Term.(*ElementDecl)
+				if !wildcardAllowsName(bwc, det.Name, schema) {
+					continue
+				}
+				if de.MaxOccurs == Unbounded {
+					over = true
+					break
+				}
+				capacity += de.MaxOccurs
+			}
+		}
+		if over || capacity > bw.MaxOccurs {
+			return false
+		}
+	}
+
+	// Combined wildcard cardinality: the derived wildcards must not admit more
+	// content than the base wildcards collectively allow.
+	if derivedUnbounded && !baseUnbounded {
+		return false
+	}
+	if !baseUnbounded && derivedWildMax > baseWildMax {
+		return false
+	}
+	return true
+}
+
+// baseWildcardExclusive reports whether base wildcard bw is the only base
+// wildcard whose namespace covers its region — i.e. no OTHER base wildcard's
+// namespace intersects bw's. Only then does bw alone cap its region's capacity.
+func baseWildcardExclusive(bw *Particle, bwc *Wildcard, baseWilds []*Particle) bool {
+	for _, other := range baseWilds {
+		if other == bw {
+			continue
+		}
+		owc, _ := other.Term.(*Wildcard)
+		if constraintsIntersect(wildcardConstraint(owc), wildcardConstraint(bwc)) {
+			return false
+		}
+	}
+	return true
+}
+
 // elementRestrictsGroup implements Recurse-As-If-Group (XSD §3.9.6): a derived
 // ELEMENT particle restricting a base MODEL GROUP particle. The derived element
 // is treated as a singleton group and mapped through the base group's children
@@ -497,7 +750,7 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version
 // the base group particle's range. When the recursion cannot decide a sub-case
 // with confidence it stays conservative (accepts) rather than risk a false
 // rejection.
-func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *ModelGroup, version Version) bool {
+func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 		return false
 	}
@@ -505,14 +758,14 @@ func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *Mo
 	case CompositorChoice:
 		// The element must restrict SOME alternative of the base choice.
 		return slices.ContainsFunc(bg.Particles, func(bp *Particle) bool {
-			return particleValidRestriction(ctx, r, bp, version)
+			return particleValidRestriction(ctx, r, bp, schema, version)
 		})
 	case CompositorSequence, CompositorAll:
 		// The element must restrict exactly one base child; every unmatched base
 		// child must be emptiable (or a prohibited base particle that emits nothing).
 		matched := false
 		for _, bp := range bg.Particles {
-			if !matched && particleValidRestriction(ctx, r, bp, version) {
+			if !matched && particleValidRestriction(ctx, r, bp, schema, version) {
 				matched = true
 				continue
 			}
@@ -543,7 +796,7 @@ func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *Mo
 //
 // A group that can emit a different element, two-or-more elements, or zero
 // elements where the base requires one is rejected.
-func groupRestrictsElement(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, be *ElementDecl, version Version) bool {
+func groupRestrictsElement(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, be *ElementDecl, schema *Schema, version Version) bool {
 	dMin, dMax := particleElementRange(r)
 	if !occurrenceValidRestriction(dMin, dMax, b.MinOccurs, b.MaxOccurs) {
 		return false
@@ -552,14 +805,14 @@ func groupRestrictsElement(ctx context.Context, r *Particle, rg *ModelGroup, b *
 	// restrict. Build a one-occurrence base particle so the leaf check compares
 	// element-to-element without re-folding the outer occurrence range.
 	beP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: be}
-	return groupLeavesRestrictElement(ctx, rg, beP, version)
+	return groupLeavesRestrictElement(ctx, rg, beP, schema, version)
 }
 
 // groupLeavesRestrictElement reports whether every element/wildcard leaf the
 // derived group rg can emit is a valid restriction of the base element particle
 // beP. A wildcard leaf can match elements other than the base element's name, so
 // it can never be a valid restriction of a single named element.
-func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Particle, version Version) bool {
+func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Particle, schema *Schema, version Version) bool {
 	for _, p := range rg.Particles {
 		// A prohibited leaf/group emits nothing — it neither contributes an emitted
 		// element nor blocks the wrapper from restricting the base element.
@@ -569,7 +822,7 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 		switch t := p.Term.(type) {
 		case *ElementDecl:
 			leafP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: t}
-			if !particleValidRestriction(ctx, leafP, beP, version) {
+			if !particleValidRestriction(ctx, leafP, beP, schema, version) {
 				return false
 			}
 		case *Wildcard:
@@ -577,7 +830,7 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 			// valid restriction of a single named element.
 			return false
 		case *ModelGroup:
-			if !groupLeavesRestrictElement(ctx, t, beP, version) {
+			if !groupLeavesRestrictElement(ctx, t, beP, schema, version) {
 				return false
 			}
 		}
@@ -660,7 +913,7 @@ func maxOccursAdd(a, b int) int {
 // be decided with confidence (e.g. a nested group whose effective range is
 // genuinely undecidable) it stays conservative (accepts). The base wildcard
 // itself is reached through the base particle b (b.Term).
-func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle) bool {
+func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle, schema *Schema) bool {
 	// The TOTAL number of elements the derived group can emit must be within the
 	// base wildcard particle's occurrence range. This is the cardinality bound that
 	// matters — NOT the derived group's raw occurrence range (always 1,1 for a
@@ -681,7 +934,7 @@ func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle) bool {
 	// Each leaf inside the derived group must be admitted by the wildcard, and its
 	// effective occurrence maximum (folding in the enclosing group ranges) must not
 	// exceed the base wildcard particle's maximum.
-	return groupLeavesWithinWildcard(rg, r.MaxOccurs, b)
+	return groupLeavesWithinWildcard(rg, r.MaxOccurs, b, schema)
 }
 
 // groupLeavesWithinWildcard walks the derived group's particles, threading the
@@ -695,7 +948,7 @@ func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle) bool {
 // than bw.MinOccurs is not a violation when sibling leaves make up the total
 // (e.g. sequence(g1,g2) each emitting 1 validly restricts <xs:any minOccurs="2">).
 // Returns false on the first clear violation.
-func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle) bool {
+func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle, schema *Schema) bool {
 	for _, p := range rg.Particles {
 		// A prohibited leaf/group emits nothing — it places no element against the
 		// base wildcard, so skip it (its namespace/cardinality is irrelevant).
@@ -709,7 +962,7 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle) bool {
 			if !ok {
 				return true
 			}
-			if !wildcardAllowsName(wc, t.Name) {
+			if !wildcardAllowsName(wc, t.Name, schema) {
 				return false
 			}
 			if !occurrenceValidRestriction(0, leafMax, 0, bw.MaxOccurs) {
@@ -726,14 +979,14 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle) bool {
 			if processContentsStrength(t.ProcessContents) < processContentsStrength(bwc.ProcessContents) {
 				return false
 			}
-			if !wildcardConstraintSubset(t, bwc) {
+			if !wildcardConstraintSubset(t, bwc, schema, false) {
 				return false
 			}
 			if !occurrenceValidRestriction(0, leafMax, 0, bw.MaxOccurs) {
 				return false
 			}
 		case *ModelGroup:
-			if !groupLeavesWithinWildcard(t, leafMax, bw) {
+			if !groupLeavesWithinWildcard(t, leafMax, bw, schema) {
 				return false
 			}
 		}
@@ -806,7 +1059,15 @@ func particleEmptiable(p *Particle) bool {
 //   - finite set      = the listed URIs (##local→absent, ##targetNamespace→TNS)
 //
 // sub ⊆ super when every namespace sub admits is also admitted by super.
-func wildcardConstraintSubset(sub, super *Wildcard) bool {
+// schema/isAttr are used only by the XSD 1.1 path for ##defined-aware per-name
+// subset checks (isAttr selects the elements vs attributes declaration table).
+func wildcardConstraintSubset(sub, super *Wildcard, schema *Schema, isAttr bool) bool {
+	// XSD 1.1: when either wildcard carries a notNamespace/notQName constraint
+	// the 1.0 case analysis below cannot represent it; decide via the general
+	// constraint algebra. 1.0-only wildcards keep the byte-identical path below.
+	if wildcardHas11Fields(sub) || wildcardHas11Fields(super) {
+		return wildcardConstraintSubset11(sub, super, schema, isAttr)
+	}
 	// super = ##any admits everything.
 	if super.Namespace == WildcardNSAny {
 		return true
@@ -876,14 +1137,15 @@ func wildcardExcludedSet(wc *Wildcard) map[string]bool {
 	}
 }
 
-// wildcardAllowsName reports whether the wildcard's namespace constraint admits
-// an element with the given expanded name. Used for the element-restricts-
-// wildcard (NSCompat) case. It delegates to the validator's wildcardMatches so
-// the restriction check and instance validation share one definition of which
-// names a wildcard admits — in particular ##other excludes the ABSENT namespace
-// (an element with no namespace is not matched by ##other), which the validator
-// enforces and the restriction check must mirror to avoid false-accepting an
-// empty-namespace element as a restriction of an ##other wildcard.
-func wildcardAllowsName(wc *Wildcard, name QName) bool {
-	return wildcardMatches(wc, name.NS)
+// wildcardAllowsName reports whether the wildcard admits an ELEMENT with the
+// given expanded name. Used for the element-restricts-wildcard (NSCompat) case.
+// It delegates to the validator's wildcardAllowsExpandedName so the restriction
+// check and instance validation share ONE definition of which names a wildcard
+// admits: the namespace constraint (incl. notNamespace, and ##other excluding
+// the ABSENT namespace) AND the XSD 1.1 @notQName disallowed-name set
+// (explicit QNames, ##definedSibling, and ##defined — the latter consulting
+// schema.elements). Without the notQName half the restriction check would
+// false-ACCEPT a derived element a base wildcard explicitly excludes.
+func wildcardAllowsName(wc *Wildcard, name QName, schema *Schema) bool {
+	return wildcardAllowsExpandedName(wc, name.Local, name.NS, schema, false)
 }

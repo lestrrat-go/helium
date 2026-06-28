@@ -66,6 +66,8 @@ const (
 	attrMode                 = "mode" // XSD 1.1: xs:openContent mode
 	attrName                 = "name"
 	attrNamespace            = "namespace"
+	attrNotNamespace         = "notNamespace" // XSD 1.1: wildcard negated-namespace list
+	attrNotQName             = "notQName"     // XSD 1.1: wildcard disallowed-names list
 	attrNillable             = "nillable"
 	attrNil                  = "nil"
 	attrProcessContents      = "processContents"

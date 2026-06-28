@@ -280,7 +280,7 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 		info.last = slices.Clone(ids)
 		return info
 	case *Wildcard:
-		id := a.newPos(firstSetEntry{isWildcard: true, wildcard: t.Namespace, targetNS: t.TargetNS})
+		id := a.newPos(firstSetEntry{isWildcard: true, wildcard: t.Namespace, targetNS: t.TargetNS, wc: t})
 		return posInfo{first: []int{id}, last: []int{id}}
 	case *ModelGroup:
 		return a.walkModelGroup(t)
@@ -448,10 +448,11 @@ func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
 // the empty string to also mean "this is an element" would mis-treat such a
 // wildcard as an element and false-reject deterministic models.
 type firstSetEntry struct {
-	qname      QName  // for elements
-	isWildcard bool   // true iff this entry is a wildcard position
-	wildcard   string // for wildcards (namespace constraint)
-	targetNS   string // for wildcards
+	qname      QName     // for elements
+	isWildcard bool      // true iff this entry is a wildcard position
+	wildcard   string    // for wildcards (namespace constraint)
+	targetNS   string    // for wildcards
+	wc         *Wildcard // for wildcards: the full term (carries XSD 1.1 notNamespace/notQName)
 }
 
 // entriesOverlap checks if two first-set entries can match the same element.
@@ -480,13 +481,13 @@ func entriesOverlap(a, b firstSetEntry, version Version) bool {
 		if version == Version11 {
 			return false
 		}
-		return wildcardMatchesNS(b.wildcard, b.targetNS, a.qname.NS)
+		return entryWildcardMatchesNS(b, a.qname.NS)
 	}
 	if a.isWildcard && !b.isWildcard {
 		if version == Version11 {
 			return false
 		}
-		return wildcardMatchesNS(a.wildcard, a.targetNS, b.qname.NS)
+		return entryWildcardMatchesNS(a, b.qname.NS)
 	}
 	// Two wildcards: check if their namespace constraints can both match the same namespace.
 	return wildcardsOverlap(a, b)
@@ -506,6 +507,12 @@ func entriesOverlap(a, b firstSetEntry, version Version) bool {
 // set/negation combination so a negation (open-ended) constraint no longer
 // falls through to a blanket "always overlaps".
 func wildcardsOverlap(a, b firstSetEntry) bool {
+	// XSD 1.1: when either wildcard carries a notNamespace/notQName constraint
+	// the string-based set/negation analysis below cannot represent it; decide
+	// namespace intersection via the general constraint algebra.
+	if (a.wc != nil && wildcardHas11Fields(a.wc)) || (b.wc != nil && wildcardHas11Fields(b.wc)) {
+		return constraintsIntersect(wildcardConstraint(a.wc), wildcardConstraint(b.wc))
+	}
 	aSet := upaWildcardNSSet(a.wildcard, a.targetNS)
 	bSet := upaWildcardNSSet(b.wildcard, b.targetNS)
 
@@ -567,6 +574,17 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 		}
 		return result
 	}
+}
+
+// entryWildcardMatchesNS reports whether a wildcard first-set entry admits a
+// namespace, honoring an XSD 1.1 notNamespace constraint when the full *Wildcard
+// is available (it always is for entries built by this package) and falling back
+// to the string form otherwise.
+func entryWildcardMatchesNS(e firstSetEntry, ns string) bool {
+	if e.wc != nil {
+		return wildcardMatches(e.wc, ns)
+	}
+	return wildcardMatchesNS(e.wildcard, e.targetNS, ns)
 }
 
 // wildcardMatchesNS checks if a wildcard namespace constraint matches a given namespace.

@@ -9,6 +9,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -249,8 +250,9 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 }
 
 func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
+	hasNS := hasAttr(elem, attrNamespace)
 	namespace := getAttr(elem, attrNamespace)
-	if !hasAttr(elem, attrNamespace) {
+	if !hasNS {
 		// ABSENT namespace defaults to ##any. A present-but-empty
 		// namespace="" is preserved: it is a (degenerate) namespace list
 		// that matches nothing, which is distinct from the ##any default.
@@ -259,11 +261,143 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 		c.validateWildcardNamespace(ctx, elem, namespace)
 	}
 
-	return &Wildcard{
+	wc := &Wildcard{
 		Namespace:       namespace,
 		ProcessContents: c.readProcessContents(ctx, elem),
 		TargetNS:        c.schema.targetNamespace,
 	}
+
+	// XSD 1.1 negated namespace / name constraints. Gated on Version11 so 1.0
+	// behavior is byte-identical (the attributes are not recognized in 1.0; if
+	// present they are simply ignored, as any foreign attribute would be).
+	if c.version != Version11 {
+		return wc
+	}
+
+	hasNotNS := hasAttr(elem, attrNotNamespace)
+	// @namespace and @notNamespace are mutually exclusive (XSD 3.10.2,
+	// no-xmlns / src-wildcard): a wildcard may carry at most one of them.
+	if hasNS && hasNotNS {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrNotNamespace,
+			"The attributes 'namespace' and 'notNamespace' are mutually exclusive."))
+	}
+	if hasNotNS {
+		wc.NotNamespace = c.parseNotNamespace(ctx, elem, getAttr(elem, attrNotNamespace))
+	}
+	if hasAttr(elem, attrNotQName) {
+		c.parseNotQName(ctx, elem, wc, getAttr(elem, attrNotQName), isXSDElement(elem, elemAnyAttribute))
+	}
+	return wc
+}
+
+// parseNotNamespace parses an xs:any/xs:anyAttribute @notNamespace value (XSD
+// 1.1). The value is an xs:basicNamespaceList whose members are each an anyURI,
+// "##targetNamespace", or "##local"; the "##any"/"##other" keywords are NOT
+// permitted. It returns the resolved set of EXCLUDED namespace URIs ("" for
+// ##local / the absent namespace).
+//
+// An EMPTY list (e.g. notNamespace="") is VALID: it is a `not` constraint with
+// an empty excluded set, which admits every namespace (XSD 1.1 §3.10.1). The
+// caller passes a present (possibly empty) attribute value, so a NON-NIL empty
+// slice is returned to mark the wildcard as a notNamespace constraint — distinct
+// from an ABSENT @notNamespace (nil), which leaves the @namespace constraint in
+// effect. wildcardMatches treats a non-nil empty NotNamespace as "excludes
+// nothing" (matches all).
+func (c *compiler) parseNotNamespace(ctx context.Context, elem *helium.Element, raw string) []string {
+	reject := func(msg string) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrNotNamespace, msg))
+	}
+	tokens := splitSpace(normalizeWhiteSpace(raw, "collapse"))
+	seen := make(map[string]struct{}, len(tokens))
+	out := make([]string, 0, len(tokens))
+	for _, tok := range tokens {
+		var ns string
+		switch tok {
+		case WildcardNSTargetNamespace:
+			ns = c.schema.targetNamespace
+		case WildcardNSLocal:
+			ns = ""
+		case WildcardNSAny, WildcardNSOther:
+			reject(fmt.Sprintf("The value '%s' is not valid in a 'notNamespace' list.", tok))
+			continue
+		default:
+			if strings.HasPrefix(tok, "##") {
+				reject(fmt.Sprintf("The value '%s' is not a recognized '##' token in 'notNamespace'.", tok))
+				continue
+			}
+			ns = tok
+		}
+		if _, dup := seen[ns]; dup {
+			continue
+		}
+		seen[ns] = struct{}{}
+		out = append(out, ns)
+	}
+	return out
+}
+
+// parseNotQName parses an xs:any/xs:anyAttribute @notQName value (XSD 1.1) into
+// the wildcard's disallowed-name set. Members are each a QName, "##defined", or
+// (for xs:any only) "##definedSibling". Each QName must be lexically valid, its
+// prefix bound, and its namespace admitted by the wildcard's namespace
+// constraint (otherwise listing it would be pointless and is a schema error).
+// isAttr is true for an xs:anyAttribute wildcard, for which "##definedSibling"
+// is NOT a permitted token (XSD 1.1 restricts it to ELEMENT wildcards).
+func (c *compiler) parseNotQName(ctx context.Context, elem *helium.Element, wc *Wildcard, raw string, isAttr bool) {
+	reject := func(msg string) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrNotQName, msg))
+	}
+	tokens := splitSpace(normalizeWhiteSpace(raw, "collapse"))
+	for _, tok := range tokens {
+		switch tok {
+		case WildcardQNameDefined:
+			wc.NotQNameDefined = true
+			continue
+		case WildcardQNameDefinedSibling:
+			if isAttr {
+				reject("The value '##definedSibling' is only allowed on an element wildcard, not on 'anyAttribute'.")
+				continue
+			}
+			wc.NotQNameDefinedSibling = true
+			continue
+		}
+		if !xmlchar.IsValidQName(tok) {
+			reject(fmt.Sprintf("The value '%s' is not a valid QName.", tok))
+			continue
+		}
+		qn := c.resolveNotQName(ctx, elem, tok)
+		// The name's namespace must be admitted by the wildcard's namespace
+		// constraint; excluding a name the wildcard could never match is an error
+		// (cvc/wildcard: notQName names must be in an allowed namespace).
+		if !wildcardMatches(wc, qn.NS) {
+			reject(fmt.Sprintf("The QName '%s' in 'notQName' is not in a namespace allowed by the wildcard.", tok))
+			continue
+		}
+		wc.NotQName = append(wc.NotQName, qn)
+	}
+}
+
+// resolveNotQName resolves a @notQName QName token using resolve-QName ACTUAL
+// VALUE semantics (XSD 1.1), which differ from schema-component reference
+// resolution (c.resolveQName): an UNPREFIXED token resolves through the in-scope
+// DEFAULT namespace, or to the ABSENT namespace when there is no default — it
+// must NEVER fall back to the schema's targetNamespace. A prefixed token uses
+// the in-scope binding (and the predeclared xml prefix), with the same
+// unbound-prefix diagnostic as c.resolveQName.
+func (c *compiler) resolveNotQName(ctx context.Context, elem *helium.Element, ref string) QName {
+	if prefix, local, found := strings.Cut(ref, ":"); found {
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
+		}
+		return QName{Local: local, NS: ns}
+	}
+	// Unprefixed: the in-scope default namespace, else absent. No targetNamespace
+	// fallback (lookupNS returns "" when no default xmlns is in scope).
+	return QName{Local: ref, NS: lookupNS(elem, "")}
 }
 
 func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, opts elementDeclReadOptions) (*ElementDecl, error) {
@@ -592,6 +726,20 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 	}
 	// Global attributes are always in the target namespace (per spec).
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
+
+	// A GLOBAL attribute declaration must not be in the XSI namespace (XSD 1.1
+	// Schema Component Constraint "no-xsi" / xs:attribute representation): the XSI
+	// namespace is reserved for the four processor attributes and a schema may not
+	// add to it. This is gated on Version11: it is NEW in this PR and the opt-in
+	// contract requires 1.0 to stay byte-identical to origin/feat-xsd11, which has
+	// no global-attribute no-xsi check (the pre-existing check in check_elements.go
+	// covers only LOCAL qualified attributes and is left unchanged for 1.0).
+	if c.version == Version11 && c.filename != "" && qn.NS == lexicon.NamespaceXSI {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrName,
+			"An attribute declaration must not be in the XSI namespace."))
+		return
+	}
 
 	// Check for a duplicate global attribute declaration BEFORE parsing the body,
 	// so a rejected declaration records no type/constraint refs that would
