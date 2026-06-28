@@ -296,7 +296,16 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// compatibility check and the default-attribute interpretation: a vc-excluded
 	// root contributes an EMPTY schema and must not be rejected for a TNS mismatch.
 	// (For a non-excluded root the same call prunes its vc:-excluded descendants.)
-	if c.applyConditionalInclusion(ctx, incRoot) {
+	// c.includeFile is set across the pre-pass so a malformed-vc diagnostic in the
+	// included document is attributed to the included file, not the including one,
+	// then restored on every path (the later block sets it again for parsing).
+	savedIncludeFileVC := c.includeFile
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
+	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
+	c.includeFile = savedIncludeFileVC
+	if rootExcluded {
 		return nil
 	}
 
@@ -492,7 +501,15 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// check and default-attribute interpretation: a vc-excluded root contributes an
 	// EMPTY schema (no Phase-A components) and must not be rejected for a TNS
 	// mismatch. (For a non-excluded root the same call prunes its descendants.)
-	if c.applyConditionalInclusion(ctx, incRoot) {
+	// c.includeFile is set across the pre-pass so a malformed-vc diagnostic in the
+	// redefined document is attributed to that file, then restored on every path.
+	savedIncludeFileVC := c.includeFile
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
+	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
+	c.includeFile = savedIncludeFileVC
+	if rootExcluded {
 		return nil
 	}
 
@@ -926,6 +943,27 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	defer func() { _ = subCollector.Close() }()
 	impC.errorHandler = subCollector
 
+	// propagateImpErrors drains the import sub-compiler's collected diagnostics and
+	// folds its error count into the parent. Preserving libxml2's "stop after the
+	// first import failure" rule, the diagnostic TEXT is forwarded only when the
+	// parent has no prior errors, but impC.errorCount is ALWAYS added so an
+	// imported-schema failure still fails the compile. It is invoked on every exit
+	// path once the sub-collector is live (pre-pass exclusion, TNS mismatch, and the
+	// normal completion) so a pre-pass/parse error is never dropped by a later
+	// early return. Close is idempotent, so the trailing defer is harmless.
+	propagateImpErrors := func() {
+		_ = subCollector.Close()
+		if impC.errorCount == 0 {
+			return
+		}
+		if c.errorCount == 0 {
+			for _, e := range subCollector.Errors() {
+				c.errorHandler.Handle(ctx, e)
+			}
+		}
+		c.errorCount += impC.errorCount
+	}
+
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
 	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified
 	impC.schema.attrFormQualified = getAttr(impRoot, attrAttributeFormDefault) == attrValQualified
@@ -941,16 +979,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// Conditional inclusion runs per schema document, BEFORE the src-import
 	// targetNamespace check: a vc-excluded imported root contributes an EMPTY
 	// schema and must not be rejected for a namespace mismatch. A malformed 1.1 vc
-	// value on the excluded root is still a schema error, so forward the
-	// sub-collector's diagnostics before returning.
+	// value on the (excluded or non-excluded) root is still a schema error, so its
+	// diagnostics are propagated on every exit path below.
 	if impC.applyConditionalInclusion(ctx, impRoot) {
-		_ = subCollector.Close()
-		if impC.errorCount > 0 && c.errorCount == 0 {
-			for _, e := range subCollector.Errors() {
-				c.errorHandler.Handle(ctx, e)
-			}
-		}
-		c.errorCount += impC.errorCount
+		propagateImpErrors()
 		return nil
 	}
 
@@ -961,8 +993,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// requires the imported schema to have no targetNamespace. This is a
 	// fatal schema error, not an I/O warning, so it is emitted directly here
 	// and reported via a nil return (mirroring the xs:include check above).
+	// Pre-pass diagnostics collected in impC are flushed FIRST (while the parent
+	// is still error-free) so they are not dropped by this early return.
 	impTargetNS := getAttr(impRoot, attrTargetNamespace)
 	if impTargetNS != ns {
+		propagateImpErrors()
 		displayLoc := location
 		if c.filename != "" {
 			displayLoc = schemaDisplayLoc(c.filename, location)
@@ -996,18 +1031,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		_ = err
 	}
 
-	_ = subCollector.Close()
-
-	// Only propagate sub-compiler errors to the parent if the parent has no
-	// prior errors. This matches libxml2's behavior of stopping error reporting
-	// after the first import failure.
+	// Propagate sub-compiler diagnostics (same rule as the early-return paths).
+	propagateImpErrors()
 	if impC.errorCount > 0 {
-		if c.errorCount == 0 {
-			for _, e := range subCollector.Errors() {
-				c.errorHandler.Handle(ctx, e)
-			}
-		}
-		c.errorCount += impC.errorCount
 		return nil
 	}
 

@@ -349,6 +349,34 @@ func TestConditionalInclusion(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("resolveVersion: NBSP/below-1.1 minVersion hint does not auto-select 1.1", func(t *testing.T) {
+		t.Parallel()
+		// No explicit Compiler.Version(): the root vc:minVersion hint drives version
+		// auto-selection. type xs:double reveals the selected version via the 1.1-only
+		// "+INF" lexical (accepted only under 1.1). resolveVersion must use the same
+		// ASCII-trim + exact-decimal rules as the pre-pass.
+		schemaFor := func(minVer string) string {
+			return `<xs:schema ` + ns + ` vc:minVersion="` + minVer + `">
+  <xs:element name="v" type="xs:double"/>
+</xs:schema>`
+		}
+		// "1.10" == 1.1 exactly → selects 1.1 → +INF accepted (and pv==minVersion so
+		// the root is not self-excluded).
+		sEq, err := compileVC(t, xsd.NewCompiler(), schemaFor("1.10"))
+		require.NoError(t, err)
+		require.NoError(t, validate(t, sEq, `<v>+INF</v>`))
+		// NBSP-padded → not a valid xs:decimal → no hint → default 1.0 → +INF rejected
+		// (a float-based strings.TrimSpace parse would have wrongly selected 1.1).
+		sNBSP, err := compileVC(t, xsd.NewCompiler(), schemaFor("\u00a0"+"1.1"))
+		require.NoError(t, err)
+		require.Error(t, validate(t, sNBSP, `<v>+INF</v>`))
+		// High-precision value just BELOW 1.1 → exact compare keeps 1.0 → +INF rejected
+		// (a float64 parse would round it up to 1.1 and wrongly select 1.1).
+		sBelow, err := compileVC(t, xsd.NewCompiler(), schemaFor("1.09999999999999999999999999"))
+		require.NoError(t, err)
+		require.Error(t, validate(t, sBelow, `<v>+INF</v>`))
+	})
+
 	t.Run("vc-excluded included root with mismatched TNS contributes empty (no error)", func(t *testing.T) {
 		t.Parallel()
 		// The included document's root is vc-excluded (maxVersion 0.9) AND declares a

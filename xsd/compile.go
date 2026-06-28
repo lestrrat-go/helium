@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // compiler holds state during schema compilation.
@@ -975,13 +976,21 @@ func getAttrNS(elem *helium.Element, ns, name string) string {
 // Otherwise a vc:minVersion="1.1" (or higher) hint on the root <xs:schema>
 // upgrades to 1.1; absent any hint, the default is Version10. vc:maxVersion is
 // not consulted for processor selection — it gates per-element conditional
-// inclusion (deferred), not the overall version.
+// inclusion, not the overall version.
+//
+// The hint is parsed with the SAME rules the conditional-inclusion pre-pass uses
+// for vc decimals: ASCII XML whitespace trim only (NOT strings.TrimSpace, which
+// also strips NBSP) and EXACT xs:decimal comparison (isValidXSDDecimal +
+// value.CompareDecimal, not float64). So an NBSP-padded value or a malformed
+// decimal does NOT auto-select 1.1 (treated as no hint → default 1.0), and a
+// high-precision value just below 1.1 is not float-rounded up into 1.1.
 func resolveVersion(cfg *compileConfig, root *helium.Element) Version {
 	if cfg != nil && cfg.versionSet {
 		return cfg.version
 	}
 	if v := getAttrNS(root, lexicon.NamespaceXSDVersioning, "minVersion"); v != "" {
-		if minVer, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && minVer >= 1.1 {
+		s := strings.Trim(v, " \t\r\n")
+		if isValidXSDDecimal(s) && value.CompareDecimal(s, "1.1") >= 0 {
 			return Version11
 		}
 	}
