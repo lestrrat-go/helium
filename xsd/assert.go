@@ -332,12 +332,10 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	if td == nil || td.ContentType != ContentTypeSimple {
 		return xpath3.EmptySequence()
 	}
-	// For a simpleContent restriction the typed value follows the narrowed content
-	// type (nested simpleType / facets), so $value carries that type.
-	valueType := td
-	if td.ContentSimpleType != nil {
-		valueType = td.ContentSimpleType
-	}
+	// $value carries the effective content simple type composed across the whole
+	// simpleContent chain (a narrowing inherited through derived types), matching
+	// what validateSimpleContent validates against.
+	valueType := effectiveContentSimpleType(td)
 	value := elemTextContent(elem)
 	if value == "" && edecl != nil {
 		if edecl.Fixed != nil {

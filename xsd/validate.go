@@ -957,21 +957,89 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 	}
 
-	// XSD 1.1 simpleContent RESTRICTION: validate the text against the narrowed
-	// content simple type (nested <xs:simpleType> or direct facets) rather than the
-	// base, so an enumeration / type restriction actually constrains the content.
-	contentTD := td
-	if td != nil && td.ContentSimpleType != nil {
-		contentTD = td.ContentSimpleType
-		return validateValue(ctx, effectiveValue, collectNSContext(elem), contentTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+	// XSD 1.1: validate the text against the EFFECTIVE content simple type, composed
+	// across the whole simpleContent derivation chain (effectiveContentSimpleType):
+	// a base type's facets/assertions are enforced (e.g. an extension of a named
+	// faceted type), and a narrowed content type is inherited through derived
+	// simpleContent types (e.g. a restriction's enumeration survives a further
+	// restriction or extension). XSD 1.0 keeps the original gating, byte-identical.
+	if vc.version == Version11 {
+		effTD := effectiveContentSimpleType(td)
+		if simpleContentNeedsValidation(effTD) {
+			return validateValue(ctx, effectiveValue, collectNSContext(elem), effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+		}
+		return nil
 	}
 
-	// Validate the text value against the type.
-	if contentTD != nil && (contentTD.Facets != nil || resolveVariety(contentTD) == TypeVarietyList || resolveVariety(contentTD) == TypeVarietyUnion || builtinBaseLocal(contentTD) != "" && builtinBaseLocal(contentTD) != "string" && builtinBaseLocal(contentTD) != "anySimpleType") {
-		return validateValue(ctx, effectiveValue, collectNSContext(elem), contentTD, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+	// XSD 1.0: validate the text value against the type with the historical gating.
+	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
+		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 	}
 
 	return nil
+}
+
+// effectiveContentSimpleType returns the simple type that constrains the text
+// content of a simpleContent complex type, composed across the WHOLE simpleContent
+// derivation chain. It recurses through simpleContent complex types (IsSimpleContent)
+// and stops at the underlying simpleType/builtin, which IS its own content type:
+//
+//   - extension / restriction with no own narrowing: content = base content;
+//   - restriction with a nested <xs:simpleType>: that simpleType (carries its base
+//     and facets);
+//   - restriction with direct facets (a synthetic type whose BaseType is the owning
+//     complex type): a fresh restriction of the base's EFFECTIVE content type with
+//     those facets, so an ancestor's facets compose with the derived ones.
+//
+// depth bounds the recursion defensively; validation only runs on an acyclic,
+// successfully compiled schema.
+func effectiveContentSimpleType(td *TypeDef) *TypeDef {
+	return effectiveContentSimpleTypeRec(td, 0)
+}
+
+func effectiveContentSimpleTypeRec(td *TypeDef, depth int) *TypeDef {
+	if td == nil || !td.IsSimpleContent || depth > 64 {
+		return td
+	}
+	base := effectiveContentSimpleTypeRec(td.BaseType, depth+1)
+	cst := td.ContentSimpleType
+	if cst == nil {
+		return base
+	}
+	if cst.BaseType == td {
+		// Synthetic facet-only restriction: re-base on the effective base content
+		// type so the ancestor's facets are still applied alongside these.
+		return &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			Facets:      cst.Facets,
+			BaseType:    base,
+		}
+	}
+	// Nested <xs:simpleType>: it already carries its own base and facets.
+	return cst
+}
+
+// simpleContentNeedsValidation reports whether the effective content simple type
+// constrains its value (so validateValue must run): a list/union variety, a
+// non-string builtin base, or any facet/assertion anywhere along its base chain.
+func simpleContentNeedsValidation(td *TypeDef) bool {
+	if td == nil {
+		return false
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList, TypeVarietyUnion:
+		return true
+	}
+	if bl := builtinBaseLocal(td); bl != "" && bl != "string" && bl != "anySimpleType" {
+		return true
+	}
+	for cur := range baseChain(td) {
+		if cur.Facets != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *helium.Element) error {

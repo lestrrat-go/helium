@@ -577,3 +577,100 @@ func TestVersion11AttrMergeExtensionOfRestriction(t *testing.T) {
 		require.NoError(t, validateAssertion(t, schema, `<e req="y"><c>x</c></e>`))
 	})
 }
+
+// TestVersion11SimpleContentChainFacets covers the two simpleContent content-type
+// findings: (1) a simpleContent EXTENSION of a named simple type must enforce that
+// base type's facets/assertions (not skip validateValue); (2) a narrowed content
+// type (an ancestor enumeration) is inherited through a further restriction AND a
+// further extension. Both compose across the whole simpleContent derivation chain.
+func TestVersion11SimpleContentChainFacets(t *testing.T) {
+	t.Run("extension of named type with assertion facet enforces it", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="nonempty">
+    <xs:restriction base="xs:string">
+      <xs:assertion test="string-length($value) gt 0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="s">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="nonempty"/>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<s>x</s>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<s></s>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("extension of named type with length facet enforces it", func(t *testing.T) {
+		t.Parallel()
+		// A non-assertion base facet must also be enforced through the extension.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="two">
+    <xs:restriction base="xs:string">
+      <xs:length value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="s">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="two">
+          <xs:attribute name="a" type="xs:string"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<s a="z">ab</s>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<s a="z">abc</s>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("ancestor enumeration honored through further restriction and extension", func(t *testing.T) {
+		t.Parallel()
+		// A: simpleContent extension of xs:string. B: restriction of A with
+		// enumeration "square". C: restriction of B (no own facet). E: extension of B.
+		// Both C and E must still reject a non-enumerated value.
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="A">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="k" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:restriction base="A">
+        <xs:enumeration value="square"/>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="C">
+    <xs:simpleContent>
+      <xs:restriction base="B"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:simpleContent>
+      <xs:extension base="B">
+        <xs:attribute name="m" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="c" type="C"/>
+  <xs:element name="e" type="E"/>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<c>square</c>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<c>circle</c>`), xsd.ErrValidationFailed)
+		require.NoError(t, validateAssertion(t, schema, `<e>square</e>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<e>circle</e>`), xsd.ErrValidationFailed)
+	})
+}

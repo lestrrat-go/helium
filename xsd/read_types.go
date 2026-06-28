@@ -613,6 +613,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 
 func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element, td *TypeDef) {
 	td.ContentType = ContentTypeSimple
+	td.IsSimpleContent = true
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue

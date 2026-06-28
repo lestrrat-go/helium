@@ -266,6 +266,14 @@ type TypeDef struct {
 	// with no content-narrowing facets). Used by validateSimpleContent so a
 	// restricted simpleContent value is actually checked against its narrowed type.
 	ContentSimpleType *TypeDef
+	// IsSimpleContent marks a COMPLEX type whose content is simple content (an
+	// <xs:simpleContent> extension/restriction), distinguishing it from a plain
+	// <xs:simpleType> (both carry ContentType == ContentTypeSimple). The effective
+	// content-type walk (effectiveContentSimpleType) recurses through simpleContent
+	// complex types and stops at the underlying simpleType/builtin, so a base
+	// type's facets/assertions are not skipped and a narrowed content type is
+	// inherited through derived simpleContent types.
+	IsSimpleContent bool
 }
 
 // OpenContentMode is the XSD 1.1 xs:openContent mode.
