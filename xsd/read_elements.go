@@ -752,9 +752,11 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 		switch {
 		case isXSDElement(ce, elemSelector):
 			idc.Selector = getAttr(ce, attrXPath)
+			idc.SelectorDefaultNS = c.resolveXPathDefaultNS(ce)
 			selectorLine = ce.Line()
 		case isXSDElement(ce, elemField):
 			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
+			idc.FieldDefaultNS = append(idc.FieldDefaultNS, c.resolveXPathDefaultNS(ce))
 			fieldLines = append(fieldLines, ce.Line())
 		}
 	}
@@ -792,6 +794,35 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	}
 
 	return idc
+}
+
+// resolveXPathDefaultNS resolves the effective default element namespace for an
+// identity-constraint selector/field XPath (XSD 1.1). The value on the
+// selector/field element wins; otherwise the schema-level @xpathDefaultNamespace
+// is inherited. The special keywords resolve as: ##targetNamespace → the
+// schema's target namespace, ##defaultNamespace → the in-scope default namespace
+// at the element, ##local → no namespace; any other value is a literal URI. An
+// absent value (and 1.0 mode) yields no default. Returns "" for "no default".
+func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) string {
+	if c.version != Version11 {
+		return ""
+	}
+	raw := getAttr(elem, attrXPathDefaultNS)
+	if raw == "" {
+		raw = c.schemaXPathDefaultNS
+	}
+	switch raw {
+	case "":
+		return ""
+	case xpathDefaultNSLocal:
+		return ""
+	case xpathDefaultNSTargetNamespace:
+		return c.schema.targetNamespace
+	case xpathDefaultNSDefaultNamespace:
+		return lookupNS(elem, "")
+	default:
+		return raw
+	}
 }
 
 // resolveIDCReferQName resolves an xs:keyref/@refer QName against the constraint

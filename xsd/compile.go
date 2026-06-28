@@ -17,7 +17,12 @@ import (
 type compiler struct {
 	schema  *Schema
 	version Version        // XSD specification version targeted by this compilation
-	baseDir string         // directory of the schema file, for resolving relative paths
+	// schemaXPathDefaultNS is the raw value of the root xs:schema
+	// @xpathDefaultNamespace (XSD 1.1), inherited by every identity-constraint
+	// selector/field that does not set its own. Empty means absent (XPath 1.0
+	// default: unprefixed element = no-namespace).
+	schemaXPathDefaultNS string
+	baseDir              string // directory of the schema file, for resolving relative paths
 	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
 	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
@@ -502,6 +507,11 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
+
+	// XSD 1.1 schema-level default element namespace for identity-constraint XPaths.
+	if c.version == Version11 {
+		c.schemaXPathDefaultNS = getAttr(root, attrXPathDefaultNS)
+	}
 
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {

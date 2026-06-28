@@ -203,6 +203,13 @@ type IDConstraint struct {
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)
 
+	// SelectorDefaultNS / FieldDefaultNS hold the resolved default element
+	// namespace URI (XSD 1.1 @xpathDefaultNamespace) for the selector and each
+	// field XPath. Empty means no default (XPath 1.0 unprefixed = no-namespace).
+	// FieldDefaultNS is parallel to Fields.
+	SelectorDefaultNS string
+	FieldDefaultNS    []string
+
 	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
 }
 
