@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -111,5 +112,66 @@ func TestIDCXPathDefaultNamespaceAcrossDocuments(t *testing.T) {
 		odoc, err := helium.NewParser().Parse(t.Context(), []byte(ok))
 		require.NoError(t, err)
 		require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), odoc))
+	})
+}
+
+// TestIDCReferSourceInIncludedSchema covers PR860-REVIEW-012: a malformed or
+// unbound-prefix @refer in an INCLUDED schema must be attributed to the INCLUDED
+// file (whose line number the diagnostic carries), not the including schema.
+func TestIDCReferSourceInIncludedSchema(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mainXSD = "kr_main.xsd"
+		incXSD  = "kr_inc.xsd"
+	)
+
+	assert := func(t *testing.T, refer string) {
+		t.Helper()
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="kr_inc.xsd"/>
+</xs:schema>`)},
+			// The keyref (with the bad @refer) lives entirely in the included file,
+			// so the diagnostic's line number is meaningful only when paired with it.
+			incXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="x" maxOccurs="unbounded">
+          <xs:complexType><xs:attribute name="y" type="xs:string"/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:keyref name="kr" refer="` + refer + `">
+      <xs:selector xpath="x"/>
+      <xs:field xpath="@y"/>
+    </xs:keyref>
+  </xs:element>
+</xs:schema>`)},
+		}
+		data, err := fsys.ReadFile(mainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Version(xsd.Version11).Label(mainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		requireCompileResultErr(t, err)
+		require.NoError(t, collector.Close())
+		_, errStr := partitionCompileErrors(collector.Errors())
+
+		require.Contains(t, errStr, incXSD+":",
+			"the bad @refer diagnostic must cite the included file; got: %q", errStr)
+		require.False(t, strings.Contains(errStr, mainXSD+":"),
+			"the diagnostic must not cite the including schema; got: %q", errStr)
+	}
+
+	t.Run("malformed refer", func(t *testing.T) {
+		t.Parallel()
+		assert(t, ":k") // not a valid xs:QName (empty prefix)
+	})
+	t.Run("unbound-prefix refer", func(t *testing.T) {
+		t.Parallel()
+		assert(t, "bad:k") // prefix bad is not bound in scope
 	})
 }

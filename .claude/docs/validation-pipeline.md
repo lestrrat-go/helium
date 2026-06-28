@@ -381,7 +381,10 @@ the prefix, so a malformed value such as `:u` (empty prefix) is a fatal error
 (`reportInvalidQNameValue`) instead of being silently resolved as an unprefixed
 reference — `strings.Cut(":u", ":")` would otherwise yield an empty prefix that
 bypasses the unbound-prefix check. `@refer` (`resolveIDCReferQName`) is validated
-the same way. A prefixed `@ref` whose prefix is not bound in scope is a fatal error
+the same way, and its malformed/unbound-prefix diagnostics are attributed to the
+constraint's DECLARING file (`idc.Source`, falling back to `c.diagSource()`), so a
+bad `@refer` in an included/redefined schema cites the included file paired with
+its own line number, not the including schema. A prefixed `@ref` whose prefix is not bound in scope is a fatal error
 (`resolveIDCNameQName` → `reportUnboundQNamePrefix`, the same path every other
 QName-valued schema attribute uses), not a silent map to no-namespace; the
 `constraintRefUnbound` flag suppresses the follow-up "unknown constraint"

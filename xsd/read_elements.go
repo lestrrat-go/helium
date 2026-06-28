@@ -910,14 +910,22 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		// An empty @refer is reported by checkKeyRefRefers.
 		return QName{}, false
 	}
+	// Report against the constraint's DECLARING file (idc.Source, pinned in
+	// parseIDConstraint to c.includeFile/c.filename), paired with idc.Line, so a
+	// malformed/unbound @refer in an INCLUDED or REDEFINED schema cites the
+	// included file — not the including schema — matching the line number used.
+	source := idc.Source
+	if source == "" {
+		source = c.diagSource()
+	}
 	// A malformed @refer (e.g. ":k") is a fatal error, not a silently-resolved
 	// unprefixed reference. The returned bool suppresses checkKeyRefRefers's own
 	// "unknown key" diagnostic, mirroring the unbound-prefix path.
 	if err := validateQName(refer); err != nil {
-		if c.filename != "" {
+		if source != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' that is not a valid QName.", idc.Name, refer)
 			c.schemaError(ctx,
-				schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+				schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 		}
 		return QName{}, true
 	}
@@ -925,9 +933,9 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
-			if c.filename != "" {
+			if source != "" {
 				c.schemaError(ctx,
-					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+					schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			}
 			return QName{}, true
 		}
