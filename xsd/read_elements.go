@@ -1027,8 +1027,16 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 // selector/field that may redeclare the default namespace — so schema-level values
 // are pre-resolved at root-read time (see compiler.schemaXPathDefaultNS) and
 // inherited as the already-resolved URI.
+//
+// @xpathDefaultNamespace is xs:anyURI (whiteSpace=collapse), so the raw lexical
+// value is whitespace-collapsed BEFORE matching the ##keyword forms — a padded
+// "  ##targetNamespace  " must resolve to the target namespace, not be mistaken for
+// a literal URI. Every caller (schema-level root/include/redefine/import and the
+// idc/CTA local selector/field paths) routes through here, so the collapse is
+// centralized here rather than duplicated per call site.
 func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) string {
-	switch raw {
+	collapsed := normalizeWhiteSpace(raw, "collapse")
+	switch collapsed {
 	case "", xpathDefaultNSLocal:
 		return ""
 	case xpathDefaultNSTargetNamespace:
@@ -1036,7 +1044,7 @@ func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) stri
 	case xpathDefaultNSDefaultNamespace:
 		return lookupNS(elem, "")
 	default:
-		return raw
+		return collapsed
 	}
 }
 

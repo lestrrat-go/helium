@@ -102,6 +102,16 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 		// (a valid type=" xs:int " must not be rejected). Use it for the resolved
 		// QName, the deferred ref, the chameleon-eligibility test, and diagnostics.
 		typeRef = normalizeWhiteSpace(typeRef, "collapse")
+		// Validate the lexical QName BEFORE resolveQName, mirroring idc's @ref/@refer
+		// handling: a malformed value like ":T" (leading colon) is not a valid QName
+		// and must be a fatal schema error, not silently resolved to {}T.
+		if err := validateQName(typeRef); err != nil {
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative, attrType,
+					"The value '"+typeRef+"' is not a valid QName."))
+			}
+			return nil
+		}
 		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
 		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
 			alt:               alt,
@@ -224,11 +234,10 @@ func (c *compiler) parseInlineAlternativeType(ctx context.Context, elem *helium.
 func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) {
 	// A locally-present xpathDefaultNamespace on the alternative wins and is resolved
 	// against the alternative's OWN namespace context (so a local ##defaultNamespace
-	// uses the alternative's in-scope default namespace). xpathDefaultNamespace is
-	// whitespace-collapse, so collapse the value before matching the ##keyword forms.
+	// uses the alternative's in-scope default namespace). resolveXPathDefaultNSToken
+	// whitespace-collapses the raw value (xs:anyURI) before matching the ##keywords.
 	if hasAttr(elem, attrXPathDefaultNamespace) {
-		raw := normalizeWhiteSpace(getAttr(elem, attrXPathDefaultNamespace), "collapse")
-		return resolveXPathDefaultNSToken(elem, raw, c.schema.targetNamespace), true
+		return resolveXPathDefaultNSToken(elem, getAttr(elem, attrXPathDefaultNamespace), c.schema.targetNamespace), true
 	}
 	// Otherwise inherit the schema-level value. It is ALREADY RESOLVED against the
 	// schema ROOT at root-read time (compiler.schemaXPathDefaultNS, shared with the
