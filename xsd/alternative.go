@@ -17,6 +17,10 @@ type altTypeRef struct {
 	line     int
 	source   string
 	elemName string
+	// chameleonEligible is true when the lexical @type ref was unprefixed with no
+	// in-scope default namespace, so resolveAltTypeRefs may retry the no-namespace
+	// ({}) key — mirroring the ordinary element @type chameleon/no-TNS fallback.
+	chameleonEligible bool
 }
 
 // parseTypeAlternatives reads the XSD 1.1 <xs:alternative> children of an
@@ -94,13 +98,18 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 	}
 
 	if hasType {
+		// xs:QName uses whitespace collapse, so resolve the COLLAPSED lexical value
+		// (a valid type=" xs:int " must not be rejected). Use it for the resolved
+		// QName, the deferred ref, the chameleon-eligibility test, and diagnostics.
+		typeRef = normalizeWhiteSpace(typeRef, "collapse")
 		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
 		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
-			alt:      alt,
-			qn:       alt.TypeName,
-			line:     elem.Line(),
-			source:   c.diagSource(),
-			elemName: elem.LocalName(),
+			alt:               alt,
+			qn:                alt.TypeName,
+			line:              elem.Line(),
+			source:            c.diagSource(),
+			elemName:          elem.LocalName(),
+			chameleonEligible: refChameleonEligible(elem, typeRef),
 		})
 	} else {
 		// No @type: an inline anonymous <xs:complexType> or <xs:simpleType> child
@@ -250,6 +259,12 @@ func isErrorType(td *TypeDef) bool {
 func (c *compiler) resolveAltTypeRefs(ctx context.Context) {
 	for _, ref := range c.altTypeRefs {
 		td, ok := c.schema.types[ref.qn]
+		if !ok && ref.chameleonEligible {
+			// The type may come from an imported schema with no targetNamespace
+			// (chameleon include); retry the no-namespace ({}) key, mirroring the
+			// ordinary element @type fallback in resolveRefs.
+			td, ok = c.schema.types[QName{Local: ref.qn.Local, NS: ""}]
+		}
 		if !ok {
 			if c.filename != "" {
 				msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", ref.qn.NS, ref.qn.Local)
