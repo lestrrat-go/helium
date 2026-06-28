@@ -340,25 +340,32 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     xs:integer value space rather than being wrongly accepted as unique.
 
 **XSD 1.1 identity-constraint extras** (compile time): `@xpathDefaultNamespace`
-on `xs:selector`/`xs:field` (or inherited from the root `xs:schema`) is resolved
-by `resolveXPathDefaultNS` (`read_elements.go`) to a default ELEMENT namespace
-URI (`##targetNamespace`/`##defaultNamespace`/`##local`/literal URI) and stored
-per selector/field (`IDConstraint.SelectorDefaultNS`/`FieldDefaultNS`).
-`evaluateIDC` applies it via the opt-in `xpath1.Evaluator.DefaultElementNamespace`,
-which matches unprefixed ELEMENT name tests against that URI (attributes are
-never affected — they have no default namespace). `resolveXPathDefaultNS` decides
-inheritance by PRESENCE (`hasAttr(elem, attrXPathDefaultNS)`), not value — xs:anyURI
-admits the empty string and `getAttr` cannot tell `xpathDefaultNamespace=""` from an
-absent attribute — so an EXPLICIT empty value means "no default element namespace"
-and does NOT inherit the schema-level default; only an ABSENT attribute inherits.
-The schema-level `@xpathDefaultNamespace` (`compiler.schemaXPathDefaultNS`, read by
-`resolveXPathDefaultNS` when a selector/field has none) is a PER-document setting:
-`compile_imports.go` saves/sets/restores it across `xs:include`/`xs:redefine`
-(alongside elementFormDefault/blockDefault/finalDefault and `includeFile`) and
-sets it on the import sub-compiler from the imported root — so an included/
-imported schema's IDCs inherit ITS root's value, not the including/importing
-schema's (otherwise an included `xpath="emp"` selector would silently resolve to
-no-namespace and miss duplicates). `@ref` on an identity
+on `xs:selector`/`xs:field` (or inherited from the root `xs:schema`) becomes a
+default ELEMENT namespace URI stored per selector/field
+(`IDConstraint.SelectorDefaultNS`/`FieldDefaultNS`). The token→URI resolution
+(`resolveXPathDefaultNSToken`, `read_elements.go`: `##targetNamespace` → the
+target namespace, `##defaultNamespace` → the element's in-scope default namespace,
+`##local`/empty → none, else literal URI) is namespace-context-sensitive for
+`##defaultNamespace`. A LOCALLY-PRESENT selector/field value is resolved against
+THAT element; an inherited schema-level value is resolved ONCE against the SCHEMA
+ROOT at root-read time and stored as the resolved URI (`compiler.schemaXPathDefaultNS`),
+so an inherited `##defaultNamespace` uses the ROOT's default namespace, NOT a
+selector/field that redeclares `xmlns`. `evaluateIDC` applies the URI via the
+opt-in `xpath1.Evaluator.DefaultElementNamespace`, which matches unprefixed
+ELEMENT name tests against it (attributes are never affected — they have no
+default namespace). `resolveXPathDefaultNS` decides inheritance by PRESENCE
+(`hasAttr(elem, attrXPathDefaultNS)`), not value — xs:anyURI admits the empty
+string and `getAttr` cannot tell `xpathDefaultNamespace=""` from an absent
+attribute — so an EXPLICIT empty value means "no default element namespace" and
+does NOT inherit; only an ABSENT attribute inherits the resolved schema-level URI.
+The schema-level default is a PER-document setting: `compile.go` resolves it for
+the top-level root and `compile_imports.go` saves/sets/restores it (resolved
+against each loaded root) across `xs:include`/`xs:redefine` (alongside
+elementFormDefault/blockDefault/finalDefault and `includeFile`) and sets it on the
+import sub-compiler from the imported root — so an included/imported schema's IDCs
+inherit ITS root's value, not the including/importing schema's (otherwise an
+included `xpath="emp"` selector would silently resolve to no-namespace and miss
+duplicates). `@ref` on an identity
 constraint (`resolveConstraintRefs`, `compile.go`, run after `checkDuplicateIDCs`
 and before `checkKeyRefRefers`) makes the constraint reuse a referenced
 constraint's selector/fields — and a keyref's `refer` — and adopt its QName

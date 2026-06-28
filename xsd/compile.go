@@ -17,10 +17,13 @@ import (
 type compiler struct {
 	schema  *Schema
 	version Version // XSD specification version targeted by this compilation
-	// schemaXPathDefaultNS is the raw value of the root xs:schema
-	// @xpathDefaultNamespace (XSD 1.1), inherited by every identity-constraint
-	// selector/field that does not set its own. Empty means absent (XPath 1.0
-	// default: unprefixed element = no-namespace).
+	// schemaXPathDefaultNS is the root xs:schema @xpathDefaultNamespace (XSD 1.1)
+	// ALREADY RESOLVED to a default element-namespace URI against the schema
+	// root's context (so ##defaultNamespace uses the ROOT's default namespace,
+	// not a selector/field that may redeclare it). It is inherited verbatim by
+	// every identity-constraint selector/field that does not set its own. Empty
+	// means no default (unprefixed element = no-namespace). It is re-set per
+	// document for xs:include/xs:redefine/xs:import.
 	schemaXPathDefaultNS string
 	baseDir              string         // directory of the schema file, for resolving relative paths
 	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
@@ -508,9 +511,11 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 
-	// XSD 1.1 schema-level default element namespace for identity-constraint XPaths.
+	// XSD 1.1 schema-level default element namespace for identity-constraint
+	// XPaths, RESOLVED against the root's context now (so an inherited
+	// ##defaultNamespace uses the root's default namespace, not a selector/field's).
 	if c.version == Version11 {
-		c.schemaXPathDefaultNS = getAttr(root, attrXPathDefaultNS)
+		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(root, getAttr(root, attrXPathDefaultNS), c.schema.targetNamespace)
 	}
 
 	// Parse blockDefault attribute.

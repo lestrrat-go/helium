@@ -855,38 +855,47 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	return idc
 }
 
-// resolveXPathDefaultNS resolves the effective default element namespace for an
-// identity-constraint selector/field XPath (XSD 1.1). The value on the
-// selector/field element wins; the schema-level @xpathDefaultNamespace is
-// inherited ONLY when the attribute is ABSENT on the element — detected by
-// PRESENCE (hasAttr), since xs:anyURI admits the empty value and getAttr cannot
-// tell an explicit @xpathDefaultNamespace="" from an absent one. An explicit
-// empty value therefore means "no default element namespace" and does NOT inherit
-// the schema-level default. The special keywords resolve as: ##targetNamespace →
-// the schema's target namespace, ##defaultNamespace → the in-scope default
-// namespace at the element, ##local → no namespace; any other value is a literal
-// URI. An absent value (and 1.0 mode) yields no default. Returns "" for "no
-// default".
-func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) string {
-	if c.version != Version11 {
-		return ""
-	}
-	raw := getAttr(elem, attrXPathDefaultNS)
-	if !hasAttr(elem, attrXPathDefaultNS) {
-		raw = c.schemaXPathDefaultNS
-	}
+// resolveXPathDefaultNSToken resolves a raw @xpathDefaultNamespace value to a
+// default ELEMENT namespace URI against elem's namespace context: empty/##local →
+// no default (""), ##targetNamespace → targetNS, ##defaultNamespace → elem's
+// in-scope default namespace, any other value → the literal URI. ##defaultNamespace
+// is the namespace-context-SENSITIVE case: a schema-level value must be resolved
+// against the SCHEMA ROOT (where the attribute appears), NOT later against a
+// selector/field that may redeclare the default namespace — so schema-level values
+// are pre-resolved at root-read time (see compiler.schemaXPathDefaultNS) and
+// inherited as the already-resolved URI.
+func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) string {
 	switch raw {
-	case "":
-		return ""
-	case xpathDefaultNSLocal:
+	case "", xpathDefaultNSLocal:
 		return ""
 	case xpathDefaultNSTargetNamespace:
-		return c.schema.targetNamespace
+		return targetNS
 	case xpathDefaultNSDefaultNamespace:
 		return lookupNS(elem, "")
 	default:
 		return raw
 	}
+}
+
+// resolveXPathDefaultNS resolves the effective default element namespace for an
+// identity-constraint selector/field XPath (XSD 1.1). A LOCALLY-PRESENT value on
+// the selector/field element is resolved against THAT element's context. The
+// schema-level @xpathDefaultNamespace is inherited ONLY when the attribute is
+// ABSENT on the element — detected by PRESENCE (hasAttr), since xs:anyURI admits
+// the empty value and getAttr cannot tell an explicit @xpathDefaultNamespace=""
+// from an absent one, so an explicit empty value means "no default element
+// namespace" and does NOT inherit. The inherited value is the schema-level URI
+// ALREADY RESOLVED against the schema root when the root was read, so an inherited
+// ##defaultNamespace uses the root's default namespace, not this selector/field's.
+// An absent value (and 1.0 mode) yields no default. Returns "" for "no default".
+func (c *compiler) resolveXPathDefaultNS(elem *helium.Element) string {
+	if c.version != Version11 {
+		return ""
+	}
+	if !hasAttr(elem, attrXPathDefaultNS) {
+		return c.schemaXPathDefaultNS
+	}
+	return resolveXPathDefaultNSToken(elem, getAttr(elem, attrXPathDefaultNS), c.schema.targetNamespace)
 }
 
 // resolveIDCReferQName resolves an xs:keyref/@refer QName against the constraint

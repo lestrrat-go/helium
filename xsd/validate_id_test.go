@@ -315,6 +315,50 @@ func TestIDCXPathDefaultNamespaceEmptyOverride(t *testing.T) {
 	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc2))
 }
 
+// TestIDCXPathDefaultNamespaceInheritedDefaultNS covers PR860-REVIEW-NS-001: an
+// inherited schema-level xpathDefaultNamespace="##defaultNamespace" must resolve
+// against the SCHEMA ROOT's default namespace, NOT against a selector/field that
+// redeclares xmlns. Here the root default ns is urn:A but the selector/field
+// redeclare xmlns="urn:B"; the inherited default must still be urn:A so the
+// duplicate in the urn:A instance is caught.
+func TestIDCXPathDefaultNamespaceInheritedDefaultNS(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns="urn:A" targetNamespace="urn:A" elementFormDefault="qualified"
+    xpathDefaultNamespace="##defaultNamespace">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence><xs:element name="emp" type="empType" maxOccurs="unbounded"/></xs:sequence>
+    </xs:complexType>
+    <xs:unique name="u">
+      <xs:selector xmlns="urn:B" xpath="emp"/>
+      <xs:field xmlns="urn:B" xpath="nr"/>
+    </xs:unique>
+  </xs:element>
+  <xs:complexType name="empType">
+    <xs:sequence><xs:element name="nr" type="xs:int"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+	sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), sdoc)
+	require.NoError(t, err)
+
+	// emp/nr are {urn:A} (qualified). The inherited ##defaultNamespace must resolve
+	// to the ROOT default ns urn:A (not the selector's redeclared urn:B), so "emp"
+	// matches {urn:A}emp and the duplicate nr=1 is caught.
+	dup := `<doc xmlns="urn:A"><emp><nr>1</nr></emp><emp><nr>1</nr></emp></doc>`
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(dup))
+	require.NoError(t, err)
+	require.Error(t, xsd.NewValidator(schema).Validate(t.Context(), idoc),
+		"inherited ##defaultNamespace must resolve against the schema root, not the selector's redeclared xmlns")
+
+	ok := `<doc xmlns="urn:A"><emp><nr>1</nr></emp><emp><nr>2</nr></emp></doc>`
+	idoc2, err := helium.NewParser().Parse(t.Context(), []byte(ok))
+	require.NoError(t, err)
+	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc2))
+}
+
 // TestIDSkipWildcardNotAssessed verifies that elements/attributes admitted
 // through a processContents="skip" wildcard are NOT treated as xs:ID/xs:IDREF by
 // the document-wide ID pass: skip content is not schema-assessed, so duplicate
