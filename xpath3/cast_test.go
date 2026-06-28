@@ -372,6 +372,16 @@ func TestCastAtomicUserTypeNormalization(t *testing.T) {
 		require.Equal(t, int64(5), result.BigInt().Int64())
 	})
 
+	// PR859-CAST-EMPTY: an EMPTY TypeName is not a schema-derived USER type, so even a
+	// KNOWN XSD BaseType must NOT trigger normalization — the atom stays opaque and
+	// falls through to the normal XPTY0004 path on a non-string-like target.
+	t.Run("empty TypeName with known BaseType stays opaque", func(t *testing.T) {
+		v := xpath3.AtomicValue{BaseType: xpath3.TypeInteger, Value: big.NewInt(5)}
+		_, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
+		require.Error(t, err)
+		require.Equal(t, "XPTY0004", castErrorCode(t, err))
+	})
+
 	// PR859-CAST-NORM-002: a NON-XSD BaseType must NOT alter dispatch — it stays
 	// opaque. Casting to the (also non-XSD) BaseType name must NOT become an identity
 	// success via TypeName rewriting; it falls through to the normal XPTY0004 path.

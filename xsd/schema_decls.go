@@ -161,16 +161,24 @@ func (d schemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 	}
 	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
 		name := d.typeName(cur)
+		// When the ORIGINAL type is a (simpleContent) COMPLEX type, only COMPLEX base
+		// ancestors count for node/instance-of/subtype tests. Its {base type definition}
+		// may be a SIMPLE type (e.g. a simpleContent extension/restriction of xs:string),
+		// but the complex type is NOT a subtype of that simple base or its simple
+		// ancestors (xs:string, xs:anySimpleType, …) — its only universal simple-side
+		// ancestor is xs:anyType (handled by the early return). Skipping the simple
+		// ancestry here keeps `t:c instance of element(*, xs:string)` (or any user simple
+		// base) FALSE, while data() still atomizes through the narrowed content type
+		// (resolved separately via LookupSchemaType/effectiveContentSimpleType).
+		if td.IsComplex && !cur.IsComplex {
+			continue
+		}
 		if name == baseTypeName {
 			return true
 		}
 		// Only fall into the BUILTIN simple-type hierarchy when the ORIGINAL type is
-		// itself simple. A simpleContent COMPLEX type's {base type definition} can be a
-		// simple type (e.g. an extension of xs:string), but the complex type is NOT a
-		// subtype of that simple type's simple ancestors (xs:anySimpleType, …) for
-		// node/instance-of tests — it is a COMPLEX type whose universal ancestor is
-		// xs:anyType (handled by the early return). Without this guard a complex
-		// simpleContent type would be wrongly accepted as an xs:anySimpleType target.
+		// itself simple (a complex original never reaches here — its simple ancestors are
+		// skipped above).
 		if !td.IsComplex && xpath3.IsKnownXSDType(name) {
 			return xpath3.BuiltinIsSubtypeOf(name, baseTypeName)
 		}

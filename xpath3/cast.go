@@ -97,9 +97,11 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	// (preserving the Value) so it casts exactly like its base, keeping data() and
 	// $value consistent. The BaseType must itself be a KNOWN XSD builtin — an arbitrary
 	// non-XSD BaseType on a public/custom atom must NOT change dispatch (it stays opaque
-	// and falls through to the normal XPTY0004 path). Built-in atoms (empty/known-XSD
-	// TypeName) are unaffected.
-	if v.BaseType != "" && IsKnownXSDType(v.BaseType) && !IsKnownXSDType(v.TypeName) {
+	// and falls through to the normal XPTY0004 path). The source TypeName must be a
+	// NON-EMPTY non-XSD name (the "schema-derived USER type" case): an EMPTY TypeName is
+	// not a user type and is left untouched (it falls through to the normal cast path).
+	// Built-in atoms (empty/known-XSD TypeName) are unaffected.
+	if v.TypeName != "" && v.BaseType != "" && IsKnownXSDType(v.BaseType) && !IsKnownXSDType(v.TypeName) {
 		v = AtomicValue{TypeName: v.BaseType, Value: v.Value}
 		if v.TypeName == targetType {
 			// Re-run the xs:dateTimeStamp mandatory-timezone invariant: normalization

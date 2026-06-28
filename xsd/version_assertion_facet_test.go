@@ -2187,6 +2187,42 @@ func TestVersion11AssertSimpleContentComplexNotSimpleTarget(t *testing.T) {
 	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t"><c>hi</c></e>`))
 }
 
+// TestVersion11AssertSimpleContentComplexNotSimpleBaseSubtype verifies that a
+// simpleContent COMPLEX type is NOT a subtype of its direct SIMPLE base — neither a
+// builtin (xs:string) nor a user-defined simple type (t:strRestr) — for instance-of
+// (PR859-01): the base-chain walk must not match a non-complex base ancestor. data()
+// still atomizes through the narrowed content type.
+func TestVersion11AssertSimpleContentComplexNotSimpleBaseSubtype(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="strRestr">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="ccBuiltinType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="ccUserType">
+    <xs:simpleContent>
+      <xs:extension base="t:strRestr"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="cBuiltin" type="t:ccBuiltinType"/>
+        <xs:element name="cUser" type="t:ccUserType"/>
+      </xs:sequence>
+      <xs:assert test="not(t:cBuiltin instance of element(*, xs:string)) and not(t:cUser instance of element(*, t:strRestr)) and not(t:cUser instance of element(*, xs:string)) and (data(t:cBuiltin) = 'hi') and (data(t:cUser) = 'hi')"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t"><cBuiltin>hi</cBuiltin><cUser>hi</cUser></e>`))
+}
+
 // TestVersion11AssertionFacetValuePreservesUserType verifies that the $value binding
 // of an xs:assertion simple-type facet PRESERVES a named user-defined atomic type's
 // identity (PR859-REVIEW-01) instead of collapsing it to its builtin base: $value of
