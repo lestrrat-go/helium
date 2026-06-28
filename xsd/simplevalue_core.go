@@ -307,7 +307,7 @@ func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string
 		if i < len(td.Facets.EnumerationNS) {
 			enumNS = td.Facets.EnumerationNS[i]
 		}
-		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.version) {
+		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.schema, vc.version) {
 			return nil
 		}
 	}
@@ -479,7 +479,7 @@ func checkListEnumeration(ctx context.Context, value string, valueNS map[string]
 		if i < len(fs.EnumerationNS) {
 			enumNS = fs.EnumerationNS[i]
 		}
-		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.version) {
+		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.schema, vc.version) {
 			return nil
 		}
 	}

@@ -70,6 +70,7 @@ func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
 func (e Evaluator) PreservedIDAnnotations(annotations map[helium.Node]string) Evaluator
 func (e Evaluator) SchemaDeclarations(d SchemaDeclarations) Evaluator
 func (e Evaluator) StrictPrefixes() Evaluator
+func (e Evaluator) QNameValueNoDefaultNamespace() Evaluator // XSD: unprefixed QName/NOTATION node VALUE atomizes to no namespace (off by default)
 func (e Evaluator) AllowXML11Chars() Evaluator
 
 // Misc

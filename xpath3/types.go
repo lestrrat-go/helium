@@ -231,6 +231,13 @@ type NodeItem struct {
 	AtomizedType     string   // optional built-in base type used for typed atomization
 	ListItemType     string   // non-empty when the type is a list; the item type name
 	UnionMemberTypes []string // member type names for union types (for atomization)
+	// QNameNoDefaultNS, when true, atomizes an UNPREFIXED QName/NOTATION value to
+	// NO namespace instead of resolving the node's in-scope default namespace —
+	// XSD value-space semantics (a QName VALUE, unlike a name, does not pick up the
+	// default namespace). Set from the evaluator's QNameValueNoDefaultNamespace
+	// option (used by xsd assertions); off by default so general XPath/XQuery and
+	// XSLT atomization keep the default-namespace behavior.
+	QNameNoDefaultNS bool
 }
 
 func (NodeItem) itemTag() {}
@@ -1343,7 +1350,7 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 
 // resolveQNameFromNode resolves a QName string (e.g., "my:brown-bear") using
 // the in-scope namespaces of the given node.
-func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
+func resolveQNameFromNode(s string, node helium.Node, noDefaultNS bool) (QNameValue, error) {
 	// The split kernel trims and splits at the first colon; this site does not
 	// NCName-validate, so the validNC result is ignored.
 	prefix, local, _, _ := domutil.SplitLexicalQName(s)
@@ -1360,7 +1367,7 @@ func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
 		if !found {
 			return QNameValue{}, fmt.Errorf("undeclared namespace prefix: %s", prefix)
 		}
-	} else {
+	} else if !noDefaultNS {
 		// Default-namespace resolution keeps the skip-empty walk inline: an
 		// ancestor xmlns="" must not stop the search for an outer default.
 		for p := scope; p != nil; p = p.Parent() {
@@ -1448,7 +1455,7 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 			// QName-like types need namespace resolution from the node's scope.
 			if v.TypeAnnotation == TypeQName || v.TypeAnnotation == TypeNOTATION ||
 				v.AtomizedType == TypeQName || v.AtomizedType == TypeNOTATION {
-				if qv, err := resolveQNameFromNode(s, v.Node); err == nil {
+				if qv, err := resolveQNameFromNode(s, v.Node, v.QNameNoDefaultNS); err == nil {
 					typeName := v.TypeAnnotation
 					if typeName == "" {
 						typeName = v.AtomizedType

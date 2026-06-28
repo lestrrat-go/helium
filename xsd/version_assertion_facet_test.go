@@ -908,3 +908,95 @@ func TestVersion11AssertIsolationKeepsDefaultNamespace(t *testing.T) {
 	require.NoError(t, validateAssertion(t, schema,
 		`<t:outer xmlns:t="urn:elems" xmlns="urn:default"><t:inner/></t:outer>`))
 }
+
+// TestVersion11UnionFixedEnumSchemaAware verifies that union enumeration/fixed
+// comparison resolves active members SCHEMA-AWARELY: a member whose own assertion
+// needs `castable as t:T` must be selectable, so the enumeration comparison runs
+// in the integer value space (where "05" == "5") rather than falling back to a
+// string member.
+func TestVersion11UnionFixedEnumSchemaAware(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="foo">
+    <xs:restriction base="xs:integer"/>
+  </xs:simpleType>
+  <xs:simpleType name="memberA">
+    <xs:restriction base="xs:integer">
+      <xs:assertion test="$value castable as t:foo"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="t:memberA xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="t:u">
+        <xs:enumeration value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	// "05" is value-equal to the enumeration "5" in the integer value space; this
+	// only holds if both resolve to memberA (schema-aware), not the string member.
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">05</e>`))
+	// "7" is not equal to the enumeration "5".
+	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">7</e>`), xsd.ErrValidationFailed)
+}
+
+// TestVersion11AssertQNameUnprefixedNoNamespace verifies XSD QName value-space
+// semantics in an assertion: an UNPREFIXED xs:QName value has NO namespace (it
+// does not pick up the element's default namespace), while a prefixed value still
+// resolves.
+func TestVersion11AssertQNameUnprefixedNoNamespace(t *testing.T) {
+	t.Run("unprefixed value has no namespace", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:e" elementFormDefault="qualified">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName"/>
+      <xs:assert test="namespace-uri-from-QName(@a) = ''"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:e" a="x"/>`))
+	})
+
+	t.Run("prefixed value still resolves its namespace", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:e" elementFormDefault="qualified">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName"/>
+      <xs:assert test="namespace-uri-from-QName(@a) = 'urn:p'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:e" xmlns:p="urn:p" a="p:y"/>`))
+	})
+}
+
+// TestVersion11QNameDefaultAttrWhitespace verifies that a QName default value with
+// surrounding whitespace (" p:x ") is whitespace-collapsed before its prefix is
+// extracted for namespace materialization, so a later xs:assert resolves the
+// prefix.
+func TestVersion11QNameDefaultAttrWhitespace(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:schema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName" default=" p:x "/>
+      <xs:assert test="namespace-uri-from-QName(@a) = 'urn:schema'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e/>`))
+}

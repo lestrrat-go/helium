@@ -203,6 +203,7 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 	}
 	ni.TypeAnnotation = ec.typeAnnotations[n]
 	ni.AtomizedType = atomizedTypeForAnnotation(ni.TypeAnnotation, ec.schemaDeclarations)
+	ni.QNameNoDefaultNS = ec.qnameValueNoDefaultNS
 	if ec.schemaDeclarations != nil && ni.TypeAnnotation != "" {
 		if itemType, ok := ec.schemaDeclarations.ListItemType(ni.TypeAnnotation); ok {
 			ni.ListItemType = itemType

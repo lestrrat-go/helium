@@ -28,14 +28,19 @@ type Sequence []Item
 
 ```go
 type NodeItem struct {
-    Node           helium.Node
-    TypeAnnotation string
-    AtomizedType   string
+    Node             helium.Node
+    TypeAnnotation   string
+    AtomizedType     string
+    ListItemType     string
+    UnionMemberTypes []string
+    QNameNoDefaultNS bool
 }
 ```
 
 - `TypeAnnotation` → schema-aware node type annotation (`xs:*` or `Q{ns}local`)
 - `AtomizedType` → built-in base type used when atomizing schema-derived node types
+- `ListItemType` → item type name for a list-typed node; `UnionMemberTypes` → member type names for a union-typed node
+- `QNameNoDefaultNS` → set from `Evaluator.QNameValueNoDefaultNamespace()`; when true an UNPREFIXED QName/NOTATION value atomizes to no namespace (XSD value-space semantics) instead of the node's default namespace
 
 ## AtomicValue
 

@@ -46,7 +46,7 @@ const msgAbstractType = "The type definition is abstract."
 // value and the schema fixed value respectively; they are only consulted for
 // QName/NOTATION types. When td is nil the comparison falls back to raw string
 // equality.
-func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
+func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	if td == nil {
 		return instance == fixed
 	}
@@ -59,7 +59,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// each member normalize with its own facet. List and atomic types keep their
 	// type-level normalization.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, version)
+		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version)
 	}
 
 	ws := resolveWhiteSpace(td)
@@ -67,7 +67,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	nf := normalizeWhiteSpace(fixed, ws)
 
 	if resolveVariety(td) == TypeVarietyList {
-		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, version)
+		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, schema, version)
 	}
 	return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
 }
@@ -77,7 +77,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 // variety-aware comparator on the actual item type, so a list whose item type is
 // a union (or itself a list) is compared in the correct value space rather than
 // raw lexical text.
-func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
+func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	ii := value.XSDFields(instance)
 	fi := value.XSDFields(fixed)
 	if len(ii) != len(fi) {
@@ -85,7 +85,7 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 	}
 	itemType := resolveItemType(td)
 	for i := range ii {
-		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, version) {
+		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, schema, version) {
 			return false
 		}
 	}
@@ -127,14 +127,14 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 // same per-member validateValue path the normal (non-fixed) validation uses, so
 // the fixed-comparison and ordinary-validation notions of "active member" stay
 // consistent.
-func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
+func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	members := resolveUnionMembers(td)
 
-	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, nil, version)
+	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, schema, version)
 	if fixedMember == nil {
 		return false
 	}
-	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, nil, version)
+	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, schema, version)
 	if instanceMember == nil {
 		return false
 	}
@@ -143,7 +143,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 		// Same active member: compare in that member's value space. A union has no
 		// whiteSpace facet of its own, so the raw values are forwarded and the
 		// member normalizes both with its own facet inside fixedValueMatches.
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, version)
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
 	}
 
 	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
@@ -154,7 +154,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// atomic members reduce to their primitive value-space family. Cross-variety
 	// pairs (a list member vs an atomic member) have no shared value space and
 	// remain unequal.
-	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, version)
+	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, schema, version)
 }
 
 // crossMemberValueComparisonMaxDepth bounds the recursion of
@@ -192,11 +192,11 @@ const crossMemberValueComparisonMaxDepth = 64
 //     normalized-lexical for the string family).
 //   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
 //     no shared value space → unequal.
-func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
-	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, version)
+func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
+	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, schema, version)
 }
 
-func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, version Version) bool {
+func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, schema *Schema, version Version) bool {
 	if depth > crossMemberValueComparisonMaxDepth {
 		return false
 	}
@@ -212,18 +212,18 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// a union nested directly inside another union, and any deeper combination, so
 	// the recursion always descends to a non-union variety before comparing.
 	if instanceVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), nil, version)
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), schema, version)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, version)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, schema, version)
 	}
 	if fixedVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), nil, version)
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), schema, version)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, version)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, schema, version)
 	}
 
 	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
@@ -240,7 +240,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 			return false
 		}
 		for i := range ii {
-			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, version) {
+			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, schema, version) {
 				return false
 			}
 		}
@@ -256,7 +256,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
 	// no-shared-family rule.
 	if instanceMember == fixedMember {
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, version)
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
 	}
 
 	fixedLocal := builtinBaseLocal(fixedMember)
@@ -959,7 +959,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		if fixedType == nil {
 			fixedType = td
 		}
-		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.version) {
+		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
@@ -1214,7 +1214,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.version) {
+			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version) {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -1354,7 +1354,12 @@ func (vc *validationContext) materializeQNameAttrValue(elem *helium.Element, au 
 	default:
 		return value
 	}
-	prefix, local, found := strings.Cut(value, ":")
+	// QName/NOTATION whiteSpace is "collapse": the lexical prefix/local must be
+	// extracted from the COLLAPSED value, so a default authored as " p:x " still
+	// binds p. (Atomization later collapses too, so the non-rewrite case can keep
+	// the authored value; a rewrite emits the fresh prefix with the collapsed local.)
+	collapsed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
+	prefix, local, found := strings.Cut(collapsed, ":")
 	if !found || prefix == "" {
 		return value // no prefix → no-namespace QName; nothing to bind
 	}
@@ -1418,7 +1423,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
-	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.version) {
+	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.schema, vc.version) {
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
 		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)

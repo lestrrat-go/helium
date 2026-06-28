@@ -144,7 +144,8 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 			}
 			ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 				Namespaces(a.Namespaces).
-				Variables(map[string]xpath3.Sequence{"value": valueSeq})
+				Variables(map[string]xpath3.Sequence{"value": valueSeq}).
+				QNameValueNoDefaultNamespace()
 			if annotations != nil {
 				ev = ev.TypeAnnotations(annotations)
 			}

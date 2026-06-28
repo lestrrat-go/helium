@@ -120,7 +120,8 @@ func checkSimpleTypeAssertions(ctx context.Context, value string, valueNS map[st
 			}
 			ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 				Namespaces(a.Namespaces).
-				Variables(map[string]xpath3.Sequence{"value": valueSeq})
+				Variables(map[string]xpath3.Sequence{"value": valueSeq}).
+				QNameValueNoDefaultNamespace()
 			if decls != nil {
 				ev = ev.SchemaDeclarations(decls)
 			}

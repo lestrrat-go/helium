@@ -78,7 +78,7 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	derivedP := &Particle{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG}
 	baseP := &Particle{MinOccurs: baseMG.MinOccurs, MaxOccurs: baseMG.MaxOccurs, Term: baseMG}
 
-	if particleValidRestriction(ctx, derivedP, baseP, c.version) {
+	if particleValidRestriction(ctx, derivedP, baseP, c.schema, c.version) {
 		return
 	}
 
@@ -102,13 +102,13 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 // restriction of the base particle b. Returning true means "accepted" — and, per
 // the conservative contract above, it also returns true for any case the
 // recursion is not confident enough to reject.
-func particleValidRestriction(ctx context.Context, r, b *Particle, version Version) bool {
+func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schema, version Version) bool {
 	switch rt := r.Term.(type) {
 	case *ElementDecl:
 		switch bt := b.Term.(type) {
 		case *ElementDecl:
 			// NameAndTypeOK
-			return elementRestrictsElement(ctx, r, rt, b, bt, version)
+			return elementRestrictsElement(ctx, r, rt, b, bt, schema, version)
 		case *Wildcard:
 			// NSCompat: element restricts wildcard — the element's name must be
 			// allowed by the wildcard and occurrence must be a valid restriction.
@@ -120,7 +120,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 			// Recurse-As-If-Group (XSD §3.9.6): a derived element against a base
 			// model group. Treat the element as a singleton group and map it through
 			// the base group's compositor-specific children.
-			return elementRestrictsGroup(ctx, r, b, bt, version)
+			return elementRestrictsGroup(ctx, r, b, bt, schema, version)
 		}
 	case *Wildcard:
 		switch bt := b.Term.(type) {
@@ -147,7 +147,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
 		case *ModelGroup:
-			return groupRestrictsGroup(ctx, r, rt, b, bt, version)
+			return groupRestrictsGroup(ctx, r, rt, b, bt, schema, version)
 		case *Wildcard:
 			// NSRecurseCheckCardinality (XSD §3.9.6): the derived group's effective
 			// occurrence range must be within the base wildcard's range, and every
@@ -163,7 +163,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 			// element} so it stays valid against the base element. A group that can
 			// emit a different element, two-or-more elements, or zero elements where
 			// the base requires one admits content the base does not.
-			return groupRestrictsElement(ctx, r, rt, b, bt, version)
+			return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
 		}
 	}
 	return true
@@ -173,7 +173,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, version Versi
 // same expanded name, occurrence range subset, and the derived element's type is
 // derived from (or equal to) the base element's type. nillable/fixed tightening
 // is checked conservatively.
-func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, version Version) bool {
+func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, schema *Schema, version Version) bool {
 	if rt.Name.Local != bt.Name.Local || rt.Name.NS != bt.Name.NS {
 		return false
 	}
@@ -206,7 +206,7 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		// prefixes against their respective FixedNS bindings. The element
 		// declaration's simple type drives the comparison; when it is unresolved,
 		// fixedValueMatches falls back to lexical equality.
-		if !fixedValueMatches(ctx, *rt.Fixed, *bt.Fixed, rt.Type, rt.FixedNS, bt.FixedNS, version) {
+		if !fixedValueMatches(ctx, *rt.Fixed, *bt.Fixed, rt.Type, rt.FixedNS, bt.FixedNS, schema, version) {
 			return false
 		}
 	}
@@ -216,23 +216,23 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 // groupRestrictsGroup handles the model-group cases (recurse / map-and-sum). It
 // requires the derived group's occurrence range to be a valid restriction of the
 // base's, then dispatches on compositor.
-func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup, version Version) bool {
+func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
 	switch {
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorSequence:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 			return false
 		}
-		return recurseOrdered(ctx, rg.Particles, bg.Particles, version)
+		return recurseOrdered(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorAll && bg.Compositor == CompositorAll:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 			return false
 		}
-		return recurseAll(ctx, rg.Particles, bg.Particles, version)
+		return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorChoice && bg.Compositor == CompositorChoice:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 			return false
 		}
-		return recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, version)
+		return recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorChoice:
 		// MapAndSum (XSD §3.9.6): a derived SEQUENCE restricting a base CHOICE. Every
 		// member of the derived sequence must be a valid restriction of SOME branch
@@ -257,7 +257,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 				continue
 			}
 			if !slices.ContainsFunc(bg.Particles, func(bp *Particle) bool {
-				return particleValidRestriction(ctx, rp, bp, version)
+				return particleValidRestriction(ctx, rp, bp, schema, version)
 			}) {
 				return false
 			}
@@ -308,7 +308,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 				return false
 			}
-			return recurseAll(ctx, rg.Particles, bg.Particles, version)
+			return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 		}
 		// Remaining mixed pairs: choice:sequence, choice:all, all:sequence,
 		// all:choice — no §3.9.6 derivation rule. Before rejecting, fold away
@@ -320,7 +320,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		rr := reduceSingletonGroup(r)
 		bb := reduceSingletonGroup(b)
 		if rr != r || bb != b {
-			return particleValidRestriction(ctx, rr, bb, version)
+			return particleValidRestriction(ctx, rr, bb, schema, version)
 		}
 		return false
 	}
@@ -368,7 +368,7 @@ func reduceSingletonGroup(p *Particle) *Particle {
 // particle is consumed left-to-right: it either restricts the next derived
 // particle (advancing both) or is skipped only if it is emptiable. Every derived
 // particle must be consumed, and any trailing base particles must be emptiable.
-func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, version Version) bool {
+func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	// A derived particle that emits no elements (maxOccurs=0, a prohibited
 	// particle) matches nothing and demands nothing of the base: it neither needs
 	// a base counterpart nor blocks subsumption. Drop such particles before the
@@ -382,7 +382,7 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, ver
 		if particleEmitsNothing(bp) {
 			continue
 		}
-		if ri < len(rParticles) && particleValidRestriction(ctx, rParticles[ri], bp, version) {
+		if ri < len(rParticles) && particleValidRestriction(ctx, rParticles[ri], bp, schema, version) {
 			ri++
 			continue
 		}
@@ -425,7 +425,7 @@ func nonEmittingFiltered(particles []*Particle) []*Particle {
 // alternatives may be dropped freely (narrowing a choice to fewer branches is a
 // valid restriction). A derived alternative with no matching base alternative is
 // a clear violation (it admits content the base choice does not).
-func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Particle, version Version) bool {
+func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	for _, rp := range rParticles {
 		// A prohibited derived alternative emits nothing — it admits no content the
 		// base must accept, so it needs no matching base alternative.
@@ -434,7 +434,7 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 		}
 		matched := false
 		for _, bp := range bParticles {
-			if particleValidRestriction(ctx, rp, bp, version) {
+			if particleValidRestriction(ctx, rp, bp, schema, version) {
 				matched = true
 				break
 			}
@@ -449,7 +449,7 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 // recurseAll handles all→all: every derived particle must restrict a DISTINCT
 // base particle (order is irrelevant in an all group), and every base particle
 // not matched must be emptiable.
-func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version Version) bool {
+func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	used := make([]bool, len(bParticles))
 	for _, rp := range rParticles {
 		// A prohibited derived particle emits nothing — it needs no base counterpart.
@@ -461,7 +461,7 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version
 			if used[bi] {
 				continue
 			}
-			if particleValidRestriction(ctx, rp, bp, version) {
+			if particleValidRestriction(ctx, rp, bp, schema, version) {
 				used[bi] = true
 				matched = true
 				break
@@ -497,7 +497,7 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, version
 // the base group particle's range. When the recursion cannot decide a sub-case
 // with confidence it stays conservative (accepts) rather than risk a false
 // rejection.
-func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *ModelGroup, version Version) bool {
+func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 		return false
 	}
@@ -505,14 +505,14 @@ func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *Mo
 	case CompositorChoice:
 		// The element must restrict SOME alternative of the base choice.
 		return slices.ContainsFunc(bg.Particles, func(bp *Particle) bool {
-			return particleValidRestriction(ctx, r, bp, version)
+			return particleValidRestriction(ctx, r, bp, schema, version)
 		})
 	case CompositorSequence, CompositorAll:
 		// The element must restrict exactly one base child; every unmatched base
 		// child must be emptiable (or a prohibited base particle that emits nothing).
 		matched := false
 		for _, bp := range bg.Particles {
-			if !matched && particleValidRestriction(ctx, r, bp, version) {
+			if !matched && particleValidRestriction(ctx, r, bp, schema, version) {
 				matched = true
 				continue
 			}
@@ -543,7 +543,7 @@ func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *Mo
 //
 // A group that can emit a different element, two-or-more elements, or zero
 // elements where the base requires one is rejected.
-func groupRestrictsElement(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, be *ElementDecl, version Version) bool {
+func groupRestrictsElement(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, be *ElementDecl, schema *Schema, version Version) bool {
 	dMin, dMax := particleElementRange(r)
 	if !occurrenceValidRestriction(dMin, dMax, b.MinOccurs, b.MaxOccurs) {
 		return false
@@ -552,14 +552,14 @@ func groupRestrictsElement(ctx context.Context, r *Particle, rg *ModelGroup, b *
 	// restrict. Build a one-occurrence base particle so the leaf check compares
 	// element-to-element without re-folding the outer occurrence range.
 	beP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: be}
-	return groupLeavesRestrictElement(ctx, rg, beP, version)
+	return groupLeavesRestrictElement(ctx, rg, beP, schema, version)
 }
 
 // groupLeavesRestrictElement reports whether every element/wildcard leaf the
 // derived group rg can emit is a valid restriction of the base element particle
 // beP. A wildcard leaf can match elements other than the base element's name, so
 // it can never be a valid restriction of a single named element.
-func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Particle, version Version) bool {
+func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Particle, schema *Schema, version Version) bool {
 	for _, p := range rg.Particles {
 		// A prohibited leaf/group emits nothing — it neither contributes an emitted
 		// element nor blocks the wrapper from restricting the base element.
@@ -569,7 +569,7 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 		switch t := p.Term.(type) {
 		case *ElementDecl:
 			leafP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: t}
-			if !particleValidRestriction(ctx, leafP, beP, version) {
+			if !particleValidRestriction(ctx, leafP, beP, schema, version) {
 				return false
 			}
 		case *Wildcard:
@@ -577,7 +577,7 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 			// valid restriction of a single named element.
 			return false
 		case *ModelGroup:
-			if !groupLeavesRestrictElement(ctx, t, beP, version) {
+			if !groupLeavesRestrictElement(ctx, t, beP, schema, version) {
 				return false
 			}
 		}
