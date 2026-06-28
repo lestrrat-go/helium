@@ -54,10 +54,31 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 		Namespaces: collectNSContext(elem),
 		Line:       elem.Line(),
 		Source:     c.diagSource(),
-		BaseURI:    c.diagSource(),
+		// fn:static-base-uri() exposes the SCHEMA document URI, never the diagnostic
+		// label/source (which may be a caller-supplied error-message string).
+		BaseURI: c.schemaBaseURI,
 	}
 
+	// XSD 1.1 requires EXACTLY ONE governing-type source: either a @type attribute
+	// or a single inline <xs:complexType>/<xs:simpleType> child, never both and never
+	// two inline types.
 	typeRef := getAttr(elem, attrType)
+	inlineCount := countInlineAlternativeTypes(elem)
+	switch {
+	case typeRef != "" && inlineCount > 0:
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+				"An xs:alternative must not have both a 'type' attribute and an inline type definition."))
+		}
+		return nil
+	case inlineCount > 1:
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+				"An xs:alternative must not have more than one inline type definition."))
+		}
+		return nil
+	}
+
 	if typeRef != "" {
 		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
 		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
@@ -122,6 +143,26 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 	return alt
 }
 
+// countInlineAlternativeTypes returns the number of inline anonymous
+// <xs:complexType>/<xs:simpleType> children of an <xs:alternative>, so the caller
+// can enforce the exactly-one-governing-type-source rule.
+func countInlineAlternativeTypes(elem *helium.Element) int {
+	n := 0
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if isXSDElement(ce, elemComplexType) || isXSDElement(ce, elemSimpleType) {
+			n++
+		}
+	}
+	return n
+}
+
 // parseInlineAlternativeType compiles the inline anonymous <xs:complexType> or
 // <xs:simpleType> child of an <xs:alternative>. found reports whether such a child
 // was present; when found is false the caller reports the missing-type error. A
@@ -164,6 +205,9 @@ func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) 
 	default:
 		return "", false
 	}
+	// xpathDefaultNamespace is whitespace-collapse, so the ##keyword forms (and a
+	// literal URI) must be matched after collapsing surrounding/internal whitespace.
+	raw = normalizeWhiteSpace(raw, "collapse")
 	switch raw {
 	case xpathDefaultNSTargetNamespace:
 		return c.schema.targetNamespace, true
@@ -301,14 +345,15 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 // (Type Derivation OK), which — for a union declared type — includes alt being
 // derived from one of the union's member types.
 //
-// The check is deliberately under-strict for SIMPLE alternative types: the XSD
-// built-in simple-type hierarchy (e.g. xs:nonNegativeInteger ⊂ xs:integer) is not
-// linked via BaseType pointers, so isDerivedFrom cannot confirm those legitimate
-// derivations. Rather than risk false-rejecting a valid schema, a simple
-// alternative type whose derivation cannot be confirmed is accepted; only an
-// unrelated COMPLEX alternative type (whose derivation IS reliably linked) is
-// firmly rejected — which is exactly the case the constraint must catch (an inline
-// complexType not derived from the element's declared complex type).
+// The check is deliberately under-strict for SIMPLE alternative types against a
+// SIMPLE-or-union declared type: the XSD built-in simple-type hierarchy (e.g.
+// xs:nonNegativeInteger ⊂ xs:integer) is not linked via BaseType pointers, so
+// isDerivedFrom cannot confirm those legitimate derivations. Rather than risk
+// false-rejecting a valid schema, an unconfirmed simple-vs-simple derivation is
+// accepted. A simple alternative against a COMPLEX declared type (or an unrelated
+// complex alternative type) is firmly rejected — a simple type can never be derived
+// from a complex one, so that is always a real violation, not a hierarchy-linking
+// gap.
 func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	if alt == nil || decl == nil {
 		return true
@@ -326,5 +371,9 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 			}
 		}
 	}
-	return alt.ContentType == ContentTypeSimple
+	// Only fall back to the under-strict acceptance when BOTH types are simple
+	// (or the declared type is a union): a simple alternative against a complex
+	// declared type is a definite violation.
+	declSimple := decl.ContentType == ContentTypeSimple || decl.Variety == TypeVarietyUnion
+	return alt.ContentType == ContentTypeSimple && declSimple
 }

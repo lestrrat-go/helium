@@ -143,6 +143,11 @@ type compiler struct {
 	// "absent" from "present and empty".
 	xpathDefaultNS    string
 	xpathDefaultNSSet bool
+	// schemaBaseURI is the schema document's URI, exposed to xs:alternative /
+	// xs:assert XPath expressions as fn:static-base-uri(). It is sourced from the
+	// document URL (or the CompileFile path), NEVER from the diagnostic label, so a
+	// caller-supplied error-message label cannot leak into XPath static-base-uri().
+	schemaBaseURI string
 	// ctaElems collects every element declaration carrying a {type table}
 	// (xs:alternative children), so the alternative-type substitutability check
 	// (cta-cvc / Type Alternative valid) can run after all types resolve.
@@ -497,6 +502,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		}
 		if c.filename == "" {
 			c.filename = "(string)"
+		}
+		// XPath fn:static-base-uri() source: the document URL (set by the caller),
+		// else the CompileFile path. NEVER the diagnostic label.
+		c.schemaBaseURI = doc.URL()
+		if c.schemaBaseURI == "" {
+			c.schemaBaseURI = cfg.schemaURI
 		}
 		if cfg.errorHandler != nil {
 			c.errorHandler = cfg.errorHandler

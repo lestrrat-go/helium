@@ -1197,10 +1197,15 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		} else {
 			_, _ = elem.SetAttribute(au.Name.Local, defVal)
 		}
-		// Annotate the newly inserted attribute.
+		// Annotate the newly inserted attribute and, for XSD 1.1, record it as
+		// inheritable when its use is — a defaulted/fixed attribute is part of the
+		// inherited-attribute set just like an explicitly-present one.
 		for _, a := range elem.Attributes() {
 			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
 				vc.annotateAttrUse(ctx, a, au)
+				if vc.version == Version11 && au.Inheritable {
+					vc.attrInheritable[a] = struct{}{}
+				}
 				break
 			}
 		}
@@ -1261,6 +1266,14 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		}
 	}
 
+	// A wildcard-matched global attribute participates in type annotation and (XSD
+	// 1.1) inheritance exactly like an explicitly-declared attribute use, so a
+	// descendant's conditional type assignment can see an inheritable ancestor
+	// attribute admitted through xs:anyAttribute.
+	vc.annotateAttrUse(ctx, a, globalAttr)
+	if vc.version == Version11 && globalAttr.Inheritable {
+		vc.attrInheritable[a] = struct{}{}
+	}
 	return nil
 }
 
