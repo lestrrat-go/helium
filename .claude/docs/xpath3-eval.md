@@ -220,8 +220,9 @@ shared schema-aware cast helper. The helper resolves the target's builtin base:
 a QName/NOTATION-derived base validates via
 `SchemaDeclarations.ValidateCastWithNS` and, for `cast`, returns the
 namespace-resolved `QNameValue` carrying the user type annotation; other bases
-cast through the builtin, `ValidateCast` the facets, and return the user type
-annotation with `BaseType` set to that builtin base. Union targets from
+cast through the builtin for the returned atomic value, but validate facets with
+`ValidateCastWithNS` against the original source lexical string, then return the
+user type annotation with `BaseType` set to that builtin base. Union targets from
 `SchemaDeclarations.UnionMemberTypes` are tried recursively through that same
 schema-aware path for both `cast` and `castable`, so a union member that is
 itself a user-defined type still resolves its builtin base and facets. After a

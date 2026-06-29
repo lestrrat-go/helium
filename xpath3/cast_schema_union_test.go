@@ -15,6 +15,7 @@ const (
 	testMyTime       = "Q{}MyTime"
 	testRejectUnion  = "Q{}RejectUnion"
 	testSmallInt     = "Q{}SmallInt"
+	testTwoDigit     = "Q{}TwoDigit"
 	testUserUnion    = "Q{}UserUnion"
 )
 
@@ -35,6 +36,8 @@ func (unionCastDecls) LookupSchemaType(local, ns string) (string, bool) {
 		return testRejectUnion, true
 	case "SmallInt":
 		return xpath3.TypeInt, true
+	case "TwoDigit":
+		return xpath3.TypeInteger, true
 	case "UserUnion":
 		return testUserUnion, true
 	default:
@@ -47,6 +50,17 @@ func (unionCastDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 func (unionCastDecls) ValidateCast(_ context.Context, value, typeName string) error {
 	if typeName == testRejectUnion && value == "7" {
 		return errors.New("RejectUnion rejects 7")
+	}
+	if typeName == testTwoDigit {
+		if len(value) != 2 {
+			return errors.New("TwoDigit requires exactly two lexical digits")
+		}
+		for _, r := range value {
+			if r < '0' || r > '9' {
+				return errors.New("TwoDigit requires decimal digits")
+			}
+		}
+		return nil
 	}
 	if typeName != testSmallInt {
 		return nil
@@ -132,6 +146,28 @@ func TestSchemaAwareCastPreservesBuiltinBase(t *testing.T) {
 	res, err = eval.Evaluate(t.Context(), mustCompile(t, `('10:00:00' cast as MyTime) = xs:time('10:00:00')`), nil)
 	require.NoError(t, err)
 	require.Equal(t, "true", res.StringValue())
+}
+
+func TestSchemaAwareCastUserTypeValidatesSourceLexical(t *testing.T) {
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		SchemaDeclarations(unionCastDecls{})
+
+	res, err := eval.Evaluate(t.Context(), mustCompile(t, `'05' castable as TwoDigit`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "true", res.StringValue())
+
+	res, err = eval.Evaluate(t.Context(), mustCompile(t, `'5' castable as TwoDigit`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "false", res.StringValue())
+
+	res, err = eval.Evaluate(t.Context(), mustCompile(t, `'05' cast as TwoDigit`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "5", res.StringValue())
+
+	av, ok := res.Sequence().Get(0).(xpath3.AtomicValue)
+	require.True(t, ok)
+	require.Equal(t, testTwoDigit, av.TypeName)
+	require.Equal(t, xpath3.TypeInteger, av.BaseType)
 }
 
 func TestSchemaAwareGeneralComparisonCastsUntypedToUserType(t *testing.T) {

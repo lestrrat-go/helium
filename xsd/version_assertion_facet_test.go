@@ -565,6 +565,29 @@ func TestVersion11AssertionFacetSchemaAwareUnionCast(t *testing.T) {
 	require.ErrorIs(t, validateAssertion(t, schema, `<targetCast xmlns="urn:t">7</targetCast>`), xsd.ErrValidationFailed)
 }
 
+func TestVersion11AssertionFacetSchemaAwareCastUsesSourceLexical(t *testing.T) {
+	t.Parallel()
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:simpleType name="TwoDigit">
+    <xs:restriction base="xs:integer">
+      <xs:pattern value="[0-9]{2}"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:simpleType>
+      <xs:restriction base="xs:string">
+        <xs:assertion test="$value castable as t:TwoDigit"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e xmlns="urn:t">05</e>`))
+	require.ErrorIs(t, validateAssertion(t, schema, `<e xmlns="urn:t">5</e>`), xsd.ErrValidationFailed)
+}
+
 func TestVersion11AssertionFacetSchemaAwareUntypedComparison(t *testing.T) {
 	t.Parallel()
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -1208,6 +1231,48 @@ func TestVersion11UnionDefaultQNameAttrMaterialize(t *testing.T) {
 	// The default "p:x" is active in the xs:QName member; its prefix p (declared
 	// only in the schema) must be bound on the instance so the assert resolves it.
 	require.NoError(t, validateAssertion(t, schema, `<e/>`))
+}
+
+func TestVersion11UnionDefaultQNameListAttrMaterialize(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:schema">
+  <xs:simpleType name="qnames">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="qnamesOrString">
+    <xs:union memberTypes="qnames xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="qs" type="qnamesOrString" default="p:a p:b"/>
+      <xs:assert test="count(data(@qs)) = 2 and namespace-uri-from-QName(data(@qs)[2]) = 'urn:schema'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<e/>`))
+}
+
+func TestVersion11AssertDescendantQNameListDefaultMaterialize(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:schema">
+  <xs:simpleType name="myQName">
+    <xs:restriction base="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="qnames">
+    <xs:list itemType="myQName"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="qnames" default="p:a p:b"/>
+      </xs:sequence>
+      <xs:assert test="count(data(c)) = 2 and namespace-uri-from-QName(data(c)[1]) = 'urn:schema'"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schema, err := compileAssertion(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML)
+	require.NoError(t, err)
+	require.NoError(t, validateAssertion(t, schema, `<root><c/></root>`))
 }
 
 // TestVersion11XPathDefaultNSWhitespace verifies that xpathDefaultNamespace is

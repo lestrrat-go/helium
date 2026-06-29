@@ -3,7 +3,6 @@ package xsd
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -106,7 +105,7 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 	// stripped of comment/PI nodes. Build that isolated tree once (carrying the
 	// PSVI type annotations onto the copy) and evaluate every assertion against it
 	// so an expression cannot navigate to ancestors/siblings.
-	root, annotations := vc.isolatedAssertTree(elem)
+	root, annotations := vc.isolatedAssertTree(ctx, elem)
 	decls := vc.assertSchemaDecls()
 	var firstErr error
 	for cur := range baseChain(td) {
@@ -173,7 +172,7 @@ func typeHasAssertions(td *TypeDef) bool {
 // typed attribute in a value comparison) still works. If the copy fails for any
 // reason it falls back to the live element and annotations (the documented
 // non-isolated behavior) rather than skipping the assertion.
-func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.Node, map[helium.Node]string) {
+func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *helium.Element) (helium.Node, map[helium.Node]string) {
 	live := map[helium.Node]string(vc.assertAnnotations)
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	copied, err := helium.CopyNode(elem, doc)
@@ -214,7 +213,7 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 	var ann map[helium.Node]string
 	if vc.assertAnnotations != nil {
 		ann = make(map[helium.Node]string, len(vc.assertAnnotations))
-		vc.mapAssertAnnotations(elem, ce, vc.assertAnnotations, ann, true)
+		vc.mapAssertAnnotations(ctx, elem, ce, vc.assertAnnotations, ann, true)
 	}
 	stripCommentsAndPIs(ce)
 	return ce, ann
@@ -231,7 +230,7 @@ func (vc *validationContext) isolatedAssertTree(elem *helium.Element) (helium.No
 // yet assigned during evaluation — its typed value (data(.)) is untyped — while
 // its attributes and all descendant elements (validated earlier) keep their PSVI
 // types. This matches the XSD 1.1 conformance tests (and Saxon).
-func (vc *validationContext) mapAssertAnnotations(orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string, isRoot bool) {
+func (vc *validationContext) mapAssertAnnotations(ctx context.Context, orig, copied *helium.Element, src TypeAnnotations, dst map[helium.Node]string, isRoot bool) {
 	if name, ok := src[orig]; ok && !isRoot {
 		dst[copied] = name
 	}
@@ -239,7 +238,7 @@ func (vc *validationContext) mapAssertAnnotations(orig, copied *helium.Element, 
 	// onto the copy so data(c) atomizes the default, not "". The asserted ROOT's own
 	// value is handled by $value and its data(.) is intentionally untyped, so skip it.
 	if !isRoot {
-		vc.materializeAssertDefault(orig, copied)
+		vc.materializeAssertDefault(ctx, orig, copied)
 	}
 	// Match attributes by expanded QName rather than positional index: the copy
 	// may carry a different attribute ordering or extra namespace declarations.
@@ -265,7 +264,7 @@ func (vc *validationContext) mapAssertAnnotations(orig, copied *helium.Element, 
 		oe, ok1 := helium.AsNode[*helium.Element](oc[i])
 		ce, ok2 := helium.AsNode[*helium.Element](cc[i])
 		if ok1 && ok2 {
-			vc.mapAssertAnnotations(oe, ce, src, dst, false)
+			vc.mapAssertAnnotations(ctx, oe, ce, src, dst, false)
 		}
 	}
 }
@@ -276,7 +275,7 @@ func (vc *validationContext) mapAssertAnnotations(orig, copied *helium.Element, 
 // schema-normalized default instead of "". A QName/NOTATION value's prefix is
 // declared on the copy (from the DECLARATION's namespace context) so
 // resolveQNameFromNode resolves it. Only an empty copy is materialized.
-func (vc *validationContext) materializeAssertDefault(orig, copied *helium.Element) {
+func (vc *validationContext) materializeAssertDefault(ctx context.Context, orig, copied *helium.Element) {
 	if vc.assertEffectiveValues == nil {
 		return
 	}
@@ -287,45 +286,23 @@ func (vc *validationContext) materializeAssertDefault(orig, copied *helium.Eleme
 	if elemTextContent(copied) != "" {
 		return // copy already carries content; do not overwrite
 	}
-	_ = copied.AppendText([]byte(vc.materializeAssertText(copied, ev)))
+	_ = copied.AppendText([]byte(vc.materializeAssertText(ctx, copied, ev)))
 }
 
 // materializeAssertText returns the text to append for a defaulted descendant in the
-// isolated assert tree, handling a QName/NOTATION value's prefix exactly like
-// materializeQNameAttrValue: a prefix bound in the DECLARATION context is declared on
-// the copy so the value resolves to its intended URI; if that prefix already binds a
-// DIFFERENT URI in the copy's scope, a fresh prefix is minted, declared, and the text
-// is rewritten to it. A non-QName value (or a value with no prefix / an unbound
-// prefix) is returned verbatim. QName atomization later collapses, so the non-rewrite
-// cases keep the authored value and only the collision rewrite emits the collapsed local.
-func (vc *validationContext) materializeAssertText(copied *helium.Element, ev assertEffectiveValue) string {
+// isolated assert tree, handling QName/NOTATION values exactly like
+// materializeQNameAttrValue: prefixes bound in the DECLARATION context are declared
+// on the copy so atomic values and every list token resolve to their intended URI;
+// collisions mint a fresh prefix and rewrite only the affected token(s). A non-QName
+// value (or a value with no prefix / an unbound prefix) is returned verbatim.
+func (vc *validationContext) materializeAssertText(ctx context.Context, copied *helium.Element, ev assertEffectiveValue) string {
 	if !ev.qname || ev.ns == nil {
 		return ev.value
 	}
-	collapsed := normalizeWhiteSpace(ev.value, "collapse")
-	prefix, local, found := strings.Cut(collapsed, ":")
-	if !found || prefix == "" {
-		return ev.value // no-namespace QName; nothing to bind
+	if materialized, ok := vc.materializeQNameValue(ctx, copied, ev.td, ev.value, ev.ns); ok {
+		return materialized
 	}
-	uri, bound := ev.ns[prefix]
-	if !bound || uri == "" {
-		return ev.value // prefix not bound in the declaration; leave as authored
-	}
-	inScope := collectNSContext(copied)
-	cur, already := inScope[prefix]
-	switch {
-	case already && cur == uri:
-		return ev.value // already resolves to the intended URI
-	case !already:
-		copied.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
-		return ev.value
-	default:
-		// Prefix collides with a DIFFERENT binding in the copy: mint a fresh prefix,
-		// declare it to the declaration-ns URI, and rewrite the value to it.
-		np := freshNSPrefix(inScope, prefix)
-		copied.AddNamespaceDecl(helium.NewNamespace(np, uri))
-		return np + ":" + local
-	}
+	return ev.value
 }
 
 // stripCommentsAndPIs removes every comment and processing-instruction node from

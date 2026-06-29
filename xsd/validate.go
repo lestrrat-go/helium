@@ -542,9 +542,11 @@ type validationContext struct {
 type assertEffectiveValue struct {
 	value string
 	ns    map[string]string
-	// qname is true when the effective value's active type is xs:QName/xs:NOTATION,
-	// so isolatedAssertTree does prefix materialization (declare/rewrite) for it; a
-	// non-QName value (e.g. an xs:string that happens to contain a colon) is appended
+	td    *TypeDef
+	// qname is true when the effective value's active type carries xs:QName or
+	// xs:NOTATION values, including list item types and active union members. The
+	// isolated assert tree then materializes every QName/NOTATION token's prefix
+	// against ns; a non-QName value that happens to contain a colon is appended
 	// verbatim with no prefix rewrite.
 	qname bool
 }
@@ -1104,25 +1106,12 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// default's prefix resolves in the DECLARATION's namespace context (effectiveValueNS).
 	if isEmpty && effectiveValue != "" && vc.assertEffectiveValues != nil {
 		ns := effectiveValueNS(elem, edecl, true)
-		// Mark whether the value is a QName/NOTATION (resolving a union's active
-		// member), so materialization does prefix declare/collision-rewrite only then.
-		isQName := false
-		if contentTD := effectiveContentSimpleType(td); contentTD != nil {
-			activeTD := contentTD
-			if resolveVariety(contentTD) == TypeVarietyUnion {
-				activeTD = fixedUnionActiveMember(ctx, normalizeWhiteSpace(effectiveValue, "collapse"), ns, resolveUnionMembers(contentTD), vc.schema, vc.version)
-			}
-			if activeTD != nil {
-				switch builtinBaseLocal(activeTD) {
-				case lexicon.TypeQName, lexicon.TypeNotation:
-					isQName = true
-				}
-			}
-		}
+		contentTD := effectiveContentSimpleType(td)
 		vc.assertEffectiveValues[elem] = assertEffectiveValue{
 			value: effectiveValue,
 			ns:    ns,
-			qname: isQName,
+			td:    contentTD,
+			qname: vc.valueHasQNameNotationCarrier(ctx, contentTD, effectiveValue, ns),
 		}
 	}
 
@@ -1568,13 +1557,13 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 }
 
 // materializeQNameAttrValue prepares a default/fixed attribute value for insertion
-// so a QName/NOTATION lexical keeps its SCHEMA-intended namespace once on the
+// so QName/NOTATION lexical values keep their SCHEMA-intended namespace once on the
 // instance. The value is authored with the declaration's prefix bindings (declNS);
-// an instance consumer (xs:assert, IDC) resolves the prefix against the element's
-// in-scope namespaces instead, so this binds that prefix to the declaration's URI
-// on the element. If the instance already binds the prefix to a DIFFERENT URI, it
-// rewrites the value to use a fresh, non-colliding prefix bound to the right URI.
-// Non-QName values and unprefixed (no-namespace) QNames are returned unchanged.
+// an instance consumer (xs:assert, IDC) resolves prefixes against the element's
+// in-scope namespaces instead, so this binds each QName/NOTATION token's prefix to
+// the declaration URI on the element. If the instance already binds that prefix to
+// a DIFFERENT URI, the token is rewritten to a fresh, non-colliding prefix. The
+// type walk is value-dependent for unions and recursive through list item types.
 func (vc *validationContext) materializeQNameAttrValue(ctx context.Context, elem *helium.Element, au *AttrUse, value string, declNS map[string]string) string {
 	if declNS == nil {
 		return value
@@ -1583,47 +1572,149 @@ func (vc *validationContext) materializeQNameAttrValue(ctx context.Context, elem
 	if !ok {
 		return value
 	}
-	// QName/NOTATION whiteSpace is "collapse": the lexical prefix/local must be
-	// extracted from the COLLAPSED value, so a default authored as " p:x " still
-	// binds p. (Atomization later collapses too, so the non-rewrite case can keep
-	// the authored value; a rewrite emits the fresh prefix with the collapsed local.)
-	collapsed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
-	// Resolve the ACTIVE type: for a union, the value's active member decides
-	// whether it is a QName/NOTATION (e.g. memberTypes="xs:QName xs:string" with a
-	// QName default). Only then does it need prefix materialization.
-	activeTD := td
-	if resolveVariety(td) == TypeVarietyUnion {
-		activeTD = fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+	materialized, _ := vc.materializeQNameValue(ctx, elem, td, value, declNS)
+	return materialized
+}
+
+func (vc *validationContext) materializeQNameValue(ctx context.Context, elem *helium.Element, td *TypeDef, value string, declNS map[string]string) (string, bool) {
+	if td == nil || declNS == nil {
+		return value, false
 	}
-	if activeTD == nil {
-		return value
+	return vc.materializeQNameValueVisit(ctx, elem, td, value, declNS, map[*TypeDef]struct{}{}, make(map[string]string))
+}
+
+func (vc *validationContext) materializeQNameValueVisit(ctx context.Context, elem *helium.Element, td *TypeDef, raw string, declNS map[string]string, seen map[*TypeDef]struct{}, rewrites map[string]string) (string, bool) {
+	if td == nil {
+		return raw, false
 	}
-	switch builtinBaseLocal(activeTD) {
-	case lexicon.TypeQName, lexicon.TypeNotation:
+	if _, ok := seen[td]; ok {
+		return raw, false
+	}
+	seen[td] = struct{}{}
+	defer delete(seen, td)
+
+	switch resolveVariety(td) {
+	case TypeVarietyUnion:
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		if activeTD == nil {
+			return raw, false
+		}
+		return vc.materializeQNameValueVisit(ctx, elem, activeTD, raw, declNS, seen, rewrites)
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return raw, false
+		}
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		tokens := value.XSDFields(collapsed)
+		if len(tokens) == 0 {
+			return raw, false
+		}
+		out := make([]string, len(tokens))
+		hasCarrier := false
+		rewrote := false
+		for i, token := range tokens {
+			next, carrier := vc.materializeQNameValueVisit(ctx, elem, itemType, token, declNS, seen, rewrites)
+			out[i] = next
+			if carrier {
+				hasCarrier = true
+			}
+			if next != token {
+				rewrote = true
+			}
+		}
+		if !hasCarrier {
+			return raw, false
+		}
+		if rewrote {
+			return strings.Join(out, " "), true
+		}
+		return raw, true
 	default:
-		return value
+		switch builtinBaseLocal(td) {
+		case lexicon.TypeQName, lexicon.TypeNotation:
+			collapsed := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
+			if rewritten, ok := materializeQNameToken(elem, collapsed, declNS, rewrites); ok {
+				return rewritten, true
+			}
+			return raw, true
+		default:
+			return raw, false
+		}
 	}
-	prefix, local, found := strings.Cut(collapsed, ":")
+}
+
+func (vc *validationContext) valueHasQNameNotationCarrier(ctx context.Context, td *TypeDef, value string, declNS map[string]string) bool {
+	return vc.valueHasQNameNotationCarrierVisit(ctx, td, value, declNS, map[*TypeDef]struct{}{})
+}
+
+func (vc *validationContext) valueHasQNameNotationCarrierVisit(ctx context.Context, td *TypeDef, raw string, declNS map[string]string, seen map[*TypeDef]struct{}) bool {
+	if td == nil {
+		return false
+	}
+	if _, ok := seen[td]; ok {
+		return false
+	}
+	seen[td] = struct{}{}
+	defer delete(seen, td)
+
+	switch resolveVariety(td) {
+	case TypeVarietyUnion:
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		return vc.valueHasQNameNotationCarrierVisit(ctx, activeTD, collapsed, declNS, seen)
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return false
+		}
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		for _, token := range value.XSDFields(collapsed) {
+			if vc.valueHasQNameNotationCarrierVisit(ctx, itemType, token, declNS, seen) {
+				return true
+			}
+		}
+		return false
+	default:
+		switch builtinBaseLocal(td) {
+		case lexicon.TypeQName, lexicon.TypeNotation:
+			return true
+		default:
+			return false
+		}
+	}
+}
+
+func materializeQNameToken(elem *helium.Element, token string, declNS map[string]string, rewrites map[string]string) (string, bool) {
+	prefix, local, found := strings.Cut(token, ":")
 	if !found || prefix == "" {
-		return value // no prefix → no-namespace QName; nothing to bind
+		return token, false // no prefix → no-namespace QName; nothing to bind
 	}
 	uri, ok := declNS[prefix]
 	if !ok || uri == "" {
-		return value // prefix not bound in the declaration; leave as authored
+		return token, false // prefix not bound in the declaration; leave as authored
+	}
+	if elem == nil {
+		return token, false
 	}
 	inScope := collectNSContext(elem)
 	cur, bound := inScope[prefix]
 	if bound && cur == uri {
-		return value // already resolves to the intended URI
+		return token, false // already resolves to the intended URI
 	}
 	if !bound {
 		elem.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
-		return value
+		return token, false
 	}
-	// Prefix collides with a different instance binding: mint a fresh prefix.
+	key := prefix + "\x00" + uri
+	if np, ok := rewrites[key]; ok {
+		return np + ":" + local, true
+	}
 	np := freshNSPrefix(inScope, prefix)
+	rewrites[key] = np
 	elem.AddNamespaceDecl(helium.NewNamespace(np, uri))
-	return np + ":" + local
+	return np + ":" + local, true
 }
 
 // freshNSPrefix returns a prefix not present in inScope, derived from base.

@@ -497,6 +497,22 @@ nodes in an ancestor IDC (see `TestIDCFieldSkipWildcardSelectedSelf`), so the
 saxon `Wild.testSet` `wild101–104` "IDC-with-skip" cases (which require the
 opposite) remain a separate, unresolved pass-2 design question.
 
+### Current XSD 1.1 Assertion Details
+
+`materializeQNameAttrValue` handles default/fixed QName and NOTATION carriers
+value-dependently: it selects active union members with `fixedUnionActiveMember`,
+walks XSD-list item tokens recursively, and rewrites only tokens whose schema
+prefix collides with the instance's in-scope binding. `assertEffectiveValues`
+records the effective content type for empty descendant defaults so
+`isolatedAssertTree` applies the same union/list materialization before ancestor
+assertions atomize `data(c)`.
+
+Schema-aware XPath casts to user-defined types still return the built-in cast
+atomic value stamped with the user type, but facet validation uses the original
+source lexical string via `ValidateCastWithNS`. This preserves lexical facets
+such as a pattern on an integer restriction where `"05"` and canonical `"5"`
+must not be treated as the same lexical input.
+
 ### Key Data Model
 
 ```

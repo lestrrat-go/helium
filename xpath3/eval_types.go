@@ -138,8 +138,8 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 	if castErr != nil {
 		return AtomicValue{}, castErr
 	}
-	s, _ := AtomicToString(result)
-	if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
+	s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
+	if facetErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); facetErr != nil {
 		return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 	}
 	result.BaseType = builtinBase
