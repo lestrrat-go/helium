@@ -63,6 +63,16 @@ Test data: `testdata/libxml2-compat/` (golden files generated from libxml2's xml
 | unsupported spec: XSLT10 | 1 |
 | xsd compiler rejects schema-for-xslt20.xsd attribute-wildcard derivation-by-restriction | 1 |
 
+### W3C XSD 1.1 tests
+
+The heavyweight XSD 1.1 conformance harness lives in the sibling module
+`../helium-w3c-tests` on branch `migrate-xsd11`; run it against this module with
+a local `go.work` pointing at the Helium worktree. Current `TestXSD11W3C` leaf
+count: 967 generated test groups, 504 pass, 463 skipped. The Go JSON stream also
+counts the top-level `TestXSD11W3C`, so the harness summary appears as 968 run /
+505 pass / 463 skip. Persistent skips are tracked in
+`helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance gaps.
+
 ## Parser Limitations
 
 Cross-element redundant namespace redeclarations and entity references in

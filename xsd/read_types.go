@@ -903,6 +903,17 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 // parseFacets extracts facet constraints from an xs:restriction element.
 func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element) *FacetSet {
 	var fs *FacetSet
+	seenSingletonFacets := make(map[string]struct{})
+	duplicateSingletonFacet := func(elem *helium.Element, name string) bool {
+		if _, ok := seenSingletonFacets[name]; !ok {
+			seenSingletonFacets[name] = struct{}{}
+			return false
+		}
+		c.schemaError(ctx, schemaParserError(c.filename, elem.Line(),
+			elem.LocalName(), elem.LocalName(),
+			fmt.Sprintf("It is an error for the facet '%s' to be specified more than once on the same type definition.", name)))
+		return true
+	}
 
 	for child := range helium.Children(restriction) {
 		if child.Type() != helium.ElementNode {
@@ -928,6 +939,9 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			maps.Copy(nsCopy, nsCtx)
 			fs.EnumerationNS = append(fs.EnumerationNS, nsCopy)
 		case facetMinInclusive:
+			if duplicateSingletonFacet(ce, facetMinInclusive) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
@@ -935,6 +949,9 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			fs.MinInclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MinInclusiveNS = captureFacetNS(ce)
 		case facetMaxInclusive:
+			if duplicateSingletonFacet(ce, facetMaxInclusive) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
@@ -942,6 +959,9 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			fs.MaxInclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MaxInclusiveNS = captureFacetNS(ce)
 		case facetMinExclusive:
+			if duplicateSingletonFacet(ce, facetMinExclusive) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
@@ -949,6 +969,9 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			fs.MinExclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MinExclusiveNS = captureFacetNS(ce)
 		case facetMaxExclusive:
+			if duplicateSingletonFacet(ce, facetMaxExclusive) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
@@ -956,42 +979,63 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			fs.MaxExclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MaxExclusiveNS = captureFacetNS(ce)
 		case "totalDigits":
+			if duplicateSingletonFacet(ce, "totalDigits") {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			n := parseOccurs(val, 0)
 			fs.TotalDigits = &n
 		case "length":
+			if duplicateSingletonFacet(ce, "length") {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			n := parseOccurs(val, 0)
 			fs.Length = &n
 		case "minLength":
+			if duplicateSingletonFacet(ce, "minLength") {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			n := parseOccurs(val, 0)
 			fs.MinLength = &n
 		case "maxLength":
+			if duplicateSingletonFacet(ce, "maxLength") {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			n := parseOccurs(val, 0)
 			fs.MaxLength = &n
 		case "fractionDigits":
+			if duplicateSingletonFacet(ce, "fractionDigits") {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			n := parseOccurs(val, 0)
 			fs.FractionDigits = &n
 		case "whiteSpace":
+			if duplicateSingletonFacet(ce, "whiteSpace") {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.WhiteSpace = &val
 		case elemExplicitTimezone:
 			if c.version != Version11 {
+				continue
+			}
+			if duplicateSingletonFacet(ce, elemExplicitTimezone) {
 				continue
 			}
 			if fs == nil {
