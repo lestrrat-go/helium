@@ -1149,16 +1149,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// gating and instance-context resolution, byte-identical.
 	if vc.version == Version11 {
 		valueNS := effectiveValueNS(elem, edecl, isEmpty)
-		effTD := effectiveContentSimpleType(td)
-		if simpleContentNeedsValidation(effTD) {
-			if err := validateValue(ctx, effectiveValue, valueNS, effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
-				return err
-			}
-		}
-		if err := vc.validateNestedSimpleContentBases(ctx, elem, effectiveValue, valueNS, td, effTD); err != nil {
-			return err
-		}
-		return nil
+		return vc.validateSimpleContentValue(ctx, effectiveValue, valueNS, td, elemDisplayName(elem), elem.Line())
 	}
 
 	// XSD 1.0: validate the text value against the type with the historical gating.
@@ -1169,7 +1160,27 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	return nil
 }
 
-func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Context, elem *helium.Element, value string, ns map[string]string, td, effTD *TypeDef) error {
+// validateSimpleContentValue validates a value against a simpleContent (or plain
+// simple) type's FULL effective constraint set: the composed effective content
+// simple type (effectiveContentSimpleType) PLUS every inherited base content type
+// reached through a nested <xs:simpleType> restriction (validateNestedSimpleContentBases).
+// It is the single source of truth shared by the runtime simpleContent check
+// (validateSimpleContent) and the compile-time element default/fixed check
+// (checkElementDeclConstraints), so a default validated at compile time enforces
+// exactly the same constraints the instance value does. displayName/line are used
+// only for diagnostics (the schema error is emitted by the caller, so a suppressed
+// validationContext drops the inner reports).
+func (vc *validationContext) validateSimpleContentValue(ctx context.Context, value string, ns map[string]string, td *TypeDef, displayName string, line int) error {
+	effTD := effectiveContentSimpleType(td)
+	if simpleContentNeedsValidation(effTD) {
+		if err := validateValue(ctx, value, ns, effTD, displayName, vc.filename, line, vc); err != nil {
+			return err
+		}
+	}
+	return vc.validateNestedSimpleContentBases(ctx, value, ns, td, effTD, displayName, line)
+}
+
+func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Context, value string, ns map[string]string, td, effTD *TypeDef, displayName string, line int) error {
 	visited := make(map[*TypeDef]struct{})
 	for cur := td; cur != nil && cur.IsSimpleContent; cur = cur.BaseType {
 		if _, seen := visited[cur]; seen {
@@ -1192,7 +1203,7 @@ func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Contex
 		if baseContent == effTD || !simpleContentNeedsValidation(baseContent) {
 			continue
 		}
-		if err := validateValue(ctx, value, ns, baseContent, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+		if err := validateValue(ctx, value, ns, baseContent, displayName, vc.filename, line, vc); err != nil {
 			return err
 		}
 	}

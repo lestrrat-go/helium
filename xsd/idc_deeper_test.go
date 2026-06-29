@@ -200,4 +200,69 @@ func TestElementDefaultValidity(t *testing.T) {
 		// reject an invalid element default at compile time).
 		require.NoError(t, compile10(t, strings.ReplaceAll(intSchema, "DEFVAL", "notint")))
 	})
+
+	// PR885-EDV-SG-INHERIT: a no-type global substitution-group member inherits its
+	// head's type, so its default/fixed must be validated against the INHERITED
+	// (effective) type, not the member's own nil Type.
+	const sgSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="member" substitutionGroup="head" default="DEFVAL"/>
+</xs:schema>`
+
+	t.Run("invalid default on no-type substitution-group member is a schema error", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compile(t, strings.ReplaceAll(sgSchema, "DEFVAL", "notint")), xsd.ErrCompilationFailed)
+	})
+
+	t.Run("valid default on no-type substitution-group member compiles", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compile(t, strings.ReplaceAll(sgSchema, "DEFVAL", "42")))
+	})
+
+	t.Run("invalid fixed on no-type substitution-group member is a schema error", func(t *testing.T) {
+		t.Parallel()
+		s := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="member" substitutionGroup="head" fixed="notint"/>
+</xs:schema>`
+		require.ErrorIs(t, compile(t, s), xsd.ErrCompilationFailed)
+	})
+
+	// PR885-EDV-SC-BASE: a simpleContent element default must satisfy the INHERITED
+	// base content facets, not only the nested <xs:simpleType>'s own facets. Base
+	// content is xs:string maxLength=2; the derived nested type only adds minLength=1,
+	// so a default that the nested type accepts but the base maxLength rejects must
+	// still be a schema error. (Same schema shape as the runtime
+	// TestVersion11SimpleContentNestedTypeKeepsBaseFacets.)
+	const scBaseSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:restriction base="xs:anySimpleType">
+        <xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="2"/></xs:restriction></xs:simpleType>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="mid">
+    <xs:simpleContent>
+      <xs:restriction base="base">
+        <xs:simpleType><xs:restriction base="xs:string"><xs:minLength value="1"/></xs:restriction></xs:simpleType>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="e" default="DEFVAL">
+    <xs:complexType><xs:simpleContent><xs:extension base="mid"/></xs:simpleContent></xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("simpleContent default violating inherited base facet is a schema error", func(t *testing.T) {
+		t.Parallel()
+		// "abc" satisfies the nested minLength=1 but violates the inherited maxLength=2.
+		require.ErrorIs(t, compile(t, strings.ReplaceAll(scBaseSchema, "DEFVAL", "abc")), xsd.ErrCompilationFailed)
+	})
+
+	t.Run("simpleContent default satisfying all chain facets compiles", func(t *testing.T) {
+		t.Parallel()
+		// "ab" satisfies both the nested minLength=1 and the inherited maxLength=2.
+		require.NoError(t, compile(t, strings.ReplaceAll(scBaseSchema, "DEFVAL", "ab")))
+	})
 }

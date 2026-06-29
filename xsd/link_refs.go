@@ -1312,9 +1312,14 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 // silently injected into the instance. Sources are recorded only in Version11, so
 // 1.0 never reaches this check.
 //
-// Only an element whose type is a simple type, or a complex type with simple
+// The type checked is the element's EFFECTIVE declared type (effectiveDeclType),
+// so a no-type substitution-group member is validated against its inherited head
+// type. Only an element whose type is a simple type, or a complex type with simple
 // content, has a type-validated default; an element-only/mixed complex content
 // default is character data not validated against a simple type, so it is skipped.
+// A simpleContent default is validated against its FULL content chain (effective
+// content type plus inherited base-content facets) via the shared
+// validateSimpleContentValue, identical to the instance-value path.
 func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
 	if c.filename == "" {
 		return
@@ -1342,40 +1347,30 @@ func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
 		if val == nil {
 			continue
 		}
-		std := elementDefaultSimpleType(it.decl.Type)
+		// Resolve the EFFECTIVE declared type: a no-type substitution-group member
+		// inherits its head's type, so validating it.decl.Type directly would skip the
+		// member (nil type) and miss an invalid inherited-type default/fixed.
+		std := effectiveDeclType(it.decl, c.schema)
 		if std == nil {
 			continue
 		}
-		// Validate through the version-aware, schema-aware path so a 1.1 lexical form
-		// or a schema-aware assertion facet is handled the same way as for an
-		// attribute default/fixed.
+		// An element-only/mixed complex content default is character data, not validated
+		// against a simple type — skip it. A plain simpleType and a simpleContent complex
+		// type are both type-validated (the latter through its content chain).
+		if std.IsComplex && !std.IsSimpleContent {
+			continue
+		}
+		// Validate through the SAME shared simpleContent path the instance value uses
+		// (validateSimpleContentValue: effective content type PLUS inherited base
+		// content facets), version-/schema-aware so a 1.1 lexical form or an assertion
+		// facet is handled exactly as for an attribute default/fixed. A plain simpleType
+		// passes through that path unchanged (the nested-base walk is a no-op).
 		vc := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, version: c.version}
-		if err := validateValue(ctx, *val, it.src.nsMap, std, "", "", 0, vc); err != nil {
-			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(std))
+		if err := vc.validateSimpleContentValue(ctx, *val, it.src.nsMap, std, it.src.local, it.src.line); err != nil {
+			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(effectiveContentSimpleType(std)))
 			c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
 		}
 	}
-}
-
-// elementDefaultSimpleType returns the simple type an element declaration's
-// default/fixed value must validate against, or nil when the value is not
-// type-validated (a complex element-only/mixed content type). A plain simple type
-// is returned as-is; a complex type with simple content is resolved to its
-// effective content simple type.
-func elementDefaultSimpleType(td *TypeDef) *TypeDef {
-	if td == nil {
-		return nil
-	}
-	if !td.IsComplex {
-		if td.ContentType == ContentTypeSimple {
-			return td
-		}
-		return nil
-	}
-	if td.IsSimpleContent {
-		return effectiveContentSimpleType(td)
-	}
-	return nil
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
