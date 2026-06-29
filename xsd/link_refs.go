@@ -1715,13 +1715,14 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 
 // rejectDeprecatedDatatypeNamespace reports the XSD 1.1 rule that schema QName
 // references must not use the old XML Schema datatypes namespace.
-func (c *compiler) rejectDeprecatedDatatypeNamespace(ctx context.Context, elem *helium.Element, ref, ns string) {
+func (c *compiler) rejectDeprecatedDatatypeNamespace(ctx context.Context, elem *helium.Element, ref, ns string) bool {
 	if c.version != Version11 || ns != lexicon.NamespaceXSDDatatypes {
-		return
+		return false
 	}
 	msg := fmt.Sprintf("The namespace '%s' used by QName value '%s' has been deprecated; use '%s' for XML Schema built-in datatypes.", ns, ref, lexicon.NamespaceXSD)
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
+	return true
 }
 
 // reportUnboundQNamePrefix emits a fatal schema-compilation error for a prefixed

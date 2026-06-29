@@ -1117,12 +1117,18 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 			}
 			return QName{}, true
 		}
+		if c.rejectDeprecatedDatatypeNamespace(ctx, elem, refer, ns) {
+			return QName{}, true
+		}
 		return QName{Local: local, NS: ns}, false
 	}
 	// Unprefixed: use the in-scope default namespace, else the target namespace.
 	ns := c.schema.targetNamespace
 	if defNS := lookupNS(elem, ""); defNS != "" {
 		ns = defNS
+	}
+	if c.rejectDeprecatedDatatypeNamespace(ctx, elem, refer, ns) {
+		return QName{}, true
 	}
 	return QName{Local: refer, NS: ns}, false
 }
@@ -1150,11 +1156,17 @@ func (c *compiler) resolveIDCNameQName(ctx context.Context, elem *helium.Element
 			c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
 			return QName{}, true
 		}
+		if c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns) {
+			return QName{}, true
+		}
 		return QName{Local: local, NS: ns}, false
 	}
 	ns := c.schema.targetNamespace
 	if defNS := lookupNS(elem, ""); defNS != "" {
 		ns = defNS
+	}
+	if c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns) {
+		return QName{}, true
 	}
 	return QName{Local: ref, NS: ns}, false
 }
