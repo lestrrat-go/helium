@@ -169,12 +169,12 @@ func (c Compiler) FS(fsys fs.FS) Compiler {
 
 // Parser sets the [helium.Parser] used to parse XSD schema documents — the
 // top-level schema in [Compiler.CompileFile] as well as every schema pulled in
-// via xs:include, xs:import, and xs:redefine. When unset, a default
-// [helium.NewParser] is used. The injected parser supplies parse policy —
-// resource limits and XXE/network controls — so a caller can apply one uniform
-// policy across every helium component. Schema documents are parsed plain: the
-// compiler's [Compiler.FS] still fetches the bytes, and no functional options
-// or base URI are forced onto the injected parser.
+// via xs:include, xs:import, and xs:redefine. When unset, the compiler uses a
+// default schema parser that expands entity references in schema attribute
+// values. The injected parser supplies parse policy — resource limits and
+// XXE/network controls — so a caller can apply one uniform policy across every
+// helium component. The compiler's [Compiler.FS] still fetches the bytes, and no
+// functional options or base URI are forced onto the injected parser.
 func (c Compiler) Parser(p helium.Parser) Compiler {
 	c = c.clone()
 	c.cfg.parser = &p
@@ -251,7 +251,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	if cfg == nil {
 		cfg = &compileConfig{}
 	}
-	p := helium.NewParser()
+	p := defaultSchemaParser()
 	if cfg.parser != nil {
 		p = *cfg.parser
 	}
