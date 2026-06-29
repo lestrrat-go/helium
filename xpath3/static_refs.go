@@ -70,17 +70,6 @@ func (c *staticRefCollector) addAtomicType(prefix, name string) {
 	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: name})
 }
 
-// withBound runs fn with key temporarily added to the bound-variable set,
-// restoring the prior state afterward (so a binding does not leak to siblings).
-func (c *staticRefCollector) withBound(key string, fn func()) {
-	_, had := c.bound[key]
-	c.bound[key] = struct{}{}
-	fn()
-	if !had {
-		delete(c.bound, key)
-	}
-}
-
 func (c *staticRefCollector) walkSequenceType(st SequenceType) {
 	if aut, ok := st.ItemTest.(AtomicOrUnionType); ok {
 		c.addAtomicType(aut.Prefix, aut.Name)
@@ -206,17 +195,17 @@ func (c *staticRefCollector) walkFLWOR(n FLWORExpr) {
 		switch cl := clause.(type) {
 		case ForClause:
 			c.walk(cl.Expr)
-			key := normalizeVarKey(cl.Var)
+			key := cl.Var
 			c.bound[key] = struct{}{}
 			added = append(added, key)
 			if cl.PosVar != "" {
-				pk := normalizeVarKey(cl.PosVar)
+				pk := cl.PosVar
 				c.bound[pk] = struct{}{}
 				added = append(added, pk)
 			}
 		case LetClause:
 			c.walk(cl.Expr)
-			key := normalizeVarKey(cl.Var)
+			key := cl.Var
 			c.bound[key] = struct{}{}
 			added = append(added, key)
 		}
@@ -233,7 +222,7 @@ func (c *staticRefCollector) walkQuantified(n QuantifiedExpr) {
 	var added []string
 	for _, b := range n.Bindings {
 		c.walk(b.Domain)
-		key := normalizeVarKey(b.Var)
+		key := b.Var
 		c.bound[key] = struct{}{}
 		added = append(added, key)
 	}
@@ -246,7 +235,7 @@ func (c *staticRefCollector) walkQuantified(n QuantifiedExpr) {
 func (c *staticRefCollector) walkInlineFunction(n InlineFunctionExpr) {
 	var added []string
 	for _, p := range n.Params {
-		key := normalizeVarKey(p.Name)
+		key := p.Name
 		c.bound[key] = struct{}{}
 		added = append(added, key)
 	}
@@ -254,12 +243,4 @@ func (c *staticRefCollector) walkInlineFunction(n InlineFunctionExpr) {
 	for _, k := range added {
 		delete(c.bound, k)
 	}
-}
-
-// normalizeVarKey reduces a binding's variable name to the same key form used for
-// references: an unprefixed name stays as-is, a "prefix:local" stays as-is. A
-// Q{uri}local form is left verbatim (CTA never uses it; an exact-string match
-// still works for a self-consistent binding/reference pair).
-func normalizeVarKey(name string) string {
-	return name
 }
