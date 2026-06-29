@@ -144,35 +144,45 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 }
 
 // baseModelAdmitsOpenContent reports whether the base type's DECLARED content
-// model contains a wildcard that admits the derived open-content wildcard, i.e.
-// the derived wildcard's namespace constraint is a subset of some base content
-// wildcard and its processContents is at least as strong. This is the case where
-// a restriction validly re-expresses a base `xs:any` particle as open content even
-// though the base carries no {open content} of its own (saxonData Open/open022).
+// model contains a wildcard that admits the derived open-content wildcard. An
+// interleave/suffix open-content wildcard is effectively UNBOUNDED (it matches
+// 0..unbounded open children), so the base wildcard must match it in BOTH
+// directions: namespace constraint (derived ⊆ base), processContents (derived at
+// least as strong), AND effective cardinality — the base wildcard must itself be
+// effectively unbounded (its particle maxOccurs is unbounded, or it sits inside an
+// unbounded ancestor model group). A BOUNDED base wildcard (e.g. maxOccurs="1")
+// would reject a second open child, so the restriction's open content is NOT a
+// language subset of the base and is rejected. This is the valid case where a
+// restriction re-expresses a base unbounded `xs:any` particle as open content even
+// though the base carries no {open content} of its own (saxonData Open/open022),
+// while the reviewer's maxOccurs="1" base wildcard is correctly rejected.
 func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema) bool {
 	if base == nil || derived == nil {
 		return false
 	}
 	admits := false
-	var walk func(mg *ModelGroup)
-	walk = func(mg *ModelGroup) {
+	var walk func(mg *ModelGroup, ancestorUnbounded bool)
+	walk = func(mg *ModelGroup, ancestorUnbounded bool) {
 		if mg == nil || admits {
 			return
 		}
+		groupUnbounded := ancestorUnbounded || mg.MaxOccurs == Unbounded
 		for _, p := range mg.Particles {
 			switch term := p.Term.(type) {
 			case *Wildcard:
-				if wildcardConstraintSubset(derived, term, schema, false) &&
+				effUnbounded := groupUnbounded || p.MaxOccurs == Unbounded
+				if effUnbounded &&
+					wildcardConstraintSubset(derived, term, schema, false) &&
 					processContentsStrength(derived.ProcessContents) >= processContentsStrength(term.ProcessContents) {
 					admits = true
 					return
 				}
 			case *ModelGroup:
-				walk(term)
+				walk(term, groupUnbounded)
 			}
 		}
 	}
-	walk(base.ContentModel)
+	walk(base.ContentModel, false)
 	return admits
 }
 
@@ -255,6 +265,25 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 		return nil
 	}
 	return &OpenContent{Mode: mode, Wildcard: wc}
+}
+
+// openContentOrderViolation returns the schema-error message when an
+// <xs:openContent> child appears out of order within a complex type's child
+// sequence, or "" when it is correctly placed. XSD §3.4.2 fixes the order
+// (annotation?, (openContent?, (group|all|choice|sequence)?),
+// ((attribute|attributeGroup)*, anyAttribute?), assert*), so an openContent must
+// precede the content-model particle, the attribute uses, and the anyAttribute
+// wildcard.
+func openContentOrderViolation(contentModelChild, directAttrChild string, anyAttributeSeen bool) string {
+	switch {
+	case contentModelChild != "":
+		return fmt.Sprintf("The 'openContent' must appear before the content model particle '%s'.", contentModelChild)
+	case directAttrChild != "":
+		return fmt.Sprintf("The 'openContent' must appear before the attribute declaration '%s'.", directAttrChild)
+	case anyAttributeSeen:
+		return "The 'openContent' must appear before the attribute wildcard 'anyAttribute'."
+	}
+	return ""
 }
 
 // scanOpenContentChildren walks the children of an <xs:openContent> or
@@ -341,10 +370,18 @@ func (c *compiler) readDefaultOpenContent(ctx context.Context, root *helium.Elem
 			continue
 		}
 		switch {
-		case isXSDElement(ce, elemAnnotation), isXSDElement(ce, elemInclude),
-			isXSDElement(ce, elemImport), isXSDElement(ce, elemRedefine),
-			isXSDElement(ce, elemOverride):
-			// composition / annotation: allowed before defaultOpenContent
+		case isXSDElement(ce, elemInclude), isXSDElement(ce, elemImport),
+			isXSDElement(ce, elemRedefine), isXSDElement(ce, elemOverride):
+			// Composition elements must precede defaultOpenContent: the schema
+			// content model is ((include|import|redefine|override|annotation)*,
+			// (defaultOpenContent, annotation*)?, ...), so a composition element
+			// AFTER the defaultOpenContent is out of order.
+			if sawDefault && c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), ce.LocalName(),
+					"A '"+ce.LocalName()+"' must appear before 'defaultOpenContent'."))
+			}
+		case isXSDElement(ce, elemAnnotation):
+			// annotation: allowed both before and after defaultOpenContent
 		default:
 			sawDeclaration = true
 		}

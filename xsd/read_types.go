@@ -305,6 +305,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen); msg != "" {
+				reportExtraContent(ce, msg)
+				continue
+			}
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
@@ -511,6 +515,10 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen); msg != "" {
+				reportOrder(ce, msg)
+				continue
+			}
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
@@ -670,6 +678,10 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen); msg != "" {
+				reportOrder(ce, msg)
+				continue
+			}
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}

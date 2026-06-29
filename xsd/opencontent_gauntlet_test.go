@@ -75,6 +75,111 @@ func TestOpenContent_RestrictionEmptyModelStillChecked(t *testing.T) {
 		_, _, cerr := compileV11(t, schema)
 		require.NoError(t, cerr, "subset open content with an empty model must stay valid")
 	})
+
+	t.Run("empty model restriction may not convert a BOUNDED base wildcard to open content", func(t *testing.T) {
+		t.Parallel()
+		// Base has a BOUNDED content-model wildcard (maxOccurs=1). An interleave
+		// open-content wildcard is effectively unbounded, so it admits a SECOND open
+		// child the base would reject — the restriction is not a language subset.
+		schema := head + `
+  <xs:complexType name="B"><xs:sequence>
+    <xs:any namespace="http://open.com/" processContents="lax" minOccurs="0" maxOccurs="1"/>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "converting a bounded base wildcard to unbounded open content must be rejected")
+	})
+
+	t.Run("empty model restriction may convert an UNBOUNDED base wildcard to open content (open022 shape)", func(t *testing.T) {
+		t.Parallel()
+		// Anchor for the correct ACCEPT: the base's content-model wildcard is
+		// effectively unbounded, so re-expressing it as open content is valid.
+		schema := head + `
+  <xs:complexType name="B"><xs:sequence>
+    <xs:any namespace="http://open.com/" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "converting an unbounded base wildcard to open content is valid (open022)")
+	})
+}
+
+// TestOpenContent_ChildOrder covers the gauntlet finding that <xs:openContent>
+// must participate in the complex-type child-order checks (XSD §3.4.2): it must
+// precede the content-model particle, the attribute uses, and the anyAttribute
+// wildcard, in the direct complexType branch as well as in complexContent
+// restriction and extension.
+func TestOpenContent_ChildOrder(t *testing.T) {
+	t.Parallel()
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`
+	const oc = `<xs:openContent mode="suffix"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>`
+
+	cases := map[string]string{
+		"after attribute (direct)": head + `
+  <xs:element name="doc"><xs:complexType>
+    <xs:sequence><xs:element name="a"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>
+    ` + oc + `
+  </xs:complexType></xs:element></xs:schema>`,
+		"after anyAttribute (direct)": head + `
+  <xs:element name="doc"><xs:complexType>
+    <xs:sequence><xs:element name="a"/></xs:sequence>
+    <xs:anyAttribute processContents="lax"/>
+    ` + oc + `
+  </xs:complexType></xs:element></xs:schema>`,
+		"after content model (direct)": head + `
+  <xs:element name="doc"><xs:complexType>
+    <xs:sequence><xs:element name="a"/></xs:sequence>
+    ` + oc + `
+  </xs:complexType></xs:element></xs:schema>`,
+		"after attribute (restriction)": head + `
+  <xs:complexType name="B"><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:sequence><xs:element name="a"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>
+    ` + oc + `
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/></xs:schema>`,
+		"after attribute (extension)": head + `
+  <xs:complexType name="B"><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:extension base="B">
+    <xs:sequence><xs:element name="d" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>
+    ` + oc + `
+  </xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/></xs:schema>`,
+	}
+	for name, schema := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, _, cerr := compileV11(t, schema)
+			require.Error(t, cerr, "out-of-order openContent must be rejected")
+		})
+	}
+}
+
+// TestDefaultOpenContent_CompositionOrder covers the gauntlet finding that a
+// composition element (include/import/redefine/override) must precede the
+// schema-level <xs:defaultOpenContent>; one appearing AFTER it is out of order.
+func TestDefaultOpenContent_CompositionOrder(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:defaultOpenContent><xs:any namespace="http://open.com/" processContents="lax"/></xs:defaultOpenContent>
+  <xs:include schemaLocation="nonexistent.xsd"/>
+  <xs:element name="doc"><xs:complexType><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType></xs:element>
+</xs:schema>`
+	_, _, cerr := compileV11(t, schema)
+	require.Error(t, cerr, "xs:include after defaultOpenContent must be rejected")
 }
 
 // TestOpenContent_InterleaveRefinementKeepsTrying covers the gauntlet finding
