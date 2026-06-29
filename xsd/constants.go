@@ -36,6 +36,7 @@ const (
 	elemKey            = "key"
 	elemKeyRef         = "keyref"
 	elemList           = "list"
+	elemNotation       = "notation"
 	elemRedefine       = "redefine"
 	elemRestriction    = "restriction"
 	elemSchema         = "schema"

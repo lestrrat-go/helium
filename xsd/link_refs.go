@@ -1101,7 +1101,7 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 		if elemKind == elemComplexType {
 			component = componentLocalComplexType
 		} else {
-			component = "local simple type"
+			component = componentLocalSimpleType
 		}
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)

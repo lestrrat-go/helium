@@ -168,6 +168,10 @@ type compiler struct {
 	// (xs:alternative children), so the alternative-type substitutability check
 	// (cta-cvc / Type Alternative valid) can run after all types resolve.
 	ctaElems []*ElementDecl
+	// notations records the QNames of every <xs:notation> declared in the schema
+	// (and its included/imported documents). Used to verify that an xs:NOTATION
+	// restriction's enumeration values name declared notations.
+	notations map[QName]struct{}
 }
 
 // redefinableSet caches the redefinable component names a schema document
@@ -507,6 +511,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		includeVisited:           make(map[string]struct{}),
 		maxIncludeDepth:          defaultMaxIncludeDepth,
 		loadedRedefinable:        make(map[string]*redefinableSet),
+		notations:                make(map[QName]struct{}),
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
@@ -668,6 +673,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Reject element/attribute declarations whose effective type is the built-in
 	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
 	c.checkNotationOnDeclarations(ctx)
+
+	// XSD 1.1: xs:anyAtomicType is abstract and must not be used as the base type
+	// of a user-defined simple type, nor as a list item type or union member type.
+	if c.version == Version11 {
+		c.checkAnyAtomicTypeUsage(ctx)
+	}
 
 	// XSD 1.1: each conditional-type-assignment alternative's type must be validly
 	// substitutable for the element's declared type. Runs after type refs resolve.
@@ -1071,6 +1082,10 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 			}
 		case isXSDElement(elem, elemAttribute):
 			c.parseGlobalAttribute(ctx, elem)
+		case isXSDElement(elem, elemNotation):
+			if name := getAttr(elem, attrName); name != "" {
+				c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
+			}
 		}
 	}
 	return nil

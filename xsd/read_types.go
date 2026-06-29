@@ -76,7 +76,14 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		td.Final = parseFinalFlags(getAttr(elem, attrFinal))
 		td.FinalSet = true
 	} else {
-		td.Final = c.schema.finalDefault & (FinalRestriction | FinalList | FinalUnion)
+		// XSD 1.1 (spec bug 2074): "extension" is a valid member of a simple
+		// type's {final}, so finalDefault="extension" reaches a simple type and
+		// blocks a simpleContent extension of it. XSD 1.0 masks extension out.
+		mask := FinalRestriction | FinalList | FinalUnion
+		if c.version == Version11 {
+			mask |= FinalExtension
+		}
+		td.Final = c.schema.finalDefault & mask
 	}
 
 	c.recordTypeDefSource(td, elem.Line(), false, elem.LocalName())
