@@ -1072,39 +1072,40 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
-		version:                  c.version,
-		baseDir:                  schemaBaseDir(path),
-		fsys:                     c.fsys,
-		parser:                   c.parser,
-		typeRefs:                 make(map[*TypeDef]QName),
-		elemRefs:                 make(map[*ElementDecl]QName),
-		elemRefSources:           make(map[*ElementDecl]elemRefSource),
-		groupRefs:                make(map[*ModelGroup]QName),
-		groupRefSources:          make(map[*ModelGroup]groupRefSource),
-		groupSources:             make(map[QName]groupSource),
-		attrGroupSources:         make(map[QName]attrGroupSource),
-		attrGroupRefs:            make(map[*TypeDef][]QName),
-		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
-		defaultAttrUses:          make(map[*TypeDef]map[QName]*AttrUse),
-		attrGroupRefChildren:     make(map[QName][]QName),
-		attrGroupRefSources:      make(map[QName][]attrGroupSource),
-		attrGroupWildcards:       make(map[QName]*Wildcard),
-		globalElemSources:        make(map[*ElementDecl]elemRefSource),
-		typeDefSources:           make(map[*TypeDef]typeDefSource),
-		typeKinds:                make(map[QName]redefineKind),
-		itemTypeRefs:             make(map[*TypeDef]QName),
-		chameleonEligible:        make(map[any]struct{}),
-		attrRefs:                 make(map[*AttrUse]QName),
-		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
-		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
-		filename:                 impFilename,
-		importedNS:               make(map[string]string),
-		importDepth:              c.importDepth + 1,
-		maxImportDepth:           c.maxImportDepth,
-		includeVisited:           make(map[string]struct{}),
-		maxIncludeDepth:          c.maxIncludeDepth,
-		loadedRedefinable:        make(map[string]*redefinableSet),
-		notations:                make(map[QName]struct{}),
+		version:                   c.version,
+		baseDir:                   schemaBaseDir(path),
+		fsys:                      c.fsys,
+		parser:                    c.parser,
+		typeRefs:                  make(map[*TypeDef]QName),
+		elemRefs:                  make(map[*ElementDecl]QName),
+		elemRefSources:            make(map[*ElementDecl]elemRefSource),
+		groupRefs:                 make(map[*ModelGroup]QName),
+		groupRefSources:           make(map[*ModelGroup]groupRefSource),
+		groupSources:              make(map[QName]groupSource),
+		attrGroupSources:          make(map[QName]attrGroupSource),
+		attrGroupRefs:             make(map[*TypeDef][]QName),
+		attrGroupRefUseSources:    make(map[*TypeDef][]attrGroupRefUseSource),
+		defaultAttrUses:           make(map[*TypeDef]map[QName]*AttrUse),
+		attrGroupRefChildren:      make(map[QName][]QName),
+		attrGroupRefSources:       make(map[QName][]attrGroupSource),
+		attrGroupWildcards:        make(map[QName]*Wildcard),
+		globalElemSources:         make(map[*ElementDecl]elemRefSource),
+		typeDefSources:            make(map[*TypeDef]typeDefSource),
+		typeKinds:                 make(map[QName]redefineKind),
+		itemTypeRefs:              make(map[*TypeDef]QName),
+		chameleonEligible:         make(map[any]struct{}),
+		attrRefs:                  make(map[*AttrUse]QName),
+		attrUseConstraintSources:  make(map[*AttrUse]attrConstraintSource),
+		attrUseSources:            make(map[*AttrUse]attrConstraintSource),
+		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
+		filename:                  impFilename,
+		importedNS:                make(map[string]string),
+		importDepth:               c.importDepth + 1,
+		maxImportDepth:            c.maxImportDepth,
+		includeVisited:            make(map[string]struct{}),
+		maxIncludeDepth:           c.maxIncludeDepth,
+		loadedRedefinable:         make(map[string]*redefinableSet),
+		notations:                 make(map[QName]struct{}),
 	}
 
 	// Seed the imported sub-compiler's circular-include guard with the imported
@@ -1394,6 +1395,15 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			src.source = impC.filename
 		}
 		c.attrUseConstraintSources[au] = src
+	}
+	// Merge element-declaration default/fixed constraint sources, mirroring the
+	// attribute-use merge above so an invalid element default/fixed in an imported
+	// document is still checked and the diagnostic cites the imported file.
+	for decl, src := range impC.elemDeclConstraintSources {
+		if src.source == "" {
+			src.source = impC.filename
+		}
+		c.elemDeclConstraintSources[decl] = src
 	}
 	// Merge prohibited/ref'd attribute-use sources, preserving the originating
 	// file. An attribute use parsed directly in the imported document (not via a
