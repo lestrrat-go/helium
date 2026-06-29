@@ -60,6 +60,11 @@ type compiler struct {
 	// attrGroupRefs. This covers explicit xs:attributeGroup ref children and
 	// the implicit ref injected for XSD 1.1 schema defaultAttributes.
 	attrGroupRefUseSources map[*TypeDef][]attrGroupRefUseSource
+	// defaultAttrUseNames records attribute uses contributed by an implicit
+	// xs:schema/@defaultAttributes application, keyed by complex type and
+	// expanded attribute name. Used to distinguish implicit default reapplication
+	// from explicit extension redeclaration.
+	defaultAttrUseNames map[*TypeDef]map[QName]struct{}
 	// nested xs:attributeGroup ref children of a GLOBAL attribute group, keyed by
 	// the containing group's QName. These are flattened (recursively, cycle-guarded)
 	// before checkAttrGroupDuplicates so a duplicate attribute use introduced
@@ -548,6 +553,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupWildcards:       make(map[QName]*Wildcard),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
+		defaultAttrUseNames:      make(map[*TypeDef]map[QName]struct{}),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),

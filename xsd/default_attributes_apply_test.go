@@ -77,6 +77,59 @@ func TestVersion11DefaultAttributesDuplicateWithExplicitGroup(t *testing.T) {
 	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 }
 
+func TestVersion11DefaultAttributesExtensionReapplyIsNotDuplicate(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  attributeFormDefault="qualified" defaultAttributes="t:defaults">
+  <xs:attributeGroup name="defaults">
+    <xs:attribute name="a" type="xs:boolean" use="required"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="t:Base"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+
+	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<t:root xmlns:t="urn:t" t:a="true"/>`))
+	require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<t:root xmlns:t="urn:t"/>`), xsd.ErrValidationFailed)
+}
+
+func TestVersion11DefaultAttributesExtensionExplicitGroupDuplicate(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  attributeFormDefault="qualified">
+  <xs:attributeGroup name="defaults">
+    <xs:attribute name="a" type="xs:boolean"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base">
+    <xs:attributeGroup ref="t:defaults"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="t:Base">
+        <xs:attributeGroup ref="t:defaults"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Label("test.xsd").Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
 func TestVersion11DefaultAttributesMissingGroupFailsCompile(t *testing.T) {
 	t.Parallel()
 

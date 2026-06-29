@@ -238,11 +238,16 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// checkDuplicateAttrUses below (ct-props-correct.4), preserving the prior
 	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
-		for _, qn := range qns {
+		srcs := c.attrGroupRefUseSources[td]
+		for i, qn := range qns {
 			if _, ok := c.schema.attrGroups[qn]; !ok {
 				continue
 			}
-			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
+			uses := c.expandAttrGroupUses(qn, map[QName]struct{}{})
+			if i < len(srcs) && srcs[i].attr == attrDefaultAttributes {
+				c.markDefaultAttrUses(td, uses)
+			}
+			td.Attributes = append(td.Attributes, uses...)
 			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
 			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
 			// "complete wildcard"). Gated on Version11 so 1.0 (which drops group
@@ -558,6 +563,43 @@ func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*
 	return uses
 }
 
+func (c *compiler) markDefaultAttrUses(td *TypeDef, uses []*AttrUse) {
+	if td == nil || len(uses) == 0 {
+		return
+	}
+	names := c.defaultAttrUseNames[td]
+	if names == nil {
+		names = make(map[QName]struct{})
+		c.defaultAttrUseNames[td] = names
+	}
+	for _, au := range uses {
+		if au.Prohibited {
+			continue
+		}
+		names[au.Name] = struct{}{}
+	}
+}
+
+func (c *compiler) hasDefaultAttrUse(td *TypeDef, name QName) bool {
+	if td == nil {
+		return false
+	}
+	_, ok := c.defaultAttrUseNames[td][name]
+	return ok
+}
+
+func (c *compiler) markDefaultAttrUse(td *TypeDef, name QName) {
+	if td == nil {
+		return
+	}
+	names := c.defaultAttrUseNames[td]
+	if names == nil {
+		names = make(map[QName]struct{})
+		c.defaultAttrUseNames[td] = names
+	}
+	names[name] = struct{}{}
+}
+
 // attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
 // attribute group: its OWN xs:anyAttribute (if any) INTERSECTED with the
 // complete wildcards of every nested xs:attributeGroup ref child. visited guards
@@ -642,6 +684,9 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 			continue
 		}
 		if !baseAttrNames[au.Name] {
+			continue
+		}
+		if c.hasDefaultAttrUse(td, au.Name) && c.hasDefaultAttrUse(td.BaseType, au.Name) {
 			continue
 		}
 		src, ok := c.typeDefSources[td]
@@ -1373,6 +1418,9 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 				continue
 			}
 			td.Attributes = append(td.Attributes, bau)
+			if c.hasDefaultAttrUse(base, bau.Name) {
+				c.markDefaultAttrUse(td, bau.Name)
+			}
 		}
 	}
 	// anyAttribute: a restriction inherits the base wildcard when it declares none;
