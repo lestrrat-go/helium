@@ -31,7 +31,10 @@ type altTypeRef struct {
 //
 // Callers must only invoke this in XSD 1.1 mode.
 func (c *compiler) parseTypeAlternatives(ctx context.Context, elem *helium.Element) []*TypeAlternative {
-	var alts []*TypeAlternative
+	// Gather the xs:alternative child elements in document order first, so the
+	// testless-default ordering constraint can be checked positionally (only the
+	// LAST alternative may omit @test).
+	var altElems []*helium.Element
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -39,6 +42,20 @@ func (c *compiler) parseTypeAlternatives(ctx context.Context, elem *helium.Eleme
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok || !isXSDElement(ce, elemAlternative) {
 			continue
+		}
+		altElems = append(altElems, ce)
+	}
+
+	var alts []*TypeAlternative
+	for i, ce := range altElems {
+		// A testless alternative (no @test) is the unconditional default and must be
+		// LAST in document order; an earlier testless alternative would render every
+		// following alternative unreachable, which is a schema error (cta9001err).
+		if !hasAttr(ce, attrTest) && i != len(altElems)-1 {
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), elemAlternative,
+					"Only the last xs:alternative may omit the 'test' attribute."))
+			}
 		}
 		alt := c.parseTypeAlternative(ctx, ce)
 		if alt != nil {
@@ -174,9 +191,46 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 			}
 			return nil
 		}
+		// The CTA @test runs in a static context with NO in-scope variables and whose
+		// in-scope schema types are the built-in (xs:) types only; a free variable
+		// reference (cta9002err) or a user-defined type named in cast/castable/instance
+		// of/treat as (cta9003err / s3_12ii06) is a schema error.
+		if err := c.checkCTATestStaticContext(elem, compiled, alt.Namespaces); err != nil {
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+					fmt.Sprintf("The XPath expression '%s' of the type alternative is not valid: %v.", test, err)))
+			}
+			return nil
+		}
 		alt.compiled = compiled
 	}
 	return alt
+}
+
+// checkCTATestStaticContext enforces the XSD 1.1 static-context restrictions on an
+// xs:alternative @test XPath beyond namespace-prefix validity: the expression may
+// reference no variables (CTA exposes none) and may name only built-in (xs:) atomic
+// types in cast/castable/instance of/treat as. A user-defined type reference or a
+// free variable returns a non-nil error. The type-name namespace is resolved
+// against the alternative's in-scope namespaces (unprefixed → the default element
+// namespace binding, "").
+func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3.Expression, namespaces map[string]string) error {
+	refs := compiled.StaticReferences()
+	if len(refs.FreeVariables) > 0 {
+		return fmt.Errorf("undefined variable $%s", refs.FreeVariables[0])
+	}
+	for _, tn := range refs.TypeNames {
+		ns := namespaces[tn.Prefix]
+		if ns == lexicon.NamespaceXSD {
+			continue
+		}
+		ref := tn.Name
+		if tn.Prefix != "" {
+			ref = tn.Prefix + ":" + tn.Name
+		}
+		return fmt.Errorf("the type %q is not a built-in type and is not available in a type alternative", ref)
+	}
+	return nil
 }
 
 // countInlineAlternativeTypes returns the number of inline anonymous
