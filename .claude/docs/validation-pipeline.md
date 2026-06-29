@@ -525,10 +525,11 @@ records the effective content type for empty descendant defaults so
 assertions atomize `data(c)`.
 
 Schema-aware XPath casts to user-defined types still return the built-in cast
-atomic value stamped with the user type, but facet validation uses the original
-source lexical string via `ValidateCastWithNS`. This preserves lexical facets
-such as a pattern on an integer restriction where `"05"` and canonical `"5"`
-must not be treated as the same lexical input.
+atomic value stamped with the user type. String and untypedAtomic sources validate
+facets against the original source lexical string via `ValidateCastWithNS`,
+preserving lexical facets such as a pattern on an integer restriction where
+`"05"` and canonical `"5"` must not be treated as the same lexical input; already
+typed sources validate the builtin cast result's lexical form.
 
 ### Key Data Model
 

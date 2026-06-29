@@ -114,6 +114,13 @@ func schemaAwareCastLexical(av AtomicValue, base map[string]string) (string, map
 	return s, base
 }
 
+func schemaAwareFacetLexical(src, cast AtomicValue, base map[string]string) (string, map[string]string) {
+	if src.TypeName == TypeString || src.TypeName == TypeUntypedAtomic {
+		return schemaAwareCastLexical(src, base)
+	}
+	return schemaAwareCastLexical(cast, base)
+}
+
 func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicValue, targetType, annName, builtinBase string, fallback error) (AtomicValue, error) {
 	if builtinBase == TypeNOTATION || builtinBase == TypeQName {
 		_, isQV := av.Value.(QNameValue)
@@ -138,7 +145,7 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 	if castErr != nil {
 		return AtomicValue{}, castErr
 	}
-	s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
+	s, nsForCast := schemaAwareFacetLexical(av, result, ec.namespaces)
 	if facetErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); facetErr != nil {
 		return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 	}
