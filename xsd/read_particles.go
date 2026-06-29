@@ -248,6 +248,20 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				}
 				continue
 			}
+			// XSD 1.1: an INLINE <xs:all> directly inside another <xs:all> is still
+			// forbidden by cos-all-limited — only a <xs:group ref> resolving to an
+			// all group (occurrence 1/1) is the relaxed allowed nesting. Reject and
+			// SKIP so the invalid inline nested all is never built into the model
+			// (where the matcher/subsumption flatteners would otherwise treat it as
+			// the allowed group-ref case and silently accept it). Gated on Version11
+			// so the XSD 1.0 path stays byte-identical.
+			if compositor == CompositorAll && c.version == Version11 {
+				if c.filename != "" {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), elemAll,
+						"The content is not valid. Expected is (annotation?, (element | any | group)*)."))
+				}
+				continue
+			}
 			sub, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return nil, err

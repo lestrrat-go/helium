@@ -160,7 +160,11 @@ func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl
 	// type through the substitution-group chain.
 	rtType := effectiveDeclType(rt, schema)
 	conType := effectiveDeclType(constraining, schema)
-	if rtType != nil && conType != nil && !isDerivedFrom(rtType, conType) {
+	// Use the BUILT-IN-AWARE derivation predicate: the 1.0 built-in simple types
+	// are NOT BaseType-linked, so a plain isDerivedFrom misses e.g. xs:int derived
+	// from xs:integer and would false-reject a valid all-restriction. This matches
+	// how substitutability is judged elsewhere (admissibleSubstitutionMember / CTA).
+	if rtType != nil && conType != nil && !strictBuiltinAwareDerivedFrom(rtType, conType) {
 		return false
 	}
 	if !constraining.Nillable && rt.Nillable {

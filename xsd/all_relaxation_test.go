@@ -806,3 +806,79 @@ func TestAll11UPAAbstractMemberCompetes(t *testing.T) {
 	_, cerr := compileAll11(t, schema)
 	require.Error(t, cerr) // abstract member m competes with local m → cos-nonambig (UPA) violation
 }
+
+// TestAll11SubsumptionBuiltinDerivation guards XSDALL-880-002 (round 6): the
+// all-restriction NameAndTypeOK check must be BUILT-IN-AWARE. The 1.0 built-in
+// simple types are not BaseType-linked, so a derived member typed xs:int
+// restricting a base member typed xs:integer must be ACCEPTED (xs:int IS derived
+// from xs:integer) — a plain isDerivedFrom would false-reject it.
+func TestAll11SubsumptionBuiltinDerivation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("derived xs:int restricting base xs:integer accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element name="c" type="xs:integer"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="c" type="xs:int"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr)
+	})
+
+	// A non-derivation (xs:string vs xs:integer) is still rejected.
+	t.Run("unrelated builtin types rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element name="c" type="xs:integer"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="c" type="xs:string"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+}
+
+// TestAll11InlineNestedAllRejected guards XSDALL-880-003: an INLINE <xs:all>
+// directly inside another <xs:all> violates cos-all-limited even in 1.1 and is a
+// schema error (only a <xs:group ref> resolving to a 1/1 all-group is the relaxed
+// allowed nesting).
+func TestAll11InlineNestedAllRejected(t *testing.T) {
+	t.Parallel()
+
+	t.Run("inline all under all rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="t"><xs:all>
+    <xs:element name="a"/>
+    <xs:all><xs:element name="b"/></xs:all>
+  </xs:all></xs:complexType>
+  <xs:element name="doc" type="t"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+
+	t.Run("nested all via 1/1 group ref still allowed", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:complexType name="t"><xs:all>
+    <xs:element name="a"/>
+    <xs:group ref="g"/>
+  </xs:all></xs:complexType>
+  <xs:group name="g"><xs:all><xs:element name="b"/></xs:all></xs:group>
+  <xs:element name="doc" type="t"/>
+</xs:schema>`
+		schema11, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr)
+		// flattened members a,b matched order-independently.
+		require.NoError(t, validateAll11(t, schema, `<doc><b/><a/></doc>`))
+		_ = schema11
+	})
+}
