@@ -283,14 +283,11 @@ func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Sche
 		if !ok {
 			continue
 		}
-		for _, m := range schema.substGroups[bd.Name] {
-			if m.Name != derived.Name {
-				continue
-			}
-			// Use the shared admissibility predicate so subsumption agrees with the
-			// runtime matcher and UPA on which members can substitute for the head
-			// (concrete, not blocked, EFFECTIVE type substitutable for the head's).
-			if admissibleSubstitutionMember(m, bd, schema) {
+		// Use the TRANSITIVE instance-admissible closure so subsumption agrees with
+		// the runtime matcher on which members can substitute for the head — incl.
+		// multi-level chains (h<-m1<-m2) a direct substGroups lookup would miss.
+		for _, m := range instanceSubstMembers(bd, schema) {
+			if m.Name == derived.Name {
 				return i, m
 			}
 		}

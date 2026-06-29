@@ -882,3 +882,95 @@ func TestAll11InlineNestedAllRejected(t *testing.T) {
 		_ = schema11
 	})
 }
+
+// TestAll11TransitiveSubstClosure guards XSDALL-880-R6-001: substitution-group
+// membership is TRANSITIVE (h <- m1 <- m2), so the runtime matcher, restriction
+// subsumption, and UPA must all walk the full chain, not just direct members.
+func TestAll11TransitiveSubstClosure(t *testing.T) {
+	t.Parallel()
+
+	// (a) runtime: an xs:all member ref="h" admits a transitive substitute <m2/>.
+	t.Run("runtime admits transitive member", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m1" substitutionGroup="h"/>
+  <xs:element name="m2" substitutionGroup="m1"/>
+</xs:schema>`
+		require.NoError(t, validateAll11(t, schema, `<doc><m2>x</m2></doc>`))
+	})
+
+	// (b) subsumption: an all-restriction may restrict base member h to a
+	// transitive substitute m2.
+	t.Run("subsumption accepts transitive member", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element ref="m2"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m1" substitutionGroup="h"/>
+  <xs:element name="m2" substitutionGroup="m1"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr)
+	})
+
+	// (c) UPA: a transitive member of h competes with a local element of the same
+	// name → cos-nonambig violation.
+	t.Run("UPA detects transitive conflict", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="t"><xs:all>
+    <xs:element ref="h"/>
+    <xs:element name="m2" type="xs:string"/>
+  </xs:all></xs:complexType>
+  <xs:element name="doc" type="t"/>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m1" substitutionGroup="h"/>
+  <xs:element name="m2" substitutionGroup="m1"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+}
+
+// TestAll10BlockedHeadSubstitution guards XSDALL-880-R6-002: the XSD 1.0 xs:all
+// matcher must honor block="substitution" — a member m of a head h blocked from
+// substitution must NOT be accepted where h is expected (the pre-feature 1.0
+// matcher used the block-filtered substitution closure).
+func TestAll10BlockedHeadSubstitution(t *testing.T) {
+	t.Parallel()
+
+	compile10 := func(t *testing.T, schemaXML string) (*xsd.Schema, error) {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		return xsd.NewCompiler().Compile(t.Context(), doc)
+	}
+	validate10 := func(t *testing.T, schema *xsd.Schema, instanceXML string) error {
+		t.Helper()
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="h" type="xs:string" block="substitution"/>
+  <xs:element name="m" substitutionGroup="h"/>
+</xs:schema>`
+	sch, cerr := compile10(t, schema)
+	require.NoError(t, cerr, "1.0 schema should compile")
+
+	require.NoError(t, validate10(t, sch, `<doc><h>x</h></doc>`)) // direct head ok
+	require.Error(t, validate10(t, sch, `<doc><m>x</m></doc>`))   // blocked substitute rejected
+}

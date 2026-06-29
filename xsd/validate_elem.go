@@ -277,7 +277,9 @@ func (vc *validationContext) matchAll10(ctx context.Context, parent *helium.Elem
 	for i, p := range mg.Particles {
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
-			for _, member := range vc.schema.substGroups[ed.Name] {
+			// TRANSITIVE, block-filtered substitution closure (the pre-feature XSD
+			// 1.0 matcher used this; a direct substGroups lookup misses h<-m1<-m2).
+			for _, member := range substitutableMembersFor(ed, vc.schema) {
 				nameToIdx[member.Name] = i
 			}
 		}
@@ -731,7 +733,9 @@ func resolveSubstDecl(child childElem, edecl *ElementDecl, schema *Schema) *Elem
 		return edecl
 	}
 	if schema != nil {
-		for _, member := range schema.substGroups[edecl.Name] {
+		// TRANSITIVE closure so a child matched via a multi-level substitution chain
+		// (h<-m1<-m2) resolves to its actual member declaration, not the head.
+		for _, member := range substitutableMembersFor(edecl, schema) {
 			if matchesDeclDirect(child, member) {
 				return member
 			}
@@ -963,7 +967,9 @@ func (vc *validationContext) tryMatchAll10(mg *ModelGroup, children []childElem,
 	for i, p := range mg.Particles {
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
-			for _, member := range vc.schema.substGroups[ed.Name] {
+			// TRANSITIVE, block-filtered substitution closure (the pre-feature XSD
+			// 1.0 matcher used this; a direct substGroups lookup misses h<-m1<-m2).
+			for _, member := range substitutableMembersFor(ed, vc.schema) {
 				nameToIdx[member.Name] = i
 			}
 		}
@@ -1348,16 +1354,91 @@ func admissibleSubstitutionMember(member, head *ElementDecl, schema *Schema) boo
 	return true
 }
 
+// transitiveSubstClosure walks the TRANSITIVE substitution-group closure of head
+// (BFS, cycle-guarded): a member m reached via immediateHead is included only when
+// admit(m, immediateHead, head) holds, and a member that itself blocks
+// substitution (Block&BlockSubstitution) is not expanded further. It is the
+// shared skeleton for the two membership policies below — the transitive chain
+// (h <- m1 <- m2) is what a direct `substGroups[head]` lookup misses.
+func transitiveSubstClosure(head *ElementDecl, schema *Schema, admit func(member, immediateHead, origHead *ElementDecl) bool) []*ElementDecl {
+	if head == nil || schema == nil {
+		return nil
+	}
+	type queued struct{ member, head *ElementDecl }
+	queue := make([]queued, 0, len(schema.substGroups[head.Name]))
+	for _, m := range schema.substGroups[head.Name] {
+		queue = append(queue, queued{member: m, head: head})
+	}
+	seen := map[QName]struct{}{head.Name: {}}
+	var members []*ElementDecl
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+		m := item.member
+		if m == nil {
+			continue
+		}
+		if _, ok := seen[m.Name]; ok {
+			continue
+		}
+		if !admit(m, item.head, head) {
+			continue
+		}
+		seen[m.Name] = struct{}{}
+		members = append(members, m)
+		if m.Block&BlockSubstitution != 0 {
+			continue
+		}
+		for _, child := range schema.substGroups[m.Name] {
+			queue = append(queue, queued{member: child, head: m})
+		}
+	}
+	return members
+}
+
+// substitutableMembersFor returns the DECLARATION-membership substitution-group
+// closure of a head: transitive, block/derivation-block-filtered (against both
+// the immediate and the original head), but ABSTRACT MEMBERS INCLUDED. This is
+// the set used for COMPETITION questions — UPA (cos-nonambig) and the XSD 1.0
+// matcher — where membership is by declaration so an abstract member still
+// counts (W3C wgData/sg/upa.xsd). Restored from the pre-feature behavior.
+func substitutableMembersFor(head *ElementDecl, schema *Schema) []*ElementDecl {
+	if head == nil || schema == nil || head.Block&BlockSubstitution != 0 {
+		return nil
+	}
+	headType := effectiveDeclType(head, schema)
+	return transitiveSubstClosure(head, schema, func(m, immH, _ *ElementDecl) bool {
+		mt := effectiveDeclType(m, schema)
+		return !isDerivationBlocked(mt, effectiveDeclType(immH, schema), immH.Block) &&
+			!isDerivationBlocked(mt, headType, head.Block)
+	})
+}
+
+// instanceSubstMembers returns the INSTANCE-ADMISSIBLE substitution-group closure
+// of a head: transitive, and at each edge requiring admissibleSubstitutionMember
+// (concrete — abstract EXCLUDED, head allows substitution, member's effective type
+// substitutable for both the immediate and the original head). This is the set
+// that can actually appear where the head is expected, used by runtime matching
+// (elemMatchesDeclOrSubst) and restriction subsumption (findBaseAllMember).
+func instanceSubstMembers(head *ElementDecl, schema *Schema) []*ElementDecl {
+	if head == nil || schema == nil || head.Block&BlockSubstitution != 0 {
+		return nil
+	}
+	return transitiveSubstClosure(head, schema, func(m, immH, orig *ElementDecl) bool {
+		return admissibleSubstitutionMember(m, immH, schema) && admissibleSubstitutionMember(m, orig, schema)
+	})
+}
+
 // elemMatchesDeclOrSubst checks if a child element matches a declaration
 // directly or via substitution group. schema may be nil for basic matching.
 func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema) bool {
 	if matchesDeclDirect(child, edecl) && !edecl.Abstract {
 		return true
 	}
-	// Check substitution group members via the shared admissibility predicate.
+	// Check the TRANSITIVE instance-admissible substitution-group closure.
 	if schema != nil {
-		for _, member := range schema.substGroups[edecl.Name] {
-			if matchesDeclDirect(child, member) && admissibleSubstitutionMember(member, edecl, schema) {
+		for _, member := range instanceSubstMembers(edecl, schema) {
+			if matchesDeclDirect(child, member) {
 				return true
 			}
 		}

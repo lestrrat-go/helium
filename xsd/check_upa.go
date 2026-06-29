@@ -280,7 +280,10 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 		// elemMatchesDeclOrSubst — that is a different question.)
 		var info posInfo
 		ids := []int{a.newPos(firstSetEntry{qname: t.Name})}
-		for _, member := range a.schema.substGroups[t.Name] {
+		// TRANSITIVE declaration-membership closure (abstract members included) — a
+		// direct substGroups lookup misses a multi-level chain h<-m1<-m2 and would
+		// miss a transitive UPA conflict.
+		for _, member := range substitutableMembersFor(t, a.schema) {
 			ids = append(ids, a.newPos(firstSetEntry{qname: member.Name}))
 		}
 		info.first = ids
