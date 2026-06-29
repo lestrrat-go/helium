@@ -3,6 +3,7 @@ package xsd_test
 import (
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -82,4 +83,161 @@ func TestVersion11SubtypeFacetsValueSpace(t *testing.T) {
 		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaUnion, `<v>PT0S</v>`)
 		require.NoError(t, err)
 	})
+}
+
+func TestVersion11TemporalSubtypeRangeFacets(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="stamp">
+          <xs:simpleType>
+            <xs:restriction base="xs:dateTimeStamp">
+              <xs:minInclusive value="2020-01-01T00:00:00Z"/>
+              <xs:maxInclusive value="2020-12-31T23:59:59Z"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="day">
+          <xs:simpleType>
+            <xs:restriction base="xs:dayTimeDuration">
+              <xs:minInclusive value="PT1H"/>
+              <xs:maxInclusive value="P2D"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="month">
+          <xs:simpleType>
+            <xs:restriction base="xs:yearMonthDuration">
+              <xs:minInclusive value="P1M"/>
+              <xs:maxInclusive value="P2Y"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<root><stamp>2020-06-01T12:00:00Z</stamp><day>PT24H</day><month>P12M</month></root>`)
+	require.NoError(t, err)
+
+	err = compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<root><stamp>2021-01-01T00:00:00Z</stamp><day>PT24H</day><month>P12M</month></root>`)
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+}
+
+func TestVersion11TemporalExclusiveBoundRestriction(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseStamp">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:maxExclusive value="2020-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sameBound">
+    <xs:restriction base="baseStamp">
+      <xs:maxExclusive value="2019-12-31T19:00:00-05:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="v" type="sameBound"/>
+</xs:schema>`
+
+	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<v>2019-12-31T23:00:00Z</v>`))
+}
+
+func TestVersion11FixedRangeFacetRestriction(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseDuration">
+    <xs:restriction base="xs:yearMonthDuration">
+      <xs:minInclusive value="P1Y1M" fixed="true"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badDuration">
+    <xs:restriction base="baseDuration">
+      <xs:minInclusive value="P1Y2M"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
+func TestVersion11TemporalExplicitTimezoneFacet(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="tzRequired">
+    <xs:restriction base="xs:dateTime">
+      <xs:explicitTimezone value="required"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="tzProhibited">
+    <xs:restriction base="xs:date">
+      <xs:explicitTimezone value="prohibited"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="required" type="tzRequired"/>
+  <xs:element name="prohibited" type="tzProhibited"/>
+</xs:schema>`
+
+	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<required>2020-01-01T00:00:00Z</required>`))
+	require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<required>2020-01-01T00:00:00</required>`), xsd.ErrValidationFailed)
+
+	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<prohibited>2020-01-01</prohibited>`))
+	require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+		`<prohibited>2020-01-01Z</prohibited>`), xsd.ErrValidationFailed)
+}
+
+func TestVersion11DateTimeStampFixedBuiltInFacets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		schema string
+	}{
+		{
+			name: "explicitTimezone optional cannot relax dateTimeStamp",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:explicitTimezone value="optional"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+		{
+			name: "whiteSpace replace cannot relax dateTimeStamp collapse",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:whiteSpace value="replace"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
+			require.NoError(t, err)
+			_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
 }

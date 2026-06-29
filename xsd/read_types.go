@@ -932,24 +932,28 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 				fs = &FacetSet{}
 			}
 			fs.MinInclusive = &val
+			fs.MinInclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MinInclusiveNS = captureFacetNS(ce)
 		case "maxInclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxInclusive = &val
+			fs.MaxInclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MaxInclusiveNS = captureFacetNS(ce)
 		case "minExclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MinExclusive = &val
+			fs.MinExclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MinExclusiveNS = captureFacetNS(ce)
 		case "maxExclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxExclusive = &val
+			fs.MaxExclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MaxExclusiveNS = captureFacetNS(ce)
 		case "totalDigits":
 			if fs == nil {
@@ -986,6 +990,19 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 				fs = &FacetSet{}
 			}
 			fs.WhiteSpace = &val
+		case elemExplicitTimezone:
+			if fs == nil {
+				fs = &FacetSet{}
+			}
+			val = normalizeWhiteSpace(val, "collapse")
+			switch val {
+			case attrValOptional, attrValProhibited, attrValRequired:
+				fs.ExplicitTimezone = &val
+			default:
+				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(),
+					ce.LocalName(), elemExplicitTimezone,
+					fmt.Sprintf("The value '%s' is not a valid value for the 'explicitTimezone' facet.", val)))
+			}
 		case "pattern":
 			if fs == nil {
 				fs = &FacetSet{}
@@ -1021,6 +1038,20 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 	}
 
 	return fs
+}
+
+func (c *compiler) readFacetFixed(ctx context.Context, elem *helium.Element) bool {
+	if !hasAttr(elem, attrFixed) {
+		return false
+	}
+	v, ok := parseSchemaBool(getAttr(elem, attrFixed))
+	if ok {
+		return v
+	}
+	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", normalizeWhiteSpace(getAttr(elem, attrFixed), "collapse"))
+	c.schemaError(ctx, schemaParserErrorAttr(c.filename, elem.Line(),
+		elem.LocalName(), elem.LocalName(), attrFixed, msg))
+	return false
 }
 
 // captureFacetNS records the in-scope namespace bindings at a single range-facet

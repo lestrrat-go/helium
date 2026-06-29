@@ -322,12 +322,16 @@ type OpenContent struct {
 
 // FacetSet holds facet constraints for a simple type restriction.
 type FacetSet struct {
-	Enumeration   []string
-	EnumerationNS []map[string]string
-	MinInclusive  *string
-	MaxInclusive  *string
-	MinExclusive  *string
-	MaxExclusive  *string
+	Enumeration       []string
+	EnumerationNS     []map[string]string
+	MinInclusive      *string
+	MaxInclusive      *string
+	MinExclusive      *string
+	MaxExclusive      *string
+	MinInclusiveFixed bool
+	MaxInclusiveFixed bool
+	MinExclusiveFixed bool
+	MaxExclusiveFixed bool
 	// MinInclusiveNS/MaxInclusiveNS/MinExclusiveNS/MaxExclusiveNS hold the
 	// in-scope namespace bindings (prefix → URI) captured at the point each
 	// individual range-facet bound was declared in the schema document. Each
@@ -338,15 +342,16 @@ type FacetSet struct {
 	// union) needs this context to resolve a prefixed bound value like
 	// <xs:minInclusive value="p:a"/>. A nil map means no extra bindings were in
 	// scope at that facet (the facet was absent or carried no namespace context).
-	MinInclusiveNS map[string]string
-	MaxInclusiveNS map[string]string
-	MinExclusiveNS map[string]string
-	MaxExclusiveNS map[string]string
-	TotalDigits    *int
-	FractionDigits *int
-	Length         *int
-	MinLength      *int
-	MaxLength      *int
+	MinInclusiveNS   map[string]string
+	MaxInclusiveNS   map[string]string
+	MinExclusiveNS   map[string]string
+	MaxExclusiveNS   map[string]string
+	TotalDigits      *int
+	FractionDigits   *int
+	Length           *int
+	MinLength        *int
+	MaxLength        *int
+	ExplicitTimezone *string
 	// Patterns holds the <xs:pattern> facets from a single restriction step.
 	// Per XSD, patterns in the same step are ORed (a value is valid if it
 	// matches any of them); patterns from different derivation steps are ANDed,

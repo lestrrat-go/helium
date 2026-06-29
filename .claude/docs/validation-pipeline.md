@@ -158,10 +158,11 @@ active in a numeric member (`memberTypes="zeroString xs:int"` enum `"0"` rejects
 `"+0"`). A **union** restriction may carry ONLY `pattern` and `enumeration`
 facets: per XSD §4.1.5 the range facets (`min`/`maxInclusive`,
 `min`/`maxExclusive`), the digit facets (`totalDigits`/`fractionDigits`), the
-length family (`length`/`minLength`/`maxLength`), and `whiteSpace` are NOT in a
-union's {applicable facets} set, so `checkFacetApplicability` rejects them at
-COMPILE time (`The facet '…' is not allowed.`) — they never reach validation as a
-runtime no-op. The union's allowed `pattern`/`enumeration` facets are checked in
+length family (`length`/`minLength`/`maxLength`), `whiteSpace`, and
+`explicitTimezone` are NOT in a union's {applicable facets} set, so
+`checkFacetApplicability` rejects them at COMPILE time (`The facet '…' is not
+allowed.`) — they never reach validation as a runtime no-op. The union's allowed
+`pattern`/`enumeration` facets are checked in
 the instance active member's value space via `checkFacets` with enumeration
 suppressed. The active member for that `checkFacets` call is resolved down to its
 LEAF basic member (`fixedUnionActiveMember` descends through nested unions), so a
@@ -171,8 +172,9 @@ leaf type rather than an intermediate union. On an ATOMIC restriction the range 
 value space is ORDERED, so `compareForRangeFacet` first gates `builtinLocal` on
 `value.Orderable` (the shared `orderedRangeFacetTypes` allowlist in
 `internal/xsd/value`, also used by relaxng) — the numeric leaves (decimal and derived
-integers, float, double) AND the date/time/duration family (duration, dateTime,
-time, date, and the gregorian g-types). For every NON-ordered leaf — string-family
+integers, float, double) AND the date/time/duration family (duration,
+dayTimeDuration, yearMonthDuration, dateTime, dateTimeStamp, time, date, and the
+gregorian g-types). For every NON-ordered leaf — string-family
 and anyURI, boolean, the binary types (hexBinary/base64Binary), QName/NOTATION,
 and any non-atomic list/union carrier (empty/unknown local) — it returns
 `ok=false`, leaving the range facet INAPPLICABLE rather than forcing a comparison.
@@ -188,7 +190,12 @@ OUTSIDE `lengthApplicableTypes` (string-derived, the binary types, anyURI, QName
 NOTATION); on a numeric/decimal, boolean, float/double or date/time/duration atomic
 the length facets are inapplicable and are reported at COMPILE time (`The facet '…'
 is not allowed on types derived from the type xs:…`), so e.g. `xs:int`+`length` is a
-schema error rather than a runtime no-op. `checkFacetSameTypeConsistency` gates EACH
+schema error rather than a runtime no-op. `explicitTimezone` is accepted only on the
+date/time family (dateTime/dateTimeStamp/date/time and the gregorian g-types); it is
+stored on `FacetSet.ExplicitTimezone`, checked at validation time for required or
+prohibited timezone presence, and participates in compile-time restriction checks
+so `xs:dateTimeStamp` can only retain `required`. Built-in temporal whiteSpace is
+treated as fixed `collapse`. `checkFacetSameTypeConsistency` gates EACH
 facet-family consistency check to the family's applicable type/variety, so it never
 adds a spurious error on top of an applicability rejection: the LENGTH check
 (`minLength>maxLength`) runs only on a list variety or a `lengthApplicableTypes`
@@ -203,7 +210,13 @@ maxInclusive 2020-01-01` on `xs:date` is rejected. `checkFacetBaseRestriction` c
 each derived range bound against the base bound with the SAME value-space comparator
 (gated to ordered atomic; `compareDecimal` only for an unresolved primitive), so a
 valid narrowing non-decimal restriction — e.g. base `xs:date` `minInclusive=2021-01-01`
-with derived `maxInclusive=2022-01-01` — is no longer false-rejected.
+with derived `maxInclusive=2022-01-01` — is no longer false-rejected. Range facet
+`fixed="true"` is tracked per bound (`FacetSet.*Fixed`) and prevents a derived type
+from changing that bound except by value-space equality. The facet value-against-base
+check also allows a derived exclusive bound equal to the base exclusive bound (for
+example the same `maxExclusive` on `xs:dateTimeStamp`), because that is a valid
+restriction even though the exclusive boundary value is not itself an instance of
+the base type.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema
