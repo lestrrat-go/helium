@@ -41,6 +41,17 @@ func (c *compiler) localAttributeNamespace(elem *helium.Element) string {
 	return ""
 }
 
+func (c *compiler) localElementNamespace(elem *helium.Element) string {
+	if c.version == Version11 && hasAttr(elem, attrTargetNamespace) {
+		return getAttr(elem, attrTargetNamespace)
+	}
+	form := getAttr(elem, attrForm)
+	if form == attrValQualified || (form == "" && c.schema.elemFormQualified) {
+		return c.schema.targetNamespace
+	}
+	return ""
+}
+
 func parseParticleOccurs(elem *helium.Element) (int, int) {
 	minOccurs := 1
 	maxOccurs := 1
@@ -701,19 +712,18 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 
 	name := getAttr(elem, attrName)
 	if name == "" {
-		return nil, fmt.Errorf("xsd: local element missing name")
-	}
-
-	// Determine element namespace based on form and elementFormDefault.
-	elemNS := ""
-	form := getAttr(elem, attrForm)
-	if form == attrValQualified || (form == "" && c.schema.elemFormQualified) {
-		elemNS = c.schema.targetNamespace
+		if c.version != Version11 || !hasAttr(elem, attrTargetNamespace) {
+			return nil, fmt.Errorf("xsd: local element missing name")
+		}
+		// checkLocalElement has already reported the schema error. Use a valid,
+		// internal recovery name so compilation reaches the usual ErrCompilationFailed
+		// gate instead of returning a raw parser error.
+		name = fmt.Sprintf("__invalid_local_element_%d", elem.Line())
 	}
 
 	edecl, err := c.readElementDecl(ctx, elem, elementDeclReadOptions{
 		name:         name,
-		namespace:    elemNS,
+		namespace:    c.localElementNamespace(elem),
 		minOccurs:    minOcc,
 		maxOccurs:    maxOcc,
 		defaultBlock: c.schema.blockDefault,
