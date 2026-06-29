@@ -218,32 +218,57 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 	return pos - startPos, contentErr
 }
 
+// allMember is a flattened member of an xs:all model group used by matchAll. In
+// XSD 1.1 an xs:all may carry element members with maxOccurs>1, element
+// wildcards, and a nested all-group reference (flattened in here); each member
+// is matched order-independently with per-member occurrence counting. In XSD 1.0
+// the flat list is the particle list 1:1 (no wildcards, no nested all), each
+// with max 1, so counting reduces to the previous boolean "seen" semantics.
+type allMember struct {
+	min, max int
+	ed       *ElementDecl // non-nil for an element member
+	wc       *Wildcard    // non-nil for a wildcard member
+}
+
+// flattenAllMembers builds the flat member list for an xs:all group. In XSD 1.1
+// a wildcard particle becomes a wildcard member and a nested all-group (reached
+// via an xs:group ref that resolved to an all group, occurrence 1/1) is
+// flattened into the parent's members. In XSD 1.0 only element particles are
+// recognized, matching the pre-feature behavior.
+func flattenAllMembers(mg *ModelGroup, is11 bool) []allMember {
+	var members []allMember
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *ElementDecl:
+			members = append(members, allMember{min: p.MinOccurs, max: p.MaxOccurs, ed: term})
+		case *Wildcard:
+			if is11 {
+				members = append(members, allMember{min: p.MinOccurs, max: p.MaxOccurs, wc: term})
+			}
+		case *ModelGroup:
+			if is11 && term.Compositor == CompositorAll && p.MinOccurs == 1 && p.MaxOccurs == 1 {
+				members = append(members, flattenAllMembers(term, is11)...)
+			}
+		}
+	}
+	return members
+}
+
 // matchAll matches children[pos:] against an all model group.
 // Returns (consumed, error). Does NOT check for leftover children.
 func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
-	seen := make([]bool, len(mg.Particles))
-	nameToIdx := make(map[QName]int, len(mg.Particles))
-	// XSD 1.1 ONLY: an xs:all may contain element wildcards (and its particles may
-	// have maxOccurs>1). Track wildcard particle indices and per-wildcard match
-	// counts so order-independent matching honors each wildcard's occurrence
-	// bounds and processContents. In XSD 1.0 a wildcard is NOT a permitted xs:all
-	// member, so wildcardIdx stays empty and the matcher's behavior is identical
-	// to before this feature: a child matching no element particle is unexpected.
 	is11 := vc.version == Version11
-	var wildcardIdx []int
-	wcCount := make([]int, len(mg.Particles))
-	for i, p := range mg.Particles {
-		switch ed := p.Term.(type) {
-		case *ElementDecl:
-			nameToIdx[ed.Name] = i
-			// Also register substitution group members.
-			for _, member := range vc.schema.substGroups[ed.Name] {
-				nameToIdx[member.Name] = i
-			}
-		case *Wildcard:
-			if is11 {
-				wildcardIdx = append(wildcardIdx, i)
-			}
+	members := flattenAllMembers(mg, is11)
+	counts := make([]int, len(members))
+	nameToIdx := make(map[QName]int, len(members))
+	for i, m := range members {
+		if m.ed == nil {
+			continue
+		}
+		nameToIdx[m.ed.Name] = i
+		// Also register substitution group members.
+		for _, member := range vc.schema.substGroups[m.ed.Name] {
+			nameToIdx[member.Name] = i
 		}
 	}
 
@@ -252,43 +277,36 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 	// name also matches a (now-exhausted) element particle must not be
 	// re-validated as that element.
 	wcClaimed := make(map[int]bool)
-	tryWildcard := func(child childElem) (int, bool) {
-		widx := vc.allWildcardFor(mg, wildcardIdx, wcCount, child)
-		return widx, widx >= 0
-	}
 
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
 		// A declared element wins over a wildcard (weak-wildcard precedence) while
-		// it still has occurrence budget. Once exhausted (already seen), a further
-		// same-named child may instead be claimed by a wildcard member.
-		if ok && !seen[idx] {
+		// it still has occurrence budget. Once exhausted, a further same-named
+		// child may instead be claimed by a wildcard member.
+		if ok && (members[idx].max == Unbounded || counts[idx] < members[idx].max) {
 			// Record the (possibly LOCAL) host declaration AS SOON AS this child is
-			// matched to a particle — BEFORE any early return — so pass-2 IDC
+			// matched to a member — BEFORE any early return — so pass-2 IDC
 			// evaluation does not fall back to a same-named GLOBAL declaration.
-			if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
-				vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
-			}
-			seen[idx] = true
+			vc.recordElemDecl(child.elem, resolveSubstDecl(child, members[idx].ed, vc.schema))
+			counts[idx]++
 			consumed++
 			continue
 		}
-		if widx, matched := tryWildcard(child); matched {
-			wc, _ := mg.Particles[widx].Term.(*Wildcard)
+		if widx := vc.allWildcardMember(members, counts, child); widx >= 0 {
+			wc := members[widx].wc
 			if err := vc.validateWildcardChild(ctx, wc, child, edcScope); err != nil {
 				return consumed, err
 			}
-			wcCount[widx]++
-			seen[widx] = true
+			counts[widx]++
 			wcClaimed[pos+consumed] = true
 			consumed++
 			continue
 		}
 		// Not matchable: a duplicate of an exhausted element, or an undeclared
 		// child not admitted by any wildcard.
-		expected := unseenParticleNames(mg.Particles, seen, vc.schema)
+		expected := unseenMemberNames(members, counts, vc.schema)
 		msg := "This element is not expected."
 		if len(expected) > 0 {
 			msg = formatExpected("This element is not expected.", expected)
@@ -302,25 +320,13 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		return 0, nil
 	}
 
-	// Check for required missing particles. A wildcard particle is satisfied by
-	// its match count meeting minOccurs (which may be >1 in XSD 1.1); an element
-	// particle by having been seen.
-	hasRequired := false
-	for i, p := range mg.Particles {
-		if _, isWC := p.Term.(*Wildcard); isWC {
-			if wcCount[i] < p.MinOccurs {
-				hasRequired = true
-				break
-			}
+	// Check for required missing members: each member's match count must reach its
+	// minOccurs (which may be >1 in XSD 1.1).
+	for i, m := range members {
+		if counts[i] >= m.min {
 			continue
 		}
-		if !seen[i] && p.MinOccurs > 0 {
-			hasRequired = true
-			break
-		}
-	}
-	if hasRequired {
-		unseen := unseenParticleNames(mg.Particles, seen, vc.schema)
+		unseen := unseenMemberNames(members, counts, vc.schema)
 		msg := formatExpected("Missing child element(s).", unseen)
 		vc.reportValidityError(ctx, vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		return consumed, fmt.Errorf("missing")
@@ -338,8 +344,8 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		if !ok {
 			continue
 		}
-		edecl, isElem := mg.Particles[idx].Term.(*ElementDecl)
-		if !isElem {
+		edecl := members[idx].ed
+		if edecl == nil {
 			continue
 		}
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
@@ -387,21 +393,43 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 	return consumed, nil
 }
 
-// allWildcardFor returns the index of a wildcard particle in an xs:all group
-// that admits child and still has occurrence budget (maxOccurs not reached), or
-// -1 if none. Wildcards are tried in declaration order.
-func (vc *validationContext) allWildcardFor(mg *ModelGroup, wildcardIdx []int, wcCount []int, child childElem) int {
-	for _, i := range wildcardIdx {
-		p := mg.Particles[i]
-		wc, _ := p.Term.(*Wildcard)
-		if p.MaxOccurs != Unbounded && wcCount[i] >= p.MaxOccurs {
+// allWildcardMember returns the index of a wildcard member in an xs:all group's
+// flattened member list that admits child and still has occurrence budget
+// (maxOccurs not reached), or -1 if none. Wildcards are tried in declaration
+// order.
+func (vc *validationContext) allWildcardMember(members []allMember, counts []int, child childElem) int {
+	for i, m := range members {
+		if m.wc == nil {
 			continue
 		}
-		if wildcardAllowsExpandedName(wc, child.name, child.ns, vc.schema, false) {
+		if m.max != Unbounded && counts[i] >= m.max {
+			continue
+		}
+		if wildcardAllowsExpandedName(m.wc, child.name, child.ns, vc.schema, false) {
 			return i
 		}
 	}
 	return -1
+}
+
+// unseenMemberNames lists the expected names of xs:all members that have not yet
+// been matched (match count zero), used to build the "expected" hint in the
+// unexpected-element and missing-element diagnostics. Listing zero-count members
+// (rather than under-min members) keeps the XSD 1.0 message byte-identical.
+func unseenMemberNames(members []allMember, counts []int, schema *Schema) []string {
+	var names []string
+	for i, m := range members {
+		if counts[i] != 0 {
+			continue
+		}
+		switch {
+		case m.ed != nil:
+			names = append(names, elementExpectedNamesWithSubst(m.ed, schema)...)
+		case m.wc != nil:
+			names = append(names, wildcardExpected(m.wc))
+		}
+	}
+	return names
 }
 
 // validateContentModelTop validates children against a model group, checking
@@ -777,31 +805,40 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 }
 
 func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
-	seen := make([]bool, len(mg.Particles))
-	nameToIdx := make(map[QName]int, len(mg.Particles))
-	for i, p := range mg.Particles {
-		if ed, ok := p.Term.(*ElementDecl); ok {
-			nameToIdx[ed.Name] = i
-			for _, member := range vc.schema.substGroups[ed.Name] {
-				nameToIdx[member.Name] = i
-			}
+	is11 := vc.version == Version11
+	members := flattenAllMembers(mg, is11)
+	counts := make([]int, len(members))
+	nameToIdx := make(map[QName]int, len(members))
+	for i, m := range members {
+		if m.ed == nil {
+			continue
+		}
+		nameToIdx[m.ed.Name] = i
+		for _, member := range vc.schema.substGroups[m.ed.Name] {
+			nameToIdx[member.Name] = i
 		}
 	}
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
-		if !ok {
-			break
+		if ok && (members[idx].max == Unbounded || counts[idx] < members[idx].max) {
+			counts[idx]++
+			consumed++
+			continue
 		}
-		if seen[idx] {
+		if widx := vc.allWildcardMember(members, counts, child); widx >= 0 {
+			counts[widx]++
+			consumed++
+			continue
+		}
+		if ok {
 			return 0, fmt.Errorf("duplicate")
 		}
-		seen[idx] = true
-		consumed++
+		break
 	}
-	for i, p := range mg.Particles {
-		if !seen[i] && p.MinOccurs > 0 {
+	for i, m := range members {
+		if counts[i] < m.min {
 			return 0, fmt.Errorf("missing required")
 		}
 	}
@@ -1311,22 +1348,6 @@ func formatExpected(prefix string, names []string) string {
 		return fmt.Sprintf("%s Expected is ( %s ).", prefix, names[0])
 	}
 	return fmt.Sprintf("%s Expected is one of ( %s ).", prefix, strings.Join(names, ", "))
-}
-
-func unseenParticleNames(particles []*Particle, seen []bool, schema *Schema) []string {
-	var names []string
-	for i, p := range particles {
-		if seen[i] {
-			continue
-		}
-		switch term := p.Term.(type) {
-		case *ElementDecl:
-			names = append(names, elementExpectedNamesWithSubst(term, schema)...)
-		case *Wildcard:
-			names = append(names, wildcardExpected(term))
-		}
-	}
-	return names
 }
 
 func particleNames(particles []*Particle, schema *Schema) []string {

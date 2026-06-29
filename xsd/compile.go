@@ -313,6 +313,11 @@ type groupRefSource struct {
 	// particle of a complex type's content. A reference to an 'all' model group
 	// is forbidden when nested.
 	nested bool
+	// parentCompositor is the compositor of the model group the reference appears
+	// in (only meaningful when nested). XSD 1.1 permits a reference to an 'all'
+	// model group nested directly inside another xs:all (it is flattened); a
+	// reference nested in a sequence/choice remains forbidden.
+	parentCompositor ModelGroupKind
 	// maxOccursRaw is the lexical maxOccurs attribute on the referencing element
 	// ("" if absent, which defaults to 1). A reference to an 'all' model group
 	// must have maxOccurs == 1.
@@ -738,6 +743,15 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 // circularity, final, and element-consistency checks run later, unchanged.
 func (c *compiler) buildSubstGroups() {
 	for _, edecl := range c.schema.elements {
+		// XSD 1.1 multiple-head substitution: register the element under EVERY head
+		// it declares. SubstitutionGroups holds all heads when more than one; the
+		// common single-head case uses SubstitutionGroup.
+		if len(edecl.SubstitutionGroups) > 0 {
+			for _, head := range edecl.SubstitutionGroups {
+				c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
+			}
+			continue
+		}
 		if edecl.SubstitutionGroup == (QName{}) {
 			continue
 		}

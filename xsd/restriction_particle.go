@@ -227,6 +227,24 @@ func groupHasWildcard(g *ModelGroup) bool {
 }
 
 func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
+	// XSD 1.1 occurrence-counting subsumption of a base xs:all: a derived xs:all,
+	// xs:sequence, or xs:choice restricting a base all is checked by summing the
+	// derived side's per-member occurrence contributions (several derived
+	// particles, e.g. substitution-group members, may collectively restrict one
+	// base member with maxOccurs>1). recurseAll's 1:1 distinct mapping cannot
+	// express this. The wildcard cases still route to allRestrictsWithWildcards.
+	if version == Version11 && bg.Compositor == CompositorAll &&
+		!groupHasWildcard(rg) && !groupHasWildcard(bg) {
+		// An empty (non-emitting) derived particle restricts the base all to empty
+		// content; valid iff the base all particle itself is emptiable.
+		if particleEmitsNothing(r) {
+			return particleEmptiable(b)
+		}
+		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+			return false
+		}
+		return allRestrictsByCounting(r, bg, schema)
+	}
 	switch {
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorSequence:
 		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {

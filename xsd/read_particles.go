@@ -276,11 +276,12 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				// model group (xs:sequence/xs:choice/xs:all), so a resolved 'all'
 				// model group is forbidden here.
 				c.groupRefSources[placeholder] = groupRefSource{
-					line:         ce.Line(),
-					local:        ce.LocalName(),
-					nested:       true,
-					maxOccursRaw: getAttr(ce, attrMaxOccurs),
-					source:       c.diagSource(),
+					line:             ce.Line(),
+					local:            ce.LocalName(),
+					nested:           true,
+					parentCompositor: compositor,
+					maxOccursRaw:     getAttr(ce, attrMaxOccurs),
+					source:           c.diagSource(),
 				}
 				mg.Particles = append(mg.Particles, &Particle{
 					MinOccurs: placeholder.MinOccurs,

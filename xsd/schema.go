@@ -143,11 +143,15 @@ type ElementDecl struct {
 	MaxOccurs         int // -1 = unbounded
 	Abstract          bool
 	Nillable          bool  // true if the element may carry xsi:nil="true"
-	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
-	IsRef             bool  // true if this was created from a ref="..." attribute
-	IDCs              []*IDConstraint
-	Default           *string // nil = not set
-	Fixed             *string // nil = not set
+	SubstitutionGroup QName // QName of the (first) substitution group head (zero value if none)
+	// SubstitutionGroups holds ALL heads when XSD 1.1 multiple-head substitution
+	// is used (substitutionGroup="a b c"). It is nil for the common single-head
+	// case; SubstitutionGroup always holds the first head for back-compat.
+	SubstitutionGroups []QName
+	IsRef              bool // true if this was created from a ref="..." attribute
+	IDCs               []*IDConstraint
+	Default            *string // nil = not set
+	Fixed              *string // nil = not set
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document. It is used to resolve
 	// a QName/NOTATION fixed value's prefix when comparing in value space.

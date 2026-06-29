@@ -425,7 +425,23 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 
 	if opts.allowSubstitutionGroup {
 		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
-			decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
+			// XSD 1.1 allows MULTIPLE substitution group heads
+			// (substitutionGroup="a b c"); the element is a member of every listed
+			// head. XSD 1.0 permits exactly one head, so the whole (possibly invalid
+			// spaced) value is resolved as a single QName, preserving 1.0 behavior.
+			if c.version == Version11 {
+				for h := range strings.FieldsSeq(sg) {
+					decl.SubstitutionGroups = append(decl.SubstitutionGroups, c.resolveQName(ctx, elem, h))
+				}
+				if len(decl.SubstitutionGroups) > 0 {
+					decl.SubstitutionGroup = decl.SubstitutionGroups[0]
+				}
+				if len(decl.SubstitutionGroups) == 1 {
+					decl.SubstitutionGroups = nil
+				}
+			} else {
+				decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
+			}
 		}
 	}
 
