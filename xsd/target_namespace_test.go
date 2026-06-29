@@ -226,6 +226,18 @@ func TestVersion11LocalElementTargetNamespaceRepresentationConstraints(t *testin
 </xs:schema>`,
 		},
 		{
+			name: "empty target namespace not allowed with explicit empty schema target namespace outside restriction",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" targetNamespace=""/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
 			name: "cross namespace not allowed in anyType restriction",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="restricted">

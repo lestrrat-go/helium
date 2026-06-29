@@ -26,11 +26,10 @@ type compiler struct {
 	// not set its own. Empty means no default (unprefixed element = no-namespace).
 	// It is re-set per document for xs:include/xs:redefine/xs:import.
 	schemaXPathDefaultNS string
-	// schemaTargetNSSet tracks whether the current schema document's xs:schema
-	// element explicitly has @targetNamespace. This is distinct from
-	// schema.targetNamespace for chameleon includes, where the effective component
-	// namespace is inherited from the including schema but the included document's
-	// ancestor xs:schema still has no targetNamespace attribute.
+	// schemaTargetNSSet tracks whether the current schema document has a non-empty
+	// effective target namespace. This is distinct from @targetNamespace presence:
+	// targetNamespace="" is no target namespace, while chameleon includes inherit
+	// the including schema's effective namespace.
 	schemaTargetNSSet bool
 	baseDir           string         // directory of the schema file, for resolving relative paths
 	fsys              fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
@@ -549,7 +548,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.version = c.version
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
-	c.schemaTargetNSSet = hasAttr(root, attrTargetNamespace)
+	c.schemaTargetNSSet = c.schema.targetNamespace != ""
 	if hasAttr(root, attrXPathDefaultNamespace) {
 		c.xpathDefaultNSSet = true
 	}

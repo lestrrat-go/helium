@@ -343,7 +343,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaTargetNSSet := c.schemaTargetNSSet
-	c.schemaTargetNSSet = hasAttr(incRoot, attrTargetNamespace) || c.schema.targetNamespace != ""
+	c.schemaTargetNSSet = c.schema.targetNamespace != ""
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -586,7 +586,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaTargetNSSet := c.schemaTargetNSSet
-	c.schemaTargetNSSet = hasAttr(incRoot, attrTargetNamespace) || c.schema.targetNamespace != ""
+	c.schemaTargetNSSet = c.schema.targetNamespace != ""
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -1094,7 +1094,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	defer propagateImpErrors()
 
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
-	impC.schemaTargetNSSet = hasAttr(impRoot, attrTargetNamespace)
+	impC.schemaTargetNSSet = impC.schema.targetNamespace != ""
 	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified
 	impC.schema.attrFormQualified = getAttr(impRoot, attrAttributeFormDefault) == attrValQualified
 	if v := getAttr(impRoot, attrBlockDefault); v != "" {
