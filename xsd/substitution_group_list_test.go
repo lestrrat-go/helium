@@ -104,6 +104,29 @@ func TestVersion11SubstitutionGroupList(t *testing.T) {
 		require.NoError(t, validateXSDDocument(t, schema, `<root><member>42</member></root>`))
 	})
 
+	t.Run("final restriction blocks union member affiliation", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="headType">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:element name="head" type="headType" final="restriction"/>
+  <xs:element name="member" type="xs:int" substitutionGroup="head"/>
+</xs:schema>`
+		_, err := compileXSD11Schema(t, schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
+	t.Run("final restriction blocks builtin simple narrowing", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:integer" final="restriction"/>
+  <xs:element name="member" type="xs:int" substitutionGroup="head"/>
+</xs:schema>`
+		_, err := compileXSD11Schema(t, schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
 	t.Run("member cannot derive through a faceted union head", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

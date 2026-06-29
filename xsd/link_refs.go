@@ -1743,8 +1743,10 @@ func (c *compiler) checkSubstGroupAffiliations(ctx context.Context) {
 	}
 }
 
-// derivationUsesMethod walks the BaseType chain from derived to base and
-// returns true if any step in the chain uses the given derivation method.
+// derivationUsesMethod reports whether derived reaches base through the given
+// derivation method. It follows explicit BaseType links and the extra simple-type
+// derivation paths that are not pointer-linked: built-in narrowing and an
+// unfaceted union head substitutable through one of its members.
 func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 	if derived == nil || base == nil {
 		return false
@@ -1755,6 +1757,22 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 			return true
 		}
 		td = td.BaseType
+	}
+	if td == base {
+		return false
+	}
+	if method == DerivationRestriction && resolveVariety(base) == TypeVarietyUnion {
+		for _, member := range resolveUnionMembers(base) {
+			if isXsiTypeDerivedFromDeclared(derived, member) {
+				return true
+			}
+		}
+	}
+	if method == DerivationRestriction && isBuiltinSimpleType(base) {
+		db := builtinBaseLocal(derived)
+		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
+			return true
+		}
 	}
 	return false
 }
