@@ -192,10 +192,12 @@ the length facets are inapplicable and are reported at COMPILE time (`The facet 
 is not allowed on types derived from the type xs:…`), so e.g. `xs:int`+`length` is a
 schema error rather than a runtime no-op. `explicitTimezone` is accepted only on the
 date/time family (dateTime/dateTimeStamp/date/time and the gregorian g-types); it is
-stored on `FacetSet.ExplicitTimezone`, checked at validation time for required or
-prohibited timezone presence, and participates in compile-time restriction checks
-so `xs:dateTimeStamp` can only retain `required`. Built-in temporal whiteSpace is
-treated as fixed `collapse`. `checkFacetSameTypeConsistency` gates EACH
+stored on `FacetSet.ExplicitTimezone` with `FacetSet.ExplicitTimezoneFixed`,
+checked at validation time for required or prohibited timezone presence, and
+participates in compile-time restriction checks so `xs:dateTimeStamp` can only
+retain `required` and inherited user `fixed="true"` values cannot be changed.
+Built-in temporal whiteSpace is treated as fixed `collapse`.
+`checkFacetSameTypeConsistency` gates EACH
 facet-family consistency check to the family's applicable type/variety, so it never
 adds a spurious error on top of an applicability rejection: the LENGTH check
 (`minLength>maxLength`) runs only on a list variety or a `lengthApplicableTypes`

@@ -1257,6 +1257,12 @@ func (c *compiler) checkBuiltinFixedFacetRestriction(ctx context.Context, td *Ty
 	if fs.ExplicitTimezone == nil {
 		return
 	}
+	if fixedValue := inheritedFixedExplicitTimezone(td); fixedValue != "" && *fs.ExplicitTimezone != fixedValue {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The value '%s' of the facet 'explicitTimezone' does not match the fixed value '%s' of the base type '%s'.",
+				*fs.ExplicitTimezone, fixedValue, typeDisplayName(td.BaseType))))
+		return
+	}
 	baseValue := baseExplicitTimezone(td)
 	switch baseValue {
 	case attrValRequired:
@@ -1314,6 +1320,21 @@ func baseExplicitTimezone(td *TypeDef) string {
 			return attrValOptional
 		default:
 			return ""
+		}
+	}
+	return ""
+}
+
+func inheritedFixedExplicitTimezone(td *TypeDef) string {
+	if td == nil || td.BaseType == nil {
+		return ""
+	}
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets != nil && cur.Facets.ExplicitTimezone != nil && cur.Facets.ExplicitTimezoneFixed {
+			return *cur.Facets.ExplicitTimezone
+		}
+		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local == lexicon.TypeDateTimeStamp {
+			return attrValRequired
 		}
 	}
 	return ""

@@ -271,6 +271,57 @@ func TestVersion11TemporalExplicitTimezoneFacet(t *testing.T) {
 		`<prohibited>2020-01-01Z</prohibited>`), xsd.ErrValidationFailed)
 }
 
+func TestVersion11ExplicitTimezoneFixedFacetRestriction(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		schema string
+	}{
+		{
+			name: "fixed optional through intermediate",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseDateTime">
+    <xs:restriction base="xs:dateTime">
+      <xs:explicitTimezone value="optional" fixed="true"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intermediateDateTime">
+    <xs:restriction base="baseDateTime">
+      <xs:minInclusive value="2020-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badDateTime">
+    <xs:restriction base="intermediateDateTime">
+      <xs:explicitTimezone value="required"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+		{
+			name: "invalid fixed lexical",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badDateTime">
+    <xs:restriction base="xs:dateTime">
+      <xs:explicitTimezone value="required" fixed="maybe"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
+			require.NoError(t, err)
+			_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
+}
+
 func TestVersion10IgnoresExplicitTimezoneFacet(t *testing.T) {
 	t.Parallel()
 

@@ -1001,6 +1001,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			switch val {
 			case attrValOptional, attrValProhibited, attrValRequired:
 				fs.ExplicitTimezone = &val
+				fs.ExplicitTimezoneFixed = c.readFacetFixed(ctx, ce)
 			default:
 				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(),
 					ce.LocalName(), elemExplicitTimezone,
