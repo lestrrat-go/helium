@@ -598,25 +598,16 @@ func isGlobalAttributeDecl(elem *helium.Element) bool {
 }
 
 func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context, elem *helium.Element) bool {
-	for parent := elem.Parent(); parent != nil; parent = parent.Parent() {
-		pe, ok := helium.AsNode[*helium.Element](parent)
-		if !ok {
-			return false
-		}
-		if !isXSDElement(pe, elemRestriction) {
-			continue
-		}
-		if !isContentDerivationRestriction(pe) {
-			continue
-		}
-		base := getAttr(pe, attrBase)
-		if base == "" {
-			return false
-		}
-		qn := c.resolveQName(ctx, pe, base)
-		return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
+	parent, ok := helium.AsNode[*helium.Element](elem.Parent())
+	if !ok || !isXSDElement(parent, elemRestriction) || !isContentDerivationRestriction(parent) {
+		return false
 	}
-	return false
+	base := getAttr(parent, attrBase)
+	if base == "" {
+		return false
+	}
+	qn := c.resolveQName(ctx, parent, base)
+	return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 }
 
 func isContentDerivationRestriction(elem *helium.Element) bool {

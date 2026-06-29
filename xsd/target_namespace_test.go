@@ -124,6 +124,29 @@ func TestVersion11LocalAttributeTargetNamespaceRepresentationConstraints(t *test
   </xs:complexType>
 </xs:schema>`,
 		},
+		{
+			name: "cross namespace not allowed on nested element attribute inside restriction",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:element name="item" type="xs:anyType"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="restricted">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:element name="item">
+            <xs:complexType>
+              <xs:attribute name="a" type="xs:string" targetNamespace="urn:other"/>
+            </xs:complexType>
+          </xs:element>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`,
+		},
 	}
 
 	for _, tc := range tests {
