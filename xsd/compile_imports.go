@@ -164,6 +164,9 @@ func schemaDisplayLoc(filename, loc string) string {
 
 // processIncludes handles xs:include and xs:import elements.
 func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) error {
+	// Per-document set of xs:override target paths, so the same document overridden
+	// twice within one schema document is rejected (XSD 1.1, W3C over022).
+	overrideSeen := make(map[string]struct{})
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -228,6 +231,19 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				continue
 			}
 			if err := c.loadRedefine(ctx, loc, elem); err != nil {
+				return err
+			}
+		case c.version == Version11 && isXSDElement(elem, elemOverride):
+			// xs:override is an XSD 1.1 construct. In 1.0 mode it is ignored
+			// (skipped) so existing 1.0 behavior stays byte-identical.
+			loc := getAttr(elem, attrSchemaLocation)
+			if loc == "" {
+				continue
+			}
+			if !c.recordOverrideTarget(ctx, elem, loc, overrideSeen) {
+				continue
+			}
+			if err := c.loadOverride(ctx, loc, elem); err != nil {
 				return err
 			}
 		}
