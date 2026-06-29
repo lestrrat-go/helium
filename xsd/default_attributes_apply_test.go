@@ -130,6 +130,48 @@ func TestVersion11DefaultAttributesExtensionExplicitGroupDuplicate(t *testing.T)
 	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 }
 
+func TestVersion11DefaultAttributesExtensionDistinctDefaultsDuplicate(t *testing.T) {
+	t.Parallel()
+
+	const mainXSD = "main.xsd"
+	const incXSD = "inc.xsd"
+	fsys := fstest.MapFS{
+		mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  attributeFormDefault="qualified" defaultAttributes="t:d2">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:attributeGroup name="d2">
+    <xs:attribute name="a" type="xs:boolean"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="t:Base"/>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`)},
+		incXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  attributeFormDefault="qualified" defaultAttributes="t:d1">
+  <xs:attributeGroup name="d1">
+    <xs:attribute name="a" type="xs:boolean" use="required"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base"/>
+</xs:schema>`)},
+	}
+	data, err := fsys.ReadFile(mainXSD)
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
+	require.NoError(t, err)
+
+	_, err = xsd.NewCompiler().
+		Version(xsd.Version11).
+		Label(mainXSD).
+		BaseDir(".").
+		FS(fsys).
+		Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
 func TestVersion11DefaultAttributesMissingGroupFailsCompile(t *testing.T) {
 	t.Parallel()
 

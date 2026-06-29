@@ -567,37 +567,41 @@ func (c *compiler) markDefaultAttrUses(td *TypeDef, uses []*AttrUse) {
 	if td == nil || len(uses) == 0 {
 		return
 	}
-	names := c.defaultAttrUseNames[td]
-	if names == nil {
-		names = make(map[QName]struct{})
-		c.defaultAttrUseNames[td] = names
+	attrs := c.defaultAttrUses[td]
+	if attrs == nil {
+		attrs = make(map[QName]*AttrUse)
+		c.defaultAttrUses[td] = attrs
 	}
 	for _, au := range uses {
 		if au.Prohibited {
 			continue
 		}
-		names[au.Name] = struct{}{}
+		attrs[au.Name] = au
 	}
 }
 
-func (c *compiler) hasDefaultAttrUse(td *TypeDef, name QName) bool {
+func (c *compiler) defaultAttrUse(td *TypeDef, name QName) *AttrUse {
 	if td == nil {
-		return false
+		return nil
 	}
-	_, ok := c.defaultAttrUseNames[td][name]
-	return ok
+	return c.defaultAttrUses[td][name]
 }
 
-func (c *compiler) markDefaultAttrUse(td *TypeDef, name QName) {
-	if td == nil {
+func (c *compiler) defaultAttrUseMatches(a, b *TypeDef, name QName) bool {
+	au := c.defaultAttrUse(a, name)
+	return au != nil && au == c.defaultAttrUse(b, name)
+}
+
+func (c *compiler) markDefaultAttrUse(td *TypeDef, au *AttrUse) {
+	if td == nil || au == nil || au.Prohibited {
 		return
 	}
-	names := c.defaultAttrUseNames[td]
-	if names == nil {
-		names = make(map[QName]struct{})
-		c.defaultAttrUseNames[td] = names
+	attrs := c.defaultAttrUses[td]
+	if attrs == nil {
+		attrs = make(map[QName]*AttrUse)
+		c.defaultAttrUses[td] = attrs
 	}
-	names[name] = struct{}{}
+	attrs[au.Name] = au
 }
 
 // attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
@@ -686,7 +690,7 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 		if !baseAttrNames[au.Name] {
 			continue
 		}
-		if c.hasDefaultAttrUse(td, au.Name) && c.hasDefaultAttrUse(td.BaseType, au.Name) {
+		if c.defaultAttrUseMatches(td, td.BaseType, au.Name) {
 			continue
 		}
 		src, ok := c.typeDefSources[td]
@@ -1418,9 +1422,7 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 				continue
 			}
 			td.Attributes = append(td.Attributes, bau)
-			if c.hasDefaultAttrUse(base, bau.Name) {
-				c.markDefaultAttrUse(td, bau.Name)
-			}
+			c.markDefaultAttrUse(td, c.defaultAttrUse(base, bau.Name))
 		}
 	}
 	// anyAttribute: a restriction inherits the base wildcard when it declares none;

@@ -1085,7 +1085,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
-		defaultAttrUseNames:      make(map[*TypeDef]map[QName]struct{}),
+		defaultAttrUses:          make(map[*TypeDef]map[QName]*AttrUse),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		attrGroupWildcards:       make(map[QName]*Wildcard),
