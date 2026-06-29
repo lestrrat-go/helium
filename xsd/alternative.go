@@ -293,13 +293,18 @@ func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) 
 	if hasAttr(elem, attrXPathDefaultNamespace) {
 		return resolveXPathDefaultNSToken(elem, getAttr(elem, attrXPathDefaultNamespace), c.schema.targetNamespace), true
 	}
-	// Otherwise inherit the schema-level value. It is ALREADY RESOLVED against the
-	// schema ROOT at root-read time (compiler.schemaXPathDefaultNS, shared with the
-	// identity-constraint path), so an inherited ##defaultNamespace uses the ROOT's
-	// default namespace — NOT a nested default-namespace redeclaration in scope at
-	// the alternative element (CTA-861-001).
+	// Otherwise inherit the schema-level token, but resolve it against the HOST
+	// element (the alternative), NOT the schema root. Per the XSD 1.1 {xpath default
+	// namespace} mapping the ##defaultNamespace keyword always uses the in-scope
+	// default namespace of the element bearing the XPath, even when the
+	// xpathDefaultNamespace attribute is inherited from <schema> — so an
+	// alternative's own xmlns redeclaration governs (cta0005). The pre-resolved
+	// root value (schemaXPathDefaultNS) is therefore NOT used here; only the raw
+	// token is inherited and re-resolved at elem. ##targetNamespace/##local/literal
+	// URI tokens resolve identically at either element, so this is a strict
+	// refinement of the ##defaultNamespace case.
 	if c.xpathDefaultNSSet {
-		return c.schemaXPathDefaultNS, true
+		return resolveXPathDefaultNSToken(elem, c.schemaXPathDefaultNSToken, c.schema.targetNamespace), true
 	}
 	return "", false
 }
