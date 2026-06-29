@@ -177,3 +177,33 @@ func TestVersion11CTAElementConsistentTypeTables(t *testing.T) {
 		require.NoError(t, compileCTASchema(t, src))
 	})
 }
+
+// TestVersion11CTABaseURIContextNode covers cta0021: fn:base-uri(.) in an
+// xs:alternative @test must resolve to the INSTANCE document's URI (the element
+// carries no xml:base), so a base-uri-driven alternative selects its type. The
+// CTA context node is detached, so the synthetic document must carry the instance
+// document URI.
+func TestVersion11CTABaseURIContextNode(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="when" type="xs:date">
+    <xs:alternative test="ends-with(base-uri(.), 'inst.xml')" type="xs:date"/>
+    <xs:alternative type="xs:error"/>
+  </xs:element>
+</xs:schema>`
+	doc, perr := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, perr)
+	schema, cerr := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+	require.NoError(t, cerr)
+
+	t.Run("base-uri matches: xs:date selected, valid date accepted", func(t *testing.T) {
+		idoc, ierr := helium.NewParser().BaseURI("file:///tmp/inst.xml").Parse(t.Context(), []byte(`<when>2010-10-16</when>`))
+		require.NoError(t, ierr)
+		require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), idoc))
+	})
+
+	t.Run("base-uri does not match: xs:error selected, invalid", func(t *testing.T) {
+		idoc, ierr := helium.NewParser().BaseURI("file:///tmp/other.xml").Parse(t.Context(), []byte(`<when>2010-10-16</when>`))
+		require.NoError(t, ierr)
+		require.ErrorIs(t, xsd.NewValidator(schema).Validate(t.Context(), idoc), xsd.ErrValidationFailed)
+	})
+}

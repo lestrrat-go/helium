@@ -61,6 +61,14 @@ func (vc *validationContext) inheritedAttributes(elem *helium.Element) []*helium
 // inherited ancestor attributes so a test like @c:kind matches them.
 func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Element {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
+	// Carry the INSTANCE document's URI onto the synthetic document so fn:base-uri(.)
+	// on the CTA context node resolves to the instance document (the element bears no
+	// xml:base), matching the data model — a @test like ends-with(base-uri(.), '…')
+	// must see the instance URI, not the empty string (cta0021). fn:static-base-uri()
+	// stays the SCHEMA URI, set separately on the evaluator from alt.BaseURI.
+	if owner := elem.OwnerDocument(); owner != nil && owner.URL() != "" {
+		doc.SetURL(owner.URL())
+	}
 	// Use the LOCAL name: elem.Name() is the lexical QName (e.g. "p:root") for a
 	// prefixed element, which CreateElement would store verbatim and SetActiveNamespace
 	// would then leave with a wrong local part, so a name test in @test would miss.
