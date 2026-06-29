@@ -814,11 +814,26 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 }
 
 func (c *compiler) readSchemaDefaultAttributes(ctx context.Context, root *helium.Element) {
-	c.schema.defaultAttributes = QName{}
-	c.schema.defaultAttrsSet = false
-	c.schema.defaultAttrsSrc = attrGroupRefUseSource{}
+	qn, set, src := c.resolveSchemaDefaultAttributes(ctx, root)
+	c.schema.defaultAttributes = qn
+	c.schema.defaultAttrsSet = set
+	c.schema.defaultAttrsSrc = src
+	if set {
+		c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, schemaDefaultAttrRef{qn: qn, src: src})
+	}
+}
+
+// resolveSchemaDefaultAttributes resolves the @defaultAttributes QName of a schema
+// document's root element (XSD 1.1 only). It returns the resolved QName, whether
+// the attribute was present and well-formed, and its source. Lexical/prefix/
+// deprecated-namespace diagnostics are emitted for a malformed value. It has no
+// side effects on c.schema; the caller decides how to apply the resolved state
+// (the normal read path stores it on c.schema and queues the unresolved-group
+// check; the xs:override path reapplies the TARGET document's value, see
+// overrideLoadTarget).
+func (c *compiler) resolveSchemaDefaultAttributes(ctx context.Context, root *helium.Element) (QName, bool, attrGroupRefUseSource) {
 	if c.version != Version11 || !hasAttr(root, attrDefaultAttributes) {
-		return
+		return QName{}, false, attrGroupRefUseSource{}
 	}
 	ref := normalizeWhiteSpace(getAttr(root, attrDefaultAttributes), "collapse")
 	src := attrGroupRefUseSource{
@@ -829,17 +844,17 @@ func (c *compiler) readSchemaDefaultAttributes(ctx context.Context, root *helium
 	}
 	if !xmlchar.IsValidQName(ref) {
 		c.reportInvalidQNameValue(ctx, root, ref)
-		return
+		return QName{}, false, attrGroupRefUseSource{}
 	}
 	qn := QName{Local: ref, NS: c.schema.targetNamespace}
 	if prefix, local, ok := strings.Cut(ref, ":"); ok {
 		ns := lookupNS(root, prefix)
 		if ns == "" && prefix != "" {
 			c.reportUnboundQNamePrefix(ctx, root, ref, prefix)
-			return
+			return QName{}, false, attrGroupRefUseSource{}
 		}
 		if c.rejectDeprecatedDatatypeNamespace(ctx, root, ref, ns) {
-			return
+			return QName{}, false, attrGroupRefUseSource{}
 		}
 		qn = QName{Local: local, NS: ns}
 	} else {
@@ -847,13 +862,10 @@ func (c *compiler) readSchemaDefaultAttributes(ctx context.Context, root *helium
 			qn.NS = defNS
 		}
 		if c.rejectDeprecatedDatatypeNamespace(ctx, root, ref, qn.NS) {
-			return
+			return QName{}, false, attrGroupRefUseSource{}
 		}
 	}
-	c.schema.defaultAttributes = qn
-	c.schema.defaultAttrsSet = true
-	c.schema.defaultAttrsSrc = src
-	c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, schemaDefaultAttrRef{qn: qn, src: src})
+	return qn, true, src
 }
 
 // buildSubstGroups populates c.schema.substGroups, mapping each substitution-group
