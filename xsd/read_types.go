@@ -991,6 +991,9 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			}
 			fs.WhiteSpace = &val
 		case elemExplicitTimezone:
+			if c.version != Version11 {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}

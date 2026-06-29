@@ -1056,7 +1056,7 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'fractionDigits' value '%d' is greater than the 'fractionDigits' value of the base type '%d'.", *fs.FractionDigits, *base.FractionDigits)))
 	}
-	c.checkFixedRangeFacetRestriction(ctx, td, fs, base, line, component)
+	c.checkFixedRangeFacetRestriction(ctx, td, fs, line, component)
 
 	// Inclusive/exclusive boundary facets vs base. These compare a derived bound
 	// against a base bound in the type's ORDERED VALUE SPACE — exactly as the
@@ -1191,10 +1191,10 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 	}
 }
 
-func (c *compiler) checkFixedRangeFacetRestriction(ctx context.Context, td *TypeDef, fs, base *FacetSet, line int, component string) {
+func (c *compiler) checkFixedRangeFacetRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	builtinLocal := builtinBaseLocal(td)
-	check := func(name string, value, baseValue *string, fixed bool) {
-		if value == nil || baseValue == nil || !fixed {
+	check := func(name string, value, baseValue *string) {
+		if value == nil || baseValue == nil {
 			return
 		}
 		if rangeFacetValueEqual(*value, *baseValue, builtinLocal) {
@@ -1204,10 +1204,40 @@ func (c *compiler) checkFixedRangeFacetRestriction(ctx context.Context, td *Type
 			fmt.Sprintf("The value '%s' of the facet '%s' does not match the fixed value '%s' of the base type.",
 				*value, name, *baseValue)))
 	}
-	check("minInclusive", fs.MinInclusive, base.MinInclusive, base.MinInclusiveFixed)
-	check("maxInclusive", fs.MaxInclusive, base.MaxInclusive, base.MaxInclusiveFixed)
-	check("minExclusive", fs.MinExclusive, base.MinExclusive, base.MinExclusiveFixed)
-	check("maxExclusive", fs.MaxExclusive, base.MaxExclusive, base.MaxExclusiveFixed)
+	check("minInclusive", fs.MinInclusive, inheritedFixedRangeFacet(td, "minInclusive"))
+	check("maxInclusive", fs.MaxInclusive, inheritedFixedRangeFacet(td, "maxInclusive"))
+	check("minExclusive", fs.MinExclusive, inheritedFixedRangeFacet(td, "minExclusive"))
+	check("maxExclusive", fs.MaxExclusive, inheritedFixedRangeFacet(td, "maxExclusive"))
+}
+
+func inheritedFixedRangeFacet(td *TypeDef, name string) *string {
+	if td == nil || td.BaseType == nil {
+		return nil
+	}
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets == nil {
+			continue
+		}
+		switch name {
+		case "minInclusive":
+			if cur.Facets.MinInclusive != nil && cur.Facets.MinInclusiveFixed {
+				return cur.Facets.MinInclusive
+			}
+		case "maxInclusive":
+			if cur.Facets.MaxInclusive != nil && cur.Facets.MaxInclusiveFixed {
+				return cur.Facets.MaxInclusive
+			}
+		case "minExclusive":
+			if cur.Facets.MinExclusive != nil && cur.Facets.MinExclusiveFixed {
+				return cur.Facets.MinExclusive
+			}
+		case "maxExclusive":
+			if cur.Facets.MaxExclusive != nil && cur.Facets.MaxExclusiveFixed {
+				return cur.Facets.MaxExclusive
+			}
+		}
+	}
+	return nil
 }
 
 func rangeFacetValueEqual(a, b, builtinLocal string) bool {

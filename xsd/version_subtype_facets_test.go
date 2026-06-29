@@ -154,7 +154,13 @@ func TestVersion11TemporalExclusiveBoundRestriction(t *testing.T) {
 func TestVersion11FixedRangeFacetRestriction(t *testing.T) {
 	t.Parallel()
 
-	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	tests := []struct {
+		name   string
+		schema string
+	}{
+		{
+			name: "direct base",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="baseDuration">
     <xs:restriction base="xs:yearMonthDuration">
       <xs:minInclusive value="P1Y1M" fixed="true"/>
@@ -165,12 +171,40 @@ func TestVersion11FixedRangeFacetRestriction(t *testing.T) {
       <xs:minInclusive value="P1Y2M"/>
     </xs:restriction>
   </xs:simpleType>
-</xs:schema>`
+</xs:schema>`,
+		},
+		{
+			name: "inherited through intermediate",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseDuration">
+    <xs:restriction base="xs:yearMonthDuration">
+      <xs:minInclusive value="P1Y1M" fixed="true"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intermediateDuration">
+    <xs:restriction base="baseDuration">
+      <xs:maxInclusive value="P3Y"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badDuration">
+    <xs:restriction base="intermediateDuration">
+      <xs:minInclusive value="P1Y2M"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+	}
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
-	require.NoError(t, err)
-	_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
-	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
+			require.NoError(t, err)
+			_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
 }
 
 func TestVersion11TemporalExplicitTimezoneFacet(t *testing.T) {
@@ -200,6 +234,22 @@ func TestVersion11TemporalExplicitTimezoneFacet(t *testing.T) {
 		`<prohibited>2020-01-01</prohibited>`))
 	require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
 		`<prohibited>2020-01-01Z</prohibited>`), xsd.ErrValidationFailed)
+}
+
+func TestVersion10IgnoresExplicitTimezoneFacet(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="tzRequired">
+    <xs:restriction base="xs:dateTime">
+      <xs:explicitTimezone value="required"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="v" type="tzRequired"/>
+</xs:schema>`
+
+	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schemaXML,
+		`<v>2020-01-01T00:00:00</v>`))
 }
 
 func TestVersion11DateTimeStampFixedBuiltInFacets(t *testing.T) {
