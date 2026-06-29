@@ -58,7 +58,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			// For ref elements, report unresolved element declaration error.
 			if edecl.IsRef {
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, elemElement, attrRef, msg))
 				}
@@ -78,7 +78,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// that should exist or a missing user-defined type — before
 				// installing a recovery placeholder, so an invalid schema cannot
 				// silently compile and validate as if the type existed.
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, attrType, msg))
 				}
@@ -1078,6 +1078,9 @@ func modelGroupHasContent(mg *ModelGroup) bool {
 // placeholder only after this records the error, so an invalid schema cannot
 // silently compile and validate documents as if the missing type existed.
 func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, qn QName) {
+	if c.deprecatedDatatypeQName(qn) {
+		return
+	}
 	if c.filename == "" {
 		return
 	}
@@ -1723,6 +1726,10 @@ func (c *compiler) rejectDeprecatedDatatypeNamespace(ctx context.Context, elem *
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 	return true
+}
+
+func (c *compiler) deprecatedDatatypeQName(qn QName) bool {
+	return c.version == Version11 && qn.NS == lexicon.NamespaceXSDDatatypes
 }
 
 // reportUnboundQNamePrefix emits a fatal schema-compilation error for a prefixed

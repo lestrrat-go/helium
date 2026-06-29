@@ -269,7 +269,7 @@ func (c *compiler) resolveAltTypeRefs(ctx context.Context) {
 			td, ok = c.schema.types[QName{Local: ref.qn.Local, NS: ""}]
 		}
 		if !ok {
-			if c.filename != "" {
+			if c.filename != "" && !c.deprecatedDatatypeQName(ref.qn) {
 				msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", ref.qn.NS, ref.qn.Local)
 				c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(ref.source), ref.line, ref.elemName, attrType, msg))
 			}

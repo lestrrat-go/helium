@@ -27,6 +27,61 @@ func TestVersion11DeprecatedDatatypesNamespaceRejected(t *testing.T) {
 </schema>`,
 		},
 		{
+			name: "element type QName",
+			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsdt="http://www.w3.org/2001/XMLSchema-datatypes">
+  <element name="root" type="xsdt:string"/>
+</schema>`,
+		},
+		{
+			name: "complex type base QName",
+			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsdt="http://www.w3.org/2001/XMLSchema-datatypes">
+  <complexType name="T">
+    <complexContent>
+      <extension base="xsdt:anyType"/>
+    </complexContent>
+  </complexType>
+</schema>`,
+		},
+		{
+			name: "simple type base QName",
+			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsdt="http://www.w3.org/2001/XMLSchema-datatypes">
+  <simpleType name="S">
+    <restriction base="xsdt:string"/>
+  </simpleType>
+</schema>`,
+		},
+		{
+			name: "list itemType QName",
+			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsdt="http://www.w3.org/2001/XMLSchema-datatypes">
+  <simpleType name="S">
+    <list itemType="xsdt:string"/>
+  </simpleType>
+</schema>`,
+		},
+		{
+			name: "union memberTypes QName",
+			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsdt="http://www.w3.org/2001/XMLSchema-datatypes">
+  <simpleType name="S">
+    <union memberTypes="xsdt:string string"/>
+  </simpleType>
+</schema>`,
+		},
+		{
+			name: "alternative type QName",
+			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsdt="http://www.w3.org/2001/XMLSchema-datatypes"
+        xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning" vc:minVersion="1.1">
+  <element name="root" type="string">
+    <alternative test="true()" type="xsdt:string"/>
+  </element>
+</schema>`,
+		},
+		{
 			name: "identity constraint ref QName",
 			schema: `<schema xmlns="http://www.w3.org/2001/XMLSchema"
         targetNamespace="http://www.w3.org/2001/XMLSchema-datatypes"
