@@ -434,14 +434,18 @@ func (c *compiler) schemaError(ctx context.Context, msg string) {
 }
 
 // parse parses a nested schema document (xs:include/xs:import/xs:redefine)
-// using the injected parser policy when one was configured on the Compiler,
-// or a default [helium.NewParser] otherwise.
+// using the injected parser policy when one was configured on the Compiler, or
+// the default schema parser otherwise.
 func (c *compiler) parse(ctx context.Context, data []byte) (*helium.Document, error) {
-	p := helium.NewParser()
+	p := defaultSchemaParser()
 	if c.parser != nil {
 		p = *c.parser
 	}
 	return p.Parse(ctx, data)
+}
+
+func defaultSchemaParser() helium.Parser {
+	return helium.NewParser().SubstituteEntities(true)
 }
 
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
