@@ -194,6 +194,41 @@ func TestVersion11TemporalExclusiveBoundRestrictionAgainstEffectiveBase(t *testi
 		schema string
 	}{
 		{
+			name: "minExclusive equal to direct maxInclusive",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseStamp">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:maxInclusive value="2020-06-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badStamp">
+    <xs:restriction base="baseStamp">
+      <xs:minExclusive value="2020-05-31T20:00:00-04:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+		{
+			name: "minExclusive equal to inherited maxInclusive",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseStamp">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:maxInclusive value="2020-06-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intermediateStamp">
+    <xs:restriction base="baseStamp">
+      <xs:minInclusive value="2020-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badStamp">
+    <xs:restriction base="intermediateStamp">
+      <xs:minExclusive value="2020-05-31T20:00:00-04:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+		{
 			name: "old minExclusive hidden by tighter minInclusive",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="baseStamp">

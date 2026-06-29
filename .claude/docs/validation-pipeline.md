@@ -209,10 +209,13 @@ restricted type's ORDERED VALUE SPACE (`value.CompareFloatFacetBound` for float/
 NaN ordering, else `compareForRangeFacet`), skipping the check on an indeterminate
 result, so an inconsistent non-decimal pair like `minInclusive 2021-01-01 >
 maxInclusive 2020-01-01` on `xs:date` is rejected. `checkFacetBaseRestriction` compares
-each derived range bound against the base bound with the SAME value-space comparator
-(gated to ordered atomic; `compareDecimal` only for an unresolved primitive), so a
-valid narrowing non-decimal restriction — e.g. base `xs:date` `minInclusive=2021-01-01`
-with derived `maxInclusive=2022-01-01` — is no longer false-rejected. Range facet
+each derived range bound against the EFFECTIVE inherited lower/upper bounds with
+the SAME value-space comparator (gated to ordered atomic; `compareDecimal` only
+for an unresolved primitive), so a valid narrowing non-decimal restriction — e.g.
+base `xs:date` `minInclusive=2021-01-01` with derived
+`maxInclusive=2022-01-01` — is no longer false-rejected, while an empty derived
+range such as `minExclusive` equal to the effective inherited `maxInclusive` is
+rejected. Range facet
 `fixed="true"` is tracked per bound (`FacetSet.*Fixed`) and prevents a derived type
 from changing that bound except by value-space equality. The facet value-against-base
 check also allows a derived exclusive bound equal to the base exclusive bound (for

@@ -498,7 +498,8 @@ XML 1.0 character classification and name validation. Single source of truth for
 
 XSD builtin value validation and comparison, extracted from `xsd/`.
 
-- **ValidateBuiltin(value, builtinLocal string) error** — validate value against XSD builtin type lexical space
+- **Version10 / Version11** — lexical-rule selector for version-sensitive builtins
+- **ValidateBuiltin(value, builtinLocal string, version Version) error** — validate value against an XSD builtin type lexical space under XSD 1.0 or 1.1 rules
 - **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
 - **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
 - **CompareFloatFacetBound(a, b, builtinLocal string) (int, bool)** — float/double bound comparison ordering NaN as equal-to-NaN and greater-than-finite (schema-consistency check)
