@@ -462,6 +462,21 @@ type validationContext struct {
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
+	// edcType is the complex type whose content model is currently being matched.
+	// It is set (and restored) by validateContentByType, so the wildcard
+	// Element-Declarations-Consistent check (validateWildcardElementConsistent) can
+	// consult the type's BASE chain for a same-named local element declaration: a
+	// derived type's wildcard may match an element the base type declared locally
+	// with a different type, which the dynamic EDC check must reject even when the
+	// derived content model itself no longer declares it. XSD 1.1 only.
+	edcType *TypeDef
+	// skipContentNodes records every element node inside a processContents="skip"
+	// wildcard-matched subtree (and the matched elements themselves). Such content
+	// is NOT schema-assessed, so a pass-2 identity-constraint selector must not
+	// pick it: an xs:key/xs:unique selecting an unassessed skip-content element
+	// would impose key/uniqueness on a node that carries no PSVI contribution.
+	// Populated by annotateSkipChildren; consulted by evaluateIDC. XSD 1.1 only.
+	skipContentNodes map[helium.Node]struct{}
 	// actualElemType records the ACTUAL *TypeDef determined for each element
 	// during pass-1 content validation, including any xsi:type override. Pass-2
 	// identity-constraint field resolution consults this before falling back to
@@ -586,6 +601,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		vc.assertAnonTypes = make(map[string]*TypeDef)
 		vc.assertAnonNames = make(map[*TypeDef]string)
 		vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
+		vc.skipContentNodes = make(map[helium.Node]struct{})
 	}
 	return vc
 }
@@ -880,6 +896,14 @@ func (vc *validationContext) rejectNonWhitespaceText(ctx context.Context, elem *
 // content-type (empty/simple/element-only/mixed). Attribute validation and the
 // XSD 1.1 assertion check are handled by the caller (validateElementContent).
 func (vc *validationContext) validateContentByType(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	// Record the type whose content model is about to be matched so a wildcard
+	// match inside it can consult this type's base chain for a same-named local
+	// element declaration (dynamic EDC). Restored on exit so a nested element's
+	// own content validation does not leak its type to the parent's match.
+	prevEDC := vc.edcType
+	vc.edcType = td
+	defer func() { vc.edcType = prevEDC }()
+
 	switch td.ContentType {
 	case ContentTypeEmpty:
 		// XSD 1.1 §3.4.2.3.3: an empty explicit content type plus effective open
@@ -1051,6 +1075,11 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 // xsi:type-introduced field (e.g. an inline xs:integer attribute) is canonicalized
 // in the actual type's value space rather than compared lexically.
 func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	// Record this element as un-assessed skip content so a pass-2 IDC selector
+	// does not pick it (an xs:key/xs:unique must not constrain unassessed nodes).
+	if vc.skipContentNodes != nil {
+		vc.skipContentNodes[elem] = struct{}{}
+	}
 	// Skipped content is NOT schema-assessed: annotate for pass-2 IDC
 	// canonicalization only (assessed=false), so a skipped element carrying
 	// xsi:type="xs:ID"/"xs:IDREF" is never picked up by the ID/IDREF pass.
