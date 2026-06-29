@@ -6,6 +6,7 @@ import (
 )
 
 const componentLocalComplexType = "local complex type"
+const componentLocalSimpleType = "local simple type"
 
 // checkUPA checks that a content model is deterministic (Unique Particle Attribution).
 // A non-deterministic model means that when an element arrives, there's ambiguity

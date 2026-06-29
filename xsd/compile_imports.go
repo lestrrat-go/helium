@@ -1077,6 +1077,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		includeVisited:           make(map[string]struct{}),
 		maxIncludeDepth:          c.maxIncludeDepth,
 		loadedRedefinable:        make(map[string]*redefinableSet),
+		notations:                make(map[QName]struct{}),
 	}
 
 	// Seed the imported sub-compiler's circular-include guard with the imported
@@ -1334,6 +1335,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.chameleonEligible, impC.chameleonEligible)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
+	maps.Copy(c.notations, impC.notations)
 	// Merge attribute-use default/fixed constraint sources, preserving the
 	// originating file. An attribute use parsed directly in the imported document
 	// (not via a nested include) has an empty source; attribute it to the

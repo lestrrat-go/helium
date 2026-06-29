@@ -223,9 +223,21 @@ func (c *compiler) registerOverrideChild(ctx context.Context, key overrideKey, e
 	case overrideSymAttrGroup:
 		return c.parseNamedAttributeGroup(ctx, elem)
 	case overrideSymNotation:
-		// notations are not modeled by the compiler; nothing to register.
+		// Notations have no full component model, but their NAMES must be collected
+		// (mirroring parseSchemaChildren) so an xs:NOTATION-restriction enumeration
+		// can resolve against a declared notation (W3C over015): the override child
+		// notation replaces the suppressed target notation in c.notations.
+		c.collectNotation(elem)
 	}
 	return nil
+}
+
+// collectNotation records an <xs:notation>'s name in c.notations (in the current
+// document's target namespace), matching parseSchemaChildren's notation handling.
+func (c *compiler) collectNotation(elem *helium.Element) {
+	if name := getAttr(elem, attrName); name != "" {
+		c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
+	}
 }
 
 // reportOverrideIncludeConflict emits the fatal error for a schema document that
@@ -459,6 +471,11 @@ func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium
 			}
 		case isXSDElement(elem, elemAttribute):
 			c.parseGlobalAttribute(ctx, elem)
+		case isXSDElement(elem, elemNotation):
+			// A target notation NOT overridden is kept; collect its name so an
+			// xs:NOTATION-restriction enumeration can resolve against it (mirroring
+			// parseSchemaChildren). An overridden one was suppressed above.
+			c.collectNotation(elem)
 		}
 	}
 	return nil
