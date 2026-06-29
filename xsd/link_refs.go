@@ -195,6 +195,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// appear as the entire content model of a complex type (never nested in
 		// another model group), and its {max occurs} must be 1.
 		if grp.Compositor != CompositorAll {
+			// XSD 1.1: a group reference nested directly inside an xs:all must resolve
+			// to an 'all' model group; a referenced sequence/choice group is invalid.
+			if c.version == Version11 {
+				if src := c.groupRefSources[placeholder]; src.nested && src.parentCompositor == CompositorAll {
+					file := c.diagSourceOrRecorded(src.source)
+					c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
+						"A reference within an 'all' model group must resolve to an 'all' model group."))
+				}
+			}
 			continue
 		}
 		c.checkAllGroupRef(ctx, placeholder)
@@ -357,6 +366,22 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Merge content models for extension types. extensionTypes is already
 	// filtered to extension types with a base, so no per-item guard is needed.
 	for _, td := range extensionTypes {
+		// XSD 1.1 §3.4.6 (Derivation Valid (Extension), 1.4.3.2.2.2): when an
+		// extension and its base both have open content, the extension's mode may
+		// only TIGHTEN — a base 'interleave' open content may not become 'suffix' in
+		// the extension (suffix→interleave and identical modes are allowed).
+		if c.version == Version11 && td.OpenContent != nil && td.BaseType != nil && td.BaseType.OpenContent != nil &&
+			td.BaseType.OpenContent.Mode == OpenContentInterleave && td.OpenContent.Mode == OpenContentSuffix {
+			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
+				component := componentLocalComplexType
+				if !src.isLocal {
+					component = "complex type '" + td.Name.Local + "'"
+				}
+				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+					"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'."))
+			}
+			continue
+		}
 		if td.ContentType == ContentTypeSimple {
 			// simpleContent extension — check for base-vs-derived duplicate
 			// attributes BEFORE inheriting the base attributes, then merge. In XSD
@@ -402,7 +427,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// CONTAINING an 'all' group, which is forbidden. The base-as-sole-content
 		// and direct-group-ref paths are checked elsewhere; this catches the
 		// extension-merge path, which they miss. libxml2 rejects this.
-		if baseMG != nil && derivedMG != nil && derivedMG.MaxOccurs != 0 && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG) {
+		allExtErr := func() {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
 				component := componentLocalComplexType
 				if !src.isLocal {
@@ -411,11 +436,39 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
 					"The 'all' model group needs to be the only child of the model group."))
 			}
-			continue
 		}
-		if baseMG != nil && derivedMG != nil {
+		switch {
+		case c.version == Version11 && baseMG != nil && derivedMG != nil &&
+			(baseMG.Compositor == CompositorAll || derivedMG.Compositor == CompositorAll):
+			// XSD 1.1 relaxes cos-all-limited: an xs:all may be extended by another
+			// xs:all, merging into a SINGLE all group whose members are the union of
+			// the base's and extension's. Both content models must be all groups (an
+			// xs:sequence/xs:choice extending an all, or an all extending a
+			// sequence/choice, remains invalid) with the SAME minOccurs (§3.4.2.2).
+			if baseMG.Compositor != CompositorAll || derivedMG.Compositor != CompositorAll ||
+				derivedMG.MaxOccurs == 0 || baseMG.MinOccurs != derivedMG.MinOccurs {
+				allExtErr()
+				continue
+			}
+			merged := make([]*Particle, 0, len(baseMG.Particles)+len(derivedMG.Particles))
+			merged = append(merged, baseMG.Particles...)
+			merged = append(merged, derivedMG.Particles...)
+			td.ContentModel = &ModelGroup{
+				Compositor: CompositorAll,
+				MinOccurs:  baseMG.MinOccurs,
+				MaxOccurs:  1,
+				Particles:  merged,
+			}
+		case baseMG != nil && derivedMG != nil && derivedMG.MaxOccurs != 0 && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG):
+			// cos-all-limited.1.2 / §3.8.2 (XSD 1.0, or 1.1 extension of a non-all
+			// base): an 'all' model group may only constitute the WHOLE content of a
+			// type. Appending an 'all' onto a non-empty base would build a sequence
+			// CONTAINING an 'all' group, which is forbidden.
+			allExtErr()
+			continue
+		case baseMG != nil && derivedMG != nil:
 			// Merge: create a sequence of base content + derived content.
-			merged := &ModelGroup{
+			td.ContentModel = &ModelGroup{
 				Compositor: CompositorSequence,
 				MinOccurs:  1,
 				MaxOccurs:  1,
@@ -424,8 +477,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 					{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG},
 				},
 			}
-			td.ContentModel = merged
-		} else if baseMG != nil {
+		case baseMG != nil:
 			td.ContentModel = baseMG
 		}
 		// Inherit content type from base if not already set.
@@ -1067,6 +1119,19 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	// time this deferred check runs, so the recorded source is used.
 	file := c.diagSourceOrRecorded(src.source)
 	if src.nested {
+		// XSD 1.1 relaxes cos-all-limited: a reference to an 'all' model group may
+		// be nested directly inside another xs:all (it is flattened into the parent
+		// by matchAll), but it must occur exactly once (minOccurs = maxOccurs = 1).
+		// A reference nested in an xs:sequence/xs:choice is still forbidden, as is
+		// any nested all-group reference in XSD 1.0.
+		if c.version == Version11 && src.parentCompositor == CompositorAll {
+			if placeholder.MinOccurs == 1 && placeholder.MaxOccurs == 1 {
+				return
+			}
+			c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
+				"A reference to an 'all' model group nested in an 'all' model group must have minOccurs = maxOccurs = 1."))
+			return
+		}
 		c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
 			"A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."))
 		return
@@ -1609,6 +1674,9 @@ func processContentsStrength(pc ProcessContentsKind) int {
 // leads back to itself. Only reports an error if the element itself is part
 // of the cycle (not if it just points to a cyclic element).
 func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDecl) {
+	// DFS over ALL heads (XSD 1.1 multiple-head substitution): a cycle may close
+	// through any one of an element's heads, so following only the first head
+	// would miss cycles that run through a later head.
 	visited := map[QName]bool{}
 	for _, current := range edecl.substitutionGroupHeads() {
 		if c.substGroupChainContains(edecl.Name, current, visited) {

@@ -238,6 +238,13 @@ func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *heli
 	if c.filename == "" {
 		return
 	}
+	// XSD 1.1 relaxes cos-all-limited: an element particle inside an xs:all may
+	// have any minOccurs/maxOccurs (including maxOccurs>1 / unbounded). The
+	// generic checkLocalElement still validates the lexical form and min<=max, so
+	// only the all-specific "(must be 0 or 1)" restriction is dropped here.
+	if c.version == Version11 {
+		return
+	}
 	line := elem.Line()
 	local := elem.LocalName()
 	// Attribute to the declaring file (an included/imported schema when inside an

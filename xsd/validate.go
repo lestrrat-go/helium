@@ -1888,7 +1888,10 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 				"This element is not expected, because the element '"+dn+"' is nilled.")
 			return fmt.Errorf("content in nilled element")
 		case helium.TextNode, helium.CDATASectionNode:
-			if !xmlchar.IsAllSpace(child.Content()) {
+			// cvc-elt.3.2.1: a nilled element must have NO character content. XSD 1.0
+			// tolerates insignificant whitespace (matching libxml2); XSD 1.1 rejects
+			// any character content, including whitespace-only.
+			if vc.version == Version11 || !xmlchar.IsAllSpace(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
 					"Character content is not allowed, because the element is nilled.")
 				return fmt.Errorf("content in nilled element")
