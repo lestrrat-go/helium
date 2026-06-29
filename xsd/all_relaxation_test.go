@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -691,4 +692,54 @@ func TestAll11WildcardRestrictionNestedGroupFailClosed(t *testing.T) {
 		_, cerr := compileAll11(t, schema)
 		require.NoError(t, cerr)
 	})
+}
+
+// TestAll11SubstMemberNoTypeRestriction guards XSDALL-880-001: when the
+// constraining substitution-group member has NO explicit @type (it inherits its
+// head's type), the restriction type-derivation check must use the EFFECTIVE type
+// — not the nil raw Type pointer (which would skip the check and false-accept). A
+// derived local element sharing the member's QName but typed xs:string cannot
+// restrict a base whose member effectively types xs:int (from the head).
+func TestAll11SubstMemberNoTypeRestriction(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="m" type="xs:string"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="h" abstract="true" type="xs:int"/>
+  <xs:element name="m" substitutionGroup="h"/>
+</xs:schema>`
+	_, cerr := compileAll11(t, schema)
+	require.Error(t, cerr) // local m (xs:string) not derived from member m's effective type (xs:int)
+}
+
+// TestAll11UnderMinDiagnostic guards PR880-001 (diagnostic): a member PRESENT but
+// under its minOccurs must still appear in the missing-element "Expected is"
+// hint, so the list is never empty.
+func TestAll11UnderMinDiagnostic(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element name="c" minOccurs="2" maxOccurs="5"/>
+  </xs:all></xs:complexType></xs:element>
+</xs:schema>`
+	schema11, cerr := compileAll11(t, schema)
+	require.NoError(t, cerr)
+	idoc, err := helium.NewParser().Parse(t.Context(), []byte(`<doc><c/></doc>`))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	verr := xsd.NewValidator(schema11).ErrorHandler(collector).Validate(t.Context(), idoc)
+	require.Error(t, verr) // one <c/> is below minOccurs=2
+
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+	}
+	msg := b.String()
+	require.Contains(t, msg, "Missing child element")
+	require.Contains(t, msg, "( c )")   // expected list names the under-min member c
+	require.NotContains(t, msg, "(  )") // not the empty-list artifact
 }

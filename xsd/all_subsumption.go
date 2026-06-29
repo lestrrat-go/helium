@@ -153,7 +153,14 @@ func groupBodyContributions(ctx context.Context, mg *ModelGroup, baseElems []*Pa
 // nillable widening, and fixed-value equality. Mirrors elementRestrictsElement
 // minus the name/occurrence checks.
 func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl, schema *Schema, version Version) bool {
-	if rt.Type != nil && constraining.Type != nil && !isDerivedFrom(rt.Type, constraining.Type) {
+	// Compare EFFECTIVE types, not the raw ElementDecl.Type pointers: a derived or
+	// constraining declaration with no explicit @type (e.g. a substitution-group
+	// member that inherits its head's type) has a nil Type, which would otherwise
+	// SKIP the derivation check and false-accept. effectiveDeclType resolves the
+	// type through the substitution-group chain.
+	rtType := effectiveDeclType(rt, schema)
+	conType := effectiveDeclType(constraining, schema)
+	if rtType != nil && conType != nil && !isDerivedFrom(rtType, conType) {
 		return false
 	}
 	if !constraining.Nillable && rt.Nillable {
@@ -163,7 +170,7 @@ func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl
 		if rt.Fixed == nil {
 			return false
 		}
-		if !fixedValueMatches(ctx, *rt.Fixed, *constraining.Fixed, rt.Type, rt.FixedNS, constraining.FixedNS, schema, version) {
+		if !fixedValueMatches(ctx, *rt.Fixed, *constraining.Fixed, rtType, rt.FixedNS, constraining.FixedNS, schema, version) {
 			return false
 		}
 	}

@@ -394,7 +394,7 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 			consumed++
 			continue
 		}
-		expected := unseenMemberNames(members, counts, vc.schema)
+		expected := availableMemberNames(members, counts, vc.schema)
 		msg := "This element is not expected."
 		if len(expected) > 0 {
 			msg = formatExpected("This element is not expected.", expected)
@@ -414,7 +414,7 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 		if counts[i] >= m.min {
 			continue
 		}
-		unseen := unseenMemberNames(members, counts, vc.schema)
+		unseen := underMinMemberNames(members, counts, vc.schema)
 		msg := formatExpected("Missing child element(s).", unseen)
 		vc.reportValidityError(ctx, vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		return consumed, fmt.Errorf("missing")
@@ -515,13 +515,35 @@ func (vc *validationContext) allWildcardMember(members []allMember, counts []int
 	return -1
 }
 
-// unseenMemberNames lists the expected names of xs:all members that have not yet
-// been matched (match count zero), used to build the "expected" hint in the
-// XSD 1.1 unexpected-element and missing-element diagnostics.
-func unseenMemberNames(members []allMember, counts []int, schema *Schema) []string {
+// availableMemberNames lists the expected names of XSD 1.1 xs:all members that
+// can still accept another child (remaining occurrence budget: unbounded, or
+// count below maxOccurs), used for the unexpected-element "Expected is one of"
+// hint. A member already at its maxOccurs is omitted (it cannot accept more).
+func availableMemberNames(members []allMember, counts []int, schema *Schema) []string {
 	var names []string
 	for i, m := range members {
-		if counts[i] != 0 {
+		if m.max != Unbounded && counts[i] >= m.max {
+			continue
+		}
+		switch {
+		case m.ed != nil:
+			names = append(names, elementExpectedNamesWithSubst(m.ed, schema)...)
+		case m.wc != nil:
+			names = append(names, wildcardExpected(m.wc))
+		}
+	}
+	return names
+}
+
+// underMinMemberNames lists the expected names of XSD 1.1 xs:all members that
+// have not yet reached their minOccurs, used for the missing-element hint — so a
+// member PRESENT but UNDER minOccurs (e.g. `c minOccurs="2"` with one `<c/>`) is
+// still reported, and the expected list is never empty when a missing-required
+// error fires.
+func underMinMemberNames(members []allMember, counts []int, schema *Schema) []string {
+	var names []string
+	for i, m := range members {
+		if counts[i] >= m.min {
 			continue
 		}
 		switch {
