@@ -438,7 +438,7 @@ func isValidlySubstitutableForDeclaredType(sub, decl *TypeDef, allowError bool) 
 	// Variety/MemberTypes are empty), so reading decl.Variety/decl.MemberTypes
 	// directly would skip the union branch and false-reject a member-derived
 	// alternative. The member check stays strict and recursive (no fallback).
-	if resolveVariety(decl) == TypeVarietyUnion {
+	if resolveVariety(decl) == TypeVarietyUnion && (allowError || unionDerivationHasNoFacets(decl)) {
 		for _, m := range resolveUnionMembers(decl) {
 			if isValidlySubstitutableForDeclaredType(sub, m, allowError) {
 				return true
@@ -446,4 +446,33 @@ func isValidlySubstitutableForDeclaredType(sub, decl *TypeDef, allowError bool) 
 		}
 	}
 	return false
+}
+
+func unionDerivationHasNoFacets(td *TypeDef) bool {
+	for cur := td; cur != nil && resolveVariety(cur) == TypeVarietyUnion; cur = cur.BaseType {
+		if !facetSetEmpty(cur.Facets) {
+			return false
+		}
+	}
+	return true
+}
+
+func facetSetEmpty(fs *FacetSet) bool {
+	if fs == nil {
+		return true
+	}
+	return len(fs.Enumeration) == 0 &&
+		fs.MinInclusive == nil &&
+		fs.MaxInclusive == nil &&
+		fs.MinExclusive == nil &&
+		fs.MaxExclusive == nil &&
+		fs.TotalDigits == nil &&
+		fs.FractionDigits == nil &&
+		fs.Length == nil &&
+		fs.MinLength == nil &&
+		fs.MaxLength == nil &&
+		fs.ExplicitTimezone == nil &&
+		len(fs.Patterns) == 0 &&
+		fs.WhiteSpace == nil &&
+		len(fs.Assertions) == 0
 }

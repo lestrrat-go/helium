@@ -82,3 +82,90 @@ func TestVersion11XSITypeUnionMemberGuards(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrValidationFailed)
 	})
 }
+
+func TestVersion11XSITypeUnionMemberRequiresFacetFreeUnionPath(t *testing.T) {
+	t.Parallel()
+
+	const xsiNS = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+
+	t.Run("declared union enumeration is not bypassed", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="SmallInt">
+    <xs:restriction base="xs:integer">
+      <xs:maxInclusive value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="SmallOrBool">
+    <xs:union memberTypes="SmallInt xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="OnlyTrue">
+    <xs:restriction base="SmallOrBool">
+      <xs:enumeration value="true"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="open" type="OnlyTrue"/>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+			`<open `+xsiNS+` xsi:type="SmallInt">5</open>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+			`<open>true</open>`))
+	})
+
+	t.Run("declared union pattern is not bypassed", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="SmallString">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="StringOrBool">
+    <xs:union memberTypes="SmallString xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="TStringOrBool">
+    <xs:restriction base="StringOrBool">
+      <xs:pattern value="T.*"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="open" type="TStringOrBool"/>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+			`<open `+xsiNS+` xsi:type="SmallString">abc</open>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+			`<open>T-abc</open>`))
+	})
+
+	t.Run("intervening nested union facet is not bypassed", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="SmallInt">
+    <xs:restriction base="xs:integer">
+      <xs:maxInclusive value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="Inner">
+    <xs:union memberTypes="SmallInt xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="NegativeInner">
+    <xs:restriction base="Inner">
+      <xs:pattern value="-[0-9]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="Outer">
+    <xs:union memberTypes="NegativeInner xs:string"/>
+  </xs:simpleType>
+  <xs:element name="open" type="Outer"/>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+			`<open `+xsiNS+` xsi:type="SmallInt">5</open>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
+			`<open>-5</open>`))
+	})
+}
