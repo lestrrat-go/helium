@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -1695,6 +1696,7 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 			if ns == "" && prefix != "" {
 				c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
 			}
+			c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns)
 			return QName{Local: local, NS: ns}
 		}
 	}
@@ -1707,7 +1709,19 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 		ns = defNS
 	}
 
+	c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns)
 	return QName{Local: local, NS: ns}
+}
+
+// rejectDeprecatedDatatypeNamespace reports the XSD 1.1 rule that schema QName
+// references must not use the old XML Schema datatypes namespace.
+func (c *compiler) rejectDeprecatedDatatypeNamespace(ctx context.Context, elem *helium.Element, ref, ns string) {
+	if c.version != Version11 || ns != lexicon.NamespaceXSDDatatypes {
+		return
+	}
+	msg := fmt.Sprintf("The namespace '%s' used by QName value '%s' has been deprecated; use '%s' for XML Schema built-in datatypes.", ns, ref, lexicon.NamespaceXSD)
+	c.schemaError(ctx,
+		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 }
 
 // reportUnboundQNamePrefix emits a fatal schema-compilation error for a prefixed
