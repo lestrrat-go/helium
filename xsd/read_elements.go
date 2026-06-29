@@ -30,6 +30,17 @@ type attrUseReadOptions struct {
 	includeUse bool
 }
 
+func (c *compiler) localAttributeNamespace(elem *helium.Element) string {
+	if c.version == Version11 && hasAttr(elem, attrTargetNamespace) {
+		return getAttr(elem, attrTargetNamespace)
+	}
+	form := getAttr(elem, attrForm)
+	if form == attrValQualified || (form == "" && c.schema.attrFormQualified) {
+		return c.schema.targetNamespace
+	}
+	return ""
+}
+
 func parseParticleOccurs(elem *helium.Element) (int, int) {
 	minOccurs := 1
 	maxOccurs := 1
@@ -828,14 +839,8 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 	}
 
 	name := getAttr(elem, attrName)
-	// Determine attribute namespace based on form and attributeFormDefault.
-	attrNS := ""
-	form := getAttr(elem, attrForm)
-	if form == attrValQualified || (form == "" && c.schema.attrFormQualified) {
-		attrNS = c.schema.targetNamespace
-	}
 	return c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
-		name:       QName{Local: name, NS: attrNS},
+		name:       QName{Local: name, NS: c.localAttributeNamespace(elem)},
 		includeUse: true,
 	})
 }
