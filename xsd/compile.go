@@ -360,6 +360,11 @@ type groupRefSource struct {
 	// particle of a complex type's content. A reference to an 'all' model group
 	// is forbidden when nested.
 	nested bool
+	// parentCompositor is the compositor of the model group the reference appears
+	// in (only meaningful when nested). XSD 1.1 permits a reference to an 'all'
+	// model group nested directly inside another xs:all (it is flattened); a
+	// reference nested in a sequence/choice remains forbidden.
+	parentCompositor ModelGroupKind
 	// maxOccursRaw is the lexical maxOccurs attribute on the referencing element
 	// ("" if absent, which defaults to 1). A reference to an 'all' model group
 	// must have maxOccurs == 1.
