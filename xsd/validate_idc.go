@@ -232,6 +232,14 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 	table := &idcTable{idc: idc}
 
 	for _, node := range selectorResult.NodeSet {
+		// XSD 1.1: a selector must not pick an element inside a
+		// processContents="skip" wildcard-matched subtree — such content is not
+		// schema-assessed, so it carries no PSVI contribution and cannot
+		// participate in a key/unique/keyref. (1.0 keeps selecting it: the set is
+		// empty outside 1.1, so this is byte-identical there.)
+		if _, skip := vc.skipContentNodes[node]; skip {
+			continue
+		}
 		entry := idcEntry{node: node}
 
 		// Resolve the element for this node.
