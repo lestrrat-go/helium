@@ -216,9 +216,11 @@ with derived `maxInclusive=2022-01-01` — is no longer false-rejected. Range fa
 `fixed="true"` is tracked per bound (`FacetSet.*Fixed`) and prevents a derived type
 from changing that bound except by value-space equality. The facet value-against-base
 check also allows a derived exclusive bound equal to the base exclusive bound (for
-example the same `maxExclusive` on `xs:dateTimeStamp`), because that is a valid
-restriction even though the exclusive boundary value is not itself an instance of
-the base type.
+example the same effective `maxExclusive` on `xs:dateTimeStamp`), because that is
+a valid restriction even though the exclusive boundary value is not itself an
+instance of the base type; the shortcut is only used when that exclusive bound is
+still the effective inherited bound for that side after considering any tighter
+intermediate inclusive/exclusive bounds.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema

@@ -186,6 +186,77 @@ func TestVersion11TemporalExclusiveBoundRestriction(t *testing.T) {
 	}
 }
 
+func TestVersion11TemporalExclusiveBoundRestrictionAgainstEffectiveBase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		schema string
+	}{
+		{
+			name: "old minExclusive hidden by tighter minInclusive",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseStamp">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:minExclusive value="2020-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="tightenedStamp">
+    <xs:restriction base="baseStamp">
+      <xs:minInclusive value="2020-06-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="unrelatedStamp">
+    <xs:restriction base="tightenedStamp">
+      <xs:maxInclusive value="2020-12-31T23:59:59Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badStamp">
+    <xs:restriction base="unrelatedStamp">
+      <xs:minExclusive value="2019-12-31T19:00:00-05:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+		{
+			name: "old maxExclusive hidden by tighter maxInclusive",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseStamp">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:maxExclusive value="2020-12-31T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="tightenedStamp">
+    <xs:restriction base="baseStamp">
+      <xs:maxInclusive value="2020-06-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="unrelatedStamp">
+    <xs:restriction base="tightenedStamp">
+      <xs:minInclusive value="2020-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="badStamp">
+    <xs:restriction base="unrelatedStamp">
+      <xs:maxExclusive value="2020-12-30T19:00:00-05:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
+			require.NoError(t, err)
+			_, err = xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
+}
+
 func TestVersion11FixedRangeFacetRestriction(t *testing.T) {
 	t.Parallel()
 

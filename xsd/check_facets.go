@@ -349,8 +349,8 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 	for _, rf := range []rangeFacet{
 		{"minInclusive", fs.MinInclusive, fs.MinInclusiveNS, nil},
 		{"maxInclusive", fs.MaxInclusive, fs.MaxInclusiveNS, nil},
-		{"minExclusive", fs.MinExclusive, fs.MinExclusiveNS, inheritedRangeFacet(td, "minExclusive", false)},
-		{"maxExclusive", fs.MaxExclusive, fs.MaxExclusiveNS, inheritedRangeFacet(td, "maxExclusive", false)},
+		{"minExclusive", fs.MinExclusive, fs.MinExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, "minExclusive", builtinLocal)},
+		{"maxExclusive", fs.MaxExclusive, fs.MaxExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, "maxExclusive", builtinLocal)},
 	} {
 		if rf.value == nil {
 			continue
@@ -1234,11 +1234,80 @@ func inheritedRangeFacet(td *TypeDef, name string, requireFixed bool) *string {
 	return nil
 }
 
-func rangeFacetValueEqual(a, b, builtinLocal string) bool {
+type inheritedRangeBound struct {
+	value     *string
+	exclusive bool
+}
+
+func effectiveInheritedExclusiveRangeFacet(td *TypeDef, name, builtinLocal string) *string {
+	var bound inheritedRangeBound
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets == nil {
+			continue
+		}
+		switch name {
+		case "minExclusive":
+			mergeInheritedLowerBound(&bound, cur.Facets.MinInclusive, false, builtinLocal)
+			mergeInheritedLowerBound(&bound, cur.Facets.MinExclusive, true, builtinLocal)
+		case "maxExclusive":
+			mergeInheritedUpperBound(&bound, cur.Facets.MaxInclusive, false, builtinLocal)
+			mergeInheritedUpperBound(&bound, cur.Facets.MaxExclusive, true, builtinLocal)
+		default:
+			return nil
+		}
+	}
+	if !bound.exclusive {
+		return nil
+	}
+	return bound.value
+}
+
+func mergeInheritedLowerBound(bound *inheritedRangeBound, candidate *string, exclusive bool, builtinLocal string) {
+	if candidate == nil {
+		return
+	}
+	if bound.value == nil {
+		bound.value = candidate
+		bound.exclusive = exclusive
+		return
+	}
+	if cmp, ok := rangeFacetCmp(*candidate, *bound.value, builtinLocal); ok {
+		if cmp > 0 || (cmp == 0 && exclusive && !bound.exclusive) {
+			bound.value = candidate
+			bound.exclusive = exclusive
+		}
+	}
+}
+
+func mergeInheritedUpperBound(bound *inheritedRangeBound, candidate *string, exclusive bool, builtinLocal string) {
+	if candidate == nil {
+		return
+	}
+	if bound.value == nil {
+		bound.value = candidate
+		bound.exclusive = exclusive
+		return
+	}
+	if cmp, ok := rangeFacetCmp(*candidate, *bound.value, builtinLocal); ok {
+		if cmp < 0 || (cmp == 0 && exclusive && !bound.exclusive) {
+			bound.value = candidate
+			bound.exclusive = exclusive
+		}
+	}
+}
+
+func rangeFacetCmp(a, b, builtinLocal string) (int, bool) {
 	if cmp, ok := value.CompareFloatFacetBound(a, b, builtinLocal); ok {
-		return cmp == 0
+		return cmp, true
 	}
 	if cmp, ok := compareForRangeFacet(a, b, builtinLocal); ok {
+		return cmp, true
+	}
+	return 0, false
+}
+
+func rangeFacetValueEqual(a, b, builtinLocal string) bool {
+	if cmp, ok := rangeFacetCmp(a, b, builtinLocal); ok {
 		return cmp == 0
 	}
 	return a == b
