@@ -196,6 +196,9 @@ stored on `FacetSet.ExplicitTimezone` with `FacetSet.ExplicitTimezoneFixed`,
 checked at validation time for required or prohibited timezone presence, and
 participates in compile-time restriction checks so `xs:dateTimeStamp` can only
 retain `required` and inherited user `fixed="true"` values cannot be changed.
+`parseFacets` rejects duplicate singleton facets in a single restriction step
+(range, digit, length, whiteSpace, and explicitTimezone facets); only
+`enumeration`, `pattern`, and the XSD 1.1 `assertion` facet are repeatable there.
 Built-in temporal whiteSpace is treated as fixed `collapse`.
 `checkFacetSameTypeConsistency` gates EACH
 facet-family consistency check to the family's applicable type/variety, so it never
