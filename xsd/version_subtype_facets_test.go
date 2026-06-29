@@ -133,7 +133,13 @@ func TestVersion11TemporalSubtypeRangeFacets(t *testing.T) {
 func TestVersion11TemporalExclusiveBoundRestriction(t *testing.T) {
 	t.Parallel()
 
-	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	tests := []struct {
+		name   string
+		schema string
+	}{
+		{
+			name: "direct base",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="baseStamp">
     <xs:restriction base="xs:dateTimeStamp">
       <xs:maxExclusive value="2020-01-01T00:00:00Z"/>
@@ -145,10 +151,39 @@ func TestVersion11TemporalExclusiveBoundRestriction(t *testing.T) {
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="v" type="sameBound"/>
-</xs:schema>`
+</xs:schema>`,
+		},
+		{
+			name: "inherited through intermediate",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseStamp">
+    <xs:restriction base="xs:dateTimeStamp">
+      <xs:maxExclusive value="2020-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intermediateStamp">
+    <xs:restriction base="baseStamp">
+      <xs:minInclusive value="2019-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sameBound">
+    <xs:restriction base="intermediateStamp">
+      <xs:maxExclusive value="2019-12-31T19:00:00-05:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="v" type="sameBound"/>
+</xs:schema>`,
+		},
+	}
 
-	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML,
-		`<v>2019-12-31T23:00:00Z</v>`))
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), tt.schema,
+				`<v>2019-12-31T23:00:00Z</v>`))
+		})
+	}
 }
 
 func TestVersion11FixedRangeFacetRestriction(t *testing.T) {
