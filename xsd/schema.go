@@ -70,10 +70,15 @@ func (s *Schema) LookupType(local, ns string) (*TypeDef, bool) {
 	return t, ok
 }
 
-// SubstGroupMembers returns the element declarations in the substitution group
-// of the given head element.
+// SubstGroupMembers returns the element declarations substitutable for the
+// given head element, including eligible transitive members after block and
+// derivation filtering.
 func (s *Schema) SubstGroupMembers(head QName) []*ElementDecl {
-	return s.substGroups[head]
+	headDecl, ok := s.LookupElement(head.Local, head.NS)
+	if !ok {
+		return nil
+	}
+	return slices.Clone(substitutableMembersFor(headDecl, s))
 }
 
 // LookupAttribute returns the global attribute declaration for the given name.
@@ -140,17 +145,18 @@ const Unbounded = -1
 
 // ElementDecl is a schema element declaration.
 type ElementDecl struct {
-	Name              QName
-	Type              *TypeDef
-	MinOccurs         int
-	MaxOccurs         int // -1 = unbounded
-	Abstract          bool
-	Nillable          bool  // true if the element may carry xsi:nil="true"
-	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
-	IsRef             bool  // true if this was created from a ref="..." attribute
-	IDCs              []*IDConstraint
-	Default           *string // nil = not set
-	Fixed             *string // nil = not set
+	Name               QName
+	Type               *TypeDef
+	MinOccurs          int
+	MaxOccurs          int // -1 = unbounded
+	Abstract           bool
+	Nillable           bool    // true if the element may carry xsi:nil="true"
+	SubstitutionGroup  QName   // first substitution-group head QName (zero value if none)
+	SubstitutionGroups []QName // all substitution-group head QNames (XSD 1.1 permits a list)
+	IsRef              bool    // true if this was created from a ref="..." attribute
+	IDCs               []*IDConstraint
+	Default            *string // nil = not set
+	Fixed              *string // nil = not set
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document. It is used to resolve
 	// a QName/NOTATION fixed value's prefix when comparing in value space.
@@ -168,6 +174,28 @@ type ElementDecl struct {
 	// the governing type is the one selected by the first alternative whose @test
 	// is true, or a testless default; empty when the declaration has none.
 	Alternatives []*TypeAlternative
+}
+
+func (e *ElementDecl) substitutionGroupHeads() []QName {
+	if e == nil {
+		return nil
+	}
+	if len(e.SubstitutionGroups) > 0 {
+		return e.SubstitutionGroups
+	}
+	if e.SubstitutionGroup == (QName{}) {
+		return nil
+	}
+	return []QName{e.SubstitutionGroup}
+}
+
+func (e *ElementDecl) setSubstitutionGroupHeads(heads []QName) {
+	e.SubstitutionGroups = slices.Clone(heads)
+	if len(e.SubstitutionGroups) == 0 {
+		e.SubstitutionGroup = QName{}
+		return
+	}
+	e.SubstitutionGroup = e.SubstitutionGroups[0]
 }
 
 // TypeAlternative is one XSD 1.1 <xs:alternative> in an element declaration's

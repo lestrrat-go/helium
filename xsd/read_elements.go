@@ -436,7 +436,7 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 
 	if opts.allowSubstitutionGroup {
 		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
-			decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
+			decl.setSubstitutionGroupHeads(c.resolveSubstitutionGroupHeads(ctx, elem, sg))
 		}
 	}
 
@@ -554,11 +554,29 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	// ensures xsi:nil lexical validation and nilled-empty enforcement run for
 	// no-type declarations the same as for typed ones. Substitution-group
 	// members are left untyped so they can inherit the head's type at validation.
-	if decl.Type == nil && decl.SubstitutionGroup == (QName{}) {
+	if decl.Type == nil && len(decl.substitutionGroupHeads()) == 0 {
 		decl.Type = c.schema.types[QName{Local: typeAnyType, NS: lexicon.NamespaceXSD}]
 	}
 
 	return nil
+}
+
+func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element, raw string) []QName {
+	if c.version != Version11 {
+		return []QName{c.resolveQName(ctx, elem, raw)}
+	}
+	tokens := splitSpace(raw)
+	heads := make([]QName, 0, len(tokens))
+	seen := make(map[QName]struct{}, len(tokens))
+	for _, token := range tokens {
+		qn := c.resolveQName(ctx, elem, token)
+		if _, ok := seen[qn]; ok {
+			continue
+		}
+		seen[qn] = struct{}{}
+		heads = append(heads, qn)
+	}
+	return heads
 }
 
 func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Element, opts attrUseReadOptions) *AttrUse {

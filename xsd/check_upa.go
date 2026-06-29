@@ -274,7 +274,7 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 		// position; any of them can match where the element is expected.
 		var info posInfo
 		ids := []int{a.newPos(firstSetEntry{qname: t.Name})}
-		for _, member := range a.schema.substGroups[t.Name] {
+		for _, member := range substitutableMembersFor(t, a.schema) {
 			ids = append(ids, a.newPos(firstSetEntry{qname: member.Name}))
 		}
 		info.first = ids
