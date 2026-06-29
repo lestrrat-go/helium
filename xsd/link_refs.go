@@ -318,6 +318,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// injecting an invalid value into the instance during validation.
 	c.checkAttrUseConstraints(ctx)
 
+	// XSD 1.1: validate element-declaration default/fixed constraint values against
+	// the element's simple (content) type now that all type refs are resolved. Gated
+	// to 1.1 (sources are only recorded in 1.1 mode), so 1.0 stays byte-identical.
+	c.checkElementDeclConstraints(ctx)
+
 	// Topologically order extension types so each base type is merged before
 	// the types that derive from it (the merge reads the base's finalized
 	// content model and attributes).
@@ -1311,6 +1316,75 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		if err := validateValue(ctx, *val, it.src.nsMap, td, "", "", 0, vc); err != nil {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
+		}
+	}
+}
+
+// checkElementDeclConstraints validates each element declaration's explicit
+// default/fixed value against its declared simple (content) type (XSD 1.1
+// "Schema Component Constraint: Element Default Valid (Immediate)"). It mirrors
+// checkAttrUseConstraints: an invalid value (e.g. a list/union default that does
+// not satisfy the type) is a schema error caught at compile time rather than
+// silently injected into the instance. Sources are recorded only in Version11, so
+// 1.0 never reaches this check.
+//
+// The type checked is the element's EFFECTIVE declared type (effectiveDeclType),
+// so a no-type substitution-group member is validated against its inherited head
+// type. Only an element whose type is a simple type, or a complex type with simple
+// content, has a type-validated default; an element-only/mixed complex content
+// default is character data not validated against a simple type, so it is skipped.
+// A simpleContent default is validated against its FULL content chain (effective
+// content type plus inherited base-content facets) via the shared
+// validateSimpleContentValue, identical to the instance-value path.
+func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	type pending struct {
+		decl *ElementDecl
+		src  attrConstraintSource
+	}
+	items := make([]pending, 0, len(c.elemDeclConstraintSources))
+	for decl, src := range c.elemDeclConstraintSources {
+		items = append(items, pending{decl: decl, src: src})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].src.line != items[j].src.line {
+			return items[i].src.line < items[j].src.line
+		}
+		return items[i].src.local < items[j].src.local
+	})
+
+	for _, it := range items {
+		val := it.decl.Default
+		if val == nil {
+			val = it.decl.Fixed
+		}
+		if val == nil {
+			continue
+		}
+		// Resolve the EFFECTIVE declared type: a no-type substitution-group member
+		// inherits its head's type, so validating it.decl.Type directly would skip the
+		// member (nil type) and miss an invalid inherited-type default/fixed.
+		std := effectiveDeclType(it.decl, c.schema)
+		if std == nil {
+			continue
+		}
+		// An element-only/mixed complex content default is character data, not validated
+		// against a simple type — skip it. A plain simpleType and a simpleContent complex
+		// type are both type-validated (the latter through its content chain).
+		if std.IsComplex && !std.IsSimpleContent {
+			continue
+		}
+		// Validate through the SAME shared simpleContent path the instance value uses
+		// (validateSimpleContentValue: effective content type PLUS inherited base
+		// content facets), version-/schema-aware so a 1.1 lexical form or an assertion
+		// facet is handled exactly as for an attribute default/fixed. A plain simpleType
+		// passes through that path unchanged (the nested-base walk is a no-op).
+		vc := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, version: c.version}
+		if err := vc.validateSimpleContentValue(ctx, *val, it.src.nsMap, std, it.src.local, it.src.line); err != nil {
+			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(effectiveContentSimpleType(std)))
+			c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
 		}
 	}
 }
