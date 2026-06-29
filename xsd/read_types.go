@@ -927,28 +927,28 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			nsCopy := make(map[string]string, len(nsCtx))
 			maps.Copy(nsCopy, nsCtx)
 			fs.EnumerationNS = append(fs.EnumerationNS, nsCopy)
-		case "minInclusive":
+		case facetMinInclusive:
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MinInclusive = &val
 			fs.MinInclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MinInclusiveNS = captureFacetNS(ce)
-		case "maxInclusive":
+		case facetMaxInclusive:
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxInclusive = &val
 			fs.MaxInclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MaxInclusiveNS = captureFacetNS(ce)
-		case "minExclusive":
+		case facetMinExclusive:
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MinExclusive = &val
 			fs.MinExclusiveFixed = c.readFacetFixed(ctx, ce)
 			fs.MinExclusiveNS = captureFacetNS(ce)
-		case "maxExclusive":
+		case facetMaxExclusive:
 			if fs == nil {
 				fs = &FacetSet{}
 			}

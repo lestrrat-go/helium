@@ -177,7 +177,6 @@ func TestVersion11TemporalExclusiveBoundRestriction(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), tt.schema,
@@ -281,7 +280,6 @@ func TestVersion11TemporalExclusiveBoundRestrictionAgainstEffectiveBase(t *testi
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
@@ -337,7 +335,6 @@ func TestVersion11FixedRangeFacetRestriction(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
@@ -417,7 +414,6 @@ func TestVersion11ExplicitTimezoneFixedFacetRestriction(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))
@@ -473,7 +469,6 @@ func TestVersion11DateTimeStampFixedBuiltInFacets(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.schema))

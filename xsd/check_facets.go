@@ -11,6 +11,13 @@ import (
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
+const (
+	facetMinInclusive = "minInclusive"
+	facetMaxInclusive = "maxInclusive"
+	facetMinExclusive = "minExclusive"
+	facetMaxExclusive = "maxExclusive"
+)
+
 // baseFacets returns the FacetSet from the nearest base type in the chain.
 func baseFacets(td *TypeDef) *FacetSet {
 	if td.BaseType == nil {
@@ -210,10 +217,10 @@ func (c *compiler) checkListUnionFacetApplicability(ctx context.Context, td *Typ
 		present bool
 	}
 	disallowed := []facetPresence{
-		{"minInclusive", fs.MinInclusive != nil},
-		{"maxInclusive", fs.MaxInclusive != nil},
-		{"minExclusive", fs.MinExclusive != nil},
-		{"maxExclusive", fs.MaxExclusive != nil},
+		{facetMinInclusive, fs.MinInclusive != nil},
+		{facetMaxInclusive, fs.MaxInclusive != nil},
+		{facetMinExclusive, fs.MinExclusive != nil},
+		{facetMaxExclusive, fs.MaxExclusive != nil},
 		{"totalDigits", fs.TotalDigits != nil},
 		{"fractionDigits", fs.FractionDigits != nil},
 		{"explicitTimezone", fs.ExplicitTimezone != nil},
@@ -277,10 +284,10 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 			name    string
 			present bool
 		}{
-			{"minInclusive", fs.MinInclusive != nil},
-			{"maxInclusive", fs.MaxInclusive != nil},
-			{"minExclusive", fs.MinExclusive != nil},
-			{"maxExclusive", fs.MaxExclusive != nil},
+			{facetMinInclusive, fs.MinInclusive != nil},
+			{facetMaxInclusive, fs.MaxInclusive != nil},
+			{facetMinExclusive, fs.MinExclusive != nil},
+			{facetMaxExclusive, fs.MaxExclusive != nil},
 		} {
 			if !rf.present {
 				continue
@@ -347,10 +354,10 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		sameExclusiveBase *string
 	}
 	for _, rf := range []rangeFacet{
-		{"minInclusive", fs.MinInclusive, fs.MinInclusiveNS, nil},
-		{"maxInclusive", fs.MaxInclusive, fs.MaxInclusiveNS, nil},
-		{"minExclusive", fs.MinExclusive, fs.MinExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, "minExclusive", builtinLocal)},
-		{"maxExclusive", fs.MaxExclusive, fs.MaxExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, "maxExclusive", builtinLocal)},
+		{facetMinInclusive, fs.MinInclusive, fs.MinInclusiveNS, nil},
+		{facetMaxInclusive, fs.MaxInclusive, fs.MaxInclusiveNS, nil},
+		{facetMinExclusive, fs.MinExclusive, fs.MinExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, facetMinExclusive, builtinLocal)},
+		{facetMaxExclusive, fs.MaxExclusive, fs.MaxExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, facetMaxExclusive, builtinLocal)},
 	} {
 		if rf.value == nil {
 			continue
@@ -1087,7 +1094,7 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 		return compareDecimal(a, b), true
 	}
 
-	lower, upper := effectiveInheritedRangeBounds(td, builtinLocal, rangeCmp)
+	lower, upper := effectiveInheritedRangeBounds(td, rangeCmp)
 	reportRangeBase := func(name string, value string, base inheritedRangeBound, relation string) {
 		if base.immediate {
 			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
@@ -1149,10 +1156,10 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 			}
 		}
 	}
-	checkUpper("maxInclusive", fs.MaxInclusive, true)
-	checkUpper("maxExclusive", fs.MaxExclusive, false)
-	checkLower("minInclusive", fs.MinInclusive, true)
-	checkLower("minExclusive", fs.MinExclusive, false)
+	checkUpper(facetMaxInclusive, fs.MaxInclusive, true)
+	checkUpper(facetMaxExclusive, fs.MaxExclusive, false)
+	checkLower(facetMinInclusive, fs.MinInclusive, true)
+	checkLower(facetMinExclusive, fs.MinExclusive, false)
 }
 
 func (c *compiler) checkFixedRangeFacetRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
@@ -1168,13 +1175,13 @@ func (c *compiler) checkFixedRangeFacetRestriction(ctx context.Context, td *Type
 			fmt.Sprintf("The value '%s' of the facet '%s' does not match the fixed value '%s' of the base type.",
 				*value, name, *baseValue)))
 	}
-	check("minInclusive", fs.MinInclusive, inheritedRangeFacet(td, "minInclusive", true))
-	check("maxInclusive", fs.MaxInclusive, inheritedRangeFacet(td, "maxInclusive", true))
-	check("minExclusive", fs.MinExclusive, inheritedRangeFacet(td, "minExclusive", true))
-	check("maxExclusive", fs.MaxExclusive, inheritedRangeFacet(td, "maxExclusive", true))
+	check(facetMinInclusive, fs.MinInclusive, inheritedFixedRangeFacet(td, facetMinInclusive))
+	check(facetMaxInclusive, fs.MaxInclusive, inheritedFixedRangeFacet(td, facetMaxInclusive))
+	check(facetMinExclusive, fs.MinExclusive, inheritedFixedRangeFacet(td, facetMinExclusive))
+	check(facetMaxExclusive, fs.MaxExclusive, inheritedFixedRangeFacet(td, facetMaxExclusive))
 }
 
-func inheritedRangeFacet(td *TypeDef, name string, requireFixed bool) *string {
+func inheritedFixedRangeFacet(td *TypeDef, name string) *string {
 	if td == nil || td.BaseType == nil {
 		return nil
 	}
@@ -1183,20 +1190,20 @@ func inheritedRangeFacet(td *TypeDef, name string, requireFixed bool) *string {
 			continue
 		}
 		switch name {
-		case "minInclusive":
-			if cur.Facets.MinInclusive != nil && (!requireFixed || cur.Facets.MinInclusiveFixed) {
+		case facetMinInclusive:
+			if cur.Facets.MinInclusive != nil && cur.Facets.MinInclusiveFixed {
 				return cur.Facets.MinInclusive
 			}
-		case "maxInclusive":
-			if cur.Facets.MaxInclusive != nil && (!requireFixed || cur.Facets.MaxInclusiveFixed) {
+		case facetMaxInclusive:
+			if cur.Facets.MaxInclusive != nil && cur.Facets.MaxInclusiveFixed {
 				return cur.Facets.MaxInclusive
 			}
-		case "minExclusive":
-			if cur.Facets.MinExclusive != nil && (!requireFixed || cur.Facets.MinExclusiveFixed) {
+		case facetMinExclusive:
+			if cur.Facets.MinExclusive != nil && cur.Facets.MinExclusiveFixed {
 				return cur.Facets.MinExclusive
 			}
-		case "maxExclusive":
-			if cur.Facets.MaxExclusive != nil && (!requireFixed || cur.Facets.MaxExclusiveFixed) {
+		case facetMaxExclusive:
+			if cur.Facets.MaxExclusive != nil && cur.Facets.MaxExclusiveFixed {
 				return cur.Facets.MaxExclusive
 			}
 		}
@@ -1212,15 +1219,15 @@ type inheritedRangeBound struct {
 }
 
 func effectiveInheritedExclusiveRangeFacet(td *TypeDef, name, builtinLocal string) *string {
-	lower, upper := effectiveInheritedRangeBounds(td, builtinLocal, func(a, b string) (int, bool) {
+	lower, upper := effectiveInheritedRangeBounds(td, func(a, b string) (int, bool) {
 		return rangeFacetCmp(a, b, builtinLocal)
 	})
 	switch name {
-	case "minExclusive":
+	case facetMinExclusive:
 		if lower.exclusive {
 			return lower.value
 		}
-	case "maxExclusive":
+	case facetMaxExclusive:
 		if upper.exclusive {
 			return upper.value
 		}
@@ -1228,7 +1235,7 @@ func effectiveInheritedExclusiveRangeFacet(td *TypeDef, name, builtinLocal strin
 	return nil
 }
 
-func effectiveInheritedRangeBounds(td *TypeDef, builtinLocal string, cmp func(string, string) (int, bool)) (inheritedRangeBound, inheritedRangeBound) {
+func effectiveInheritedRangeBounds(td *TypeDef, cmp func(string, string) (int, bool)) (inheritedRangeBound, inheritedRangeBound) {
 	var lower, upper inheritedRangeBound
 	if td == nil || td.BaseType == nil {
 		return lower, upper
@@ -1239,10 +1246,10 @@ func effectiveInheritedRangeBounds(td *TypeDef, builtinLocal string, cmp func(st
 			immediate = false
 			continue
 		}
-		mergeInheritedLowerBound(&lower, "minInclusive", cur.Facets.MinInclusive, false, immediate, cmp)
-		mergeInheritedLowerBound(&lower, "minExclusive", cur.Facets.MinExclusive, true, immediate, cmp)
-		mergeInheritedUpperBound(&upper, "maxInclusive", cur.Facets.MaxInclusive, false, immediate, cmp)
-		mergeInheritedUpperBound(&upper, "maxExclusive", cur.Facets.MaxExclusive, true, immediate, cmp)
+		mergeInheritedLowerBound(&lower, facetMinInclusive, cur.Facets.MinInclusive, false, immediate, cmp)
+		mergeInheritedLowerBound(&lower, facetMinExclusive, cur.Facets.MinExclusive, true, immediate, cmp)
+		mergeInheritedUpperBound(&upper, facetMaxInclusive, cur.Facets.MaxInclusive, false, immediate, cmp)
+		mergeInheritedUpperBound(&upper, facetMaxExclusive, cur.Facets.MaxExclusive, true, immediate, cmp)
 		immediate = false
 	}
 	return lower, upper
