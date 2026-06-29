@@ -1,5 +1,7 @@
 package xsd
 
+import "context"
+
 // XSD 1.1 occurrence-counting subsumption of a base xs:all model group.
 //
 // In XSD 1.1 the members of an xs:all may carry occurrence ranges (minOccurs /
@@ -79,7 +81,7 @@ func occursMin(a, b int) int {
 // wildcard (route to the wildcard-aware path), names an element no base member
 // admits, or maps an element to a base member whose type it is not derived from.
 // A non-emitting particle (prohibited, or an empty group) contributes nothing.
-func memberContributions(p *Particle, baseElems []*Particle, schema *Schema) ([]memberRange, bool) {
+func memberContributions(ctx context.Context, p *Particle, baseElems []*Particle, schema *Schema, version Version) ([]memberRange, bool) {
 	// A non-emitting particle (maxOccurs=0, or a group with no emitting content)
 	// contributes nothing and must be checked BEFORE rejecting a wildcard term, so
 	// a prohibited wildcard (e.g. <xs:any maxOccurs="0"/>) does not falsely abort.
@@ -88,15 +90,14 @@ func memberContributions(p *Particle, baseElems []*Particle, schema *Schema) ([]
 	}
 	switch t := p.Term.(type) {
 	case *ElementDecl:
-		bi := findBaseAllMember(t, baseElems, schema)
+		bi, member := findBaseAllMember(t, baseElems, schema)
 		if bi < 0 {
 			return nil, false
 		}
-		// Type derivation: the derived element's type must be the same as, or
-		// derived from, the base member's type. When either is unresolved, accept
-		// conservatively (matching elementRestrictsElement).
-		bd, _ := baseElems[bi].Term.(*ElementDecl)
-		if t.Type != nil && bd != nil && bd.Type != nil && !isDerivedFrom(t.Type, bd.Type) {
+		// NameAndTypeOK against the ACTUAL constraining declaration (the base member
+		// for a direct match, or the matched global substitution member otherwise) —
+		// type derivation, nillable, and fixed value.
+		if !derivedElemNameAndTypeOK(ctx, t, member, schema, version) {
 			return nil, false
 		}
 		vec := make([]memberRange, len(baseElems))
@@ -105,32 +106,68 @@ func memberContributions(p *Particle, baseElems []*Particle, schema *Schema) ([]
 	case *Wildcard:
 		return nil, false
 	case *ModelGroup:
-		childVecs := make([][]memberRange, 0, len(t.Particles))
-		for _, cp := range t.Particles {
-			cv, ok := memberContributions(cp, baseElems, schema)
-			if !ok {
-				return nil, false
-			}
-			childVecs = append(childVecs, cv)
+		body, ok := groupBodyContributions(ctx, t, baseElems, schema, version)
+		if !ok {
+			return nil, false
 		}
-		var combined []memberRange
-		if t.Compositor == CompositorChoice {
-			combined = combineChoiceVecs(childVecs, len(baseElems))
-		} else {
-			// sequence and all combine the same way: each member's content is
-			// emitted independently, so contributions sum.
-			combined = combineSeqVecs(childVecs, len(baseElems))
-		}
-		// Scale by the group's own occurrence range.
-		for i := range combined {
-			combined[i] = memberRange{
-				min: occursMul(combined[i].min, p.MinOccurs),
-				max: occursMul(combined[i].max, p.MaxOccurs),
+		// Scale by the group's OWN occurrence range (a nested group's occurrence
+		// folds into its members' contributions).
+		for i := range body {
+			body[i] = memberRange{
+				min: occursMul(body[i].min, p.MinOccurs),
+				max: occursMul(body[i].max, p.MaxOccurs),
 			}
 		}
-		return combined, true
+		return body, true
 	}
 	return make([]memberRange, len(baseElems)), true
+}
+
+// groupBodyContributions computes the per-base-member contribution of a model
+// group's BODY (its members combined per compositor) WITHOUT folding the group's
+// OWN occurrence range — the caller scales it (a nested group via
+// memberContributions, the root derived group not at all, since
+// groupRestrictsGroup already checks the root occurrence range separately, so
+// folding it again would double-count and reject e.g. an identical restriction of
+// an optional `xs:all minOccurs="0"`).
+func groupBodyContributions(ctx context.Context, mg *ModelGroup, baseElems []*Particle, schema *Schema, version Version) ([]memberRange, bool) {
+	childVecs := make([][]memberRange, 0, len(mg.Particles))
+	for _, cp := range mg.Particles {
+		cv, ok := memberContributions(ctx, cp, baseElems, schema, version)
+		if !ok {
+			return nil, false
+		}
+		childVecs = append(childVecs, cv)
+	}
+	if mg.Compositor == CompositorChoice {
+		return combineChoiceVecs(childVecs, len(baseElems)), true
+	}
+	// sequence and all combine the same way: each member's content is emitted
+	// independently, so contributions sum.
+	return combineSeqVecs(childVecs, len(baseElems)), true
+}
+
+// derivedElemNameAndTypeOK checks the NameAndTypeOK constraints (XSD §3.9.6) of a
+// derived element against the actual constraining base declaration, IGNORING
+// occurrence (which is accounted separately by summing): type derivation, no
+// nillable widening, and fixed-value equality. Mirrors elementRestrictsElement
+// minus the name/occurrence checks.
+func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl, schema *Schema, version Version) bool {
+	if rt.Type != nil && constraining.Type != nil && !isDerivedFrom(rt.Type, constraining.Type) {
+		return false
+	}
+	if !constraining.Nillable && rt.Nillable {
+		return false
+	}
+	if constraining.Fixed != nil {
+		if rt.Fixed == nil {
+			return false
+		}
+		if !fixedValueMatches(ctx, *rt.Fixed, *constraining.Fixed, rt.Type, rt.FixedNS, constraining.FixedNS, schema, version) {
+			return false
+		}
+	}
+	return true
 }
 
 // combineSeqVecs sums, per base member, the contributions of a sequence/all
@@ -213,15 +250,21 @@ func flattenBaseAllElements(mg *ModelGroup) ([]*Particle, bool) {
 	return elems, hasWildcard
 }
 
-// findBaseAllMember returns the index of the base xs:all element member that a
-// derived element maps to: a direct expanded-name match, or membership in a base
-// element's substitution group (XSD 1.1 lets a derived all restrict a base
-// element to its substitution-group members), honoring block="substitution" and
-// a blocked derivation step on the base member. Returns -1 if none admits it.
-func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Schema) int {
+// findBaseAllMember returns the index of the base xs:all element member a derived
+// element maps to AND the actual CONSTRAINING declaration to validate against: a
+// direct expanded-name match to a NON-ABSTRACT base member (an abstract base head
+// admits no direct instance, only its substitutes, so a direct match to it is
+// rejected — the constraining decl is the base member itself), or membership in a
+// base element's substitution group (XSD 1.1 lets a derived all restrict a base
+// element to its substitution-group members — the constraining decl is the matched
+// GLOBAL member, so the derived element is checked against the member's own
+// type/fixed/nillable, not the head's), honoring block="substitution", a blocked
+// derivation step, and skipping abstract members (never instance-valid). Returns
+// (-1, nil) if none admits it.
+func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Schema) (int, *ElementDecl) {
 	for i, bp := range baseElems {
-		if bd, ok := bp.Term.(*ElementDecl); ok && bd.Name == derived.Name {
-			return i
+		if bd, ok := bp.Term.(*ElementDecl); ok && bd.Name == derived.Name && !bd.Abstract {
+			return i, bd
 		}
 	}
 	for i, bp := range baseElems {
@@ -230,16 +273,16 @@ func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Sche
 			continue
 		}
 		for _, m := range schema.substGroups[bd.Name] {
-			if m.Name != derived.Name {
+			if m.Name != derived.Name || m.Abstract {
 				continue
 			}
 			if isDerivationBlocked(m.Type, bd.Type, bd.Block) {
 				continue
 			}
-			return i
+			return i, m
 		}
 	}
-	return -1
+	return -1, nil
 }
 
 // allRestrictsByCounting reports whether the derived particle is a valid XSD 1.1
@@ -248,12 +291,22 @@ func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Sche
 // derived from; the combined contribution per base member must lie within that
 // member's occurrence range; and every base member with no derived contribution
 // must be emptiable.
-func allRestrictsByCounting(derived *Particle, baseAll *ModelGroup, schema *Schema) bool {
+func allRestrictsByCounting(ctx context.Context, derived *Particle, baseAll *ModelGroup, schema *Schema, version Version) bool {
 	baseElems, hasWildcard := flattenBaseAllElements(baseAll)
 	if hasWildcard {
 		return false
 	}
-	vec, ok := memberContributions(derived, baseElems, schema)
+	// Compute the derived side's per-base-member contribution. For a derived GROUP
+	// use its BODY contribution (NOT scaled by the root group's own occurrence —
+	// groupRestrictsGroup already checked that range separately, so folding it here
+	// would double-count); a bare element/particle uses memberContributions.
+	var vec []memberRange
+	var ok bool
+	if mg, isGroup := derived.Term.(*ModelGroup); isGroup {
+		vec, ok = groupBodyContributions(ctx, mg, baseElems, schema, version)
+	} else {
+		vec, ok = memberContributions(ctx, derived, baseElems, schema, version)
+	}
 	if !ok {
 		return false
 	}

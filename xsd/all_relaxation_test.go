@@ -492,3 +492,144 @@ func TestAll11MultiHeadSubstParsing(t *testing.T) {
 	// m is substitutable for both h1 and h2.
 	require.NoError(t, validateAll11(t, schema, `<doc><m>x</m><m>y</m></doc>`))
 }
+
+// TestAll11OptionalAllIdenticalRestriction guards against occurrence
+// double-folding: an identical restriction of an OPTIONAL xs:all (minOccurs="0")
+// whose member is required must be valid — the group-level occurrence is checked
+// once by groupRestrictsGroup, so the per-member contribution must NOT also be
+// scaled by the root group's minOccurs (which would drop the member min to 0).
+func TestAll11OptionalAllIdenticalRestriction(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:complexContent><xs:restriction base="xs:anyType">
+    <xs:all minOccurs="0">
+      <xs:element name="a" minOccurs="1" maxOccurs="1"/>
+    </xs:all>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b">
+    <xs:all minOccurs="0">
+      <xs:element name="a" minOccurs="1" maxOccurs="1"/>
+    </xs:all>
+  </xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+	_, cerr := compileAll11(t, schema)
+	require.NoError(t, cerr)
+}
+
+// TestAll11NestedWildcardRestrictionRouting guards flatten-aware wildcard
+// detection: a base/derived all whose wildcard is reached ONLY through a nested
+// 1/1 all-group ref must route to the wildcard-aware subsumption, not the
+// counting fast-path (which rejects any wildcard). An identical restriction is
+// valid.
+func TestAll11NestedWildcardRestrictionRouting(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all>
+    <xs:element name="a" minOccurs="0" maxOccurs="3"/>
+    <xs:any namespace="##other" minOccurs="0" maxOccurs="5" processContents="skip"/>
+  </xs:all></xs:group>
+  <xs:complexType name="b"><xs:all>
+    <xs:group ref="g"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:group ref="g"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+	_, cerr := compileAll11(t, schema)
+	require.NoError(t, cerr)
+}
+
+// TestAll11AbstractBaseHeadNoDirectRestriction: a derived local element sharing
+// the QName of an ABSTRACT base all member head must NOT be accepted as a direct
+// restriction (runtime can't accept a direct instance of the abstract head).
+func TestAll11AbstractBaseHeadNoDirectRestriction(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="h" type="xs:string"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="h" abstract="true" type="xs:string"/>
+</xs:schema>`
+	_, cerr := compileAll11(t, schema)
+	require.Error(t, cerr)
+}
+
+// TestAll11SubstMemberActualType: a derived local element sharing a QName with a
+// global substitution member must be checked against the MEMBER's type, not the
+// (anyType) head. A local element typed xs:string cannot restrict a base whose
+// matching member is typed xs:int.
+func TestAll11SubstMemberActualType(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="a"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="m" type="xs:string"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="a" abstract="true"/>
+  <xs:element name="m" substitutionGroup="a" type="xs:int"/>
+</xs:schema>`
+	_, cerr := compileAll11(t, schema)
+	require.Error(t, cerr) // local m (xs:string) is not derived from global member m (xs:int)
+}
+
+// TestAll11AbstractSubstMemberInstance: an ABSTRACT substitution member can never
+// appear in an instance, so it does not satisfy an xs:all member referencing its
+// head. (Guards the shared elemMatchesDeclOrSubst fix.)
+func TestAll11AbstractSubstMemberInstance(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m" abstract="true" substitutionGroup="h" type="xs:string"/>
+</xs:schema>`
+	require.NoError(t, validateAll11(t, schema, `<doc><h>x</h></doc>`)) // concrete head ok
+	require.Error(t, validateAll11(t, schema, `<doc><m>x</m></doc>`))   // abstract member cannot appear
+}
+
+// TestAll11MultiHeadParsing covers the multi-head substitutionGroup parsing edge
+// cases: a whitespace-only value is a schema error, duplicate heads are deduped
+// (no false UPA), and an invalid QName token is rejected.
+func TestAll11MultiHeadParsing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("whitespace-only substitutionGroup is an error", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m" substitutionGroup="   " type="xs:string"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+
+	t.Run("duplicate heads deduped, no false UPA", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="h"/>
+    <xs:element name="x" type="xs:string"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m" substitutionGroup="h h" type="xs:string"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr) // "h h" dedupes to one head; m registers once, no UPA
+	})
+
+	t.Run("invalid QName head token is an error", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m" substitutionGroup="h :bad" type="xs:string"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+}

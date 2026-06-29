@@ -1309,6 +1309,11 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 			return false
 		}
 		for _, member := range schema.substGroups[edecl.Name] {
+			// An ABSTRACT substitution member can never appear in an instance (only
+			// ITS concrete substitutes can), so it does not satisfy the head.
+			if member.Abstract {
+				continue
+			}
 			if matchesDeclDirect(child, member) {
 				// Check if the derivation chain from member's type to head's type
 				// uses a blocked method.

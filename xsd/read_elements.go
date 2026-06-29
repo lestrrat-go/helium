@@ -423,26 +423,53 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		decl.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 	}
 
-	if opts.allowSubstitutionGroup {
-		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
-			// XSD 1.1 allows MULTIPLE substitution group heads
-			// (substitutionGroup="a b c"); the element is a member of every listed
-			// head. The value is an xs:list, so it splits on XSD whitespace only
-			// (space/tab/CR/LF via splitSpace, like memberTypes) — NOT arbitrary
-			// Unicode whitespace. XSD 1.0 permits exactly one head, so the whole
-			// value resolves as a single QName, preserving 1.0 behavior.
-			if c.version == Version11 {
-				for _, h := range splitSpace(sg) {
-					decl.SubstitutionGroups = append(decl.SubstitutionGroups, c.resolveQName(ctx, elem, h))
+	if opts.allowSubstitutionGroup && hasAttr(elem, attrSubstitutionGroup) {
+		sg := getAttr(elem, attrSubstitutionGroup)
+		// XSD 1.1 allows MULTIPLE substitution group heads
+		// (substitutionGroup="a b c"); the element is a member of every listed head.
+		// The value is an xs:list, so it splits on XSD whitespace only
+		// (space/tab/CR/LF via splitSpace, like memberTypes) — NOT arbitrary Unicode
+		// whitespace. XSD 1.0 permits exactly one head, resolved as a single QName
+		// (byte-identical to before).
+		if c.version != Version11 {
+			if sg != "" {
+				decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
+			}
+		} else {
+			seen := make(map[QName]struct{})
+			for _, h := range splitSpace(sg) {
+				// Each head token must be a lexically valid QName.
+				if err := validateQName(h); err != nil {
+					if c.filename != "" {
+						c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+							elem.LocalName(), elem.LocalName(), attrSubstitutionGroup,
+							fmt.Sprintf("'%s' is not a valid QName.", h)))
+					}
+					continue
 				}
-				if len(decl.SubstitutionGroups) > 0 {
-					decl.SubstitutionGroup = decl.SubstitutionGroups[0]
+				qn := c.resolveQName(ctx, elem, h)
+				// Dedupe duplicate heads (substitutionGroup="h h") preserving
+				// first-head order, so the member is registered (and counted in UPA)
+				// once per distinct head.
+				if _, dup := seen[qn]; dup {
+					continue
 				}
+				seen[qn] = struct{}{}
+				decl.SubstitutionGroups = append(decl.SubstitutionGroups, qn)
+			}
+			if len(decl.SubstitutionGroups) == 0 {
+				// A present substitutionGroup with no valid head (whitespace-only, or
+				// all tokens invalid) is a schema error.
+				if c.filename != "" {
+					c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+						elem.LocalName(), elem.LocalName(), attrSubstitutionGroup,
+						fmt.Sprintf("The value '%s' is not valid. Expected is a non-empty list of QNames.", sg)))
+				}
+			} else {
+				decl.SubstitutionGroup = decl.SubstitutionGroups[0]
 				if len(decl.SubstitutionGroups) == 1 {
 					decl.SubstitutionGroups = nil
 				}
-			} else {
-				decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
 			}
 		}
 	}
