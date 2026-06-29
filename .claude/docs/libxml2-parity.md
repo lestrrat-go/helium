@@ -103,7 +103,7 @@ declarations remain a well-formedness error, as in libxml2.
 |---------|-----------|-----|
 | HTML parsing | SAX + DOM, auto-close, void elements, entities, encoding | Structural element nesting not enforced, areBlanks heuristic simpler, attribute deduplication missing |
 | encoding/xml shim | Marshal, Unmarshal, Encoder, Decoder, Token, struct tags | Strict-only, xmlns before regular attrs, InputOffset approximate, undeclared prefixes rejected |
-| XSD numeric comparison | decimal/integer via big.Rat | No float/double/date/time/duration comparison |
+| XSD range comparison | decimal/integer via big.Rat; float/double; date/time/g-types; duration partial order | Non-ordered primitives rejected for range facets; NaN ordinary value comparison remains indeterminate |
 | XSD validation mode | DOM-only | No SAX/streaming validation, no subtree validation |
 | Push parser | Incremental parsing in background goroutine from blocking push stream | Blocking on chunk boundaries; semantics differ from libxml2 push APIs |
 

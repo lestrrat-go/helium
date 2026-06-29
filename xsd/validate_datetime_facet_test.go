@@ -126,3 +126,58 @@ func TestDateTimeTimezoneFacetBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestVersion11YearZeroMixedTimezoneFacetBounds(t *testing.T) {
+	t.Parallel()
+
+	schemaFor := func(baseType, bound string) string {
+		return fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="xs:%s">
+        <xs:maxInclusive value="%s"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`, baseType, bound)
+	}
+
+	cases := []struct {
+		name     string
+		baseType string
+		bound    string
+		instance string
+	}{
+		{
+			name:     "dateTime year zero is full date",
+			baseType: "dateTime",
+			bound:    "0000-01-01T00:00:00Z",
+			instance: "0000-01-10T00:00:00",
+		},
+		{
+			name:     "date year zero is full date",
+			baseType: "date",
+			bound:    "0000-01-01Z",
+			instance: "0000-01-10",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaFor(tc.baseType, tc.bound)))
+			require.NoError(t, err)
+			schema, err := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), schemaDOC)
+			require.NoError(t, err)
+
+			doc, err := helium.NewParser().Parse(t.Context(), fmt.Appendf(nil, "<root>%s</root>", tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+			require.Error(t, err)
+			require.Contains(t, errs, "[facet 'maxInclusive']")
+		})
+	}
+}
