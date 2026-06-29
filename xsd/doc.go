@@ -15,10 +15,11 @@
 // built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration,
 // xs:anyAtomicType, xs:error) are recognized. XSD 1.1 support includes
 // assertions and assertion facets, conditional type assignment, open content,
-// temporal datatype facets such as explicitTimezone, and relaxed wildcard/UPA
-// behavior. Some 1.1 structural features remain incomplete, including
-// xs:defaultOpenContent, schema default attributes, broader xs:all support, and
-// xs:override.
+// schema default attributes, broader xs:all support, xs:override, temporal
+// datatype facets such as explicitTimezone, and relaxed wildcard/UPA behavior.
+// Remaining 1.1 gaps include schema-level xs:defaultOpenContent, skip-wildcard
+// IDC selector scoping, xs:ENTITY/xs:ENTITIES instance validation, and
+// compile-time validation of element default/fixed constraints.
 //
 // # Compilation
 //
