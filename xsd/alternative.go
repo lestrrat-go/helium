@@ -220,7 +220,19 @@ func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3
 		return fmt.Errorf("undefined variable $%s", refs.FreeVariables[0])
 	}
 	for _, tn := range refs.TypeNames {
-		ns := namespaces[tn.Prefix]
+		ns, ok := namespaces[tn.Prefix]
+		if !ok {
+			// xpath3 PREDECLARES the standard static-context prefixes (notably xs →
+			// the XSD namespace), and Expression.Validate accepts a predeclared prefix
+			// even when the schema element does not literally declare xmlns:xs. Mirror
+			// that here so a @test written against the default XSD namespace (e.g.
+			// "@kind instance of xs:string" with no explicit xmlns:xs) is not rejected.
+			// An in-scope declaration in `namespaces` always takes precedence; only an
+			// UNDECLARED prefix falls back to the predeclared binding.
+			if pn, predeclared := xpath3.PredeclaredNamespace(tn.Prefix); predeclared {
+				ns = pn
+			}
+		}
 		if ns == lexicon.NamespaceXSD {
 			continue
 		}

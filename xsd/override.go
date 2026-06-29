@@ -422,6 +422,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
+	savedXPathDefaultNSToken := c.schemaXPathDefaultNSToken
 	savedSchemaBaseURI := c.schemaBaseURI
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	savedDefAttrs := c.schemaDefaultAttrs()
@@ -433,6 +434,11 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
 	}
+	// The RAW per-document token feeds effectiveXPathDefaultNS for surviving CTA
+	// alternatives in the overridden document; it must reflect the TARGET document's
+	// root, not the overriding document's stale value, so reset it here (mirroring
+	// the include/redefine save/reset/restore) and restore on exit.
+	c.schemaXPathDefaultNSToken = getAttr(incRoot, attrXPathDefaultNamespace)
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
 	if c.filename != "" {
@@ -464,6 +470,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
+		c.schemaXPathDefaultNSToken = savedXPathDefaultNSToken
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
