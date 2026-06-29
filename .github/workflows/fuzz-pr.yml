@@ -12,8 +12,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ['.', 'c14n', 'catalog', 'html', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xslt3']
-    name: "Fuzz smoke ${{ matrix.package }}"
+        include:
+          - package: '.'
+            target: FuzzParse
+          - package: c14n
+            target: FuzzCanonicalize
+          - package: catalog
+            target: FuzzLoad
+          - package: html
+            target: FuzzParse
+          - package: relaxng
+            target: FuzzValidate
+          - package: schematron
+            target: FuzzValidate
+          - package: sink
+            target: FuzzSink
+          - package: stream
+            target: FuzzWriter
+          - package: xinclude
+            target: FuzzProcess
+          - package: xpath1
+            target: FuzzCompile
+          - package: xpath3
+            target: FuzzCompile
+          - package: xpointer
+            target: FuzzEvaluate
+          - package: xsd
+            target: FuzzValidate
+          - package: xslt3
+            target: FuzzTransform
+    name: "Fuzz smoke ${{ matrix.package }} ${{ matrix.target }}"
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -37,14 +65,11 @@ jobs:
 
       - name: Run fuzz smoke tests
         run: |
+          set -o pipefail
           FUZZTIME="5s"
           mkdir -p /tmp/fuzz-output
-          for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
-            echo "::group::${target}"
-            go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}" 2>&1 \
-              | tee -a /tmp/fuzz-output/log.txt
-            echo "::endgroup::"
-          done
+          go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${{ matrix.target }}\$" -fuzztime "${FUZZTIME}" 2>&1 \
+            | tee -a /tmp/fuzz-output/log.txt
 
       - name: Collect failing corpus
         if: failure()

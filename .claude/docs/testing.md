@@ -152,10 +152,10 @@ Run specific test subsets via env vars:
 
 - `ci.yml` runs normal test/build verification only.
 - `fuzz-pr.yml` runs smoke fuzzing on pull requests.
-- Smoke fuzz duration → `5s` per discovered `Fuzz...` target.
+- Smoke fuzzing covers every fuzz-enabled package, but runs one representative `Fuzz...` target per package for `5s`.
 - `fuzz.yml` runs deep fuzzing on weekly schedule + manual dispatch.
 - Deep fuzz duration default → `5m` per discovered `Fuzz...` target.
-- Workflows discover fuzz targets via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`.
+- Deep fuzzing discovers fuzz targets via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`.
 
 ## Common Test Patterns
 

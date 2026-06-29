@@ -37,6 +37,7 @@ jobs:
             fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-
       - name: Run fuzz tests
         run: |
+          set -o pipefail
           FUZZTIME="${{ github.event.inputs.fuzz-time || '5m' }}"
           mkdir -p /tmp/fuzz-output
           for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
