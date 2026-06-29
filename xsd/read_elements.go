@@ -447,6 +447,19 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	if decl.Default != nil {
 		decl.DefaultNS = collectNSContext(elem)
 	}
+	// Record source info so an EXPLICIT default/fixed on this declaration can be
+	// validated against the element's simple (content) type once type refs are
+	// resolved (XSD 1.1 Element Default Valid). A ref="" element inheriting the
+	// global's value is not recorded here — the global declaration's own entry
+	// covers it.
+	if c.version == Version11 && (decl.Default != nil || decl.Fixed != nil) {
+		c.elemDeclConstraintSources[decl] = attrConstraintSource{
+			line:   elem.Line(),
+			local:  opts.name,
+			nsMap:  collectNSContext(elem),
+			source: c.includeFile,
+		}
+	}
 
 	if hasAttr(elem, attrBlock) {
 		decl.Block = parseBlockFlags(getAttr(elem, attrBlock))

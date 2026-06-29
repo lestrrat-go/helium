@@ -318,6 +318,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// injecting an invalid value into the instance during validation.
 	c.checkAttrUseConstraints(ctx)
 
+	// XSD 1.1: validate element-declaration default/fixed constraint values against
+	// the element's simple (content) type now that all type refs are resolved. Gated
+	// to 1.1 (sources are only recorded in 1.1 mode), so 1.0 stays byte-identical.
+	c.checkElementDeclConstraints(ctx)
+
 	// Topologically order extension types so each base type is merged before
 	// the types that derive from it (the merge reads the base's finalized
 	// content model and attributes).
@@ -1297,6 +1302,80 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
 		}
 	}
+}
+
+// checkElementDeclConstraints validates each element declaration's explicit
+// default/fixed value against its declared simple (content) type (XSD 1.1
+// "Schema Component Constraint: Element Default Valid (Immediate)"). It mirrors
+// checkAttrUseConstraints: an invalid value (e.g. a list/union default that does
+// not satisfy the type) is a schema error caught at compile time rather than
+// silently injected into the instance. Sources are recorded only in Version11, so
+// 1.0 never reaches this check.
+//
+// Only an element whose type is a simple type, or a complex type with simple
+// content, has a type-validated default; an element-only/mixed complex content
+// default is character data not validated against a simple type, so it is skipped.
+func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	type pending struct {
+		decl *ElementDecl
+		src  attrConstraintSource
+	}
+	items := make([]pending, 0, len(c.elemDeclConstraintSources))
+	for decl, src := range c.elemDeclConstraintSources {
+		items = append(items, pending{decl: decl, src: src})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].src.line != items[j].src.line {
+			return items[i].src.line < items[j].src.line
+		}
+		return items[i].src.local < items[j].src.local
+	})
+
+	for _, it := range items {
+		val := it.decl.Default
+		if val == nil {
+			val = it.decl.Fixed
+		}
+		if val == nil {
+			continue
+		}
+		std := elementDefaultSimpleType(it.decl.Type)
+		if std == nil {
+			continue
+		}
+		// Validate through the version-aware, schema-aware path so a 1.1 lexical form
+		// or a schema-aware assertion facet is handled the same way as for an
+		// attribute default/fixed.
+		vc := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, version: c.version}
+		if err := validateValue(ctx, *val, it.src.nsMap, std, "", "", 0, vc); err != nil {
+			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(std))
+			c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
+		}
+	}
+}
+
+// elementDefaultSimpleType returns the simple type an element declaration's
+// default/fixed value must validate against, or nil when the value is not
+// type-validated (a complex element-only/mixed content type). A plain simple type
+// is returned as-is; a complex type with simple content is resolved to its
+// effective content simple type.
+func elementDefaultSimpleType(td *TypeDef) *TypeDef {
+	if td == nil {
+		return nil
+	}
+	if !td.IsComplex {
+		if td.ContentType == ContentTypeSimple {
+			return td
+		}
+		return nil
+	}
+	if td.IsSimpleContent {
+		return effectiveContentSimpleType(td)
+	}
+	return nil
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
