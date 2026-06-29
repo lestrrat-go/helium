@@ -276,17 +276,19 @@ func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Sche
 	}
 	for i, bp := range baseElems {
 		bd, ok := bp.Term.(*ElementDecl)
-		if !ok || bd.Block&BlockSubstitution != 0 {
+		if !ok {
 			continue
 		}
 		for _, m := range schema.substGroups[bd.Name] {
-			if m.Name != derived.Name || m.Abstract {
+			if m.Name != derived.Name {
 				continue
 			}
-			if isDerivationBlocked(m.Type, bd.Type, bd.Block) {
-				continue
+			// Use the shared admissibility predicate so subsumption agrees with the
+			// runtime matcher and UPA on which members can substitute for the head
+			// (concrete, not blocked, EFFECTIVE type substitutable for the head's).
+			if admissibleSubstitutionMember(m, bd, schema) {
+				return i, m
 			}
-			return i, m
 		}
 	}
 	return -1, nil

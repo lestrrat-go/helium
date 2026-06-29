@@ -743,3 +743,66 @@ func TestAll11UnderMinDiagnostic(t *testing.T) {
 	require.Contains(t, msg, "( c )")   // expected list names the under-min member c
 	require.NotContains(t, msg, "(  )") // not the empty-list artifact
 }
+
+// TestAll11SubstMemberTypeSubstitutability guards XSDALL-880-001 (round 5):
+// subsumption must verify the substitution member's EFFECTIVE type is validly
+// substitutable for the base head's type — not merely that the name is a member.
+// A derived element mapping to a member whose type is NOT derived from the head
+// type is rejected; one whose type IS derived is accepted.
+func TestAll11SubstMemberTypeSubstitutability(t *testing.T) {
+	t.Parallel()
+
+	t.Run("member type not substitutable for head rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="m" type="xs:string"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="h" abstract="true" type="xs:int"/>
+  <xs:element name="m" substitutionGroup="h" type="xs:string"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr) // member m (xs:string) is not substitutable for head h (xs:int)
+	})
+
+	t.Run("member type derived from head accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="m" type="xs:int"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="h" abstract="true" type="xs:integer"/>
+  <xs:element name="m" substitutionGroup="h" type="xs:int"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr) // member m (xs:int) is derived from head h (xs:integer)
+	})
+}
+
+// TestAll11UPAAbstractMemberCompetes: in XSD 1.1 an ABSTRACT substitution member
+// is still a member of the head's substitution group BY DECLARATION, so it
+// COMPETES for unique particle attribution even though it can never appear in an
+// instance. An xs:all with a head ref plus a local element sharing the QName of an
+// abstract member of that head is therefore a UPA violation (W3C wgData/sg/upa.xsd,
+// bug 4337 — XSD 1.0 would accept it, 1.1 rejects it). Instance MATCHING, by
+// contrast, skips abstract members (a separate question, covered elsewhere).
+func TestAll11UPAAbstractMemberCompetes(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="t"><xs:all>
+    <xs:element ref="h"/>
+    <xs:element name="m" type="xs:string"/>
+  </xs:all></xs:complexType>
+  <xs:element name="doc" type="t"/>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m" abstract="true" substitutionGroup="h"/>
+</xs:schema>`
+	_, cerr := compileAll11(t, schema)
+	require.Error(t, cerr) // abstract member m competes with local m → cos-nonambig (UPA) violation
+}

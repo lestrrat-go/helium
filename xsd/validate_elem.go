@@ -1318,30 +1318,46 @@ func wildcardExpected(wc *Wildcard) string {
 	}
 }
 
+// admissibleSubstitutionMember reports whether member may substitute for head in
+// an INSTANCE. It is the single source of truth for substitution-group
+// admissibility, shared by the runtime xs:all matcher (elemMatchesDeclOrSubst),
+// the xs:all restriction subsumption (findBaseAllMember), and the UPA position
+// expansion (check_upa.go walkTerm), so all three agree on which members are
+// matchable. All of the following must hold:
+//  1. the member is CONCRETE (an abstract member can never appear directly);
+//  2. the head permits substitution (no block="substitution") and does not block
+//     the member's derivation method (isDerivationBlocked over EFFECTIVE types);
+//  3. the member's EFFECTIVE type is validly substitutable for the head's
+//     EFFECTIVE type (builtin-aware) — a member with no explicit @type inherits
+//     the head's type, so the raw ElementDecl.Type pointer is insufficient.
+func admissibleSubstitutionMember(member, head *ElementDecl, schema *Schema) bool {
+	if member.Abstract {
+		return false
+	}
+	if head.Block&BlockSubstitution != 0 {
+		return false
+	}
+	memberType := effectiveDeclType(member, schema)
+	headType := effectiveDeclType(head, schema)
+	if isDerivationBlocked(memberType, headType, head.Block) {
+		return false
+	}
+	if memberType != nil && headType != nil && !isXsiTypeDerivedFromDeclared(memberType, headType) {
+		return false
+	}
+	return true
+}
+
 // elemMatchesDeclOrSubst checks if a child element matches a declaration
 // directly or via substitution group. schema may be nil for basic matching.
 func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema) bool {
 	if matchesDeclDirect(child, edecl) && !edecl.Abstract {
 		return true
 	}
-	// Check substitution group members.
+	// Check substitution group members via the shared admissibility predicate.
 	if schema != nil {
-		// If block="substitution", skip all substitution group members.
-		if edecl.Block&BlockSubstitution != 0 {
-			return false
-		}
 		for _, member := range schema.substGroups[edecl.Name] {
-			// An ABSTRACT substitution member can never appear in an instance (only
-			// ITS concrete substitutes can), so it does not satisfy the head.
-			if member.Abstract {
-				continue
-			}
-			if matchesDeclDirect(child, member) {
-				// Check if the derivation chain from member's type to head's type
-				// uses a blocked method.
-				if isDerivationBlocked(member.Type, edecl.Type, edecl.Block) {
-					continue
-				}
+			if matchesDeclDirect(child, member) && admissibleSubstitutionMember(member, edecl, schema) {
 				return true
 			}
 		}

@@ -270,7 +270,14 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 	switch t := term.(type) {
 	case *ElementDecl:
 		// An element leaf and each of its substitution-group members is its own
-		// position; any of them can match where the element is expected.
+		// position; any of them can match where the element is expected. ABSTRACT
+		// members are NOT skipped here: XSD 1.1 (§3.8.6.4 / cos-nonambig) bases the
+		// actual substitution group on DECLARATION membership, so an abstract member
+		// still COMPETES for unique particle attribution even though it can never
+		// appear in an instance — e.g. element `e` + a local `e1` plus an abstract
+		// `e1 substitutionGroup="e"` IS a UPA violation in 1.1 (W3C wgData/sg/upa.xsd,
+		// bug 4337). (Instance MATCHING, by contrast, does skip abstract members via
+		// elemMatchesDeclOrSubst — that is a different question.)
 		var info posInfo
 		ids := []int{a.newPos(firstSetEntry{qname: t.Name})}
 		for _, member := range a.schema.substGroups[t.Name] {
