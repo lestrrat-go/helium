@@ -47,6 +47,9 @@ type Schema struct {
 	attrFormQualified bool // attributeFormDefault="qualified"
 	blockDefault      BlockFlags
 	finalDefault      FinalFlags
+	defaultAttributes QName
+	defaultAttrsSet   bool
+	defaultAttrsSrc   attrGroupRefUseSource
 	elements          map[QName]*ElementDecl
 	types             map[QName]*TypeDef
 	groups            map[QName]*ModelGroup

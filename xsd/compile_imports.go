@@ -379,10 +379,16 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
+	savedDefaultAttributes := c.schema.defaultAttributes
+	savedDefaultAttrsSet := c.schema.defaultAttrsSet
+	savedDefaultAttrsSrc := c.schema.defaultAttrsSrc
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaTargetNSSet := c.schemaTargetNSSet
 	c.schemaTargetNSSet = c.schema.targetNamespace != ""
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -397,6 +403,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schemaXPathDefaultNS = ""
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+		c.readSchemaDefaultAttributes(ctx, incRoot)
 	}
 
 	// The CTA static context (static base URI, xpathDefaultNamespace) is PER schema
@@ -407,11 +414,6 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
-
-	// Set the include file path for duplicate element error reporting.
-	if c.filename != "" {
-		c.includeFile = schemaDisplayLoc(c.filename, location)
-	}
 
 	// Snapshot the component-name sets BEFORE parsing so the delta records which
 	// components this included document contributes. A later xs:redefine of the
@@ -445,6 +447,9 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schema.defaultAttributes = savedDefaultAttributes
+	c.schema.defaultAttrsSet = savedDefaultAttrsSet
+	c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 	c.schemaBaseURI = savedSchemaBaseURI
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
@@ -629,10 +634,16 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
+	savedDefaultAttributes := c.schema.defaultAttributes
+	savedDefaultAttrsSet := c.schema.defaultAttrsSet
+	savedDefaultAttrsSrc := c.schema.defaultAttrsSrc
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaTargetNSSet := c.schemaTargetNSSet
 	c.schemaTargetNSSet = c.schema.targetNamespace != ""
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -645,6 +656,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schemaXPathDefaultNS = ""
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+		c.readSchemaDefaultAttributes(ctx, incRoot)
 	}
 	// The CTA static context (base URI + xpathDefaultNamespace) is per-document too:
 	// Phase A parses the REDEFINED document's declarations, so set them here; the
@@ -654,10 +666,6 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
-	if c.filename != "" {
-		c.includeFile = schemaDisplayLoc(c.filename, location)
-	}
-
 	// Snapshot the component-name sets per kind BEFORE Phase A. The including
 	// (main) schema's root declarations are already registered at this point,
 	// so taking the snapshot after Phase A would wrongly treat pre-existing
@@ -674,6 +682,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schema.defaultAttributes = savedDefaultAttributes
+		c.schema.defaultAttrsSet = savedDefaultAttrsSet
+		c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
@@ -689,6 +700,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schema.defaultAttributes = savedDefaultAttributes
+		c.schema.defaultAttrsSet = savedDefaultAttrsSet
+		c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
@@ -722,6 +736,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schema.defaultAttributes = savedDefaultAttributes
+	c.schema.defaultAttrsSet = savedDefaultAttrsSet
+	c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 	c.schemaBaseURI = savedSchemaBaseURI
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
@@ -1067,6 +1084,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		groupSources:             make(map[QName]groupSource),
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		attrGroupWildcards:       make(map[QName]*Wildcard),
@@ -1206,6 +1224,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		return nil
 	}
 
+	if impC.version == Version11 {
+		impC.readSchemaDefaultAttributes(ctx, impRoot)
+	}
+
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err
 	}
@@ -1310,6 +1332,22 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 	}
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
+	for _, ref := range impC.schemaDefaultAttrRefs {
+		if ref.src.source == "" {
+			ref.src.source = impC.filename
+		}
+		c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, ref)
+	}
+	for td, srcs := range impC.attrGroupRefUseSources {
+		merged := make([]attrGroupRefUseSource, len(srcs))
+		for i, src := range srcs {
+			if src.source == "" {
+				src.source = impC.filename
+			}
+			merged[i] = src
+		}
+		c.attrGroupRefUseSources[td] = merged
+	}
 	for qn, refs := range impC.attrGroupRefChildren {
 		if _, exists := c.attrGroupRefChildren[qn]; !exists {
 			c.attrGroupRefChildren[qn] = refs

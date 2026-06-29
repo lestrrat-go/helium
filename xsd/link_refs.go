@@ -216,6 +216,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// removes the duplicate use from the group so a referencing type does not
 	// re-report the same collision (xmllint reports it once, at the group).
 	c.checkAttrGroupDuplicates(ctx)
+	c.checkSchemaDefaultAttributes(ctx)
 
 	// Resolve attribute group references.
 	//
@@ -238,6 +239,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
 		for _, qn := range qns {
+			if _, ok := c.schema.attrGroups[qn]; !ok {
+				continue
+			}
 			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
 			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
 			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
@@ -1106,6 +1110,31 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg))
+}
+
+func (c *compiler) checkSchemaDefaultAttributes(ctx context.Context) {
+	for _, ref := range c.schemaDefaultAttrRefs {
+		if _, ok := c.schema.attrGroups[ref.qn]; ok {
+			continue
+		}
+		c.reportUnresolvedAttrGroupRef(ctx, ref.qn, ref.src)
+	}
+}
+
+func (c *compiler) reportUnresolvedAttrGroupRef(ctx context.Context, qn QName, src attrGroupRefUseSource) {
+	if c.filename == "" {
+		return
+	}
+	elemLocal := src.elemLocal
+	if elemLocal == "" {
+		elemLocal = elemAttributeGroup
+	}
+	attr := src.attr
+	if attr == "" {
+		attr = attrRef
+	}
+	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) attribute group definition.", qn.NS, qn.Local)
+	c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, elemLocal, elemLocal, attr, msg))
 }
 
 // checkAttrUseConstraints validates each attribute use's default/fixed value
