@@ -254,6 +254,32 @@ func TestBuiltinTypeValidation(t *testing.T) {
 	}
 }
 
+func TestCalendarYearExpandedLexicalRejectsLeadingZeroes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		typ   string
+		valid string
+		bad   string
+	}{
+		{lexicon.TypeDate, "10000-01-01", "00000-01-01"},
+		{lexicon.TypeDateTime, "10000-01-01T00:00:00", "00000-01-01T00:00:00"},
+		{lexicon.TypeDateTimeStamp, "10000-01-01T00:00:00Z", "00000-01-01T00:00:00Z"},
+		{typeGYear, "10000", "00000"},
+		{typeGYearMonth, "10000-01", "00000-01"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.typ, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, value.ValidateBuiltin(tt.valid, tt.typ, value.Version11))
+			require.Error(t, value.ValidateBuiltin(tt.bad, tt.typ, value.Version11))
+			require.Error(t, value.ValidateBuiltin("-"+tt.bad, tt.typ, value.Version11))
+			require.Error(t, value.ValidateBuiltin(tt.bad, tt.typ, value.Version10))
+		})
+	}
+}
+
 func TestCompareValues(t *testing.T) {
 	tests := []struct {
 		typ  string

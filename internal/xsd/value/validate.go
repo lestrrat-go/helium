@@ -187,8 +187,13 @@ func validateHexBinary(value string) error {
 // XSD permits only the uppercase 'Z' designator, never lowercase 'z'.
 const tzSuffix = `(Z|[+-]\d{2}:\d{2})?`
 
+// yearFrag matches the calendar-year fragment used by xs:date, xs:dateTime,
+// xs:gYear, and xs:gYearMonth. Expanded years have more than four digits and
+// must not have leading zeroes; year zero itself is written as exactly 0000.
+const yearFrag = `-?(?:\d{4}|[1-9]\d{4,})`
+
 // dateRegex is a basic match for xs:date: YYYY-MM-DD with optional timezone.
-var dateRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}` + tzSuffix + `$`)
+var dateRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}-\d{2}` + tzSuffix + `$`)
 
 func validateDate(value string, version Version) error {
 	if !dateRegex.MatchString(value) {
@@ -243,7 +248,7 @@ func validateFloat(value string, version Version) error {
 }
 
 // dateTimeRegex matches xs:dateTime.
-var dateTimeRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`)
+var dateTimeRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`)
 
 func validateDateTime(value string, version Version) error {
 	if !dateTimeRegex.MatchString(value) {
@@ -498,7 +503,7 @@ func validateDuration(value string) error {
 // dateTimeStampRegex matches xs:dateTimeStamp (XSD 1.1): an xs:dateTime whose
 // explicitTimezone is "required", i.e. the timezone designator is mandatory
 // (the tzSuffix group is not optional).
-var dateTimeStampRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
+var dateTimeStampRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
 
 // validateDateTimeStamp validates xs:dateTimeStamp: an xs:dateTime value that
 // must carry a timezone. Year-0000 gating follows the dateTime rules.
@@ -540,7 +545,7 @@ func validateYearMonthDuration(value string) error {
 }
 
 // gYearRegex matches xs:gYear.
-var gYearRegex = regexp.MustCompile(`^-?\d{4,}` + tzSuffix + `$`)
+var gYearRegex = regexp.MustCompile(`^` + yearFrag + tzSuffix + `$`)
 
 func validateGYear(value string, version Version) error {
 	if !gYearRegex.MatchString(value) {
@@ -595,7 +600,7 @@ func gDayRange(s, typeName string) error {
 }
 
 // gYearMonthRegex matches xs:gYearMonth.
-var gYearMonthRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}` + tzSuffix + `$`)
+var gYearMonthRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}` + tzSuffix + `$`)
 
 func validateGYearMonth(value string, version Version) error {
 	if !gYearMonthRegex.MatchString(value) {
