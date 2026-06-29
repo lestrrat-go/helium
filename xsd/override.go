@@ -199,6 +199,20 @@ func (c *compiler) registerOverrideChild(ctx context.Context, key overrideKey, e
 	return nil
 }
 
+// reportOverrideIncludeConflict emits the fatal error for a schema document that
+// is BOTH pulled in by a plain xs:include/xs:redefine AND transformed by an
+// xs:override in the same assembly. kind is the XSD element local name of the
+// element being processed (override/include/redefine) so the diagnostic cites the
+// right source construct regardless of which side discovered the conflict.
+func (c *compiler) reportOverrideIncludeConflict(ctx context.Context, srcElem *helium.Element, location, kind string) {
+	displayLoc := location
+	if c.filename != "" {
+		displayLoc = schemaDisplayLoc(c.filename, location)
+	}
+	c.schemaError(ctx, schemaParserError(c.diagSource(), srcElem.Line(), srcElem.LocalName(), kind,
+		"The schema document '"+displayLoc+"' is both included/redefined and overridden; a document cannot be pulled in by xs:include/xs:redefine and transformed by xs:override in the same schema."))
+}
+
 // recordOverrideTarget enforces that a single schema document does not contain
 // two xs:override elements targeting the SAME document (W3C over022). seen is the
 // per-document set of already-targeted resolved paths. It returns true if the
@@ -238,12 +252,36 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
-	// A document already pulled in (by a prior include/override, OR a back-edge in
-	// a circular override pointing at an ancestor) is not re-loaded: its components
-	// were already contributed and the cascade terminates here (W3C over023/024).
-	if _, seen := c.includeVisited[path]; seen {
+	// Override-cycle / diamond termination: a document already pulled in by THIS
+	// override transformation, or the overriding root itself reached by a back-edge,
+	// is not re-loaded — its (transformed) components were already contributed and
+	// the cascade terminates here (W3C over023/024). The root is matched by rootKey
+	// rather than its includeVisited seed so it is never re-loaded/re-registered.
+	if _, seen := c.overrideVisited[path]; seen {
 		return matched, nil
 	}
+	if path == c.rootKey {
+		return matched, nil
+	}
+
+	// include+override conflict: the target was already pulled in by a PLAIN
+	// xs:include/xs:redefine (it is in includeVisited but was NOT override-loaded
+	// and is not the seeded root). The override transform produces a DISTINCT
+	// constituent whose components would collide with the plain-included originals
+	// (§4.2.5/§F; duplicate top-level components). This is a fatal schema error —
+	// not a silent no-op — so report it and stop the override.
+	if _, included := c.includeVisited[path]; included {
+		c.reportOverrideIncludeConflict(ctx, srcElem, location, elemOverride)
+		return matched, nil
+	}
+
+	if c.overrideVisited == nil {
+		c.overrideVisited = make(map[string]struct{})
+	}
+	c.overrideVisited[path] = struct{}{}
+	// Also mark it include-visited so a LATER plain xs:include/xs:redefine of the
+	// same document is recognized as the (include↔override) conflict by
+	// loadInclude/loadRedefine rather than silently re-registering originals.
 	c.includeVisited[path] = struct{}{}
 
 	data, err := c.readNestedSchema(path)
@@ -478,22 +516,10 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 				}
 			}
 		case isXSDElement(elem, elemImport):
-			loc := getAttr(elem, attrSchemaLocation)
-			if loc == "" {
-				continue
-			}
-			ns := getAttr(elem, attrNamespace)
-			if _, seen := c.importedNS[ns]; seen {
-				continue
-			}
-			if ierr := c.loadImport(ctx, loc, ns, elem); ierr != nil {
-				if IsFatalSchemaLoad(ierr) {
-					err = ierr
-					break
-				}
-				continue
-			}
-			c.importedNS[ns] = loc
+			// Shared with processIncludes so an import inside an overridden document
+			// emits the same already-imported / load-failure warnings; only a fatal
+			// load condition aborts.
+			err = c.processImport(ctx, elem)
 		case isXSDElement(elem, elemRedefine):
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {

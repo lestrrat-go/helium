@@ -168,6 +168,20 @@ type compiler struct {
 	// (xs:alternative children), so the alternative-type substitutability check
 	// (cta-cvc / Type Alternative valid) can run after all types resolve.
 	ctaElems []*ElementDecl
+	// rootKey is the resolved fs key of the TOP-LEVEL schema document of this
+	// compiler (the CompileFile root, or an import sub-compiler's own document). It
+	// lets the xs:override cascade terminate a back-edge that points at the
+	// overriding root WITHOUT re-loading/re-registering the root's components, and
+	// distinguishes the seeded-root entry in includeVisited from a genuine plain
+	// xs:include of a document (see override.go).
+	rootKey string
+	// overrideVisited records the resolved fs keys of schema documents pulled in by
+	// the xs:override TRANSFORMATION (override.go), tracked SEPARATELY from
+	// includeVisited (plain xs:include/xs:redefine). The separation lets the
+	// override loader (a) terminate a genuine override cycle/diamond, while (b) NOT
+	// treating a prior plain include/redefine of the same document as satisfying an
+	// override — include+override of one document is a fatal conflict, not a no-op.
+	overrideVisited map[string]struct{}
 }
 
 // redefinableSet caches the redefinable component names a schema document
@@ -516,6 +530,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// re-parsing it and emitting spurious duplicate-component errors.
 		if cfg.rootKey != "" {
 			c.includeVisited[cfg.rootKey] = struct{}{}
+			c.rootKey = cfg.rootKey
 		}
 		c.filename = cfg.label
 		if c.filename == "" {

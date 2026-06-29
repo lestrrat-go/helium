@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -329,4 +330,61 @@ func TestOverride_NestedChildContext(t *testing.T) {
 		"nested override child's local element must be qualified per its OWN document")
 	require.Error(t, overrideValidate(t, schema, `<doc xmlns="`+ns+`"><para xmlns="">x</para></doc>`),
 		"an unqualified para must be rejected when the owning document is qualified")
+}
+
+// TestOverride_IncludeThenOverrideConflict is the OVR-878-002 regression: a target
+// already pulled in by a plain xs:include must NOT make a later xs:override of the
+// same target a silent no-op (which left the original xs:string element in force).
+// Per §4.2.5/§F the override transform yields a distinct constituent whose
+// components collide with the included originals; helium reports a fatal conflict.
+func TestOverride_IncludeThenOverrideConflict(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:include schemaLocation="a.xsd"/>
+  <xs:override schemaLocation="a.xsd">
+    <xs:element name="doc" type="xs:int"/>
+  </xs:override>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:element name="doc" type="xs:string"/>
+</xs:schema>`)},
+	}
+	_, err := compileOverride(t, fsys)
+	require.Error(t, err,
+		"include then override of the same document must be a fatal conflict, not a no-op")
+}
+
+// TestOverride_ImportWarningInTarget is the OVR-003 regression: an xs:import inside
+// an overridden target that fails to load must emit the same I/O / "Failed to
+// locate" warnings as a top-level import, rather than being silently skipped.
+func TestOverride_ImportWarningInTarget(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	const ns = "urn:o"
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `">
+  <xs:override schemaLocation="a.xsd"><xs:element name="doc" type="xs:date"/></xs:override>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `">
+  <xs:import namespace="urn:missing" schemaLocation="nope.xsd"/>
+  <xs:element name="doc" type="xs:string"/>
+</xs:schema>`)},
+	}
+	data, err := fsys.ReadFile(fileMain)
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	schema, err := xsd.NewCompiler().Version(xsd.Version11).Label(fileMain).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+	// The import failure is non-fatal, so the schema still compiles (the override
+	// applies); only a warning is expected.
+	require.NoError(t, err, "a non-fatal import failure inside an override target must not fail compilation")
+	require.NotNil(t, schema)
+
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+	}
+	require.Contains(t, b.String(), "Failed to locate a schema at location 'nope.xsd'",
+		"import failure inside an overridden target must emit the same warning as processIncludes")
 }
