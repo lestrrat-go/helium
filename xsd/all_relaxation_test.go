@@ -974,3 +974,68 @@ func TestAll10BlockedHeadSubstitution(t *testing.T) {
 	require.NoError(t, validate10(t, sch, `<doc><h>x</h></doc>`)) // direct head ok
 	require.Error(t, validate10(t, sch, `<doc><m>x</m></doc>`))   // blocked substitute rejected
 }
+
+// TestAll11AbstractIntermediateSubst guards XSDALL-880-R8-001: the
+// instance-admissible substitution closure must TRAVERSE THROUGH an abstract
+// intermediate to reach its concrete descendants (h <- abstract m1 <- concrete
+// m2), while still EXCLUDING the abstract member itself. block="substitution"
+// still prunes the subtree.
+func TestAll11AbstractIntermediateSubst(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m1" abstract="true" substitutionGroup="h"/>
+  <xs:element name="m2" substitutionGroup="m1"/>
+</xs:schema>`
+
+	// (a) runtime: a concrete descendant behind the abstract intermediate matches.
+	t.Run("runtime admits concrete descendant of abstract intermediate", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateAll11(t, schema, `<doc><m2>x</m2></doc>`))
+	})
+
+	// (c) the abstract intermediate itself is not instance-valid.
+	t.Run("abstract intermediate not instance-valid", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, validateAll11(t, schema, `<doc><m1>x</m1></doc>`))
+	})
+
+	// (b) subsumption: a derived all restricting base member h to the concrete
+	// descendant m2 (reached through the abstract intermediate) is accepted.
+	t.Run("subsumption accepts concrete descendant of abstract intermediate", func(t *testing.T) {
+		t.Parallel()
+		const restr = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element ref="m2"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m1" abstract="true" substitutionGroup="h"/>
+  <xs:element name="m2" substitutionGroup="m1"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, restr)
+		require.NoError(t, cerr)
+	})
+
+	// (d) a block="substitution" edge stops traversal: a member behind it is not
+	// admitted (but the blocking member itself, a direct substitute of h, is).
+	t.Run("block=substitution edge stops traversal", func(t *testing.T) {
+		t.Parallel()
+		const blocked = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="h"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m1" substitutionGroup="h" block="substitution"/>
+  <xs:element name="m2" substitutionGroup="m1"/>
+</xs:schema>`
+		require.NoError(t, validateAll11(t, blocked, `<doc><m1>x</m1></doc>`)) // m1 substitutes h directly
+		require.Error(t, validateAll11(t, blocked, `<doc><m2>x</m2></doc>`))   // m2 behind blocked m1
+	})
+}

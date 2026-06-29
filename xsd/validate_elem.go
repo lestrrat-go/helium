@@ -1324,22 +1324,15 @@ func wildcardExpected(wc *Wildcard) string {
 	}
 }
 
-// admissibleSubstitutionMember reports whether member may substitute for head in
-// an INSTANCE. It is the single source of truth for substitution-group
-// admissibility, shared by the runtime xs:all matcher (elemMatchesDeclOrSubst),
-// the xs:all restriction subsumption (findBaseAllMember), and the UPA position
-// expansion (check_upa.go walkTerm), so all three agree on which members are
-// matchable. All of the following must hold:
-//  1. the member is CONCRETE (an abstract member can never appear directly);
-//  2. the head permits substitution (no block="substitution") and does not block
-//     the member's derivation method (isDerivationBlocked over EFFECTIVE types);
-//  3. the member's EFFECTIVE type is validly substitutable for the head's
-//     EFFECTIVE type (builtin-aware) — a member with no explicit @type inherits
-//     the head's type, so the raw ElementDecl.Type pointer is insufficient.
-func admissibleSubstitutionMember(member, head *ElementDecl, schema *Schema) bool {
-	if member.Abstract {
-		return false
-	}
+// substitutionMemberTypeOK reports the STRUCTURAL substitutability of member for
+// head IGNORING abstractness: the head must permit substitution (no
+// block="substitution"), the member's derivation method must not be blocked by
+// the head (isDerivationBlocked over EFFECTIVE types), and the member's EFFECTIVE
+// type must be validly substitutable for the head's (builtin-aware). It is the
+// TRAVERSAL predicate: an abstract member is structurally substitutable and may
+// be traversed THROUGH to reach its concrete descendants, even though the
+// abstract member itself is not instance-admissible.
+func substitutionMemberTypeOK(member, head *ElementDecl, schema *Schema) bool {
 	if head.Block&BlockSubstitution != 0 {
 		return false
 	}
@@ -1355,12 +1348,15 @@ func admissibleSubstitutionMember(member, head *ElementDecl, schema *Schema) boo
 }
 
 // transitiveSubstClosure walks the TRANSITIVE substitution-group closure of head
-// (BFS, cycle-guarded): a member m reached via immediateHead is included only when
-// admit(m, immediateHead, head) holds, and a member that itself blocks
-// substitution (Block&BlockSubstitution) is not expanded further. It is the
-// shared skeleton for the two membership policies below — the transitive chain
-// (h <- m1 <- m2) is what a direct `substGroups[head]` lookup misses.
-func transitiveSubstClosure(head *ElementDecl, schema *Schema, admit func(member, immediateHead, origHead *ElementDecl) bool) []*ElementDecl {
+// (BFS, cycle-guarded). traverse(m, immediateHead, head) decides REACHABILITY: an
+// edge is followed only when it holds (and then m's children are enqueued unless m
+// itself blocks substitution). include(m, immediateHead, head) decides whether a
+// REACHED member appears in the result. Separating the two is essential — for the
+// instance-admissible closure an ABSTRACT member is traversable (so its concrete
+// descendants in a `h <- abstract m1 <- concrete m2` chain are reached) but is NOT
+// itself included. block="substitution"/derivation-block still PRUNE the subtree
+// (they fail traverse). A direct `substGroups[head]` lookup misses such chains.
+func transitiveSubstClosure(head *ElementDecl, schema *Schema, traverse, include func(member, immediateHead, origHead *ElementDecl) bool) []*ElementDecl {
 	if head == nil || schema == nil {
 		return nil
 	}
@@ -1381,11 +1377,15 @@ func transitiveSubstClosure(head *ElementDecl, schema *Schema, admit func(member
 		if _, ok := seen[m.Name]; ok {
 			continue
 		}
-		if !admit(m, item.head, head) {
+		// Reachability gate: an unblocked, type-valid edge (abstract allowed).
+		if !traverse(m, item.head, head) {
 			continue
 		}
 		seen[m.Name] = struct{}{}
-		members = append(members, m)
+		if include(m, item.head, head) {
+			members = append(members, m)
+		}
+		// A member that itself blocks substitution stops descent through it.
 		if m.Block&BlockSubstitution != 0 {
 			continue
 		}
@@ -1407,26 +1407,36 @@ func substitutableMembersFor(head *ElementDecl, schema *Schema) []*ElementDecl {
 		return nil
 	}
 	headType := effectiveDeclType(head, schema)
-	return transitiveSubstClosure(head, schema, func(m, immH, _ *ElementDecl) bool {
+	// traverse == include: declaration membership (abstract included).
+	ok := func(m, immH, _ *ElementDecl) bool {
 		mt := effectiveDeclType(m, schema)
 		return !isDerivationBlocked(mt, effectiveDeclType(immH, schema), immH.Block) &&
 			!isDerivationBlocked(mt, headType, head.Block)
-	})
+	}
+	return transitiveSubstClosure(head, schema, ok, ok)
 }
 
 // instanceSubstMembers returns the INSTANCE-ADMISSIBLE substitution-group closure
-// of a head: transitive, and at each edge requiring admissibleSubstitutionMember
-// (concrete — abstract EXCLUDED, head allows substitution, member's effective type
-// substitutable for both the immediate and the original head). This is the set
-// that can actually appear where the head is expected, used by runtime matching
-// (elemMatchesDeclOrSubst) and restriction subsumption (findBaseAllMember).
+// of a head: transitive, used by runtime matching (elemMatchesDeclOrSubst) and
+// restriction subsumption (findBaseAllMember). TRAVERSAL follows any structurally
+// substitutable edge (substitutionMemberTypeOK against both the immediate and the
+// original head) INCLUDING through abstract members, so concrete descendants
+// behind an abstract intermediate (h <- abstract m1 <- concrete m2) are reached;
+// INCLUSION additionally requires the member be CONCRETE (abstract members can
+// never appear in an instance). block="substitution"/derivation-block prune.
 func instanceSubstMembers(head *ElementDecl, schema *Schema) []*ElementDecl {
 	if head == nil || schema == nil || head.Block&BlockSubstitution != 0 {
 		return nil
 	}
-	return transitiveSubstClosure(head, schema, func(m, immH, orig *ElementDecl) bool {
-		return admissibleSubstitutionMember(m, immH, schema) && admissibleSubstitutionMember(m, orig, schema)
-	})
+	traverse := func(m, immH, orig *ElementDecl) bool {
+		return substitutionMemberTypeOK(m, immH, schema) && substitutionMemberTypeOK(m, orig, schema)
+	}
+	include := func(m, _, _ *ElementDecl) bool {
+		// traverse already proved structural substitutability for both heads; an
+		// instance-admissible member must additionally be concrete.
+		return !m.Abstract
+	}
+	return transitiveSubstClosure(head, schema, traverse, include)
 }
 
 // elemMatchesDeclOrSubst checks if a child element matches a declaration

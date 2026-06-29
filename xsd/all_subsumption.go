@@ -163,7 +163,7 @@ func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl
 	// Use the BUILT-IN-AWARE derivation predicate: the 1.0 built-in simple types
 	// are NOT BaseType-linked, so a plain isDerivedFrom misses e.g. xs:int derived
 	// from xs:integer and would false-reject a valid all-restriction. This matches
-	// how substitutability is judged elsewhere (admissibleSubstitutionMember / CTA).
+	// how substitutability is judged elsewhere (substitutionMemberTypeOK / CTA).
 	if rtType != nil && conType != nil && !strictBuiltinAwareDerivedFrom(rtType, conType) {
 		return false
 	}
