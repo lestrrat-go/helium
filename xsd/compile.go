@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
@@ -52,6 +53,20 @@ type compiler struct {
 	groupRefSources map[*ModelGroup]groupRefSource
 	// unresolved attribute group references: maps from TypeDef to list of QNames
 	attrGroupRefs map[*TypeDef][]QName
+	// XSD 1.1 xs:schema/@defaultAttributes declarations. These are schema-level
+	// QName references and must resolve even if no complex type applies them.
+	schemaDefaultAttrRefs []schemaDefaultAttrRef
+	// source info for type-level attribute group references, index-aligned with
+	// attrGroupRefs. This covers explicit xs:attributeGroup ref children and
+	// the implicit ref injected for XSD 1.1 schema defaultAttributes.
+	attrGroupRefUseSources map[*TypeDef][]attrGroupRefUseSource
+	// defaultAttrUses records attribute uses contributed by an implicit
+	// xs:schema/@defaultAttributes application, keyed by complex type and
+	// expanded attribute name. The value is the contributed attribute-use
+	// component, so duplicate suppression can require the base and derived type
+	// to have received the SAME default use, not merely a same-named use from
+	// different default groups.
+	defaultAttrUses map[*TypeDef]map[QName]*AttrUse
 	// nested xs:attributeGroup ref children of a GLOBAL attribute group, keyed by
 	// the containing group's QName. These are flattened (recursively, cycle-guarded)
 	// before checkAttrGroupDuplicates so a duplicate attribute use introduced
@@ -373,6 +388,21 @@ type attrGroupSource struct {
 	source string // declaring file (this compiler's filename, or an imported file)
 }
 
+// attrGroupRefUseSource tracks where a complex type referenced an attribute
+// group, either explicitly through <xs:attributeGroup ref="..."> or implicitly
+// through xs:schema/@defaultAttributes.
+type attrGroupRefUseSource struct {
+	line      int
+	elemLocal string
+	attr      string
+	source    string
+}
+
+type schemaDefaultAttrRef struct {
+	qn  QName
+	src attrGroupRefUseSource
+}
+
 // unionMemberRef tracks an unresolved union member type reference.
 type unionMemberRef struct {
 	owner *TypeDef
@@ -524,6 +554,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupWildcards:       make(map[QName]*Wildcard),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
+		defaultAttrUses:          make(map[*TypeDef]map[QName]*AttrUse),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
@@ -633,6 +665,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// selector/field's).
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(root, getAttr(root, attrXPathDefaultNS), c.schema.targetNamespace)
+		c.readSchemaDefaultAttributes(ctx, root)
 	}
 
 	// Parse blockDefault attribute.
@@ -768,6 +801,49 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	return c.schema, nil
+}
+
+func (c *compiler) readSchemaDefaultAttributes(ctx context.Context, root *helium.Element) {
+	c.schema.defaultAttributes = QName{}
+	c.schema.defaultAttrsSet = false
+	c.schema.defaultAttrsSrc = attrGroupRefUseSource{}
+	if c.version != Version11 || !hasAttr(root, attrDefaultAttributes) {
+		return
+	}
+	ref := normalizeWhiteSpace(getAttr(root, attrDefaultAttributes), "collapse")
+	src := attrGroupRefUseSource{
+		line:      root.Line(),
+		elemLocal: root.LocalName(),
+		attr:      attrDefaultAttributes,
+		source:    c.diagSource(),
+	}
+	if !xmlchar.IsValidQName(ref) {
+		c.reportInvalidQNameValue(ctx, root, ref)
+		return
+	}
+	qn := QName{Local: ref, NS: c.schema.targetNamespace}
+	if prefix, local, ok := strings.Cut(ref, ":"); ok {
+		ns := lookupNS(root, prefix)
+		if ns == "" && prefix != "" {
+			c.reportUnboundQNamePrefix(ctx, root, ref, prefix)
+			return
+		}
+		if c.rejectDeprecatedDatatypeNamespace(ctx, root, ref, ns) {
+			return
+		}
+		qn = QName{Local: local, NS: ns}
+	} else {
+		if defNS := lookupNS(root, ""); defNS != "" {
+			qn.NS = defNS
+		}
+		if c.rejectDeprecatedDatatypeNamespace(ctx, root, ref, qn.NS) {
+			return
+		}
+	}
+	c.schema.defaultAttributes = qn
+	c.schema.defaultAttrsSet = true
+	c.schema.defaultAttrsSrc = src
+	c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, schemaDefaultAttrRef{qn: qn, src: src})
 }
 
 // buildSubstGroups populates c.schema.substGroups, mapping each substitution-group
