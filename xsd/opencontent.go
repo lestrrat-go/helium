@@ -99,23 +99,35 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 // wildcard must be a subset of the base's; the derived processContents must be at
 // least as strong; and the derived mode may differ from the base only when the
 // base is interleave. When the derived content model is EMPTY (it matches only the
-// empty sequence) the mode/wildcard comparison is moot and skipped.
+// empty sequence) ONLY the declared-model MODE comparison is moot and skipped — the
+// base-absent / wildcard-subset / processContents-strength checks still apply, so an
+// empty-model restriction may not ADD open content to a base that never admitted
+// those children, nor BROADEN or WEAKEN the base's open content.
 func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef, derived, base *OpenContent) {
 	if derived == nil {
 		return // dropping open content is always a valid restriction
 	}
-	if !modelGroupHasContent(td.ContentModel) {
-		// Empty content model: the open content is the type's WHOLE content, so the
-		// declared content's open-content mode/wildcard comparison against the base is
-		// immaterial — the base's own (possibly wildcard) content already admits it.
-		return
-	}
+	emptyModel := !modelGroupHasContent(td.ContentModel)
 	if base == nil {
+		// The base has no open content. An EMPTY-model restriction may still
+		// introduce open content when the base's DECLARED content model already
+		// admits those children through a content-model wildcard — that is, the
+		// restriction merely re-expresses the base's `xs:any` particle as open
+		// content (saxonData Open/open022). It is NOT a valid restriction when the
+		// base is genuinely closed (no admitting wildcard), nor for a non-empty
+		// derived model, which the original §3.4.6.4 enforcement always rejected.
+		if emptyModel && baseModelAdmitsOpenContent(td.BaseType, derived.Wildcard, c.schema) {
+			return
+		}
 		c.reportOpenContentTypeError(ctx, td,
 			"The derived type has open content but its base type does not.")
 		return
 	}
-	if base.Mode != OpenContentInterleave && derived.Mode != base.Mode {
+	// The MODE comparison is meaningful only when the derived type has a declared
+	// content model: for an EMPTY content model the open content IS the type's whole
+	// content and its mode against the base is immaterial. The wildcard-subset and
+	// processContents checks below are NOT waived in either case.
+	if !emptyModel && base.Mode != OpenContentInterleave && derived.Mode != base.Mode {
 		c.reportOpenContentTypeError(ctx, td,
 			"The open content mode 'interleave' is not a valid restriction of base open content mode 'suffix'.")
 		return
@@ -129,6 +141,39 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 		c.reportOpenContentTypeError(ctx, td,
 			"The open content wildcard's processContents is weaker than the base type's open content wildcard.")
 	}
+}
+
+// baseModelAdmitsOpenContent reports whether the base type's DECLARED content
+// model contains a wildcard that admits the derived open-content wildcard, i.e.
+// the derived wildcard's namespace constraint is a subset of some base content
+// wildcard and its processContents is at least as strong. This is the case where
+// a restriction validly re-expresses a base `xs:any` particle as open content even
+// though the base carries no {open content} of its own (saxonData Open/open022).
+func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema) bool {
+	if base == nil || derived == nil {
+		return false
+	}
+	admits := false
+	var walk func(mg *ModelGroup)
+	walk = func(mg *ModelGroup) {
+		if mg == nil || admits {
+			return
+		}
+		for _, p := range mg.Particles {
+			switch term := p.Term.(type) {
+			case *Wildcard:
+				if wildcardConstraintSubset(derived, term, schema, false) &&
+					processContentsStrength(derived.ProcessContents) >= processContentsStrength(term.ProcessContents) {
+					admits = true
+					return
+				}
+			case *ModelGroup:
+				walk(term)
+			}
+		}
+	}
+	walk(base.ContentModel)
+	return admits
 }
 
 // reportOpenContentTypeError emits a complex-type-level schema error for an
@@ -178,10 +223,14 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 		}
 	}
 
-	anyElem, annotations := scanOpenContentChildren(elem)
+	anyElem, annotations, anyCount := scanOpenContentChildren(elem)
 	if annotations > 1 && c.filename != "" {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
 			"An 'openContent' must not have more than one 'annotation'."))
+	}
+	if anyCount > 1 && c.filename != "" {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
+			"An 'openContent' must not have more than one 'any' wildcard."))
 	}
 
 	if isNone {
@@ -209,11 +258,14 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 }
 
 // scanOpenContentChildren walks the children of an <xs:openContent> or
-// <xs:defaultOpenContent> element, returning the first <xs:any> wildcard element
-// (nil if none) and the number of <xs:annotation> children seen.
-func scanOpenContentChildren(elem *helium.Element) (*helium.Element, int) {
+// <xs:defaultOpenContent> element, returning the FIRST <xs:any> wildcard element
+// (nil if none), the number of <xs:annotation> children, and the TOTAL number of
+// <xs:any> wildcard children seen. Callers reject more than one wildcard child as
+// a schema error (the content model permits at most one).
+func scanOpenContentChildren(elem *helium.Element) (*helium.Element, int, int) {
 	var anyElem *helium.Element
 	annotations := 0
+	anyCount := 0
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -225,11 +277,14 @@ func scanOpenContentChildren(elem *helium.Element) (*helium.Element, int) {
 		switch {
 		case isXSDElement(ce, elemAnnotation):
 			annotations++
-		case isXSDElement(ce, elemAny) && anyElem == nil:
-			anyElem = ce
+		case isXSDElement(ce, elemAny):
+			anyCount++
+			if anyElem == nil {
+				anyElem = ce
+			}
 		}
 	}
-	return anyElem, annotations
+	return anyElem, annotations, anyCount
 }
 
 // parseOpenContentWildcard parses the <xs:any> child of an open-content element.
@@ -315,10 +370,14 @@ func (c *compiler) readDefaultOpenContent(ctx context.Context, root *helium.Elem
 		appliesToEmpty = c.readBooleanAttr(ctx, dec, attrAppliesToEmpty)
 	}
 
-	anyElem, annotations := scanOpenContentChildren(dec)
+	anyElem, annotations, anyCount := scanOpenContentChildren(dec)
 	if annotations > 1 && c.filename != "" {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,
 			"A 'defaultOpenContent' must not have more than one 'annotation'."))
+	}
+	if anyCount > 1 && c.filename != "" {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,
+			"A 'defaultOpenContent' must not have more than one 'any' wildcard."))
 	}
 	if anyElem == nil {
 		if c.filename != "" {
@@ -540,14 +599,22 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 // is exhausted). It TRIALS the model match with diagnostics suppressed; the caller
 // re-runs the match for real on the returned declared set. The trial terminates:
 // each iteration removes one child from the (finite) declared set.
+//
+// The trial match may report an ERROR while still having consumed a PREFIX of the
+// declared set (the match stopped at the child at index `consumed`): per the
+// §3.4.4.3.2 existential partition that child may belong to the OPEN sub-sequence,
+// so a trial error must NOT abort refinement. As long as a blocking child remains
+// (consumed < len(declared)) and matches the open wildcard, move it to the open
+// sub-sequence and re-trial. Refinement stops only when the declared set is fully
+// consumed (consumed >= len) — including the "missing required particle at the
+// end" case, which no move can fix — or the blocker is not admissible as open
+// content (left in declared so the real match reports it as unexpected).
 func (vc *validationContext) refineInterleavePartition(ctx context.Context, elem *helium.Element, mg *ModelGroup, wc *Wildcard, declared, open []childElem) ([]childElem, []childElem) {
 	for {
 		vc.suppressDepth++
-		consumed, err := vc.matchContentModel(ctx, elem, mg, declared)
+		consumed, _ := vc.matchContentModel(ctx, elem, mg, declared)
 		vc.suppressDepth--
-		// A genuine model error (e.g. a missing required particle), or a fully
-		// consumed declared set, cannot be improved by moving a child to open.
-		if err != nil || consumed >= len(declared) {
+		if consumed >= len(declared) {
 			return declared, open
 		}
 		blocker := declared[consumed]

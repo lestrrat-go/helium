@@ -1198,9 +1198,6 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// uses the imported root's default namespace, not a selector/field's).
 	if impC.version == Version11 {
 		impC.schemaXPathDefaultNS = resolveXPathDefaultNSToken(impRoot, getAttr(impRoot, attrXPathDefaultNS), impC.schema.targetNamespace)
-		// The imported document's own <xs:defaultOpenContent> applies to its complex
-		// types (it is per-document and does not cross the import boundary).
-		impC.defaultOpenContent = impC.readDefaultOpenContent(ctx, impRoot)
 	}
 
 	// Seed the imported sub-compiler's CTA static context from the IMPORTED document
@@ -1247,6 +1244,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 
 	if impC.version == Version11 {
 		impC.readSchemaDefaultAttributes(ctx, impRoot)
+		// The imported document's own <xs:defaultOpenContent> applies to its complex
+		// types (it is per-document and does not cross the import boundary). Read it
+		// AFTER applyConditionalInclusion (above), matching xs:include/xs:redefine, so
+		// a vc-excluded <xs:defaultOpenContent> is not captured and applied.
+		impC.defaultOpenContent = impC.readDefaultOpenContent(ctx, impRoot)
 	}
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
