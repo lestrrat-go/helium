@@ -1088,6 +1088,17 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 		}
 		td = td.BaseType
 	}
+	// A declared union can be substituted by one of its member types even though the
+	// member's BaseType chain does not point back to the union. Treat that path as a
+	// restriction for element block enforcement; otherwise block="restriction" on a
+	// union-typed element would be bypassed by xsi:type naming a member.
+	if td != base && blocked&BlockRestriction != 0 && resolveVariety(base) == TypeVarietyUnion {
+		for _, member := range resolveUnionMembers(base) {
+			if isXsiTypeDerivedFromDeclared(derived, member) {
+				return true
+			}
+		}
+	}
 	// The BaseType pointer chain is NOT linked for built-in simple types, so it can
 	// bottom out (td == nil) before reaching a built-in base. ALL built-in
 	// simple-type derivation is by RESTRICTION, so when base is a built-in simple

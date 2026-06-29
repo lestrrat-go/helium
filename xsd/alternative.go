@@ -416,13 +416,21 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 // suite is the safety net — if a real derivation is missed, isDerivedFrom must be
 // extended to cover it rather than reinstating the fallback.
 func isValidlySubstitutable(alt, decl *TypeDef) bool {
-	if alt == nil || decl == nil {
+	return isValidlySubstitutableForDeclaredType(alt, decl, true)
+}
+
+func isXsiTypeDerivedFromDeclared(actual, declared *TypeDef) bool {
+	return isValidlySubstitutableForDeclaredType(actual, declared, false)
+}
+
+func isValidlySubstitutableForDeclaredType(sub, decl *TypeDef, allowError bool) bool {
+	if sub == nil || decl == nil {
 		return true
 	}
-	if isErrorType(alt) {
+	if allowError && isErrorType(sub) {
 		return true
 	}
-	if strictBuiltinAwareDerivedFrom(alt, decl) {
+	if strictBuiltinAwareDerivedFrom(sub, decl) {
 		return true
 	}
 	// Use the variety/members RESOLVED through the base chain: a named type that
@@ -432,7 +440,7 @@ func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	// alternative. The member check stays strict and recursive (no fallback).
 	if resolveVariety(decl) == TypeVarietyUnion {
 		for _, m := range resolveUnionMembers(decl) {
-			if isValidlySubstitutable(alt, m) {
+			if isValidlySubstitutableForDeclaredType(sub, m, allowError) {
 				return true
 			}
 		}
