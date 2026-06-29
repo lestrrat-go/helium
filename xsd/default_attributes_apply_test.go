@@ -352,6 +352,102 @@ func TestVersion11DefaultAttributesAfterExplicitGroups(t *testing.T) {
 	requireAttrOrder(t, out, "simpleExt", "explicit", "schemaDefault")
 }
 
+// TestVersion11DefaultAttributesOverrideTargetGoverns covers W3C
+// ibmMeta/defaultAttributesApply s3_4_2_4ii08: an xs:override replacement
+// complex type is, per spec, copied into the TARGET (overridden) schema
+// document, so the TARGET document's @defaultAttributes governs it — NOT the
+// overriding document's. The overriding schema below sets @defaultAttributes but
+// the overridden a.xsd does not, so the replacement c1 must NOT acquire the
+// default attribute group; an instance supplying that attribute is invalid.
+func TestVersion11DefaultAttributesOverrideTargetGoverns(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  elementFormDefault="qualified" attributeFormDefault="qualified"
+  defaultAttributes="t:defaultAttrGroup">
+  <xs:override schemaLocation="a.xsd">
+    <xs:complexType name="c1">
+      <xs:sequence>
+        <xs:element name="element_added"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:override>
+  <xs:attributeGroup name="defaultAttrGroup">
+    <xs:attribute name="defaultAttr" type="xs:boolean" use="required"/>
+  </xs:attributeGroup>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="c1">
+    <xs:sequence>
+      <xs:element name="element1"/>
+      <xs:element name="element2" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="t:c1"/>
+</xs:schema>`)},
+	}
+
+	schema, err := compileOverride(t, fsys)
+	require.NoError(t, err)
+
+	// Default attribute group does not apply: supplying defaultAttr is invalid.
+	require.ErrorIs(t, overrideValidate(t, schema,
+		`<t:root xmlns:t="urn:t" t:defaultAttr="true"><t:element_added/></t:root>`), xsd.ErrValidationFailed)
+
+	// Without the attribute the replacement c1 validates (proving the group is
+	// not applied and not required).
+	require.NoError(t, overrideValidate(t, schema,
+		`<t:root xmlns:t="urn:t"><t:element_added/></t:root>`))
+}
+
+// TestVersion11DefaultAttributesOverrideTargetSupplies is the symmetric case:
+// the TARGET document declares @defaultAttributes (and the group) while the
+// overriding document does not. The replacement complex type must acquire the
+// TARGET's default attribute group.
+func TestVersion11DefaultAttributesOverrideTargetSupplies(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  elementFormDefault="qualified" attributeFormDefault="qualified">
+  <xs:override schemaLocation="a.xsd">
+    <xs:complexType name="c1">
+      <xs:sequence>
+        <xs:element name="element_added"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:override>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  elementFormDefault="qualified" attributeFormDefault="qualified"
+  defaultAttributes="t:defaultAttrGroup">
+  <xs:attributeGroup name="defaultAttrGroup">
+    <xs:attribute name="defaultAttr" type="xs:boolean" use="required"/>
+  </xs:attributeGroup>
+  <xs:complexType name="c1">
+    <xs:sequence>
+      <xs:element name="element1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="t:c1"/>
+</xs:schema>`)},
+	}
+
+	schema, err := compileOverride(t, fsys)
+	require.NoError(t, err)
+
+	// The replacement c1 inherits the target document's required default attr.
+	require.NoError(t, overrideValidate(t, schema,
+		`<t:root xmlns:t="urn:t" t:defaultAttr="true"><t:element_added/></t:root>`))
+	require.ErrorIs(t, overrideValidate(t, schema,
+		`<t:root xmlns:t="urn:t"><t:element_added/></t:root>`), xsd.ErrValidationFailed)
+}
+
 func compileDefaultAttributesSchema(t *testing.T, c xsd.Compiler, schemaXML string) (*xsd.Schema, error) {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))

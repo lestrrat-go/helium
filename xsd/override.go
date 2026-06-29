@@ -64,6 +64,38 @@ type overrideChildEntry struct {
 	elem *helium.Element
 }
 
+// schemaDefaultAttrsState captures a schema document's XSD 1.1
+// @defaultAttributes resolution: the referenced attribute-group QName, whether
+// the attribute was present and well-formed, and its source. An xs:override
+// replacement component is, per §4.2.5, copied into the TARGET (overridden)
+// document, so the TARGET document's @defaultAttributes — not the overriding
+// document's — governs it; overrideLoadTarget captures the target's state and the
+// owner level reapplies it when registering the replacement.
+type schemaDefaultAttrsState struct {
+	qn  QName
+	set bool
+	src attrGroupRefUseSource
+}
+
+// schemaDefaultAttrs reads the compiler's current schema-level default-attribute
+// state.
+func (c *compiler) schemaDefaultAttrs() schemaDefaultAttrsState {
+	return schemaDefaultAttrsState{
+		qn:  c.schema.defaultAttributes,
+		set: c.schema.defaultAttrsSet,
+		src: c.schema.defaultAttrsSrc,
+	}
+}
+
+// applySchemaDefaultAttrs sets the compiler's current schema-level
+// default-attribute state, so a subsequently parsed complex type records the
+// implicit default attribute-group reference (or none) of the governing document.
+func (c *compiler) applySchemaDefaultAttrs(s schemaDefaultAttrsState) {
+	c.schema.defaultAttributes = s.qn
+	c.schema.defaultAttrsSet = s.set
+	c.schema.defaultAttrsSrc = s.src
+}
+
 // overrideChildKey returns the (symbol space, name) identity of a potential
 // override child / top-level component, with the name resolved in the current
 // schema's target namespace (which a chameleon referenced document adopts). The
@@ -100,11 +132,17 @@ func (c *compiler) loadOverride(ctx context.Context, location string, overrideEl
 	locals := c.collectOverrideChildren(ctx, overrideElem, nil)
 	active := activeFromEntries(nil, locals)
 
-	matched, err := c.overrideLoadTarget(ctx, location, overrideElem, active)
+	matched, targetDefAttrs, err := c.overrideLoadTarget(ctx, location, overrideElem, active)
 	if err != nil {
 		return err
 	}
 
+	// Register the replacement components under the TARGET document's
+	// @defaultAttributes (§4.2.5): they are copied into the transformed target, so
+	// the overriding document's @defaultAttributes must not govern them.
+	saved := c.schemaDefaultAttrs()
+	c.applySchemaDefaultAttrs(targetDefAttrs)
+	defer c.applySchemaDefaultAttrs(saved)
 	return c.registerMatchedChildren(ctx, locals, matched)
 }
 
@@ -285,12 +323,13 @@ func (c *compiler) recordOverrideTarget(ctx context.Context, srcElem *helium.Ele
 // this closure (this document plus its nested include/override targets). It does
 // NOT register override children — that is the OWNER level's job, in its own
 // context. Mirrors loadInclude's per-document form/default/chameleon handling.
-func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcElem *helium.Element, active map[overrideKey]*helium.Element) (map[overrideKey]struct{}, error) {
+func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcElem *helium.Element, active map[overrideKey]*helium.Element) (map[overrideKey]struct{}, schemaDefaultAttrsState, error) {
 	matched := make(map[overrideKey]struct{})
+	var targetDefAttrs schemaDefaultAttrsState
 
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
-		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
+		return matched, targetDefAttrs, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	// Back-edge to the overriding ROOT: terminate WITHOUT re-loading/re-registering
@@ -298,7 +337,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// before everything else so a circular override pointing at the root (over023)
 	// never re-parses it.
 	if path == c.rootKey {
-		return matched, nil
+		return matched, targetDefAttrs, nil
 	}
 
 	// include+override conflict: the target was already pulled in by a PLAIN
@@ -308,7 +347,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// no-op — so report it and stop the override.
 	if _, included := c.includeVisited[path]; included {
 		c.reportOverrideIncludeConflict(ctx, srcElem, location, elemOverride)
-		return matched, nil
+		return matched, targetDefAttrs, nil
 	}
 
 	// Override-cycle / diamond termination is keyed by (path, active-override-set):
@@ -321,7 +360,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// symmetric include+override conflict check in loadInclude/loadRedefine.
 	vkey := path + "\x00" + overrideActiveFingerprint(active)
 	if _, seen := c.overrideVisited[vkey]; seen {
-		return matched, nil
+		return matched, targetDefAttrs, nil
 	}
 	if c.overrideVisited == nil {
 		c.overrideVisited = make(map[string]struct{})
@@ -334,17 +373,17 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
-		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
+		return matched, targetDefAttrs, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return matched, fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
+		return matched, targetDefAttrs, fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
-		return matched, fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
+		return matched, targetDefAttrs, fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
 	}
 
 	// Conditional inclusion runs per document, before the targetNamespace check.
@@ -355,7 +394,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
 	c.includeFile = savedIncludeFileVC
 	if rootExcluded {
-		return matched, nil
+		return matched, targetDefAttrs, nil
 	}
 
 	// Target namespace compatibility: same rule as xs:include (W3C over016/017). A
@@ -369,7 +408,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		}
 		c.schemaError(ctx, schemaParserError(c.filename, srcElem.Line(), srcElem.LocalName(), elemOverride,
 			"The target namespace '"+incTargetNS+"' of the overridden schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the overriding schema."))
-		return matched, nil
+		return matched, targetDefAttrs, nil
 	}
 
 	// Per-document form/default/chameleon settings, mirroring loadInclude: the
@@ -385,6 +424,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaBaseURI := c.schemaBaseURI
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	savedDefAttrs := c.schemaDefaultAttrs()
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -398,6 +438,15 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
+	// §4.2.5: the override children are copied INTO the transformed target
+	// document, so the TARGET document's @defaultAttributes — not the overriding
+	// document's — governs both the surviving and the replacement complex types.
+	// Apply it for the duration of this document's parse; the owner level reapplies
+	// targetDefAttrs when it registers the replacement children (which happens after
+	// restore()).
+	qn, set, src := c.resolveSchemaDefaultAttributes(ctx, incRoot)
+	targetDefAttrs = schemaDefaultAttrsState{qn: qn, set: set, src: src}
+	c.applySchemaDefaultAttrs(targetDefAttrs)
 
 	restore := func() {
 		c.schema.elemFormQualified = savedElemForm
@@ -408,13 +457,14 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
+		c.applySchemaDefaultAttrs(savedDefAttrs)
 	}
 
 	// Parse the surviving (non-replaced) top-level components, recording which
 	// active keys this document's own components matched.
 	if err := c.overrideParseTargetChildren(ctx, incRoot, active, matched); err != nil {
 		restore()
-		return matched, err
+		return matched, targetDefAttrs, err
 	}
 
 	// Recurse into the referenced document's own include/override/import/redefine,
@@ -424,7 +474,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		matched[k] = struct{}{}
 	}
 	restore()
-	return matched, nerr
+	return matched, targetDefAttrs, nerr
 }
 
 // overrideParseTargetChildren parses the top-level children of an overridden
@@ -532,7 +582,7 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			// the override: load it as an override target carrying the same active
 			// set. Every matched key is (by construction) in the inherited set.
 			var m map[overrideKey]struct{}
-			m, err = c.overrideLoadTarget(ctx, loc, elem, active)
+			m, _, err = c.overrideLoadTarget(ctx, loc, elem, active)
 			for k := range m {
 				nestedMatched[k] = struct{}{}
 			}
@@ -550,14 +600,21 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			locals := c.collectOverrideChildren(ctx, elem, active)
 			childActive := activeFromEntries(active, locals)
 			var m map[overrideKey]struct{}
-			m, err = c.overrideLoadTarget(ctx, loc, elem, childActive)
+			var nestedDefAttrs schemaDefaultAttrsState
+			m, nestedDefAttrs, err = c.overrideLoadTarget(ctx, loc, elem, childActive)
 			if err != nil {
 				break
 			}
 			// Register THIS override's own matched children NOW, while the declaring
 			// document's context (form/block/final defaults, xpathDefaultNamespace,
-			// base URI, includeFile) is still active.
-			if rerr := c.registerMatchedChildren(ctx, locals, m); rerr != nil {
+			// base URI, includeFile) is still active — but under the TARGET document's
+			// @defaultAttributes (§4.2.5: the replacements are copied into the
+			// transformed target).
+			savedDefAttrs := c.schemaDefaultAttrs()
+			c.applySchemaDefaultAttrs(nestedDefAttrs)
+			rerr := c.registerMatchedChildren(ctx, locals, m)
+			c.applySchemaDefaultAttrs(savedDefAttrs)
+			if rerr != nil {
 				err = rerr
 				break
 			}
