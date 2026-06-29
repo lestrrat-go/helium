@@ -83,7 +83,16 @@ func schemaAwareCastRec(ctx context.Context, ec *evalContext, av AtomicValue, ta
 		for _, memberType := range members {
 			result, castErr := schemaAwareCastRec(ctx, ec, av, memberType, seen)
 			if castErr == nil {
-				if targetErr := schemaAwareValidateTarget(ctx, ec, av, targetType); targetErr != nil {
+				// F&O 3.1 §19.3.5 allows already-typed values to cast to the
+				// first castable atomic member of a union. Any facets on the target
+				// union then apply to that resulting member value, not to the
+				// original typed source lexical; string/untypedAtomic sources keep
+				// the lexical casting path from §19.2.
+				targetValue := av
+				if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
+					targetValue = result
+				}
+				if targetErr := schemaAwareValidateTarget(ctx, ec, targetValue, targetType); targetErr != nil {
 					return AtomicValue{}, targetErr
 				}
 				return result, nil
@@ -114,6 +123,13 @@ func schemaAwareCastLexical(av AtomicValue, base map[string]string) (string, map
 	return s, base
 }
 
+func schemaAwareFacetLexical(src, cast AtomicValue, base map[string]string) (string, map[string]string) {
+	if src.TypeName == TypeString || src.TypeName == TypeUntypedAtomic {
+		return schemaAwareCastLexical(src, base)
+	}
+	return schemaAwareCastLexical(cast, base)
+}
+
 func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicValue, targetType, annName, builtinBase string, fallback error) (AtomicValue, error) {
 	if builtinBase == TypeNOTATION || builtinBase == TypeQName {
 		_, isQV := av.Value.(QNameValue)
@@ -138,7 +154,7 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 	if castErr != nil {
 		return AtomicValue{}, castErr
 	}
-	s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
+	s, nsForCast := schemaAwareFacetLexical(av, result, ec.namespaces)
 	if facetErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); facetErr != nil {
 		return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 	}

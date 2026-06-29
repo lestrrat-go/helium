@@ -13,9 +13,12 @@
 // root <xs:schema> auto-selects 1.1. In 1.1 mode the 1.1-only lexical forms (e.g.
 // "+INF" for xs:double/xs:float, year "0000" on the date types) and the 1.1
 // built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration,
-// xs:anyAtomicType, xs:error) are recognized. The 1.1 structural features
-// (assertions, conditional type assignment, open content, relaxed
-// wildcards/UPA/all, xs:override) are not yet implemented.
+// xs:anyAtomicType, xs:error) are recognized. XSD 1.1 support includes
+// assertions and assertion facets, conditional type assignment, open content,
+// temporal datatype facets such as explicitTimezone, and relaxed wildcard/UPA
+// behavior. Some 1.1 structural features remain incomplete, including
+// xs:defaultOpenContent, schema default attributes, broader xs:all support, and
+// xs:override.
 //
 // # Compilation
 //

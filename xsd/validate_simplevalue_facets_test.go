@@ -1105,6 +1105,38 @@ func TestOrderedNonNumericRangeFacet(t *testing.T) {
 	})
 }
 
+// TestDurationRangeFacetReferenceDateOrder verifies that xs:duration range
+// facets use the XSD reference-date partial order instead of comparing the
+// months and seconds components independently. P1M is greater than P27D at all
+// four reference dates, while P1M vs P30D remains indeterminate and therefore
+// does not fire the facet.
+func TestDurationRangeFacetReferenceDateOrder(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="xs:duration">
+        <xs:minInclusive value="P1M"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("determinate shorter duration rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>P27D</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'minInclusive']")
+	})
+
+	t.Run("indeterminate duration accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>P30D</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}
+
 // TestNumericUnionRangeFacetRejectedAtCompile verifies that a range facet on a
 // union is rejected at COMPILE time even when every union member is numeric
 // (ordered). A union's value space is not a single ordered scalar, so per XSD

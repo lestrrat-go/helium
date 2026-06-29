@@ -47,6 +47,8 @@ const (
 	elemUnique         = "unique"
 )
 
+const elemExplicitTimezone = "explicitTimezone" // XSD 1.1: timezone-presence facet on temporal types
+
 const (
 	attrAbstract             = "abstract"
 	attrAttributeFormDefault = "attributeFormDefault"

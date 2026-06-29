@@ -220,15 +220,21 @@ shared schema-aware cast helper. The helper resolves the target's builtin base:
 a QName/NOTATION-derived base validates via
 `SchemaDeclarations.ValidateCastWithNS` and, for `cast`, returns the
 namespace-resolved `QNameValue` carrying the user type annotation; other bases
-cast through the builtin for the returned atomic value, but validate facets with
-`ValidateCastWithNS` against the original source lexical string, then return the
+cast through the builtin for the returned atomic value. String and untypedAtomic
+sources validate facets with `ValidateCastWithNS` against the original source
+lexical string so lexical facets such as patterns still see `"05"` rather than a
+canonicalized numeric value; already-typed sources validate the builtin cast
+result's lexical form so a cross-cast such as `xs:dateTime(...) cast as MyDate`
+checks the `xs:date` value actually being returned. The helper then returns the
 user type annotation with `BaseType` set to that builtin base. Union targets from
 `SchemaDeclarations.UnionMemberTypes` are tried recursively through that same
 schema-aware path for both `cast` and `castable`, so a union member that is
 itself a user-defined type still resolves its builtin base and facets. After a
-member accepts, the helper validates the original lexical value against the
-target union too, so facets/assertions on the union restriction itself can still
-reject the cast. `cast` returns the atomic value for the matching member.
+member accepts, the helper validates the target union too, so facets/assertions
+on the union restriction itself can still reject the cast: string/untypedAtomic
+sources use the original lexical value, while already-typed sources use the
+accepted member-cast result's lexical form. `cast` returns the atomic value for
+the matching member.
 
 When the cast source is itself an already-resolved `QNameValue` (e.g. `data(@q)`
 where the prefix is declared only on the instance node, absent from the

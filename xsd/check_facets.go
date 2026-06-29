@@ -11,6 +11,13 @@ import (
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
+const (
+	facetMinInclusive = "minInclusive"
+	facetMaxInclusive = "maxInclusive"
+	facetMinExclusive = "minExclusive"
+	facetMaxExclusive = "maxExclusive"
+)
+
 // baseFacets returns the FacetSet from the nearest base type in the chain.
 func baseFacets(td *TypeDef) *FacetSet {
 	if td.BaseType == nil {
@@ -210,12 +217,13 @@ func (c *compiler) checkListUnionFacetApplicability(ctx context.Context, td *Typ
 		present bool
 	}
 	disallowed := []facetPresence{
-		{"minInclusive", fs.MinInclusive != nil},
-		{"maxInclusive", fs.MaxInclusive != nil},
-		{"minExclusive", fs.MinExclusive != nil},
-		{"maxExclusive", fs.MaxExclusive != nil},
+		{facetMinInclusive, fs.MinInclusive != nil},
+		{facetMaxInclusive, fs.MaxInclusive != nil},
+		{facetMinExclusive, fs.MinExclusive != nil},
+		{facetMaxExclusive, fs.MaxExclusive != nil},
 		{"totalDigits", fs.TotalDigits != nil},
 		{"fractionDigits", fs.FractionDigits != nil},
+		{"explicitTimezone", fs.ExplicitTimezone != nil},
 	}
 	if variety == TypeVarietyUnion {
 		disallowed = append(disallowed,
@@ -261,6 +269,7 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 	ordered := value.Orderable(builtinLocal)
 	decimal := value.IsDecimalFamily(builtinLocal)
 	_, lengthOK := lengthApplicableTypes[builtinLocal]
+	explicitTimezoneOK := explicitTimezoneApplicable(builtinLocal)
 
 	report := func(facet string) {
 		msg := fmt.Sprintf("The facet '%s' is not allowed on types derived from the type %s.", facet, primitive)
@@ -275,10 +284,10 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 			name    string
 			present bool
 		}{
-			{"minInclusive", fs.MinInclusive != nil},
-			{"maxInclusive", fs.MaxInclusive != nil},
-			{"minExclusive", fs.MinExclusive != nil},
-			{"maxExclusive", fs.MaxExclusive != nil},
+			{facetMinInclusive, fs.MinInclusive != nil},
+			{facetMaxInclusive, fs.MaxInclusive != nil},
+			{facetMinExclusive, fs.MinExclusive != nil},
+			{facetMaxExclusive, fs.MaxExclusive != nil},
 		} {
 			if !rf.present {
 				continue
@@ -316,6 +325,9 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 			report("maxLength")
 		}
 	}
+	if fs.ExplicitTimezone != nil && !explicitTimezoneOK {
+		report("explicitTimezone")
+	}
 
 	return !rangeRejected
 }
@@ -333,19 +345,24 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 	if base == nil {
 		return
 	}
+	builtinLocal := builtinBaseLocal(td)
 
 	type rangeFacet struct {
-		name  string
-		value *string
-		ns    map[string]string
+		name              string
+		value             *string
+		ns                map[string]string
+		sameExclusiveBase *string
 	}
 	for _, rf := range []rangeFacet{
-		{"minInclusive", fs.MinInclusive, fs.MinInclusiveNS},
-		{"maxInclusive", fs.MaxInclusive, fs.MaxInclusiveNS},
-		{"minExclusive", fs.MinExclusive, fs.MinExclusiveNS},
-		{"maxExclusive", fs.MaxExclusive, fs.MaxExclusiveNS},
+		{facetMinInclusive, fs.MinInclusive, fs.MinInclusiveNS, nil},
+		{facetMaxInclusive, fs.MaxInclusive, fs.MaxInclusiveNS, nil},
+		{facetMinExclusive, fs.MinExclusive, fs.MinExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, facetMinExclusive, builtinLocal)},
+		{facetMaxExclusive, fs.MaxExclusive, fs.MaxExclusiveNS, effectiveInheritedExclusiveRangeFacet(td, facetMaxExclusive, builtinLocal)},
 	} {
 		if rf.value == nil {
+			continue
+		}
+		if rf.sameExclusiveBase != nil && rangeFacetValueEqual(*rf.value, *rf.sameExclusiveBase, builtinLocal) {
 			continue
 		}
 		// Validate the bound against the base type's value space with errors
@@ -1010,6 +1027,8 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 // checkFacetBaseRestriction checks that facet values properly narrow (not widen)
 // the base type's facets.
 func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	c.checkBuiltinFixedFacetRestriction(ctx, td, fs, line, component)
+
 	base := baseFacets(td)
 	if base == nil {
 		return
@@ -1038,6 +1057,7 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'fractionDigits' value '%d' is greater than the 'fractionDigits' value of the base type '%d'.", *fs.FractionDigits, *base.FractionDigits)))
 	}
+	c.checkFixedRangeFacetRestriction(ctx, td, fs, line, component)
 
 	// Inclusive/exclusive boundary facets vs base. These compare a derived bound
 	// against a base bound in the type's ORDERED VALUE SPACE — exactly as the
@@ -1074,100 +1094,318 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 		return compareDecimal(a, b), true
 	}
 
-	if fs.MaxInclusive != nil && base.MaxInclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MaxInclusive); ok && v > 0 {
+	lower, upper := effectiveInheritedRangeBounds(td, rangeCmp)
+	reportRangeBase := func(name string, value string, base inheritedRangeBound, relation string) {
+		if base.immediate {
 			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxInclusive)))
+				fmt.Sprintf("The '%s' value '%s' %s the '%s' value of the base type '%s'.",
+					name, value, relation, base.name, *base.value)))
+			return
+		}
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The '%s' value '%s' is not a valid restriction of the effective inherited '%s' value '%s' of the base type.",
+				name, value, base.name, *base.value)))
+	}
+	checkUpper := func(name string, value *string, inclusive bool) {
+		if value == nil {
+			return
+		}
+		if upper.value != nil {
+			if v, ok := rangeCmp(*value, *upper.value); ok {
+				switch {
+				case v > 0:
+					reportRangeBase(name, *value, upper, "is greater than")
+				case v == 0 && inclusive && upper.exclusive:
+					reportRangeBase(name, *value, upper, "must be less than")
+				}
+			}
+		}
+		if lower.value != nil {
+			if v, ok := rangeCmp(*value, *lower.value); ok {
+				switch {
+				case v < 0:
+					reportRangeBase(name, *value, lower, "is less than")
+				case v == 0 && (lower.exclusive || !inclusive):
+					reportRangeBase(name, *value, lower, "must be greater than")
+				}
+			}
 		}
 	}
-	if fs.MaxInclusive != nil && base.MaxExclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MaxExclusive); ok && v >= 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxExclusive)))
+	checkLower := func(name string, value *string, inclusive bool) {
+		if value == nil {
+			return
+		}
+		if lower.value != nil {
+			if v, ok := rangeCmp(*value, *lower.value); ok {
+				switch {
+				case v < 0:
+					reportRangeBase(name, *value, lower, "is less than")
+				case v == 0 && inclusive && lower.exclusive:
+					reportRangeBase(name, *value, lower, "must be greater than")
+				}
+			}
+		}
+		if upper.value != nil {
+			if v, ok := rangeCmp(*value, *upper.value); ok {
+				switch {
+				case v > 0:
+					reportRangeBase(name, *value, upper, "is greater than")
+				case v == 0 && (!inclusive || upper.exclusive):
+					reportRangeBase(name, *value, upper, "must be less than")
+				}
+			}
 		}
 	}
-	if fs.MaxInclusive != nil && base.MinInclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MinInclusive); ok && v < 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinInclusive)))
+	checkUpper(facetMaxInclusive, fs.MaxInclusive, true)
+	checkUpper(facetMaxExclusive, fs.MaxExclusive, false)
+	checkLower(facetMinInclusive, fs.MinInclusive, true)
+	checkLower(facetMinExclusive, fs.MinExclusive, false)
+}
+
+func (c *compiler) checkFixedRangeFacetRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	builtinLocal := builtinBaseLocal(td)
+	check := func(name string, value, baseValue *string) {
+		if value == nil || baseValue == nil {
+			return
+		}
+		if rangeFacetValueEqual(*value, *baseValue, builtinLocal) {
+			return
+		}
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The value '%s' of the facet '%s' does not match the fixed value '%s' of the base type.",
+				*value, name, *baseValue)))
+	}
+	check(facetMinInclusive, fs.MinInclusive, inheritedFixedRangeFacet(td, facetMinInclusive))
+	check(facetMaxInclusive, fs.MaxInclusive, inheritedFixedRangeFacet(td, facetMaxInclusive))
+	check(facetMinExclusive, fs.MinExclusive, inheritedFixedRangeFacet(td, facetMinExclusive))
+	check(facetMaxExclusive, fs.MaxExclusive, inheritedFixedRangeFacet(td, facetMaxExclusive))
+}
+
+func inheritedFixedRangeFacet(td *TypeDef, name string) *string {
+	if td == nil || td.BaseType == nil {
+		return nil
+	}
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets == nil {
+			continue
+		}
+		switch name {
+		case facetMinInclusive:
+			if cur.Facets.MinInclusive != nil && cur.Facets.MinInclusiveFixed {
+				return cur.Facets.MinInclusive
+			}
+		case facetMaxInclusive:
+			if cur.Facets.MaxInclusive != nil && cur.Facets.MaxInclusiveFixed {
+				return cur.Facets.MaxInclusive
+			}
+		case facetMinExclusive:
+			if cur.Facets.MinExclusive != nil && cur.Facets.MinExclusiveFixed {
+				return cur.Facets.MinExclusive
+			}
+		case facetMaxExclusive:
+			if cur.Facets.MaxExclusive != nil && cur.Facets.MaxExclusiveFixed {
+				return cur.Facets.MaxExclusive
+			}
 		}
 	}
-	if fs.MaxInclusive != nil && base.MinExclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MinExclusive); ok && v <= 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinExclusive)))
+	return nil
+}
+
+type inheritedRangeBound struct {
+	name      string
+	value     *string
+	exclusive bool
+	immediate bool
+}
+
+func effectiveInheritedExclusiveRangeFacet(td *TypeDef, name, builtinLocal string) *string {
+	lower, upper := effectiveInheritedRangeBounds(td, func(a, b string) (int, bool) {
+		return rangeFacetCmp(a, b, builtinLocal)
+	})
+	switch name {
+	case facetMinExclusive:
+		if lower.exclusive {
+			return lower.value
+		}
+	case facetMaxExclusive:
+		if upper.exclusive {
+			return upper.value
 		}
 	}
-	if fs.MaxExclusive != nil && base.MaxExclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MaxExclusive); ok && v > 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxExclusive)))
+	return nil
+}
+
+func effectiveInheritedRangeBounds(td *TypeDef, cmp func(string, string) (int, bool)) (inheritedRangeBound, inheritedRangeBound) {
+	var lower, upper inheritedRangeBound
+	if td == nil || td.BaseType == nil {
+		return lower, upper
+	}
+	immediate := true
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets == nil {
+			immediate = false
+			continue
+		}
+		mergeInheritedLowerBound(&lower, facetMinInclusive, cur.Facets.MinInclusive, false, immediate, cmp)
+		mergeInheritedLowerBound(&lower, facetMinExclusive, cur.Facets.MinExclusive, true, immediate, cmp)
+		mergeInheritedUpperBound(&upper, facetMaxInclusive, cur.Facets.MaxInclusive, false, immediate, cmp)
+		mergeInheritedUpperBound(&upper, facetMaxExclusive, cur.Facets.MaxExclusive, true, immediate, cmp)
+		immediate = false
+	}
+	return lower, upper
+}
+
+func mergeInheritedLowerBound(bound *inheritedRangeBound, name string, candidate *string, exclusive, immediate bool, cmp func(string, string) (int, bool)) {
+	if candidate == nil {
+		return
+	}
+	if bound.value == nil {
+		bound.name = name
+		bound.value = candidate
+		bound.exclusive = exclusive
+		bound.immediate = immediate
+		return
+	}
+	if v, ok := cmp(*candidate, *bound.value); ok {
+		if v > 0 || (v == 0 && exclusive && !bound.exclusive) {
+			bound.name = name
+			bound.value = candidate
+			bound.exclusive = exclusive
+			bound.immediate = immediate
 		}
 	}
-	if fs.MaxExclusive != nil && base.MaxInclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MaxInclusive); ok && v > 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxInclusive)))
+}
+
+func mergeInheritedUpperBound(bound *inheritedRangeBound, name string, candidate *string, exclusive, immediate bool, cmp func(string, string) (int, bool)) {
+	if candidate == nil {
+		return
+	}
+	if bound.value == nil {
+		bound.name = name
+		bound.value = candidate
+		bound.exclusive = exclusive
+		bound.immediate = immediate
+		return
+	}
+	if v, ok := cmp(*candidate, *bound.value); ok {
+		if v < 0 || (v == 0 && exclusive && !bound.exclusive) {
+			bound.name = name
+			bound.value = candidate
+			bound.exclusive = exclusive
+			bound.immediate = immediate
 		}
 	}
-	if fs.MaxExclusive != nil && base.MinInclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MinInclusive); ok && v <= 0 {
+}
+
+func rangeFacetCmp(a, b, builtinLocal string) (int, bool) {
+	if cmp, ok := value.CompareFloatFacetBound(a, b, builtinLocal); ok {
+		return cmp, true
+	}
+	if cmp, ok := compareForRangeFacet(a, b, builtinLocal); ok {
+		return cmp, true
+	}
+	return 0, false
+}
+
+func rangeFacetValueEqual(a, b, builtinLocal string) bool {
+	if cmp, ok := rangeFacetCmp(a, b, builtinLocal); ok {
+		return cmp == 0
+	}
+	return a == b
+}
+
+func (c *compiler) checkBuiltinFixedFacetRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	builtinLocal := builtinBaseLocal(td)
+	if fs.WhiteSpace != nil {
+		if fixed, ok := fixedBuiltinWhiteSpace(builtinLocal); ok && *fs.WhiteSpace != fixed {
 			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinInclusive)))
+				fmt.Sprintf("The value '%s' of the facet 'whiteSpace' does not match the fixed value '%s' of the base type '%s'.",
+					*fs.WhiteSpace, fixed, typeDisplayName(td.BaseType))))
 		}
 	}
-	if fs.MaxExclusive != nil && base.MinExclusive != nil {
-		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MinExclusive); ok && v <= 0 {
+
+	if fs.ExplicitTimezone == nil {
+		return
+	}
+	if fixedValue := inheritedFixedExplicitTimezone(td); fixedValue != "" && *fs.ExplicitTimezone != fixedValue {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The value '%s' of the facet 'explicitTimezone' does not match the fixed value '%s' of the base type '%s'.",
+				*fs.ExplicitTimezone, fixedValue, typeDisplayName(td.BaseType))))
+		return
+	}
+	baseValue := baseExplicitTimezone(td)
+	switch baseValue {
+	case attrValRequired:
+		if *fs.ExplicitTimezone != attrValRequired {
 			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinExclusive)))
+				fmt.Sprintf("The value '%s' of the facet 'explicitTimezone' does not match the fixed value '%s' of the base type '%s'.",
+					*fs.ExplicitTimezone, attrValRequired, typeDisplayName(td.BaseType))))
+		}
+	case attrValProhibited:
+		if *fs.ExplicitTimezone != attrValProhibited {
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The value '%s' of the facet 'explicitTimezone' does not match the fixed value '%s' of the base type '%s'.",
+					*fs.ExplicitTimezone, attrValProhibited, typeDisplayName(td.BaseType))))
 		}
 	}
-	if fs.MinInclusive != nil && base.MinInclusive != nil {
-		if v, ok := rangeCmp(*fs.MinInclusive, *base.MinInclusive); ok && v < 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinInclusive)))
+}
+
+func explicitTimezoneApplicable(builtinLocal string) bool {
+	switch builtinLocal {
+	case lexicon.TypeDateTime, lexicon.TypeDateTimeStamp, lexicon.TypeDate, lexicon.TypeTime,
+		lexicon.TypeGYear, lexicon.TypeGYearMonth, lexicon.TypeGMonth, lexicon.TypeGDay, lexicon.TypeGMonthDay:
+		return true
+	default:
+		return false
+	}
+}
+
+func fixedBuiltinWhiteSpace(builtinLocal string) (string, bool) {
+	switch builtinLocal {
+	case lexicon.TypeDateTime, lexicon.TypeDateTimeStamp, lexicon.TypeDate, lexicon.TypeTime,
+		lexicon.TypeDuration, lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration,
+		lexicon.TypeGYear, lexicon.TypeGYearMonth, lexicon.TypeGMonth, lexicon.TypeGDay, lexicon.TypeGMonthDay:
+		return "collapse", true
+	default:
+		return "", false
+	}
+}
+
+func baseExplicitTimezone(td *TypeDef) string {
+	if td == nil || td.BaseType == nil {
+		return ""
+	}
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets != nil && cur.Facets.ExplicitTimezone != nil {
+			return *cur.Facets.ExplicitTimezone
+		}
+		if cur.Name.NS != lexicon.NamespaceXSD {
+			continue
+		}
+		switch cur.Name.Local {
+		case lexicon.TypeDateTimeStamp:
+			return attrValRequired
+		case lexicon.TypeDateTime, lexicon.TypeDate, lexicon.TypeTime,
+			lexicon.TypeGYear, lexicon.TypeGYearMonth, lexicon.TypeGMonth, lexicon.TypeGDay, lexicon.TypeGMonthDay:
+			return attrValOptional
+		default:
+			return ""
 		}
 	}
-	if fs.MinInclusive != nil && base.MinExclusive != nil {
-		if v, ok := rangeCmp(*fs.MinInclusive, *base.MinExclusive); ok && v <= 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinExclusive)))
+	return ""
+}
+
+func inheritedFixedExplicitTimezone(td *TypeDef) string {
+	if td == nil || td.BaseType == nil {
+		return ""
+	}
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets != nil && cur.Facets.ExplicitTimezone != nil && cur.Facets.ExplicitTimezoneFixed {
+			return *cur.Facets.ExplicitTimezone
+		}
+		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local == lexicon.TypeDateTimeStamp {
+			return attrValRequired
 		}
 	}
-	if fs.MinInclusive != nil && base.MaxInclusive != nil {
-		if v, ok := rangeCmp(*fs.MinInclusive, *base.MaxInclusive); ok && v > 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxInclusive)))
-		}
-	}
-	if fs.MinInclusive != nil && base.MaxExclusive != nil {
-		if v, ok := rangeCmp(*fs.MinInclusive, *base.MaxExclusive); ok && v >= 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxExclusive)))
-		}
-	}
-	if fs.MinExclusive != nil && base.MinExclusive != nil {
-		if v, ok := rangeCmp(*fs.MinExclusive, *base.MinExclusive); ok && v < 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinExclusive)))
-		}
-	}
-	if fs.MinExclusive != nil && base.MinInclusive != nil {
-		if v, ok := rangeCmp(*fs.MinExclusive, *base.MinInclusive); ok && v < 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinInclusive)))
-		}
-	}
-	if fs.MinExclusive != nil && base.MaxInclusive != nil {
-		if v, ok := rangeCmp(*fs.MinExclusive, *base.MaxInclusive); ok && v > 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxInclusive)))
-		}
-	}
-	if fs.MinExclusive != nil && base.MaxExclusive != nil {
-		if v, ok := rangeCmp(*fs.MinExclusive, *base.MaxExclusive); ok && v >= 0 {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxExclusive)))
-		}
-	}
+	return ""
 }
