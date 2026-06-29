@@ -447,6 +447,16 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	qn, set, src := c.resolveSchemaDefaultAttributes(ctx, incRoot)
 	targetDefAttrs = schemaDefaultAttrsState{qn: qn, set: set, src: src}
 	c.applySchemaDefaultAttrs(targetDefAttrs)
+	if set {
+		// Queue the unresolved-attribute-group check for the TARGET document's
+		// @defaultAttributes, matching readSchemaDefaultAttributes. The per-type
+		// implicit ref recorded by parseComplexType silently skips an unresolved
+		// group, so without this an override target declaring
+		// defaultAttributes="t:missing" would compile clean. The source was captured
+		// while c.includeFile points at the target, so checkSchemaDefaultAttributes
+		// attributes the diagnostic to the target document.
+		c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, schemaDefaultAttrRef{qn: qn, src: src})
+	}
 
 	restore := func() {
 		c.schema.elemFormQualified = savedElemForm

@@ -448,6 +448,53 @@ func TestVersion11DefaultAttributesOverrideTargetSupplies(t *testing.T) {
 		`<t:root xmlns:t="urn:t"><t:element_added/></t:root>`), xsd.ErrValidationFailed)
 }
 
+// TestVersion11DefaultAttributesOverrideTargetMissingGroupFailsCompile covers
+// PR884-DA-001: an xs:override target whose root declares @defaultAttributes
+// pointing at a non-existent attribute group, with a replacement complex type
+// that would apply it, must fail compilation — the target document's
+// @defaultAttributes is checked for resolution just like the normal read path.
+func TestVersion11DefaultAttributesOverrideTargetMissingGroupFailsCompile(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  elementFormDefault="qualified" attributeFormDefault="qualified">
+  <xs:override schemaLocation="a.xsd">
+    <xs:complexType name="c1">
+      <xs:sequence>
+        <xs:element name="element_added"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:override>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:t" xmlns:t="urn:t"
+  elementFormDefault="qualified" attributeFormDefault="qualified"
+  defaultAttributes="t:missing">
+  <xs:complexType name="c1">
+    <xs:sequence>
+      <xs:element name="element1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="t:c1"/>
+</xs:schema>`)},
+	}
+
+	data, err := fsys.ReadFile(fileMain)
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
+	require.NoError(t, err)
+
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Label(fileMain).FS(fsys).ErrorHandler(collector).Compile(t.Context(), doc)
+	_ = collector.Close()
+
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	errs := compileErrorsString(collector.Errors())
+	require.Contains(t, errs, "does not resolve to a(n) attribute group definition")
+}
+
 func compileDefaultAttributesSchema(t *testing.T, c xsd.Compiler, schemaXML string) (*xsd.Schema, error) {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
