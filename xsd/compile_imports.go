@@ -164,6 +164,9 @@ func schemaDisplayLoc(filename, loc string) string {
 
 // processIncludes handles xs:include and xs:import elements.
 func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) error {
+	// Per-document set of xs:override target paths, so the same document overridden
+	// twice within one schema document is rejected (XSD 1.1, W3C over022).
+	overrideSeen := make(map[string]struct{})
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -182,46 +185,9 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				return err
 			}
 		case isXSDElement(elem, elemImport):
-			loc := getAttr(elem, attrSchemaLocation)
-			if loc == "" {
-				continue
+			if err := c.processImport(ctx, elem); err != nil {
+				return err
 			}
-			ns := getAttr(elem, attrNamespace)
-
-			// Check if this namespace was already imported.
-			if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
-				displayLoc := schemaDisplayLoc(c.filename, loc)
-				displayPrevLoc := schemaDisplayLoc(c.filename, prevLoc)
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
-					elem.LocalName(), elemImport,
-					"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."), helium.ErrorLevelWarning))
-				continue
-			}
-
-			if err := c.loadImport(ctx, loc, ns, elem); err != nil {
-				// Depth-exceeded and baseDir-escape are security limits,
-				// not I/O hiccups; surface them as fatal compilation
-				// errors rather than demoting to an I/O warning. A
-				// FatalSchemaLoader load failure (e.g. a resource-limit
-				// breach from the configured FS) is likewise fatal so the
-				// cap cannot be silently defeated for an xs:import target.
-				// All three conditions route through the one classifier.
-				if IsFatalSchemaLoad(err) {
-					return err
-				}
-				// Import failure — report warning if we have a filename.
-				if c.filename != "" {
-					displayLoc := schemaDisplayLoc(c.filename, loc)
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
-						elem.LocalName(), elemImport,
-						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."), helium.ErrorLevelWarning))
-				}
-				continue
-			}
-
-			// Track the imported namespace.
-			c.importedNS[ns] = loc
 		case isXSDElement(elem, elemRedefine):
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
@@ -230,8 +196,72 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 			if err := c.loadRedefine(ctx, loc, elem); err != nil {
 				return err
 			}
+		case c.version == Version11 && isXSDElement(elem, elemOverride):
+			// xs:override is an XSD 1.1 construct. In 1.0 mode it is ignored
+			// (skipped) so existing 1.0 behavior stays byte-identical.
+			loc := getAttr(elem, attrSchemaLocation)
+			if loc == "" {
+				continue
+			}
+			if !c.recordOverrideTarget(ctx, elem, loc, overrideSeen) {
+				continue
+			}
+			if err := c.loadOverride(ctx, loc, elem); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
+}
+
+// processImport handles a single xs:import element: it enforces the
+// already-imported-namespace warning, loads the imported schema, and demotes a
+// non-fatal load failure to the established I/O + "Failed to locate" warnings (so
+// the import is skipped, matching libxml2). It returns a non-nil error ONLY for a
+// fatal load condition ([IsFatalSchemaLoad]) that must abort compilation; every
+// non-fatal path returns nil after warning. Shared by processIncludes and the
+// xs:override nested processor so an import inside an overridden document gets the
+// same diagnostics as a top-level import.
+func (c *compiler) processImport(ctx context.Context, elem *helium.Element) error {
+	loc := getAttr(elem, attrSchemaLocation)
+	if loc == "" {
+		return nil
+	}
+	ns := getAttr(elem, attrNamespace)
+
+	// Check if this namespace was already imported.
+	if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
+		displayLoc := schemaDisplayLoc(c.filename, loc)
+		displayPrevLoc := schemaDisplayLoc(c.filename, prevLoc)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
+			elem.LocalName(), elemImport,
+			"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."), helium.ErrorLevelWarning))
+		return nil
+	}
+
+	if err := c.loadImport(ctx, loc, ns, elem); err != nil {
+		// Depth-exceeded and baseDir-escape are security limits, not I/O hiccups;
+		// surface them as fatal compilation errors rather than demoting to an I/O
+		// warning. A FatalSchemaLoader load failure (e.g. a resource-limit breach
+		// from the configured FS) is likewise fatal so the cap cannot be silently
+		// defeated for an xs:import target. All conditions route through the one
+		// classifier.
+		if IsFatalSchemaLoad(err) {
+			return err
+		}
+		// Import failure — report warning if we have a filename.
+		if c.filename != "" {
+			displayLoc := schemaDisplayLoc(c.filename, loc)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
+				elem.LocalName(), elemImport,
+				"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."), helium.ErrorLevelWarning))
+		}
+		return nil
+	}
+
+	// Track the imported namespace.
+	c.importedNS[ns] = loc
 	return nil
 }
 
@@ -267,6 +297,15 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
+	}
+
+	// include+override conflict (symmetric to overrideLoadTarget): the document was
+	// already transformed by an xs:override, so pulling in its untransformed
+	// originals via xs:include would collide. Report the fatal conflict instead of
+	// silently skipping.
+	if _, overridden := c.overridePaths[path]; overridden {
+		c.reportOverrideIncludeConflict(ctx, includeElem, location, elemInclude)
+		return nil
 	}
 
 	// Load each included document at most once: a transitive/diamond re-include
@@ -340,8 +379,16 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
+	savedDefaultAttributes := c.schema.defaultAttributes
+	savedDefaultAttrsSet := c.schema.defaultAttrsSet
+	savedDefaultAttrsSrc := c.schema.defaultAttrsSrc
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
+	savedSchemaTargetNSSet := c.schemaTargetNSSet
+	c.schemaTargetNSSet = c.schema.targetNamespace != ""
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -356,6 +403,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schemaXPathDefaultNS = ""
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+		c.readSchemaDefaultAttributes(ctx, incRoot)
 	}
 
 	// The CTA static context (static base URI, xpathDefaultNamespace) is PER schema
@@ -366,11 +414,6 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
-
-	// Set the include file path for duplicate element error reporting.
-	if c.filename != "" {
-		c.includeFile = schemaDisplayLoc(c.filename, location)
-	}
 
 	// Snapshot the component-name sets BEFORE parsing so the delta records which
 	// components this included document contributes. A later xs:redefine of the
@@ -404,10 +447,14 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schema.defaultAttributes = savedDefaultAttributes
+	c.schema.defaultAttrsSet = savedDefaultAttrsSet
+	c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 	c.schemaBaseURI = savedSchemaBaseURI
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
+	c.schemaTargetNSSet = savedSchemaTargetNSSet
 
 	return err
 }
@@ -472,6 +519,13 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
+	}
+
+	// include+override conflict (symmetric to overrideLoadTarget): a document
+	// already transformed by an xs:override cannot also be redefined.
+	if _, overridden := c.overridePaths[path]; overridden {
+		c.reportOverrideIncludeConflict(ctx, redefineElem, location, elemRedefine)
+		return nil
 	}
 
 	// A redefine whose target document is ALREADY loaded — via a prior xs:include
@@ -580,8 +634,16 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
+	savedDefaultAttributes := c.schema.defaultAttributes
+	savedDefaultAttrsSet := c.schema.defaultAttrsSet
+	savedDefaultAttrsSrc := c.schema.defaultAttrsSrc
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
+	savedSchemaTargetNSSet := c.schemaTargetNSSet
+	c.schemaTargetNSSet = c.schema.targetNamespace != ""
+	if c.filename != "" {
+		c.includeFile = schemaDisplayLoc(c.filename, location)
+	}
 	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
@@ -594,6 +656,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schemaXPathDefaultNS = ""
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
+		c.readSchemaDefaultAttributes(ctx, incRoot)
 	}
 	// The CTA static context (base URI + xpathDefaultNamespace) is per-document too:
 	// Phase A parses the REDEFINED document's declarations, so set them here; the
@@ -603,10 +666,6 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
-	if c.filename != "" {
-		c.includeFile = schemaDisplayLoc(c.filename, location)
-	}
-
 	// Snapshot the component-name sets per kind BEFORE Phase A. The including
 	// (main) schema's root declarations are already registered at this point,
 	// so taking the snapshot after Phase A would wrongly treat pre-existing
@@ -623,10 +682,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schema.defaultAttributes = savedDefaultAttributes
+		c.schema.defaultAttrsSet = savedDefaultAttrsSet
+		c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
+		c.schemaTargetNSSet = savedSchemaTargetNSSet
 		return err
 	}
 
@@ -637,10 +700,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
 		c.schema.finalDefault = savedFinalDefault
+		c.schema.defaultAttributes = savedDefaultAttributes
+		c.schema.defaultAttrsSet = savedDefaultAttrsSet
+		c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
+		c.schemaTargetNSSet = savedSchemaTargetNSSet
 		return err
 	}
 
@@ -669,10 +736,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = savedAttrForm
 	c.schema.blockDefault = savedBlockDefault
 	c.schema.finalDefault = savedFinalDefault
+	c.schema.defaultAttributes = savedDefaultAttributes
+	c.schema.defaultAttrsSet = savedDefaultAttrsSet
+	c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 	c.schemaBaseURI = savedSchemaBaseURI
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
+	c.schemaTargetNSSet = savedSchemaTargetNSSet
 
 	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
 }
@@ -1013,6 +1084,8 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		groupSources:             make(map[QName]groupSource),
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
+		defaultAttrUses:          make(map[*TypeDef]map[QName]*AttrUse),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		attrGroupWildcards:       make(map[QName]*Wildcard),
@@ -1031,6 +1104,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		includeVisited:           make(map[string]struct{}),
 		maxIncludeDepth:          c.maxIncludeDepth,
 		loadedRedefinable:        make(map[string]*redefinableSet),
+		notations:                make(map[QName]struct{}),
 	}
 
 	// Seed the imported sub-compiler's circular-include guard with the imported
@@ -1039,6 +1113,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// own root (import imp.xsd -> include inc.xsd -> include imp.xsd) re-parses
 	// imp.xsd and emits spurious duplicate-component errors.
 	impC.includeVisited[path] = struct{}{}
+	// The imported schema is this sub-compiler's root: record it so an xs:override
+	// cascade inside the imported schema that points back at its own root
+	// terminates without re-loading it (mirrors the top-level rootKey seeding).
+	impC.rootKey = path
 
 	// Sub-compiler collects errors into its own collector so we can
 	// conditionally forward them. This matches libxml2's behavior of
@@ -1086,6 +1164,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	defer propagateImpErrors()
 
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
+	impC.schemaTargetNSSet = impC.schema.targetNamespace != ""
 	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified
 	impC.schema.attrFormQualified = getAttr(impRoot, attrAttributeFormDefault) == attrValQualified
 	if v := getAttr(impRoot, attrBlockDefault); v != "" {
@@ -1144,6 +1223,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			importElem.LocalName(), elemImport,
 			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
 		return nil
+	}
+
+	if impC.version == Version11 {
+		impC.readSchemaDefaultAttributes(ctx, impRoot)
 	}
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
@@ -1250,6 +1333,22 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 	}
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
+	for _, ref := range impC.schemaDefaultAttrRefs {
+		if ref.src.source == "" {
+			ref.src.source = impC.filename
+		}
+		c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, ref)
+	}
+	for td, srcs := range impC.attrGroupRefUseSources {
+		merged := make([]attrGroupRefUseSource, len(srcs))
+		for i, src := range srcs {
+			if src.source == "" {
+				src.source = impC.filename
+			}
+			merged[i] = src
+		}
+		c.attrGroupRefUseSources[td] = merged
+	}
 	for qn, refs := range impC.attrGroupRefChildren {
 		if _, exists := c.attrGroupRefChildren[qn]; !exists {
 			c.attrGroupRefChildren[qn] = refs
@@ -1284,6 +1383,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.chameleonEligible, impC.chameleonEligible)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
+	maps.Copy(c.notations, impC.notations)
 	// Merge attribute-use default/fixed constraint sources, preserving the
 	// originating file. An attribute use parsed directly in the imported document
 	// (not via a nested include) has an empty source; attribute it to the

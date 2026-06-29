@@ -594,21 +594,11 @@ func TestAll11AbstractSubstMemberInstance(t *testing.T) {
 	require.Error(t, validateAll11(t, schema, `<doc><m>x</m></doc>`))   // abstract member cannot appear
 }
 
-// TestAll11MultiHeadParsing covers the multi-head substitutionGroup parsing edge
-// cases: a whitespace-only value is a schema error, duplicate heads are deduped
-// (no false UPA), and an invalid QName token is rejected.
+// TestAll11MultiHeadParsing covers multi-head substitutionGroup parsing: duplicate
+// heads are deduped (no false UPA). Lexical token validation / empty-value errors
+// are owned by the shared resolveSubstitutionGroupHeads (#877), not re-tested here.
 func TestAll11MultiHeadParsing(t *testing.T) {
 	t.Parallel()
-
-	t.Run("whitespace-only substitutionGroup is an error", func(t *testing.T) {
-		t.Parallel()
-		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="h" type="xs:string"/>
-  <xs:element name="m" substitutionGroup="   " type="xs:string"/>
-</xs:schema>`
-		_, cerr := compileAll11(t, schema)
-		require.Error(t, cerr)
-	})
 
 	t.Run("duplicate heads deduped, no false UPA", func(t *testing.T) {
 		t.Parallel()
@@ -622,16 +612,6 @@ func TestAll11MultiHeadParsing(t *testing.T) {
 </xs:schema>`
 		_, cerr := compileAll11(t, schema)
 		require.NoError(t, cerr) // "h h" dedupes to one head; m registers once, no UPA
-	})
-
-	t.Run("invalid QName head token is an error", func(t *testing.T) {
-		t.Parallel()
-		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="h" type="xs:string"/>
-  <xs:element name="m" substitutionGroup="h :bad" type="xs:string"/>
-</xs:schema>`
-		_, cerr := compileAll11(t, schema)
-		require.Error(t, cerr)
 	})
 }
 

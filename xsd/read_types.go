@@ -76,7 +76,14 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		td.Final = parseFinalFlags(getAttr(elem, attrFinal))
 		td.FinalSet = true
 	} else {
-		td.Final = c.schema.finalDefault & (FinalRestriction | FinalList | FinalUnion)
+		// XSD 1.1 (spec bug 2074): "extension" is a valid member of a simple
+		// type's {final}, so finalDefault="extension" reaches a simple type and
+		// blocks a simpleContent extension of it. XSD 1.0 masks extension out.
+		mask := FinalRestriction | FinalList | FinalUnion
+		if c.version == Version11 {
+			mask |= FinalExtension
+		}
+		td.Final = c.schema.finalDefault & mask
 	}
 
 	c.recordTypeDefSource(td, elem.Line(), false, elem.LocalName())
@@ -85,12 +92,23 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 	return nil
 }
 
+func (c *compiler) recordAttrGroupRef(td *TypeDef, qn QName, src attrGroupRefUseSource) {
+	c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
+	c.attrGroupRefUseSources[td] = append(c.attrGroupRefUseSources[td], src)
+}
+
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
 	td := &TypeDef{IsComplex: true}
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 
 	if c.readBooleanAttr(ctx, elem, "mixed") {
 		td.ContentType = ContentTypeMixed
+	}
+	defaultAttrsApply := c.version == Version11
+	if c.version == Version11 {
+		if hasAttr(elem, attrDefaultAttrsApply) {
+			defaultAttrsApply = c.readBooleanAttr(ctx, elem, attrDefaultAttrsApply)
+		}
 	}
 
 	// XSD 3.4.2: the content of an xs:complexType is one of:
@@ -259,7 +277,12 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
-				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
+				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
+					line:      ce.Line(),
+					elemLocal: ce.LocalName(),
+					attr:      attrRef,
+					source:    c.diagSource(),
+				})
 			}
 		case isXSDElement(ce, elemAnyAttribute):
 			if contentWrapperChild != "" {
@@ -288,6 +311,9 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 
 	// If no content model and not mixed, ContentTypeEmpty is the default (no children).
 	// Attribute declarations do not change the content type.
+	if defaultAttrsApply && c.schema.defaultAttrsSet {
+		c.recordAttrGroupRef(td, c.schema.defaultAttributes, c.schema.defaultAttrsSrc)
+	}
 
 	return td, nil
 }
@@ -438,7 +464,12 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
-				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
+				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
+					line:      ce.Line(),
+					elemLocal: ce.LocalName(),
+					attr:      attrRef,
+					source:    c.diagSource(),
+				})
 			}
 		case isXSDElement(ce, elemAnyAttribute):
 			if anyAttributeSeen {
@@ -591,7 +622,12 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
-				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
+				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
+					line:      ce.Line(),
+					elemLocal: ce.LocalName(),
+					attr:      attrRef,
+					source:    c.diagSource(),
+				})
 			}
 		case isXSDElement(ce, elemAnyAttribute):
 			if anyAttributeSeen {
@@ -696,7 +732,12 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			}
 			if ref := getAttr(ae, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ae, ref)
-				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
+				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
+					line:      ae.Line(),
+					elemLocal: ae.LocalName(),
+					attr:      attrRef,
+					source:    c.diagSource(),
+				})
 			}
 		case isXSDElement(ae, elemAnyAttribute):
 			if anyAttributeSeen {

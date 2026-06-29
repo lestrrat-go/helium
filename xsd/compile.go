@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
@@ -26,9 +27,14 @@ type compiler struct {
 	// not set its own. Empty means no default (unprefixed element = no-namespace).
 	// It is re-set per document for xs:include/xs:redefine/xs:import.
 	schemaXPathDefaultNS string
-	baseDir              string         // directory of the schema file, for resolving relative paths
-	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
-	parser               *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
+	// schemaTargetNSSet tracks whether the current schema document has a non-empty
+	// effective target namespace. This is distinct from @targetNamespace presence:
+	// targetNamespace="" is no target namespace, while chameleon includes inherit
+	// the including schema's effective namespace.
+	schemaTargetNSSet bool
+	baseDir           string         // directory of the schema file, for resolving relative paths
+	fsys              fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser            *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -47,6 +53,20 @@ type compiler struct {
 	groupRefSources map[*ModelGroup]groupRefSource
 	// unresolved attribute group references: maps from TypeDef to list of QNames
 	attrGroupRefs map[*TypeDef][]QName
+	// XSD 1.1 xs:schema/@defaultAttributes declarations. These are schema-level
+	// QName references and must resolve even if no complex type applies them.
+	schemaDefaultAttrRefs []schemaDefaultAttrRef
+	// source info for type-level attribute group references, index-aligned with
+	// attrGroupRefs. This covers explicit xs:attributeGroup ref children and
+	// the implicit ref injected for XSD 1.1 schema defaultAttributes.
+	attrGroupRefUseSources map[*TypeDef][]attrGroupRefUseSource
+	// defaultAttrUses records attribute uses contributed by an implicit
+	// xs:schema/@defaultAttributes application, keyed by complex type and
+	// expanded attribute name. The value is the contributed attribute-use
+	// component, so duplicate suppression can require the base and derived type
+	// to have received the SAME default use, not merely a same-named use from
+	// different default groups.
+	defaultAttrUses map[*TypeDef]map[QName]*AttrUse
 	// nested xs:attributeGroup ref children of a GLOBAL attribute group, keyed by
 	// the containing group's QName. These are flattened (recursively, cycle-guarded)
 	// before checkAttrGroupDuplicates so a duplicate attribute use introduced
@@ -168,6 +188,33 @@ type compiler struct {
 	// (xs:alternative children), so the alternative-type substitutability check
 	// (cta-cvc / Type Alternative valid) can run after all types resolve.
 	ctaElems []*ElementDecl
+	// rootKey is the resolved fs key of the TOP-LEVEL schema document of this
+	// compiler (the CompileFile root, or an import sub-compiler's own document). It
+	// lets the xs:override cascade terminate a back-edge that points at the
+	// overriding root WITHOUT re-loading/re-registering the root's components, and
+	// distinguishes the seeded-root entry in includeVisited from a genuine plain
+	// xs:include of a document (see override.go).
+	rootKey string
+	// overrideVisited records the (path + active-override-set fingerprint) keys of
+	// schema documents pulled in by the xs:override TRANSFORMATION (override.go),
+	// tracked SEPARATELY from includeVisited (plain xs:include/xs:redefine). Keying
+	// by path AND active set (not path alone) is required: the SAME document reached
+	// with a DIFFERENT active override set is a DISTINCT transformed document and
+	// must be loaded again (letting duplicate-component checks fire on a real
+	// collision); only a true diamond/cycle reached with the SAME active set
+	// terminates here.
+	overrideVisited map[string]struct{}
+	// overridePaths records every resolved fs path ever pulled in by an
+	// xs:override transformation (regardless of active set). It is the path-level
+	// companion to overrideVisited used for the include+override CONFLICT check: a
+	// document pulled in by BOTH a plain xs:include/xs:redefine AND an xs:override
+	// is a fatal conflict (distinct constituents with colliding components), not a
+	// silent no-op.
+	overridePaths map[string]struct{}
+	// notations records the QNames of every <xs:notation> declared in the schema
+	// (and its included/imported documents). Used to verify that an xs:NOTATION
+	// restriction's enumeration values name declared notations.
+	notations map[QName]struct{}
 }
 
 // redefinableSet caches the redefinable component names a schema document
@@ -346,6 +393,21 @@ type attrGroupSource struct {
 	source string // declaring file (this compiler's filename, or an imported file)
 }
 
+// attrGroupRefUseSource tracks where a complex type referenced an attribute
+// group, either explicitly through <xs:attributeGroup ref="..."> or implicitly
+// through xs:schema/@defaultAttributes.
+type attrGroupRefUseSource struct {
+	line      int
+	elemLocal string
+	attr      string
+	source    string
+}
+
+type schemaDefaultAttrRef struct {
+	qn  QName
+	src attrGroupRefUseSource
+}
+
 // unionMemberRef tracks an unresolved union member type reference.
 type unionMemberRef struct {
 	owner *TypeDef
@@ -497,6 +559,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupWildcards:       make(map[QName]*Wildcard),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
+		defaultAttrUses:          make(map[*TypeDef]map[QName]*AttrUse),
 		attrGroupRefChildren:     make(map[QName][]QName),
 		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
@@ -512,6 +576,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		includeVisited:           make(map[string]struct{}),
 		maxIncludeDepth:          defaultMaxIncludeDepth,
 		loadedRedefinable:        make(map[string]*redefinableSet),
+		notations:                make(map[QName]struct{}),
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
@@ -521,6 +586,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// re-parsing it and emitting spurious duplicate-component errors.
 		if cfg.rootKey != "" {
 			c.includeVisited[cfg.rootKey] = struct{}{}
+			c.rootKey = cfg.rootKey
 		}
 		c.filename = cfg.label
 		if c.filename == "" {
@@ -548,6 +614,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.version = c.version
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
+	c.schemaTargetNSSet = c.schema.targetNamespace != ""
 	if hasAttr(root, attrXPathDefaultNamespace) {
 		c.xpathDefaultNSSet = true
 	}
@@ -603,6 +670,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// selector/field's).
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(root, getAttr(root, attrXPathDefaultNS), c.schema.targetNamespace)
+		c.readSchemaDefaultAttributes(ctx, root)
 	}
 
 	// Parse blockDefault attribute.
@@ -674,6 +742,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
 	c.checkNotationOnDeclarations(ctx)
 
+	// XSD 1.1: xs:anyAtomicType is abstract and must not be used as the base type
+	// of a user-defined simple type, nor as a list item type or union member type.
+	if c.version == Version11 {
+		c.checkAnyAtomicTypeUsage(ctx)
+	}
+
 	// XSD 1.1: each conditional-type-assignment alternative's type must be validly
 	// substitutable for the element's declared type. Runs after type refs resolve.
 	c.checkAltSubstitutability(ctx)
@@ -684,11 +758,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// error-ordering sequence unchanged.
 	if c.filename != "" {
 		for _, edecl := range c.schema.elements {
-			if edecl.SubstitutionGroup == (QName{}) {
+			if len(edecl.substitutionGroupHeads()) == 0 {
 				continue
 			}
 			c.checkCircularSubstGroup(ctx, edecl)
 		}
+	}
+
+	// Check that every member is type-substitutable for every affiliated head.
+	if c.filename != "" && c.errorCount == 0 {
+		c.checkSubstGroupAffiliations(ctx)
 	}
 
 	// Enforce final on type derivations.
@@ -734,6 +813,49 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	return c.schema, nil
 }
 
+func (c *compiler) readSchemaDefaultAttributes(ctx context.Context, root *helium.Element) {
+	c.schema.defaultAttributes = QName{}
+	c.schema.defaultAttrsSet = false
+	c.schema.defaultAttrsSrc = attrGroupRefUseSource{}
+	if c.version != Version11 || !hasAttr(root, attrDefaultAttributes) {
+		return
+	}
+	ref := normalizeWhiteSpace(getAttr(root, attrDefaultAttributes), "collapse")
+	src := attrGroupRefUseSource{
+		line:      root.Line(),
+		elemLocal: root.LocalName(),
+		attr:      attrDefaultAttributes,
+		source:    c.diagSource(),
+	}
+	if !xmlchar.IsValidQName(ref) {
+		c.reportInvalidQNameValue(ctx, root, ref)
+		return
+	}
+	qn := QName{Local: ref, NS: c.schema.targetNamespace}
+	if prefix, local, ok := strings.Cut(ref, ":"); ok {
+		ns := lookupNS(root, prefix)
+		if ns == "" && prefix != "" {
+			c.reportUnboundQNamePrefix(ctx, root, ref, prefix)
+			return
+		}
+		if c.rejectDeprecatedDatatypeNamespace(ctx, root, ref, ns) {
+			return
+		}
+		qn = QName{Local: local, NS: ns}
+	} else {
+		if defNS := lookupNS(root, ""); defNS != "" {
+			qn.NS = defNS
+		}
+		if c.rejectDeprecatedDatatypeNamespace(ctx, root, ref, qn.NS) {
+			return
+		}
+	}
+	c.schema.defaultAttributes = qn
+	c.schema.defaultAttrsSet = true
+	c.schema.defaultAttrsSrc = src
+	c.schemaDefaultAttrRefs = append(c.schemaDefaultAttrRefs, schemaDefaultAttrRef{qn: qn, src: src})
+}
+
 // buildSubstGroups populates c.schema.substGroups, mapping each substitution-group
 // head QName to the global element declarations affiliated with it, sorted by
 // local name for deterministic downstream output. It is intentionally
@@ -743,20 +865,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 // circularity, final, and element-consistency checks run later, unchanged.
 func (c *compiler) buildSubstGroups() {
 	for _, edecl := range c.schema.elements {
-		// XSD 1.1 multiple-head substitution: register the element under EVERY head
-		// it declares (SubstitutionGroups); the common single-head case uses
-		// SubstitutionGroup.
-		if len(edecl.SubstitutionGroups) > 0 {
-			for _, head := range edecl.SubstitutionGroups {
-				c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
-			}
+		heads := edecl.substitutionGroupHeads()
+		if len(heads) == 0 {
 			continue
 		}
-		if edecl.SubstitutionGroup == (QName{}) {
-			continue
+		for _, head := range heads {
+			c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
 		}
-		head := edecl.SubstitutionGroup
-		c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
 	}
 	for _, members := range c.schema.substGroups {
 		sort.Slice(members, func(i, j int) bool {
@@ -1085,6 +1200,10 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 			}
 		case isXSDElement(elem, elemAttribute):
 			c.parseGlobalAttribute(ctx, elem)
+		case isXSDElement(elem, elemNotation):
+			if name := getAttr(elem, attrName); name != "" {
+				c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
+			}
 		}
 	}
 	return nil

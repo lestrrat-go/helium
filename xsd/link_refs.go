@@ -3,7 +3,6 @@ package xsd
 import (
 	"context"
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 
@@ -42,8 +41,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// nilled-empty checks would be silently skipped for a direct
 				// ref="member". The member's own Nillable (copied below) still
 				// governs the nilled-element check.
-				if edecl.SubstitutionGroup == (QName{}) {
-					edecl.SubstitutionGroup = ge.SubstitutionGroup
+				if len(edecl.substitutionGroupHeads()) == 0 {
+					edecl.setSubstitutionGroupHeads(ge.substitutionGroupHeads())
 				}
 				edecl.Nillable = ge.Nillable
 				edecl.Abstract = ge.Abstract
@@ -226,6 +225,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// removes the duplicate use from the group so a referencing type does not
 	// re-report the same collision (xmllint reports it once, at the group).
 	c.checkAttrGroupDuplicates(ctx)
+	c.checkSchemaDefaultAttributes(ctx)
 
 	// Resolve attribute group references.
 	//
@@ -247,8 +247,16 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// checkDuplicateAttrUses below (ct-props-correct.4), preserving the prior
 	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
-		for _, qn := range qns {
-			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
+		srcs := c.attrGroupRefUseSources[td]
+		for i, qn := range qns {
+			if _, ok := c.schema.attrGroups[qn]; !ok {
+				continue
+			}
+			uses := c.expandAttrGroupUses(qn, map[QName]struct{}{})
+			if i < len(srcs) && srcs[i].attr == attrDefaultAttributes {
+				c.markDefaultAttrUses(td, uses)
+			}
+			td.Attributes = append(td.Attributes, uses...)
 			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
 			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
 			// "complete wildcard"). Gated on Version11 so 1.0 (which drops group
@@ -607,6 +615,47 @@ func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*
 	return uses
 }
 
+func (c *compiler) markDefaultAttrUses(td *TypeDef, uses []*AttrUse) {
+	if td == nil || len(uses) == 0 {
+		return
+	}
+	attrs := c.defaultAttrUses[td]
+	if attrs == nil {
+		attrs = make(map[QName]*AttrUse)
+		c.defaultAttrUses[td] = attrs
+	}
+	for _, au := range uses {
+		if au.Prohibited {
+			continue
+		}
+		attrs[au.Name] = au
+	}
+}
+
+func (c *compiler) defaultAttrUse(td *TypeDef, name QName) *AttrUse {
+	if td == nil {
+		return nil
+	}
+	return c.defaultAttrUses[td][name]
+}
+
+func (c *compiler) defaultAttrUseMatches(a, b *TypeDef, name QName) bool {
+	au := c.defaultAttrUse(a, name)
+	return au != nil && au == c.defaultAttrUse(b, name)
+}
+
+func (c *compiler) markDefaultAttrUse(td *TypeDef, au *AttrUse) {
+	if td == nil || au == nil || au.Prohibited {
+		return
+	}
+	attrs := c.defaultAttrUses[td]
+	if attrs == nil {
+		attrs = make(map[QName]*AttrUse)
+		c.defaultAttrUses[td] = attrs
+	}
+	attrs[au.Name] = au
+}
+
 // attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
 // attribute group: its OWN xs:anyAttribute (if any) INTERSECTED with the
 // complete wildcards of every nested xs:attributeGroup ref child. visited guards
@@ -691,6 +740,9 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 			continue
 		}
 		if !baseAttrNames[au.Name] {
+			continue
+		}
+		if c.defaultAttrUseMatches(td, td.BaseType, au.Name) {
 			continue
 		}
 		src, ok := c.typeDefSources[td]
@@ -1167,11 +1219,36 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 		if elemKind == elemComplexType {
 			component = componentLocalComplexType
 		} else {
-			component = "local simple type"
+			component = componentLocalSimpleType
 		}
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg))
+}
+
+func (c *compiler) checkSchemaDefaultAttributes(ctx context.Context) {
+	for _, ref := range c.schemaDefaultAttrRefs {
+		if _, ok := c.schema.attrGroups[ref.qn]; ok {
+			continue
+		}
+		c.reportUnresolvedAttrGroupRef(ctx, ref.qn, ref.src)
+	}
+}
+
+func (c *compiler) reportUnresolvedAttrGroupRef(ctx context.Context, qn QName, src attrGroupRefUseSource) {
+	if c.filename == "" {
+		return
+	}
+	elemLocal := src.elemLocal
+	if elemLocal == "" {
+		elemLocal = elemAttributeGroup
+	}
+	attr := src.attr
+	if attr == "" {
+		attr = attrRef
+	}
+	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) attribute group definition.", qn.NS, qn.Local)
+	c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, elemLocal, elemLocal, attr, msg))
 }
 
 // checkAttrUseConstraints validates each attribute use's default/fixed value
@@ -1410,6 +1487,7 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 				continue
 			}
 			td.Attributes = append(td.Attributes, bau)
+			c.markDefaultAttrUse(td, c.defaultAttrUse(base, bau.Name))
 		}
 	}
 	// anyAttribute: a restriction inherits the base wildcard when it declares none;
@@ -1598,52 +1676,46 @@ func processContentsStrength(pc ProcessContentsKind) int {
 func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDecl) {
 	// DFS over ALL heads (XSD 1.1 multiple-head substitution): a cycle may close
 	// through any one of an element's heads, so following only the first head
-	// (SubstitutionGroup) would miss cycles that run through a later head.
+	// would miss cycles that run through a later head.
 	visited := map[QName]bool{}
-	var reaches func(cur QName) bool
-	reaches = func(cur QName) bool {
-		if cur == (QName{}) {
-			return false
+	for _, current := range edecl.substitutionGroupHeads() {
+		if c.substGroupChainContains(edecl.Name, current, visited) {
+			// Cycle leads back to this element.
+			// libxml2 reports this error twice.
+			if src, ok := c.globalElemSources[edecl]; ok {
+				msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
+					edecl.Name.Local, edecl.Name.Local)
+				errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
+				c.schemaError(ctx, errStr)
+				c.schemaError(ctx, errStr)
+			}
+			return
 		}
-		if cur == edecl.Name {
-			return true // cycle back to this element
-		}
-		if visited[cur] {
-			return false // a cycle not involving this element
-		}
-		visited[cur] = true
-		head, ok := c.schema.elements[cur]
-		if !ok {
-			return false
-		}
-		return slices.ContainsFunc(substHeads(head), reaches)
 	}
-	if !slices.ContainsFunc(substHeads(edecl), reaches) {
-		return
-	}
-	// Cycle leads back to this element. libxml2 reports this error twice.
-	src, ok := c.globalElemSources[edecl]
-	if !ok {
-		return
-	}
-	msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
-		edecl.Name.Local, edecl.Name.Local)
-	errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
-	c.schemaError(ctx, errStr)
-	c.schemaError(ctx, errStr)
 }
 
-// substHeads returns all substitution-group heads of an element declaration:
-// every head for XSD 1.1 multiple-head substitution, else the single head, else
-// none.
-func substHeads(edecl *ElementDecl) []QName {
-	if len(edecl.SubstitutionGroups) > 0 {
-		return edecl.SubstitutionGroups
+func (c *compiler) substGroupChainContains(target, current QName, visited map[QName]bool) bool {
+	if current == (QName{}) {
+		return false
 	}
-	if edecl.SubstitutionGroup != (QName{}) {
-		return []QName{edecl.SubstitutionGroup}
+	if current == target {
+		return true
 	}
-	return nil
+	if visited[current] {
+		// Hit a cycle that doesn't include this element.
+		return false
+	}
+	visited[current] = true
+	head, ok := c.schema.elements[current]
+	if !ok {
+		return false
+	}
+	for _, next := range head.substitutionGroupHeads() {
+		if c.substGroupChainContains(target, next, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkFinalOnTypes checks that no type derivation violates the base type's final constraint.
@@ -1700,14 +1772,16 @@ func (c *compiler) checkFinalOnSubstGroups(ctx context.Context) {
 		if head.Final == 0 {
 			continue
 		}
+		headType := c.resolveDeclaredType(head)
 		for _, member := range members {
-			if head.Final&FinalExtension != 0 && derivationUsesMethod(member.Type, head.Type, DerivationExtension) {
+			memberType := c.resolveDeclaredType(member)
+			if head.Final&FinalExtension != 0 && derivationUsesMethod(memberType, headType, DerivationExtension) {
 				if src, ok := c.globalElemSources[member]; ok {
 					c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."))
 				}
 			}
-			if head.Final&FinalRestriction != 0 && derivationUsesMethod(member.Type, head.Type, DerivationRestriction) {
+			if head.Final&FinalRestriction != 0 && derivationUsesMethod(memberType, headType, DerivationRestriction) {
 				if src, ok := c.globalElemSources[member]; ok {
 					c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."))
@@ -1717,8 +1791,30 @@ func (c *compiler) checkFinalOnSubstGroups(ctx context.Context) {
 	}
 }
 
-// derivationUsesMethod walks the BaseType chain from derived to base and
-// returns true if any step in the chain uses the given derivation method.
+func (c *compiler) checkSubstGroupAffiliations(ctx context.Context) {
+	for headQN, members := range c.schema.substGroups {
+		head, ok := c.schema.elements[headQN]
+		if !ok {
+			continue
+		}
+		headType := c.resolveDeclaredType(head)
+		for _, member := range members {
+			memberType := c.resolveDeclaredType(member)
+			if isXsiTypeDerivedFromDeclared(memberType, headType) {
+				continue
+			}
+			if src, ok := c.globalElemSources[member]; ok {
+				msg := fmt.Sprintf("The substitution group affiliation to '%s' is not validly substitutable for the head element's type definition.", head.Name.Local)
+				c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local, msg))
+			}
+		}
+	}
+}
+
+// derivationUsesMethod reports whether derived reaches base through the given
+// derivation method. It follows explicit BaseType links and the extra simple-type
+// derivation paths that are not pointer-linked: built-in narrowing and an
+// unfaceted union head substitutable through one of its members.
 func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 	if derived == nil || base == nil {
 		return false
@@ -1729,6 +1825,22 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 			return true
 		}
 		td = td.BaseType
+	}
+	if td == base {
+		return false
+	}
+	if method == DerivationRestriction && resolveVariety(base) == TypeVarietyUnion {
+		for _, member := range resolveUnionMembers(base) {
+			if isXsiTypeDerivedFromDeclared(derived, member) {
+				return true
+			}
+		}
+	}
+	if method == DerivationRestriction && isBuiltinSimpleType(base) {
+		db := builtinBaseLocal(derived)
+		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
+			return true
+		}
 	}
 	return false
 }

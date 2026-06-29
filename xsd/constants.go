@@ -36,6 +36,8 @@ const (
 	elemKey            = "key"
 	elemKeyRef         = "keyref"
 	elemList           = "list"
+	elemNotation       = "notation"
+	elemOverride       = "override" // XSD 1.1: xs:override (override schema document)
 	elemRedefine       = "redefine"
 	elemRestriction    = "restriction"
 	elemSchema         = "schema"
@@ -56,6 +58,8 @@ const (
 	attrBlock                = "block"
 	attrBlockDefault         = "blockDefault"
 	attrDefault              = "default"
+	attrDefaultAttributes    = "defaultAttributes"      // XSD 1.1: schema-level default attribute group
+	attrDefaultAttrsApply    = "defaultAttributesApply" // XSD 1.1: complexType default attribute toggle
 	attrElementFormDefault   = "elementFormDefault"
 	attrFinal                = "final"
 	attrFinalDefault         = "finalDefault"

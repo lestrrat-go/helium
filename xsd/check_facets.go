@@ -78,7 +78,7 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 
 		component := td.Name.Local
 		if component == "" || entry.src.isLocal {
-			component = "local simple type"
+			component = componentLocalSimpleType
 		}
 		line := entry.src.line
 
@@ -486,7 +486,7 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 
 		component := td.Name.Local
 		if component == "" || e.src.isLocal {
-			component = "local simple type"
+			component = componentLocalSimpleType
 		}
 
 		variety := resolveVariety(td)
@@ -516,6 +516,20 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 			if c.enumLiteralHasUnboundQName(ctx, ev, enumNS, td, variety) {
 				msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", ev, typeDisplayName(td))
 				c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
+				continue
+			}
+			// XSD 1.1: an xs:NOTATION restriction's enumeration values must name a
+			// notation declared in the schema. (XSD 1.0 keeps the historical
+			// behavior — declaration-table matching deferred — to stay byte-identical.)
+			if c.version == Version11 && variety == TypeVarietyAtomic && builtinBaseLocal(td) == lexicon.TypeNotation {
+				qn, qerr := resolveLexicalQName(normalizeWhiteSpace(ev, resolveWhiteSpace(td)), enumNS)
+				if qerr != nil {
+					continue
+				}
+				if _, ok := c.notations[qn]; !ok {
+					msg := fmt.Sprintf("The enumeration value '%s' does not match a declared notation.", ev)
+					c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
+				}
 			}
 		}
 	}
@@ -565,7 +579,7 @@ func (c *compiler) checkCircularSimpleTypes(ctx context.Context) bool {
 		found = true
 		component := e.td.Name.Local
 		if component == "" || e.src.isLocal {
-			component = "local simple type"
+			component = componentLocalSimpleType
 		}
 		c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
 			"Circular definition of the simple type; a type must not be a member, item, or base type of itself."))
@@ -895,6 +909,63 @@ func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
 		}
 		c.schemaError(ctx, schemaParserError(c.filename, a.src.line, a.src.local, elemAttribute,
 			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."))
+	}
+}
+
+// isAnyAtomicTypeDef reports whether td is the built-in xs:anyAtomicType.
+func isAnyAtomicTypeDef(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == lexicon.TypeAnyAtomicType
+}
+
+// checkAnyAtomicTypeUsage (XSD 1.1) rejects a user-defined simple type that uses
+// xs:anyAtomicType as its restriction base, list item type, or union member type.
+// xs:anyAtomicType is the abstract base of every atomic type and (per the
+// resolution of W3C bug 11103) must not be named in a user derivation. It walks
+// every parsed simple type, including inline anonymous ones (typeDefSources).
+func (c *compiler) checkAnyAtomicTypeUsage(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	type entry struct {
+		td  *TypeDef
+		src typeDefSource
+	}
+	var entries []entry
+	for td, src := range c.typeDefSources {
+		if td.Name.NS == lexicon.NamespaceXSD {
+			continue
+		}
+		entries = append(entries, entry{td: td, src: src})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].src.line != entries[j].src.line {
+			return entries[i].src.line < entries[j].src.line
+		}
+		if entries[i].td.Name.Local != entries[j].td.Name.Local {
+			return entries[i].td.Name.Local < entries[j].td.Name.Local
+		}
+		return entries[i].src.ordinal < entries[j].src.ordinal
+	})
+
+	for _, e := range entries {
+		td := e.td
+		component := td.Name.Local
+		if component == "" || e.src.isLocal {
+			component = componentLocalSimpleType
+		}
+		report := func(role string) {
+			c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
+				"The "+role+" must not be the built-in 'anyAtomicType'."))
+		}
+		switch {
+		case td.Derivation == DerivationRestriction && isAnyAtomicTypeDef(td.BaseType):
+			report("base type")
+		case isAnyAtomicTypeDef(td.ItemType):
+			report("item type")
+		case slices.ContainsFunc(td.MemberTypes, isAnyAtomicTypeDef):
+			report("member type")
+		}
 	}
 }
 

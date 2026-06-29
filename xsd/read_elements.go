@@ -41,6 +41,17 @@ func (c *compiler) localAttributeNamespace(elem *helium.Element) string {
 	return ""
 }
 
+func (c *compiler) localElementNamespace(elem *helium.Element) string {
+	if c.version == Version11 && hasAttr(elem, attrTargetNamespace) {
+		return getAttr(elem, attrTargetNamespace)
+	}
+	form := getAttr(elem, attrForm)
+	if form == attrValQualified || (form == "" && c.schema.elemFormQualified) {
+		return c.schema.targetNamespace
+	}
+	return ""
+}
+
 func parseParticleOccurs(elem *helium.Element) (int, int) {
 	minOccurs := 1
 	maxOccurs := 1
@@ -423,54 +434,9 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		decl.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 	}
 
-	if opts.allowSubstitutionGroup && hasAttr(elem, attrSubstitutionGroup) {
-		sg := getAttr(elem, attrSubstitutionGroup)
-		// XSD 1.1 allows MULTIPLE substitution group heads
-		// (substitutionGroup="a b c"); the element is a member of every listed head.
-		// The value is an xs:list, so it splits on XSD whitespace only
-		// (space/tab/CR/LF via splitSpace, like memberTypes) — NOT arbitrary Unicode
-		// whitespace. XSD 1.0 permits exactly one head, resolved as a single QName
-		// (byte-identical to before).
-		if c.version != Version11 {
-			if sg != "" {
-				decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
-			}
-		} else {
-			seen := make(map[QName]struct{})
-			for _, h := range splitSpace(sg) {
-				// Each head token must be a lexically valid QName.
-				if err := validateQName(h); err != nil {
-					if c.filename != "" {
-						c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
-							elem.LocalName(), elem.LocalName(), attrSubstitutionGroup,
-							fmt.Sprintf("'%s' is not a valid QName.", h)))
-					}
-					continue
-				}
-				qn := c.resolveQName(ctx, elem, h)
-				// Dedupe duplicate heads (substitutionGroup="h h") preserving
-				// first-head order, so the member is registered (and counted in UPA)
-				// once per distinct head.
-				if _, dup := seen[qn]; dup {
-					continue
-				}
-				seen[qn] = struct{}{}
-				decl.SubstitutionGroups = append(decl.SubstitutionGroups, qn)
-			}
-			if len(decl.SubstitutionGroups) == 0 {
-				// A present substitutionGroup with no valid head (whitespace-only, or
-				// all tokens invalid) is a schema error.
-				if c.filename != "" {
-					c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
-						elem.LocalName(), elem.LocalName(), attrSubstitutionGroup,
-						fmt.Sprintf("The value '%s' is not valid. Expected is a non-empty list of QNames.", sg)))
-				}
-			} else {
-				decl.SubstitutionGroup = decl.SubstitutionGroups[0]
-				if len(decl.SubstitutionGroups) == 1 {
-					decl.SubstitutionGroups = nil
-				}
-			}
+	if opts.allowSubstitutionGroup {
+		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
+			decl.setSubstitutionGroupHeads(c.resolveSubstitutionGroupHeads(ctx, elem, sg))
 		}
 	}
 
@@ -588,11 +554,29 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	// ensures xsi:nil lexical validation and nilled-empty enforcement run for
 	// no-type declarations the same as for typed ones. Substitution-group
 	// members are left untyped so they can inherit the head's type at validation.
-	if decl.Type == nil && decl.SubstitutionGroup == (QName{}) {
+	if decl.Type == nil && len(decl.substitutionGroupHeads()) == 0 {
 		decl.Type = c.schema.types[QName{Local: typeAnyType, NS: lexicon.NamespaceXSD}]
 	}
 
 	return nil
+}
+
+func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element, raw string) []QName {
+	if c.version != Version11 {
+		return []QName{c.resolveQName(ctx, elem, raw)}
+	}
+	tokens := splitSpace(raw)
+	heads := make([]QName, 0, len(tokens))
+	seen := make(map[QName]struct{}, len(tokens))
+	for _, token := range tokens {
+		qn := c.resolveQName(ctx, elem, token)
+		if _, ok := seen[qn]; ok {
+			continue
+		}
+		seen[qn] = struct{}{}
+		heads = append(heads, qn)
+	}
+	return heads
 }
 
 func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Element, opts attrUseReadOptions) *AttrUse {
@@ -746,19 +730,18 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 
 	name := getAttr(elem, attrName)
 	if name == "" {
-		return nil, fmt.Errorf("xsd: local element missing name")
-	}
-
-	// Determine element namespace based on form and elementFormDefault.
-	elemNS := ""
-	form := getAttr(elem, attrForm)
-	if form == attrValQualified || (form == "" && c.schema.elemFormQualified) {
-		elemNS = c.schema.targetNamespace
+		if c.version != Version11 || !hasAttr(elem, attrTargetNamespace) {
+			return nil, fmt.Errorf("xsd: local element missing name")
+		}
+		// checkLocalElement has already reported the schema error. Use a valid,
+		// internal recovery name so compilation reaches the usual ErrCompilationFailed
+		// gate instead of returning a raw parser error.
+		name = fmt.Sprintf("__invalid_local_element_%d", elem.Line())
 	}
 
 	edecl, err := c.readElementDecl(ctx, elem, elementDeclReadOptions{
 		name:         name,
-		namespace:    elemNS,
+		namespace:    c.localElementNamespace(elem),
 		minOccurs:    minOcc,
 		maxOccurs:    maxOcc,
 		defaultBlock: c.schema.blockDefault,

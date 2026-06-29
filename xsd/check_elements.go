@@ -344,9 +344,12 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 
 		// Report first ref-restricted attribute found (alphabetical order).
 		notAllowedWithRef := []string{attrAbstract, attrBlock, attrDefault, attrFinal, attrFixed, attrForm, attrNillable, attrSubstitutionGroup, attrType}
+		if c.version == Version11 {
+			notAllowedWithRef = []string{attrAbstract, attrBlock, attrDefault, attrFinal, attrFixed, attrForm, attrNillable, attrSubstitutionGroup, attrTargetNamespace, attrType}
+		}
 		for _, attr := range notAllowedWithRef {
 			if hasAttr(elem, attr) {
-				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", attr,
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "element", attr,
 					"Only the attributes 'minOccurs', 'maxOccurs' and 'id' are allowed in addition to 'ref'."))
 				break // only report first
 			}
@@ -424,6 +427,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 					"The attribute '"+attr+"' is not allowed."))
 			}
 		}
+		c.checkLocalElementTargetNamespace(ctx, elem)
 
 		// Validate 'block' attribute value.
 		if v := getAttr(elem, attrBlock); v != "" && !isValidBlock(v) {
@@ -459,7 +463,55 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 				}
 			}
 		}
+	} else if c.version == Version11 && hasAttr(elem, attrTargetNamespace) {
+		c.checkLocalElementTargetNamespace(ctx, elem)
 	}
+}
+
+func (c *compiler) checkLocalElementTargetNamespace(ctx context.Context, elem *helium.Element) {
+	if c.version != Version11 || !hasAttr(elem, attrTargetNamespace) {
+		return
+	}
+
+	line := elem.Line()
+	local := elem.LocalName()
+	if getAttr(elem, attrName) == "" {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "element",
+			"The attribute 'targetNamespace' requires a local element declaration with a 'name'."))
+		return
+	}
+	if hasAttr(elem, attrForm) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "element",
+			"The attributes 'targetNamespace' and 'form' are mutually exclusive."))
+	}
+	targetNS := getAttr(elem, attrTargetNamespace)
+	sameSchemaTargetNS := c.schemaTargetNSSet && targetNS == c.schema.targetNamespace
+	if !sameSchemaTargetNS && !c.localElementUnderNonAnyTypeRestriction(ctx, elem) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "element",
+			"A local element declaration with 'targetNamespace' different from the schema target namespace, or with no schema target namespace, must appear in a restriction of a type other than xs:anyType."))
+	}
+}
+
+func (c *compiler) localElementUnderNonAnyTypeRestriction(ctx context.Context, elem *helium.Element) bool {
+	for parent := elem.Parent(); parent != nil; parent = parent.Parent() {
+		pe, ok := helium.AsNode[*helium.Element](parent)
+		if !ok {
+			continue
+		}
+		if isXSDElement(pe, elemComplexType) {
+			return false
+		}
+		if !isXSDElement(pe, elemRestriction) || !isContentDerivationRestriction(pe) {
+			continue
+		}
+		base := getAttr(pe, attrBase)
+		if base == "" {
+			return false
+		}
+		qn := c.resolveQName(ctx, pe, base)
+		return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
+	}
+	return false
 }
 
 // checkAttributeUse validates constraints on an xs:attribute declaration.

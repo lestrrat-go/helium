@@ -762,23 +762,54 @@ func effectiveDeclType(decl *ElementDecl, schema *Schema) *TypeDef {
 	if schema == nil {
 		return nil
 	}
-	seen := map[QName]struct{}{decl.Name: {}}
-	head := decl.SubstitutionGroup
-	for head != (QName{}) {
-		if _, ok := seen[head]; ok {
-			return nil
-		}
-		seen[head] = struct{}{}
-		headDecl, ok := schema.LookupElement(head.Local, head.NS)
-		if !ok {
-			return nil
-		}
-		if headDecl.Type != nil {
-			return headDecl.Type
-		}
-		head = headDecl.SubstitutionGroup
+	return inheritedTypeFromFirstSubstitutionHead(decl, func(qn QName) (*ElementDecl, bool) {
+		return schema.LookupElement(qn.Local, qn.NS)
+	})
+}
+
+func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl {
+	if edecl == nil || schema == nil || edecl.Block&BlockSubstitution != 0 {
+		return nil
 	}
-	return nil
+	type queuedMember struct {
+		member *ElementDecl
+		head   *ElementDecl
+	}
+	headType := effectiveDeclType(edecl, schema)
+	queue := make([]queuedMember, 0, len(schema.substGroups[edecl.Name]))
+	for _, member := range schema.substGroups[edecl.Name] {
+		queue = append(queue, queuedMember{member: member, head: edecl})
+	}
+	seen := map[QName]struct{}{edecl.Name: {}}
+	members := make([]*ElementDecl, 0, len(queue))
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+		member := item.member
+		if member == nil {
+			continue
+		}
+		if _, ok := seen[member.Name]; ok {
+			continue
+		}
+		memberType := effectiveDeclType(member, schema)
+		curHeadType := effectiveDeclType(item.head, schema)
+		if isDerivationBlocked(memberType, curHeadType, item.head.Block) {
+			continue
+		}
+		if isDerivationBlocked(memberType, headType, edecl.Block) {
+			continue
+		}
+		seen[member.Name] = struct{}{}
+		members = append(members, member)
+		if member.Block&BlockSubstitution != 0 {
+			continue
+		}
+		for _, child := range schema.substGroups[member.Name] {
+			queue = append(queue, queuedMember{member: child, head: member})
+		}
+	}
+	return members
 }
 
 // tryMatchParticle is like matchParticle but does not write errors.
@@ -1324,119 +1355,23 @@ func wildcardExpected(wc *Wildcard) string {
 	}
 }
 
-// substitutionMemberTypeOK reports the STRUCTURAL substitutability of member for
-// head IGNORING abstractness: the head must permit substitution (no
-// block="substitution"), the member's derivation method must not be blocked by
-// the head (isDerivationBlocked over EFFECTIVE types), and the member's EFFECTIVE
-// type must be validly substitutable for the head's (builtin-aware). It is the
-// TRAVERSAL predicate: an abstract member is structurally substitutable and may
-// be traversed THROUGH to reach its concrete descendants, even though the
-// abstract member itself is not instance-admissible.
-func substitutionMemberTypeOK(member, head *ElementDecl, schema *Schema) bool {
-	if head.Block&BlockSubstitution != 0 {
-		return false
-	}
-	memberType := effectiveDeclType(member, schema)
-	headType := effectiveDeclType(head, schema)
-	if isDerivationBlocked(memberType, headType, head.Block) {
-		return false
-	}
-	if memberType != nil && headType != nil && !isXsiTypeDerivedFromDeclared(memberType, headType) {
-		return false
-	}
-	return true
-}
-
-// transitiveSubstClosure walks the TRANSITIVE substitution-group closure of head
-// (BFS, cycle-guarded). traverse(m, immediateHead, head) decides REACHABILITY: an
-// edge is followed only when it holds (and then m's children are enqueued unless m
-// itself blocks substitution). include(m, immediateHead, head) decides whether a
-// REACHED member appears in the result. Separating the two is essential — for the
-// instance-admissible closure an ABSTRACT member is traversable (so its concrete
-// descendants in a `h <- abstract m1 <- concrete m2` chain are reached) but is NOT
-// itself included. block="substitution"/derivation-block still PRUNE the subtree
-// (they fail traverse). A direct `substGroups[head]` lookup misses such chains.
-func transitiveSubstClosure(head *ElementDecl, schema *Schema, traverse, include func(member, immediateHead, origHead *ElementDecl) bool) []*ElementDecl {
-	if head == nil || schema == nil {
-		return nil
-	}
-	type queued struct{ member, head *ElementDecl }
-	queue := make([]queued, 0, len(schema.substGroups[head.Name]))
-	for _, m := range schema.substGroups[head.Name] {
-		queue = append(queue, queued{member: m, head: head})
-	}
-	seen := map[QName]struct{}{head.Name: {}}
-	var members []*ElementDecl
-	for len(queue) > 0 {
-		item := queue[0]
-		queue = queue[1:]
-		m := item.member
-		if m == nil {
-			continue
-		}
-		if _, ok := seen[m.Name]; ok {
-			continue
-		}
-		// Reachability gate: an unblocked, type-valid edge (abstract allowed).
-		if !traverse(m, item.head, head) {
-			continue
-		}
-		seen[m.Name] = struct{}{}
-		if include(m, item.head, head) {
-			members = append(members, m)
-		}
-		// A member that itself blocks substitution stops descent through it.
-		if m.Block&BlockSubstitution != 0 {
-			continue
-		}
-		for _, child := range schema.substGroups[m.Name] {
-			queue = append(queue, queued{member: child, head: m})
-		}
-	}
-	return members
-}
-
-// substitutableMembersFor returns the DECLARATION-membership substitution-group
-// closure of a head: transitive, block/derivation-block-filtered (against both
-// the immediate and the original head), but ABSTRACT MEMBERS INCLUDED. This is
-// the set used for COMPETITION questions — UPA (cos-nonambig) and the XSD 1.0
-// matcher — where membership is by declaration so an abstract member still
-// counts (W3C wgData/sg/upa.xsd). Restored from the pre-feature behavior.
-func substitutableMembersFor(head *ElementDecl, schema *Schema) []*ElementDecl {
-	if head == nil || schema == nil || head.Block&BlockSubstitution != 0 {
-		return nil
-	}
-	headType := effectiveDeclType(head, schema)
-	// traverse == include: declaration membership (abstract included).
-	ok := func(m, immH, _ *ElementDecl) bool {
-		mt := effectiveDeclType(m, schema)
-		return !isDerivationBlocked(mt, effectiveDeclType(immH, schema), immH.Block) &&
-			!isDerivationBlocked(mt, headType, head.Block)
-	}
-	return transitiveSubstClosure(head, schema, ok, ok)
-}
-
 // instanceSubstMembers returns the INSTANCE-ADMISSIBLE substitution-group closure
-// of a head: transitive, used by runtime matching (elemMatchesDeclOrSubst) and
-// restriction subsumption (findBaseAllMember). TRAVERSAL follows any structurally
-// substitutable edge (substitutionMemberTypeOK against both the immediate and the
-// original head) INCLUDING through abstract members, so concrete descendants
-// behind an abstract intermediate (h <- abstract m1 <- concrete m2) are reached;
-// INCLUSION additionally requires the member be CONCRETE (abstract members can
-// never appear in an instance). block="substitution"/derivation-block prune.
+// of a head: the transitive declaration-membership closure (substitutableMembersFor,
+// which is already block/derivation-filtered and traverses THROUGH abstract
+// intermediates) with ABSTRACT members removed. An abstract element can never
+// appear in an instance, but a concrete descendant behind an abstract intermediate
+// (h <- abstract m1 <- concrete m2) is still reached. Used by runtime matching
+// (elemMatchesDeclOrSubst) and restriction subsumption (findBaseAllMember). It
+// builds ON TOP of #877's substitutableMembersFor rather than re-walking substGroups.
 func instanceSubstMembers(head *ElementDecl, schema *Schema) []*ElementDecl {
-	if head == nil || schema == nil || head.Block&BlockSubstitution != 0 {
-		return nil
+	all := substitutableMembersFor(head, schema)
+	concrete := all[:0] // substitutableMembersFor returns a fresh slice; reuse it
+	for _, m := range all {
+		if !m.Abstract {
+			concrete = append(concrete, m)
+		}
 	}
-	traverse := func(m, immH, orig *ElementDecl) bool {
-		return substitutionMemberTypeOK(m, immH, schema) && substitutionMemberTypeOK(m, orig, schema)
-	}
-	include := func(m, _, _ *ElementDecl) bool {
-		// traverse already proved structural substitutability for both heads; an
-		// instance-admissible member must additionally be concrete.
-		return !m.Abstract
-	}
-	return transitiveSubstClosure(head, schema, traverse, include)
+	return concrete
 }
 
 // elemMatchesDeclOrSubst checks if a child element matches a declaration
@@ -1445,7 +1380,8 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 	if matchesDeclDirect(child, edecl) && !edecl.Abstract {
 		return true
 	}
-	// Check the TRANSITIVE instance-admissible substitution-group closure.
+	// Check the TRANSITIVE instance-admissible substitution-group closure
+	// (abstract members excluded — they can never appear in an instance).
 	if schema != nil {
 		for _, member := range instanceSubstMembers(edecl, schema) {
 			if matchesDeclDirect(child, member) {
@@ -1519,7 +1455,7 @@ func elementDisplayForExpected(edecl *ElementDecl) string {
 // for a declaration, including substitution group members.
 // The head element is always listed first (even if abstract), followed by members.
 func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string {
-	members := schema.substGroups[edecl.Name]
+	members := substitutableMembersFor(edecl, schema)
 	if len(members) == 0 {
 		return []string{elementDisplayForExpected(edecl)}
 	}
