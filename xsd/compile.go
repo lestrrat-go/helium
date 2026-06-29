@@ -140,6 +140,12 @@ type compiler struct {
 	// source info for every attribute use, used by post-resolve declaration
 	// checks (e.g. an un-enumerated xs:NOTATION typed attribute).
 	attrUseSources map[*AttrUse]attrConstraintSource
+	// source info for element declarations carrying a default/fixed value, used to
+	// validate the constraint value against the element's simple (content) type
+	// once type references are resolved. Populated only for an EXPLICIT default/
+	// fixed on the declaration itself; a ref="" element inheriting the global's
+	// value is checked via the global declaration's own entry. XSD 1.1 only.
+	elemDeclConstraintSources map[*ElementDecl]attrConstraintSource
 	// error handler for reporting schema errors/warnings
 	errorHandler helium.ErrorHandler
 	errorCount   int    // count of fatal errors reported
@@ -556,36 +562,37 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
-		baseDir:                  baseDir,
-		fsys:                     fsys,
-		parser:                   parser,
-		typeRefs:                 make(map[*TypeDef]QName),
-		elemRefs:                 make(map[*ElementDecl]QName),
-		elemRefSources:           make(map[*ElementDecl]elemRefSource),
-		groupRefs:                make(map[*ModelGroup]QName),
-		groupRefSources:          make(map[*ModelGroup]groupRefSource),
-		groupSources:             make(map[QName]groupSource),
-		attrGroupSources:         make(map[QName]attrGroupSource),
-		attrGroupWildcards:       make(map[QName]*Wildcard),
-		attrGroupRefs:            make(map[*TypeDef][]QName),
-		attrGroupRefUseSources:   make(map[*TypeDef][]attrGroupRefUseSource),
-		defaultAttrUses:          make(map[*TypeDef]map[QName]*AttrUse),
-		attrGroupRefChildren:     make(map[QName][]QName),
-		attrGroupRefSources:      make(map[QName][]attrGroupSource),
-		globalElemSources:        make(map[*ElementDecl]elemRefSource),
-		typeDefSources:           make(map[*TypeDef]typeDefSource),
-		typeKinds:                make(map[QName]redefineKind),
-		itemTypeRefs:             make(map[*TypeDef]QName),
-		chameleonEligible:        make(map[any]struct{}),
-		attrRefs:                 make(map[*AttrUse]QName),
-		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
-		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
-		importedNS:               make(map[string]string),
-		maxImportDepth:           defaultMaxImportDepth,
-		includeVisited:           make(map[string]struct{}),
-		maxIncludeDepth:          defaultMaxIncludeDepth,
-		loadedRedefinable:        make(map[string]*redefinableSet),
-		notations:                make(map[QName]struct{}),
+		baseDir:                   baseDir,
+		fsys:                      fsys,
+		parser:                    parser,
+		typeRefs:                  make(map[*TypeDef]QName),
+		elemRefs:                  make(map[*ElementDecl]QName),
+		elemRefSources:            make(map[*ElementDecl]elemRefSource),
+		groupRefs:                 make(map[*ModelGroup]QName),
+		groupRefSources:           make(map[*ModelGroup]groupRefSource),
+		groupSources:              make(map[QName]groupSource),
+		attrGroupSources:          make(map[QName]attrGroupSource),
+		attrGroupWildcards:        make(map[QName]*Wildcard),
+		attrGroupRefs:             make(map[*TypeDef][]QName),
+		attrGroupRefUseSources:    make(map[*TypeDef][]attrGroupRefUseSource),
+		defaultAttrUses:           make(map[*TypeDef]map[QName]*AttrUse),
+		attrGroupRefChildren:      make(map[QName][]QName),
+		attrGroupRefSources:       make(map[QName][]attrGroupSource),
+		globalElemSources:         make(map[*ElementDecl]elemRefSource),
+		typeDefSources:            make(map[*TypeDef]typeDefSource),
+		typeKinds:                 make(map[QName]redefineKind),
+		itemTypeRefs:              make(map[*TypeDef]QName),
+		chameleonEligible:         make(map[any]struct{}),
+		attrRefs:                  make(map[*AttrUse]QName),
+		attrUseConstraintSources:  make(map[*AttrUse]attrConstraintSource),
+		attrUseSources:            make(map[*AttrUse]attrConstraintSource),
+		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
+		importedNS:                make(map[string]string),
+		maxImportDepth:            defaultMaxImportDepth,
+		includeVisited:            make(map[string]struct{}),
+		maxIncludeDepth:           defaultMaxIncludeDepth,
+		loadedRedefinable:         make(map[string]*redefinableSet),
+		notations:                 make(map[QName]struct{}),
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {

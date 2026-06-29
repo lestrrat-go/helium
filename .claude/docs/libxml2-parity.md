@@ -67,15 +67,12 @@ Test data: `testdata/libxml2-compat/` (golden files generated from libxml2's xml
 
 The heavyweight XSD 1.1 conformance harness lives in the sibling module
 `../helium-w3c-tests` on branch `migrate-xsd11`; run it against this module with
-a local `go.work` pointing at the Helium worktree. Current `TestXSD11W3C` leaf
-count at `helium-w3c-tests` `migrate-xsd11` commit `6651985`: 967 generated
-test groups, 549 pass, 418 skipped, verified against Helium commit `fc141e44`
-with `GOWORK=$PWD/.tmp/go.work.docs-6651985 go run ./cmd/w3ctest -out
-.tmp/xsd11-junit-review-875-fc141e44.xml xsd11` (JUnit: `tests="967"`
-`failures="0"` `skipped="418"`). The Go JSON stream also counts the top-level
-`TestXSD11W3C`, so its harness summary appears as 968 run / 550 pass / 418
-skip. Persistent skips are tracked in
-`helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance gaps.
+a local `go.work` pointing at the Helium worktree. Treat checked-in counts as
+current-state only: regenerate them from the current `migrate-xsd11` branch and
+the Helium branch under test. Do not preserve old branch/SHA counts in this
+section unless the heading explicitly marks them as historical. Persistent skips
+are tracked in `helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance
+gaps.
 
 ## Parser Limitations
 

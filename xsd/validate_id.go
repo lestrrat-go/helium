@@ -33,8 +33,13 @@ type idCollector struct {
 
 // idOwner returns the element an ID value identifies. For an element-content ID
 // (elementContent true) that is the element's PARENT (the element bearing the ID
-// child); for an attribute ID it is the bearing element itself. A typed element
-// with no element parent owns its own ID.
+// child); for an attribute ID it is the bearing element itself.
+//
+// An element-content ID on the DOCUMENT ROOT has no parent element, so it denotes
+// NO element (XSD §3.3.4: an element-content ID identifies its parent). idOwner
+// returns nil in that case and recordID skips it, so the value is never entered
+// into the ID/IDREF table and any xs:IDREF to it dangles (W3C idIDREF
+// s3_3_4ii26/ii27 — "ID on root does not denote any element").
 func idOwner(elem *helium.Element, elementContent bool) helium.Node {
 	if !elementContent {
 		return elem
@@ -42,7 +47,7 @@ func idOwner(elem *helium.Element, elementContent bool) helium.Node {
 	if parent, ok := elem.Parent().(*helium.Element); ok {
 		return parent
 	}
-	return elem
+	return nil
 }
 
 // validateIDIDREF performs document-wide xs:ID / xs:IDREF / xs:IDREFS validation
@@ -207,6 +212,12 @@ func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idColl
 // already bound to a DIFFERENT owning element.
 func (vc *validationContext) recordID(ctx context.Context, col *idCollector, tok string, owner helium.Node, elem *helium.Element, attr string) {
 	if tok == "" {
+		return
+	}
+	// A nil owner means the ID denotes no element (an element-content ID on the
+	// document root). Such an ID is not entered into the table, so any IDREF to it
+	// dangles. Skip it without recording.
+	if owner == nil {
 		return
 	}
 	prev, seen := col.ids[tok]
