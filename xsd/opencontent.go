@@ -252,7 +252,7 @@ func (vc *validationContext) validateOpenChildren(ctx context.Context, parent *h
 		return nil
 	}
 	p := &Particle{MinOccurs: 0, MaxOccurs: Unbounded, Term: wc}
-	consumed, err := vc.matchWildcardParticle(ctx, parent, p, wc, open, 0)
+	consumed, err := vc.matchWildcardParticle(ctx, parent, p, wc, open, 0, nil)
 	if err != nil {
 		return err
 	}

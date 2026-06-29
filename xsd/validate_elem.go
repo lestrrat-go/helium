@@ -23,7 +23,7 @@ import (
 // wildcard preceding an element can still greedily consume a child the element
 // declaration should validate. Fixing it safely requires lookahead/backtracking
 // across particles; left as a remaining limitation.
-func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
+func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
 	startPos := pos
 
 	tryOnce := func(p int) (int, error) {
@@ -36,7 +36,7 @@ func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.E
 		cur := p
 		var contentErr error
 		for _, particle := range mg.Particles {
-			consumed, e := vc.matchParticle(ctx, parent, particle, children, cur, hasWildcard)
+			consumed, e := vc.matchParticle(ctx, parent, particle, children, cur, hasWildcard, edcScope)
 			cur += consumed
 			if e != nil {
 				if consumed == 0 {
@@ -99,7 +99,7 @@ func (vc *validationContext) tryMatchSequenceOnce(ctx context.Context, mg *Model
 
 // matchChoice matches children[pos:] against a choice model group.
 // Returns (consumed, error). Does NOT check for leftover children.
-func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
+func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
 	startPos := pos
 
 	minReps := mg.MinOccurs
@@ -113,7 +113,7 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 			return 0, false
 		}
 		// Now validate matched content with error reporting.
-		actualConsumed, actualErr := vc.matchParticle(ctx, parent, particle, children, p, false)
+		actualConsumed, actualErr := vc.matchParticle(ctx, parent, particle, children, p, false, edcScope)
 		if actualErr != nil {
 			contentErr = actualErr
 		}
@@ -153,7 +153,7 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 				// No element-first branch matched fully. Surface the first
 				// element-first branch's real failure (with error reporting)
 				// instead of falling back to a wildcard branch.
-				consumed, err := vc.matchParticle(ctx, parent, elemFirst, children, p, false)
+				consumed, err := vc.matchParticle(ctx, parent, elemFirst, children, p, false, edcScope)
 				if err != nil {
 					contentErr = err
 				}
@@ -220,7 +220,7 @@ func (vc *validationContext) matchChoice(ctx context.Context, parent *helium.Ele
 
 // matchAll matches children[pos:] against an all model group.
 // Returns (consumed, error). Does NOT check for leftover children.
-func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
+func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	// XSD 1.1 ONLY: an xs:all may contain element wildcards (and its particles may
@@ -277,7 +277,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		}
 		if widx, matched := tryWildcard(child); matched {
 			wc, _ := mg.Particles[widx].Term.(*Wildcard)
-			if err := vc.validateWildcardChild(ctx, wc, child); err != nil {
+			if err := vc.validateWildcardChild(ctx, wc, child, edcScope); err != nil {
 				return consumed, err
 			}
 			wcCount[widx]++
@@ -427,34 +427,38 @@ func (vc *validationContext) validateContentModelTop(ctx context.Context, parent
 // children — callers that require full consumption do so themselves). Used by
 // validateContentModelTop and by the XSD 1.1 open-content suffix path.
 func (vc *validationContext) matchContentModel(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) (int, error) {
+	return vc.matchContentModelScoped(ctx, parent, mg, children, mg)
+}
+
+func (vc *validationContext) matchContentModelScoped(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, edcScope *ModelGroup) (int, error) {
 	switch mg.Compositor {
 	case CompositorSequence:
-		return vc.matchSequence(ctx, parent, mg, children, 0)
+		return vc.matchSequence(ctx, parent, mg, children, 0, edcScope)
 	case CompositorChoice:
-		return vc.matchChoice(ctx, parent, mg, children, 0)
+		return vc.matchChoice(ctx, parent, mg, children, 0, edcScope)
 	case CompositorAll:
-		return vc.matchAll(ctx, parent, mg, children, 0)
+		return vc.matchAll(ctx, parent, mg, children, 0, edcScope)
 	}
 	return 0, nil
 }
 
 // matchParticle matches a particle against children[pos:], returning how many
 // children were consumed. On failure, writes an error and returns an error.
-func (vc *validationContext) matchParticle(ctx context.Context, parent *helium.Element, p *Particle, children []childElem, pos int, seqHasWildcard bool) (int, error) {
+func (vc *validationContext) matchParticle(ctx context.Context, parent *helium.Element, p *Particle, children []childElem, pos int, seqHasWildcard bool, edcScope *ModelGroup) (int, error) {
 	switch term := p.Term.(type) {
 	case *ElementDecl:
 		return vc.matchElementParticle(ctx, parent, p, term, children, pos, seqHasWildcard)
 	case *ModelGroup:
 		switch term.Compositor {
 		case CompositorSequence:
-			return vc.matchSequence(ctx, parent, term, children, pos)
+			return vc.matchSequence(ctx, parent, term, children, pos, edcScope)
 		case CompositorChoice:
-			return vc.matchChoice(ctx, parent, term, children, pos)
+			return vc.matchChoice(ctx, parent, term, children, pos, edcScope)
 		case CompositorAll:
-			return vc.matchAll(ctx, parent, term, children, pos)
+			return vc.matchAll(ctx, parent, term, children, pos, edcScope)
 		}
 	case *Wildcard:
-		return vc.matchWildcardParticle(ctx, parent, p, term, children, pos)
+		return vc.matchWildcardParticle(ctx, parent, p, term, children, pos, edcScope)
 	}
 	return 0, nil
 }
@@ -805,7 +809,7 @@ func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, chil
 }
 
 // matchWildcardParticle matches a wildcard particle against children.
-func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *helium.Element, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) {
+func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *helium.Element, p *Particle, wc *Wildcard, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
@@ -845,7 +849,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 	// validateWildcardChild (shared with the idc lax-assessment path).
 	var contentErr error
 	for i := range count {
-		if err := vc.validateWildcardChild(ctx, wc, children[pos+i]); err != nil {
+		if err := vc.validateWildcardChild(ctx, wc, children[pos+i], edcScope); err != nil {
 			contentErr = err
 		}
 	}
@@ -862,7 +866,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 // resolvable xsi:type; strict = a global declaration is required). It mirrors the
 // per-child logic the run-based matchWildcardParticle applies, factored out so the
 // xs:all matcher can reuse it.
-func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wildcard, child childElem) error {
+func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wildcard, child childElem, edcScope *ModelGroup) error {
 	if wc.ProcessContents == ProcessSkip {
 		vc.annotateSkipChildren(ctx, child.elem)
 		return nil
@@ -891,6 +895,11 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		// walked to record descendants' ACTUAL types for pass-2 IDC
 		// canonicalization. assessLaxElement handles both cases and never lets
 		// xsi:nil bypass type validation.
+		if actual, ok := vc.resolveXsiTypeQuiet(child.elem); ok {
+			if err := vc.validateWildcardElementConsistent(ctx, edcScope, child, actual); err != nil {
+				return err
+			}
+		}
 		return vc.assessLaxElement(ctx, child.elem)
 	}
 	declType := effectiveDeclType(edecl, vc.schema)
@@ -910,6 +919,9 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
 		return fmt.Errorf("abstract type")
 	}
+	if err := vc.validateWildcardElementConsistent(ctx, edcScope, child, td); err != nil {
+		return err
+	}
 	vc.annotateElement(ctx, child.elem, td, true)
 	if td == nil {
 		return nil
@@ -922,6 +934,53 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		return vc.validateNilledElement(ctx, child.elem, edecl, td)
 	}
 	return vc.validateElementContent(ctx, child.elem, edecl, td)
+}
+
+func (vc *validationContext) validateWildcardElementConsistent(ctx context.Context, mg *ModelGroup, child childElem, governing *TypeDef) error {
+	if vc.version != Version11 || mg == nil || governing == nil {
+		return nil
+	}
+	qn := QName{Local: child.name, NS: child.ns}
+	for _, decl := range localElementDeclsByName(mg, qn) {
+		localType := effectiveDeclType(decl, vc.schema)
+		if localType == nil || isValidlySubstitutable(governing, localType) {
+			continue
+		}
+		msg := fmt.Sprintf("The wildcard-matched element's governing type definition is not validly substitutable for the locally declared type definition of element '%s'.", child.displayName)
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+		return fmt.Errorf("wildcard element declaration inconsistent")
+	}
+	return nil
+}
+
+func localElementDeclsByName(mg *ModelGroup, qn QName) []*ElementDecl {
+	var decls []*ElementDecl
+	visited := make(map[*ModelGroup]struct{})
+	var walk func(*ModelGroup)
+	walk = func(g *ModelGroup) {
+		if g == nil || g.MaxOccurs == 0 {
+			return
+		}
+		if _, ok := visited[g]; ok {
+			return
+		}
+		visited[g] = struct{}{}
+		for _, p := range g.Particles {
+			if p.MaxOccurs == 0 {
+				continue
+			}
+			switch term := p.Term.(type) {
+			case *ElementDecl:
+				if !term.IsRef && term.Name == qn {
+					decls = append(decls, term)
+				}
+			case *ModelGroup:
+				walk(term)
+			}
+		}
+	}
+	walk(mg)
+	return decls
 }
 
 // tryMatchWildcardParticle is the try version (no error reporting).
