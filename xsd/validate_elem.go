@@ -1198,11 +1198,11 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 }
 
 func (vc *validationContext) validateWildcardElementConsistent(ctx context.Context, mg *ModelGroup, child childElem, governing *TypeDef) error {
-	if vc.version != Version11 || mg == nil || governing == nil {
+	if vc.version != Version11 || governing == nil {
 		return nil
 	}
 	qn := QName{Local: child.name, NS: child.ns}
-	for _, decl := range localElementDeclsByName(mg, qn) {
+	for _, decl := range vc.edcLocalDecls(mg, qn) {
 		localType := effectiveDeclType(decl, vc.schema)
 		if localType == nil || isValidlySubstitutable(governing, localType) {
 			continue
@@ -1212,6 +1212,32 @@ func (vc *validationContext) validateWildcardElementConsistent(ctx context.Conte
 		return fmt.Errorf("wildcard element declaration inconsistent")
 	}
 	return nil
+}
+
+// edcLocalDecls gathers the same-named local element declarations that the
+// dynamic EDC check must compare the wildcard's governing type against: those in
+// the current content model (mg) AND those declared in the BASE type chain of the
+// type whose content is being matched (vc.edcType). A restriction may drop a
+// base's local element declaration while admitting it through a wildcard; the
+// base declaration's type still constrains the element, so the wildcard's
+// governing type must remain substitutable for it.
+func (vc *validationContext) edcLocalDecls(mg *ModelGroup, qn QName) []*ElementDecl {
+	decls := localElementDeclsByName(mg, qn)
+	if vc.edcType == nil {
+		return decls
+	}
+	seen := make(map[*TypeDef]struct{})
+	for base := vc.edcType.BaseType; base != nil; base = base.BaseType {
+		if _, ok := seen[base]; ok {
+			break
+		}
+		seen[base] = struct{}{}
+		if base.ContentModel == nil || base.ContentModel == mg {
+			continue
+		}
+		decls = append(decls, localElementDeclsByName(base.ContentModel, qn)...)
+	}
+	return decls
 }
 
 func localElementDeclsByName(mg *ModelGroup, qn QName) []*ElementDecl {
