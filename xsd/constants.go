@@ -37,6 +37,7 @@ const (
 	elemKeyRef         = "keyref"
 	elemList           = "list"
 	elemNotation       = "notation"
+	elemOverride       = "override" // XSD 1.1: xs:override (override schema document)
 	elemRedefine       = "redefine"
 	elemRestriction    = "restriction"
 	elemSchema         = "schema"

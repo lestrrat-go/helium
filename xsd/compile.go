@@ -173,6 +173,29 @@ type compiler struct {
 	// (xs:alternative children), so the alternative-type substitutability check
 	// (cta-cvc / Type Alternative valid) can run after all types resolve.
 	ctaElems []*ElementDecl
+	// rootKey is the resolved fs key of the TOP-LEVEL schema document of this
+	// compiler (the CompileFile root, or an import sub-compiler's own document). It
+	// lets the xs:override cascade terminate a back-edge that points at the
+	// overriding root WITHOUT re-loading/re-registering the root's components, and
+	// distinguishes the seeded-root entry in includeVisited from a genuine plain
+	// xs:include of a document (see override.go).
+	rootKey string
+	// overrideVisited records the (path + active-override-set fingerprint) keys of
+	// schema documents pulled in by the xs:override TRANSFORMATION (override.go),
+	// tracked SEPARATELY from includeVisited (plain xs:include/xs:redefine). Keying
+	// by path AND active set (not path alone) is required: the SAME document reached
+	// with a DIFFERENT active override set is a DISTINCT transformed document and
+	// must be loaded again (letting duplicate-component checks fire on a real
+	// collision); only a true diamond/cycle reached with the SAME active set
+	// terminates here.
+	overrideVisited map[string]struct{}
+	// overridePaths records every resolved fs path ever pulled in by an
+	// xs:override transformation (regardless of active set). It is the path-level
+	// companion to overrideVisited used for the include+override CONFLICT check: a
+	// document pulled in by BOTH a plain xs:include/xs:redefine AND an xs:override
+	// is a fatal conflict (distinct constituents with colliding components), not a
+	// silent no-op.
+	overridePaths map[string]struct{}
 	// notations records the QNames of every <xs:notation> declared in the schema
 	// (and its included/imported documents). Used to verify that an xs:NOTATION
 	// restriction's enumeration values name declared notations.
@@ -526,6 +549,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// re-parsing it and emitting spurious duplicate-component errors.
 		if cfg.rootKey != "" {
 			c.includeVisited[cfg.rootKey] = struct{}{}
+			c.rootKey = cfg.rootKey
 		}
 		c.filename = cfg.label
 		if c.filename == "" {
