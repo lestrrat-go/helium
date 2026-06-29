@@ -26,9 +26,15 @@ type compiler struct {
 	// not set its own. Empty means no default (unprefixed element = no-namespace).
 	// It is re-set per document for xs:include/xs:redefine/xs:import.
 	schemaXPathDefaultNS string
-	baseDir              string         // directory of the schema file, for resolving relative paths
-	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
-	parser               *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
+	// schemaTargetNSSet tracks whether the current schema document's xs:schema
+	// element explicitly has @targetNamespace. This is distinct from
+	// schema.targetNamespace for chameleon includes, where the effective component
+	// namespace is inherited from the including schema but the included document's
+	// ancestor xs:schema still has no targetNamespace attribute.
+	schemaTargetNSSet bool
+	baseDir           string         // directory of the schema file, for resolving relative paths
+	fsys              fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser            *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -543,6 +549,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.schema.version = c.version
 
 	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
+	c.schemaTargetNSSet = hasAttr(root, attrTargetNamespace)
 	if hasAttr(root, attrXPathDefaultNamespace) {
 		c.xpathDefaultNSSet = true
 	}
