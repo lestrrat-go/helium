@@ -30,16 +30,36 @@ type StaticReferences struct {
 // intended for schema-compile-time analysis, not the evaluation hot path.
 func (e *Expression) StaticReferences() StaticReferences {
 	ast := e.astExpr()
-	c := &staticRefCollector{bound: map[string]struct{}{}}
+	c := &staticRefCollector{bound: map[string]int{}}
 	c.walk(ast)
 	return StaticReferences{FreeVariables: c.freeVars, TypeNames: c.typeNames}
 }
 
 type staticRefCollector struct {
-	bound     map[string]struct{}
+	// bound is a REFCOUNT of in-scope variable bindings keyed by lexical name, not a
+	// flat present/absent set: an inner for/let/quantified/inline-function binding may
+	// SHADOW an outer one of the same name, so binding increments and leaving scope
+	// decrements (deleting at zero). Restoring the prior count on exit keeps the outer
+	// binding visible to later references instead of unbinding it — a flat set with an
+	// unconditional delete would wrongly report the still-bound outer variable as free.
+	bound     map[string]int
 	freeVars  []string
 	typeNames []TypeNameRef
 	seenFree  map[string]struct{}
+}
+
+// bindVar enters a variable binding for the duration of an enclosed scope.
+func (c *staticRefCollector) bindVar(key string) {
+	c.bound[key]++
+}
+
+// unbindVar leaves a variable binding, restoring any shadowed outer binding.
+func (c *staticRefCollector) unbindVar(key string) {
+	if c.bound[key] <= 1 {
+		delete(c.bound, key)
+		return
+	}
+	c.bound[key]--
 }
 
 // variableKey returns the lexical key under which a variable is tracked for
@@ -54,7 +74,7 @@ func variableKey(name string) string {
 }
 
 func (c *staticRefCollector) addFreeVar(key string) {
-	if _, ok := c.bound[key]; ok {
+	if c.bound[key] > 0 {
 		return
 	}
 	if c.seenFree == nil {
@@ -227,24 +247,21 @@ func (c *staticRefCollector) walkFLWOR(n FLWORExpr) {
 		switch cl := clause.(type) {
 		case ForClause:
 			c.walk(cl.Expr)
-			key := cl.Var
-			c.bound[key] = struct{}{}
-			added = append(added, key)
+			c.bindVar(cl.Var)
+			added = append(added, cl.Var)
 			if cl.PosVar != "" {
-				pk := cl.PosVar
-				c.bound[pk] = struct{}{}
-				added = append(added, pk)
+				c.bindVar(cl.PosVar)
+				added = append(added, cl.PosVar)
 			}
 		case LetClause:
 			c.walk(cl.Expr)
-			key := cl.Var
-			c.bound[key] = struct{}{}
-			added = append(added, key)
+			c.bindVar(cl.Var)
+			added = append(added, cl.Var)
 		}
 	}
 	c.walk(n.Return)
 	for _, k := range added {
-		delete(c.bound, k)
+		c.unbindVar(k)
 	}
 }
 
@@ -254,25 +271,34 @@ func (c *staticRefCollector) walkQuantified(n QuantifiedExpr) {
 	var added []string
 	for _, b := range n.Bindings {
 		c.walk(b.Domain)
-		key := b.Var
-		c.bound[key] = struct{}{}
-		added = append(added, key)
+		c.bindVar(b.Var)
+		added = append(added, b.Var)
 	}
 	c.walk(n.Satisfies)
 	for _, k := range added {
-		delete(c.bound, k)
+		c.unbindVar(k)
 	}
 }
 
+// walkInlineFunction collects references from an inline function LITERAL
+// (function($v as T) as R { body }): its parameter and return SEQUENCE TYPES may
+// name user-defined atomic types (which the CTA static check forbids), so they are
+// walked alongside the body, mirroring the namespace validator's traversal. The
+// parameters are bound for the duration of the body.
 func (c *staticRefCollector) walkInlineFunction(n InlineFunctionExpr) {
 	var added []string
 	for _, p := range n.Params {
-		key := p.Name
-		c.bound[key] = struct{}{}
-		added = append(added, key)
+		if p.TypeHint != nil {
+			c.walkSequenceType(*p.TypeHint)
+		}
+		c.bindVar(p.Name)
+		added = append(added, p.Name)
+	}
+	if n.ReturnType != nil {
+		c.walkSequenceType(*n.ReturnType)
 	}
 	c.walk(n.Body)
 	for _, k := range added {
-		delete(c.bound, k)
+		c.unbindVar(k)
 	}
 }

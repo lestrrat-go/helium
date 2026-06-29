@@ -91,4 +91,38 @@ func TestStaticReferences(t *testing.T) {
 		refs := compile(t, "some $p:x in (1,2) satisfies $p:x = 1").StaticReferences()
 		require.Empty(t, refs.FreeVariables)
 	})
+
+	t.Run("inner shadowing binding does not unbind outer variable", func(t *testing.T) {
+		// The trailing $x is bound by the OUTER for; the inner for shadows $x and on
+		// exit must restore (not delete) the outer binding.
+		refs := compile(t, "for $x in 1 return ((for $x in 2 return $x), $x)").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
+
+	t.Run("prefixed inner shadowing binding does not unbind outer variable", func(t *testing.T) {
+		refs := compile(t, "for $p:x in 1 return ((for $p:x in 2 return $p:x), $p:x)").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
+
+	t.Run("quantified inner shadowing binding does not unbind outer variable", func(t *testing.T) {
+		refs := compile(t, "for $x in 1 return ((some $x in 2 satisfies $x = 1), $x)").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
+
+	t.Run("inline-function param shadowing does not unbind outer variable", func(t *testing.T) {
+		refs := compile(t, "for $x in 1 return ((function($x) { $x }), $x)").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
+
+	t.Run("inline function literal param and return types reported", func(t *testing.T) {
+		refs := compile(t, "exists(function($v as t:arg) as t:ret { true() })").StaticReferences()
+		names := collectNames(refs)
+		require.Equal(t, "t", names["arg"])
+		require.Equal(t, "t", names["ret"])
+	})
+
+	t.Run("inline function literal nested type in param type reported", func(t *testing.T) {
+		refs := compile(t, "exists(function($v as array(t:deep)) as xs:boolean { true() })").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["deep"])
+	})
 }
