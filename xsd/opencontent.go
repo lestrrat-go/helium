@@ -69,7 +69,7 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 			switch term := p.Term.(type) {
 			case *ElementDecl:
 				names[term.Name] = true
-				for _, m := range schema.substGroups[term.Name] {
+				for _, m := range substitutableMembersFor(term, schema) {
 					names[m.Name] = true
 				}
 			case *ModelGroup:

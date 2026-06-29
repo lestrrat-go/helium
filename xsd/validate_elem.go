@@ -237,7 +237,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		case *ElementDecl:
 			nameToIdx[ed.Name] = i
 			// Also register substitution group members.
-			for _, member := range vc.schema.substGroups[ed.Name] {
+			for _, member := range substitutableMembersFor(ed, vc.schema) {
 				nameToIdx[member.Name] = i
 			}
 		case *Wildcard:
@@ -560,7 +560,7 @@ func resolveSubstDecl(child childElem, edecl *ElementDecl, schema *Schema) *Elem
 		return edecl
 	}
 	if schema != nil {
-		for _, member := range schema.substGroups[edecl.Name] {
+		for _, member := range substitutableMembersFor(edecl, schema) {
 			if matchesDeclDirect(child, member) {
 				return member
 			}
@@ -587,23 +587,54 @@ func effectiveDeclType(decl *ElementDecl, schema *Schema) *TypeDef {
 	if schema == nil {
 		return nil
 	}
-	seen := map[QName]struct{}{decl.Name: {}}
-	head := decl.SubstitutionGroup
-	for head != (QName{}) {
-		if _, ok := seen[head]; ok {
-			return nil
-		}
-		seen[head] = struct{}{}
-		headDecl, ok := schema.LookupElement(head.Local, head.NS)
-		if !ok {
-			return nil
-		}
-		if headDecl.Type != nil {
-			return headDecl.Type
-		}
-		head = headDecl.SubstitutionGroup
+	return inheritedTypeFromFirstSubstitutionHead(decl, func(qn QName) (*ElementDecl, bool) {
+		return schema.LookupElement(qn.Local, qn.NS)
+	})
+}
+
+func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl {
+	if edecl == nil || schema == nil || edecl.Block&BlockSubstitution != 0 {
+		return nil
 	}
-	return nil
+	type queuedMember struct {
+		member *ElementDecl
+		head   *ElementDecl
+	}
+	headType := effectiveDeclType(edecl, schema)
+	queue := make([]queuedMember, 0, len(schema.substGroups[edecl.Name]))
+	for _, member := range schema.substGroups[edecl.Name] {
+		queue = append(queue, queuedMember{member: member, head: edecl})
+	}
+	seen := map[QName]struct{}{edecl.Name: {}}
+	members := make([]*ElementDecl, 0, len(queue))
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+		member := item.member
+		if member == nil {
+			continue
+		}
+		if _, ok := seen[member.Name]; ok {
+			continue
+		}
+		memberType := effectiveDeclType(member, schema)
+		curHeadType := effectiveDeclType(item.head, schema)
+		if isDerivationBlocked(memberType, curHeadType, item.head.Block) {
+			continue
+		}
+		if isDerivationBlocked(memberType, headType, edecl.Block) {
+			continue
+		}
+		seen[member.Name] = struct{}{}
+		members = append(members, member)
+		if member.Block&BlockSubstitution != 0 {
+			continue
+		}
+		for _, child := range schema.substGroups[member.Name] {
+			queue = append(queue, queuedMember{member: child, head: member})
+		}
+	}
+	return members
 }
 
 // tryMatchParticle is like matchParticle but does not write errors.
@@ -782,7 +813,7 @@ func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, chil
 	for i, p := range mg.Particles {
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
-			for _, member := range vc.schema.substGroups[ed.Name] {
+			for _, member := range substitutableMembersFor(ed, vc.schema) {
 				nameToIdx[member.Name] = i
 			}
 		}
@@ -1113,17 +1144,8 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 	}
 	// Check substitution group members.
 	if schema != nil {
-		// If block="substitution", skip all substitution group members.
-		if edecl.Block&BlockSubstitution != 0 {
-			return false
-		}
-		for _, member := range schema.substGroups[edecl.Name] {
+		for _, member := range substitutableMembersFor(edecl, schema) {
 			if matchesDeclDirect(child, member) {
-				// Check if the derivation chain from member's type to head's type
-				// uses a blocked method.
-				if isDerivationBlocked(member.Type, edecl.Type, edecl.Block) {
-					continue
-				}
 				return true
 			}
 		}
@@ -1194,7 +1216,7 @@ func elementDisplayForExpected(edecl *ElementDecl) string {
 // for a declaration, including substitution group members.
 // The head element is always listed first (even if abstract), followed by members.
 func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string {
-	members := schema.substGroups[edecl.Name]
+	members := substitutableMembersFor(edecl, schema)
 	if len(members) == 0 {
 		return []string{elementDisplayForExpected(edecl)}
 	}

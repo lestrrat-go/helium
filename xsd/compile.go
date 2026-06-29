@@ -753,11 +753,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// error-ordering sequence unchanged.
 	if c.filename != "" {
 		for _, edecl := range c.schema.elements {
-			if edecl.SubstitutionGroup == (QName{}) {
+			if len(edecl.substitutionGroupHeads()) == 0 {
 				continue
 			}
 			c.checkCircularSubstGroup(ctx, edecl)
 		}
+	}
+
+	// Check that every member is type-substitutable for every affiliated head.
+	if c.filename != "" && c.errorCount == 0 {
+		c.checkSubstGroupAffiliations(ctx)
 	}
 
 	// Enforce final on type derivations.
@@ -855,11 +860,13 @@ func (c *compiler) readSchemaDefaultAttributes(ctx context.Context, root *helium
 // circularity, final, and element-consistency checks run later, unchanged.
 func (c *compiler) buildSubstGroups() {
 	for _, edecl := range c.schema.elements {
-		if edecl.SubstitutionGroup == (QName{}) {
+		heads := edecl.substitutionGroupHeads()
+		if len(heads) == 0 {
 			continue
 		}
-		head := edecl.SubstitutionGroup
-		c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
+		for _, head := range heads {
+			c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
+		}
 	}
 	for _, members := range c.schema.substGroups {
 		sort.Slice(members, func(i, j int) bool {

@@ -307,24 +307,17 @@ func (c *compiler) foldSubstitutionMembers(head *ElementDecl, byName map[QName][
 // here before comparing. The seen set bounds malformed cyclic substitution
 // groups (rejected elsewhere) so this never loops.
 func (c *compiler) resolveDeclaredType(decl *ElementDecl) *TypeDef {
-	seen := make(map[QName]struct{})
-	for decl != nil {
-		if decl.Type != nil {
-			return decl.Type
-		}
-		head := decl.SubstitutionGroup
-		if head == (QName{}) {
-			break
-		}
-		if _, ok := seen[head]; ok {
-			break
-		}
-		seen[head] = struct{}{}
-		next, ok := c.schema.elements[head]
-		if !ok {
-			break
-		}
-		decl = next
+	if decl == nil {
+		return c.schema.types[QName{Local: typeAnyType, NS: lexicon.NamespaceXSD}]
+	}
+	if decl.Type != nil {
+		return decl.Type
+	}
+	if td := inheritedTypeFromFirstSubstitutionHead(decl, func(qn QName) (*ElementDecl, bool) {
+		next, ok := c.schema.elements[qn]
+		return next, ok
+	}); td != nil {
+		return td
 	}
 	// No explicit type and no resolvable substitution-group head type: the
 	// declaration's {type definition} defaults to xs:anyType.

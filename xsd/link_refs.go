@@ -41,8 +41,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// nilled-empty checks would be silently skipped for a direct
 				// ref="member". The member's own Nillable (copied below) still
 				// governs the nilled-element check.
-				if edecl.SubstitutionGroup == (QName{}) {
-					edecl.SubstitutionGroup = ge.SubstitutionGroup
+				if len(edecl.substitutionGroupHeads()) == 0 {
+					edecl.setSubstitutionGroupHeads(ge.substitutionGroupHeads())
 				}
 				edecl.Nillable = ge.Nillable
 				edecl.Abstract = ge.Abstract
@@ -1610,31 +1610,44 @@ func processContentsStrength(pc ProcessContentsKind) int {
 // of the cycle (not if it just points to a cyclic element).
 func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDecl) {
 	visited := map[QName]bool{}
-	current := edecl.SubstitutionGroup
-	for current != (QName{}) {
-		if current == edecl.Name {
+	for _, current := range edecl.substitutionGroupHeads() {
+		if c.substGroupChainContains(edecl.Name, current, visited) {
 			// Cycle leads back to this element.
 			// libxml2 reports this error twice.
 			if src, ok := c.globalElemSources[edecl]; ok {
 				msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
-					edecl.Name.Local, current.Local)
+					edecl.Name.Local, edecl.Name.Local)
 				errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
 				c.schemaError(ctx, errStr)
 				c.schemaError(ctx, errStr)
 			}
 			return
 		}
-		if visited[current] {
-			// Hit a cycle that doesn't include this element.
-			return
-		}
-		visited[current] = true
-		head, ok := c.schema.elements[current]
-		if !ok {
-			return
-		}
-		current = head.SubstitutionGroup
 	}
+}
+
+func (c *compiler) substGroupChainContains(target, current QName, visited map[QName]bool) bool {
+	if current == (QName{}) {
+		return false
+	}
+	if current == target {
+		return true
+	}
+	if visited[current] {
+		// Hit a cycle that doesn't include this element.
+		return false
+	}
+	visited[current] = true
+	head, ok := c.schema.elements[current]
+	if !ok {
+		return false
+	}
+	for _, next := range head.substitutionGroupHeads() {
+		if c.substGroupChainContains(target, next, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkFinalOnTypes checks that no type derivation violates the base type's final constraint.
@@ -1691,18 +1704,40 @@ func (c *compiler) checkFinalOnSubstGroups(ctx context.Context) {
 		if head.Final == 0 {
 			continue
 		}
+		headType := c.resolveDeclaredType(head)
 		for _, member := range members {
-			if head.Final&FinalExtension != 0 && derivationUsesMethod(member.Type, head.Type, DerivationExtension) {
+			memberType := c.resolveDeclaredType(member)
+			if head.Final&FinalExtension != 0 && derivationUsesMethod(memberType, headType, DerivationExtension) {
 				if src, ok := c.globalElemSources[member]; ok {
 					c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."))
 				}
 			}
-			if head.Final&FinalRestriction != 0 && derivationUsesMethod(member.Type, head.Type, DerivationRestriction) {
+			if head.Final&FinalRestriction != 0 && derivationUsesMethod(memberType, headType, DerivationRestriction) {
 				if src, ok := c.globalElemSources[member]; ok {
 					c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."))
 				}
+			}
+		}
+	}
+}
+
+func (c *compiler) checkSubstGroupAffiliations(ctx context.Context) {
+	for headQN, members := range c.schema.substGroups {
+		head, ok := c.schema.elements[headQN]
+		if !ok {
+			continue
+		}
+		headType := c.resolveDeclaredType(head)
+		for _, member := range members {
+			memberType := c.resolveDeclaredType(member)
+			if strictBuiltinAwareDerivedFrom(memberType, headType) {
+				continue
+			}
+			if src, ok := c.globalElemSources[member]; ok {
+				msg := fmt.Sprintf("The substitution group affiliation to '%s' is not validly substitutable for the head element's type definition.", head.Name.Local)
+				c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local, msg))
 			}
 		}
 	}
