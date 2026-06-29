@@ -309,6 +309,53 @@ func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) 
 	return "", false
 }
 
+// elementAlternatives returns the effective {type table} alternatives for an
+// element declaration: its own, or — for an <xs:element ref="g"> particle that
+// does not carry the table — the referenced global declaration's. Mirrors
+// effectiveAlternatives (validation) / declAlternatives (EDC) for the restriction
+// and consistency checks that run at compile time.
+func elementAlternatives(decl *ElementDecl, schema *Schema) []*TypeAlternative {
+	if decl == nil {
+		return nil
+	}
+	if len(decl.Alternatives) > 0 {
+		return decl.Alternatives
+	}
+	if decl.IsRef && schema != nil {
+		if g, ok := schema.LookupElement(decl.Name.Local, decl.Name.NS); ok && g != decl {
+			return g.Alternatives
+		}
+	}
+	return nil
+}
+
+// typeTablesEquivalent reports whether two {type table}s are equivalent for the XSD
+// 1.1 constraints that require it (Element Declarations Consistent; element
+// restriction Particle Valid (Restriction) clause 4.6). Per the spec a Type Table
+// T1 is equivalent to T2 iff their {alternatives} have the same length with
+// equivalent corresponding entries (and equivalent default type definitions). The
+// comparison is the spec-sanctioned CONSERVATIVE one — a processor "may treat two
+// type alternatives as non-equivalent" unless it detects they are the same: two
+// alternatives are equivalent only when their {test}s are identical and their
+// {type definition}s are the same type definition. The default (testless)
+// alternative is the final slice entry (Test == ""), so comparing the whole slice
+// covers both {alternatives} and {default type definition}. Two empty tables (both
+// absent) are equivalent.
+func typeTablesEquivalent(a, b []*TypeAlternative) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Test != b[i].Test {
+			return false
+		}
+		if !elementTypesConsistent(a[i].Type, b[i].Type) {
+			return false
+		}
+	}
+	return true
+}
+
 // isErrorType reports whether td is the XSD 1.1 built-in xs:error type, whose
 // value space and lexical space are empty so any element it governs is invalid.
 func isErrorType(td *TypeDef) bool {

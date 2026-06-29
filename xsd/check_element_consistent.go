@@ -301,47 +301,13 @@ func (c *compiler) declsConsistent(decls []*ElementDecl) bool {
 	return true
 }
 
-// declAlternatives returns the effective {type table} alternatives for a content-
-// model element declaration at compile time: its own alternatives, or — for an
-// <xs:element ref="g"> particle that does not carry the table — the referenced
-// global declaration's, mirroring effectiveAlternatives on the validation side.
-func (c *compiler) declAlternatives(decl *ElementDecl) []*TypeAlternative {
-	if decl == nil {
-		return nil
-	}
-	if len(decl.Alternatives) > 0 {
-		return decl.Alternatives
-	}
-	if decl.IsRef {
-		if g, ok := c.schema.LookupElement(decl.Name.Local, decl.Name.NS); ok && g != decl {
-			return g.Alternatives
-		}
-	}
-	return nil
-}
-
 // typeTablesEDCConsistent reports whether two same-named element declarations have
-// the same {type table} for the XSD 1.1 Element Declarations Consistent constraint.
-// The comparison is structural and deliberately UNDER-strict (it reports only a
-// genuine difference, never false-rejecting): tables of differing length, or whose
-// corresponding alternatives differ in @test or selected {type definition}, are
-// inconsistent; an empty table differs from a non-empty one. Two structurally
-// identical tables are treated as consistent.
+// equivalent {type table}s for the XSD 1.1 Element Declarations Consistent
+// constraint (both must be absent or equivalent). It resolves each declaration's
+// effective alternatives (own or, for a ref, the global's) and defers the
+// structural comparison to the shared typeTablesEquivalent.
 func (c *compiler) typeTablesEDCConsistent(a, b *ElementDecl) bool {
-	altsA := c.declAlternatives(a)
-	altsB := c.declAlternatives(b)
-	if len(altsA) != len(altsB) {
-		return false
-	}
-	for i := range altsA {
-		if altsA[i].Test != altsB[i].Test {
-			return false
-		}
-		if !elementTypesConsistent(altsA[i].Type, altsB[i].Type) {
-			return false
-		}
-	}
-	return true
+	return typeTablesEquivalent(elementAlternatives(a, c.schema), elementAlternatives(b, c.schema))
 }
 
 // sortedNames returns the keys of byName in a deterministic (namespace, local)

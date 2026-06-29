@@ -207,3 +207,52 @@ func TestVersion11CTABaseURIContextNode(t *testing.T) {
 		require.ErrorIs(t, xsd.NewValidator(schema).Validate(t.Context(), idoc), xsd.ErrValidationFailed)
 	})
 }
+
+// TestVersion11CTATypeTableRestrictionEquivalent covers the XSD 1.1 rule that when
+// an element declaration restricts another, their {type table}s must be both absent
+// or both present and EQUIVALENT (Particle Valid (Restriction) clause 4.6). Mirrors
+// saxonData/CTA cta0043: a restriction whose stamp alternative selects a different
+// type for the same @test than the base is invalid.
+func TestVersion11CTATypeTableRestrictionEquivalent(t *testing.T) {
+	const types = `
+  <xs:complexType name="dateT"><xs:simpleContent><xs:extension base="xs:date">
+    <xs:attribute name="type" type="xs:NCName"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="dtsT"><xs:simpleContent><xs:extension base="xs:dateTimeStamp">
+    <xs:attribute name="type" type="xs:NCName"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="dtT"><xs:simpleContent><xs:extension base="xs:dateTime">
+    <xs:attribute name="type" type="xs:NCName"/></xs:extension></xs:simpleContent></xs:complexType>`
+
+	base := `
+  <xs:complexType name="chapType"><xs:sequence>
+    <xs:element name="stamp">
+      <xs:alternative test="@type='date'" type="dateT"/>
+      <xs:alternative test="@type='dateTime'" type="dtsT"/>
+    </xs:element>
+  </xs:sequence></xs:complexType>`
+
+	t.Run("restriction with non-equivalent type table is invalid", func(t *testing.T) {
+		t.Parallel()
+		src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + base + `
+  <xs:complexType name="appType"><xs:complexContent><xs:restriction base="chapType">
+    <xs:sequence><xs:element name="stamp">
+      <xs:alternative test="@type='date'" type="dateT"/>
+      <xs:alternative test="@type='dateTime'" type="dtT"/>
+    </xs:element></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>` + types + `
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
+	})
+
+	t.Run("restriction with equivalent type table is valid", func(t *testing.T) {
+		t.Parallel()
+		src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + base + `
+  <xs:complexType name="appType"><xs:complexContent><xs:restriction base="chapType">
+    <xs:sequence><xs:element name="stamp">
+      <xs:alternative test="@type='date'" type="dateT"/>
+      <xs:alternative test="@type='dateTime'" type="dtsT"/>
+    </xs:element></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>` + types + `
+</xs:schema>`
+		require.NoError(t, compileCTASchema(t, src))
+	})
+}
