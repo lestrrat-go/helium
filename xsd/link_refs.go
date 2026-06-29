@@ -1732,7 +1732,7 @@ func (c *compiler) checkSubstGroupAffiliations(ctx context.Context) {
 		headType := c.resolveDeclaredType(head)
 		for _, member := range members {
 			memberType := c.resolveDeclaredType(member)
-			if strictBuiltinAwareDerivedFrom(memberType, headType) {
+			if isXsiTypeDerivedFromDeclared(memberType, headType) {
 				continue
 			}
 			if src, ok := c.globalElemSources[member]; ok {

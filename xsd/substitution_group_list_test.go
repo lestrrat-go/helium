@@ -83,6 +83,45 @@ func TestVersion11SubstitutionGroupList(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 
+	t.Run("member can derive from an unfaceted union head member type", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="headType">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:element name="head" type="headType"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="member" type="xs:int" substitutionGroup="head"/>
+</xs:schema>`
+		schema, err := compileXSD11Schema(t, schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateXSDDocument(t, schema, `<root><member>42</member></root>`))
+	})
+
+	t.Run("member cannot derive through a faceted union head", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseUnion">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="headType">
+    <xs:restriction base="baseUnion">
+      <xs:enumeration value="ok"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="head" type="headType"/>
+  <xs:element name="member" type="xs:int" substitutionGroup="head"/>
+</xs:schema>`
+		_, err := compileXSD11Schema(t, schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
 	t.Run("untyped multi-head member inherits type from first head chain", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
