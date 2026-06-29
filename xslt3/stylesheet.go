@@ -141,6 +141,7 @@ type Stylesheet struct {
 	compilerImportSchemas []*xsd.Schema               // pre-compiled schemas from compiler (for fn:transform nested compiles)
 	maxResourceBytes      int64                       // per-resource read cap from compiler; 0 = MaxResourceBytes default, <0 = unbounded
 	allowExternalEntities bool                        // compile-time opt-in: legacy permissive external-entity parsing (for fn:transform nested compiles)
+	parser                *helium.Parser              // caller-injected base parser from the compiler (forwarded to runtime + fn:transform nested compiles); nil = hardened default
 }
 
 // globalContextItemDef represents a compiled xsl:global-context-item declaration.
@@ -286,7 +287,7 @@ type variable struct {
 	ImportPrec     int             // import precedence for XTSE0630 duplicate detection
 	StaticValue    xpath3.Sequence // pre-computed value for static="yes" variables
 	XPathDefaultNS string          // xpath-default-namespace in scope at definition site
-	StaticBaseURI  string          // effective static base URI from xml:base (non-empty when overridden)
+	StaticBaseURI  string          // declaration-site static base URI (module base + any xml:base override)
 }
 
 // param is a compiled xsl:param.
@@ -299,7 +300,7 @@ type param struct {
 	Tunnel        bool
 	Visibility    string // "public", "private", "final", "abstract" (for global params)
 	ImportPrec    int    // import precedence for XTSE0630 duplicate detection
-	StaticBaseURI string // effective static base URI from xml:base (non-empty when overridden)
+	StaticBaseURI string // declaration-site static base URI (module base + any xml:base override)
 }
 
 // keyDef is a compiled xsl:key.

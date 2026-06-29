@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"github.com/lestrrat-go/helium/internal/xpath1/number"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -230,24 +232,23 @@ func xpathResultToString(r *xpath1.Result) string {
 	case xpath1.StringResult:
 		return r.String
 	case xpath1.NumberResult:
-		return fmt.Sprintf("%g", r.Number)
+		// XPath 1.0 string(number): reuse the canonical xmlXPathFormatNumber
+		// port (integers without a decimal point, "NaN"/"Infinity"/"-Infinity",
+		// no trailing ".0") instead of Go's default formatting.
+		return number.ToString(r.Number)
 	case xpath1.BooleanResult:
+		// XPath 1.0 string(boolean): "true"/"false" (lowercase).
 		if r.Bool {
-			return "True"
+			return "true"
 		}
-		return "False"
+		return "false"
 	case xpath1.NodeSetResult:
 		if len(r.NodeSet) == 0 {
 			return ""
 		}
-		var sb strings.Builder
-		for i, n := range r.NodeSet {
-			if i > 0 {
-				sb.WriteByte(' ')
-			}
-			sb.WriteString(n.Name())
-		}
-		return sb.String()
+		// XPath 1.0: a node-set converts to the string-value of the node
+		// first in document order.
+		return ixpath.StringValue(r.NodeSet[0])
 	}
 	return ""
 }

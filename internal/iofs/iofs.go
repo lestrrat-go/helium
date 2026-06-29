@@ -43,6 +43,22 @@ func (PermissiveRoot) Open(name string) (fs.File, error) {
 	return os.Open(name) //nolint:gosec,wrapcheck // intentional passthrough; see type doc
 }
 
+// DenyAll is an [fs.FS] that refuses every Open with [fs.ErrNotExist]. It is
+// the default FS of a freshly constructed parser: no external resource (DTD,
+// entity, ...) referenced by a document is loaded unless the caller explicitly
+// supplies an FS via Parser.FS. Making "load nothing" the default keeps
+// untrusted input from reaching the host filesystem (XXE / local-file
+// disclosure). To restore the historical permissive behavior, pass
+// [PermissiveRoot] (exposed publicly as helium.PermissiveFS).
+type DenyAll struct{}
+
+// Open implements [fs.FS]. It always fails with [fs.ErrNotExist] so callers
+// that treat a missing resource as "skip silently" behave as if no file was
+// present.
+func (DenyAll) Open(name string) (fs.File, error) {
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
 // FileURIToPath converts a "file:" URI into a local filesystem path. It mirrors
 // the conversion performed in package catalog (added in PR #602) so that other
 // loaders — notably the XInclude processor — resolve "file:" hrefs identically.
@@ -72,7 +88,40 @@ func FileURIToPath(ref string) (string, error) {
 		return "", fmt.Errorf("invalid file URI %q: no local path", ref)
 	}
 
+	// A "file:////server/share" URI parses to an empty host with a path that
+	// begins with two separators; on Windows filepath.FromSlash would turn that
+	// into a UNC path (\\server\share) reaching a remote SMB host, defeating the
+	// local-only policy. Reject every UNC form outright.
+	if IsUNCFileURIPath(u.Path) {
+		return "", fmt.Errorf("UNC file URI %q is not a local path", ref)
+	}
+
 	return fileURIPathFor(runtime.GOOS, u.Path), nil
+}
+
+// IsUNCFileURIPath reports whether p — the (already percent-decoded) path
+// component of a "file:" URI — denotes a UNC path. A UNC path begins with two
+// path separators ("\\server\share"); on Windows filepath.FromSlash turns such
+// a path into a remote SMB reference, defeating the local-only policy applied by
+// the "file:" URI loaders.
+//
+// url.Parse percent-decodes u.Path, so the two leading separators may appear as
+// any mix of forward slash and backslash: "//" (from "file:////server/share"),
+// "/\" (from "file:///%5Cserver/share", since %5C/%5c decode to a backslash), or
+// "\\" (from doubly-encoded forms). All such forms are detected here so a single
+// encoded backslash cannot smuggle a UNC path past the "//"-only check.
+//
+// This is the single source of truth for the UNC rejection shared by
+// [FileURIToPath], package catalog, and the helium CLI safety helpers.
+func IsUNCFileURIPath(p string) bool {
+	return len(p) >= 2 && isPathSep(p[0]) && isPathSep(p[1])
+}
+
+// isPathSep reports whether c is a path separator in either POSIX ("/") or
+// Windows ("\") form. A decoded "file:" URI path may contain backslashes when
+// the URI percent-encoded them as %5C/%5c.
+func isPathSep(c byte) bool {
+	return c == '/' || c == '\\'
 }
 
 // fileURIPathFor is the OS-parameterized conversion of a "file:" URI path

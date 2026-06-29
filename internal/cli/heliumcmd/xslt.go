@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -23,6 +24,16 @@ type xsltConfig struct {
 	version        bool
 	params         []xsltParam
 	maxInputBytes  int64
+	maxDepth       int
+	// substituteEntities records --noent; loadExternalDTD records --loaddtd.
+	// loadExternal is set by either and is the explicit opt-in that lifts the
+	// stylesheet parser's default XXE block and installs an FS confined to the
+	// stylesheet's directory so its external DTDs/entities actually load.
+	// Without it the stylesheet is parsed with the secure NewParser default and
+	// no external resource reaches the filesystem.
+	substituteEntities bool
+	loadExternalDTD    bool
+	loadExternal       bool
 }
 
 type xsltParam struct {
@@ -91,11 +102,55 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		t0 = time.Now()
 	}
 
-	ssDoc, err := helium.NewParser().
-		LoadExternalDTD(true).
-		SubstituteEntities(true).
-		BaseURI(cfg.stylesheetFile).
-		Parse(ctx, ssBuf)
+	// NewParser is secure by default: it blocks external DTD/entity loading and
+	// uses a deny-all FS, so a hostile stylesheet cannot read local files via a
+	// SYSTEM entity. The legacy permissive behavior is opt-in only, mirroring
+	// the lint command's --noent/--loaddtd flags. When opted in, external loads
+	// are confined to the stylesheet's own directory (not a raw permissive root)
+	// so an attacker-controlled SYSTEM identifier still cannot exfiltrate
+	// arbitrary local files.
+	// Absolutize the stylesheet path ONCE and use the result for the parser base
+	// URI, the confined FS root, and the compiler base URI. With a RELATIVE
+	// stylesheet path (e.g. "sub/main.xsl") a relative base URI would make the
+	// parser resolve "style.dtd" to "sub/style.dtd", which the confined FS
+	// (rooted at the absolute "sub" directory) would then join under its root
+	// AGAIN, producing a nonexistent "sub/sub/style.dtd". An absolute base makes
+	// every system ID resolve to an absolute path that lands directly inside the
+	// confined root.
+	absSS, err := filepath.Abs(cfg.stylesheetFile)
+	if err != nil {
+		absSS = cfg.stylesheetFile
+	}
+
+	ssParser := helium.NewParser().BaseURI(absSS)
+	// Expand the stylesheet's INTERNAL general entities by default. NewParser's
+	// secure default leaves SubstituteEntities off, which not only blocks XXE but
+	// also stops a perfectly safe internal-subset entity (e.g.
+	// <!DOCTYPE xsl:stylesheet [<!ENTITY msg "ok">]> ... &msg;) from expanding:
+	// xslt3 only compiles text/CDATA in sequence constructors, so an unexpanded
+	// EntityRefNode silently drops the value. SubstituteEntities(true) on top of
+	// the still-default BlockXXE(true)/LoadExternalDTD(false) expands internal
+	// entities while external DTD/entity content stays blocked, mirroring xslt3's
+	// own secure parser (xslt3/xslt3.go). The XXE block is what keeps a SYSTEM
+	// entity's external replacement text from loading even with substitution on.
+	//
+	// --loaddtd loads the external DTD subset (its declarations / default
+	// attributes) but, on its own, must NOT substitute external-DTD-defined
+	// general entities; that remains an explicit --noent opt-in. So suppress the
+	// internal-substitution default when --loaddtd is given without --noent.
+	if cfg.substituteEntities || !cfg.loadExternalDTD {
+		ssParser = ssParser.SubstituteEntities(true)
+	}
+	if cfg.loadExternalDTD {
+		ssParser = ssParser.LoadExternalDTD(true)
+	}
+	if cfg.loadExternal {
+		ssParser = ssParser.BlockXXE(false).FS(newConfinedDirFS(absSS))
+	}
+	if cfg.maxDepth >= 0 {
+		ssParser = ssParser.MaxDepth(cfg.maxDepth)
+	}
+	ssDoc, err := ssParser.Parse(ctx, ssBuf)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to parse stylesheet: %s\n", c.prog, err)
 		return ExitXSLT
@@ -105,7 +160,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	// xsl:include/xsl:import modules load. Without one, the compiler
 	// default-denies module loading and local stylesheets fail to compile.
 	ss, err := xslt3.NewCompiler().
-		BaseURI(cfg.stylesheetFile).
+		BaseURI(absSS).
 		URIResolver(fileResolver{maxInputBytes: cfg.maxInputBytes}).
 		Compile(ctx, ssDoc)
 	if cfg.timing {
@@ -236,6 +291,9 @@ func (c *xsltCommand) processInput(ctx context.Context, cfg *xsltConfig, input x
 	}
 
 	p := helium.NewParser()
+	if cfg.maxDepth >= 0 {
+		p = p.MaxDepth(cfg.maxDepth)
+	}
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}
@@ -286,14 +344,17 @@ Options:
 	--param NAME VAL : pass XPath parameter
 	--stringparam NAME VAL : pass string parameter
 	--noout          : suppress output
+	--noent          : substitute entities, loading the stylesheet's external entities (opt-in; off by default)
+	--loaddtd        : load the stylesheet's external DTD subset (opt-in; off by default)
 	--timing         : print timing information to stderr
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version        : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
-	cfg := &xsltConfig{maxInputBytes: DefaultMaxInputBytes}
+	cfg := &xsltConfig{maxInputBytes: DefaultMaxInputBytes, maxDepth: -1}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -305,6 +366,12 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 			cfg.timing = true
 		case "--noout":
 			cfg.noout = true
+		case "--noent":
+			cfg.substituteEntities = true
+			cfg.loadExternal = true
+		case "--loaddtd":
+			cfg.loadExternalDTD = true
+			cfg.loadExternal = true
 		case "--output", "-o":
 			i++
 			if i >= len(args) {
@@ -338,6 +405,18 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 				return nil, nil
 			}
 			cfg.maxInputBytes = n
+		case flagMaxDepth:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i])
+				return nil, nil
+			}
+			cfg.maxDepth = n
 		default:
 			if len(arg) > 0 && arg[0] == '-' {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)

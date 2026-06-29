@@ -63,3 +63,77 @@ func Example_xslt3_transform_string() {
 ```
 source: [examples/xslt3_transform_string_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_transform_string_example_test.go)
 <!-- END INCLUDE -->
+
+## Conformance
+
+`xslt3` targets **Basic XSLT 3.0** conformance (W3C XSLT 3.0 spec §27).
+"Basic XSLT Processor" is the only required conformance level; the spec's
+other seven levels are optional features.
+
+Against the W3C XSLT 3.0 test suite (default run, on `main`):
+
+| Outcome | Count |
+|---------|-------|
+| Pass    | 11,120 |
+| Skip    | 2,007  |
+| Fail    | 0      |
+| Total   | 13,127 |
+
+There are **no failing tests**. Every skip carries an explicit reason and
+falls into one of the categories below — none is a missing mandatory 3.0
+instruction.
+
+### What is implemented
+
+All mandatory Basic XSLT 3.0 facilities work and are exercised by the suite:
+template matching and modes, `xsl:apply-templates` / `xsl:call-template` /
+`xsl:next-match` / `xsl:apply-imports`, variables and parameters,
+`xsl:function`, `xsl:for-each-group`, sorting, `xsl:number`, keys,
+attribute-sets, `xsl:result-document` (multiple result documents),
+accumulators, `xsl:merge`, `xsl:iterate` / `xsl:fork`, `xsl:try` / `xsl:catch`,
+maps and arrays, packages / `xsl:use-package`, and the XPath 3.1 data model.
+
+Unsupported optional features are reported with concrete error codes
+(e.g. `XTSE0090`, `XTSE0220`, `FOXT0003`) rather than silently
+misinterpreted, and external resource access is default-deny.
+
+### What is skipped, and why
+
+| Category | ~Count | Reason |
+|----------|-------:|--------|
+| XSLT 1.0/2.0-only tests and backwards-compatibility mode | ~1,265 | Optional 1.0/2.0 compatibility level — **intentionally not implemented** |
+| Performance-gated (run with `HELIUM_SLOW_TESTS=1`) | ~605 | CI runtime only; not capability gaps |
+| Schema-awareness | ~55 | Optional level, in progress |
+| Tests requiring a feature to be *absent* (we support it) | ~35 | We exceed the test's requirement |
+| XML-parser-level limits (XML 1.1 control chars / ns-undeclaration, certain external entities) | ~33 | Parser layer, not the XSLT engine |
+| External / non-interoperable (XQuery `load-xquery-module`, network, Saxon-specific URIs) | ~12 | Out of scope or noted non-interoperable by the W3C catalog |
+| Genuine edge defects | ~25 | Narrow, individually-tracked quirks (e.g. type-annotation propagation, `snapshot()/root()` namespace nodes) |
+
+Backwards-compatibility modes for XSLT 1.0/2.0 are **not** part of the target
+feature set and will not be implemented.
+
+### Running the conformance tests
+
+The test fixtures are committed under `testdata/xslt30/testdata`, so the suite
+runs out of the box — no download step is required:
+
+```sh
+# Run the whole W3C XSLT 3.0 suite
+go test ./xslt3/ -run TestW3C
+
+# Run a single category (test functions are named TestW3C_<category>)
+go test ./xslt3/ -run TestW3C_for_each_group
+
+# Include the performance-gated tests that are skipped by default
+HELIUM_SLOW_TESTS=1 go test ./xslt3/ -run TestW3C
+```
+
+The generated `w3c_*_gen_test.go` files and their fixtures are produced from the
+upstream [w3c/xslt30-test](https://github.com/w3c/xslt30-test) suite. To refresh
+them against a newer revision, clone the upstream suite into the (gitignored)
+`testdata/xslt30/source` directory and regenerate:
+
+```sh
+testdata/xslt30/fetch.sh      # clones/updates the pinned upstream suite
+go run ./tools/xslt3gen       # regenerates w3c_*_gen_test.go + fixtures
+```

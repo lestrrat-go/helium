@@ -2,6 +2,7 @@ package heliumcmd
 
 import (
 	"math"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -20,25 +21,29 @@ func TestLocalFilePath(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "sub/mod.xsl", got)
 	})
+	// A "file:" URI is decoded into a NATIVE local path, so the expected value
+	// is wrapped in filepath.FromSlash (POSIX "/tmp/mod.xsl", Windows
+	// "\\tmp\\mod.xsl"). The plain-path subtests above pass the string through
+	// unchanged, so they are not wrapped.
 	t.Run("file URI empty host", func(t *testing.T) {
 		got, err := localFilePath("file:///tmp/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/mod.xsl"), got)
 	})
 	t.Run("file URI localhost host", func(t *testing.T) {
 		got, err := localFilePath("file://localhost/tmp/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/mod.xsl"), got)
 	})
 	t.Run("file URI uppercase localhost host", func(t *testing.T) {
 		got, err := localFilePath("file://LOCALHOST/tmp/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/mod.xsl"), got)
 	})
 	t.Run("file URI percent-decoded", func(t *testing.T) {
 		got, err := localFilePath("file:///tmp/a%20b/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/a b/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/a b/mod.xsl"), got)
 	})
 	t.Run("remote host rejected", func(t *testing.T) {
 		_, err := localFilePath("file://example.com/mod.xsl")
@@ -55,6 +60,29 @@ func TestLocalFilePath(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "scheme")
 	})
+	// "file:////server/share/x" parses to an empty host with path
+	// "//server/share/x"; on Windows that becomes the UNC path
+	// \\server\share\x, reaching a remote SMB host despite the local-only
+	// policy. It must be rejected on every platform.
+	t.Run("UNC file URI rejected", func(t *testing.T) {
+		_, err := localFilePath("file:////server/share/mod.xsl")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "UNC")
+	})
+	// url.Parse percent-decodes u.Path, so a "%5C"/"%5c" encoded backslash
+	// decodes to "/\server/share" which still becomes the UNC path
+	// \\server\share on Windows. These encoded forms must be rejected too.
+	for _, uri := range []string{
+		"file:///%5Cserver/share/mod.xsl",
+		"file:///%5cserver/share/mod.xsl",
+		"file:///%5C%5Cserver/share/mod.xsl",
+	} {
+		t.Run("encoded-backslash UNC rejected: "+uri, func(t *testing.T) {
+			_, err := localFilePath(uri)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "UNC")
+		})
+	}
 	t.Run("file URI drive letter on Windows", func(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			t.Skip("Windows-specific drive-letter handling")

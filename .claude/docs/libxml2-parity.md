@@ -8,7 +8,7 @@
 |---------|-------|------|------|------|--------------|
 | Core XML (DOM) | 150+ | all | 0 | ~100% | — |
 | Core XML (SAX2) | 150+ | all | 0 | ~100% | — |
-| C14N | 76 | 66 | 10 | 87% | Parser: duplicate xmlns (7), entity-ref in single-quoted attr (3) |
+| C14N | 73 | 73 | 0 | 100% | — |
 | XSD | 226 | 225 | 1 | 99.6% | libxml2 IDC quirk with ref + attributeFormDefault |
 | RELAX NG | 159 | 159 | 0 | 100% | — |
 | Schematron | 42 | 42 | 0 | 100% | — |
@@ -65,11 +65,12 @@ Test data: `testdata/libxml2-compat/` (golden files generated from libxml2's xml
 
 ## Parser Limitations
 
-These affect multiple packages (especially C14N test skips):
+Cross-element redundant namespace redeclarations and entity references in
+single-quoted attributes (formerly the cause of all 10 C14N skips) now parse
+correctly; the C14N suite runs with no skips. Same-element duplicate namespace
+declarations remain a well-formedness error, as in libxml2.
 
-1. **Duplicate namespace declarations** — helium rejects, libxml2 uses last. Affects 7 C14N tests.
-2. **Entity refs in single-quoted attributes** — not expanded. Affects 3 C14N tests.
-3. **External entity resolution** — limited; requires explicit config. External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. `BlockXXE(true)` blocks all. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`.
+1. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**: `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`. The `relaxng.Compiler` mirrors this default: its `include`/`externalRef` fetch `FS` is deny-all by default (opt into host access with `Compiler.FS(helium.PermissiveFS())`), and each target is read under a per-resource byte cap (`relaxng.Compiler.MaxResourceBytes`, 10 MiB default).
 
 ## Feature Status
 
@@ -132,14 +133,17 @@ These affect multiple packages (especially C14N test skips):
 | PedanticErrors(bool) | XML_PARSE_PEDANTIC | ✅ | Pedantic error reporting |
 | StripBlanks(bool) | XML_PARSE_NOBLANKS | ✅ | Remove blank nodes |
 | ProcessXInclude(bool) | XML_PARSE_XINCLUDE | ✅ | XInclude processing |
-| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network |
+| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network. **Default false** (NONET set by NewParser); cosmetic — core parser has no network loader |
 | CleanNamespaces(bool) | XML_PARSE_NSCLEAN | ✅ | Remove redundant NS decls |
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
 | XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
 | FixBaseURIs(bool) | XML_PARSE_NOBASEFIX | ✅ | Inverted: false → skip fixup |
-| RelaxLimits(bool) | XML_PARSE_HUGE | ✅ | Relax limits |
+| MaxNameLength(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max name length (0=default 50000, <0=unlimited). Replaced RelaxLimits |
+| MaxEntityAmplification(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max entity-amplification ratio (0=default 5, <0=ratio check off; 1 GiB hard ceiling always applies) |
+| MaxContentModelDepth(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max DTD content-model depth (0=default 128, <0=unlimited) |
+| MaxNodeContentSize(int) | XML_MAX_TEXT_LENGTH (intent) | ✅ | Per-limit knob: max bytes of a single CDATA/comment/PI/char-data run or attribute value, AND of a single contiguous XML-whitespace (blank-skip) run (0=default `DefaultMaxNodeContentSize` 10 MiB, <0=unlimited — disables BOTH the node-content and the blank-run cap). Fires during accumulation; over-cap → `ErrNodeContentTooLarge`. Streaming SAX (`CharBufferSize>0`) char data is exempt (already chunked) |
 | IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
-| BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks |
+| BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks. **Default true** (NOXXE set by NewParser; libxml2 defaults off) |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
 | ReuseDict(bool) | XML_PARSE_NODICT | no-op | Accepted for libxml2 parity but currently has no effect: `ReuseDict(false)` sets the `XML_PARSE_NODICT` bit, but nothing reads it. Name interning always uses the global well-known table plus a per-parse `nameCache` (see `intern.go`) regardless of this flag, so it never disables interning or selects a fresh dictionary |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
@@ -167,5 +171,5 @@ These are architectural choices, not bugs:
 - Go interfaces for node types vs xmlNode.type enum switch
 - No global state: explicit context passing
 - Functional options (WithX()) vs bitmask flags
-- XML push parser parses incrementally as chunks arrive; HTML push parser buffers through the initial ~1024-byte charset prescan, then streams only once a streamable encoding is settled (declared/detected charset=utf-8, or a non-UTF-8 head routed to Latin-1). An undeclared input that keeps proving valid UTF-8 stays undecided and buffers until Close/EOF (a later non-UTF-8 byte would re-interpret the whole prefix as Latin-1/Windows-1252).
+- XML push parser parses incrementally as chunks arrive; HTML push parser buffers through the initial ~1024-byte charset prescan, then streams only once a streamable encoding is settled (declared/detected charset=utf-8, or a non-UTF-8 head routed to Latin-1). An undeclared input that keeps proving valid UTF-8 stays undecided and buffers (a later non-UTF-8 byte would re-interpret the whole prefix as Latin-1/Windows-1252), but the undecided prefix is BOUNDED at the configured `MaxContentSize` (16 MiB default): each undecided read is capped to the remaining bound so the boundary is chunk-independent. A stream ending with valid UTF-8 at/below the cap is accepted (one-byte EOF probe); if the cap fills and more bytes still follow it fails closed with `ErrContentSizeExceeded` (`html/encoding_reader.go` deferredLatin1Reader).
 - Namespace stack: frame-based visibleNSStack vs flat arrays

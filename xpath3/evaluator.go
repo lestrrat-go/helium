@@ -36,8 +36,9 @@ type Evaluator struct {
 type evaluatorCfg struct {
 	options                EvaluatorOption
 	namespaces             map[string]string
-	variables              *Variables
-	functions              *FunctionLibrary
+	variables              map[string]Sequence
+	functions              map[string]Function        // unqualified calls
+	functionsNS            map[QualifiedName]Function // namespaced calls
 	opLimit                int
 	currentTime            *time.Time
 	implicitTimezone       *time.Location
@@ -63,6 +64,7 @@ type evaluatorCfg struct {
 	traceWriter            io.Writer
 	maxNodes               int   // 0 means use the package default (maxNodeSetLength)
 	maxResourceBytes       int64 // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc; 0 = unparsedtext default
+	parser                 *helium.Parser
 }
 
 // NewEvaluator creates a new Evaluator with the given options.
@@ -96,28 +98,46 @@ func (e Evaluator) Namespaces(ns map[string]string) Evaluator {
 	return e
 }
 
-// Variables sets the variable bindings for the evaluation.
-// The Variables collection is cloned unless EvalBorrowing is set.
-func (e Evaluator) Variables(v *Variables) Evaluator {
+// Variables sets the variable bindings for the evaluation, keyed by
+// expanded-QName string. The map is cloned (each value deep-copied) unless
+// EvalBorrowing is set, in which case the caller must not mutate it for the
+// lifetime of derived evaluators.
+func (e Evaluator) Variables(vars map[string]Sequence) Evaluator {
 	e = e.clone()
 	if e.borrowing() {
-		e.cfg.variables = v
+		e.cfg.variables = vars
 	} else {
-		e.cfg.variables = v.Clone()
+		e.cfg.variables = cloneVariableMap(vars)
 	}
 	return e
 }
 
-// Functions sets the user-defined function library for the evaluation.
-// The FunctionLibrary is cloned unless EvalBorrowing is set.
-func (e Evaluator) Functions(f *FunctionLibrary) Evaluator {
+// Functions sets the user-defined functions for the evaluation: byLocal is
+// consulted for unqualified calls, byQName for namespaced calls. Both maps are
+// cloned unless EvalBorrowing is set.
+func (e Evaluator) Functions(byLocal map[string]Function, byQName map[QualifiedName]Function) Evaluator {
 	e = e.clone()
 	if e.borrowing() {
-		e.cfg.functions = f
+		e.cfg.functions = byLocal
+		e.cfg.functionsNS = byQName
 	} else {
-		e.cfg.functions = f.Clone()
+		e.cfg.functions = maps.Clone(byLocal)
+		e.cfg.functionsNS = maps.Clone(byQName)
 	}
 	return e
+}
+
+// cloneVariableMap deep-copies a variable binding map, copying each Sequence
+// value (preserving the previous Variables.Clone semantics).
+func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {
+	if vars == nil {
+		return nil
+	}
+	cp := make(map[string]Sequence, len(vars))
+	for name, seq := range vars {
+		cp[name] = cloneSequence(seq)
+	}
+	return cp
 }
 
 // VariableResolver sets a callback for lazy variable resolution.
@@ -194,6 +214,16 @@ func (e Evaluator) NamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) Eval
 func (e Evaluator) BaseURI(uri string) Evaluator {
 	e = e.clone()
 	e.cfg.baseURI = uri
+	return e
+}
+
+// Parser sets the helium.Parser used to parse XML in fn:parse-xml,
+// fn:parse-xml-fragment, and fn:doc. When unset, a default helium.NewParser()
+// is used. The injected parser governs parse policy (limits, filesystem,
+// XXE/network controls).
+func (e Evaluator) Parser(p helium.Parser) Evaluator {
+	e = e.clone()
+	e.cfg.parser = &p
 	return e
 }
 
@@ -365,15 +395,13 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.namespaces = cfg.namespaces
 
 	// variables
-	if cfg.variables != nil && cfg.variables.Len() > 0 {
-		ec.vars = newVariableScope(cfg.variables.toMap())
+	if len(cfg.variables) > 0 {
+		ec.vars = newVariableScope(cfg.variables)
 	}
 
 	// functions
-	if cfg.functions != nil {
-		ec.functions = cfg.functions.localMap()
-		ec.fnsNS = cfg.functions.qnameMap()
-	}
+	ec.functions = cfg.functions
+	ec.fnsNS = cfg.functionsNS
 
 	// resolvers
 	ec.variableResolver = cfg.variableResolver
@@ -382,6 +410,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.collectionResolver = cfg.collectionResolver
 	ec.httpClient = cfg.httpClient
 	ec.maxResourceBytes = cfg.maxResourceBytes
+	ec.parser = cfg.parser
 
 	// limits
 	ec.opLimit = cfg.opLimit

@@ -492,8 +492,9 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	parser := helium.NewParser()
-	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+	ec := getFnContext(ctx)
+	parser := ec.xmlParser()
+	if ec != nil && ec.baseURI != "" {
 		parser = parser.BaseURI(ec.baseURI)
 	}
 	doc, err := parser.Parse(ctx, []byte(s))
@@ -520,11 +521,12 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	doc.SetProperties(doc.Properties() | helium.DocInternal)
-	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+	ec := getFnContext(ctx)
+	if ec != nil && ec.baseURI != "" {
 		doc.SetURL(ec.baseURI)
 	}
 
-	first, err := helium.NewParser().ParseInNodeContext(ctx, doc, []byte(s))
+	first, err := ec.xmlParser().ParseInNodeContext(ctx, doc, []byte(s))
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 	}
@@ -651,6 +653,15 @@ func isXMLNameChar(b byte) bool {
 }
 
 func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
+	return idLookup(ctx, args, false)
+}
+
+// idLookup implements both fn:id and fn:element-with-id. The two functions
+// agree whenever the is-id node is an attribute (the result is the element
+// bearing the attribute) and differ when the is-id node is an element: fn:id
+// returns that element itself, whereas fn:element-with-id returns its parent
+// element. The elementWithID flag selects the latter behavior.
+func idLookup(ctx context.Context, args []Sequence, elementWithID bool) (Sequence, error) {
 	doc, err := resolveIDLookupDocument(ctx, args)
 	if err != nil {
 		return nil, err
@@ -666,15 +677,18 @@ func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	nodes := make([]helium.Node, 0, len(tokens))
 	for _, token := range tokens {
+		// GetElementByID resolves DTD-declared ID attributes; the returned
+		// element already bears the ID attribute, so it is the correct
+		// result for both fn:id and fn:element-with-id.
 		if elem := doc.GetElementByID(token); elem != nil {
 			nodes = append(nodes, elem)
 		}
 	}
-	nodes = append(nodes, idElementsFromTypeAnnotations(doc, tokens, getFnContext(ctx))...)
+	nodes = append(nodes, idElementsFromTypeAnnotations(doc, tokens, getFnContext(ctx), elementWithID)...)
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
-func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext) []helium.Node {
+func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext, elementWithID bool) []helium.Node {
 	if ec == nil || len(tokens) == 0 {
 		return nil
 	}
@@ -717,13 +731,25 @@ func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *ev
 				seen[parent] = struct{}{}
 				nodes = append(nodes, parent)
 			case *helium.Element:
-				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; ok {
-					if _, dup := seen[typed]; dup {
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+					continue
+				}
+				// fn:id returns the is-id element itself; fn:element-with-id
+				// returns the element that CONTAINS the is-id element, i.e. its
+				// parent.
+				result := helium.Node(typed)
+				if elementWithID {
+					parent, ok := typed.Parent().(*helium.Element)
+					if !ok {
 						continue
 					}
-					seen[typed] = struct{}{}
-					nodes = append(nodes, typed)
+					result = parent
 				}
+				if _, dup := seen[result]; dup {
+					continue
+				}
+				seen[result] = struct{}{}
+				nodes = append(nodes, result)
 			}
 		}
 	}
@@ -799,7 +825,16 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	ec := getFnContext(ctx)
 	var nodes []helium.Node
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	walkErr := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+		// Honor context cancellation and the established op-limit on every
+		// visited node so a large document cannot run unbounded.
+		if ec != nil {
+			if err := ec.countOps(ctx, 1); err != nil {
+				return err
+			}
+		} else if err := ctx.Err(); err != nil {
+			return err
+		}
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
@@ -839,11 +874,14 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return nil
 	}))
+	if walkErr != nil {
+		return nil, walkErr
+	}
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
 func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnID(ctx, args)
+	return idLookup(ctx, args, true)
 }
 
 func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -943,7 +981,8 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	if strings.Contains(resolved, "#") {
 		return nil, &XPathError{Code: errCodeFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
 	}
-	if ec := getFnContext(ctx); ec != nil {
+	ec := getFnContext(ctx)
+	if ec != nil {
 		if doc, ok := ec.docCache[resolved]; ok {
 			return doc, nil
 		}
@@ -954,18 +993,40 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
 
-	// Block external entity expansion and network access in the retrieved
-	// document. Without this, an attacker who controls the resource body
-	// could chain XXE/SSRF on top of the doc() retrieval.
-	doc, err := helium.NewParser().BlockXXE(true).AllowNetwork(false).Parse(ctx, data)
+	// The parser governs external entity expansion and network access for the
+	// retrieved document. The default helium.NewParser() is safe-by-default
+	// (XXE blocked, network disabled); an injected parser's policy wins.
+	//
+	// The retrieved resource is already bounded by the resource read cap
+	// (ec.maxResourceBytes), so the parser's separate per-node content cap is
+	// redundant on this path. Align it with the resource cap so a raised
+	// MaxResourceBytes actually accepts large single-node content instead of
+	// being silently overridden by the parser's default node-content cap. The
+	// 0/negative/positive convention (default / unbounded / explicit) matches
+	// between MaxResourceBytes and MaxNodeContentSize.
+	p := ec.xmlParser().MaxNodeContentSize(clampInt64ToInt(ec.maxResourceBytes))
+	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}
 	doc.SetURL(resolved)
-	if ec := getFnContext(ctx); ec != nil {
+	if ec != nil {
 		ec.docCache[resolved] = doc
 	}
 	return doc, nil
+}
+
+// clampInt64ToInt narrows an int64 limit to int without wrapping on 32-bit
+// platforms. The sign is preserved so the 0/negative/positive limit convention
+// (default / unbounded / explicit) survives the conversion.
+func clampInt64ToInt(n int64) int {
+	if n > int64(math.MaxInt) {
+		return math.MaxInt
+	}
+	if n < int64(math.MinInt) {
+		return math.MinInt
+	}
+	return int(n)
 }
 
 func docURIArg(seq Sequence, fnName string) (string, error) {

@@ -33,7 +33,7 @@ func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCo
 		return nil, err
 	}
 	coll := ec.resolveDefaultCollation()
-	result, err := generalCompareWithCollation(e.Op, left, right, coll, ec)
+	result, err := generalCompareWithCollation(ctx, e.Op, left, right, coll, ec)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,12 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ctx context.Context, ec 
 	if seqLen(singletonSeq) == 0 {
 		return false, true, nil
 	}
-	singletonAtoms, err := AtomizeSequence(singletonSeq)
+	// Atomize with an early stop (cap 2): the range fast-path only applies when
+	// the non-range side is a singleton, so a multi-item or unbounded-lazy operand
+	// (e.g. another large range) must be detected WITHOUT materializing/draining
+	// the whole sequence. When more than one atom is produced, fall back to the
+	// general O(N*M) path, which honors OpLimit / context cancellation.
+	singletonAtoms, err := atomizeSingletonOperand(singletonSeq)
 	if err != nil {
 		return false, true, err
 	}
@@ -195,12 +200,15 @@ func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 	if err != nil {
 		return nil, err
 	}
-	// Atomize operands (handles arrays, nodes, etc.)
-	leftAtoms, err := AtomizeSequence(left)
+	// Atomize operands (handles arrays, nodes, etc.). A value comparison only
+	// needs to distinguish empty / one / more-than-one item, so atomize with an
+	// early stop: a multi-item (or unbounded lazy) operand is rejected with
+	// XPTY0004 below without materializing the whole sequence.
+	leftAtoms, err := atomizeSingletonOperand(left)
 	if err != nil {
 		return nil, err
 	}
-	rightAtoms, err := AtomizeSequence(right)
+	rightAtoms, err := atomizeSingletonOperand(right)
 	if err != nil {
 		return nil, err
 	}
@@ -220,6 +228,24 @@ func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 		return nil, err
 	}
 	return SingleBoolean(result), nil
+}
+
+// atomizeSingletonOperand atomizes seq for a value comparison, stopping as soon
+// as a second atomic value is produced. Value comparison only needs to tell
+// empty / one / more-than-one apart, so a multi-item (or unbounded lazy) operand
+// can be detected without materializing the whole sequence. It returns at most
+// two atoms; a genuine atomization error (e.g. FOTY0013 for a map/function item
+// encountered before the cap) still propagates.
+func atomizeSingletonOperand(seq Sequence) ([]AtomicValue, error) {
+	atoms := make([]AtomicValue, 0, 2)
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		atoms = append(atoms, av)
+		return len(atoms) < 2, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return atoms, nil
 }
 
 func evalNodeComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
@@ -265,12 +291,17 @@ func evalNodeComparison(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 // Atomizes both sides and returns true if any pair of atomic values
 // satisfies the operator.
 func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
-	return generalCompareWithCollation(op, left, right, nil, nil)
+	return generalCompareWithCollation(context.Background(), op, left, right, nil, nil)
 }
 
 // generalCompareWithCollation is the collation-aware implementation of
 // general comparison.  When coll is nil, codepoint collation is used.
-func generalCompareWithCollation(op TokenType, left, right Sequence, coll *collationImpl, ec *evalContext) (bool, error) {
+//
+// The existential left x right scan is O(N*M), so it charges one op (and honors
+// context cancellation) per candidate pair via fnCountOp. A comparison over two
+// large sequences therefore respects OpLimit / context cancellation instead of
+// running to completion unbounded and uncancellable.
+func generalCompareWithCollation(ctx context.Context, op TokenType, left, right Sequence, coll *collationImpl, ec *evalContext) (bool, error) {
 	leftIter := newAtomicSequenceIter(left)
 	rightAtoms := newCachedAtomicSequence(right)
 	for {
@@ -282,6 +313,9 @@ func generalCompareWithCollation(op TokenType, left, right Sequence, coll *colla
 			return false, nil
 		}
 		for i := 0; ; i++ {
+			if err := fnCountOp(ctx, ec); err != nil {
+				return false, err
+			}
 			ra, ok, err := rightAtoms.At(i)
 			if err != nil {
 				return false, err

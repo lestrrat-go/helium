@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -700,6 +701,12 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
 	if name == "" {
+		// @name is required (XSD Structures 3.11.2 / src-identity-constraint).
+		// libxml2 reports the missing attribute and drops the constraint; an
+		// absent name previously compiled clean and silently discarded the
+		// constraint with no diagnostic.
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The attribute 'name' is required but missing.")
 		return nil
 	}
 	// Source pins the filename of the schema document that declares this
@@ -737,6 +744,19 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// so a malformed field XPath is reported against the right element.
 	var selectorLine int
 	var fieldLines []int
+	var selectorSeen bool
+
+	// The identity-constraint content model is (annotation?, (selector, field+))
+	// (XSD Structures 3.11.1 / src-identity-constraint). Enforce ORDER and
+	// CARDINALITY with an ordered scan: an OPTIONAL leading <annotation>, then
+	// EXACTLY ONE <selector>, then ONE-OR-MORE <field>, and nothing else. Each of
+	// these — a <field> before the <selector>, a second <selector>, a misplaced
+	// <annotation>, or an unexpected XSD child — was previously accepted silently
+	// (a stray <selector> even OVERWROTE idc.Selector), yielding a constraint that
+	// either fired wrong or not at all.
+	contentErr := false          // an order/cardinality/unexpected-child violation
+	fieldBeforeSelector := false // a <field> appeared before any <selector>
+	annotationSeen := false      // an <annotation> may appear only first, once
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -746,13 +766,54 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			continue
 		}
 		switch {
+		case isXSDElement(ce, elemAnnotation):
+			// annotation must precede selector/field and appear at most once.
+			if selectorSeen || len(idc.Fields) > 0 || annotationSeen {
+				contentErr = true
+			}
+			annotationSeen = true
 		case isXSDElement(ce, elemSelector):
-			idc.Selector = getAttr(ce, attrXPath)
+			// exactly one selector, before any field.
+			if selectorSeen || len(idc.Fields) > 0 {
+				contentErr = true
+			}
+			selectorSeen = true
 			selectorLine = ce.Line()
+			idc.Selector = c.idcXPathAttr(ctx, ce, elemSelector)
 		case isXSDElement(ce, elemField):
-			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
+			// fields follow the selector.
+			if !selectorSeen {
+				fieldBeforeSelector = true
+			}
 			fieldLines = append(fieldLines, ce.Line())
+			idc.Fields = append(idc.Fields, c.idcXPathAttr(ctx, ce, elemField))
+		default:
+			// Any other element child is not in the content model. The
+			// (annotation?, (selector, field+)) model has NO element wildcard, so
+			// a foreign-namespaced child is rejected too (extension content belongs
+			// inside xs:annotation/xs:appinfo, not as a direct IDC child). libxml2
+			// rejects this with the same content error.
+			contentErr = true
 		}
+	}
+
+	// Structural requirements (XSD Structures 3.11.1 / src-identity-constraint):
+	// a constraint MUST have exactly one <selector> and at least one <field>.
+	// Absence previously compiled clean and produced a no-op constraint that
+	// never fired at validation time. Mirror libxml2: a missing <selector> is the
+	// first missing-child error (it short-circuits the field check), otherwise a
+	// present selector with no <field> is a content error; an order/cardinality
+	// violation (with the selector present and a field) is a content error too.
+	switch {
+	case !selectorSeen:
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"A child element is missing.")
+	case len(idc.Fields) == 0:
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The content is not valid. Expected is (annotation?, (selector, field+)).")
+	case contentErr || fieldBeforeSelector:
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The content is not valid. Expected is (annotation?, (selector, field+)).")
 	}
 
 	// Pre-compile selector XPath expression. A malformed selector XPath is a
@@ -761,7 +822,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// run), so an invalid schema must fail to compile rather than validate
 	// documents as if no constraint were present.
 	if idc.Selector != "" {
-		compiled, err := xpath1.Compile(idc.Selector)
+		compiled, err := compileIDCXPath(idc.Selector, false)
 		if err != nil {
 			c.reportIDCXPathError(ctx, elemSelector, selectorLine, idc.Selector, err)
 		} else {
@@ -775,7 +836,12 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// constraint.
 	idc.FieldExprs = make([]*xpath1.Expression, len(idc.Fields))
 	for i, f := range idc.Fields {
-		compiled, err := xpath1.Compile(f)
+		if f == "" {
+			// A missing/empty @xpath was already reported by idcXPathAttr; don't
+			// also emit a redundant "not a valid field expression" diagnostic.
+			continue
+		}
+		compiled, err := compileIDCXPath(f, true)
 		if err != nil {
 			line := 0
 			if i < len(fieldLines) {
@@ -806,9 +872,13 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
-			if c.filename != "" {
+			// Use diagSource() (not c.filename) so an unbound-prefix @refer in an
+			// included/redefined schema is cited under the declaring file
+			// (c.includeFile), matching idc.Line.
+			src := c.diagSource()
+			if src != "" {
 				c.schemaError(ctx,
-					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+					schemaParserErrorAttr(src, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			}
 			return QName{}, true
 		}
@@ -822,10 +892,57 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 	return QName{Local: refer, NS: ns}, false
 }
 
+// idcXPathAttr reads the required unqualified @xpath attribute of an
+// identity-constraint <selector>/<field> child. A missing OR empty @xpath is a
+// fatal schema parser error (XSD Structures 3.11.1): without it the selector or
+// field compiles to "" and silently disables the constraint at validation time.
+// childElem is elemSelector or elemField, used as the diagnostic element name.
+// Returns the xpath value (possibly "").
+func (c *compiler) idcXPathAttr(ctx context.Context, elem *helium.Element, childElem string) string {
+	xpath := getAttr(elem, attrXPath)
+	if !hasAttr(elem, attrXPath) || xpath == "" {
+		src := c.diagSource()
+		if src != "" {
+			c.schemaError(ctx, schemaParserError(src, elem.Line(), childElem, childElem,
+				"The attribute 'xpath' is required but missing."))
+		}
+	}
+	return xpath
+}
+
+// idcElemName maps an IDC kind to its XSD element local name, used as the
+// canonical element name in compile-time diagnostics.
+func idcElemName(kind IDCKind) string {
+	switch kind {
+	case IDCKey:
+		return elemKey
+	case IDCKeyRef:
+		return elemKeyRef
+	default:
+		return elemUnique
+	}
+}
+
+// reportIDCStructureError reports a malformed identity-constraint declaration
+// (missing required @name, <selector>, or <field>) as a fatal schema
+// compilation error, matching libxml2's src-identity-constraint diagnostics.
+func (c *compiler) reportIDCStructureError(ctx context.Context, kind IDCKind, line int, local, msg string) {
+	// Use diagSource() (not c.filename) so a malformed IDC in an included/redefined
+	// schema is cited under the DECLARING file (c.includeFile), matching its line.
+	src := c.diagSource()
+	if src == "" {
+		return
+	}
+	c.schemaError(ctx, schemaParserError(src, line, local, idcElemName(kind), msg))
+}
+
 // reportIDCXPathError reports a malformed identity-constraint selector/field
 // XPath as a fatal schema compilation error. kind is elemSelector or elemField.
 func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line int, xpath string, cause error) {
-	if c.filename == "" {
+	// Use diagSource() so a malformed selector/field XPath in an included/redefined
+	// schema is cited under the declaring file (c.includeFile), matching its line.
+	src := c.diagSource()
+	if src == "" {
 		return
 	}
 	noun := "selector"
@@ -834,5 +951,93 @@ func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line in
 	}
 	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.", noun, xpath, noun, cause)
 	c.schemaError(ctx,
-		schemaParserErrorAttr(c.filename, line, kind, kind, attrXPath, msg))
+		schemaParserErrorAttr(src, line, kind, kind, attrXPath, msg))
+}
+
+// compileIDCXPath compiles an identity-constraint selector/field XPath and
+// additionally verifies it conforms to the restricted XPath subset that XSD
+// (Structures 3.11.6) permits for selectors and fields. The full XPath 1.0
+// grammar accepted by xpath1.Compile is broader than that subset, so a syntax
+// check alone would wrongly accept expressions such as string/number literal
+// steps, function calls, variable references, operators, or predicates that the
+// subset forbids. allowAttribute is true for <field> (which may end in an
+// attribute step) and false for <selector> (where the attribute axis is not
+// permitted).
+func compileIDCXPath(expr string, allowAttribute bool) (*xpath1.Expression, error) {
+	compiled, err := xpath1.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	// Re-parse to inspect the AST; the expression already compiled, so this
+	// cannot fail. The subset gate only runs at schema-compile time.
+	ast, err := xpath1.Parse(expr)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateIDCXPathSubset(ast, allowAttribute); err != nil {
+		return nil, err
+	}
+	return compiled, nil
+}
+
+// validateIDCXPathSubset reports an error if expr falls outside the XSD
+// identity-constraint XPath subset. The subset is a union ('|') of relative
+// location paths whose steps use only the child axis (with a name test), the
+// self axis (the abbreviated '.'), the descendant-or-self step of the './/'
+// prefix, and — for fields only — a trailing attribute step. Anything else
+// (literals, function calls, variables, arithmetic/boolean operators, filter
+// expressions, predicates, absolute paths) is rejected.
+func validateIDCXPathSubset(expr xpath1.Expr, allowAttribute bool) error {
+	switch e := expr.(type) {
+	case xpath1.UnionExpr:
+		if err := validateIDCXPathSubset(e.Left, allowAttribute); err != nil {
+			return err
+		}
+		return validateIDCXPathSubset(e.Right, allowAttribute)
+	case *xpath1.LocationPath:
+		return validateIDCLocationPath(e, allowAttribute)
+	case xpath1.LocationPath:
+		return validateIDCLocationPath(&e, allowAttribute)
+	default:
+		return errors.New("the expression is outside the identity-constraint XPath subset")
+	}
+}
+
+// validateIDCLocationPath checks a single location path against the IDC subset.
+func validateIDCLocationPath(lp *xpath1.LocationPath, allowAttribute bool) error {
+	if lp.Absolute {
+		return errors.New("absolute location paths are not permitted")
+	}
+	last := len(lp.Steps) - 1
+	for i, step := range lp.Steps {
+		if len(step.Predicates) > 0 {
+			return errors.New("predicates are not permitted")
+		}
+		switch step.Axis {
+		case xpath1.AxisSelf, xpath1.AxisDescendantOrSelf:
+			// Only the abbreviated '.' and './/' steps (axis::node()) are
+			// allowed; a name or other node-type test on these axes is not.
+			tt, ok := step.NodeTest.(xpath1.TypeTest)
+			if !ok || tt.Type != xpath1.NodeTestNode {
+				return fmt.Errorf("the %s axis is only permitted as the abbreviated '.' or './/' step", step.Axis)
+			}
+		case xpath1.AxisChild:
+			if _, ok := step.NodeTest.(xpath1.NameTest); !ok {
+				return errors.New("only name tests are permitted on the child axis")
+			}
+		case xpath1.AxisAttribute:
+			if !allowAttribute {
+				return errors.New("the attribute axis is not permitted in a selector")
+			}
+			if i != last {
+				return errors.New("the attribute axis is only permitted in the final step")
+			}
+			if _, ok := step.NodeTest.(xpath1.NameTest); !ok {
+				return errors.New("only name tests are permitted on the attribute axis")
+			}
+		default:
+			return fmt.Errorf("the %s axis is not permitted", step.Axis)
+		}
+	}
+	return nil
 }

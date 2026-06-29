@@ -22,6 +22,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -262,7 +263,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				for _, param := range tc.Params {
 					paramEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 					if len(vars) > 0 {
-						paramEval = paramEval.Variables(xpath3.VariablesFromMap(vars))
+						paramEval = paramEval.Variables(vars)
 					}
 					compiledParam, err := xpath3.NewCompiler().Compile(param.Select)
 					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
@@ -273,7 +274,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			if len(vars) > 0 {
 				v := vars
-				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(xpath3.VariablesFromMap(v)) })
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(v) })
 			}
 			eval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 			compiled, err := xpath3.NewCompiler().Compile(tc.XPath)
@@ -410,17 +411,32 @@ func qt3NeedsParseXMLBaseURI(expr string) bool {
 		strings.Contains(expr, "parse-xml-fragment(")
 }
 
-func qt3ParseDoc(t *testing.T, path string) helium.Node {
+func qt3ParseDoc(t *testing.T, p string) helium.Node {
 	t.Helper()
-	data, err := os.ReadFile(path)
-	require.NoError(t, err, "reading %s", path)
+	data, err := os.ReadFile(p)
+	require.NoError(t, err, "reading %s", p)
 	doc, err := helium.NewParser().Parse(t.Context(), data)
-	require.NoError(t, err, "parsing %s", path)
-	absPath, err := filepath.Abs(path)
+	require.NoError(t, err, "parsing %s", p)
+	absPath, err := filepath.Abs(p)
 	if err == nil {
-		doc.SetURL(absPath)
+		doc.SetURL(qt3DocBaseURI(absPath))
 	}
 	return doc
+}
+
+// qt3DocBaseURI turns a native absolute path into the base URI stored on a
+// parsed QT3 document. On POSIX the absolute path ("/abs/x.xml") is used as-is,
+// preserving the historical behavior. On Windows the path is "D:\\a\\x.xml":
+// stored verbatim, url.Parse would read the drive letter "D" as a URI scheme
+// and mangle every relative-reference resolution (e.g. an absolute http: ref in
+// a resource map would be wrongly filepath-joined). Convert such a path to a
+// canonical "file:///D:/a/x.xml" URI so resolution behaves identically on both
+// platforms. Detection is string-shaped (uripath), so POSIX output is unchanged.
+func qt3DocBaseURI(absPath string) string {
+	if uripath.IsWindowsAbsolute(absPath) {
+		return uripath.WindowsToFileURI(absPath)
+	}
+	return absPath
 }
 
 func qt3ParseDocSource(t *testing.T, src qt3SourceDoc) helium.Node {
@@ -449,7 +465,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 
 	queryEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 	if len(vars) > 0 {
-		queryEval = queryEval.Variables(xpath3.VariablesFromMap(vars))
+		queryEval = queryEval.Variables(vars)
 	}
 
 	for _, col := range tc.Collections {

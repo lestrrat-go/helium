@@ -43,12 +43,34 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	// Fast path: UTF8Cursor can scan directly into a []byte slice,
 	// avoiding the bytes.Buffer intermediate.
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0])
+		// Streaming SAX consumers that configured a char-buffer size get
+		// bounded memory: scan and deliver the run in fixed-size chunks rather
+		// than buffering the whole delimiter-free run (which would also grow the
+		// cursor's internal buffer) before chunking only the delivery.
+		// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
+		// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
+		// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
+		// set it). Such wrappers must use the single-shot classification path so a
+		// large whitespace run is classified over the whole run and delivered via
+		// IgnorableWhitespace (which StripBlanks drops) rather than being downgraded
+		// to Characters by the chunked path's blankBudget cap.
+		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
+			pctx.sax != nil && !pctx.disableSAX {
+			return pctx.parseCharDataChunkedSAX(ctx, u8)
+		}
+
+		// Bound the scan to the node-content cap (plus a rune of slack) so an
+		// oversized delimiter-free run is detected and rejected before the whole
+		// run — and the cursor's internal buffer — is materialized.
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], pctx.nodeContentScanBudget())
 		if i <= 0 {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
 			}
 			return errors.New("invalid char data")
+		}
+		if pctx.nodeContentTooLong(i) {
+			return pctx.error(ctx, ErrNodeContentTooLarge)
 		}
 
 		if err := cur.AdvanceFast(i); err != nil {
@@ -86,12 +108,15 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
-	i := cur.ScanCharDataInto(buf)
+	i := cur.ScanCharDataInto(buf, pctx.nodeContentScanBudget())
 	if i <= 0 {
 		if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
 		return errors.New("invalid char data")
+	}
+	if pctx.nodeContentTooLong(buf.Len()) {
+		return pctx.error(ctx, ErrNodeContentTooLarge)
 	}
 
 	if err := cur.AdvanceFast(i); err != nil {
@@ -124,6 +149,176 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	return nil
 }
 
+// parseCharDataChunkedSAX scans and delivers a character-data run to a streaming
+// SAX consumer in chunks of at most pctx.charBufferSize bytes. Unlike the
+// single-shot fast path it never materializes the whole delimiter-free run, so a
+// huge run delivers with bounded memory. Context cancellation is checked between
+// chunks. Used only when charBufferSize > 0 and no DOM is being built (the DOM
+// path must classify blank-vs-text over the whole run to drive whitespace
+// stripping, so it stays single-shot).
+//
+// Whitespace classification must match the single-shot path, which classifies
+// the WHOLE run as one unit: <root>  text</root> is character data (the leading
+// blanks are not ignorable whitespace), while <root>   </root> is ignorable
+// whitespace. The chunked path therefore must NOT emit any IgnorableWhitespace
+// event until it has proven the whole run is blank — an early per-chunk
+// IgnorableWhitespace that a later non-blank byte contradicts cannot be taken
+// back. Two cases keep this bounded:
+//
+//   - When the context makes whitespace non-ignorable here (xml:space="preserve",
+//     mixed content, no open element), the run is character data regardless of
+//     its bytes, so it is streamed in fixed-size chunks directly. This covers the
+//     unbounded-text DoS in those contexts.
+//   - Otherwise the leading blank run is accumulated while every byte seen is
+//     whitespace. The first non-blank byte proves character data: the accumulated
+//     prefix plus the rest of the run is delivered as Characters and the tail is
+//     streamed in bounded chunks. A run that stays blank to its end is delivered
+//     as IgnorableWhitespace. The realistic huge run (non-blank text) commits to
+//     Characters on its first chunk and never accumulates; only a pathological
+//     multi-megabyte run of pure whitespace buffers (it cannot be classified
+//     without seeing its end), and that is whitespace, not the text DoS vector.
+func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcursor.UTF8Cursor) error {
+	s := pctx.sax
+	limit := pctx.charBufferSize
+
+	// blankBudget bounds the as-yet-unclassified all-whitespace prefix that may
+	// be buffered before it is downgraded to character data. A blank run cannot
+	// be proven ignorable whitespace until its end is in view, so without a cap
+	// a pathological multi-megabyte run of pure whitespace would accumulate
+	// whole in acc before the first callback. The budget is a small multiple of
+	// the configured chunk size with a fixed floor, so realistic indentation
+	// runs still classify as ignorable whitespace while memory stays bounded.
+	blankBudget := max(limit*8, minPendingBlankBytes)
+
+	// blank tracks whether the run could still be ignorable whitespace. When the
+	// context makes whitespace non-ignorable, it starts false so the first chunk
+	// commits to Characters immediately (no blank-prefix accumulation).
+	blank := pctx.whitespaceContextIgnorable()
+
+	acc := pctx.charBuf[:0]
+	first := true
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		prev := len(acc)
+		var i int
+		acc, i = u8.ScanCharDataSlice(acc, limit)
+		if i <= 0 {
+			if first {
+				if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
+					return pctx.error(ctx, ErrMisplacedCDATAEnd)
+				}
+				return errors.New("invalid char data")
+			}
+			// The run ended; everything accumulated is blank (a non-blank byte
+			// would have returned via the Characters branch below). Deliver it
+			// as ignorable whitespace or character data per the final
+			// classification below.
+			break
+		}
+		first = false
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = acc
+
+		if blank && !allBlankBytes(acc[prev:]) {
+			blank = false
+		}
+
+		// Bounded-whitespace policy: an unclassified blank prefix that grows
+		// past the budget is downgraded to character data so memory stays
+		// bounded for a pathological pure-whitespace run.
+		//
+		// DOCUMENTED POLICY (intentional reclassification, not a silent quirk):
+		// an all-whitespace run can only be classified as IgnorableWhitespace
+		// once its end-of-run delimiter is in view, so a still-blank prefix must
+		// be buffered until then. To bound memory against a pathological multi-MiB
+		// run of pure whitespace, once the buffered blank prefix grows past
+		// blankBudget we stop treating it as ignorable and deliver it (and the
+		// rest of the run) as Characters rather than IgnorableWhitespace. Only
+		// abnormally large pure-blank runs are affected — realistic indentation /
+		// pretty-printing whitespace is far below blankBudget (see
+		// minPendingBlankBytes) and is still delivered as IgnorableWhitespace.
+		if blank && len(acc) > blankBudget {
+			blank = false
+		}
+
+		if !blank {
+			// Proven to be (or downgraded to) character data: flush the
+			// accumulated prefix (which includes this chunk) as Characters, then
+			// stream the rest of the run in bounded chunks.
+			if err := pctx.deliverCharacters(ctx, s.Characters, acc); err != nil {
+				return err
+			}
+			return pctx.streamCharDataChunks(ctx, u8, limit, s.Characters)
+		}
+	}
+
+	pctx.charBuf = acc
+	if len(acc) == 0 {
+		return nil
+	}
+
+	// The run was blank to its end. Match the single-shot areBlanksBytes
+	// classification: when no DOM document drives the decision, a blank run is
+	// ignorable whitespace only if the delimiter that ended it is '<' or CR. A
+	// run ending at '&' (an entity reference) or any other delimiter is
+	// character data — the delimiter check whitespaceContextIgnorable omits is
+	// re-applied here, now that the end of the run (and thus the delimiter) is
+	// in view.
+	handler := s.IgnorableWhitespace
+	if pctx.doc == nil {
+		if c := u8.Peek(); c != '<' && c != 0xD {
+			handler = s.Characters
+		}
+	}
+	return pctx.deliverCharacters(ctx, handler, acc)
+}
+
+// minPendingBlankBytes is the floor for the blank-prefix budget in
+// parseCharDataChunkedSAX: a blank character-data run up to this size is
+// buffered and classified as ignorable whitespace even when the configured
+// chunk size is tiny, so realistic indentation is never downgraded to
+// character data by the bounded-whitespace policy.
+const minPendingBlankBytes = 1 << 16 // 64 KiB
+
+// streamCharDataChunks scans the remainder of a character-data run and delivers
+// it via handler in chunks of at most limit bytes, with bounded memory. It is
+// called once the run's classification is known and at least one chunk has
+// already been consumed, so an empty scan means the run ended at a delimiter or
+// EOF (handled by the caller) rather than an error.
+func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.UTF8Cursor, limit int, handler func(context.Context, []byte) error) error {
+	for {
+		// A SAX handler may have requested a stop on the previous chunk's
+		// callback. Bail before scanning or advancing so no further chunk is
+		// emitted after the stop.
+		if pctx.stopped {
+			return errParserStopped
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
+		if i <= 0 {
+			return nil
+		}
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = data
+
+		if err := pctx.deliverCharacters(ctx, handler, data); err != nil {
+			return err
+		}
+	}
+}
+
 func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	pctx.elemDepth++
 	defer func() { pctx.elemDepth-- }()
@@ -154,6 +349,43 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 		return pctx.error(ctx, err)
 	}
 
+	return nil
+}
+
+// validatePrefixedNamespaceDecl enforces the Namespaces in XML constraints
+// that apply to a prefixed namespace declaration (xmlns:prefix="uri"),
+// regardless of whether the declaration is literal on a start tag or supplied
+// as a DTD attribute default. The reserved xml prefix must map to the XML
+// namespace; the xmlns prefix may not be redeclared; the reserved XMLNS
+// namespace URI may not be reused; the URI may not be empty; and, in pedantic
+// mode, the URI must be absolute. It returns a non-nil namespace error when any
+// constraint is violated.
+func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix, uri string) error {
+	if prefix == lexicon.PrefixXML {
+		if uri != lexicon.NamespaceXML {
+			return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
+		}
+		return nil
+	}
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: only the xml prefix may be bound to the reserved XML namespace", prefix))
+	}
+	if prefix == lexicon.PrefixXMLNS {
+		return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
+	}
+	if uri == lexicon.NamespaceXMLNS {
+		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
+	}
+	if uri == "" {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", prefix, uri))
+	}
+	if pctx.pedantic && u.Scheme == "" {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, uri))
+	}
 	return nil
 }
 
@@ -245,36 +477,25 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			pctx.skipBlanks(ctx)
 			continue
 		} else if aprefix == lexicon.PrefixXMLNS {
-			var u *url.URL
-
 			// <elem xmlns:foo="...">
 			// Namespace URI entity/character references are expanded inline
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
+			// The same validity checks are applied to DTD-defaulted namespace
+			// declarations during attribute defaulting below.
+			if err := pctx.validatePrefixedNamespaceDecl(ctx, attname, attvalue); err != nil {
+				return err
+			}
 			if attname == lexicon.PrefixXML {
-				if attvalue != lexicon.NamespaceXML {
-					return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
-				}
+				// Record the explicitly-declared reserved prefix before the
+				// SkipNS shortcut so a conflicting DTD-supplied default for the
+				// same prefix (e.g. <!ATTLIST r xmlns:xml CDATA "urn:dtd">) is
+				// suppressed by the nsDeclared check during attribute
+				// defaulting. Without this, the explicit binding takes the early
+				// goto and is never recorded, letting the DTD default override
+				// the reserved xml namespace.
+				nsDeclared = append(nsDeclared, attname)
 				goto SkipNS
-			}
-			if attname == lexicon.PrefixXMLNS {
-				return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
-			}
-
-			if attvalue == lexicon.NamespaceXMLNS {
-				return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
-			}
-
-			if attvalue == "" {
-				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", attname))
-			}
-
-			u, err = url.Parse(attvalue)
-			if err != nil {
-				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", attname, attvalue))
-			}
-			if pctx.pedantic && u.Scheme == "" {
-				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
 			}
 
 			// A same-element duplicate namespace declaration is a
@@ -342,20 +563,47 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 		defaults, ok := pctx.lookupAttributeDefault(elemName)
 		if ok {
-			// First pass: apply default xmlns="..." (must come before prefixed)
+			// First pass: apply default xmlns="..." (must come before prefixed).
+			// Skip a DTD default whose prefix (the empty string for the default
+			// namespace) was already explicitly declared on this start tag: an
+			// explicit binding must win over a DTD-supplied default. Because
+			// nsStack.Lookup is LIFO, pushing the DTD default afterwards would
+			// otherwise shadow the explicit one.
 			for _, attr := range defaults {
 				if attr.LocalName() == lexicon.PrefixXMLNS && attr.Prefix() == "" {
+					if slices.Contains(nsDeclared, "") {
+						continue
+					}
 					pctx.pushNS("", attr.Value())
 					nbNs++
 				}
 			}
-			// Second pass: apply xmlns:prefix="..." and regular attributes
+			// Second pass: apply xmlns:prefix="..." and regular attributes.
+			// Likewise skip a prefixed DTD default already declared explicitly.
 			for _, attr := range defaults {
 				attname := attr.LocalName()
 				aprefix := attr.Prefix()
 				if attname == lexicon.PrefixXMLNS && aprefix == "" {
 					continue
 				} else if aprefix == lexicon.PrefixXMLNS {
+					if slices.Contains(nsDeclared, attname) {
+						continue
+					}
+					// DTD-defaulted namespace declarations are subject to the
+					// same namespace-validity checks as literal ones: a
+					// wrong-URI xmlns:xml, an xmlns:xmlns redefinition, reuse of
+					// the reserved XMLNS namespace, an empty/invalid URI, etc.
+					// are all rejected before the binding is pushed.
+					if err := pctx.validatePrefixedNamespaceDecl(ctx, attname, attr.Value()); err != nil {
+						return err
+					}
+					// The reserved xml prefix is implicitly bound to the XML
+					// namespace; never let a DTD default push (and thus shadow)
+					// it, even a well-formed one. This mirrors the literal path,
+					// where xmlns:xml takes the SkipNS shortcut without pushing.
+					if attname == lexicon.PrefixXML {
+						continue
+					}
 					pctx.pushNS(attname, attr.Value())
 					nbNs++
 				} else {
@@ -573,7 +821,15 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 
 	if !normalize {
 		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-			if v, nBytes := u8.ScanSimpleAttrValue(qch); nBytes > 0 {
+			if v, nBytes := u8.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
+				// The scan budget is cap+utf8.UTFMax, so a successful scan can
+				// run slightly over the cap; re-check the exact byte count here
+				// (before advancing) so a value of cap+1..cap+UTFMax bytes is
+				// rejected, matching the slow path's per-iteration check.
+				if pctx.nodeContentTooLong(nBytes) {
+					err = pctx.error(ctx, ErrNodeContentTooLarge)
+					return
+				}
 				if err = u8.AdvanceFast(nBytes); err != nil {
 					return
 				}
@@ -587,6 +843,13 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	b := bufferPool.Get()
 	defer releaseBuffer(b)
 
+	// Every write into b goes through writeAttr{String,Byte,Rune}, which
+	// enforce the node-content cap BEFORE the copy. This bounds the value
+	// during accumulation (so a giant attribute fails before its closing quote
+	// is reached, matching CDATA/PI/comment) AND closes the whole class of
+	// single-iteration over-cap writes — most importantly the non-substituted
+	// entity-reference branch, which copies "&"+ent.name+";" in one step and
+	// would otherwise be unbounded for a long entity name under MaxNameLength(-1).
 	for {
 		c := cur.PeekRune()
 		if (qch != 0x0 && c == rune(qch)) || c == '<' {
@@ -620,9 +883,13 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 				}
 
 				if r == '&' && !pctx.replaceEntities {
-					_, _ = b.WriteString("&#38;")
+					if err = pctx.writeAttrString(ctx, b, "&#38;"); err != nil {
+						return
+					}
 				} else {
-					_, _ = b.WriteRune(r)
+					if err = pctx.writeAttrRune(ctx, b, r); err != nil {
+						return
+					}
 				}
 			} else {
 				var ent *Entity
@@ -638,39 +905,58 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 
 				if ent.entityType == enum.InternalPredefinedEntity {
 					if ent.content == "&" && !pctx.replaceEntities {
-						_, _ = b.WriteString("&#38;")
+						if err = pctx.writeAttrString(ctx, b, "&#38;"); err != nil {
+							return
+						}
 					} else {
-						_, _ = b.WriteString(ent.content)
+						if err = pctx.writeAttrString(ctx, b, ent.content); err != nil {
+							return
+						}
 					}
 				} else if pctx.replaceEntities {
-					var rep string
-					rep, err = pctx.decodeEntities(ctx, ent.Content(), SubstituteRef)
-					if err != nil {
+					// Decode the entity replacement DIRECTLY into the attribute
+					// buffer through a cap-enforcing sink instead of first
+					// materializing the full expansion via decodeEntities and
+					// then copying it in. The sink normalizes attribute-value
+					// whitespace (TAB/CR/LF -> space) and checks the node-content
+					// cap before every byte, so an over-cap expansion (e.g.
+					// <r a="&big;"/> with SubstituteEntities, or a
+					// forced-replacement namespace attr xmlns:x="&big;") fails
+					// with ErrNodeContentTooLarge as soon as the running total
+					// would exceed the remaining budget — the cap is enforced
+					// incrementally during decode, never after a fully-built rep.
+					sink := &attrEntitySink{pctx: pctx, b: b}
+					if err = pctx.decodeEntitiesToSink(ctx, ent.Content(), SubstituteRef, 0, sink); err != nil {
 						err = pctx.error(ctx, err)
 						return
-					}
-					for i := range len(rep) {
-						switch rep[i] {
-						case 0xD, 0xA, 0x9:
-							_ = b.WriteByte(0x20)
-						default:
-							_ = b.WriteByte(rep[i])
-						}
 					}
 				} else {
 					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {
 						_, _ = pctx.decodeEntities(ctx, ent.Content(), SubstituteRef)
 						ent.checked = 2
 					}
-					_, _ = b.WriteString("&")
-					_, _ = b.WriteString(ent.name)
-					_, _ = b.WriteString(";")
+					// Route the unresolved reference through the bounded helper:
+					// a declared entity with a very long name under
+					// MaxNameLength(-1) would otherwise copy "&"+ent.name+";"
+					// unbounded in this single iteration before the next cap
+					// check.
+					if err = pctx.writeAttrString(ctx, b, "&"); err != nil {
+						return
+					}
+					if err = pctx.writeAttrString(ctx, b, ent.name); err != nil {
+						return
+					}
+					if err = pctx.writeAttrString(ctx, b, ";"); err != nil {
+						return
+					}
 				}
 			}
 		case 0x20, 0xD, 0xA, 0x9:
 			if b.Len() > 0 || !normalize {
 				if !normalize || !inSpace {
-					b.WriteByte(0x20)
+					if err = pctx.writeAttrByte(ctx, b, 0x20); err != nil {
+						return
+					}
 				}
 				inSpace = true
 			}
@@ -682,7 +968,9 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 			// Write the raw decoded bytes (dw wide) so a real U+FFFD round-trips
 			// intact; WriteRune(c) would re-encode RuneError and utf8.RuneLen(c)
 			// would be -1, advancing too few bytes.
-			b.WriteString(cur.PeekString(dw))
+			if err = pctx.writeAttrString(ctx, b, cur.PeekString(dw)); err != nil {
+				return
+			}
 			if err := cur.Advance(dw); err != nil {
 				return "", 0, err
 			}

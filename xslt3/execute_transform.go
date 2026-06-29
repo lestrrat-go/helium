@@ -303,7 +303,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		defaultCollation:    ss.defaultCollation,
 		docOrderCache:       xpath3.NewDocOrderCache(),
 	}
-	ec.setCurrentTemplate(nil) // initialize currentTemplateBaseDir from stylesheet
+	ec.setCurrentTemplate(nil) // start with no current template; baseDir() falls back to the stylesheet base
 	// Set the principal output method so that isItemOutputMethod() returns
 	// true when the default xsl:output method is json or adaptive.  Without
 	// this, maps/arrays/functions produced during the principal result tree
@@ -328,6 +328,16 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	}
 	if cfg != nil && cfg.baseOutputURI != "" {
 		ec.currentOutputURI = cfg.baseOutputURI
+		// The principal result tree always exists and its URI is the base output
+		// URI, so reserve the canonical form of that URI up front. A secondary
+		// xsl:result-document whose href resolves to it denotes the SAME final
+		// result tree and must raise XTDE1490. Canonicalize with the SAME resolver
+		// the secondary duplicate key uses (canonicalResultURIKey) so a relative
+		// secondary href and the equivalent absolute one both match this seed.
+		// The primary output itself keys on the "" sentinel, so this distinct
+		// canonical key never makes the primary collide with itself.
+		ec.canonicalPrimaryURI = canonicalResultURIKey(cfg.baseOutputURI, "")
+		ec.usedResultURIs[ec.canonicalPrimaryURI] = struct{}{}
 	}
 	// Make the transform config (and thus its URIResolver) available before
 	// any runtime resource loading. initGlobalVars also assigns this; setting
@@ -412,7 +422,11 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if cfg != nil && cfg.globalContextSelect != "" && effectiveSource != nil {
 		expr, compErr := xpath3.NewCompiler().Compile(cfg.globalContextSelect)
 		if compErr == nil {
-			result, evalErr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, expr, effectiveSource)
+			gcEval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+			if cfg.parser != nil {
+				gcEval = gcEval.Parser(*cfg.parser)
+			}
+			result, evalErr := gcEval.Evaluate(ctx, expr, effectiveSource)
 			if evalErr != nil || sequence.Len(result.Sequence()) == 0 {
 				ec.globalContextAbsent = true
 			}
@@ -697,9 +711,16 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			// for the primary output method.
 			primaryMethod := ec.currentResultDocMethod
 			if primaryMethod == methodJSON {
+				// Derive allow-duplicate-names from the effective primary output
+				// definition: the default xsl:output, overridden by any primary
+				// xsl:result-document serialization params (which already fold in
+				// the default base via evalResultDocOutputDef).
 				allowDupes := false
 				if defOut := ss.outputs[""]; defOut != nil {
 					allowDupes = defOut.AllowDuplicateNames
+				}
+				if ec.primaryOutputOverrides != nil {
+					allowDupes = ec.primaryOutputOverrides.AllowDuplicateNames
 				}
 				if !allowDupes {
 					if err := validateJSONItems(out.pendingItems); err != nil {
@@ -759,7 +780,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ov := cloneOutputDef(ec.primaryOutputOverrides)
 		if ov.Method != "" {
 			outDef.Method = ov.Method
-			outDef.MethodExplicit = true
+			// Carry the override's explicitness rather than forcing it true:
+			// an override built solely from AVT-only attributes (media-type,
+			// html-version, etc.) inherits the base method without making it
+			// explicit, so forcing MethodExplicit=true here would wrongly
+			// disable html/xhtml auto-detection in serializeResult.
+			outDef.MethodExplicit = ov.MethodExplicit
 		}
 		if ov.Standalone != "" {
 			outDef.Standalone = ov.Standalone
@@ -767,8 +793,17 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.Encoding != "" {
 			outDef.Encoding = ov.Encoding
 		}
-		outDef.Indent = ov.Indent || outDef.Indent
-		outDef.OmitDeclaration = ov.OmitDeclaration || outDef.OmitDeclaration
+		// ov folds in the default xsl:output base via evalResultDocOutputDef, so
+		// it is the effective output definition. Assign the boolean serialization
+		// fields directly rather than OR-ing with outDef: an explicit false on
+		// the result-document (e.g. indent="{false()}") must override an inherited
+		// true. OR-ing would wrongly keep the inherited true on.
+		outDef.Indent = ov.Indent
+		outDef.OmitDeclaration = ov.OmitDeclaration
+		// Carry the omit-xml-declaration explicitness so the xhtml/html5
+		// serializer respects an explicit value rather than defaulting it to
+		// "yes" (output_html.go keys on OmitDeclarationExplicit).
+		outDef.OmitDeclarationExplicit = ov.OmitDeclarationExplicit
 		if ov.DoctypeSystem != "" {
 			outDef.DoctypeSystem = ov.DoctypeSystem
 		}
@@ -781,12 +816,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.HTMLVersion != "" {
 			outDef.HTMLVersion = ov.HTMLVersion
 		}
-		if ov.IncludeContentType != nil {
-			outDef.IncludeContentType = ov.IncludeContentType
-		}
-		if ov.ByteOrderMark {
-			outDef.ByteOrderMark = true
-		}
+		// Effective (base-folded) values; assign directly so an explicit false
+		// overrides an inherited true.
+		outDef.IncludeContentType = ov.IncludeContentType
+		outDef.ByteOrderMark = ov.ByteOrderMark
 		if len(ov.CDATASections) > 0 {
 			outDef.CDATASections = ov.CDATASections
 		}
@@ -796,9 +829,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.Version != "" {
 			outDef.Version = ov.Version
 		}
-		if ov.EscapeURIAttributes != nil {
-			outDef.EscapeURIAttributes = ov.EscapeURIAttributes
-		}
+		outDef.EscapeURIAttributes = ov.EscapeURIAttributes
 		if len(ov.SuppressIndentation) > 0 {
 			outDef.SuppressIndentation = ov.SuppressIndentation
 		}
@@ -817,6 +848,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.BuildTree != nil {
 			outDef.BuildTree = ov.BuildTree
 		}
+		// ov folds in the default xsl:output base via evalResultDocOutputDef, so
+		// this is the effective allow-duplicate-names for the primary output.
+		outDef.AllowDuplicateNames = ov.AllowDuplicateNames
+		// Likewise, ov folds in the default xsl:output base, so this is the
+		// effective undeclare-prefixes for the primary output.
+		outDef.UndeclarePrefixes = ov.UndeclarePrefixes
 	}
 
 	if cfg != nil {

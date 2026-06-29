@@ -675,8 +675,13 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				}
 			}
 			// Attribute nodes must be set as attributes on the current
-			// element, not added as child nodes.
-			if v.Node.Type() == helium.AttributeNode {
+			// element, not added as child nodes — except in capture/sequence
+			// mode (xsl:function / xsl:variable with as=, etc.), where the
+			// attribute is a free-standing sequence item that must be captured
+			// intact (out.current is not the eventual owner element). Falling
+			// through to ec.addNode captures it as a pendingItem in that case,
+			// mirroring copyNodeToOutput's sequenceMode handling.
+			if v.Node.Type() == helium.AttributeNode && !out.captureItems && !out.sequenceMode {
 				attr, ok := v.Node.(*helium.Attribute)
 				if ok {
 					if elem, ok := out.current.(*helium.Element); ok {
@@ -686,10 +691,12 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 								"cannot add attribute to element after children have been added")
 						}
 						if attr.URI() != "" {
-							ns, _ := out.doc.CreateNamespace(attr.Prefix(), attr.URI())
-							if err := elem.SetLiteralAttributeNS(attr.LocalName(), string(attr.Content()), ns); err != nil {
-								return err
-							}
+							// Use copyAttributeToElement so the attribute's
+							// namespace is declared on the element (and prefix
+							// conflicts are resolved). Setting only the attribute
+							// without a namespace declaration would leave the
+							// prefix undeclared in the serialized output.
+							copyAttributeToElement(elem, attr)
 						} else {
 							if _, err := elem.SetAttribute(attr.LocalName(), string(attr.Content())); err != nil {
 								return err

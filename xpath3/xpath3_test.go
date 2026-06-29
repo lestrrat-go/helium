@@ -152,9 +152,9 @@ func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"p:v": xpath3.SingleInteger(1),
-		})).
+		}).
 		Evaluate(t.Context(), compiled, nil)
 	require.Error(t, err)
 
@@ -1362,9 +1362,9 @@ func TestContextVariables(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile(`count(/library/book[price > $threshold])`)
 	require.NoError(t, err)
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"threshold": xpath3.SingleDouble(30.0),
-		})).
+		}).
 		Evaluate(t.Context(), compiled, doc)
 	require.NoError(t, err)
 	n, ok := result.IsNumber()
@@ -1376,9 +1376,9 @@ func TestWithVariablesCopiesSequences(t *testing.T) {
 	t.Parallel()
 	seq := xpath3.SingleInteger(1)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"x": seq,
-		}))
+		})
 
 	seq.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)}
 
@@ -1626,5 +1626,163 @@ func TestConcurrentEvaluate(t *testing.T) {
 	}
 	for range goroutines {
 		require.NoError(t, <-errs)
+	}
+}
+
+func TestResult_StringValue(t *testing.T) {
+	// Empty sequence => "".
+	r, err := evaluate(t.Context(), nil, `()`)
+	require.NoError(t, err)
+	require.Equal(t, "", r.StringValue())
+
+	// Single atomic.
+	r, err = evaluate(t.Context(), nil, `42`)
+	require.NoError(t, err)
+	require.Equal(t, "42", r.StringValue())
+
+	// Multi-item sequence => space-joined values (loop branch).
+	r, err = evaluate(t.Context(), nil, `(1, 2, 3)`)
+	require.NoError(t, err)
+	require.Equal(t, "1 2 3", r.StringValue())
+
+	r, err = evaluate(t.Context(), nil, `("a", "b")`)
+	require.NoError(t, err)
+	require.Equal(t, "a b", r.StringValue())
+
+	// Single-node result returns the node string value directly.
+	doc := mustParseXML(t, "<root>text-content</root>")
+	root := doc.DocumentElement()
+	r, err = evaluate(t.Context(), root, `.`)
+	require.NoError(t, err)
+	require.Equal(t, "text-content", r.StringValue())
+}
+
+func TestResult_TypePredicates(t *testing.T) {
+	// IsNumber across the numeric type hierarchy.
+	for _, expr := range []string{`1`, want1Dot5, `xs:double("2.0")`, `xs:float("3.0")`} {
+		r, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err)
+		_, ok := r.IsNumber()
+		require.True(t, ok, expr)
+	}
+
+	// A string is not a number.
+	r, err := evaluate(t.Context(), nil, `"x"`)
+	require.NoError(t, err)
+	_, ok := r.IsNumber()
+	require.False(t, ok)
+
+	// IsString / IsBoolean.
+	s, ok := r.IsString()
+	require.True(t, ok)
+	require.Equal(t, "x", s)
+
+	r, err = evaluate(t.Context(), nil, `true()`)
+	require.NoError(t, err)
+	b, ok := r.IsBoolean()
+	require.True(t, ok)
+	require.True(t, b)
+
+	// IsAtomic / Atomics.
+	r, err = evaluate(t.Context(), nil, `(1, 2)`)
+	require.NoError(t, err)
+	require.False(t, r.IsAtomic())
+	atoms, err := r.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atoms, 2)
+
+	r, err = evaluate(t.Context(), nil, `1`)
+	require.NoError(t, err)
+	require.True(t, r.IsAtomic())
+
+	// IsNodeSet / Nodes.
+	doc := mustParseXML(t, "<root><a/><b/></root>")
+	root := doc.DocumentElement()
+	r, err = evaluate(t.Context(), root, `*`)
+	require.NoError(t, err)
+	require.True(t, r.IsNodeSet())
+	nodes, err := r.Nodes()
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+
+	// A non-node result is not a node set; Nodes returns ErrNotNodeSet.
+	r, err = evaluate(t.Context(), root, `1`)
+	require.NoError(t, err)
+	require.False(t, r.IsNodeSet())
+	_, err = r.Nodes()
+	require.Error(t, err)
+}
+
+func TestExpression_ValidateAndCopy(t *testing.T) {
+	expr, err := xpath3.NewCompiler().Compile(`fn:abs(-1)`)
+	require.NoError(t, err)
+
+	// Valid: fn prefix is predeclared.
+	require.NoError(t, expr.Validate(map[string]string{}))
+
+	bad, err := xpath3.NewCompiler().Compile(`undeclared:foo()`)
+	require.NoError(t, err)
+	require.Error(t, bad.Validate(map[string]string{}))
+
+	// Result.Copy on an empty result yields an empty result whose sequence is nil.
+	empty := xpath3.Result{}
+	cp := empty.Copy()
+	require.Nil(t, cp.Sequence())
+
+	r, err := evaluate(t.Context(), nil, `(1, 2, 3)`)
+	require.NoError(t, err)
+	rc := r.Copy()
+	require.Equal(t, 3, rc.Sequence().Len())
+}
+
+func TestExpression_AST_StreamInfo(t *testing.T) {
+	expr, err := xpath3.NewCompiler().Compile(`child::a/descendant::b`)
+	require.NoError(t, err)
+
+	require.NotNil(t, expr.AST())
+
+	si := expr.StreamInfo()
+	require.True(t, si.HasDownwardStep)
+
+	// Nil expression yields a zero StreamInfo without panicking.
+	var nilExpr *xpath3.Expression
+	require.Equal(t, xpath3.StreamInfo{}, nilExpr.StreamInfo())
+}
+
+func TestExpression_StreamInfo_SnapshotIsolation(t *testing.T) {
+	expr, err := xpath3.NewCompiler().Compile(`count(child::a)`)
+	require.NoError(t, err)
+
+	si := expr.StreamInfo()
+	require.NotEmpty(t, si.UsedFunctions)
+
+	// Mutating the returned snapshot must not corrupt internal state.
+	si.UsedFunctions["bogus"] = true
+	delete(si.UsedFunctions, "count")
+
+	fresh := expr.StreamInfo()
+	require.True(t, fresh.UsedFunctions["count"])
+	require.NotContains(t, fresh.UsedFunctions, "bogus")
+}
+
+// An EQName-spelled fn:position()/fn:last() in a predicate must classify the
+// same as the unprefixed spelling for streamability (HasNonMotionlessPred) and
+// must be recorded in UsedFunctions under its local name.
+func TestExpression_StreamInfo_EQNameFunction(t *testing.T) {
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+
+	for _, fn := range []string{"position", "last"} {
+		plain, err := xpath3.NewCompiler().Compile(`a[` + fn + `()=1]`)
+		require.NoError(t, err)
+		eqname, err := xpath3.NewCompiler().Compile(`a[Q{` + fnNS + `}` + fn + `()=1]`)
+		require.NoError(t, err)
+
+		require.True(t, plain.StreamInfo().HasNonMotionlessPred,
+			"plain %s() predicate must be non-motionless", fn)
+		require.Equal(t, plain.StreamInfo().HasNonMotionlessPred,
+			eqname.StreamInfo().HasNonMotionlessPred,
+			"EQName Q{...}%s() must classify same as plain %s()", fn, fn)
+		require.True(t, eqname.StreamInfo().UsedFunctions[fn],
+			"EQName Q{...}%s() must be recorded under local name %q", fn, fn)
 	}
 }

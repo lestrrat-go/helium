@@ -176,6 +176,202 @@ func TestAttributeAType(t *testing.T) {
 	})
 }
 
+func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("explicit default xmlns wins over DTD default", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns CDATA "urn:dtd">]><r xmlns="urn:explicit"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "urn:explicit", root.URI())
+	})
+
+	t.Run("explicit prefixed xmlns wins over DTD default", func(t *testing.T) {
+		t.Parallel()
+		// The ATTLIST must be declared for the qualified element name "p:r"
+		// (the DTD-default lookup key for prefixed elements is the literal
+		// "prefix:local"); otherwise the default never applies and the test
+		// would pass regardless of the fix.
+		xml := `<!DOCTYPE p:r [<!ATTLIST p:r xmlns:p CDATA "urn:dtd">]><p:r xmlns:p="urn:explicit"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "urn:explicit", root.URI())
+	})
+
+	t.Run("DTD default applies when no explicit declaration", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns CDATA "urn:dtd">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "urn:dtd", root.URI())
+	})
+
+	t.Run("prefixed DTD default applies when no explicit declaration", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE p:r [<!ATTLIST p:r xmlns:p CDATA "urn:dtd">]><p:r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "urn:dtd", root.URI())
+	})
+
+	t.Run("explicit reserved xml prefix wins over DTD default", func(t *testing.T) {
+		t.Parallel()
+		// An explicit reserved-prefix declaration (xmlns:xml=...) takes an
+		// early SkipNS shortcut during parsing. The fix records it in
+		// nsDeclared so a conflicting DTD default for the same prefix is
+		// suppressed; otherwise xml:lang would bind to "urn:dtd" instead of
+		// the reserved XML namespace.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA "urn:dtd">]>` +
+			`<r xmlns:xml="http://www.w3.org/XML/1998/namespace" xml:lang="en"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		var lang *helium.Attribute
+		for _, a := range root.Attributes() {
+			if a.Name() == "xml:lang" {
+				lang = a
+				break
+			}
+		}
+		require.NotNil(t, lang)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
+	})
+
+	t.Run("conflicting DTD default xmlns:xml is rejected without explicit decl", func(t *testing.T) {
+		t.Parallel()
+		// No explicit xmlns:xml on the tag. A DTD-defaulted xmlns:xml that maps
+		// the reserved xml prefix to the wrong URI must be rejected before it is
+		// pushed; otherwise xml:lang would resolve through "urn:dtd" instead of
+		// the reserved XML namespace.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA "urn:dtd">]>` +
+			`<r xml:lang="en"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("well-formed DTD default xmlns:xml keeps the implicit XML namespace", func(t *testing.T) {
+		t.Parallel()
+		// A DTD-defaulted xmlns:xml that maps to the correct URI must not shadow
+		// the implicit reserved binding; xml:lang stays in the XML namespace.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA "http://www.w3.org/XML/1998/namespace">]>` +
+			`<r xml:lang="en"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		var lang *helium.Attribute
+		for _, a := range root.Attributes() {
+			if a.Name() == "xml:lang" {
+				lang = a
+				break
+			}
+		}
+		require.NotNil(t, lang)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
+	})
+
+	t.Run("DTD default xmlns:xmlns is rejected", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xmlns CDATA "urn:dtd">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("DTD default prefixed xmlns with empty URI creates no binding", func(t *testing.T) {
+		t.Parallel()
+		// An empty default value is never registered as an attribute default
+		// (mirrors libxml2: empty defaults are not applied), so the empty-URI
+		// case cannot reach the defaulting path and no namespace is pushed.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Empty(t, root.URI())
+	})
+
+	t.Run("literal non-xml prefix bound to reserved XML namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Only the xml prefix may bind the reserved XML namespace URI; a
+		// literal xmlns:p declaration of it must be rejected.
+		xml := `<r xmlns:p="http://www.w3.org/XML/1998/namespace"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("DTD default non-xml prefix bound to reserved XML namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Same constraint via the DTD-defaulting path.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "http://www.w3.org/XML/1998/namespace">]><r/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("literal xmlns:xml bound to reserved XML namespace is allowed", func(t *testing.T) {
+		t.Parallel()
+		// The xml prefix may explicitly bind its reserved namespace URI.
+		xml := `<r xmlns:xml="http://www.w3.org/XML/1998/namespace" xml:lang="en"/>`
+
+		p := helium.NewParser()
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		var lang *helium.Attribute
+		for _, a := range root.Attributes() {
+			if a.Name() == "xml:lang" {
+				lang = a
+				break
+			}
+		}
+		require.NotNil(t, lang)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
+	})
+}
+
 func TestGetAttribute(t *testing.T) {
 	t.Parallel()
 
@@ -888,4 +1084,70 @@ func TestAttributeAddSibling(t *testing.T) {
 		require.Nil(t, elem.LastChild(), "owner lastChild remains nil")
 		require.Len(t, elem.Attributes(), 1, "only the anchor attribute remains")
 	})
+}
+
+// TestSetBooleanAttribute covers Element.SetBooleanAttribute for both the
+// success path (a value-less attribute) and the colon-rejection error path.
+func TestSetBooleanAttribute(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("input")
+	require.NoError(t, doc.AddChild(root))
+
+	require.NoError(t, root.SetBooleanAttribute("checked"), "boolean attribute added")
+
+	require.True(t, root.HasAttribute("checked"), "boolean attribute is present")
+	val, ok := root.GetAttribute("checked")
+	require.True(t, ok, "boolean attribute is readable")
+	require.Empty(t, val, "boolean attribute has no value")
+
+	// A colon in the name is rejected.
+	require.Error(t, root.SetBooleanAttribute("ns:bad"))
+}
+
+// TestAttributeNodeMethods exercises the Attribute node-interface methods.
+func TestAttributeNodeMethods(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	attr, err := doc.CreateAttribute("a", "v", nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "v", attr.Value())
+	require.Equal(t, "a", attr.Name())
+
+	attr.SetAType(enum.AttrCDATA)
+	require.Equal(t, enum.AttrCDATA, attr.AType())
+
+	attr.SetDefault(true)
+	require.True(t, attr.IsDefault())
+
+	// AppendText extends the attribute value (text child).
+	require.NoError(t, attr.AppendText([]byte("-more")))
+
+	attr.SetTreeDoc(doc)
+}
+
+// TestCreateAttributeWithEntityValue drives the stringToNodeList path inside
+// CreateAttribute by passing a value containing character and entity references.
+func TestCreateAttributeWithEntityValue(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+
+	// Value with a decimal char ref, a hex char ref, and a named entity ref.
+	attr, err := doc.CreateAttribute("a", "x&#65;y&#x42;z&amp;w", nil)
+	require.NoError(t, err)
+	require.Equal(t, "a", attr.Name())
+	// The attribute has a child node list (text + entity refs).
+	require.NotNil(t, attr.FirstChild())
+
+	// Plain value (no '&') takes the fast single-text-node path.
+	attr2, err := doc.CreateAttribute("b", "plain", nil)
+	require.NoError(t, err)
+	require.Equal(t, "plain", attr2.Value())
+
+	// Colon in name is rejected.
+	_, err = doc.CreateAttribute("ns:x", "v", nil)
+	require.Error(t, err)
 }

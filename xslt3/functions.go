@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -420,11 +422,11 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// legacy permissive behavior (e.g. XSLT 3.0 W3C tests such as base-uri-051
 	// that resolve external SYSTEM entities) must opt in via
 	// Invocation.AllowExternalEntities(true).
-	doc, err := parseExternalXML(ctx, data, resolvedURI, ec.allowExternalEntities(),
+	doc, err := parseExternalXML(ctx, ec.injectedParser(), data, resolvedURI, ec.allowExternalEntities(),
 		ec.retrieveDocumentBytes,
 		func(p helium.Parser) helium.Parser {
 			return p.DefaultDTDAttributes(true).FixBaseURIs(false)
-		})
+		}, ec.resourceLimit())
 	if err != nil {
 		return nil, dynamicError(errCodeFODC0002, "cannot parse document %q: %v", uri, err)
 	}
@@ -526,6 +528,15 @@ func (ec *execContext) resourceLimit() int64 {
 // this transformation. Default false: XXE is blocked.
 func (ec *execContext) allowExternalEntities() bool {
 	return ec != nil && ec.transformConfig != nil && ec.transformConfig.allowExternalEntities
+}
+
+// injectedParser returns the caller-injected base parser governing parse policy
+// for runtime XML parses (nil = hardened default).
+func (ec *execContext) injectedParser() *helium.Parser {
+	if ec != nil && ec.transformConfig != nil {
+		return ec.transformConfig.parser
+	}
+	return nil
 }
 
 func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {
@@ -650,12 +661,14 @@ func resolveAgainstBaseURI(uri string, baseURI string) string {
 		}
 		return resolved
 	}
-	// Both base and ref are local filesystem paths.
-	if filepath.IsAbs(uri) {
+	// Both base and ref are local filesystem paths. Resolve with forward-slash
+	// (path) semantics so the result uses '/' on every OS; uripath.IsAbsolutePath
+	// recognizes both POSIX- and Windows-absolute refs regardless of GOOS.
+	if uripath.IsAbsolutePath(uri) {
 		return uri
 	}
 	baseDir := baseURIDir(baseURI)
-	return filepath.Join(baseDir, uri)
+	return uripath.JoinLocalBaseDir(baseDir, uri)
 }
 
 func splitURIFragment(uri string) (string, string) {
@@ -678,8 +691,20 @@ func splitURIFragment(uri string) (string, string) {
 // sibling "doc.xml" wrongly resolves to "mem:/pkg/doc.xml" instead of
 // "mem://pkg/doc.xml".
 //
-// For a genuine local filesystem base, filepath.Dir is used as before so a
-// sibling reference resolves against the containing directory.
+// For a genuine local filesystem base the containing directory is derived with
+// path.Dir over the forward-slash-normalized base ([uripath.ToSlash]) — the
+// SAME derivation compile-time module resolution uses for a local baseURI (see
+// resolveModuleHref in compile_imports.go), so a relative reference resolves to
+// the same directory whether the surrounding expression is compiled statically
+// or evaluated dynamically. A Compiler.BaseURI / stylesheet FILE base such as
+// "/styles/main" is treated as a file path: its last segment is dropped
+// ("/styles"), so doc("data.xml") lands at "/styles/data.xml". A genuine
+// directory-form base (a trailing-slash path such as "…/tests/fn/", as an
+// xml:base=".." override resolves to) is still handled correctly: path.Dir
+// collapses the trailing slash and keeps the directory ("…/tests/fn/" ->
+// "…/tests/fn"). Forward-slash semantics keep the result '/'-separated on every
+// OS (on Windows filepath.Dir would emit '\' and corrupt the later slash-based
+// join).
 func documentBaseDir(base string) string {
 	if base == "" {
 		return ""
@@ -687,22 +712,16 @@ func documentBaseDir(base string) string {
 	if xsd.URIScheme(base) != "" {
 		return base
 	}
-	return filepath.Dir(base)
+	return path.Dir(uripath.ToSlash(base))
 }
 
-// baseURIDir extracts the directory from a base URI. If the base URI looks
-// like a file path (last segment contains a dot), filepath.Dir is used.
-// Otherwise the base URI itself is treated as a directory.
+// baseURIDir extracts the directory from a local-filesystem base URI in
+// forward-slash form. If the base looks like a file path (last segment contains
+// a dot) the last segment is dropped; otherwise the base itself is treated as a
+// directory. uripath.LocalBaseDir performs this in slash space on every OS, so
+// the result never gains backslashes on Windows.
 func baseURIDir(baseURI string) string {
-	if strings.HasSuffix(baseURI, "/") || strings.HasSuffix(baseURI, string(filepath.Separator)) {
-		return strings.TrimRight(baseURI, "/"+string([]byte{filepath.Separator}))
-	}
-	base := filepath.Base(baseURI)
-	if strings.Contains(base, ".") {
-		return filepath.Dir(baseURI)
-	}
-	// No extension in the last segment — treat the entire path as a directory.
-	return baseURI
+	return uripath.LocalBaseDir(baseURI)
 }
 
 // resolveDocumentURI resolves a URI against a base directory.
@@ -715,9 +734,25 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 	if idx := strings.IndexByte(cleanURI, '#'); idx >= 0 {
 		cleanURI = cleanURI[:idx]
 	}
-	// Convert file:// URIs to local paths.
+	// Convert file:// URIs to local paths. Use iofs.FileURIToPath so a Windows
+	// drive-letter URI ("file:///D:/a/b") yields a drive path ("D:\\a\\b" on
+	// Windows) rather than a spurious leading-slash path ("/D:/a/b"). The result
+	// is then normalized with uripath.ToSlash so a non-drive POSIX-shaped URI
+	// ("file:///abs/x.xml") resolves to a forward-slash path ("/abs/x.xml") on
+	// EVERY OS — FileURIToPath would otherwise emit "\\abs\\x.xml" on Windows.
+	// The forward-slash form is what every other helium resolver consumes (Win32
+	// accepts '/'); POSIX behavior is unchanged. On parse failure, fall back to
+	// the original strip.
 	if strings.HasPrefix(cleanURI, "file:///") {
-		return cleanURI[len("file://"):]
+		if p, err := iofs.FileURIToPath(cleanURI); err == nil {
+			return uripath.ToSlash(p)
+		}
+		// On conversion failure (e.g. a "file:////server/share" UNC URI that
+		// FileURIToPath rejects) do NOT strip the "file://" prefix: that would
+		// yield "//server/share/..." which becomes a UNC path on Windows,
+		// bypassing the local-only policy. Return the original file: URI so a
+		// downstream local-path loader rejects it.
+		return cleanURI
 	}
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not a "://" substring
 	// check or filepath.IsAbs: an absolute-URI ref may carry a scheme with no
@@ -734,11 +769,14 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 		}
 		return resolved
 	}
-	if filepath.IsAbs(cleanURI) {
+	// Both local: resolve with forward-slash (path) semantics so the result uses
+	// '/' on every OS. uripath.IsAbsolutePath recognizes both POSIX- and
+	// Windows-absolute refs regardless of GOOS.
+	if uripath.IsAbsolutePath(cleanURI) {
 		return cleanURI
 	}
 	if baseDir != "" {
-		return filepath.Join(baseDir, cleanURI)
+		return uripath.JoinLocalBaseDir(baseDir, cleanURI)
 	}
 	return cleanURI
 }

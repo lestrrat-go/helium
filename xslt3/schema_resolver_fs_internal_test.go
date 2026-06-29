@@ -57,6 +57,11 @@ func TestResolveSchemaURI(t *testing.T) {
 		// xml:base): treated as a directory, NOT truncated by filepath.Dir.
 		{"local dir base, relative ref", "/work/schemas", sxsd, "/work/schemas/s.xsd"},
 		{"local dir base trailing slash, relative ref", "/work/schemas/", sxsd, "/work/schemas/s.xsd"},
+		// Windows-shaped local base: resolution stays in forward-slash space on
+		// every OS (plain strings, so exercised on Linux). The slashed base's
+		// last segment carries an extension, so it is the document and is dropped.
+		{"windows file base, relative ref", `C:\work\main.xsl`, sxsd, "C:/work/s.xsd"},
+		{"windows dir base, relative ref", `C:\work\schemas`, sxsd, "C:/work/schemas/s.xsd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := resolveSchemaURI(tc.ref, tc.base)

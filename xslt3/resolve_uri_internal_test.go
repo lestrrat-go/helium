@@ -11,6 +11,7 @@ const (
 	testStylesMainXSL = "/styles/main.xsl"
 	testDocsDir       = "/docs"
 	testDocsMainXML   = "/docs/main.xml"
+	testChildXML      = "child.xml"
 )
 
 // TestResolveAgainstBaseURIAbsolute verifies that resolveAgainstBaseURI
@@ -28,14 +29,40 @@ func TestResolveAgainstBaseURIAbsolute(t *testing.T) {
 		{"urn opaque", "urn:shared", testDocsMainXML, "urn:shared"},
 		{"file single slash", "file:/docs/d.xml", testDocsMainXML, "file:/docs/d.xml"},
 		{"http authority", "http://example.com/d.xml", testDocsMainXML, "http://example.com/d.xml"},
-		{"relative against local base", "child.xml", testDocsMainXML, "/docs/child.xml"},
+		{"relative against local base", testChildXML, testDocsMainXML, "/docs/child.xml"},
 		// Root-relative ref against a URI base keeps scheme+authority.
 		{"root-relative against uri base", "/other/d.xml", "mem:/docs/main.xml", "mem:/other/d.xml"},
-		{"relative against uri base", "child.xml", "mem:/docs/main.xml", "mem:/docs/child.xml"},
+		{"relative against uri base", testChildXML, "mem:/docs/main.xml", "mem:/docs/child.xml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolveAgainstBaseURI(tc.uri, tc.base)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestEnsureFileURI verifies that ensureFileURI normalizes both POSIX- and
+// Windows-absolute filesystem paths into "file:" URIs (so a later url.Parse
+// never reads a Windows drive letter as a URI scheme), and leaves paths that
+// already carry a scheme untouched. The Windows shapes are plain strings, so
+// the Windows behavior is exercised on Linux CI.
+func TestEnsureFileURI(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"posix absolute", "/a/b/main.xsl", "file:///a/b/main.xsl"},
+		{"windows drive backslash", `D:\a\helium\main.xsl`, "file:///D:/a/helium/main.xsl"},
+		{"windows drive forward slash", `C:/styles/main.xsl`, "file:///C:/styles/main.xsl"},
+		{"windows unc", `\\host\share\main.xsl`, "file://host/share/main.xsl"},
+		{"already file uri", "file:///a/b.xsl", "file:///a/b.xsl"},
+		{"already http uri", "http://example.com/a.xsl", "http://example.com/a.xsl"},
+		{"relative left alone", "child.xsl", "child.xsl"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, ensureFileURI(tc.in))
 		})
 	}
 }
@@ -64,7 +91,7 @@ func TestLoadParameterDocumentURIAbsolute(t *testing.T) {
 				// care which URI the loader was asked for.
 				return nil, errStopAfterResolve
 			}
-			_ = loadParameterDocumentFromFile(context.Background(), &OutputDef{}, tc.base, tc.href, loadBytes, false)
+			_, _, _ = loadParameterDocumentFromFile(context.Background(), nil, &OutputDef{}, tc.base, tc.href, loadBytes, false, false, 0)
 			require.Equal(t, tc.want, seen)
 		})
 	}
@@ -118,12 +145,32 @@ func TestResolveDocumentURIAbsolute(t *testing.T) {
 		{"file single slash", "file:/x.xml", testDocsDir, "file:/x.xml"},
 		{"http authority", "http://example.com/d.xml", testDocsDir, "http://example.com/d.xml"},
 		// Relative ref against a URI base keeps scheme/authority.
-		{"relative under uri base", "child.xml", "mem://pkg", "mem://pkg/child.xml"},
+		{"relative under uri base", testChildXML, "mem://pkg", "mem://pkg/child.xml"},
 		{"root-relative under uri base", "/other.xml", "mem://pkg/sub", "mem://pkg/other.xml"},
 		// Both local: historical filepath behavior preserved.
-		{"local relative", "child.xml", testDocsDir, "/docs/child.xml"},
+		{"local relative", testChildXML, testDocsDir, "/docs/child.xml"},
 		{"local absolute", "/abs.xml", testDocsDir, "/abs.xml"},
+		// A POSIX-shaped file: URI resolves to a forward-slash path on every OS;
+		// the ToSlash normalization on the FileURIToPath result is what stops
+		// Windows from emitting "\abs\x.xml" here. (A drive-letter file: URI is
+		// GOOS-dependent via FileURIToPath, so it is not asserted in this
+		// cross-OS table.)
 		{"file triple slash", "file:///abs/x.xml", testDocsDir, "/abs/x.xml"},
+		// A "file:////server/share" UNC URI is rejected by FileURIToPath; the
+		// fallback must NOT strip "file://" (which would yield the UNC path
+		// "//server/share/x.xml" and reach a remote SMB host on Windows). The
+		// original file: URI is returned unchanged so a local-path loader rejects it.
+		{"file unc rejected not stripped", "file:////server/share/x.xml", testDocsDir, "file:////server/share/x.xml"},
+		// url.Parse percent-decodes u.Path, so a "%5C"/"%5c" encoded backslash
+		// decodes to "/\server/share" — still a UNC path on Windows. FileURIToPath
+		// rejects it, so the fallback must keep the original file: URI verbatim
+		// rather than stripping "file://" into a bare UNC path.
+		{"file unc encoded backslash not stripped", "file:///%5Cserver/share/x.xml", testDocsDir, "file:///%5Cserver/share/x.xml"},
+		{"file unc encoded backslash lower not stripped", "file:///%5cserver/share/x.xml", testDocsDir, "file:///%5cserver/share/x.xml"},
+		// Windows-shaped local base resolves with forward-slash output on any OS
+		// (a plain string here, so the Windows behavior is exercised on Linux).
+		{"windows base relative ref", testChildXML, `C:\docs`, "C:/docs/child.xml"},
+		{"windows-absolute ref verbatim", `C:\abs.xml`, `C:\docs`, `C:\abs.xml`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ec.resolveDocumentURI(tc.uri, tc.baseDir)
@@ -154,6 +201,65 @@ func TestRootXMLBaseURIAware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolveRootXMLBase(tc.baseURI, tc.xmlBase)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestRefDenotesDirectory verifies that directory-detection looks only at the
+// PATH portion of a reference: a query-only/fragment-only ref has an empty path
+// and is NOT directory-denoting (path.Base("") == "." must not be mistaken for
+// a "." dot-segment), while a path that ends in '/' before a query still is.
+func TestRefDenotesDirectory(t *testing.T) {
+	for _, tc := range []struct {
+		ref  string
+		want bool
+	}{
+		{"", false},
+		{"dir/", true},
+		{"dir", false},
+		{".", true},
+		{"..", true},
+		{"a/b/", true},
+		{"a/b", false},
+		// Query-only / fragment-only: empty path portion, not a directory.
+		{"?v", false},
+		{"#frag", false},
+		{"?a=b", false},
+		// Path ends in '/' even with a trailing query/fragment.
+		{"dir/?v", true},
+		{"dir/#f", true},
+		// Path is a plain file even with a query.
+		{"dir?v", false},
+		{"file.xml#frag", false},
+		// Dot-segment paths with a query.
+		{"..?v", true},
+		{"./#f", true},
+	} {
+		t.Run(tc.ref, func(t *testing.T) {
+			require.Equal(t, tc.want, refDenotesDirectory(tc.ref))
+		})
+	}
+}
+
+// TestEnsureDirSlash verifies the trailing path slash is inserted before any
+// query/fragment, never at the very end — so a directory base carrying a query
+// ("…/dir?v") becomes "…/dir/?v", not the path-corrupting "…/dir?v/".
+func TestEnsureDirSlash(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{"a/b/dir", "a/b/dir/"},
+		{"a/b/dir/", "a/b/dir/"},
+		{"a/b/dir?v", "a/b/dir/?v"},
+		{"a/b/dir?v=1&w=2", "a/b/dir/?v=1&w=2"},
+		{"a/b/dir#f", "a/b/dir/#f"},
+		{"a/b/dir/?v", "a/b/dir/?v"},
+		{"a/b/dir/#f", "a/b/dir/#f"},
+		{"mem://h/dir?v", "mem://h/dir/?v"},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			require.Equal(t, tc.want, ensureDirSlash(tc.in))
 		})
 	}
 }

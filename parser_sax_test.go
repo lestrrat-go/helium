@@ -330,6 +330,58 @@ func TestChunkedReaderPreservesIgnorableWhitespaceClassification(t *testing.T) {
 	}, events)
 }
 
+// A SAX wrapper that delegates to a TreeBuilder builds a DOM yet has
+// pctx.treeBuilder == nil (it is not the concrete *TreeBuilder). With
+// StripBlanks(true) and a tiny CharBufferSize, a pure-whitespace run longer than
+// the blank-prefix budget must still be classified over the whole run and
+// delivered via IgnorableWhitespace (which the TreeBuilder drops under
+// StripBlanks) — not downgraded to Characters by the chunked path's budget cap,
+// which would leave a stray whitespace text node in the DOM.
+func TestCharBufferStripBlanksTreeBuilderWrapper(t *testing.T) {
+	t.Parallel()
+
+	tb := helium.NewTreeBuilder()
+	wrapper := sax.New()
+	wrapper.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(ctx context.Context, loc sax.DocumentLocator) error {
+		return tb.SetDocumentLocator(ctx, loc)
+	}))
+	wrapper.SetOnStartDocument(sax.StartDocumentFunc(func(ctx context.Context) error {
+		return tb.StartDocument(ctx)
+	}))
+	wrapper.SetOnEndDocument(sax.EndDocumentFunc(func(ctx context.Context) error {
+		return tb.EndDocument(ctx)
+	}))
+	wrapper.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
+	}))
+	wrapper.SetOnEndElementNS(sax.EndElementNSFunc(func(ctx context.Context, localname, prefix, uri string) error {
+		return tb.EndElementNS(ctx, localname, prefix, uri)
+	}))
+	wrapper.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
+		return tb.Characters(ctx, ch)
+	}))
+	wrapper.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx context.Context, ch []byte) error {
+		return tb.IgnorableWhitespace(ctx, ch)
+	}))
+
+	// CharBufferSize(8) gives a blank-prefix budget floored at 64 KiB; a
+	// whitespace run past that budget is what the chunked path would downgrade
+	// to Characters. Keep it well above the floor.
+	input := "<root>" + strings.Repeat(" ", 70000) + "<child/></root>"
+
+	p := helium.NewParser().SAXHandler(wrapper).StripBlanks(true).CharBufferSize(8)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	root := findDocumentElement(doc)
+	require.NotNil(t, root, "document element must exist")
+	first := root.FirstChild()
+	require.NotNil(t, first, "root must have children")
+	require.Equal(t, helium.ElementNode, first.Type(),
+		"large whitespace run must be dropped as ignorable whitespace, not delivered as a text node")
+}
+
 func newStopParserEntityHandler(seen *[]string, resolve sax.ResolveEntityFunc) sax.SAX2Handler {
 	tb := helium.NewTreeBuilder()
 	wrapper := sax.New()
@@ -423,6 +475,49 @@ func TestStopParser(t *testing.T) {
 
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "StopParser should not produce an error")
+	})
+
+	t.Run("on final chunk of a multi-chunk char-data run", func(t *testing.T) {
+		t.Parallel()
+		// Regression: a SAX handler that stops on the LAST sub-chunk of a
+		// chunked character-data callback must not let the parser scan/emit any
+		// further chunk. A pure-whitespace prefix larger than the blank-prefix
+		// budget is reclassified as character data and flushed via a single
+		// multi-chunk callback, then the rest of the run is streamed in bounded
+		// chunks. Stopping on the final sub-chunk of that flush previously
+		// returned nil, so the streaming tail still read and emitted one more
+		// chunk after the stop.
+		//
+		// With CharBufferSize(8) the budget floor is 64 KiB, so the prefix is
+		// reclassified once the buffered blanks first exceed 64 KiB: the first
+		// multiple of 8 strictly greater than 65536 is 65544. Stop exactly when
+		// that prefix has been delivered (its final sub-chunk).
+		const prefix = 65544
+		input := "<root>" + strings.Repeat(" ", prefix+4000) + "<child/></root>"
+
+		var total int
+		var stopped bool
+		var afterStop int
+
+		s := sax.New()
+		s.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
+			if stopped {
+				afterStop += len(ch)
+			}
+			total += len(ch)
+			if !stopped && total == prefix {
+				helium.StopParser(ctx)
+				stopped = true
+			}
+			return nil
+		}))
+
+		p := helium.NewParser().SAXHandler(s).CharBufferSize(8)
+
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "StopParser should not produce an error")
+		require.True(t, stopped, "StopParser should have fired on the prefix's final sub-chunk")
+		require.Zero(t, afterStop, "no character data should be emitted after StopParser")
 	})
 
 	t.Run("in StartElementNS", func(t *testing.T) {
@@ -623,7 +718,7 @@ func TestStopParser(t *testing.T) {
 			return nil, sax.ErrHandlerUnspecified
 		}))
 
-		p := helium.NewParser().SAXHandler(s).SubstituteEntities(true)
+		p := helium.NewParser().BlockXXE(false).SAXHandler(s).SubstituteEntities(true)
 
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "StopParser should work while expanding external parsed entities")

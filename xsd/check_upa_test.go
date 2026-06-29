@@ -173,6 +173,27 @@ func TestUPADeterminism(t *testing.T) {
   </xs:element>
 </xs:schema>`,
 			},
+			{
+				// A choice between a substitution-group head ref and a ref to one
+				// of its members. `ref="head"` accepts the head AND every
+				// substitution-group member, so a `member` element could be
+				// attributed to either the head branch (via substitution) or the
+				// explicit member branch. Non-deterministic. UPA must expand the
+				// head leaf to its substitution-group members to see the overlap.
+				name: "choice of subst-group head and a member overlaps",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="member" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element ref="head"/>
+        <xs:element ref="member"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -421,6 +442,26 @@ func TestUPADeterminism(t *testing.T) {
       <xs:sequence>
         <xs:element name="a" type="xs:int" minOccurs="0" maxOccurs="0"/>
         <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A substitution-group head ref followed by an element whose name
+				// is distinct from the head AND every member. Expanding the head
+				// leaf to {head, member} positions must NOT make the model overlap
+				// the trailing `tail`, so it stays deterministic. Guards the
+				// substitution-group UPA expansion against over-rejection.
+				name: "subst-group head ref followed by a distinct element",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="member" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="tail" type="xs:int"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>

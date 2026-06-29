@@ -106,6 +106,96 @@ Use `helium lint` in place of the old `heliumlint` command.
 See [`cmd/helium/README.md`](cmd/helium/README.md) for command-specific
 documentation.
 
+# Security
+
+`NewParser()` is **secure by default** — it is safe to point at untrusted XML
+with no extra configuration. By default:
+
+- External entity and DTD loading is **blocked** (`BlockXXE(true)`), so XML
+  External Entity (XXE) attacks are rejected.
+- No filesystem is exposed: the parser's `FS` is a **deny-all** filesystem, so
+  even a document that reaches a loader cannot open host paths.
+- Network access is **forbidden** (`AllowNetwork(false)`). The core parser has
+  no network loader, so this is belt-and-suspenders.
+- Element nesting depth is **capped at 256** (`MaxDepth(256)`; `0` = unbounded).
+- Entity substitution and external DTD loading are off
+  (`SubstituteEntities(false)`, `LoadExternalDTD(false)`); the entity-expansion
+  amplification, name-length, and content-model-depth guards are at their
+  defaults (`MaxEntityAmplification`, `MaxNameLength`, `MaxContentModelDepth`);
+  and any external DTD subset — once explicitly enabled — is capped at 10 MiB.
+
+The builder is clone-on-write, so one configured parser is safe to reuse across
+goroutines.
+
+To deliberately load external resources from a **trusted** source, opt back in
+explicitly:
+
+```go
+doc, err := helium.NewParser().
+    BlockXXE(false).            // allow external entities and DTDs
+    LoadExternalDTD(true).      // read the external DTD subset
+    SubstituteEntities(true).   // expand entities
+    FS(helium.PermissiveFS()).  // open any os.Open path (or pass a confined fs.FS)
+    Parse(ctx, xmlBytes)
+```
+
+`helium.PermissiveFS()` returns an `fs.FS` that opens any path via `os.Open`,
+restoring the historical unsandboxed behavior; prefer a confined `fs.FS` rooted
+at a trusted directory when the document's external references are known.
+Passing `FS(nil)` restores the deny-all default.
+
+The parser cannot know your resource budget, so even with the safe defaults the
+caller should also:
+
+- Enforce a maximum raw document size before calling `Parse`.
+- Pass a `context.Context` with a deadline to `Parse` / `ParseReader`.
+- Leave the entity-amplification, name-length, and content-model-depth limits
+  at their defaults — passing a negative value to `MaxEntityAmplification`,
+  `MaxNameLength`, or `MaxContentModelDepth` removes that guard.
+- Be cautious enabling XInclude, catalogs, DTD validation, or
+  default-DTD-attribute processing for untrusted input; when you do, keep every
+  external resource allowlisted and size-bounded. The `xinclude` processor is
+  also secure by default — with no resolver configured it denies all filesystem
+  access; grant access with `Resolver(xinclude.NewFSResolver(fsys))` backed by a
+  confined `fs.FS` (`os.Root.FS`), or restore historical OS-path access with
+  `xinclude.NewFSResolver(helium.PermissiveFS())`.
+  `xinclude.Processor.MaxIncludeDepth` bounds the nesting depth of included
+  documents, and `MaxIncludeSize` caps the bytes read per included resource.
+
+The `xsd` schema compiler is likewise **secure by default**: `xsd.NewCompiler()`
+denies all nested-schema filesystem access, so an untrusted schema cannot
+disclose local files or exhaust resources through a hostile
+`xs:include`/`xs:import`/`xs:redefine` `schemaLocation`. Each nested schema is
+read through a fixed byte cap regardless of the `fs.FS` in use. Opt into host
+access with `Compiler.FS(helium.PermissiveFS())` or a confined `fs.FS`;
+`Compiler.FS(nil)` restores the deny-all default.
+
+**Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
+External-resource paths are joined against the document base URI and may be
+absolute or use OS-specific separators, so `os.DirFS`-style roots (which enforce
+`fs.ValidPath`) reject them. Until path normalization lands, rely on the deny-all
+default for confinement rather than a chroot-style `fs.FS`.
+
+The `xmldsig1` (signatures) and `xmlenc1` (encryption) packages are
+**experimental** and should not be relied on inside a security or compliance
+boundary yet.
+
+# `encoding/xml` compatibility
+
+The [`shim`](shim/README.md) package is an import-path-compatible replacement
+for `encoding/xml` backed by helium's parser (`Marshal`, `Unmarshal`,
+`Encoder`, `Decoder`, and the usual struct tags). It is a migration aid, not a
+byte-for-byte behavioral clone. Known differences:
+
+- `Decoder.Strict = false` is not supported; `Decoder.AutoClose` is a no-op and
+  `HTMLAutoClose` is omitted.
+- Undeclared namespace prefixes are rejected rather than passed through.
+- Namespace declarations are emitted before regular attributes.
+- `Decoder.InputOffset` is approximate rather than exact.
+- Empty elements captured via `,innerxml` may re-serialize as self-closed tags.
+
+Migrate behind your own tests rather than assuming a transparent swap.
+
 # Performance
 
 Helium parses XML into a full DOM tree. The benchmark below compares that DOM
@@ -146,7 +236,7 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 * Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
 * Experimental: W3C XML Digital Signatures 1.1 (`xmldsig1`) and XML Encryption 1.1 (`xmlenc1`). These APIs may change and may move to a separate repository.
 * W3C conformance suites: ~22,250 / 22,744 QT3 tests pass for XPath 3.1; ~11,780 / 13,129 W3C tests pass for XSLT 3.0 (skips are XSLT 1.0/2.0 backwards compatibility and other out-of-scope features).
-* libxml2-compat golden tests: core XML parsing 100%, XSD 99.6%, RELAX NG 100%, Schematron 100%, C14N 87%, HTML 100%.
+* libxml2-compat golden tests: core XML parsing 100%, XSD 99.6%, RELAX NG 100%, Schematron 100%, C14N 100%, HTML 100%.
 * XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards compatibility modes for XSLT 1.0/2.0 are not part of the target feature set.
 * A `helium` CLI provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.

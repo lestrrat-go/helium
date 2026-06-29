@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/tools/internal/gen"
 	"golang.org/x/net/html/charset"
 )
@@ -187,7 +188,11 @@ func main() {
 	resourceFiles := make(map[string]bool)
 
 	for _, tsRef := range cat.TestSets {
-		tsFile := filepath.Join(sourceDir, tsRef.File)
+		tsFile, err := containedPath(sourceDir, tsRef.File)
+		if err != nil {
+			log.Printf("qt3gen: skipping unsafe test-set path %q: %v", tsRef.File, err)
+			continue
+		}
 		ts := parseTestSet(tsFile)
 		tsDir := filepath.Dir(tsRef.File)
 
@@ -323,8 +328,16 @@ func main() {
 	// Copy context documents (preserving directory structure)
 	copied := 0
 	for docPath := range docFiles {
-		srcFull := filepath.Join(sourceDir, docPath)
-		dstFull := filepath.Join(docsDir, docPath)
+		srcFull, err := containedPath(sourceDir, docPath)
+		if err != nil {
+			log.Printf("qt3gen: skipping unsafe doc path %q: %v", docPath, err)
+			continue
+		}
+		dstFull, err := containedPath(docsDir, docPath)
+		if err != nil {
+			log.Printf("qt3gen: skipping unsafe doc path %q: %v", docPath, err)
+			continue
+		}
 		if err := gen.CopyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", docPath, err)
 			continue
@@ -334,8 +347,16 @@ func main() {
 
 	// Copy resource files (for fn:json-doc etc.)
 	for resPath := range resourceFiles {
-		srcFull := filepath.Join(sourceDir, resPath)
-		dstFull := filepath.Join(docsDir, resPath)
+		srcFull, err := containedPath(sourceDir, resPath)
+		if err != nil {
+			log.Printf("qt3gen: skipping unsafe resource path %q: %v", resPath, err)
+			continue
+		}
+		dstFull, err := containedPath(docsDir, resPath)
+		if err != nil {
+			log.Printf("qt3gen: skipping unsafe resource path %q: %v", resPath, err)
+			continue
+		}
 		if err := gen.CopyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying resource %s: %v", resPath, err)
 			continue
@@ -593,6 +614,39 @@ func checkEnvironmentSupport(env *environment) string {
 		}
 	}
 	return ""
+}
+
+// containedPath joins root and relPath, rejecting any relPath that is absolute
+// or escapes root via ".." segments. It returns the cleaned absolute path on
+// success. This prevents a malicious or malformed catalog reference (e.g.
+// "../../xpath3/pwn.go" or "/etc/passwd") from causing the generator to read or
+// write outside the intended testdata tree.
+func containedPath(root, relPath string) (string, error) {
+	if relPath == "" {
+		return "", fmt.Errorf("empty path")
+	}
+	if isAbsoluteAnyOS(relPath) {
+		return "", fmt.Errorf("absolute path not allowed: %q", relPath)
+	}
+	cleaned := filepath.Clean(filepath.Join(root, relPath))
+	rel, err := filepath.Rel(root, cleaned)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes root %q: %q", root, relPath)
+	}
+	return cleaned, nil
+}
+
+// isAbsoluteAnyOS reports whether p is absolute under EITHER POSIX or Windows
+// conventions, regardless of the host OS. The containment guard must use this
+// rather than filepath.IsAbs: on Windows filepath.IsAbs("/etc/passwd") is false
+// (no drive letter) and on POSIX filepath.IsAbs("C:\\Windows") is false, so a
+// single-OS check lets a path that is absolute on the "other" OS slip past the
+// path-traversal rejection.
+func isAbsoluteAnyOS(p string) bool {
+	return filepath.IsAbs(p) || uripath.IsAbsolutePath(p)
 }
 
 func resolveEnvSourcePath(envIsGlobal bool, tsDir, file string) string {

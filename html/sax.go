@@ -20,19 +20,50 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // the parse fails rather than emitting a truncated node and leaking the
 // remainder as stray text.
 //
-// It is also returned from the RCDATA path for ANY unresolved named
-// character-reference literal — an "&"-prefixed sequence that does not resolve
-// to a known entity or legacy prefix — whether short, semicolon-terminated, or
-// unbounded, once the literal bytes it would emit ("&" + name + optional ";")
-// exceed the cap. A known-entity (';'-terminated) reference is exempt: it is
-// resolved within a fixed lookahead window and never charged against the cap. A
-// no-';' LEGACY resolution — a full legacy entity (e.g. "&amp") OR a
-// legacy-PREFIX match (e.g. "&ampZ", where "amp" resolves and "Z" is echoed) —
-// is exempt only when its whole consumed run ("&" + name) fits within the cap;
-// over the cap it hard-fails with this error and emits NOTHING. This holds
-// uniformly for both a SHORT within-lookahead run (e.g. "&ampZ" under a cap of 2)
-// and a saturated ambiguous run (e.g. "&amp" followed by a long alphanumeric
-// tail).
+// It is also returned — in normal data-state text as well as the RCDATA path —
+// for ANY unresolved named character-reference literal — an "&"-prefixed
+// sequence that does not resolve to a known entity or legacy prefix — whether
+// short, semicolon-terminated, or unbounded, once the literal bytes it would
+// emit ("&" + name + optional ";") exceed the cap. A known-entity
+// (';'-terminated) reference is exempt: it is resolved within a fixed lookahead
+// window and never charged against the cap. A no-';' LEGACY resolution — a full
+// legacy entity (e.g. "&amp") OR a legacy-PREFIX match (e.g. "&ampZ", where
+// "amp" resolves and "Z" is echoed) — is exempt only when its whole consumed
+// run ("&" + name) fits within the cap; over the cap it hard-fails with this
+// error and emits NOTHING. This holds uniformly for both a SHORT
+// within-lookahead run (e.g. "&ampZ" under a cap of 2) and a saturated ambiguous
+// run (e.g. "&amp" followed by a long alphanumeric tail).
+//
+// Finally, it is returned for a normal-text whitespace case whenever a run's
+// leading whitespace must be DEFERRED with its parent or significance still
+// undecided: under [Parser.StripBlanks](true) (a run is suppressed only when
+// entirely whitespace) OR during implied-<body> deferral (mode < insertInBody
+// with implied insertion enabled, so the next non-whitespace byte would open the
+// implied <body>). The scanner cannot flush a run whose leading whitespace prefix
+// reaches the cap with yet more whitespace beyond it without buffering the run
+// unbounded to learn its significance or parent — such a run fails rather than
+// parsing successfully. Default-mode whitespace with a fixed insertion target and
+// no StripBlanks stays a soft-cap stream and never hits this case.
+//
+// It is also returned for an over-cap indivisible STRUCTURAL token scan: a
+// tag name, an end-tag name, an attribute name, a PUBLIC/SYSTEM DOCTYPE literal,
+// or an intra-tag whitespace run. These are part of a single indivisible
+// start/end-tag or DOCTYPE event and cannot be chunked, so each is a HARD cap.
+// Their bound is the structural scan cap, which is NOT [Parser.MaxContentSize]
+// (a content-chunking knob callers legitimately set very small): it is floored
+// at the 16 MiB default so ordinary names like "script" always parse, and grows
+// only when MaxContentSize is raised above that floor. An over-cap structural
+// run fails the parse and emits no partial token.
+//
+// Lastly, [Parser.ParseReader] returns it for an UNDECLARED-charset stream whose
+// bytes stay valid UTF-8 past the configured [Parser.MaxContentSize] (16 MiB by
+// default) without ever revealing their encoding. Such a stream cannot be
+// committed to UTF-8 within the memory bound — a later non-UTF-8 byte would flip
+// the whole document to Windows-1252 (matching [Parser.Parse]) while EOF would
+// keep it UTF-8 — so rather than buffer it unbounded or risk a silently
+// mis-decoded result that diverges from the in-memory path, the reader fails
+// closed with this error. A stream that declares its charset, or that settles its
+// encoding (reaches EOF or a non-UTF-8 byte) below the limit, is unaffected.
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 
 // DocumentLocator is an alias for [sax.DocumentLocator].

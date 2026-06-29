@@ -44,19 +44,9 @@ const (
 
 var errInvalidUTF8Name = errors.New("invalid UTF-8 sequence in name")
 
-const MaxNameLength = 50000
-
 const (
 	entityAllowedExpansion int64 = 1_000_000 // 1 MB baseline before ratio check
 	entityFixedCost        int64 = 20        // fixed byte cost per entity reference
-	entityMaxAmplDefault         = 5         // default max amplification factor
-	// entityHardCeiling caps total entity expansion even when the ratio
-	// check is disabled (maxAmpl=0 via [Parser.RelaxLimits]). Without it,
-	// RelaxLimits permits unbounded amplification — a single document
-	// could expand to many GB of resident memory. 1 GB is permissive enough
-	// for any realistic XML workload but blocks the unbounded billion-laughs
-	// path that a hostile document could otherwise exploit.
-	entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, survives RelaxLimits
 	// externalEntityMaxBytes caps the number of bytes read from a single
 	// external parsed entity. Without it, a resolver returning an unbounded
 	// source (e.g. SYSTEM "/dev/zero") would be read via io.ReadAll and exhaust
@@ -64,6 +54,16 @@ const (
 	// blocking the unbounded-read denial-of-service path.
 	externalEntityMaxBytes int64 = 10 * 1024 * 1024 // 10 MiB
 )
+
+// entityHardCeiling caps total entity expansion even when the ratio check is
+// disabled (maxAmpl=0 via [Parser.MaxEntityAmplification](-1)). Without it,
+// disabling the ratio check would permit unbounded amplification — a single
+// document could expand to many GB of resident memory. 1 GB is permissive
+// enough for any realistic XML workload but blocks the unbounded billion-laughs
+// path that a hostile document could otherwise exploit. It is a package var
+// (not a const) only so tests can lower it to verify the ceiling without
+// actually expanding toward 1 GB; production never reassigns it.
+var entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, always enforced
 
 const (
 	notInSubset = iota
@@ -82,9 +82,23 @@ type parserCtx struct {
 	detectedEncoding string
 	in               io.Reader
 	rawInput         []byte // original bytes, used for EBCDIC encoding detection
-	nbread           int
-	instate          parserState
-	keepBlanks       bool
+	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
+	// that mode rawInput holds only a bounded sniff prefix (enough for
+	// ExtractEBCDICEncoding), and the live cursor over the prefix+remainder
+	// stream is decoded in place rather than being reset from rawInput (which
+	// would otherwise require buffering the whole — possibly unbounded — input).
+	ebcdicStream bool
+	// ebcdicConsumed counts the bytes pulled from the underlying reader on the
+	// EBCDIC streaming path. In ebcdicStream mode rawInput holds only a bounded
+	// sniff prefix, so init cannot seed inputSize with the real document size;
+	// the entity-amplification guard (entityCheckLimits) instead compares against
+	// this live consumed-byte count so a legitimate large EBCDIC document whose
+	// internal entity is referenced once is not falsely rejected. nil on every
+	// non-EBCDIC path (where inputSize already reflects the real/known size).
+	ebcdicConsumed *countingReader
+	nbread         int
+	instate        parserState
+	keepBlanks     bool
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
@@ -118,21 +132,54 @@ type parserCtx struct {
 	nodeTab     nodeStack
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
-	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via parseHuge)
+	maxAmpl     int   // max entity amplification factor (default 5; 0 = ratio check disabled)
 	// nbentities int
 	inputTab         inputStack
 	cachedCursor     strcursor.Cursor // cached result of getCursor(); invalidated on push/pop
 	stopped          bool
 	disableSAX       bool              // suppress SAX callbacks after fatal error in recover mode
 	recoverErr       error             // first fatal error saved during recovery
+	blankRunErr      error             // sticky error from an over-cap whitespace run (prolog/inter-root DoS guard)
 	elemDepth        int               // current element nesting depth
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
+	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)
+	maxCMDepth       int               // max DTD content-model declaration depth (0 = unlimited)
 	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
+	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run or attribute value, AND of a contiguous XML-whitespace blank-skip run (0 = unlimited)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
 	attrBuf          []attrData        // reusable attribute scratch buffer for start-tag parsing
 	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
+	baseURIScopes    []baseURIScope    // per-input baseURI overrides (restored when the input is popped)
+	// externalPEScopes records, per pushed external parameter-entity input, the
+	// entity whose replacement text the input holds. activeExternalPECount is the
+	// set of external PEs currently on the input stack (count per entity, to
+	// tolerate the same PE legitimately appearing at sibling positions). Together
+	// they reject a self/mutually recursive external PE before it can drive
+	// unbounded cursor pushes into the amplification ceiling. The active mark is
+	// cleared when the pushed input is popped (popInput), mirroring baseURIScopes.
+	externalPEScopes      []externalPEScope
+	activeExternalPECount map[*Entity]int
+}
+
+// baseURIScope records the baseURI to restore when a particular pushed input
+// (its cursor) is popped from the input stack. It is used to scope pctx.baseURI
+// to an external parameter entity's own resolved URI while that entity's
+// replacement text is being parsed, so relative system IDs in declarations
+// INSIDE the entity resolve against the entity's location rather than the
+// containing DTD.
+type baseURIScope struct {
+	input   any
+	baseURI string
+}
+
+// externalPEScope records which external parameter entity a pushed input belongs
+// to, so its active mark can be cleared when that exact input is popped (strictly
+// LIFO, like baseURIScope).
+type externalPEScope struct {
+	input  any
+	entity *Entity
 }
 
 type parserCtxKey struct{}
@@ -283,6 +330,43 @@ func (ctx *parserCtx) pushInput(in any) {
 	ctx.cachedCursor = nil // invalidate cache
 }
 
+// pushInputWithBaseURI pushes a new input AND scopes pctx.baseURI to baseURI
+// while that input is on the stack. The previous baseURI is restored when this
+// exact input is popped (popInput), so the override lasts precisely as long as
+// the pushed cursor is being consumed — even though the cursor is drained later
+// by the surrounding declaration loop rather than within the call that pushed it.
+// An empty baseURI is treated as "no override" (the input is pushed normally),
+// because clobbering baseURI to "" would break relative resolution rather than
+// help it.
+func (ctx *parserCtx) pushInputWithBaseURI(in any, baseURI string) {
+	if baseURI == "" {
+		ctx.pushInput(in)
+		return
+	}
+	ctx.baseURIScopes = append(ctx.baseURIScopes, baseURIScope{input: in, baseURI: ctx.baseURI})
+	ctx.baseURI = baseURI
+	ctx.pushInput(in)
+}
+
+// pushExternalPEInput pushes an external parameter entity's replacement text
+// (scoping baseURI to its resolved URI) AND records the entity as active so a
+// nested reference to the same PE — while its earlier input is still being
+// drained — is detected as recursion. The active mark is cleared in popInput.
+func (ctx *parserCtx) pushExternalPEInput(in any, baseURI string, ent *Entity) {
+	ctx.pushInputWithBaseURI(in, baseURI)
+	if ctx.activeExternalPECount == nil {
+		ctx.activeExternalPECount = make(map[*Entity]int)
+	}
+	ctx.activeExternalPECount[ent]++
+	ctx.externalPEScopes = append(ctx.externalPEScopes, externalPEScope{input: in, entity: ent})
+}
+
+// externalPEActive reports whether the given external parameter entity is
+// currently on the input stack (its replacement text is being parsed).
+func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
+	return ctx.activeExternalPECount[ent] > 0
+}
+
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	cur, ok := ctx.inputTab.PeekOne().(*strcursor.ByteCursor)
 	if !ok {
@@ -345,11 +429,120 @@ func (ctx *parserCtx) cursorDecodeErr() error {
 
 func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
 	ctx.cachedCursor = nil // invalidate cache
-	return ctx.inputTab.Pop()
+	popped := ctx.inputTab.Pop()
+	// Restore any baseURI override scoped to this exact input (see
+	// pushInputWithBaseURI). Inputs are popped strictly LIFO, so the override —
+	// if any — for the popped input is the top of the scope stack.
+	if n := len(ctx.baseURIScopes); n > 0 && ctx.baseURIScopes[n-1].input == popped {
+		ctx.baseURI = ctx.baseURIScopes[n-1].baseURI
+		ctx.baseURIScopes = ctx.baseURIScopes[:n-1]
+	}
+	// Clear the active mark for an external parameter entity whose pushed input is
+	// being popped (strictly LIFO, like the baseURI scope above), so a later
+	// sibling reference to the same PE is not mistaken for recursion.
+	if n := len(ctx.externalPEScopes); n > 0 && ctx.externalPEScopes[n-1].input == popped {
+		ent := ctx.externalPEScopes[n-1].entity
+		ctx.externalPEScopes = ctx.externalPEScopes[:n-1]
+		ctx.activeExternalPECount[ent]--
+		if ctx.activeExternalPECount[ent] <= 0 {
+			delete(ctx.activeExternalPECount, ent)
+		}
+	}
+	return popped
 }
 
 func (ctx *parserCtx) currentInputID() any {
 	return ctx.inputTab.PeekOne()
+}
+
+// resolveLimit maps a builder-supplied limit value to its effective
+// parser-context value: zero selects def, a negative value means "no limit"
+// (returns 0, the context sentinel for unlimited / disabled), and a positive
+// value is used verbatim.
+func resolveLimit(v, def int) int {
+	if v == 0 {
+		return def
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
+// nameTooLong reports whether a name of n bytes exceeds the configured maximum
+// name length. A maxNameLength of zero means no limit is enforced.
+func (ctx *parserCtx) nameTooLong(n int) bool {
+	return ctx.maxNameLength > 0 && n > ctx.maxNameLength
+}
+
+// nodeContentTooLong reports whether an indivisible content run of n bytes
+// exceeds the configured maximum node-content size. A maxNodeContent of zero
+// means no limit is enforced. Exactly maxNodeContent bytes is allowed; one more
+// fails (strict-greater).
+func (ctx *parserCtx) nodeContentTooLong(n int) bool {
+	return ctx.maxNodeContent > 0 && n > ctx.maxNodeContent
+}
+
+// writeAttrString appends s to the attribute-value buffer, enforcing the
+// node-content cap BEFORE the copy so no attribute write path (entity-reference
+// name, predefined-entity replacement, char-ref output, or literal text) can
+// grow the buffer past the cap. Returns ErrNodeContentTooLarge if the append
+// would exceed the cap. Exactly the cap is accepted (strict-greater).
+func (ctx *parserCtx) writeAttrString(c context.Context, b *bytes.Buffer, s string) error {
+	if ctx.nodeContentTooLong(b.Len() + len(s)) {
+		return ctx.error(c, ErrNodeContentTooLarge)
+	}
+	_, _ = b.WriteString(s)
+	return nil
+}
+
+// writeAttrByte appends a single byte to the attribute-value buffer with the
+// same pre-write cap enforcement as writeAttrString.
+func (ctx *parserCtx) writeAttrByte(c context.Context, b *bytes.Buffer, by byte) error {
+	if ctx.nodeContentTooLong(b.Len() + 1) {
+		return ctx.error(c, ErrNodeContentTooLarge)
+	}
+	_ = b.WriteByte(by)
+	return nil
+}
+
+// writeAttrRune appends a rune to the attribute-value buffer with the same
+// pre-write cap enforcement as writeAttrString.
+func (ctx *parserCtx) writeAttrRune(c context.Context, b *bytes.Buffer, r rune) error {
+	if ctx.nodeContentTooLong(b.Len() + utf8.RuneLen(r)) {
+		return ctx.error(c, ErrNodeContentTooLarge)
+	}
+	_, _ = b.WriteRune(r)
+	return nil
+}
+
+// nodeContentScanBudget returns the byte budget to hand a bounded char-data
+// scan so it stops just past the cap (cap + utf8.UTFMax guarantees a run longer
+// than the cap is detected even when a multi-byte rune straddles the boundary).
+// Zero means unbounded.
+func (ctx *parserCtx) nodeContentScanBudget() int {
+	if ctx.maxNodeContent <= 0 {
+		return 0
+	}
+	return ctx.maxNodeContent + utf8.UTFMax
+}
+
+// countingReader wraps an io.Reader and tracks the total number of bytes read
+// through it. The EBCDIC streaming path wraps its reconstructed stream
+// (sniff prefix + remainder) in one so the entity-amplification guard can use
+// the real number of document bytes consumed so far instead of the bounded
+// sniff-prefix length that rawInput holds in that mode. The count can never
+// exceed the source's true byte length, so it is a safe lower bound on the
+// document size.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
@@ -367,7 +560,10 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.spaceTab = ctx.spaceTab[:0]
 	ctx.spaceTab = append(ctx.spaceTab, -1) // initial value before any element
 	ctx.inputSize = int64(len(ctx.rawInput))
-	ctx.maxAmpl = entityMaxAmplDefault
+	ctx.maxAmpl = DefaultMaxEntityAmplification
+	ctx.maxNameLength = DefaultMaxNameLength
+	ctx.maxCMDepth = DefaultMaxContentModelDepth
+	ctx.maxNodeContent = DefaultMaxNodeContentSize
 	if p != nil {
 		ctx.sax = p.sax
 		if tb, ok := p.sax.(*TreeBuilder); ok {
@@ -392,17 +588,18 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		if ctx.options.IsSet(parseNoEnt) {
 			ctx.replaceEntities = true
 		}
-		if ctx.options.IsSet(parseHuge) {
-			ctx.maxAmpl = 0
-		}
 		if ctx.options.IsSet(parseSkipIDs) {
 			ctx.loadsubset.Set(SkipIDs)
 		}
 		ctx.maxElemDepth = p.maxDepth
 		ctx.maxExtDTDSize = p.maxExtDTDSize
+		ctx.maxAmpl = resolveLimit(p.maxEntityAmpl, DefaultMaxEntityAmplification)
+		ctx.maxNameLength = resolveLimit(p.maxNameLength, DefaultMaxNameLength)
+		ctx.maxCMDepth = resolveLimit(p.maxCMDepth, DefaultMaxContentModelDepth)
+		ctx.maxNodeContent = resolveLimit(p.maxNodeContent, DefaultMaxNodeContentSize)
 	}
 	if ctx.fsys == nil {
-		ctx.fsys = iofs.PermissiveRoot{}
+		ctx.fsys = iofs.DenyAll{}
 	}
 	return nil
 }
@@ -444,14 +641,26 @@ func (pctx *parserCtx) deliverCharacters(ctx context.Context, handler func(conte
 				end--
 			}
 			if end == 0 {
-				// Should not happen with valid UTF-8, but avoid infinite loop.
-				end = min(bufSize, len(data))
+				// A single rune is wider than bufSize (e.g. CharBufferSize(1)
+				// with multi-byte text). Splitting it would emit invalid UTF-8
+				// fragments, so deliver the whole rune even though it exceeds
+				// bufSize: walk forward to the next character boundary.
+				end = bufSize
+				for end < len(data) && !utf8.RuneStart(data[end]) {
+					end++
+				}
 			}
 		}
 
 		switch err := handler(ctx, data[:end]); err {
 		case nil, sax.ErrHandlerUnspecified:
-			// no op
+			// The handler may have requested a stop on this chunk's callback
+			// (including the final chunk, where the loop would otherwise exit
+			// with nil). Report the stop so the caller terminates promptly and
+			// emits no further chunks.
+			if pctx.stopped {
+				return errParserStopped
+			}
 		default:
 			return pctx.error(ctx, err)
 		}
@@ -474,6 +683,37 @@ func (pctx *parserCtx) namespaceError(ctx context.Context, err error) error {
 }
 
 func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorLevel) error {
+	// A blank-run scan that tripped the cancellation/over-cap guard records a
+	// sticky pctx.blankRunErr. Because skipBlanks/skipBlankBytes only return a
+	// bool, callers that ignore the sticky error (XML declaration, DTD subset,
+	// ...) keep going and report a generic follow-on parse error. Prefer the
+	// blank-run error verbatim here so it surfaces regardless of which caller hit
+	// it: this keeps context.Canceled propagating as cancellation (not a syntax
+	// error, preserving the no-partial-document contract) and keeps
+	// ErrNodeContentTooLarge from being masked behind a generic XML-decl/DTD error.
+	if pctx.blankRunErr != nil {
+		err = pctx.blankRunErr
+	} else if !isParseAbort(err) {
+		// A read failure or cancellation recorded as the active cursor's sticky
+		// read error (most importantly a push/streaming-stream Read returning
+		// context.Canceled when cancellation unblocks a pending wait) — or a
+		// pending ctx cancellation — must never be reported as a synthesized
+		// syntax error. Per the cancellation contract a cancelled/failed parse
+		// surfaces the underlying cause, not a malformed-document diagnostic.
+		// This generalizes the blankRunErr preference above to callers that turn
+		// a short read into a follow-on syntax error WITHOUT going through the
+		// blank scanner — e.g. a "<?xml" whose required trailing blank was never
+		// read, so looksLikeXMLDecl cannot confirm the declaration and it is
+		// reparsed as a reserved-target PI ("XML declaration allowed only at the
+		// start of the document") instead of propagating the real read error.
+		// It mirrors the ctx.Err()/cursorDecodeErr() gate parseDocument already
+		// applies at the document-end boundary.
+		if rerr := ctx.Err(); rerr != nil {
+			err = rerr
+		} else if rerr := pctx.cursorDecodeErr(); rerr != nil {
+			err = rerr
+		}
+	}
 	// Parse-abort errors (the stop sentinel, context cancellation, deadline
 	// expiry) are not genuine parse failures: pass them through unchanged so
 	// callers see them directly and SAX error handlers are not fired as if the

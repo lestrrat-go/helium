@@ -360,7 +360,7 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	// Compute effective static base URI from xml:base on the stylesheet element.
 	// This is set generically so that static-base-uri() returns the correct
 	// value for any XSLT instruction or LRE that carries xml:base.
-	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
+	if effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot); effectiveBase != c.baseURI {
 		if si, ok := inst.(interface{ getStaticBaseURI() string }); ok {
 			// Only set if not already set by a specific compile function
 			if si.getStaticBaseURI() == "" {
@@ -713,7 +713,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			}
 		}
 		// Validate boolean output attributes on xsl:result-document.
-		for _, boolAttr := range []string{paramByteOrderMark, paramEscapeURIAttributes,
+		for _, boolAttr := range []string{paramAllowDuplicateNames, paramBuildTree, paramByteOrderMark, paramEscapeURIAttributes,
 			paramIncludeContentType, paramIndent, paramOmitXMLDeclaration, paramUndeclarePrefixes} {
 			if v := getAttr(elem, boolAttr); v != "" {
 				if !strings.ContainsAny(v, "{}") {
@@ -790,9 +790,11 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			{paramHTMLVersion, &inst.HTMLVersion},
 			{paramIncludeContentType, &inst.IncludeContentType},
 			{paramAllowDuplicateNames, &inst.AllowDuplicateNames},
+			{paramUndeclarePrefixes, &inst.UndeclarePrefixes},
 			{paramEscapeURIAttributes, &inst.EscapeURIAttributes},
 			{paramJSONNodeOutputMethod, &inst.JSONNodeOutputMethodAVT},
 			{paramNormalizationForm, &inst.NormalizationForm},
+			{paramBuildTree, &inst.BuildTree},
 		} {
 			if v := getAttr(elem, sp.attr); v != "" {
 				avt, err := compileAVT(v, c.nsBindings)
@@ -820,11 +822,13 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			} else {
 				// Static parameter-document: load at compile time
 				outDef := &OutputDef{}
-				baseURI := stylesheetBaseURI(elem, c.baseURI)
-				if err := c.loadParameterDocument(ctx, outDef, baseURI, pd); err != nil {
+				baseURI := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
+				_, presence, err := c.loadParameterDocument(ctx, outDef, baseURI, pd, false)
+				if err != nil {
 					return nil, err
 				}
 				inst.ParameterDocOutputDef = outDef
+				inst.ParameterDocPresence = presence
 				// If the parameter-document sets the method, use it as the
 				// compile-time method so isItemOutputMethod works.
 				if outDef.Method != "" && inst.Method == "" {
@@ -839,11 +843,6 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				resolved[i] = resolveQName(n, c.nsBindings)
 			}
 			inst.SuppressIndentation = resolved
-		}
-		if v := getAttr(elem, paramBuildTree); v != "" {
-			if b, ok := parseXSDBool(v); ok {
-				inst.BuildTree = &b
-			}
 		}
 		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
@@ -1082,7 +1081,7 @@ func (c *compiler) compileLocalVariable(ctx context.Context, elem *helium.Elemen
 	}
 
 	// Capture xml:base for static base URI override during body/select evaluation.
-	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 	if effectiveBase != c.baseURI {
 		inst.StaticBaseURI = effectiveBase
 	}

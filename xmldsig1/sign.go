@@ -23,6 +23,12 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 		return err
 	}
 
+	// Reject invalid transform pipelines before building or mutating any nodes,
+	// so a rejected pipeline leaves the input tree untouched.
+	if err := preflightSignerTransforms(cfg); err != nil {
+		return err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return err
@@ -79,6 +85,13 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
+	// Reject invalid transform pipelines before building nodes or moving caller
+	// content into the <Object>, so a rejected pipeline leaves the input nodes
+	// unmoved and the input tree untouched.
+	if err := preflightSignerTransforms(cfg); err != nil {
+		return nil, err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return nil, err
@@ -117,8 +130,16 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		if err != nil {
 			return nil, err
 		}
-		// Insert KeyInfo before Object.
+		// The XML-DSig schema content model is (SignedInfo, SignatureValue,
+		// KeyInfo?, Object*), so KeyInfo must precede the Object. Append KeyInfo
+		// (landing it after SignatureValue, before Object), then re-append the
+		// Object so it moves to the end after KeyInfo. AddChild auto-unlinks the
+		// already-linked Object before relinking it, so this is a move, not a
+		// duplicate.
 		if err := sigElem.AddChild(keyInfoElem); err != nil {
+			return nil, err
+		}
+		if err := sigElem.AddChild(objElem); err != nil {
 			return nil, err
 		}
 	}
@@ -136,6 +157,11 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 
 	// Reject weak (SHA-1) algorithms before building or mutating any nodes.
 	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
+	}
+
+	// Reject invalid transform pipelines before building or mutating any nodes.
+	if err := preflightSignerTransforms(cfg); err != nil {
 		return nil, err
 	}
 
@@ -233,26 +259,14 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		return err
 	}
 
-	// Apply transforms to get canonical bytes.
-	hasEnveloped := false
-	for _, t := range ref.Transforms {
-		if _, ok := t.(envelopedTransform); ok {
-			hasEnveloped = true
-			break
-		}
-	}
-
-	// Find the last c14n transform to determine the canonicalization method.
-	c14nMethod := ExcC14N10 // default
-	var prefixes []string
-	for _, t := range ref.Transforms {
-		switch tt := t.(type) {
-		case c14nTransform:
-			c14nMethod = tt.method
-		case excC14NTransform:
-			c14nMethod = ExcC14N10
-			prefixes = tt.prefixes
-		}
+	// Interpret the configured transforms as an ordered pipeline so the digest
+	// is computed exactly as a verifier reading these same Transform elements
+	// would. The output begins as a node-set; an octet-producing c14n transform
+	// ends the pipeline, and when no c14n transform is configured the default
+	// node-set->octet conversion is inclusive Canonical XML 1.0.
+	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(transformSteps(ref))
+	if err != nil {
+		return err
 	}
 
 	// For enveloped signatures the Signature element and its descendants must

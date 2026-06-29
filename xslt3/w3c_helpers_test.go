@@ -50,10 +50,7 @@ const (
 	versionResolutionLowest = "lowest"
 
 	// W3C test skip messages reused by multiple tests.
-	skipXML11NSUndecl       = "XML 1.1: namespace undeclaration not supported by parser"
-	skipParserEntityInAttr  = "parser limitation: entity ref in single-quoted attribute value"
-	skipJSONToXMLValidate   = "json-to-xml validate option does not annotate result nodes"
-	skipSchemaAttrTypeCheck = "schema-attribute type check fails"
+	skipXML11NSUndecl = "XML 1.1: namespace undeclaration not supported by parser"
 
 	// Collection URI used by merge tests for log-file collections.
 	w3cLogFilesCollectionURI = "log-files"
@@ -474,9 +471,9 @@ func evalRawResultXPath(t *testing.T, expr string, rawResult xpath3.Sequence) bo
 	}
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: rawResult,
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
 	if err != nil {
@@ -505,9 +502,9 @@ func evalRawXPathBool(expr string, rawResult xpath3.Sequence) bool {
 		return false
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: rawResult,
-	}))
+	})
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
 	if err != nil {
 		return false
@@ -1001,11 +998,10 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	}
 
 	if hasExplicitSource {
-		sourceParser := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true)
+		sourceParser := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(helium.PermissiveFS())
 		if tc.SourceDocPath != "" {
 			sourceParser = sourceParser.SubstituteEntities(true).FixBaseURIs(false)
-			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceParser = sourceParser.BaseURI(srcAbsPath)
+			sourceParser = sourceParser.BaseURI(w3cAbsBaseURI(tc.SourceDocPath))
 		}
 		var parseErr error
 		sourceDoc, parseErr = sourceParser.Parse(t.Context(), sourceData)
@@ -1016,11 +1012,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			t.Fatalf("cannot parse source: %v", parseErr)
 		}
 		if tc.SourceDocPath != "" {
-			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceDoc.SetURL(srcAbsPath)
+			sourceDoc.SetURL(w3cAbsBaseURI(tc.SourceDocPath))
 		} else if tc.SourceContent != "" && tc.StylesheetPath != "" {
-			ssAbsPath, _ := filepath.Abs(w3cResolvePath(tc.StylesheetPath))
-			sourceDoc.SetURL(ssAbsPath)
+			sourceDoc.SetURL(w3cAbsBaseURI(tc.StylesheetPath))
 		}
 	}
 
@@ -1031,13 +1025,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	if tc.EmbeddedStylesheet && tc.StylesheetPath == "" {
 		// Extract embedded stylesheet from source document
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
-		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
+		compiler := xslt3.NewCompiler().BaseURI(w3cAbsBaseURI(tc.SourceDocPath)).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else if len(tc.PackageDeps) > 0 || len(tc.Params) > 0 || len(tc.ImportSchemaPaths) > 0 {
 		// When package deps, external params, or import schemas exist, compile without caching.
 		ssPath := w3cResolvePath(tc.StylesheetPath)
-		absPath, _ := filepath.Abs(ssPath)
+		absPath := w3cAbsBaseURI(tc.StylesheetPath)
 		compiler := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		if len(tc.PackageDeps) > 0 {
 			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
@@ -1046,7 +1039,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			var importSchemas []*xsd.Schema
 			for _, sp := range tc.ImportSchemaPaths {
 				schemaPath := w3cResolvePath(sp)
-				schema, schemaErr := xsd.NewCompiler().CompileFile(t.Context(), schemaPath)
+				// Trusted committed W3C fixtures; their nested
+				// xs:include/xs:import targets live next to the schema (e.g.
+				// schema066.xsd includes schema066a.xsd). The xsd compiler now
+				// denies nested-schema FS access by default, so opt back into
+				// host access here.
+				schema, schemaErr := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(t.Context(), schemaPath)
 				if schemaErr != nil {
 					t.Fatalf("compile import schema %q: %v", sp, schemaErr)
 				}
@@ -1071,7 +1069,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		if readErr != nil {
 			t.Fatalf("read stylesheet: %v", readErr)
 		}
-		ssParser := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath)
+		ssParser := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath).FS(helium.PermissiveFS())
 		doc, parseErr := ssParser.Parse(t.Context(), data)
 		if parseErr != nil {
 			if tc.ExpectError {
@@ -1085,8 +1083,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// The source doc has an embedded stylesheet that imports/includes the
 		// standalone stylesheet. Extract and compile the embedded one.
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
-		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
+		compiler := xslt3.NewCompiler().BaseURI(w3cAbsBaseURI(tc.SourceDocPath)).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else {
 		ssPath := w3cResolvePath(tc.StylesheetPath)
@@ -1291,7 +1288,10 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// Load source document schema if specified by the test case.
 	if tc.SourceSchemaPath != "" {
 		schemaPath := w3cResolvePath(tc.SourceSchemaPath)
-		schema, schemaErr := xsd.NewCompiler().CompileFile(ctx, schemaPath)
+		// Trusted committed W3C fixtures whose nested xs:include/xs:import
+		// targets live next to the schema; the xsd compiler now denies
+		// nested-schema FS access by default, so opt back into host access.
+		schema, schemaErr := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(ctx, schemaPath)
 		if schemaErr != nil {
 			t.Fatalf("compile source schema %q: %v", schemaPath, schemaErr)
 		}
@@ -1608,34 +1608,11 @@ var w3cImplicitSkips = map[string]string{
 	"xml-version-010": "XML 1.1: control character serialization as numeric refs not implemented",
 	"xml-version-018": "XML 1.1: control character serialization as numeric refs not implemented",
 
-	// regex-070*: XSL file uses entity reference pattern that trips parser
-	"regex-070a": skipParserEntityInAttr,
-	"regex-070b": skipParserEntityInAttr,
-	"regex-070c": skipParserEntityInAttr,
-	"regex-070d": skipParserEntityInAttr,
-	"regex-070e": skipParserEntityInAttr,
-	"regex-070f": skipParserEntityInAttr,
-	"regex-070g": skipParserEntityInAttr,
-	"regex-070h": skipParserEntityInAttr,
-	"regex-070i": skipParserEntityInAttr,
-	"regex-070j": skipParserEntityInAttr,
-	"regex-070k": skipParserEntityInAttr,
-	"regex-070l": skipParserEntityInAttr,
-
 	// whitespace-011: external parameter entity resolution not supported
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
 
 	// nodetest: child::schema-attribute axis conversion produces non-empty result
 	"nodetest-032": "child::schema-attribute axis conversion vs XPath 2.0 expected output mismatch",
-
-	// json-to-xml typed tests: fn:json-to-xml validate option does not type-annotate result
-	"json-to-xml-typed-001": skipJSONToXMLValidate,
-	"json-to-xml-typed-002": skipJSONToXMLValidate,
-	"json-to-xml-typed-003": skipJSONToXMLValidate,
-	"json-to-xml-typed-004": skipJSONToXMLValidate,
-	"json-to-xml-typed-005": skipJSONToXMLValidate,
-	"json-to-xml-typed-006": skipJSONToXMLValidate,
-	"json-to-xml-typed-007": skipJSONToXMLValidate,
 
 	// import-schema-029: the full XSLT 2.0 schema (schema-for-xslt20.xsd)
 	// triggers a fatal schema-construction diagnostic in our xsd compiler
@@ -1662,31 +1639,22 @@ var w3cImplicitSkips = map[string]string{
 
 	// validation tests: schema-aware processing
 	"validation-0202": "schema-aware result validation fails",
-	"validation-0213": "schema-aware result validation fails",
 	"validation-0501": "schema-aware XSLT schema querying fails",
 	"validation-0601": "schema-aware XSLT schema querying fails",
 	"validation-0701": "schema-aware XSLT schema querying fails",
 	"validation-1202": "instance of schema-element fails",
 	"validation-1204": "instance of schema-element fails",
 
-	// as tests: schema-attribute type checks
-	"as-1812": skipSchemaAttrTypeCheck,
-	"as-1813": skipSchemaAttrTypeCheck,
-	"as-1814": skipSchemaAttrTypeCheck,
-	"as-3601": skipSchemaAttrTypeCheck,
-	"as-3602": skipSchemaAttrTypeCheck,
-	"as-3603": skipSchemaAttrTypeCheck,
-
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "schema-aware union type conversion fails",
-	"override-v-006": "schema-aware union type comparison fails",
 
 	// use-package: package-scoped namespace serialization in result-document
 	"use-package-108":  "package-scoped namespace alias serialization not implemented",
 	"use-package-108b": "package-scoped namespace alias serialization not implemented",
 
-	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
-	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
+	// error-FODC0002a-ignore is now skipped by the generator via the
+	// ignore_doc_failure dependency (see tools/xslt3gen getDepsSkipReason),
+	// so it no longer needs a name-based skip here.
 
 	// merge: schema-element instance test on merged items
 	"merge-049":   "schema-element() instance test on merged items fails",
@@ -1723,21 +1691,13 @@ var w3cImplicitSkips = map[string]string{
 	// arrays: array construction and apply-templates on arrays
 
 	// schema-aware match tests: pattern matching with schema types
-	"match-054": "element-with-id pattern match returns child instead of parent",
-	"match-055": "element-with-id pattern match returns child instead of parent",
 	"match-174": "xsl:type annotation on constructed elements not propagated",
 	"match-181": "xsl:type annotation on constructed elements not propagated",
 	"match-210": "schema-aware attribute type pattern match fails",
 	"match-221": "schema-aware numeric type pattern match fails",
 	"match-232": "schema-aware type pattern match missing items",
-	"match-244": "expected error XTSE3105 not raised for schema pattern",
-	"match-262": "deep-copy does not preserve type annotations",
-	"match-263": "deep-copy does not preserve type annotations",
-	"match-287": "schema-attribute pattern match fails (XTTE0780)",
 
 	// evaluate tests requiring schema-aware processing
-	"evaluate-012": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
-	"evaluate-013": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
 	"evaluate-048": "requires network access to saxonica.com",
 
 	// slow xsl:evaluate tests (~30s each with -race on CI)
@@ -1747,9 +1707,6 @@ var w3cImplicitSkips = map[string]string{
 	"variable-0108": "too slow for CI: large iteration count with variable binding",
 
 	"base-uri-052": "XInclude processing not applied to source documents",
-
-	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
-	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
 	// XSD 1.1 features: newly unlocked but failing
 	"validation-1301":   "XSD 1.1 xs:alternative type selection not implemented",
@@ -2052,9 +2009,9 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
 		eval = eval.Namespaces(ns)
 	}
 
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
 	if err != nil {
@@ -2154,9 +2111,9 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 
 	// Bind $result to the document node so W3C assertions like
 	// deep-equal($result, ...) can reference the transformation output.
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
 	if err != nil {
@@ -2212,9 +2169,9 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 		eval = eval.Namespaces(ns)
 	}
 
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-	}))
+	})
 
 	if annotations != nil {
 		eval = eval.TypeAnnotations(annotations)
@@ -2235,9 +2192,9 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 			if len(ns) > 0 {
 				evalPlain = evalPlain.Namespaces(ns)
 			}
-			evalPlain = evalPlain.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			evalPlain = evalPlain.Variables(map[string]xpath3.Sequence{
 				xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-			}))
+			})
 			res2, err2 := evalPlain.Evaluate(context.TODO(), compiled, doc)
 			if err2 == nil {
 				res = res2
@@ -2329,9 +2286,9 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 	}
 
 	// Bind $result to the raw XDM sequence (preserves atomic types).
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: rawResult,
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
 	if err != nil {
@@ -2597,11 +2554,15 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
 	if absErr != nil {
 		absPath = path
 	}
+	// A base URI is a URI: force forward-slash so static-base-uri(), $err:module
+	// (tokenized on '/'), and document-uri() are OS-independent (see
+	// w3cAbsBaseURI). On POSIX this is a no-op.
+	absPath = filepath.ToSlash(absPath)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath).FS(helium.PermissiveFS())
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, err
@@ -2634,6 +2595,18 @@ func w3cResolvePath(rel string) string {
 		return rel
 	}
 	return filepath.Join(w3cTestdataDir, rel)
+}
+
+// w3cAbsBaseURI returns the absolute base URI for a stylesheet/source path in
+// FORWARD-SLASH form. A base URI is a URI, not a native path: tests such as
+// try-004 do tokenize($err:module, '/') and accessor/base-uri tests resolve
+// relative URIs against it, all of which assume '/' separators. On POSIX
+// filepath.Abs already yields '/'; on Windows it yields backslashes, which
+// would leak into static-base-uri()/$err:module and break those tests. Passing
+// a forward-slash base makes the harness behave identically on every OS.
+func w3cAbsBaseURI(rel string) string {
+	abs, _ := filepath.Abs(w3cResolvePath(rel))
+	return filepath.ToSlash(abs)
 }
 
 // w3cCollectionResolver implements xpath3.CollectionResolver for W3C tests.

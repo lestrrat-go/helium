@@ -201,7 +201,12 @@ func evalFLWOR(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FLW
 		if err != nil {
 			return err
 		}
-		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		// Accumulate the return sequence lazily so the aggregate maxNodes /
+		// OpLimit / cancellation bound is enforced item-by-item BEFORE the whole
+		// per-tuple sub-sequence is materialized — a return expression bound to a
+		// large lazy Sequence (e.g. a borrowed range variable) is rejected without
+		// first materializing it in full, matching evalSimpleMapExpr.
+		result, err = appendBoundedSeq(ctx, ec, result, r, ec.maxNodes)
 		if err != nil {
 			return err
 		}

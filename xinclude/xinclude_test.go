@@ -23,6 +23,19 @@ func parseXML(t *testing.T, s string) *helium.Document {
 	return doc
 }
 
+// fileURIFromPath builds a proper "file:///" URI from a native absolute path on
+// any OS. Setting url.URL.Path to a Windows drive path ("C:/x") yields
+// "file://C:/x", where "C:" is mis-parsed as the host; ensuring a single
+// leading slash before the slash-normalized path yields "file:///C:/x" (and
+// keeps "file:///tmp/x" on POSIX).
+func fileURIFromPath(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
 func docElement(doc *helium.Document) *helium.Element {
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
 		if n.Type() == helium.ElementNode {
@@ -365,6 +378,13 @@ func TestXIncludeBasicXML(t *testing.T) {
 		}
 	}
 	require.True(t, found, "included <chapter> element not found")
+}
+
+func TestXIncludeProcessTreeNilNode(t *testing.T) {
+	t.Parallel()
+	count, err := xinclude.NewProcessor().ProcessTree(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
 }
 
 func TestXIncludeText(t *testing.T) {
@@ -770,28 +790,110 @@ func TestXIncludeNewNamespaceFallback(t *testing.T) {
 	require.True(t, found, "fallback content not found with 2003 namespace")
 }
 
+// includeChainResolver builds a resolver where levelN.xml includes level(N+1).xml
+// up to levels-1, with levelN.xml as a plain leaf, so an include starting at
+// level0.xml nests `levels` deep.
+func includeChainResolver(levels int) *stringResolver {
+	resolver := &stringResolver{files: make(map[string]string)}
+	for i := range levels {
+		resolver.files[fmt.Sprintf("level%d.xml", i)] = fmt.Sprintf(
+			`<level xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="level%d.xml"/></level>`, i+1)
+	}
+	resolver.files[fmt.Sprintf("level%d.xml", levels)] = `<leaf/>`
+	return resolver
+}
+
 func TestXIncludeDepthLimit(t *testing.T) {
 	t.Parallel()
-	// Create a chain that would exceed maxDepth (40)
-	resolver := &stringResolver{files: make(map[string]string)}
-	for i := range 50 {
-		next := i + 1
-		resolver.files[fmt.Sprintf("level%d.xml", i)] = fmt.Sprintf(
-			`<level xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="level%d.xml"/></level>`, next)
-	}
-	resolver.files["level50.xml"] = `<leaf/>`
-
+	// A chain deeper than the default limit (40) is rejected.
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="level0.xml"/>
 	</root>`)
 
 	_, err := xinclude.NewProcessor().
-		Resolver(resolver).
+		Resolver(includeChainResolver(50)).
 		NoXIncludeMarkers().
 		NoBaseFixup().
 		Process(t.Context(), doc)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "depth")
+	require.Contains(t, err.Error(), "maximum include depth")
+}
+
+func TestXIncludeMaxIncludeDepth(t *testing.T) {
+	t.Parallel()
+
+	build := func() *helium.Document {
+		return parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="level0.xml"/>
+		</root>`)
+	}
+
+	t.Run("custom limit rejects a chain deeper than it", func(t *testing.T) {
+		t.Parallel()
+		_, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(20)).
+			MaxIncludeDepth(5).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum include depth (5) exceeded")
+	})
+
+	t.Run("custom limit allows a chain within it", func(t *testing.T) {
+		t.Parallel()
+		count, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(3)).
+			MaxIncludeDepth(20).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.NoError(t, err)
+		require.Positive(t, count)
+	})
+
+	t.Run("non-positive falls back to the default", func(t *testing.T) {
+		t.Parallel()
+		// A chain past the default (40) still fails when the configured value is <= 0.
+		_, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(50)).
+			MaxIncludeDepth(0).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum include depth (40) exceeded")
+	})
+
+	t.Run("chain exactly at the limit is accepted, one deeper is rejected without fetching", func(t *testing.T) {
+		t.Parallel()
+		// includeChainResolver(n) nests `n+1` levels: root -> level0 -> ... ->
+		// level(n) leaf, so the leaf content sits at nesting depth n+1.
+
+		// Exactly at the limit: maxDepth=3 admits a leaf at depth 3.
+		okCount, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(2)).
+			MaxIncludeDepth(3).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.NoError(t, err)
+		require.Positive(t, okCount)
+
+		// One deeper: the include that would push past the limit must be
+		// rejected before its target is ever resolved/fetched.
+		resolver := &countingResolver{inner: includeChainResolver(3)}
+		_, err = xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeDepth(3).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum include depth (3) exceeded")
+		require.Zero(t, resolver.calls["level3.xml"], "over-limit resource must not be fetched")
+		require.Positive(t, resolver.calls["level2.xml"], "in-limit resources are fetched")
+	})
 }
 
 func TestXIncludeSameURLTwice(t *testing.T) {
@@ -1043,6 +1145,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, procErr := xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1096,6 +1199,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, err = xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1132,6 +1236,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", tc.name)
 
 			_, err = xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1644,23 +1749,194 @@ func TestXIncludeMaxIncludeSize(t *testing.T) {
 	})
 }
 
+// sizedResolver returns a fixed-size blob of 'x' bytes for every href, modeling
+// many distinct includes that each stay under the per-resource cap.
+type sizedResolver struct{ size int }
+
+func (r sizedResolver) Resolve(string, string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader(strings.Repeat("x", r.size))), nil
+}
+
+func TestXIncludeAggregateCap(t *testing.T) {
+	t.Parallel()
+
+	// MaxIncludeSize(1024) sets the per-resource cap to 1 KiB, which makes the
+	// aggregate bound 100*1024 = 102400 bytes. Each include returns 700 bytes —
+	// under the per-resource cap — so a few hundred of them exceed the aggregate
+	// without any single oversized resource and without large test data.
+	const blob = 700
+
+	buildDoc := func(t *testing.T, n int, sameHref bool) *helium.Document {
+		t.Helper()
+		var b strings.Builder
+		b.WriteString(`<root xmlns:xi="http://www.w3.org/2001/XInclude">`)
+		for i := range n {
+			if sameHref {
+				b.WriteString(`<xi:include href="blob.txt" parse="text"/>`)
+			} else {
+				fmt.Fprintf(&b, `<xi:include href="blob-%d.txt" parse="text"/>`, i)
+			}
+		}
+		b.WriteString(`</root>`)
+		return parseXML(t, b.String())
+	}
+
+	t.Run("many distinct sub-cap includes exceed aggregate", func(t *testing.T) {
+		t.Parallel()
+		doc := buildDoc(t, 200, false) // 200*700 = 140000 > 102400
+		_, err := xinclude.NewProcessor().
+			Resolver(sizedResolver{size: blob}).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("one cached resource reused past aggregate", func(t *testing.T) {
+		t.Parallel()
+		// Same href fetched once then re-materialized per occurrence: the
+		// per-resource cap never trips, but the aggregate guard counts every reuse.
+		doc := buildDoc(t, 200, true)
+		_, err := xinclude.NewProcessor().
+			Resolver(sizedResolver{size: blob}).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("normal small document under aggregate succeeds", func(t *testing.T) {
+		t.Parallel()
+		doc := buildDoc(t, 10, false) // 10*700 = 7000 < 102400
+		count, err := xinclude.NewProcessor().
+			Resolver(sizedResolver{size: blob}).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 10, count)
+	})
+}
+
+func TestXIncludeXPointerCopyCap(t *testing.T) {
+	t.Parallel()
+
+	// nestedDoc builds a tiny source whose only content is depth self-nested
+	// <a> elements: <r><a><a>...<a/>...</a></a></r>. An xpointer(//a) selects
+	// all depth of them, and deep-copying each selected subtree materializes
+	// O(depth^2) nodes from a sub-cap source — the amplification this cap guards.
+	nestedDoc := func(depth int) string {
+		var b strings.Builder
+		b.WriteString(`<r>`)
+		for range depth {
+			b.WriteString(`<a>`)
+		}
+		for range depth {
+			b.WriteString(`</a>`)
+		}
+		b.WriteString(`</r>`)
+		return b.String()
+	}
+
+	t.Run("xpointer copy amplification bounded by aggregate", func(t *testing.T) {
+		t.Parallel()
+		// MaxIncludeSize(1024) -> aggregate 100*1024 = 102400 bytes. The 80-deep
+		// source is well under the per-resource cap (~560 bytes), but the
+		// O(80^2) copied subtrees the xpointer selects exceed the aggregate.
+		resolver := &stringResolver{files: map[string]string{"nested.xml": nestedDoc(80)}}
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="nested.xml" xpointer="xpointer(//a)"/>
+		</root>`)
+
+		_, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("normal xpointer include under aggregate succeeds", func(t *testing.T) {
+		t.Parallel()
+		resolver := &stringResolver{files: map[string]string{"nested.xml": nestedDoc(3)}}
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="nested.xml" xpointer="xpointer(//a)"/>
+		</root>`)
+
+		count, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+
+	// namespaceHeavyDoc builds a self-nested <a> tree where every element carries
+	// nsCount short, distinct namespace declarations. The textual byte footprint
+	// is tiny (short prefixes/URIs), so the source reads well under the
+	// per-include cap, but xpointer(//a) deep-copies O(depth^2) overlapping
+	// subtrees and CopyNode allocates a fresh Namespace object for every
+	// declaration on every copied element — the amplification subtreeCopyCost
+	// must account for.
+	namespaceHeavyDoc := func(depth, nsCount int) string {
+		var b strings.Builder
+		b.WriteString(`<r>`)
+		for range depth {
+			b.WriteString(`<a`)
+			for j := range nsCount {
+				fmt.Fprintf(&b, ` xmlns:n%d="u%d"`, j, j)
+			}
+			b.WriteString(`>`)
+		}
+		for range depth {
+			b.WriteString(`</a>`)
+		}
+		b.WriteString(`</r>`)
+		return b.String()
+	}
+
+	t.Run("namespace-heavy xpointer copy amplification bounded by aggregate", func(t *testing.T) {
+		t.Parallel()
+		// MaxIncludeSize(8192) -> aggregate 100*8192 = 819200 bytes. The source is
+		// ~7.9 KiB (under the per-include cap), and its textual node footprint alone
+		// (~150 KiB across the O(66^2) copied subtrees) stays well under the
+		// aggregate. Only by counting the 8 namespace objects per copied element
+		// does the estimate exceed the aggregate and fail closed.
+		src := namespaceHeavyDoc(66, 8)
+		require.Less(t, len(src), 8192, "source must read under the per-include cap")
+		resolver := &stringResolver{files: map[string]string{"nested.xml": src}}
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="nested.xml" xpointer="xpointer(//a)"/>
+		</root>`)
+
+		_, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeSize(8192).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+}
+
 func TestXIncludeFileURIHref(t *testing.T) {
 	t.Parallel()
 
 	// Write a real include target and reference it via an absolute file:// URI.
-	// The default permissive resolver must convert the URI to an OS path rather
-	// than handing "file:/..." to os.Open verbatim.
+	// The permissive resolver must convert the URI to an OS path rather than
+	// handing "file:/..." to os.Open verbatim.
 	dir := t.TempDir()
 	target := filepath.Join(dir, "inc.xml")
 	require.NoError(t, os.WriteFile(target, []byte(`<loaded>FromFileURI</loaded>`), 0o600))
 
-	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(target)}).String()
+	fileURI := fileURIFromPath(target)
 
 	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="%s"/>
 	</root>`, fileURI))
 
 	count, err := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
@@ -1699,13 +1975,14 @@ func TestXIncludeFileURINestedExternalDTD(t *testing.T) {
 			`<!DOCTYPE chapter SYSTEM "inc.dtd">`+
 			`<chapter>text</chapter>`), 0o600))
 
-	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "inc.xml"))}).String()
+	fileURI := fileURIFromPath(filepath.Join(dir, "inc.xml"))
 
 	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="%s"/>
 	</root>`, fileURI))
 
 	count, err := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
@@ -1734,4 +2011,230 @@ func TestXIncludeFileURINonLocalHost(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "non-local file URI host",
 		"expected explicit non-local host rejection, got: %v", err)
+}
+
+// TestXIncludeDenyAllDefault verifies the secure-by-default contract: a
+// Processor with no resolver configured must NOT read local files, so untrusted
+// input cannot disclose them via an xi:include. Supplying an explicit
+// permissive resolver opts back into host access.
+func TestXIncludeDenyAllDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secret := filepath.Join(dir, "secret.txt")
+	const secretContent = "TOP SECRET CONTENTS"
+	require.NoError(t, os.WriteFile(secret, []byte(secretContent), 0o600))
+
+	mainDoc := func() *helium.Document {
+		return parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include parse="text" href="%s"/>
+		</root>`, secret))
+	}
+
+	t.Run("default resolver denies local file disclosure", func(t *testing.T) {
+		t.Parallel()
+		doc := mainDoc()
+		_, err := xinclude.NewProcessor().
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.Error(t, err, "default processor must not read local files")
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.NotContains(t, s, secretContent,
+			"secret file contents must not leak into the document")
+	})
+
+	t.Run("explicit permissive resolver opts back in", func(t *testing.T) {
+		t.Parallel()
+		doc := mainDoc()
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Contains(t, s, secretContent,
+			"explicit permissive resolver must read the file")
+	})
+}
+
+// TestXIncludeSameDocumentXPointerNoResolver verifies that a same-document
+// XPointer reference (no href) succeeds under the deny-all default resolver
+// even when a BaseURI is configured: it needs no filesystem access and must
+// not be re-loaded through the resolver.
+func TestXIncludeSameDocumentXPointerNoResolver(t *testing.T) {
+	t.Parallel()
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source><item>hello</item></source>
+		<target><xi:include xpointer="xpointer(//item)"/></target>
+	</root>`)
+
+	count, err := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err, "same-document XPointer must not require the resolver")
+	require.Equal(t, 1, count)
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Contains(t, s, "<target><item>hello</item></target>",
+		"same-document XPointer must copy the referenced node")
+}
+
+// TestXIncludeShorthandPointerDefaultResolver verifies that a same-document
+// shorthand pointer (href="#a", which selects an element by ID) succeeds under
+// the deny-all default resolver even when a BaseURI is configured: the bare
+// fragment has no document part, so it must be evaluated against the in-memory
+// snapshot rather than re-loaded through the (deny-all) resolver.
+func TestXIncludeShorthandPointerDefaultResolver(t *testing.T) {
+	t.Parallel()
+
+	t.Run("xml:id", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<source><item xml:id="a">hello</item></source>
+			<target><xi:include href="#a"/></target>
+		</root>`)
+
+		count, err := xinclude.NewProcessor().
+			BaseURI("main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err, `href="#a" is a same-document reference and must not go through the resolver`)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Equal(t, 2, strings.Count(s, "hello"),
+			"the shorthand pointer must copy the xml:id-selected element into target")
+	})
+
+	t.Run("internal DTD ID rebuild", func(t *testing.T) {
+		t.Parallel()
+		// An internal-subset ATTLIST ID populates the document's interned ID
+		// table; the snapshot must rebuild that table mapped onto its own copied
+		// elements so GetElementByID (and thus the shorthand pointer) resolves.
+		doc := parseXML(t, `<!DOCTYPE root [
+			<!ATTLIST item id ID #IMPLIED>
+		]>
+		<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<source><item id="a">hello</item></source>
+			<target><xi:include href="#a"/></target>
+		</root>`)
+		require.NotEmpty(t, doc.IDTable(), "internal DTD ID should be interned")
+
+		count, err := xinclude.NewProcessor().
+			BaseURI("main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Equal(t, 2, strings.Count(s, "hello"),
+			"the snapshot's rebuilt ID table must resolve the shorthand pointer")
+	})
+}
+
+// TestXIncludeShorthandPointerSkipIDs verifies that the same-document snapshot
+// honors the source document's SkipIDs state: a source parsed with SkipIDs(true)
+// resolves NO ids, so a shorthand pointer must resolve nothing in the snapshot
+// too — it must NOT start resolving xml:id in the copy (which the previous
+// helium.CopyDoc-based snapshot would wrongly do).
+func TestXIncludeShorthandPointerSkipIDs(t *testing.T) {
+	t.Parallel()
+
+	src := `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source><item xml:id="a">hello</item></source>
+		<target><xi:include href="#a"/></target>
+	</root>`
+	doc, err := helium.NewParser().SkipIDs(true).Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.True(t, doc.SkipIDs())
+	require.Nil(t, doc.GetElementByID("a"), "SkipIDs source must resolve no ids")
+
+	count, perr := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, perr)
+	require.Equal(t, 1, count, "the include resolves to nothing and is removed")
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Equal(t, 1, strings.Count(s, "hello"),
+		"SkipIDs snapshot must not resolve the shorthand pointer, leaving target empty")
+}
+
+// TestXIncludeSameDocumentFragmentNotCrossDocumentCircular verifies that a
+// fragment-only same-document include is keyed by the current document identity,
+// not the literal "#xptr". A root href="#a" selects a subtree containing an
+// external include of inc.xml, and inc.xml carries its OWN href="#a"; the
+// included document's same-document reference must NOT be falsely rejected as
+// circular just because it shares the fragment text with the includer.
+func TestXIncludeSameDocumentFragmentNotCrossDocumentCircular(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source xml:id="a"><xi:include href="inc.xml"/></source>
+		<target><xi:include href="#a"/></target>
+	</root>`
+	const inc = `<incroot xmlns:xi="http://www.w3.org/2001/XInclude">
+		<data xml:id="a">world</data>
+		<ref><xi:include href="#a"/></ref>
+	</incroot>`
+	incFS := fstest.MapFS{"inc.xml": &fstest.MapFile{Data: []byte(inc)}}
+
+	doc := parseXML(t, main)
+	count, err := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		Resolver(xinclude.NewFSResolver(incFS)).
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err, `inc.xml's own href="#a" must not be flagged circular against the root href="#a"`)
+	require.Greater(t, count, 0)
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Contains(t, s, "world",
+		"the included document's same-document reference must resolve")
+}
+
+// TestXIncludeParserInjection verifies that a parser injected via
+// Processor.Parser governs the resource limits used to parse included
+// documents (here, the element-name-length cap), while XInclude continues to
+// own the resolver-confined filesystem.
+func TestXIncludeParserInjection(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="inc.xml"/></root>`
+	// Included document's element name "longname" is 8 bytes.
+	incFS := fstest.MapFS{"inc.xml": &fstest.MapFile{Data: []byte(`<longname/>`)}}
+
+	t.Run("no injection accepts the included name", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(incFS)).
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("injected MaxNameLength is enforced on included docs", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		_, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(incFS)).
+			Parser(helium.NewParser().MaxNameLength(4)).
+			Process(t.Context(), doc)
+		require.Error(t, err, "injected parser's name-length limit must apply to included documents")
+	})
 }

@@ -60,19 +60,20 @@ func TestURIQualifiedBuiltinEnforcesSignature(t *testing.T) {
 func TestUserOverrideSkipsBuiltinSignature(t *testing.T) {
 	t.Parallel()
 
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("upper-case", userFunc{
-		min: 1, max: 1,
-		call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-			return xpath3.SingleString("ok"), nil
+	lib := map[string]xpath3.Function{
+		"upper-case": userFunc{
+			min: 1, max: 1,
+			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+				return xpath3.SingleString("ok"), nil
+			},
 		},
-	})
+	}
 
 	compiled, err := xpath3.NewCompiler().Compile(`upper-case(1)`)
 	require.NoError(t, err)
 
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(lib).
+		Functions(lib, nil).
 		Evaluate(t.Context(), compiled, nil)
 	require.NoError(t, err)
 
@@ -88,28 +89,29 @@ func TestTypedUserFunctionObservesCoercedArg(t *testing.T) {
 
 	dbl := stType("double")
 	var observed string
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("takes-double", typedUserFunc{
-		userFunc: userFunc{
-			min: 1, max: 1,
-			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-				av, err := xpath3.AtomizeItem(args[0].Get(0))
-				if err != nil {
-					return nil, err
-				}
-				observed = av.TypeName
-				return xpath3.SingleString(av.TypeName), nil
+	lib := map[string]xpath3.Function{
+		"takes-double": typedUserFunc{
+			userFunc: userFunc{
+				min: 1, max: 1,
+				call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+					av, err := xpath3.AtomizeItem(args[0].Get(0))
+					if err != nil {
+						return nil, err
+					}
+					observed = av.TypeName
+					return xpath3.SingleString(av.TypeName), nil
+				},
 			},
+			params: []xpath3.SequenceType{dbl},
+			ret:    nil,
 		},
-		params: []xpath3.SequenceType{dbl},
-		ret:    nil,
-	})
+	}
 
 	compiled, err := xpath3.NewCompiler().Compile(`takes-double(1)`)
 	require.NoError(t, err)
 
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(lib).
+		Functions(lib, nil).
 		Evaluate(t.Context(), compiled, nil)
 	require.NoError(t, err)
 
@@ -129,23 +131,23 @@ func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
 
 	anyAtomic := stType("anyAtomicType")
 
-	newLib := func(observed *string) *xpath3.FunctionLibrary {
-		lib := xpath3.NewFunctionLibrary()
-		lib.Set("takes-any", typedUserFunc{
-			userFunc: userFunc{
-				min: 1, max: 1,
-				call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-					av, err := xpath3.AtomizeItem(args[0].Get(0))
-					if err != nil {
-						return nil, err
-					}
-					*observed = av.TypeName
-					return xpath3.SingleString(av.TypeName), nil
+	newLib := func(observed *string) map[string]xpath3.Function {
+		return map[string]xpath3.Function{
+			"takes-any": typedUserFunc{
+				userFunc: userFunc{
+					min: 1, max: 1,
+					call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+						av, err := xpath3.AtomizeItem(args[0].Get(0))
+						if err != nil {
+							return nil, err
+						}
+						*observed = av.TypeName
+						return xpath3.SingleString(av.TypeName), nil
+					},
 				},
+				params: []xpath3.SequenceType{anyAtomic},
 			},
-			params: []xpath3.SequenceType{anyAtomic},
-		})
-		return lib
+		}
 	}
 
 	t.Run("node argument atomizes to xs:untypedAtomic", func(t *testing.T) {
@@ -156,7 +158,7 @@ func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
 
 		var observed string
 		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-			Functions(newLib(&observed)).
+			Functions(newLib(&observed), nil).
 			Evaluate(t.Context(), compiled, doc)
 		require.NoError(t, err)
 
@@ -172,7 +174,7 @@ func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
 
 		var observed string
 		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-			Functions(newLib(&observed)).
+			Functions(newLib(&observed), nil).
 			Evaluate(t.Context(), compiled, nil)
 		require.NoError(t, err)
 
@@ -230,7 +232,7 @@ func TestSignatureGatePlainMismatchIsXPTY0004(t *testing.T) {
 func TestSignatureGateAcceptsSchemaDerivedNumeric(t *testing.T) {
 	t.Parallel()
 
-	vars := xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	vars := map[string]xpath3.Sequence{
 		"v": xpath3.ItemSlice{
 			xpath3.AtomicValue{
 				TypeName: "Q{urn:test}myDecimal",
@@ -238,7 +240,7 @@ func TestSignatureGateAcceptsSchemaDerivedNumeric(t *testing.T) {
 				Value:    big.NewRat(-3, 1),
 			},
 		},
-	})
+	}
 
 	cases := map[string]float64{
 		`abs($v)`:   3,  // |-3| = 3
@@ -288,7 +290,7 @@ func TestSignatureGatePromotesIntegerDerivedSubtypes(t *testing.T) {
 func TestSignatureGatePromotesSchemaDerivedInteger(t *testing.T) {
 	t.Parallel()
 
-	vars := xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	vars := map[string]xpath3.Sequence{
 		"v": xpath3.ItemSlice{
 			xpath3.AtomicValue{
 				TypeName: "Q{urn:test}myInt",
@@ -296,7 +298,7 @@ func TestSignatureGatePromotesSchemaDerivedInteger(t *testing.T) {
 				Value:    int64(2),
 			},
 		},
-	})
+	}
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Variables(vars).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`substring("abcd", $v)`), nil)
@@ -355,7 +357,7 @@ func TestSignatureGateArrayAtomizationStillWorks(t *testing.T) {
 func TestSignatureGatePromotesSchemaDerivedAnyURI(t *testing.T) {
 	t.Parallel()
 
-	vars := xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	vars := map[string]xpath3.Sequence{
 		"u": xpath3.ItemSlice{
 			xpath3.AtomicValue{
 				TypeName: "Q{urn:test}myURI",
@@ -363,7 +365,7 @@ func TestSignatureGatePromotesSchemaDerivedAnyURI(t *testing.T) {
 				Value:    "abc",
 			},
 		},
-	})
+	}
 
 	cases := map[string]string{
 		`upper-case($u)`:    "ABC",
@@ -485,15 +487,16 @@ func TestSignatureGateKeepsItemStarLazy(t *testing.T) {
 	for _, fn := range []string{"count", "exists"} {
 		t.Run(fn, func(t *testing.T) {
 			maxIdx := -1
-			lib := xpath3.NewFunctionLibrary()
-			lib.Set("make-lazy", userFunc{
-				min: 0, max: 0,
-				call: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
-					return countingSequence{n: 1000, maxIndex: &maxIdx}, nil
+			lib := map[string]xpath3.Function{
+				"make-lazy": userFunc{
+					min: 0, max: 0,
+					call: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+						return countingSequence{n: 1000, maxIndex: &maxIdx}, nil
+					},
 				},
-			})
+			}
 			_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-				Functions(lib).
+				Functions(lib, nil).
 				Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(fn+"(make-lazy())"), nil)
 			require.NoError(t, err)
 			require.Equal(t, -1, maxIdx, "item()* gate must not iterate the lazy sequence")
@@ -550,24 +553,24 @@ func TestSignatureGateItemPlusCardinality(t *testing.T) {
 
 // typedDoubleLib registers a TypedFunction "takes-double" (xs:double param) that
 // records the observed atomized type of its argument.
-func typedDoubleLib(observed *string) *xpath3.FunctionLibrary {
+func typedDoubleLib(observed *string) map[string]xpath3.Function {
 	dbl := stType("double")
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("takes-double", typedUserFunc{
-		userFunc: userFunc{
-			min: 1, max: 1,
-			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-				av, err := xpath3.AtomizeItem(args[0].Get(0))
-				if err != nil {
-					return nil, err
-				}
-				*observed = av.TypeName
-				return xpath3.SingleString(av.TypeName), nil
+	return map[string]xpath3.Function{
+		"takes-double": typedUserFunc{
+			userFunc: userFunc{
+				min: 1, max: 1,
+				call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+					av, err := xpath3.AtomizeItem(args[0].Get(0))
+					if err != nil {
+						return nil, err
+					}
+					*observed = av.TypeName
+					return xpath3.SingleString(av.TypeName), nil
+				},
 			},
+			params: []xpath3.SequenceType{dbl},
 		},
-		params: []xpath3.SequenceType{dbl},
-	})
-	return lib
+	}
 }
 
 // Finding 2 (round 7): partial application of a TypedFunction (xs:double param)
@@ -578,7 +581,7 @@ func TestPartialApplicationCoercesTypedParam(t *testing.T) {
 
 	var observed string
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(typedDoubleLib(&observed)).
+		Functions(typedDoubleLib(&observed), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double(?)(1)`), nil)
 	require.NoError(t, err)
 
@@ -595,7 +598,7 @@ func TestPartialApplicationRejectsNonCoercible(t *testing.T) {
 
 	var observed string
 	_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(typedDoubleLib(&observed)).
+		Functions(typedDoubleLib(&observed), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double(?)(current-date())`), nil)
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
@@ -611,7 +614,7 @@ func TestPartialApplicationPropagatesTypedError(t *testing.T) {
 
 	var observed string
 	_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(typedDoubleLib(&observed)).
+		Functions(typedDoubleLib(&observed), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double(?)(xs:untypedAtomic("abc"))`), nil)
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
@@ -628,7 +631,7 @@ func TestNamedFunctionRefCoercesTypedParam(t *testing.T) {
 
 	var observed string
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(typedDoubleLib(&observed)).
+		Functions(typedDoubleLib(&observed), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`(takes-double#1)(1)`), nil)
 	require.NoError(t, err)
 
@@ -645,7 +648,7 @@ func TestNamedFunctionRefRejectsNonCoercible(t *testing.T) {
 
 	var observed string
 	_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(typedDoubleLib(&observed)).
+		Functions(typedDoubleLib(&observed), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`(takes-double#1)(current-date())`), nil)
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
@@ -661,7 +664,7 @@ func TestFunctionLookupCoercesTypedParam(t *testing.T) {
 
 	var observed string
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(typedDoubleLib(&observed)).
+		Functions(typedDoubleLib(&observed), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`function-lookup(QName("", "takes-double"), 1)(1)`), nil)
 	require.NoError(t, err)
 
@@ -676,19 +679,19 @@ func TestFunctionLookupCoercesTypedParam(t *testing.T) {
 // fn:abs signature is (xs:numeric?) as xs:numeric?, which would reject a string,
 // so this library distinguishes "built-in signature applied" from "user function
 // invoked".
-func userAbsLib() *xpath3.FunctionLibrary {
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("abs", userFunc{
-		min: 1, max: 1,
-		call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-			av, err := xpath3.AtomizeItem(args[0].Get(0))
-			if err != nil {
-				return nil, err
-			}
-			return xpath3.SingleString("user:" + av.TypeName), nil
+func userAbsLib() map[string]xpath3.Function {
+	return map[string]xpath3.Function{
+		"abs": userFunc{
+			min: 1, max: 1,
+			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+				av, err := xpath3.AtomizeItem(args[0].Get(0))
+				if err != nil {
+					return nil, err
+				}
+				return xpath3.SingleString("user:" + av.TypeName), nil
+			},
 		},
-	})
-	return lib
+	}
 }
 
 // Finding B-XPATH3-FUNCREF-BUILTIN-SIG: a named function reference to a user
@@ -699,7 +702,7 @@ func TestNamedFunctionRefUserOverrideSkipsBuiltinSignature(t *testing.T) {
 	t.Parallel()
 
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(userAbsLib()).
+		Functions(userAbsLib(), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`(abs#1)("hello")`), nil)
 	require.NoError(t, err)
 
@@ -715,7 +718,7 @@ func TestFunctionLookupUserOverrideSkipsBuiltinSignature(t *testing.T) {
 	t.Parallel()
 
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(userAbsLib()).
+		Functions(userAbsLib(), nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`function-lookup(QName("", "abs"), 1)("hello")`), nil)
 	require.NoError(t, err)
 
@@ -733,25 +736,26 @@ func TestPartialApplicationCoercesFixedArg(t *testing.T) {
 	dbl := stType("double")
 	str := stType("string")
 	var observed string
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("takes-double-str", typedUserFunc{
-		userFunc: userFunc{
-			min: 2, max: 2,
-			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-				av, err := xpath3.AtomizeItem(args[0].Get(0))
-				if err != nil {
-					return nil, err
-				}
-				observed = av.TypeName
-				return xpath3.SingleString(av.TypeName), nil
+	lib := map[string]xpath3.Function{
+		"takes-double-str": typedUserFunc{
+			userFunc: userFunc{
+				min: 2, max: 2,
+				call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+					av, err := xpath3.AtomizeItem(args[0].Get(0))
+					if err != nil {
+						return nil, err
+					}
+					observed = av.TypeName
+					return xpath3.SingleString(av.TypeName), nil
+				},
 			},
+			params: []xpath3.SequenceType{dbl, str},
 		},
-		params: []xpath3.SequenceType{dbl, str},
-	})
+	}
 
 	// Curry the first (double) arg with an integer; the placeholder fills the string.
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(lib).
+		Functions(lib, nil).
 		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double-str(1, ?)("x")`), nil)
 	require.NoError(t, err)
 	require.Equal(t, xpath3.TypeDouble, observed, "curried integer must be coerced to xs:double")

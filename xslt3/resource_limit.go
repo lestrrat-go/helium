@@ -15,14 +15,23 @@ import (
 // resource (e.g. an effectively unbounded HTTP body or a "/dev/zero"-style
 // stream) exhausting memory via an unbounded io.ReadAll. It mirrors the bounds
 // already enforced by the parser (external entities) and xinclude.
+//
+// The cap additionally doubles as the match-count ceiling for
+// xsl:analyze-string: an empty- or near-empty-matching regex matches at every
+// character boundary, so the cap bounds how many matches the instruction will
+// enumerate before failing with [ErrResourceTooLarge], keeping memory bounded
+// regardless of input size.
 const MaxResourceBytes = 10 << 20 // 10 MiB
 
 // ErrResourceTooLarge is returned when an external resource exceeds
-// [MaxResourceBytes]. The cap is enforced against the actual number of bytes
-// read, not a Content-Length header, so a server that lies about its size
-// cannot bypass it. When a runtime read (fn:doc / document(), fn:transform
-// stylesheet / package sources) trips the cap, the resulting error wraps both
-// this sentinel and [ErrDynamicError]: errors.Is matches either one.
+// [MaxResourceBytes], or when xsl:analyze-string enumerates more matches than
+// the cap allows. The cap is enforced against the actual number of bytes read
+// (not a Content-Length header, so a server that lies about its size cannot
+// bypass it) and, for xsl:analyze-string, against the running match count. When
+// a runtime read (fn:doc / document(), fn:transform stylesheet / package
+// sources) or an xsl:analyze-string match enumeration trips the cap, the
+// resulting error wraps both this sentinel and [ErrDynamicError]: errors.Is
+// matches either one.
 var ErrResourceTooLarge = errors.New("xslt3: external resource exceeds maximum allowed size")
 
 // resolveResourceLimit maps a configured cap to the value actually enforced:

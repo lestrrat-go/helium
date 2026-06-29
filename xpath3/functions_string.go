@@ -2,12 +2,14 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"regexp"
+	"regexp/syntax"
+	"slices"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -227,7 +229,7 @@ func isValidXML11Codepoint(cp int) bool {
 	return false
 }
 
-func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) {
+func fnStringToCodepoints(ctx context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -235,10 +237,21 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 	if s == "" {
 		return validNilSequence, nil
 	}
-	runes := []rune(s)
-	result := make(ItemSlice, len(runes))
-	for i, r := range runes {
-		result[i] = AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))}
+	// Build the codepoint sequence one item per character, charging the op-limit
+	// and honoring context cancellation before each append (and capping the
+	// length at maxNodes). A huge input string would otherwise materialize an
+	// unbounded item sequence in one shot, ignoring both budgets.
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	var result ItemSlice
+	for _, r := range s {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		if len(result) >= maxNodes {
+			return nil, ErrNodeSetLimit
+		}
+		result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))})
 	}
 	return result, nil
 }
@@ -942,7 +955,7 @@ func matchesXPathEmptyLine(s string) bool {
 	return s == "" || strings.HasPrefix(s, "\n") || strings.Contains(s, "\n\n")
 }
 
-func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
+func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -982,21 +995,44 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 	}
 
-	pos := 0
-	matches, err := re.FindAllStringSubmatchIndex(s, -1)
-	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	// Stream the matches one at a time instead of materializing every match up
+	// front. An input with a huge number of matches would otherwise allocate the
+	// full match slice (an O(matches) up-front cost) and build the whole result
+	// tree before the op budget or a cancellation could intervene. When an op
+	// budget is in force, cap the enumeration at remaining+1 matches so the
+	// callback observes the one match that exhausts the budget and rejects
+	// without producing the rest; an unbounded budget streams uncapped.
+	ec := getFnContext(ctx)
+	findLimit := -1
+	if remaining, bounded := fnRemainingOps(ec); bounded {
+		if n := remaining + 1; n > 0 {
+			findLimit = n
+		}
 	}
-	for _, m := range matches {
+	pos := 0
+	var buildErr error
+	buildFail := func(err error) bool {
+		buildErr = &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		return false
+	}
+	iterErr := re.eachStringSubmatchIndex(s, findLimit, func(m []int) bool {
+		// Charge the op-limit and honor context cancellation BEFORE building any
+		// result nodes for this match: an over-budget or cancelled run stops here
+		// instead of emitting an element first, and the full match slice is never
+		// materialized up front.
+		if err := fnCountOp(ctx, ec); err != nil {
+			buildErr = err
+			return false
+		}
 		start, end := m[0], m[1]
 		if start > pos {
 			if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:start]); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				return buildFail(err)
 			}
 		}
 		matchElem, err := createAnalyzeStringElement(doc, "match")
 		if err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			return buildFail(err)
 		}
 		// Check for groups
 		if len(m) > 2 {
@@ -1008,36 +1044,50 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 				}
 				if gs > groupPos {
 					if err := matchElem.AppendText([]byte(s[groupPos:gs])); err != nil {
-						return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+						return buildFail(err)
 					}
 				}
 				groupElem, err := createAnalyzeStringElement(doc, "group")
 				if err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 				_ = groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", g))
 				if err := groupElem.AppendText([]byte(s[gs:ge])); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 				if err := matchElem.AddChild(groupElem); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 				groupPos = ge
 			}
 			if groupPos < end {
 				if err := matchElem.AppendText([]byte(s[groupPos:end])); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 			}
 		} else {
 			if err := matchElem.AppendText([]byte(s[start:end])); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				return buildFail(err)
 			}
 		}
 		if err := root.AddChild(matchElem); err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			return buildFail(err)
 		}
 		pos = end
+		return true
+	})
+	if buildErr != nil {
+		return nil, buildErr
+	}
+	if iterErr != nil {
+		// A leading-context pattern that cannot stream is bounded to xpath3's
+		// full-context allocation ceiling; surface that resource condition as-is
+		// so errors.Is(err, ErrRegexMatchLimit) keeps working. Any other engine
+		// error maps to FORX0002 like the former FindAllStringSubmatchIndex path.
+		if errors.Is(iterErr, ErrRegexMatchLimit) {
+			return nil, iterErr
+		}
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", iterErr)}
 	}
 	if pos < len(s) {
 		if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:]); err != nil {
@@ -1079,6 +1129,39 @@ type compiledXPathRegex struct {
 	unicodeTable *unicode.RangeTable // non-nil for simple \p{Name} or \P{Name} patterns
 	negated      bool                // true when the simple pattern is \P{...}
 	isSimple     bool                // true when unicodeTable is usable for single-rune fast paths
+	// stdNeedsFullContext is true when the std (RE2) pattern contains a
+	// leading-context zero-width assertion (^, \A, \b, \B, or multi-line ^)
+	// whose truth depends on input to the LEFT of the current scan position.
+	// Such patterns cannot be streamed by advancing an offset over s[pos:]
+	// (slicing makes those assertions see a false "start of input"), so
+	// eachStdSubmatchIndex matches them against the whole string via a bounded
+	// FindAllStringSubmatchIndex instead. The pattern stays on Go's RE2 engine
+	// (no backtracking-ReDoS regression), and the caller-supplied limit bounds
+	// the up-front materialization to the resource cap rather than the match
+	// count.
+	stdNeedsFullContext bool
+}
+
+// patternNeedsFullContext reports whether the RE2 pattern contains a
+// leading-context zero-width assertion. Trailing assertions ($, \z, multi-line
+// $) are unaffected by left-truncation — the slice end coincides with the
+// string end — so they do NOT require the full-context fallback.
+func patternNeedsFullContext(pattern string) bool {
+	parsed, err := syntax.Parse(pattern, syntax.Perl)
+	if err != nil {
+		// Be conservative: if we cannot analyze it, assume it needs full
+		// context so correctness never depends on the analysis succeeding.
+		return true
+	}
+	return regexpHasLeadingContextAssertion(parsed)
+}
+
+func regexpHasLeadingContextAssertion(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpBeginText, syntax.OpBeginLine, syntax.OpWordBoundary, syntax.OpNoWordBoundary:
+		return true
+	}
+	return slices.ContainsFunc(re.Sub, regexpHasLeadingContextAssertion)
 }
 
 type xpathRegexCacheKey struct {
@@ -1086,7 +1169,7 @@ type xpathRegexCacheKey struct {
 	flags   string
 }
 
-var compiledXPathRegexCache sync.Map
+var compiledXPathRegexCache = newRegexLRUCache(xpathRegexCacheCapacity)
 
 // DefaultRegexMatchTimeout bounds how long the backtracking regex engine
 // will spend on a single match before returning a timeout error. Patterns
@@ -1250,6 +1333,211 @@ func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]in
 	return result, nil
 }
 
+// eachStringSubmatchIndex streams successive matches of the regex in s one at a
+// time, calling fn with the per-match (start,end) index pairs (the same layout
+// as one FindAllStringSubmatchIndex entry). Iteration stops early when fn
+// returns false. limit caps the maximum number of matches ever produced (a
+// non-positive limit means no cap); it bounds the up-front materialization for
+// the one path that cannot stream incrementally (leading-context patterns),
+// keeping live memory proportional to the cap rather than the input's match
+// count. The streaming paths never accumulate matches at all.
+func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn func([]int) bool) error {
+	// Normalize the public contract: a non-positive limit means "uncapped".
+	// Internally that is represented as -1, which is also the "all matches"
+	// sentinel understood by the full-context FindAllStringSubmatchIndex path.
+	if limit <= 0 {
+		limit = -1
+	}
+	if r.backtrack == nil {
+		return r.eachStdSubmatchIndex(s, limit, fn)
+	}
+	return r.eachBacktrackSubmatchIndex(s, limit, fn)
+}
+
+// maxFullContextIndexCells bounds the TOTAL number of index ints the single
+// FindAllStringSubmatchIndex pass may allocate for a leading-context RE2
+// pattern that cannot be streamed (see eachStdSubmatchIndex). Such a pattern
+// must materialize its matches in one shot, and each match record holds
+// 2*(NumSubexp()+1) ints — so bounding the match COUNT alone lets a
+// high-capture pattern (e.g. `^()()()...` with the `m` flag) over a large
+// input allocate far beyond the intended ceiling before the cap fires.
+// Bounding the total index cells instead keeps the worst-case allocation fixed
+// regardless of capture count: the per-pattern match cap is derived from this
+// cell budget, and an input producing more cells than this is rejected with
+// [ErrRegexMatchLimit] rather than silently truncated or allowed to allocate
+// proportionally to the input.
+const maxFullContextIndexCells = 1 << 20 // ~1M index ints
+
+// eachStdSubmatchIndex ports the standard library's regexp.allMatches loop
+// (its successive-match + empty-match advancement rules) so that the streamed
+// match sequence is identical to std.FindAllStringSubmatchIndex, while
+// delivering one match at a time instead of accumulating them all.
+//
+// The streaming loop advances an offset and matches against s[pos:]; that is
+// exact for patterns without a leading-context assertion. Patterns that DO have
+// one (^, \A, \b, \B) would see a spurious "start of input" at every slice
+// boundary, so they are matched against the WHOLE string by Go's RE2 engine via
+// FindAllStringSubmatchIndex. That call is the only one that accumulates, so it
+// is bounded to the maxFullContextIndexCells budget rather than to the caller's
+// (possibly byte-budget-sized) limit; an input that exceeds that ceiling is
+// rejected with [ErrRegexMatchLimit] instead of allocating one match per input
+// position. RE2 stays linear, so a valid backtracking-shaped pattern like
+// ^(a+)+b never runs on a backtracking engine.
+func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([]int) bool) error {
+	if r.stdNeedsFullContext {
+		return r.eachStdFullContext(s, limit, fn)
+	}
+
+	end := len(s)
+	pos := 0
+	prevMatchEnd := -1
+	produced := 0
+	for pos <= end {
+		loc := r.std.FindStringSubmatchIndex(s[pos:])
+		if loc == nil {
+			break
+		}
+		// FindStringSubmatchIndex reports indices relative to s[pos:]; shift
+		// them back to absolute positions (leaving the -1 "unmatched group"
+		// sentinels intact).
+		for i := range loc {
+			if loc[i] >= 0 {
+				loc[i] += pos
+			}
+		}
+		matchStart, matchEnd := loc[0], loc[1]
+		accept := true
+		if matchEnd == pos {
+			// Empty match at the current scan position. Mirror allMatches:
+			// reject an empty match immediately following a previous match,
+			// then advance past one rune to avoid looping forever.
+			if matchStart == prevMatchEnd {
+				accept = false
+			}
+			_, width := utf8.DecodeRuneInString(s[pos:])
+			if width > 0 {
+				pos += width
+			} else {
+				pos = end + 1
+			}
+		} else {
+			pos = matchEnd
+		}
+		prevMatchEnd = matchEnd
+		if accept {
+			if !fn(loc) {
+				return nil
+			}
+			produced++
+			if limit > 0 && produced >= limit {
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+// eachStdFullContext handles the leading-context branch of eachStdSubmatchIndex:
+// a pattern whose zero-width assertions depend on input to the left of the scan
+// position cannot be streamed by slicing, so its matches are produced by a
+// single FindAllStringSubmatchIndex pass over the whole string. To keep that
+// one accumulating pass from amplifying a bounded input into a match record per
+// position, the pass is capped at a per-pattern match ceiling derived from the
+// maxFullContextIndexCells budget — independently of the caller's limit (which
+// may be derived from a large byte budget). When the caller's own limit is the
+// smaller bound, it governs and the caller observes the overflow itself; when
+// this function's ceiling is the binding bound and it is exceeded, the input is
+// rejected with [ErrRegexMatchLimit] rather than silently truncated. Each
+// surviving match is handed to fn one at a time, so a caller checking a
+// cancelled context inside fn observes it between matches.
+func (r *compiledXPathRegex) eachStdFullContext(s string, limit int, fn func([]int) bool) error {
+	// Each FindAllStringSubmatchIndex match record holds 2*(NumSubexp()+1) ints,
+	// so derive the match ceiling from the total cell budget instead of bounding
+	// the match count directly. This keeps the worst-case allocation fixed
+	// regardless of capture count: a high-capture pattern gets a proportionally
+	// smaller match cap (clamped to at least one so a pattern whose single record
+	// already exceeds the budget can still produce one match before tripping it).
+	cellsPerMatch := 2 * (r.std.NumSubexp() + 1)
+	ceiling := max(maxFullContextIndexCells/cellsPerMatch, 1)
+	// A smaller caller limit takes precedence and lets the caller enforce its own
+	// budget (in which case we honor the public limit contract exactly — produce
+	// at most `limit`).
+	internalBound := true
+	if limit > 0 && limit <= ceiling {
+		ceiling = limit
+		internalBound = false
+	}
+	// When our own ceiling is binding, request one extra so "exactly at the
+	// ceiling" is distinguishable from "over the ceiling"; when the caller's
+	// limit is binding, request exactly that many. Either way the allocation is
+	// bounded to (ceiling+1)*cellsPerMatch ints — at most ~maxFullContextIndexCells
+	// plus one record, never proportional to the input match count.
+	n := ceiling
+	if internalBound {
+		n = ceiling + 1
+	}
+	matches := r.std.FindAllStringSubmatchIndex(s, n)
+	if internalBound && len(matches) > ceiling {
+		return ErrRegexMatchLimit
+	}
+	for _, m := range matches {
+		if !fn(m) {
+			return nil
+		}
+	}
+	return nil
+}
+
+// eachBacktrackSubmatchIndex is the regexp2 (backtracking-engine) counterpart
+// of eachStdSubmatchIndex for patterns that genuinely require regexp2
+// (backreferences, character-class subtraction, large quantifiers). It streams
+// via the engine's native FindNextMatch semantics (which resume against the
+// original string, preserving leading-context assertions), converting regexp2's
+// rune indices to byte offsets and stopping early when fn returns false. Because
+// matches are produced incrementally and never accumulated, a caller can enforce
+// a budget or honor a cancelled context DURING enumeration. No empty-match dedup
+// is applied — these patterns follow regexp2's own iteration. A positive limit
+// stops iteration after that many matches; a non-positive limit means uncapped.
+func (r *compiledXPathRegex) eachBacktrackSubmatchIndex(s string, limit int, fn func([]int) bool) error {
+	re := r.backtrack
+	offsets := runeByteOffsets(s)
+	match, err := withSpuriousTimeoutRetry(re.MatchTimeout, func() (*regexp2.Match, error) {
+		return re.FindStringMatch(s)
+	})
+	if err != nil {
+		return err
+	}
+	produced := 0
+	for match != nil {
+		groups := match.Groups()
+		entry := make([]int, 0, len(groups)*2)
+		for _, group := range groups {
+			if len(group.Captures) == 0 {
+				entry = append(entry, -1, -1)
+				continue
+			}
+			start := offsets[group.Index]
+			end := offsets[group.Index+group.Length]
+			entry = append(entry, start, end)
+		}
+		if !fn(entry) {
+			return nil
+		}
+		produced++
+		if limit > 0 && produced >= limit {
+			return nil
+		}
+		cur := match
+		match, err = withSpuriousTimeoutRetry(re.MatchTimeout, func() (*regexp2.Match, error) {
+			return re.FindNextMatch(cur)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *compiledXPathRegex) NumSubexp() int {
 	if r.backtrack != nil {
 		return r.numGroups
@@ -1317,7 +1605,7 @@ func detectSimpleUnicodePattern(pattern, flags string) (*unicode.RangeTable, boo
 func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	cacheKey := xpathRegexCacheKey{pattern: pattern, flags: flags}
 	if cached, ok := compiledXPathRegexCache.Load(cacheKey); ok {
-		return cached.(*compiledXPathRegex), nil //nolint:forcetypeassert
+		return cached, nil
 	}
 
 	// Detect simple \p{Name} / \P{Name} patterns for single-rune fast paths
@@ -1407,20 +1695,21 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			isSimple:     simpleOk,
 		}
 		actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
-		return actual.(*compiledXPathRegex), nil //nolint:forcetypeassert
+		return actual, nil
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
 	compiled := &compiledXPathRegex{
-		std:          re,
-		unicodeTable: simpleTable,
-		negated:      simpleNegated,
-		isSimple:     simpleOk,
+		std:                 re,
+		unicodeTable:        simpleTable,
+		negated:             simpleNegated,
+		isSimple:            simpleOk,
+		stdNeedsFullContext: patternNeedsFullContext(pattern),
 	}
 	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
-	return actual.(*compiledXPathRegex), nil //nolint:forcetypeassert
+	return actual, nil
 }
 
 // stripFreeSpacing removes unescaped whitespace from a regex pattern (x flag).

@@ -6,15 +6,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"regexp"
+	"math/big"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 // validator holds state during document validation.
@@ -26,6 +26,84 @@ type validator struct {
 	valid         bool
 	suppressDepth int // when > 0, errors are suppressed (inside choice branches)
 	depth         int // recursion depth guard
+
+	// groupMemo caches results of validateGroupChildren/validateGroupSeq so the
+	// recursive group backtracker (backtrackGroupFlexible/backtrackGroupNaive)
+	// does not re-explore overlapping (child-range, input-position) subproblems.
+	// Without it the cascading retry is exponential in the number of flexible
+	// members. Keyed by the full input that determines the result; a hit
+	// reproduces the original call's effect byte-for-byte.
+	groupMemo map[groupMemoKey]*groupMemoEntry
+}
+
+// groupMemoKey identifies a group-validation subproblem. Two calls with an equal
+// key are guaranteed to produce identical results and side effects.
+type groupMemoKey struct {
+	first *pattern        // children[0] — uniquely identifies the child sub-range start
+	n     int             // len(children) — sub-range length
+	elem  *helium.Element // owning element (content path); pins the element's attrs,
+	// which group content may consult even when the child sequence is empty
+	pos      helium.Node // first remaining node (nil when the input sequence is empty)
+	seqLen   int         // len(state.seq); with pos, fully identifies the sibling run
+	attrKey  string      // packed attrUsed bits ("" for the naive path)
+	suppress bool        // v.suppressDepth > 0 (governs whether errors are emitted)
+	content  bool        // element-content path vs naive path discriminator
+}
+
+// groupMemoEntry records the full effect of a memoized group-validation call so a
+// cache hit can reproduce it exactly: the resulting input position, attribute
+// usage, any errors the call appended, and its return value.
+type groupMemoEntry struct {
+	result   int
+	seq      []helium.Node
+	attrUsed []bool
+	errs     []error
+}
+
+func (e *groupMemoEntry) apply(state *validState, attrUsed []bool, v *validator) int {
+	state.seq = append([]helium.Node(nil), e.seq...)
+	if attrUsed != nil {
+		copy(attrUsed, e.attrUsed)
+	}
+	if len(e.errs) > 0 {
+		v.pendingErrors = append(v.pendingErrors, e.errs...)
+		v.valid = false
+	}
+	return e.result
+}
+
+// groupMemoLookupKey builds the cache key for a group-validation call, or reports
+// false when the sub-range is empty (trivially handled by the callers).
+func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element, attrUsed []bool, state *validState, content bool) (groupMemoKey, bool) {
+	if len(children) == 0 {
+		return groupMemoKey{}, false
+	}
+	var pos helium.Node
+	if len(state.seq) > 0 {
+		pos = state.seq[0]
+	}
+	var attrKey string
+	if len(attrUsed) > 0 {
+		buf := make([]byte, len(attrUsed))
+		for i, used := range attrUsed {
+			if used {
+				buf[i] = '1'
+			} else {
+				buf[i] = '0'
+			}
+		}
+		attrKey = string(buf)
+	}
+	return groupMemoKey{
+		first:    children[0],
+		n:        len(children),
+		elem:     elem,
+		pos:      pos,
+		seqLen:   len(state.seq),
+		attrKey:  attrKey,
+		suppress: v.suppressDepth > 0,
+		content:  content,
+	}, true
 }
 
 const maxValidationDepth = 500
@@ -479,15 +557,27 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 
 		// For children that resolve to groups, track per-member progress.
 		// This allows group members to be matched one-by-one with other
-		// interleave children consuming elements between them.
+		// interleave children consuming elements between them. A repeatable
+		// child wrapping a group (zeroOrMore/oneOrMore of group(a,b)) is tracked
+		// the same way, with repeat=true so a completed iteration restarts at the
+		// first member — letting another interleave branch consume between group
+		// members across iterations.
 		type groupState struct {
-			members []*pattern
-			pos     int
+			members      []*pattern
+			pos          int
+			repeat       bool // member-group wrapped in zeroOrMore/oneOrMore
+			iterConsumed bool // current iteration consumed at least one item
 		}
 		groupStates := make([]*groupState, len(pat.children))
 		for i, child := range pat.children {
 			if grp := v.resolveToGroup(child); grp != nil {
 				groupStates[i] = &groupState{members: grp.children, pos: 0}
+				continue
+			}
+			if child.kind == patternZeroOrMore || child.kind == patternOneOrMore {
+				if grp := v.resolveToGroup(wrapChildren(child.children)); grp != nil {
+					groupStates[i] = &groupState{members: grp.children, pos: 0, repeat: true}
+				}
 			}
 		}
 
@@ -529,42 +619,57 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				}
 
 				// Group children: match member-by-member so other interleave
-				// children can consume elements between group members.
+				// children can consume elements between group members. For a
+				// repeatable member-group, a completed iteration that consumed
+				// something restarts at the first member (a fresh group iteration).
 				if gs := groupStates[i]; gs != nil {
-					for gs.pos < len(gs.members) {
-						member := gs.members[gs.pos]
-						savedState := state.clone()
-						savedAttrUsed := make([]bool, len(attrUsed))
-						copy(savedAttrUsed, attrUsed)
-						savedLen := len(v.pendingErrors)
-						savedValid := v.valid
-						v.suppressDepth++
-						ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
-						v.suppressDepth--
-						if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
-							// Member consumed something — advance.
-							consumed[i] = true
-							progress = true
-							gs.pos++
-							v.pendingErrors = v.pendingErrors[:savedLen]
-							v.valid = savedValid
-							// Continue trying next members in same round
-							// (they might also match immediately).
-						} else {
-							// Member didn't consume. If nullable, skip it
-							// and try the next member.
-							*state = *savedState
-							copy(attrUsed, savedAttrUsed)
-							v.pendingErrors = v.pendingErrors[:savedLen]
-							v.valid = savedValid
-							if v.isNullable(member) {
+					for {
+						gs.iterConsumed = false
+						blocked := false
+						for gs.pos < len(gs.members) {
+							member := gs.members[gs.pos]
+							savedState := state.clone()
+							savedAttrUsed := make([]bool, len(attrUsed))
+							copy(savedAttrUsed, attrUsed)
+							savedLen := len(v.pendingErrors)
+							savedValid := v.valid
+							v.suppressDepth++
+							ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
+							v.suppressDepth--
+							if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
+								// Member consumed something — advance.
+								consumed[i] = true
+								progress = true
+								gs.iterConsumed = true
 								gs.pos++
-								continue
+								v.pendingErrors = v.pendingErrors[:savedLen]
+								v.valid = savedValid
+								// Continue trying next members in same round
+								// (they might also match immediately).
+							} else {
+								// Member didn't consume. If nullable, skip it
+								// and try the next member.
+								*state = *savedState
+								copy(attrUsed, savedAttrUsed)
+								v.pendingErrors = v.pendingErrors[:savedLen]
+								v.valid = savedValid
+								if v.isNullable(member) {
+									gs.pos++
+									continue
+								}
+								// Not nullable — stop trying this group for now.
+								// Other interleave children may consume first.
+								blocked = true
+								break
 							}
-							// Not nullable — stop trying this group for now.
-							// Other interleave children may consume first.
-							break
 						}
+						// Restart a repeatable member-group only after a full
+						// iteration that consumed something; otherwise stop.
+						if gs.repeat && !blocked && gs.pos >= len(gs.members) && gs.iterConsumed {
+							gs.pos = 0
+							continue
+						}
+						break
 					}
 					if gs.pos >= len(gs.members) {
 						if !isRepeatable[i] {
@@ -636,6 +741,22 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				return -1
 			}
 		}
+		// A repeatable member-group that ends mid-iteration with a non-nullable
+		// remaining member has a dangling partial group (e.g. zeroOrMore(group(a,b))
+		// fed an unpaired trailing a): that is incomplete content.
+		for i := range pat.children {
+			gs := groupStates[i]
+			if gs == nil || !gs.repeat || gs.pos <= 0 || gs.pos >= len(gs.members) {
+				continue
+			}
+			for j := gs.pos; j < len(gs.members); j++ {
+				if !v.isNullable(gs.members[j]) {
+					v.addError(elem, "Invalid sequence in interleave")
+					v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+					return -1
+				}
+			}
+		}
 		return 0
 
 	case patternRef, patternParentRef:
@@ -690,7 +811,40 @@ func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
 // we try reducing the flexible child's consumption.
 func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-	children := pat.children
+	return v.validateGroupChildren(pat.children, elem, attrs, attrUsed, state)
+}
+
+// validateGroupChildren validates a sequence of group children with backtracking
+// support. It is shared by validateGroupContent and by the recursive retry inside
+// backtrackGroupFlexible, so a backtracked sub-range that contains its own
+// flexible members can itself backtrack. Results are memoized so the cascading
+// retry stays polynomial instead of exponential in the flexible-member count.
+func (v *validator) validateGroupChildren(children []*pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
+	key, ok := v.groupMemoLookupKey(children, elem, attrUsed, state, true)
+	if ok {
+		if e, hit := v.groupMemo[key]; hit {
+			return e.apply(state, attrUsed, v)
+		}
+	}
+	errBase := len(v.pendingErrors)
+	result := v.validateGroupChildrenUncached(children, elem, attrs, attrUsed, state)
+	if ok {
+		if v.groupMemo == nil {
+			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+		}
+		v.groupMemo[key] = &groupMemoEntry{
+			result:   result,
+			seq:      append([]helium.Node(nil), state.seq...),
+			attrUsed: append([]bool(nil), attrUsed...),
+			errs:     append([]error(nil), v.pendingErrors[errBase:]...),
+		}
+	}
+	return result
+}
+
+func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
 	if len(children) == 0 {
 		return 0
 	}
@@ -828,13 +982,11 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			// Save error state so failed retries don't leave stale errors.
 			retryLen := len(v.pendingErrors)
 			retryValid := v.valid
-			allOK := true
-			for k := j + 1; k <= failIdx; k++ {
-				if v.validateContentPat(children[k], elem, attrs, attrUsed, state) != 0 {
-					allOK = false
-					break
-				}
-			}
+			// Validate the remaining children as a group so that any flexible
+			// members in [j+1..failIdx] can themselves backtrack. A flat greedy
+			// retry would let a second flexible member re-grab content that a
+			// later mandatory member needs.
+			allOK := v.validateGroupChildren(children[j+1:failIdx+1], elem, attrs, attrUsed, state) == 0
 			if allOK {
 				best = &btSuccess{
 					state:    state.clone(),
@@ -1002,6 +1154,12 @@ func (v *validator) attributeMatches(pat *pattern, attr *helium.Attribute) bool 
 	uri := attr.URI()
 	if pat.nameClass != nil {
 		return nameClassMatches(pat.nameClass, localName, uri)
+	}
+	// Fail closed: an attribute pattern with no name class and no name/ns is
+	// malformed (parseAttribute should have poisoned it). Never treat it as a
+	// wildcard that matches any attribute.
+	if pat.name == "" && pat.ns == "" {
+		return false
 	}
 	if pat.name != "" && pat.name != localName {
 		return false
@@ -1343,7 +1501,37 @@ func sortDescending(counts []int) {
 }
 
 func (v *validator) validateGroup(pat *pattern, state *validState) int {
-	children := pat.children
+	return v.validateGroupSeq(pat.children, state)
+}
+
+// validateGroupSeq validates a sequence of naive-group children with
+// backtracking support. It is shared by validateGroup and by the recursive
+// retry inside backtrackGroupNaive, so a backtracked sub-range with its own
+// flexible members can itself backtrack. Results are memoized (see
+// validateGroupChildren) to keep the cascading retry polynomial.
+func (v *validator) validateGroupSeq(children []*pattern, state *validState) int {
+	key, ok := v.groupMemoLookupKey(children, nil, nil, state, false)
+	if ok {
+		if e, hit := v.groupMemo[key]; hit {
+			return e.apply(state, nil, v)
+		}
+	}
+	errBase := len(v.pendingErrors)
+	result := v.validateGroupSeqUncached(children, state)
+	if ok {
+		if v.groupMemo == nil {
+			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+		}
+		v.groupMemo[key] = &groupMemoEntry{
+			result: result,
+			seq:    append([]helium.Node(nil), state.seq...),
+			errs:   append([]error(nil), v.pendingErrors[errBase:]...),
+		}
+	}
+	return result
+}
+
+func (v *validator) validateGroupSeqUncached(children []*pattern, state *validState) int {
 	if len(children) == 0 {
 		return 0
 	}
@@ -1381,12 +1569,11 @@ func (v *validator) validateGroup(pat *pattern, state *validState) int {
 //     validateGroupContent. So `bounds[failIdx]` is always the freshly-appended
 //     boundary and there is no multi-node cascade across separate backtrack calls
 //     that could observe a stale intermediate `bounds` entry.
-//   - Recovery reduces exactly one flexible child and greedily re-validates the
-//     rest; it does not cascade yields across several competing flexible members.
-//     A group with two or more flexible members that must each yield (e.g.
-//     group(zeroOrMore(x), zeroOrMore(x), x)) is therefore not fully recovered.
-//     This is a deliberate, pre-existing limitation shared with the element-
-//     content path (backtrackGroupFlexible), not specific to this function.
+//   - Recovery reduces one flexible child and re-validates the rest via
+//     validateGroupSeq, which itself backtracks. So a group with two or more
+//     flexible members that must each yield (e.g. group(zeroOrMore(x),
+//     zeroOrMore(x), x)) is recovered by cascading the reductions recursively.
+//     The element-content path (backtrackGroupFlexible) mirrors this.
 func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 	state *validState, bounds []groupBound) bool {
 	for j := failIdx - 1; j >= 0; j-- {
@@ -1438,13 +1625,11 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 
 			retryLen := len(v.pendingErrors)
 			retryValid := v.valid
-			allOK := true
-			for k := j + 1; k <= failIdx; k++ {
-				if v.validatePattern(children[k], state) != 0 {
-					allOK = false
-					break
-				}
-			}
+			// Validate the remaining children as a group so that any flexible
+			// members in [j+1..failIdx] can themselves backtrack. A flat greedy
+			// retry would let a second flexible member re-grab content that a
+			// later mandatory member needs.
+			allOK := v.validateGroupSeq(children[j+1:failIdx+1], state) == 0
 			if allOK {
 				bestState = state.clone()
 				bestErrLen = len(v.pendingErrors)
@@ -1769,8 +1954,57 @@ func matchXSDValue(typeName, text, expected string) int {
 	return -1
 }
 
-// matchData checks if text matches a data type pattern.
+// matchData checks if text matches a data type pattern, including any
+// <except> patterns nested under the <data>. The base datatype must match
+// first; then any value excluded by the except patterns is rejected.
 func (v *validator) matchData(pat *pattern, text string) int {
+	if ret := v.matchDataType(pat, text); ret != 0 {
+		return ret
+	}
+	// A <data> may carry an <except> (stored as a patternChoice child by
+	// parseData). The base datatype matched above, so a value that also matches
+	// any except pattern must be rejected.
+	if v.matchesExcept(pat, text) {
+		return -1
+	}
+	return 0
+}
+
+// matchesExcept reports whether text matches any of the <except> patterns
+// stored under a <data> pattern. Each <except> is compiled into a patternChoice
+// child; its alternatives are value/data patterns (optionally combined with
+// nested choice).
+func (v *validator) matchesExcept(pat *pattern, text string) bool {
+	for _, child := range pat.children {
+		if v.matchExceptPattern(child, text) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchExceptPattern reports whether text matches a single pattern appearing
+// inside a <data>'s <except>. Only value, data, and choice patterns are valid
+// there per the RELAX NG schema for except-in-data.
+func (v *validator) matchExceptPattern(ex *pattern, text string) bool {
+	switch ex.kind {
+	case patternData:
+		return v.matchData(ex, text) == 0
+	case patternValue:
+		return v.matchValue(ex, text) == 0
+	case patternChoice:
+		for _, c := range ex.children {
+			if v.matchExceptPattern(c, text) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchDataType checks if text matches a data type pattern's base datatype,
+// without considering any <except> patterns.
+func (v *validator) matchDataType(pat *pattern, text string) int {
 	if pat.dataType == nil {
 		return 0
 	}
@@ -1848,6 +2082,42 @@ var xsdDatatypeNames = map[string]struct{}{
 	"language": {}, "base64Binary": {}, "hexBinary": {},
 }
 
+// effectiveXSDDatatype returns the XSD builtin datatype local name a <data>
+// dataType resolves to for facet-applicability purposes, and whether it is an
+// XSD-validated type. It mirrors matchData's resolution exactly so the
+// compile-time facet check (checkDataFacets) and runtime validation agree: an
+// explicit XSD datatype library names an XSD type directly, and — when no
+// datatypeLibrary was declared anywhere — a bare recognized XSD name resolves to
+// its XSD type (the libxml2 compatibility fallback) EXCEPT bare "string"/"token",
+// which matchData resolves first as the EMPTY built-in RELAX NG library (accept
+// any text, no XSD facets). Anything else (the built-in string/token library, an
+// explicit datatypeLibrary="" reset, or an unknown name) is not an XSD-validated
+// type and returns ("", false).
+func effectiveXSDDatatype(dt *dataType) (string, bool) {
+	if dt == nil {
+		return "", false
+	}
+	switch dt.library {
+	case lexicon.NamespaceXSDDatatypes:
+		_, ok := xsdDatatypeNames[dt.name]
+		return dt.name, ok
+	case "":
+		// matchData resolves bare "string"/"token" as the EMPTY built-in RELAX NG
+		// library FIRST (they accept any text and apply no XSD facets), before the
+		// libxml2 bare-XSD fallback. So those two names are never XSD-validated at
+		// runtime — treating them as XSD here would raise spurious facet errors at
+		// compile time (e.g. an ordering facet on the built-in "token"). Only the
+		// other bare recognized XSD names take the fallback path.
+		if dt.name == lexicon.TypeString || dt.name == lexicon.TypeToken {
+			return "", false
+		}
+		if _, ok := xsdDatatypeNames[dt.name]; ok && !dt.libraryDeclared {
+			return dt.name, true
+		}
+	}
+	return "", false
+}
+
 // validateXSDType validates a value against an XSD datatype. Recognized type
 // names are validated through the shared XSD value validator so RELAX NG and
 // XSD stay consistent (date/time/duration value-space ranges, integer subtype
@@ -1876,44 +2146,188 @@ func validateXSDType(typeName, text string, params []*param) int {
 	return validateWithParams(text, typeName, params)
 }
 
-func validateWithParams(value, typeName string, params []*param) int {
+// validateWithParams applies the RELAX NG <param> facets carried by a <data>
+// pattern to an already whitespace-normalized, lexically-valid instance value.
+// The parameter is named text (not value) so the internal/xsd/value package
+// stays reachable for the ordering-facet comparisons below.
+//
+// The length facets (length/minLength/maxLength) are measured via facetLength on
+// every applicable type — including xs:QName and xs:NOTATION, where they are
+// CONSTRAINING (XSD 1.0 / libxml2 parity, matching the xsd package's facetLength)
+// rather than a no-op, so RELAX NG rejects an out-of-length QName/NOTATION exactly
+// as the shared xsd validator does;
+// the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated through
+// the shared XSD value engine (value.Compare) so RELAX NG and XSD agree on the
+// value space (e.g. xs:integer "5" really is less than "10"); and the digit
+// facets (totalDigits, fractionDigits) are measured via value.CountTotalDigits/
+// CountFractionDigits on the xs:decimal family; and the pattern facet is matched
+// through the shared XSD-regex engine (xsdregex) so XSD-only constructs (\i, \c,
+// \p{...}, …) are honoured. Facet applicability — an ordering facet on a
+// non-ordered type, a digit facet on a non-decimal type, a length facet on a
+// non-string-derived type, and bound/pattern validity — is enforced at compile
+// time (checkDataFacets), so the grammar is already unmatchable when an
+// inapplicable or invalid facet is present. Any other param name
+// — enumeration, whiteSpace, or an unknown facet — is unsupported and fails
+// closed: it cannot be silently accepted, which would let a <data> match values
+// the facet was meant to reject.
+func validateWithParams(text, typeName string, params []*param) int {
 	for _, p := range params {
 		switch p.name {
 		case "pattern":
-			matched, err := regexp.MatchString("^(?:"+p.value+")$", value)
-			if err != nil || !matched {
+			// The pattern facet is an XSD/XPath regular expression, anchored to the
+			// whole value. Use the compilation cached at compile time (checkDataFacets);
+			// fall back to compiling here for robustness if it was not pre-compiled. A
+			// pattern that cannot compile fails closed.
+			re := p.compiledPattern
+			if re == nil {
+				compiled, err := xsdregex.Compile(p.value)
+				if err != nil {
+					return -1
+				}
+				re = compiled
+			}
+			if !re.MatchString(text) {
 				return -1
 			}
 		case "length":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			// The bound is compile-time validated as an xs:nonNegativeInteger and
+			// parsed width-safely (big.Int) so a huge-but-valid bound is compared
+			// faithfully rather than overflowing int into a reject-all.
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
-			length, ok := facetLength(value, typeName)
-			if !ok || length != n {
+			length, ok := facetLength(text, typeName)
+			if !ok || big.NewInt(int64(length)).Cmp(n) != 0 {
 				return -1
 			}
 		case "minLength":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
-			length, ok := facetLength(value, typeName)
-			if !ok || length < n {
+			length, ok := facetLength(text, typeName)
+			if !ok || big.NewInt(int64(length)).Cmp(n) < 0 {
 				return -1
 			}
 		case "maxLength":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
-			length, ok := facetLength(value, typeName)
-			if !ok || length > n {
+			length, ok := facetLength(text, typeName)
+			if !ok || big.NewInt(int64(length)).Cmp(n) > 0 {
 				return -1
 			}
+		case "minInclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp >= 0 }) {
+				return -1
+			}
+		case "maxInclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp <= 0 }) {
+				return -1
+			}
+		case "minExclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp > 0 }) {
+				return -1
+			}
+		case "maxExclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp < 0 }) {
+				return -1
+			}
+		case "totalDigits":
+			// totalDigits applies only to the xs:decimal family (an inapplicable
+			// facet, and a bound that is not a valid xs:positiveInteger, are rejected
+			// at compile time). The instance value has already passed lexical
+			// validation, so count its significant digits and reject when they exceed
+			// the bound. The bound is parsed with big.Int so an arbitrarily large
+			// xs:positiveInteger does not overflow into a reject-all.
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok || !value.IsDecimalFamily(typeName) {
+				return -1
+			}
+			if big.NewInt(int64(value.CountTotalDigits(text))).Cmp(n) > 0 {
+				return -1
+			}
+		case "fractionDigits":
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok || !value.IsDecimalFamily(typeName) {
+				return -1
+			}
+			if big.NewInt(int64(value.CountFractionDigits(text))).Cmp(n) > 0 {
+				return -1
+			}
+		default:
+			// Unsupported / unrecognized facet (enumeration, whiteSpace, or an
+			// unknown name). Fail closed rather than silently accept: an unenforced
+			// facet must not let the value through.
+			return -1
 		}
 	}
 	return 0
+}
+
+// facetOrderingOK reports whether the instance value satisfies an ordering facet
+// (min/maxInclusive, min/maxExclusive) whose bound lexical is facetBound. The
+// instance value and the bound are compared in the datatype's value space via the
+// shared XSD engine (value.Compare). accept is given the comparison sign of text
+// relative to facetBound (-1/0/+1) and decides whether the facet is met.
+//
+// Ordering facets are defined ONLY on a datatype whose value space is ordered
+// (value.Orderable): value.Compare returns a deterministic total order even for
+// the non-ordered types (boolean, hexBinary, base64Binary) so enumeration can use
+// cmp==0, but that order must never fire a range facet. Such facets are rejected
+// at compile time (checkDataFacets makes the grammar unmatchable), so this is
+// belt-and-suspenders — a non-ordered type fails closed if ever reached.
+//
+// For an ordered type, value.Compare can still return ok=false when two VALID
+// operands are indeterminate. There are two distinct cases, and XSD treats them
+// oppositely:
+//
+//   - An xs:float/xs:double NaN operand (a NaN instance value OR a NaN bound):
+//     NaN does not participate in the order, and XSD bounding facets EXCLUDE
+//     incomparable values, so the facet is NOT satisfied. This must reject — a
+//     minInclusive=0 must not accept a NaN instance, and a NaN bound must not
+//     accept finite values.
+//   - A genuinely-indeterminate comparison between two non-NaN ordered values
+//     (e.g. a mixed-timezone xs:dateTime comparison): XSD treats this as
+//     SATISFYING the range facet, so the value is accepted — matching the XSD
+//     layer's semantics.
+func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) bool {
+	if !value.Orderable(typeName) {
+		return false
+	}
+	// Normalize the bound per the datatype's XSD whitespace facet (float/double are
+	// collapse) BEFORE comparing it: a raw bound such as "<param>" NaN "</param>"
+	// carries surrounding whitespace that value.Compare trims away (so it reads NaN
+	// and returns indeterminate) but value.IsFloatNaN does not, so the unnormalized
+	// " NaN " bound would be seen as non-NaN below and let a finite instance through.
+	facetBound = value.Normalize(facetBound, typeName)
+	cmp, ok := value.Compare(text, facetBound, typeName)
+	if !ok {
+		// A NaN operand (instance value or bound) is incomparable for the bounding
+		// facets, so the value fails the facet rather than slipping through. Other
+		// indeterminate ordered comparisons remain treated as satisfied.
+		if value.IsFloatNaN(text) || value.IsFloatNaN(facetBound) {
+			return false
+		}
+		return true
+	}
+	return accept(cmp)
+}
+
+// parseNonNegFacetBound parses an integer facet bound — totalDigits,
+// fractionDigits, or the length family (length/minLength/maxLength) — into a
+// big.Int. The bound is compile-time validated (checkDataFacets) as a valid
+// xs:positiveInteger (totalDigits) or xs:nonNegativeInteger (fractionDigits and
+// the length facets), so by the time validation runs it is a well-formed integer
+// lexical with only XSD whitespace; it is normalized (XSD collapse — NOT Go's
+// unicode-space trimming, which would accept NBSP) before parsing. A big.Int is
+// used rather than strconv.Atoi so an arbitrarily large bound is compared
+// faithfully instead of overflowing int and collapsing into a reject-all.
+func parseNonNegFacetBound(s string) (*big.Int, bool) {
+	n, ok := new(big.Int).SetString(value.Normalize(s, "nonNegativeInteger"), 10)
+	return n, ok
 }
 
 // facetLength returns the value's length in the units the length/minLength/

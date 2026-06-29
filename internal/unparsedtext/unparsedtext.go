@@ -31,7 +31,9 @@ import (
 	"golang.org/x/text/transform"
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -142,6 +144,20 @@ func LoadTextLines(ctx context.Context, cfg *Config, href, encoding string) ([]s
 		return nil, err
 	}
 	return SplitLines(text), nil
+}
+
+// LoadTextLinesBounded behaves like LoadTextLines but stops splitting once
+// limit+1 lines have been produced (limit <= 0 imposes no bound). The returned
+// bool reports whether the resource contained more than limit lines, so a caller
+// enforcing a line-count cap can reject an over-cap resource without ever
+// building the full line slice — LoadTextLines would split every line up front.
+func LoadTextLinesBounded(ctx context.Context, cfg *Config, href, encoding string, limit int) ([]string, bool, error) {
+	text, err := LoadText(ctx, cfg, href, encoding)
+	if err != nil {
+		return nil, false, err
+	}
+	lines, truncated := SplitLinesBounded(text, limit)
+	return lines, truncated, nil
 }
 
 // IsAvailable returns true if LoadText would succeed for the given href
@@ -476,6 +492,52 @@ func SplitLines(text string) []string {
 	return lines
 }
 
+// SplitLinesBounded splits text into lines following the same rules as
+// SplitLines (CRLF and CR normalize to LF; a trailing newline does not yield an
+// extra empty final line), but stops as soon as limit+1 lines have been produced
+// when limit > 0. The returned bool reports whether text contained more than
+// limit lines (collection was truncated at limit+1). This lets a caller reject
+// an over-cap resource without materializing the full line slice. A limit <= 0
+// imposes no bound and collects every line. Unlike SplitLines it does not first
+// build a fully normalized copy of text; it streams lines directly so an
+// over-cap resource stops early.
+func SplitLinesBounded(text string, limit int) ([]string, bool) {
+	var lines []string
+	var cur strings.Builder
+	// emit records the current segment as a line and reports whether the line
+	// count has now exceeded limit.
+	emit := func() bool {
+		lines = append(lines, cur.String())
+		cur.Reset()
+		return limit > 0 && len(lines) > limit
+	}
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\r':
+			if emit() {
+				return lines, true
+			}
+			if i+1 < len(text) && text[i+1] == '\n' {
+				i++
+			}
+		case '\n':
+			if emit() {
+				return lines, true
+			}
+		default:
+			cur.WriteByte(text[i])
+		}
+	}
+	// The segment after the last newline is a line only when non-empty; an empty
+	// trailing segment is the dropped extra line a trailing newline would create.
+	if cur.Len() > 0 {
+		if emit() {
+			return lines, true
+		}
+	}
+	return lines, false
+}
+
 // ValidateXMLChars checks that the string contains only valid XML 1.0
 // characters: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF].
 func ValidateXMLChars(s string) error {
@@ -534,11 +596,28 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	}
 
 	var target string
-	switch parsed.Scheme {
-	case lexicon.SchemeFile:
-		target = parsed.Path
-	case "":
-		if filepath.IsAbs(uri) {
+	switch {
+	case parsed.Scheme == lexicon.SchemeFile:
+		// Convert the "file:" URI to a native filesystem path. On Windows a
+		// drive-letter URI ("file:///C:/dir/x.txt") yields a native path
+		// ("C:\\dir\\x.txt") rather than the spurious leading-slash, forward-slash
+		// form ("/C:/dir/x.txt") that parsed.Path holds; otherwise the
+		// containedRel check below compares it against a native BaseDir and
+		// wrongly reports the target as outside the base. iofs.FileURIToPath is
+		// GOOS-parameterized, so POSIX behavior ("file:///a/b" -> "/a/b") is
+		// unchanged.
+		p, ferr := iofs.FileURIToPath(uri)
+		if ferr != nil {
+			return nil, ferr
+		}
+		target = p
+	// A bare Windows absolute path ("C:\\dir\\data.txt") is mis-parsed by
+	// url.Parse as scheme "c"; treat it as a local absolute path, not a URI.
+	case parsed.Scheme == "" || isWindowsDriveScheme(parsed):
+		// uripath.IsAbsolutePath recognizes both POSIX- and Windows-absolute
+		// shapes regardless of GOOS, so a "/abs" or "C:\\abs" reference is kept
+		// absolute rather than joined against BaseDir.
+		if filepath.IsAbs(uri) || uripath.IsAbsolutePath(uri) {
 			target = uri
 		} else {
 			target = filepath.Join(r.BaseDir, uri)
@@ -693,6 +772,13 @@ func (r *fsResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	}
 	cleaned := path.Clean(name)
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return nil, fmt.Errorf("path %q escapes the FS root", name)
+	}
+	// path.Clean and fs.ValidPath only recognize '/' as a separator, so a
+	// backslash-based traversal such as "..\\secret" survives the check above
+	// and could escape the root on a filesystem that treats '\' as a separator.
+	// Re-run the containment check with backslashes normalized to slashes.
+	if slashed := path.Clean(strings.ReplaceAll(name, `\`, "/")); slashed == ".." || strings.HasPrefix(slashed, "../") {
 		return nil, fmt.Errorf("path %q escapes the FS root", name)
 	}
 	return r.fsys.Open(cleaned)

@@ -51,3 +51,33 @@ func TestRegexMatchTimeout_BoundsCatastrophicBacktracking(t *testing.T) {
 		"timeout did not fire near %v budget; elapsed=%v err=%v",
 		matchBudget, elapsed, evalErr)
 }
+
+func TestRegex_PublicAPI(t *testing.T) {
+	re, err := xpath3.CompileRegex(`a(b+)c`, "")
+	require.NoError(t, err)
+
+	matched, err := re.MatchString("abbbc")
+	require.NoError(t, err)
+	require.True(t, matched)
+
+	matched, err = re.MatchString("xyz")
+	require.NoError(t, err)
+	require.False(t, matched)
+
+	idx, err := re.FindAllSubmatchIndex("abc and abbc", -1)
+	require.NoError(t, err)
+	require.Len(t, idx, 2)
+	// First match "abc": full match + one capture group => 4 indices.
+	require.Len(t, idx[0], 4)
+
+	// Case-insensitive flag.
+	rei, err := xpath3.CompileRegex(`abc`, "i")
+	require.NoError(t, err)
+	matched, err = rei.MatchString("ABC")
+	require.NoError(t, err)
+	require.True(t, matched)
+
+	// Invalid pattern surfaces an error.
+	_, err = xpath3.CompileRegex(`[`, "")
+	require.Error(t, err)
+}

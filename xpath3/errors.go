@@ -74,6 +74,14 @@ var (
 	// ErrNodeSetLimit is returned when a node-set exceeds the maximum length.
 	// Aliased from internal/xpath so errors.Is works end-to-end.
 	ErrNodeSetLimit = ixpath.ErrNodeSetLimit
+	// ErrRegexMatchLimit is returned by [Regex.EachSubmatchIndex] when a
+	// leading-context pattern (a multi-line ^, \A, \b, ...) — which cannot be
+	// streamed incrementally on the RE2 engine and must be materialized in one
+	// pass — produces more matches than the safe full-context allocation ceiling
+	// allows. It bounds the up-front materialization so a near-empty-matching
+	// pattern over a large input cannot allocate a match record per input
+	// position; callers should treat it as a resource-exhaustion condition.
+	ErrRegexMatchLimit = errors.New("xpath3: regex full-context match count exceeds the safe allocation ceiling")
 )
 
 // XPathError is a structured error with an XPath error code.

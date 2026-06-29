@@ -73,7 +73,13 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		if err != nil {
 			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
 		}
-		schemaDoc, err := secureXMLParser("").Parse(ctx, data)
+		// Parse with the schema's own URI as the base so doc.URL() carries the
+		// canonical location, mirroring compileSchemaFromURI. The xsd compiler's
+		// Compile derives the circular-include root key from doc.URL(); without a
+		// base, a local-path schema URI leaves doc.URL() empty and a nested
+		// xs:include/xs:redefine pointing back at this schema (main -> inc -> main)
+		// is re-parsed into duplicate components instead of being skipped.
+		schemaDoc, err := secureXMLParser(ec.injectedParser(), uri, ec.resourceLimit()).Parse(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
 		}
@@ -82,7 +88,11 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// and route those nested loads through the invocation's resolver
 		// (default-deny) instead of the xsd compiler's default os.Open.
 		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
-		schema, err := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, schemaDoc)
+		schemaCompiler := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys)
+		if p := ec.injectedParser(); p != nil {
+			schemaCompiler = schemaCompiler.Parser(*p)
+		}
+		schema, err := schemaCompiler.Compile(ctx, schemaDoc)
 		if err != nil {
 			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
 		}

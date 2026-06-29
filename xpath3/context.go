@@ -116,6 +116,10 @@ func FnContextNode(ctx context.Context) helium.Node {
 
 // DocOrderCache is a shared document-order cache that can be passed
 // across evaluations to ensure consistent cross-document ordering.
+//
+// The cache describes the tree as it was when first indexed. Callers MUST call
+// Reset after mutating any document the cache describes, or order results may be
+// stale.
 type DocOrderCache = ixpath.DocOrderCache
 
 // NewDocOrderCache creates a new shared document-order cache.

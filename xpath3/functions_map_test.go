@@ -122,12 +122,40 @@ func TestMapMergeRejectsNonStringBasedDuplicates(t *testing.T) {
 		BaseType: xpath3.TypeInteger,
 	}
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"dup": xpath3.ItemSlice{dup},
-		})).
+		}).
 		Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
 	require.Equal(t, "FOJS0005", xpErr.Code)
+}
+
+// The ?keyword lookup-key syntax accepts XPath keyword tokens as NCName keys,
+// exercising tokenAsNCName across its keyword cases.
+func TestLookupKeyword_NCNameKeys(t *testing.T) {
+	// Each keyword is used both as the map key and as the lookup key.
+	keywords := []string{
+		"div", "mod", "and", "or", "return", "else", "eq", "ne", "lt", "le",
+		"gt", "ge", "idiv", "if", "then", "for", "let", "in", "some", "every",
+		"satisfies", "is", "to", "union", "intersect", "except", "instance",
+		"treat", "castable", "cast", "as", "of",
+	}
+	for _, kw := range keywords {
+		expr := `map { "` + kw + `": 42 }?` + kw
+		r, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err, expr)
+		require.Equal(t, "42", r.StringValue(), expr)
+	}
+
+	// Plain NCName key.
+	r, err := evaluate(t.Context(), nil, `map { "plain": 7 }?plain`)
+	require.NoError(t, err)
+	require.Equal(t, "7", r.StringValue())
+
+	// Array unary-lookup with a wildcard.
+	r, err = evaluate(t.Context(), nil, `[1, 2, 3]?*`)
+	require.NoError(t, err)
+	require.Equal(t, "1 2 3", r.StringValue())
 }

@@ -181,7 +181,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 	}
 
 	// Capture xml:base for static base URI override during body execution.
-	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 	if effectiveBase != c.baseURI {
 		inst.StaticBaseURI = effectiveBase
 	}
@@ -966,7 +966,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 	// Compute effective static base URI: if any ancestor stylesheet element
 	// (including this one) has xml:base, the static base URI for expressions
 	// inside this LRE differs from the template/stylesheet base URI.
-	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 	if effectiveBase != c.baseURI {
 		lre.StaticBaseURI = effectiveBase
 	}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -694,4 +695,146 @@ func TestReplaceMultipleWithNonMutableOperand(t *testing.T) {
 	require.Equal(t, helium.Node(root), nsw.Parent(), "wrapper parent is root")
 	require.Nil(t, target.Parent(), "replaced target is detached")
 	requireNoCycle(t, root)
+}
+
+// TestPINodeMethods exercises ProcessingInstruction AddChild/AppendText paths
+// including the text-merge and rejection branches.
+func TestPINodeMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	pi := doc.CreatePI("target", "data")
+	require.Equal(t, "target", pi.Name())
+	require.Equal(t, []byte("data"), pi.Content())
+	require.Equal(t, helium.ProcessingInstructionNode, pi.Type())
+
+	// Adding a text node merges into the data string.
+	require.NoError(t, pi.AddChild(doc.CreateText([]byte(" more"))))
+	require.Equal(t, []byte("data more"), pi.Content())
+
+	// Adding a CDATA node also merges.
+	require.NoError(t, pi.AddChild(doc.CreateCDATASection([]byte("X"))))
+	require.Contains(t, string(pi.Content()), "X")
+
+	// AppendText appends directly.
+	require.NoError(t, pi.AppendText([]byte("Y")))
+	require.Contains(t, string(pi.Content()), "Y")
+
+	// Adding an element child is rejected.
+	require.Error(t, pi.AddChild(doc.CreateElement("e")))
+
+	// Adding a nil node is rejected with ErrNilNode (not a panic).
+	require.Error(t, pi.AddChild(nil))
+}
+
+// TestCommentNodeMethods exercises Comment AddChild merge/rejection branches.
+func TestCommentNodeMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	c := doc.CreateComment([]byte("hello"))
+	require.Equal(t, []byte("hello"), c.Content())
+
+	// Merging another (unlinked) comment appends its content.
+	other := doc.CreateComment([]byte(" world"))
+	require.NoError(t, c.AddChild(other))
+	require.Equal(t, []byte("hello world"), c.Content())
+
+	// AppendText appends.
+	require.NoError(t, c.AppendText([]byte("!")))
+	require.Equal(t, []byte("hello world!"), c.Content())
+
+	// Adding a non-comment node is rejected.
+	require.Error(t, c.AddChild(doc.CreateText([]byte("t"))))
+
+	// Adding nil is rejected.
+	require.Error(t, c.AddChild(nil))
+}
+
+// TestCDATANodeMethods exercises the CDATASection node methods.
+func TestCDATANodeMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	cd := doc.CreateCDATASection([]byte("data"))
+
+	// AppendText grows the content.
+	require.NoError(t, cd.AppendText([]byte("+more")))
+	require.Equal(t, []byte("data+more"), cd.Content())
+
+	// AddChild is rejected on a CDATA node.
+	require.Error(t, cd.AddChild(doc.CreateText([]byte("x"))))
+
+	// SetTreeDoc must not panic.
+	cd.SetTreeDoc(doc)
+
+	// AddSibling and Replace must run without panicking.
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	require.NoError(t, root.AddChild(cd))
+	require.NoError(t, cd.AddSibling(doc.CreateCDATASection([]byte("sib"))))
+}
+
+// TestEntityRefNodeMethods exercises the EntityRef node-interface methods.
+func TestEntityRefNodeMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	ref, err := doc.CreateCharRef("amp")
+	require.NoError(t, err)
+
+	ref.SetTreeDoc(doc)
+	require.NoError(t, ref.AppendText([]byte("x")))
+
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	require.NoError(t, root.AddChild(ref))
+	require.NoError(t, ref.AddSibling(doc.CreateText([]byte("after"))))
+}
+
+// TestEntityNodeMethods covers the Entity node-interface methods.
+func TestEntityNodeMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+	require.NoError(t, err)
+
+	ent.SetOrig("&e;")
+	require.False(t, ent.Checked())
+	ent.MarkChecked()
+	require.True(t, ent.Checked())
+
+	ent.SetTreeDoc(doc)
+	require.NoError(t, ent.AppendText([]byte("more")))
+}
+
+// TestNotationNodeMethods covers Notation node-interface methods.
+func TestNotationNodeMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+	nota, err := dtd.AddNotation("n", "pub", "sys")
+	require.NoError(t, err)
+
+	nota.SetTreeDoc(doc)
+	nota.Free()
+	require.NoError(t, nota.AppendText([]byte("x")))
+}
+
+// TestNotationNodeInterfaceMethods exercises the remaining Notation node-method
+// wrappers (AddSibling, Replace, Free, AddChild).
+func TestNotationNodeInterfaceMethods(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+	nota, err := dtd.AddNotation("n", "", "sys")
+	require.NoError(t, err)
+
+	// These delegate to the shared tree primitives; exercise without asserting
+	// implementation-defined success on an already-attached node.
+	_ = nota.AddSibling(doc.CreateElement("x"))
+	_ = nota.Replace()
+	_ = nota.AddChild(doc.CreateText([]byte("t")))
+	nota.Free()
 }

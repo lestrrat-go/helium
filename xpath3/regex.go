@@ -75,3 +75,31 @@ func (r *Regex) MatchString(s string) (bool, error) {
 func (r *Regex) FindAllSubmatchIndex(s string, n int) ([][]int, error) {
 	return r.inner.FindAllStringSubmatchIndex(s, n)
 }
+
+// EachSubmatchIndex streams the successive matches of the regex in s, calling
+// fn once per match with the (start, end) byte-index pairs for the full match
+// and each capture group (the same layout as a single FindAllSubmatchIndex
+// entry; an unmatched group is reported as -1, -1). The slice handed to fn is
+// only valid for the duration of the call — copy it to retain it. Iteration
+// stops early, and EachSubmatchIndex returns nil, as soon as fn returns false.
+//
+// Unlike FindAllSubmatchIndex, matches are produced one at a time and (for the
+// streaming engines) never accumulated, so live memory stays bounded regardless
+// of how many matches s contains. This lets callers enforce a match-count budget
+// (or honor a cancelled context) DURING enumeration — an empty- or near-empty-
+// matching regex over a large input is rejected without first materializing a
+// match slice proportional to the input size.
+//
+// limit caps the maximum number of matches ever produced; pass a non-positive
+// value for no cap. A leading-context pattern (a multi-line ^, \A, \b, ...)
+// cannot be streamed incrementally on the RE2 engine and is matched against the
+// whole string in one pass. That pass is bounded to an internal allocation
+// ceiling far below any byte-budget-sized limit, so when the pattern produces
+// more matches than the ceiling allows the call fails with [ErrRegexMatchLimit]
+// (a resource-exhaustion condition) rather than allocating a match record per
+// input position. A caller enforcing its own budget of N should pass
+// limit = N+1 so that, when N is below the internal ceiling, it observes the
+// (N+1)th match and rejects before the ceiling is reached.
+func (r *Regex) EachSubmatchIndex(s string, limit int, fn func(m []int) bool) error {
+	return r.inner.eachStringSubmatchIndex(s, limit, fn)
+}

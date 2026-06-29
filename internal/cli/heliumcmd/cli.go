@@ -13,6 +13,7 @@ const (
 	flagVersion       = "--version"
 	flagTiming        = "--timing"
 	flagMaxInputBytes = "--max-input-bytes"
+	flagMaxDepth      = "--max-depth"
 )
 
 type ioContextKey struct{}

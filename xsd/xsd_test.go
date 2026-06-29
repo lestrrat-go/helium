@@ -228,7 +228,11 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			schema, err := xsd.NewCompiler().Label(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
+			// These are trusted committed fixtures whose xs:include/xs:import/
+			// xs:redefine targets live next to the schema; restore permissive
+			// host access (the compiler now denies nested-schema FS access by
+			// default — see Compiler.FS).
+			schema, err := xsd.NewCompiler().Label(xsdFilename).FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
 			// A schema with fatal diagnostics now returns ErrCompilationFailed
 			// (and a nil schema); the diagnostics themselves are delivered to
 			// the collector and compared below. Any other error is a genuine
@@ -612,7 +616,7 @@ func TestRedefine(t *testing.T) {
 	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) error {
 		t.Helper()
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		schema, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
+		schema, err := xsd.NewCompiler().FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -824,7 +828,7 @@ func TestRedefine(t *testing.T) {
 	compileErrors := func(t *testing.T, xsdPath string) string {
 		t.Helper()
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
+		_, err := xsd.NewCompiler().FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
 		requireCompileResultErr(t, err)
 		require.NoError(t, collector.Close())
 		_, errors := partitionCompileErrors(collector.Errors())
@@ -1663,6 +1667,45 @@ func TestCompileFatalReturnsError(t *testing.T) {
 
 		schema, err := xsd.NewCompiler().Label("ok.xsd").Compile(t.Context(), doc)
 		require.NoError(t, err)
+		require.NotNil(t, schema)
+	})
+}
+
+// TestCompilerParserInjection verifies that a parser injected via
+// Compiler.Parser governs the internal parse of the schema document: a parser
+// configured with a tiny MaxDepth rejects a deeply nested schema, while the
+// same schema compiles when no parser policy is injected.
+func TestCompilerParserInjection(t *testing.T) {
+	t.Parallel()
+
+	// schema(1) > element(2) > complexType(3) > sequence(4) > element(5)
+	const schemaSrc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="child" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.xsd")
+	require.NoError(t, os.WriteFile(path, []byte(schemaSrc), 0o600))
+
+	t.Run("injected parser policy enforced", func(t *testing.T) {
+		t.Parallel()
+		_, err := xsd.NewCompiler().
+			Parser(helium.NewParser().MaxDepth(3)).
+			CompileFile(t.Context(), path)
+		require.Error(t, err, "schema nested deeper than the injected MaxDepth must fail to parse")
+	})
+
+	t.Run("control without injection", func(t *testing.T) {
+		t.Parallel()
+		schema, err := xsd.NewCompiler().CompileFile(t.Context(), path)
+		requireCompileResultErr(t, err)
 		require.NotNil(t, schema)
 	})
 }

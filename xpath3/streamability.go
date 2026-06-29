@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"maps"
 	"math/big"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -73,8 +74,8 @@ func computeStreamInfo(ast Expr) streamInfo {
 				}
 			}
 		case FunctionCall:
-			if isFnNamespacePrefix(v.Prefix) {
-				si.usedFunctions[v.Name] = true
+			if local, ok := streamFnLocalName(v); ok {
+				si.usedFunctions[local] = true
 			}
 		}
 		return true
@@ -280,27 +281,11 @@ func walkChildren(expr Expr, fn func(Expr) bool) {
 	}
 }
 
-// isFnNamespacePrefix reports whether a FunctionCall prefix names the XPath
-// functions namespace (http://www.w3.org/2005/xpath-functions) for the purpose
-// of streamability analysis. For function calls an empty prefix defaults to
-// that namespace, and "fn" is the conventional reserved prefix bound to it, so
-// both lexical forms name the same built-in. Streamability special-cases
-// functions such as position()/last() by (namespace, local-name) and must
-// therefore treat the unprefixed and "fn:"-prefixed spellings identically.
-//
-// This is a deliberately lexical check, not a namespace-resolved one: streamability
-// is computed at compile time (computeStreamInfo runs inside the VM compile pass)
-// before any static namespace context is bound — the prefix->URI map only arrives
-// at eval time via evalContext.namespaces. Resolving "fn" properly here would mean
-// threading that map through the whole compile path and every xslt3 caller. We make
-// the same assumption the evaluator's own static-shape recognition already makes
-// (see eval_path.go positionCall: Prefix == "" || Prefix == "fn"), keeping the two
-// consistent. Edge case: a caller that rebinds "fn" to a custom namespace and then
-// calls fn:position() would have it resolve to a user function at eval time while
-// streamability still treats it as the built-in. Rebinding the reserved "fn" prefix
-// is pathological and unsupported here; consistency with eval_path.go is preferred.
-func isFnNamespacePrefix(prefix string) bool {
-	return prefix == "" || prefix == "fn"
+// streamFnLocalName resolves a FunctionCall to its streamability local name via
+// the shared lexicon.StreamFnLocalName helper, normalizing the EQName
+// (Q{...}local) spelling the parser keeps in FunctionCall.Name.
+func streamFnLocalName(fc FunctionCall) (string, bool) {
+	return lexicon.StreamFnLocalName(fc.Name, fc.Prefix)
 }
 
 // predicateIsNonMotionless returns true if a predicate expression navigates
@@ -339,12 +324,13 @@ func predicateIsNonMotionlessWithStep(pred Expr, step *Step) bool {
 				return false
 			}
 		case FunctionCall:
-			if isFnNamespacePrefix(v.Prefix) && (v.Name == "last" || v.Name == lexicon.FnPosition) {
+			local, isFn := streamFnLocalName(v)
+			if isFn && (local == "last" || local == lexicon.FnPosition) {
 				nonMotionless = true
 				return false
 			}
-			if isFnNamespacePrefix(v.Prefix) {
-				switch v.Name {
+			if isFn {
+				switch local {
 				case "name", "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
 					"nilled", "has-children", "string-length", "current":
@@ -514,7 +500,7 @@ func (e *Expression) StreamInfo() StreamInfo {
 		HasDescOrSelf:        s.hasDescOrSelf,
 		HasNonMotionlessPred: s.hasNonMotionlessPred,
 		DownwardSelections:   s.downwardSelections,
-		UsedFunctions:        s.usedFunctions,
+		UsedFunctions:        maps.Clone(s.usedFunctions),
 		IsContextItem:        s.isContextItem,
 	}
 }

@@ -321,3 +321,15 @@ func TestFormatError(t *testing.T) {
 		require.Equal(t, "empty.xml:1: parser error : end of document reached", got)
 	})
 }
+
+// TestNewLeveledError exercises the leveled-error type and its ErrorLeveler.
+func TestNewLeveledError(t *testing.T) {
+	t.Parallel()
+
+	err := helium.NewLeveledError("boom", helium.ErrorLevelError)
+	require.EqualError(t, err, "boom")
+
+	leveler, ok := err.(helium.ErrorLeveler)
+	require.True(t, ok, "leveled error implements ErrorLeveler")
+	require.Equal(t, helium.ErrorLevelError, leveler.ErrorLevel())
+}

@@ -1,2 +1,28 @@
-# Preserve exact bytes in QT3 fixtures (BOM, CR/LF/NEL/LS, encodings).
-testdata/qt3ts/testdata/** -text
+# Test fixtures — INPUTS and OUTPUTS — are read and compared byte-for-byte by
+# the test harnesses (golden comparisons, SAX-event captures, byte counts,
+# checksum-sensitive parsing). Git's autocrlf on the Windows CI runner would
+# otherwise rewrite the LF-committed majority to CRLF on checkout, so an input
+# .xml gains stray \r bytes (shifting byte counts and SAX offsets) and an output
+# golden no longer matches the library's LF output.
+#
+# "-text" disables ALL end-of-line conversion, so every checkout reproduces the
+# committed blob EXACTLY on every platform. Unlike "eol=lf" it does NOT rewrite
+# files, so a fixture that genuinely contains intentional CR/CRLF bytes (e.g. a
+# SAX entity-content capture, or a deliberate line-ending test input) is
+# preserved verbatim rather than normalized. Pinning the WHOLE fixture trees —
+# inputs and outputs alike — is the robust form: it cannot be defeated by a new
+# input extension the per-extension rules below do not enumerate.
+testdata/**            -text
+test/**                -text
+relaxng/testdata/**    -text
+xslt3/testdata/**      -text
+
+# Belt-and-suspenders: pin the known golden/expected-output extensions byte-exact
+# regardless of where they live, in case a future fixture lands outside the trees
+# pinned above. (Redundant with the tree rules for current paths.)
+*.expected -text
+*.golden   -text
+*.sax2     -text
+*.sax      -text
+*.dump     -text
+*.lint     -text

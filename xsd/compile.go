@@ -15,8 +15,9 @@ import (
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
-	baseDir string // directory of the schema file, for resolving relative paths
-	fsys    fs.FS  // filesystem for loading xs:include/xs:import/xs:redefine targets
+	baseDir string         // directory of the schema file, for resolving relative paths
+	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -104,11 +105,42 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// includeVisited records the resolved fs paths of schema documents already
+	// pulled in via xs:include/xs:redefine on this compiler, so a transitive or
+	// diamond chain loads each included document at most once. It is the cycle
+	// guard for circular includes: a re-include of an already-loaded document is
+	// skipped rather than re-parsed (which would re-register its declarations and
+	// recurse forever).
+	includeVisited map[string]struct{}
+	// includeDepth and maxIncludeDepth bound xs:include/xs:redefine nesting as a
+	// secondary safety net behind includeVisited. includeDepth is incremented
+	// while processing a nested included schema's own includes and restored after.
+	includeDepth    int
+	maxIncludeDepth int
 	// redefine is non-nil while processing the override children of an
 	// xs:redefine. It scopes the duplicate-name suppression to the specific
 	// (kind, name) components actually loaded by the redefined schema, each
 	// consumable exactly once, instead of suppressing the check globally.
 	redefine *redefineState
+	// loadedRedefinable caches, per resolved schema-document path, the set of
+	// redefinable component names a document contributed when first loaded via
+	// xs:include or xs:redefine. XSD permits multiple xs:redefine elements
+	// targeting the same document (e.g. redefining disjoint components, or a
+	// no-op repeat); a later xs:redefine of an already-loaded document cannot
+	// recompute its Phase-A delta (the components are already merged), so it
+	// validates and consumes its overrides against this cached set instead.
+	loadedRedefinable map[string]*redefinableSet
+}
+
+// redefinableSet caches the redefinable component names a schema document
+// contributed (keys, split by kind) plus the names already consumed by
+// xs:redefine overrides across every xs:redefine of that document (consumed).
+// The consumed set lets a second xs:redefine of the same document reject a
+// component that an earlier xs:redefine already redefined as a duplicate, while
+// still accepting redefinitions of disjoint components.
+type redefinableSet struct {
+	keys     map[redefineKind]map[QName]struct{}
+	consumed map[redefineKind]map[QName]struct{}
 }
 
 // redefineKind identifies the component category a redefine override targets.
@@ -133,6 +165,12 @@ const (
 type redefineState struct {
 	phaseAKeys map[redefineKind]map[QName]struct{}
 	seen       map[redefineKind]map[QName]struct{}
+	// consumed, when non-nil, is the cross-redefine consumption set shared with
+	// the per-document redefinableSet cache. A component already redefined by an
+	// EARLIER xs:redefine of the same document is rejected as a duplicate even
+	// though this redefine's own seen map is empty; an accepted override is also
+	// recorded here so a later xs:redefine of the document sees it.
+	consumed map[redefineKind]map[QName]struct{}
 }
 
 // allowsRedefine reports whether an override of the given (kind, name) may
@@ -149,10 +187,24 @@ func (c *compiler) allowsRedefine(kind redefineKind, qn QName) bool {
 	if _, seen := c.redefine.seen[kind][qn]; seen {
 		return false
 	}
+	// A component already redefined by an earlier xs:redefine of the same
+	// document is a duplicate redefinition even though THIS redefine has not
+	// consumed it yet.
+	if c.redefine.consumed != nil {
+		if _, done := c.redefine.consumed[kind][qn]; done {
+			return false
+		}
+	}
 	if c.redefine.seen[kind] == nil {
 		c.redefine.seen[kind] = make(map[QName]struct{})
 	}
 	c.redefine.seen[kind][qn] = struct{}{}
+	if c.redefine.consumed != nil {
+		if c.redefine.consumed[kind] == nil {
+			c.redefine.consumed[kind] = make(map[QName]struct{})
+		}
+		c.redefine.consumed[kind][qn] = struct{}{}
+	}
 	return true
 }
 
@@ -193,6 +245,13 @@ func (c *compiler) redefineConsumed(kind redefineKind, qn QName) bool {
 // hardcoded defensive caps used by relaxng (include limit), catalog
 // (resolution depth), and xpath/xslt (recursion depth).
 const defaultMaxImportDepth = 40
+
+// defaultMaxIncludeDepth bounds xs:include/xs:redefine nesting depth. It is a
+// secondary safety net behind the includeVisited loaded-set (which already
+// guarantees termination by loading each included document at most once); the
+// depth bound also caps pathological deep but acyclic chains. The same modest
+// value as defaultMaxImportDepth leaves generous headroom for real schemas.
+const defaultMaxIncludeDepth = 40
 
 // elemRefSource tracks source location for error reporting.
 type elemRefSource struct {
@@ -336,6 +395,17 @@ func (c *compiler) schemaError(ctx context.Context, msg string) {
 	c.errorCount++
 }
 
+// parse parses a nested schema document (xs:include/xs:import/xs:redefine)
+// using the injected parser policy when one was configured on the Compiler,
+// or a default [helium.NewParser] otherwise.
+func (c *compiler) parse(ctx context.Context, data []byte) (*helium.Document, error) {
+	p := helium.NewParser()
+	if c.parser != nil {
+		p = *c.parser
+	}
+	return p.Parse(ctx, data)
+}
+
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -346,9 +416,18 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
-	fsys := fs.FS(iofs.PermissiveRoot{})
+	// Default to a deny-all FS so an untrusted schema cannot reach the host
+	// filesystem via xs:include/xs:import/xs:redefine (local-file disclosure /
+	// resource exhaustion). Callers opt into host access explicitly via
+	// [Compiler.FS] (e.g. helium.PermissiveFS or a confined fs.FS). This mirrors
+	// the secure-by-default flip applied to helium.NewParser.
+	fsys := fs.FS(iofs.DenyAll{})
 	if cfg != nil && cfg.fsys != nil {
 		fsys = cfg.fsys
+	}
+	var parser *helium.Parser
+	if cfg != nil {
+		parser = cfg.parser
 	}
 	c := &compiler{
 		schema: &Schema{
@@ -361,6 +440,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		},
 		baseDir:                  baseDir,
 		fsys:                     fsys,
+		parser:                   parser,
 		typeRefs:                 make(map[*TypeDef]QName),
 		elemRefs:                 make(map[*ElementDecl]QName),
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),
@@ -381,9 +461,19 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
 		importedNS:               make(map[string]string),
 		maxImportDepth:           defaultMaxImportDepth,
+		includeVisited:           make(map[string]struct{}),
+		maxIncludeDepth:          defaultMaxIncludeDepth,
+		loadedRedefinable:        make(map[string]*redefinableSet),
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
+		// Seed the circular-include guard with the root schema's resolved key (set
+		// by CompileFile) so a cycle pointing back at the top-level schema
+		// (main -> inc -> main) treats the root as already-loaded instead of
+		// re-parsing it and emitting spurious duplicate-component errors.
+		if cfg.rootKey != "" {
+			c.includeVisited[cfg.rootKey] = struct{}{}
+		}
 		c.filename = cfg.label
 		if c.filename == "" {
 			c.filename = doc.URL()
@@ -435,6 +525,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, err
 	}
 
+	// Build the substitution-group membership map BEFORE resolving refs, because
+	// resolveRefs runs the UPA (cos-nonambig) check, which expands a content
+	// model's substitution-group head leaves to their members. A global element's
+	// substitutionGroup affiliation is fixed at read/include time (it is a
+	// top-level-only attribute resolved by resolveQName), so the map is fully
+	// determined here; this only pre-populates the membership map (and sorts it)
+	// and emits no diagnostics, leaving every error-reporting check (circularity,
+	// final, element-consistency) in its original order below.
+	c.buildSubstGroups()
+
 	// Second pass: resolve type references.
 	c.resolveRefs(ctx)
 
@@ -449,25 +549,17 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
 	c.checkNotationOnDeclarations(ctx)
 
-	// Build substitution group membership map and detect circular references.
-	for _, edecl := range c.schema.elements {
-		if edecl.SubstitutionGroup == (QName{}) {
-			continue
-		}
-		head := edecl.SubstitutionGroup
-		c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
-
-		// Check for circular substitution groups.
-		if c.filename != "" {
+	// Detect circular substitution-group references. The membership map itself was
+	// already built by buildSubstGroups (before resolveRefs) so UPA could see it;
+	// this only reports the circularity diagnostic, keeping its position in the
+	// error-ordering sequence unchanged.
+	if c.filename != "" {
+		for _, edecl := range c.schema.elements {
+			if edecl.SubstitutionGroup == (QName{}) {
+				continue
+			}
 			c.checkCircularSubstGroup(ctx, edecl)
 		}
-	}
-
-	// Sort substitution group members for deterministic error messages.
-	for _, members := range c.schema.substGroups {
-		sort.Slice(members, func(i, j int) bool {
-			return members[i].Name.Local < members[j].Name.Local
-		})
 	}
 
 	// Enforce final on type derivations.
@@ -483,6 +575,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// containable members) and gated on errorCount==0 like UPA, since the content
 	// models must be fully resolved and structurally sound.
 	c.checkElementConsistent(ctx)
+
+	// Identity-constraints (xs:key/xs:unique/xs:keyref) share one symbol space and
+	// must be unique by {targetNamespace}name across the whole schema. Reject any
+	// repeated name before the keyref resolution below, which would otherwise
+	// silently collapse the colliding constraints into one registry entry.
+	c.checkDuplicateIDCs(ctx)
 
 	// Resolve every xs:keyref/@refer against the schema-wide registry of
 	// key/unique constraints. An unresolved refer must be a fatal schema error:
@@ -500,6 +598,28 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	return c.schema, nil
+}
+
+// buildSubstGroups populates c.schema.substGroups, mapping each substitution-group
+// head QName to the global element declarations affiliated with it, sorted by
+// local name for deterministic downstream output. It is intentionally
+// side-effect-free with respect to diagnostics: it neither reports errors nor
+// reads resolved type information, so it can run early (before resolveRefs) to let
+// the UPA check expand substitution-group heads to their members. The companion
+// circularity, final, and element-consistency checks run later, unchanged.
+func (c *compiler) buildSubstGroups() {
+	for _, edecl := range c.schema.elements {
+		if edecl.SubstitutionGroup == (QName{}) {
+			continue
+		}
+		head := edecl.SubstitutionGroup
+		c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)
+	}
+	for _, members := range c.schema.substGroups {
+		sort.Slice(members, func(i, j int) bool {
+			return members[i].Name.Local < members[j].Name.Local
+		})
+	}
 }
 
 // checkKeyRefRefers verifies that every xs:keyref/@refer names a key or unique
@@ -562,6 +682,68 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 		c.schemaError(ctx,
 			schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 	}
+}
+
+// checkDuplicateIDCs enforces the XSD constraint that identity-constraint
+// definitions (xs:key, xs:unique, xs:keyref) all share a single symbol space:
+// each {targetNamespace}name must be unique across the entire schema, regardless
+// of which element declaration hosts the constraint. Two constraints sharing one
+// name silently collapsed into a single registry entry before — corrupting
+// keyref resolution and IDC validation — so a collision is now a fatal schema
+// parser error, matching reportDuplicateComponent's style and wording.
+func (c *compiler) checkDuplicateIDCs(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	idcs := c.collectAllIDCs()
+
+	// Sort by source location so the reported collision is deterministic (the
+	// later declaration is flagged) regardless of the map-iteration order in
+	// collectAllIDCs.
+	sort.SliceStable(idcs, func(i, j int) bool {
+		if idcs[i].Source != idcs[j].Source {
+			return idcs[i].Source < idcs[j].Source
+		}
+		return idcs[i].Line < idcs[j].Line
+	})
+
+	seen := make(map[QName]struct{}, len(idcs))
+	for _, idc := range idcs {
+		if _, dup := seen[idc.QName]; !dup {
+			seen[idc.QName] = struct{}{}
+			continue
+		}
+		c.reportDuplicateIDC(ctx, idc)
+	}
+}
+
+// reportDuplicateIDC emits the fatal schema-parser error for a redeclared
+// identity-constraint, mirroring reportDuplicateComponent. The XSD element name
+// (key/unique/keyref) is derived from the constraint kind and the constraint's
+// own declaring file/line is used so an imported or included collision cites the
+// declaring document.
+func (c *compiler) reportDuplicateIDC(ctx context.Context, idc *IDConstraint) {
+	xsdElem := elemKey
+	switch idc.Kind {
+	case IDCUnique:
+		xsdElem = elemUnique
+	case IDCKeyRef:
+		xsdElem = elemKeyRef
+	}
+
+	qnDisplay := "'" + idc.QName.NS + "'" + idc.QName.Local
+	if idc.QName.NS != "" {
+		qnDisplay = "'{" + idc.QName.NS + "}" + idc.QName.Local + "'"
+	}
+
+	source := idc.Source
+	if source == "" {
+		source = c.filename
+	}
+
+	c.schemaError(ctx, schemaParserError(source, idc.Line, xsdElem, xsdElem,
+		"An identity-constraint definition "+qnDisplay+" does already exist."))
 }
 
 // collectAllIDCs returns every identity-constraint declared anywhere in the

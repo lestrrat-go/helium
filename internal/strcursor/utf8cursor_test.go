@@ -1,4 +1,4 @@
-package strcursor
+package strcursor_test
 
 import (
 	"io"
@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
-	cur := NewUTF8Cursor(zeroProgressReader{})
+	cur := strcursor.NewUTF8Cursor(zeroProgressReader{})
 
 	type result struct {
 		done bool
@@ -32,7 +33,7 @@ func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
 }
 
 func TestUTF8CursorSlowSplitReaderMakesProgress(t *testing.T) {
-	cur := NewUTF8Cursor(&slowSplitReader{data: []byte("héllo")})
+	cur := strcursor.NewUTF8Cursor(&slowSplitReader{data: []byte("héllo")})
 
 	type result struct {
 		peeked string
@@ -69,40 +70,54 @@ func (r *chunkedReader) Read(p []byte) (int, error) {
 }
 
 func TestUTF8CursorScanCharDataSliceSpansBufferEdge(t *testing.T) {
-	cur := NewUTF8Cursor(&chunkedReader{
+	cur := strcursor.NewUTF8Cursor(&chunkedReader{
 		data:  []byte("    <"),
 		chunk: 2,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 4, n)
 	require.Equal(t, "    ", string(data))
 }
 
 func TestUTF8CursorScanCharDataSliceConsumesCRLFAcrossBufferEdge(t *testing.T) {
-	cur := NewUTF8Cursor(&chunkedReader{
+	cur := strcursor.NewUTF8Cursor(&chunkedReader{
 		data:  []byte("\r\n<"),
 		chunk: 1,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 2, n)
 	require.Equal(t, "\n", string(data))
 }
 
 func TestUTF8CursorScanCharDataSlicePreservesWhitespaceRunAcrossBufferEdge(t *testing.T) {
-	cur := NewUTF8Cursor(&chunkedReader{
+	cur := strcursor.NewUTF8Cursor(&chunkedReader{
 		data:  []byte(strings.Repeat(" ", 7) + "<"),
 		chunk: 3,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 7, n)
 	require.Equal(t, strings.Repeat(" ", 7), string(data))
 }
 
+func TestUTF8CursorScanCharDataSliceReturnsOverBudgetRuneWhole(t *testing.T) {
+	// A 3-byte rune with a 1-byte budget: the scan must return the rune whole
+	// (never a partial rune) so the caller makes progress without emitting
+	// invalid UTF-8.
+	cur := strcursor.NewUTF8Cursor(&chunkedReader{
+		data:  []byte("世<"),
+		chunk: 1,
+	})
+
+	data, n := cur.ScanCharDataSlice(nil, 1)
+	require.Equal(t, 3, n, "a lone rune wider than maxBytes is returned whole")
+	require.Equal(t, "世", string(data))
+}
+
 func TestUTF8CursorScanQNameBytesASCIIUnprefixed(t *testing.T) {
-	cur := NewUTF8Cursor(strings.NewReader("root attr"))
+	cur := strcursor.NewUTF8Cursor(strings.NewReader("root attr"))
 
 	prefix, local, n, ok := cur.ScanQNameBytes()
 	require.True(t, ok)
@@ -112,7 +127,7 @@ func TestUTF8CursorScanQNameBytesASCIIUnprefixed(t *testing.T) {
 }
 
 func TestUTF8CursorScanQNameBytesASCIIPrefixed(t *testing.T) {
-	cur := NewUTF8Cursor(strings.NewReader("x:item attr"))
+	cur := strcursor.NewUTF8Cursor(strings.NewReader("x:item attr"))
 
 	prefix, local, n, ok := cur.ScanQNameBytes()
 	require.True(t, ok)
@@ -122,7 +137,7 @@ func TestUTF8CursorScanQNameBytesASCIIPrefixed(t *testing.T) {
 }
 
 func TestUTF8CursorScanQNameBytesSpansBufferEdge(t *testing.T) {
-	cur := NewUTF8Cursor(&chunkedReader{
+	cur := strcursor.NewUTF8Cursor(&chunkedReader{
 		data:  []byte("x:item attr"),
 		chunk: 2,
 	})
@@ -135,7 +150,7 @@ func TestUTF8CursorScanQNameBytesSpansBufferEdge(t *testing.T) {
 }
 
 func TestUTF8CursorScanQNameBytesRejectsSecondColon(t *testing.T) {
-	cur := NewUTF8Cursor(strings.NewReader("a:b:c"))
+	cur := strcursor.NewUTF8Cursor(strings.NewReader("a:b:c"))
 
 	prefix, local, n, ok := cur.ScanQNameBytes()
 	require.False(t, ok)
@@ -146,7 +161,7 @@ func TestUTF8CursorScanQNameBytesRejectsSecondColon(t *testing.T) {
 }
 
 func TestRuneCursorReadShortBufferBufferedRune(t *testing.T) {
-	cur := NewRuneCursor(strings.NewReader("é"))
+	cur := strcursor.NewRuneCursor(strings.NewReader("é"))
 	// Buffer the multibyte rune in the ring.
 	require.Equal(t, 'é', cur.Peek())
 
@@ -175,7 +190,7 @@ func TestRuneCursorReadShortBufferBufferedRune(t *testing.T) {
 }
 
 func TestRuneCursorReadShortBufferPartialRuneFit(t *testing.T) {
-	cur := NewRuneCursor(strings.NewReader("aé"))
+	cur := strcursor.NewRuneCursor(strings.NewReader("aé"))
 	// Buffer both runes in the ring.
 	require.Equal(t, 'a', cur.Peek())
 	require.Equal(t, 'é', cur.PeekN(2))

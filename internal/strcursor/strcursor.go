@@ -26,6 +26,17 @@ type Cursor interface {
 	Consume([]byte) bool
 	ConsumeString(string) bool
 	Done() bool
+	// Err returns a sticky non-EOF read/decode error encountered while filling
+	// the buffer, or nil if the stream ended cleanly. It lets callers tell a
+	// genuine end-of-input (PeekAt returns 0) apart from a read failure such as a
+	// push-stream Read that returned context.Canceled on cancellation.
+	Err() error
+	// HasByteAt reports whether a byte is available at the given offset from the
+	// current position. Unlike PeekAt (0 for both a genuine NUL and a position
+	// past the buffered input), this distinguishes a present byte from an
+	// exhausted buffer, so a caller can tell a scan that stopped on real input
+	// from one that ran out of buffered data because a read failed.
+	HasByteAt(int) bool
 	HasPrefix([]byte) bool
 	HasPrefixString(string) bool
 	Line() string
@@ -40,8 +51,11 @@ type Cursor interface {
 	// PeekString returns n bytes from the current position as a string.
 	PeekString(int) string
 	// ScanCharDataInto scans XML character data into dst with EOL normalization.
-	// Returns the number of bytes consumed. Does not advance — call AdvanceFast after.
-	ScanCharDataInto(dst *bytes.Buffer) int
+	// Returns the number of units consumed. Does not advance — call AdvanceFast
+	// after. When maxBytes > 0 the scan stops once dst holds that many bytes, so
+	// a caller can bound a delimiter-free run instead of materializing it whole;
+	// maxBytes <= 0 means unbounded.
+	ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int
 	Unused() io.Reader
 }
 
@@ -442,7 +456,7 @@ func (c *RuneCursor) AdvanceFast(n int) error {
 // and writes it into dst with XML §2.11 EOL normalization applied inline
 // (\r\n → \n, lone \r → \n). It stops at '<', '&', ']]>', or any non-XML-char.
 // Returns the rune count consumed. The caller should call AdvanceFast(nRunes).
-func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
+func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int {
 	if c.count == 0 {
 		if err := c.ensure(1); err != nil {
 			return 0
@@ -459,6 +473,9 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	dst.Grow(count)
 
 	for nRunes < count {
+		if maxBytes > 0 && dst.Len() >= maxBytes {
+			break
+		}
 		e := ring[(head+nRunes)&mask]
 		r := e.val
 		// A real U+FFFD is stored as RuneError with width 3 (valid XML char);
@@ -746,6 +763,25 @@ func (c *ByteCursor) PeekAt(offset int) byte {
 	return c.buf[pos]
 }
 
+// HasByteAt reports whether a byte is available at offset bytes from the
+// current position. Unlike PeekAt (which returns 0 both for a genuine NUL byte
+// and for a position past the buffered input), this lets callers tell a real
+// U+0000 / present byte apart from an exhausted buffer — e.g. to decide whether
+// a short scan stopped on real input or because a read failed.
+func (c *ByteCursor) HasByteAt(offset int) bool {
+	pos := c.bufpos + offset
+	if pos >= c.buflen {
+		if c.fillBuffer(offset+1) != nil {
+			return false
+		}
+		pos = c.bufpos + offset
+		if pos >= c.buflen {
+			return false
+		}
+	}
+	return true
+}
+
 // PeekRune decodes and returns the rune at the current position.
 // For ByteCursor, each byte is treated as a single character.
 func (c *ByteCursor) PeekRune() rune {
@@ -791,12 +827,15 @@ func (c *ByteCursor) AdvanceFast(n int) error {
 }
 
 // ScanCharDataInto scans XML character data into dst with EOL normalization.
-func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) int {
+func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int {
 	if c.fillBuffer(1) != nil {
 		return 0
 	}
 	i := 0
 	for c.bufpos+i < c.buflen {
+		if maxBytes > 0 && dst.Len() >= maxBytes {
+			break
+		}
 		b := c.buf[c.bufpos+i]
 		if b == '<' || b == '&' {
 			break

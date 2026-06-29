@@ -63,21 +63,88 @@ func generateSelfSignedCert(t *testing.T, key *rsa.PrivateKey) *x509.Certificate
 
 const samlAssertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_abc123" IssueInstant="2024-01-01T00:00:00Z" Version="2.0"><saml:Issuer>https://idp.example.com</saml:Issuer><saml:Subject><saml:NameID>user@example.com</saml:NameID></saml:Subject></saml:Assertion>`
 
-func TestSignVerifyRoundTripRSASHA256(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, samlAssertion)
+func TestSignVerifyRoundTrip(t *testing.T) {
+	t.Run("rsa-sha256", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
 
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(xmldsig1.NewEnvelopedReference()).
-		KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.NewEnvelopedReference()).
+			KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
 
-	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
-	require.NoError(t, err)
+		err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+		require.NoError(t, err)
 
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err = verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err = verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("rsa-sha1", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := signRSASHA1Doc(t, key)
+
+		// SHA-1 verification must be opted into; the default verifier rejects it.
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("ecdsa-sha256", func(t *testing.T) {
+		key := generateECDSAKey(t, elliptic.P256())
+		doc := mustParseXML(t, samlAssertion)
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgECDSASHA256).
+			Reference(xmldsig1.NewEnvelopedReference())
+
+		err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+		require.NoError(t, err)
+
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err = verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("ecdsa-sha384", func(t *testing.T) {
+		key := generateECDSAKey(t, elliptic.P384())
+		doc := mustParseXML(t, samlAssertion)
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgECDSASHA384).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "",
+				DigestAlgorithm: xmldsig1.DigestSHA384,
+				Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+			})
+
+		err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+		require.NoError(t, err)
+
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err = verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("hmac-sha256", func(t *testing.T) {
+		secret := make([]byte, 32)
+		_, err := rand.Read(secret)
+		require.NoError(t, err)
+
+		doc := mustParseXML(t, samlAssertion)
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgHMACSHA256).
+			Reference(xmldsig1.NewEnvelopedReference())
+
+		err = signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), secret)
+		require.NoError(t, err)
+
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(secret))
+		_, err = verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
 }
 
 // signRSASHA1Doc signs samlAssertion with rsa-sha1 + sha1 digest, opting in to
@@ -97,127 +164,65 @@ func signRSASHA1Doc(t *testing.T, key *rsa.PrivateKey) *helium.Document {
 	return doc
 }
 
-func TestSignVerifyRoundTripRSASHA1(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := signRSASHA1Doc(t, key)
+// TestDefaultPolicy covers the default SHA-1 rejection policy and its opt-in.
+func TestDefaultPolicy(t *testing.T) {
+	// TestSignSHA1RejectedByDefault confirms that signing with SHA-1 is rejected
+	// unless Signer.AllowSHA1(true) is set.
+	t.Run("sign sha1 rejected by default", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
 
-	// SHA-1 verification must be opted into; the default verifier rejects it.
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
-	_, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-}
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA1).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "",
+				DigestAlgorithm: xmldsig1.DigestSHA1,
+				Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+			})
 
-// TestSignSHA1RejectedByDefault confirms that signing with SHA-1 is rejected
-// unless Signer.AllowSHA1(true) is set.
-func TestSignSHA1RejectedByDefault(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, samlAssertion)
+		err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+		require.Error(t, err)
+		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+	})
 
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA1).
-		Reference(xmldsig1.ReferenceConfig{
-			URI:             "",
-			DigestAlgorithm: xmldsig1.DigestSHA1,
-			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
-		})
+	// TestVerifySHA1RejectedByDefault confirms an rsa-sha1 + sha1 signature is
+	// rejected by the default verifier with ErrWeakAlgorithm.
+	t.Run("verify sha1 rejected by default", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := signRSASHA1Doc(t, key)
 
-	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
-	require.Error(t, err)
-	require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
-}
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err := verifier.Verify(t.Context(), doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+	})
 
-// TestVerifySHA1RejectedByDefault confirms an rsa-sha1 + sha1 signature is
-// rejected by the default verifier with ErrWeakAlgorithm.
-func TestVerifySHA1RejectedByDefault(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := signRSASHA1Doc(t, key)
+	// TestVerifySHA1AcceptedWithOptIn confirms the same signature verifies once
+	// SHA-1 is opted in on the verifier.
+	t.Run("verify sha1 accepted with opt-in", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := signRSASHA1Doc(t, key)
 
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err := verifier.Verify(t.Context(), doc)
-	require.Error(t, err)
-	require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
-}
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
 
-// TestVerifySHA1AcceptedWithOptIn confirms the same signature verifies once
-// SHA-1 is opted in on the verifier.
-func TestVerifySHA1AcceptedWithOptIn(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := signRSASHA1Doc(t, key)
+	// TestVerifySHA256AcceptedByDefault confirms strong algorithms still verify
+	// without any opt-in.
+	t.Run("verify sha256 accepted by default", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
 
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
-	_, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-}
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.NewEnvelopedReference())
+		require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
 
-// TestVerifySHA256AcceptedByDefault confirms strong algorithms still verify
-// without any opt-in.
-func TestVerifySHA256AcceptedByDefault(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, samlAssertion)
-
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(xmldsig1.NewEnvelopedReference())
-	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-}
-
-func TestSignVerifyRoundTripECDSASHA256(t *testing.T) {
-	key := generateECDSAKey(t, elliptic.P256())
-	doc := mustParseXML(t, samlAssertion)
-
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgECDSASHA256).
-		Reference(xmldsig1.NewEnvelopedReference())
-
-	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
-	require.NoError(t, err)
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err = verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-}
-
-func TestSignVerifyRoundTripECDSASHA384(t *testing.T) {
-	key := generateECDSAKey(t, elliptic.P384())
-	doc := mustParseXML(t, samlAssertion)
-
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgECDSASHA384).
-		Reference(xmldsig1.ReferenceConfig{
-			URI:             "",
-			DigestAlgorithm: xmldsig1.DigestSHA384,
-			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
-		})
-
-	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
-	require.NoError(t, err)
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err = verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-}
-
-func TestSignVerifyRoundTripHMACSHA256(t *testing.T) {
-	secret := make([]byte, 32)
-	_, err := rand.Read(secret)
-	require.NoError(t, err)
-
-	doc := mustParseXML(t, samlAssertion)
-
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgHMACSHA256).
-		Reference(xmldsig1.NewEnvelopedReference())
-
-	err = signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), secret)
-	require.NoError(t, err)
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(secret))
-	_, err = verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
 }
 
 func TestSignVerifyRoundTripEd25519(t *testing.T) {

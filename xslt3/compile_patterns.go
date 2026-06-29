@@ -110,7 +110,7 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXP
 				}
 			}
 		}
-		if err := validatePatternExpr(ast); err != nil {
+		if err := validatePatternExpr(ast, nsBindings); err != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
 		// XTSE3500: current-merge-key() must not be used within a pattern.
@@ -178,11 +178,11 @@ func patternValidateNamespaces(nsBindings map[string]string, xpathDefaultNS stri
 // XSLT match pattern. XSLT patterns are a restricted subset of XPath —
 // certain constructs like variable references, arbitrary function calls,
 // and parenthesized union expressions are not allowed.
-func validatePatternExpr(expr xpath3.Expr) error {
-	return validatePatternExprInner(expr, true)
+func validatePatternExpr(expr xpath3.Expr, nsBindings map[string]string) error {
+	return validatePatternExprInner(expr, true, nsBindings)
 }
 
-func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
+func validatePatternExprInner(expr xpath3.Expr, _ bool, nsBindings map[string]string) error {
 	switch e := expr.(type) {
 	case xpath3.LocationPath, *xpath3.LocationPath:
 		// LocationPath patterns are valid (e.g., a/b/c, //x, /)
@@ -197,7 +197,7 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
 		// FilterExpr: a primary expression with predicates.
 		// XSLT 3.0 allows various filter patterns:
 		//   .[pred], (/)[pred], $var[pred], (union)[pred], etc.
-		switch e.Expr.(type) {
+		switch fexpr := e.Expr.(type) {
 		case xpath3.ContextItemExpr:
 			return nil // .[pred]
 		case xpath3.RootExpr:
@@ -209,7 +209,16 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
 		case xpath3.IntersectExceptExpr:
 			return nil // (a except b)[pred]
 		case xpath3.FunctionCall:
-			return nil // fn()[pred] — e.g., root()[self::A]
+			// fn()[pred] — e.g., root()[self::A]. Only the fn-namespace
+			// pattern-start functions (key/id/idref/doc/element-with-id/root)
+			// qualify; a custom-namespace call like c:key('x')[true()] or
+			// Q{urn:custom}key('x')[true()] must be rejected, mirroring the
+			// bare-FunctionCall and path-start checks routed through
+			// isAllowedPatternFunction.
+			if isAllowedPatternFunction(fexpr, nsBindings) {
+				return nil
+			}
+			return fmt.Errorf("function call %s() not allowed in pattern", fexpr.Name)
 		case xpath3.LocationPath:
 			return nil // (path)[pred]
 		case *xpath3.LocationPath:
@@ -222,16 +231,16 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
 		return fmt.Errorf("filter expression not allowed in pattern")
 	case xpath3.PathExpr:
 		// PathExpr: filter/step. Check the filter part is valid.
-		return validatePatternPathExpr(e)
+		return validatePatternPathExpr(e, nsBindings)
 	case xpath3.PathStepExpr:
 		// E1/E2 or E1//E2 where E2 is a non-axis expression
-		return validatePatternPathStepExpr(e)
+		return validatePatternPathStepExpr(e, nsBindings)
 	case xpath3.VariableExpr:
 		// variable references are allowed in XSLT 3.0 patterns
 		return nil
 	case xpath3.FunctionCall:
 		// Function calls: key(), id(), doc() with literal args are allowed
-		if isAllowedPatternFunction(e) {
+		if isAllowedPatternFunction(e, nsBindings) {
 			return nil
 		}
 		return fmt.Errorf("function call %s() not allowed in pattern", e.Name)
@@ -241,10 +250,10 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
 		return nil
 	case xpath3.IntersectExceptExpr:
 		// intersect/except are valid pattern operators in XSLT 3.0
-		if err := validatePatternExprInner(e.Left, false); err != nil {
+		if err := validatePatternExprInner(e.Left, false, nsBindings); err != nil {
 			return err
 		}
-		return validatePatternExprInner(e.Right, false)
+		return validatePatternExprInner(e.Right, false, nsBindings)
 	case xpath3.BinaryExpr:
 		// Binary expressions like "and union or" parse as operator expressions
 		return fmt.Errorf("binary operator not allowed in pattern")
@@ -280,7 +289,7 @@ func validateLocationPathPattern(expr xpath3.Expr) error {
 	return nil
 }
 
-func validatePatternPathExpr(e xpath3.PathExpr) error {
+func validatePatternPathExpr(e xpath3.PathExpr, nsBindings map[string]string) error {
 	// The filter part: only ContextItemExpr, RootExpr, or FunctionCall (key/id/doc)
 	switch f := e.Filter.(type) {
 	case xpath3.ContextItemExpr:
@@ -289,40 +298,40 @@ func validatePatternPathExpr(e xpath3.PathExpr) error {
 		// /steps is valid
 	case xpath3.FunctionCall:
 		// Only certain functions at the start of a path pattern
-		if !isAllowedPatternFunction(f) {
+		if !isAllowedPatternFunction(f, nsBindings) {
 			return fmt.Errorf("function call %s() not allowed at start of path pattern", f.Name)
 		}
 	case xpath3.FilterExpr:
 		// FilterExpr at the start of a path
-		return validatePatternExprInner(f, false)
+		return validatePatternExprInner(f, false, nsBindings)
 	case xpath3.VariableExpr:
 		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.PathStepExpr:
 		// Nested path step (e.g., x/(a|b)/text())
-		return validatePatternPathStepExpr(f)
+		return validatePatternPathStepExpr(f, nsBindings)
 	case *xpath3.PathStepExpr:
-		return validatePatternPathStepExpr(*f)
+		return validatePatternPathStepExpr(*f, nsBindings)
 	default:
 		return fmt.Errorf("expression type %T not allowed at start of path pattern", e.Filter)
 	}
 	return nil
 }
 
-func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
+func validatePatternPathStepExpr(e xpath3.PathStepExpr, nsBindings map[string]string) error {
 	// Check left side
 	switch l := e.Left.(type) {
 	case xpath3.VariableExpr:
 		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.FunctionCall:
-		if !isAllowedPatternFunction(l) {
+		if !isAllowedPatternFunction(l, nsBindings) {
 			return fmt.Errorf("function call %s() not allowed in pattern", l.Name)
 		}
 	case xpath3.PathExpr:
-		if err := validatePatternPathExpr(l); err != nil {
+		if err := validatePatternPathExpr(l, nsBindings); err != nil {
 			return err
 		}
 	case xpath3.PathStepExpr:
-		if err := validatePatternPathStepExpr(l); err != nil {
+		if err := validatePatternPathStepExpr(l, nsBindings); err != nil {
 			return err
 		}
 	}
@@ -336,6 +345,18 @@ func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
 		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.FunctionCall:
 		return fmt.Errorf("function call %s() not allowed in middle of pattern", r.Name)
+	case xpath3.FilterExpr:
+		// A filtered primary as a non-leading step, e.g. a/key('x')[pred] or
+		// a/c:key('x')[pred]. Pattern-start functions may appear only at the
+		// START of a pattern, so a function-call primary here is rejected just
+		// like the bare mid-pattern function call above — otherwise the
+		// predicate wrapper would smuggle a forbidden/custom function past the
+		// isAllowedPatternFunction gate. Other filtered primaries (a
+		// parenthesized union/path with a predicate such as a/(b|c)[1]) remain
+		// valid and need no further checking here.
+		if fc, ok := r.Expr.(xpath3.FunctionCall); ok {
+			return fmt.Errorf("function call %s() not allowed in middle of pattern", fc.Name)
+		}
 	case xpath3.ArrayConstructorExpr:
 		return fmt.Errorf("array constructor not allowed in pattern")
 	}
@@ -366,9 +387,21 @@ func isValidPatternStep(expr xpath3.Expr) bool {
 
 // isAllowedPatternFunction returns true if a function call is allowed at the
 // start of a path pattern. In XSLT 3.0, key(), id(), and doc() are allowed
-// with literal arguments.
-func isAllowedPatternFunction(fc xpath3.FunctionCall) bool {
-	switch fc.Name {
+// with literal arguments. Only the built-in functions in the XPath functions
+// namespace qualify: an allowlisted local name in any OTHER namespace (e.g. a
+// user-declared Q{urn:custom}key()) is NOT an allowed pattern-start function,
+// so the namespace URI must be the functions namespace before the local-name
+// switch is consulted.
+func isAllowedPatternFunction(fc xpath3.FunctionCall, nsBindings map[string]string) bool {
+	// Resolve the call's (namespace URI, local name) honoring the EQName braced
+	// form, explicit xmlns bindings, and the predeclared fn: default. A function
+	// outside the functions namespace can never be a built-in pattern function,
+	// regardless of its local name.
+	uri, local := patternFunctionIdentity(fc, nsBindings)
+	if uri != lexicon.NamespaceFn {
+		return false
+	}
+	switch local {
 	case "key", "id", "idref", "doc", "element-with-id", "root":
 		// Check that all arguments are literals or variable refs
 		for _, arg := range fc.Args {
@@ -432,6 +465,21 @@ func resolvePatternFunctionNamespace(prefix string, nsBindings map[string]string
 	return ""
 }
 
+// patternFunctionIdentity resolves a function call's (namespace URI, local name)
+// for pattern validation. The xpath3 parser keeps an EQName function call's whole
+// braced spelling in fc.Name (e.g. "Q{http://www.w3.org/2005/xpath-functions}current-group"),
+// so the braced URI must be read directly from the name rather than resolved
+// through fc.Prefix. For the lexical (unprefixed or prefixed) form it falls back
+// to resolvePatternFunctionNamespace so explicit xmlns overrides are honored.
+func patternFunctionIdentity(fc xpath3.FunctionCall, nsBindings map[string]string) (uri, local string) {
+	if strings.HasPrefix(fc.Name, "Q{") {
+		if idx := strings.IndexByte(fc.Name, '}'); idx >= 0 {
+			return fc.Name[2:idx], fc.Name[idx+1:]
+		}
+	}
+	return resolvePatternFunctionNamespace(fc.Prefix, nsBindings), fc.Name
+}
+
 // validatePatternFunctions checks that all function calls in a pattern
 // reference known functions (built-in XPath or declared xsl:function).
 // Unknown functions like f:special() raise XPST0017 at compile time.
@@ -446,13 +494,14 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 			if !ok {
 				return true
 			}
-			local := fc.Name
 			// An unprefixed function call names the XPath functions namespace,
-			// the same as the prefixed path. Resolve it explicitly so it gets
-			// the identical existence/arity validation below — a nonexistent
-			// no-such-function() or a wrong-arity key() must be rejected, not
-			// silently allowed.
-			nsURI := resolvePatternFunctionNamespace(fc.Prefix, p.nsBindings)
+			// the same as the prefixed path. Resolve identity (URI + local)
+			// explicitly so it gets the identical existence/arity validation
+			// below — a nonexistent no-such-function() or a wrong-arity key()
+			// must be rejected, not silently allowed. patternFunctionIdentity
+			// also normalizes the EQName spelling Q{uri}local so it is matched
+			// against the same registries as the lexical form.
+			nsURI, local := patternFunctionIdentity(fc, p.nsBindings)
 			displayName := local
 			if fc.Prefix != "" {
 				displayName = fc.Prefix + ":" + local
@@ -518,14 +567,17 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr, nsBindings map[string]strin
 			return true
 		}
 		// The forbidden list applies only to the XSLT/XPath functions
-		// namespace. Resolve the prefix the same way function existence is
-		// resolved (explicit bindings first, predeclared as fallback) so an
-		// explicit xmlns:fn override pointing at a custom namespace makes
-		// fn:current-group() a user function, not the forbidden builtin.
-		if resolvePatternFunctionNamespace(fc.Prefix, nsBindings) != lexicon.NamespaceFn {
+		// namespace. Resolve identity the same way function existence is
+		// resolved (braced EQName URI first, then explicit bindings, then
+		// predeclared as fallback) so an explicit xmlns:fn override pointing
+		// at a custom namespace makes fn:current-group() a user function, not
+		// the forbidden builtin, and the EQName spelling
+		// Q{http://www.w3.org/2005/xpath-functions}current-group() is caught.
+		uri, local := patternFunctionIdentity(fc, nsBindings)
+		if uri != lexicon.NamespaceFn {
 			return true
 		}
-		switch fc.Name {
+		switch local {
 		case "current-merge-key":
 			walkErr = staticError(errCodeXTSE3500, "current-merge-key() must not be used within a pattern")
 			return false

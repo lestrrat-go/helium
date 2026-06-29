@@ -59,7 +59,9 @@ to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
 `codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (partial; result DOM built with helium)
 
 Regex: use Go `regexp` package by default; fall back to `github.com/dlclark/regexp2` for patterns requiring backreferences, character class subtraction, or large quantifiers. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
-Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost.
+Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost. The cache (`regexLRUCache` in `regex_cache.go`) is a bounded LRU with a 1024-entry cap and least-recently-used eviction, replacing the old unbounded `sync.Map` so many distinct dynamic patterns can no longer grow process memory without limit.
+
+**Resource bounds (XPATH3-102/105).** `string-to-codepoints` charges `fnCountOp` per produced codepoint so a huge input cannot build an item sequence below the node-set cap but above `OpLimit`. `analyze-string` STREAMS its regex matches via `compiledXPathRegex.eachStringSubmatchIndex` (the internal form of the public `Regex.EachSubmatchIndex`) rather than calling `FindAllStringSubmatchIndex` up front: when an op budget is in force it passes `fnRemainingOps(ec)+1` as the match limit and charges `fnCountOp` BEFORE building each match's result nodes, so an input with millions of matches rejects with `ErrOpLimit` (or honors cancellation) without ever materializing the O(matches) index slice. A non-streamable leading-context pattern over an oversized input surfaces `ErrRegexMatchLimit` as-is (errors.Is-compatible); other engine errors map to `FORX0002`.
 
 ### `functions_numeric.go`
 `abs`, `ceiling`, `floor`, `round`, `round-half-to-even`
@@ -91,6 +93,18 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 
 ### `functions_json_xml.go`
 `json-to-xml`, `xml-to-json`
+
+`json-to-xml` with the `validate:true()` option type-annotates the result tree:
+each result element records the type defined by the json-to-xml result schema
+(`schema-for-json.xsd`, target namespace = fn namespace) keyed by node into
+`ec.typeAnnotations`, so downstream `instance of element(j:map, j:mapType)` /
+`element(j:string, j:stringType)` / `element(j:boolean, xs:boolean)` tests over
+the produced tree succeed. The mapping is a fixed function of each node's JSON
+kind (`mapType`/`arrayType`/`stringType`/`numberType`/`nullType` in the fn
+namespace; `boolean` → `xs:boolean`), so no general XSD validation pass runs.
+`ec.typeAnnotations` (handed in by the caller and shared across concurrent
+`Evaluate` calls) is copied into a fresh per-evaluation map before the new nodes'
+annotations are merged in — the shared config map is never mutated.
 
 ### `functions_serialize.go`
 `serialize`
@@ -142,6 +156,16 @@ All delegate to Go `math` package.
 
 ### `functions_unparsed_text.go`
 `unparsed-text`, `unparsed-text-lines`, `unparsed-text-available`
+
+`fn:unparsed-text-lines` bounds line production by the **effective** budget in
+force — `min(fnMaxNodes(ec), fnRemainingOps(ec))` — not just `maxNodes`, so a
+small `OpLimit` (far below the 10M default node-set cap) stops splitting after
+~`OpLimit` lines instead of first allocating a `[]string` proportional to the
+resource's full line count. `LoadTextLinesBounded` produces at most `limit+1`
+lines; the produced count is then charged via `fnCountOps`, surfacing
+`ErrOpLimit` (op budget binding) or `ErrNodeSetLimit` (node-set cap binding).
+`fnRemainingOps` (in `functions_hof.go`) returns the remaining op budget and
+whether one is in force (false when `OpLimit` is unset or `ec == nil`).
 
 ## FunctionItem Mechanics
 

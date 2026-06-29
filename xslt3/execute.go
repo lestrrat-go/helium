@@ -38,7 +38,6 @@ type execContext struct {
 	collectingVars               bool                 // reentrancy guard for collectAllVars
 	currentMode                  string
 	currentTemplate              *template                  // use setCurrentTemplate(); do not assign directly
-	currentTemplateBaseDir       string                     // use baseDir(); computed by setCurrentTemplate()
 	currentPackage               *Stylesheet                // owning package of currently executing template/function
 	xpathDefaultNS               string                     // current xpath-default-namespace
 	hasXPathDefaultNS            bool                       // true when xpathDefaultNS is explicitly set
@@ -97,7 +96,9 @@ type execContext struct {
 	temporaryOutputDepth         int                           // >0 when inside a temporary output state (XTDE1480)
 	primaryClaimedImplicitly     bool                          // true when implicit content has been written to primary output
 	staticBaseURIOverride        string                        // non-empty when xml:base on an LRE overrides the template's base URI
+	staticBaseURIPinned          bool                          // true while evaluating a global var/param body: base is pinned to the declaration site, never the current template
 	currentOutputURI             string                        // current output URI for current-output-uri() function
+	canonicalPrimaryURI          string                        // canonical principal (base) output URI, tracked separately from the "" primary sentinel; seeded into usedResultURIs so a secondary href resolving to it raises XTDE1490
 	inPatternMatch               bool                          // true during pattern matching (current-output-uri() returns empty)
 	patternNamespaces            map[string]string             // the matching pattern's lexical xmlns snapshot (prefix→URI) during pattern matching
 	patternMatchErr              error                         // non-nil if a fatal error occurred during pattern matching
@@ -105,20 +106,21 @@ type execContext struct {
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
 	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
-	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef // per-invocation cache for parameter-document output defs
-	primaryCharacterMaps         []string                           // character map names from xsl:result-document targeting primary output
-	primaryResolvedCharMap       map[rune]string                    // resolved character map from parameter-document for primary output
-	primaryOutputOverrides       *OutputDef                         // serialization param overrides from primary xsl:result-document
-	rawResultSequence            xpath3.Sequence                    // raw XDM result sequence (set when initial template has as="...")
-	nsFixupAllowed               map[*helium.Element]struct{}       // elements whose prefix NS was auto-generated (fixup eligible)
-	overridingTemplate           *template                          // currently executing overriding template (for xsl:original)
-	overridingVarDef             *variable                          // currently evaluating overriding variable (for $xsl:original)
-	originalFunc                 xpath3.Function                    // current xsl:original function (set during overriding function call)
-	currentAttrSetOriginal       *attributeSetDef                   // original attribute-set for use-attribute-sets="xsl:original"
-	docOrderCache                *xpath3.DocOrderCache              // shared document-order cache for consistent cross-document ordering
-	packageVarCache              map[*variable]xpath3.Sequence      // cache for package-scoped variable evaluations
-	globalContextAbsent          bool                               // true when global context item is absent (select evaluated to empty)
-	traceWriter                  io.Writer                          // destination for fn:trace output (nil = os.Stderr)
+	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef       // per-invocation cache for parameter-document output defs
+	paramDocPresences            map[*resultDocumentInst]paramDocPresence // per-invocation cache for parameter-document plain-boolean presence flags
+	primaryCharacterMaps         []string                                 // character map names from xsl:result-document targeting primary output
+	primaryResolvedCharMap       map[rune]string                          // resolved character map from parameter-document for primary output
+	primaryOutputOverrides       *OutputDef                               // serialization param overrides from primary xsl:result-document
+	rawResultSequence            xpath3.Sequence                          // raw XDM result sequence (set when initial template has as="...")
+	nsFixupAllowed               map[*helium.Element]struct{}             // elements whose prefix NS was auto-generated (fixup eligible)
+	overridingTemplate           *template                                // currently executing overriding template (for xsl:original)
+	overridingVarDef             *variable                                // currently evaluating overriding variable (for $xsl:original)
+	originalFunc                 xpath3.Function                          // current xsl:original function (set during overriding function call)
+	currentAttrSetOriginal       *attributeSetDef                         // original attribute-set for use-attribute-sets="xsl:original"
+	docOrderCache                *xpath3.DocOrderCache                    // shared document-order cache for consistent cross-document ordering
+	packageVarCache              map[*variable]xpath3.Sequence            // cache for package-scoped variable evaluations
+	globalContextAbsent          bool                                     // true when global context item is absent (select evaluated to empty)
+	traceWriter                  io.Writer                                // destination for fn:trace output (nil = os.Stderr)
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change
 	cachedBaseEval                  xpath3.Evaluator
@@ -133,20 +135,20 @@ type execContext struct {
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
 	ec.currentTemplate = tmpl
-	if tmpl != nil && tmpl.BaseURI != "" {
-		ec.currentTemplateBaseDir = documentBaseDir(tmpl.BaseURI)
-	} else if ec.stylesheet.baseURI != "" {
-		ec.currentTemplateBaseDir = documentBaseDir(ec.stylesheet.baseURI)
-	} else {
-		ec.currentTemplateBaseDir = ""
-	}
 }
 
-// baseDir returns the base directory for resolving relative URIs.
-// The value is computed by setCurrentTemplate from the current template's
-// base URI, falling back to the stylesheet's base URI.
+// baseDir returns the base directory for resolving relative URIs in the
+// XSLT-aware functions fn:doc / fn:document / fn:stream-available.
+//
+// It is derived from effectiveStaticBaseURI() — the in-scope static base URI —
+// so that every base-URI override is honored consistently: an xml:base on an
+// LRE/instruction, the pinned declaration-site base of a lazily-evaluated
+// global, and the base-uri attribute of an xsl:evaluate (which installs a
+// staticBaseURIOverride for the duration of the dynamic evaluation). This keeps
+// fn:doc resolution aligned with the native xpath3 functions (fn:unparsed-text,
+// fn:collection) that resolve against the same effective base.
 func (ec *execContext) baseDir() string {
-	return ec.currentTemplateBaseDir
+	return documentBaseDir(ec.effectiveStaticBaseURI())
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -1019,6 +1021,11 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 		if c := ec.transformConfig.httpClient; c != nil {
 			eval = eval.HTTPClient(c)
 		}
+		// Forward the injected base parser so fn:doc / fn:parse-xml inside XPath
+		// expressions parse under the same policy as the rest of the engine.
+		if p := ec.transformConfig.parser; p != nil {
+			eval = eval.Parser(*p)
+		}
 		// Map the xslt3 resource cap onto the xpath3 evaluator so
 		// fn:unparsed-text / fn:json-doc reads honor the same bound. The
 		// xpath3 setter takes 0 = unparsedtext default, so translate the
@@ -1176,8 +1183,8 @@ func (ec *execContext) accumulatorStateKey(name string) string {
 func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 	vars := ec.collectAllVars(ctx)
 	eval := ec.baseXPathEvaluator().
-		Variables(xpath3.VariablesFromMap(vars)).
-		Functions(xpath3.FunctionLibraryFromMaps(ec.xsltFunctions(), ec.xsltFunctionsNS()))
+		Variables(vars).
+		Functions(ec.xsltFunctions(), ec.xsltFunctionsNS())
 	if ec.typeAnnotations != nil {
 		eval = eval.TypeAnnotations(ec.typeAnnotations)
 	}

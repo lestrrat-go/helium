@@ -18,25 +18,46 @@ import (
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpointer"
 )
 
-const (
-	maxDepth     = 40
-	maxURILength = 2000
-)
+const maxURILength = 2000
 
-// MaxIncludeSize is the default maximum number of bytes read from a single
-// included resource (XML or text) when no cap is configured via
-// [Processor.MaxIncludeSize]. It guards against a hostile or pathological
+// defaultMaxIncludeSize is the per-include byte cap used when none is configured
+// via [Processor.MaxIncludeSize]. It guards against a hostile or pathological
 // Resolver (e.g. one returning an endless or multi-gigabyte reader) exhausting
 // memory: the bytes of every included resource are read fully and cached.
-const MaxIncludeSize = 10 << 20 // 10 MiB
+const defaultMaxIncludeSize = 10 << 20 // 10 MiB
 
-// ErrIncludeTooLarge is returned when an included resource exceeds the
-// configured maximum size (see [Processor.MaxIncludeSize], default
-// [MaxIncludeSize]). The cap is enforced against the actual number of bytes
-// read, not any reported size.
+// defaultMaxIncludeDepth is the xi:include nesting-depth cap used when none is
+// configured via [Processor.MaxIncludeDepth]. It guards against pathological or
+// maliciously deep include chains. This bounds nesting depth only; cyclic
+// includes are caught separately by circular-inclusion detection.
+const defaultMaxIncludeDepth = 40
+
+// maxIncludeAggregateMultiplier bounds the cumulative bytes materialized across
+// the entire XInclude expansion as a multiple of the effective per-include cap
+// (see effectiveMaxIncludeSize). The per-include cap only stops a single
+// oversized resource; without an aggregate bound a document could splice many
+// includes — each under the per-include cap, or the same cached resource reused
+// repeatedly — and still materialize unbounded total bytes (a memory/
+// amplification DoS). Expressing the aggregate as a multiple of the per-include
+// cap keeps it proportional: lowering MaxIncludeSize lowers the aggregate too.
+// With the 10 MiB default per-include cap the aggregate is 1 GiB.
+const maxIncludeAggregateMultiplier = 100
+
+// maxTotalIncludes bounds the aggregate number of resources spliced across the
+// entire XInclude expansion, independent of their individual sizes. It guards
+// against amplification by a very large number of tiny includes.
+const maxTotalIncludes = 1 << 16 // 65536
+
+// ErrIncludeTooLarge is returned when an included resource exceeds the maximum
+// allowed size. This covers both the per-include cap (see
+// [Processor.MaxIncludeSize]; 10 MiB by default), enforced against the actual
+// number of bytes read, and the internal aggregate bound across the whole
+// expansion (cumulative bytes / spliced-resource count) that guards against
+// amplification by many includes each staying under the per-include cap.
 var ErrIncludeTooLarge = errors.New("xi:include: included resource exceeds maximum allowed size")
 
 // Resolver loads content from a URI.
@@ -55,12 +76,14 @@ type Resolver interface {
 
 // processorCfg holds the configuration for a Processor.
 type processorCfg struct {
-	noMarkers      bool
-	noBaseFixup    bool
-	resolver       Resolver
-	baseURI        string
-	errorHandler   helium.ErrorHandler
-	maxIncludeSize int
+	noMarkers       bool
+	noBaseFixup     bool
+	resolver        Resolver
+	baseURI         string
+	errorHandler    helium.ErrorHandler
+	maxIncludeSize  int
+	maxIncludeDepth int
+	parser          *helium.Parser
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -96,10 +119,13 @@ func (p Processor) NoBaseFixup() Processor {
 	return p
 }
 
-// Resolver sets a custom resource resolver. When unset, an FS-backed
-// resolver opens any OS path verbatim via [os.Open], preserving
-// historical behavior. Callers handling untrusted documents should
-// supply a Resolver backed by a stricter [fs.FS] — see [NewFSResolver].
+// Resolver sets a custom resource resolver. When unset, the processor is
+// secure by default: it uses a deny-all resolver that refuses every
+// filesystem access, so untrusted input cannot disclose local files (mirrors
+// the deny-all default of [helium.NewParser]). To grant access, supply a
+// Resolver backed by a confined [fs.FS] — see [NewFSResolver], e.g.
+// NewFSResolver(fsys) with fsys from [os.Root.FS]. To restore the historical
+// behavior of opening any OS path, pass NewFSResolver([helium.PermissiveFS]()).
 func (p Processor) Resolver(r Resolver) Processor {
 	p = p.clone()
 	p.cfg.resolver = r
@@ -167,12 +193,35 @@ func (p Processor) BaseURI(uri string) Processor {
 // resource (XML or text). The cap is enforced against the actual number of
 // bytes read, guarding against a hostile or pathological Resolver (e.g. an
 // endless or multi-gigabyte reader) exhausting memory before the bytes are
-// cached. A value less than or equal to zero (the default) means
-// [MaxIncludeSize] (10 MiB) is used. Exceeding the cap fails the include with
-// [ErrIncludeTooLarge].
+// cached. A value less than or equal to zero (the default) means 10 MiB is
+// used. Exceeding the cap fails the include with [ErrIncludeTooLarge].
 func (p Processor) MaxIncludeSize(n int) Processor {
 	p = p.clone()
 	p.cfg.maxIncludeSize = n
+	return p
+}
+
+// MaxIncludeDepth sets the maximum nesting depth of xi:include directives — how
+// deeply an included document may itself include further documents before
+// processing fails with "maximum include depth exceeded". It bounds nesting
+// depth only; cyclic includes are caught separately by circular-inclusion
+// detection. A value less than or equal to zero (the default) means 40 is used.
+func (p Processor) MaxIncludeDepth(n int) Processor {
+	p = p.clone()
+	p.cfg.maxIncludeDepth = n
+	return p
+}
+
+// Parser sets the [helium.Parser] used to parse included documents. The
+// injected parser supplies the inner parse's resource limits (element depth,
+// name length, entity amplification, content-model depth) and is used as the
+// base; XInclude still forces its own loading policy on top — external DTD
+// loading is enabled and the filesystem is confined to the configured
+// [Resolver]'s sandbox (see [Processor.Resolver]), regardless of the injected
+// parser's FS. When unset, a default [helium.NewParser] is used as the base.
+func (p Processor) Parser(parser helium.Parser) Processor {
+	p = p.clone()
+	p.cfg.parser = &parser
 	return p
 }
 
@@ -196,17 +245,22 @@ type txtCacheEntry struct {
 }
 
 type processor struct {
-	noMarkers      bool
-	noBaseFixup    bool
-	resolver       Resolver
-	baseURI        string
-	expanding      map[string]bool          // circular inclusion detection (set during recursive expansion)
-	docCache       map[string]docCacheEntry // cached raw bytes for XML documents
-	txtCache       map[string]txtCacheEntry // cached text inclusions
-	errorHandler   helium.ErrorHandler
-	maxIncludeSize int
-	depth          int
-	count          int
+	noMarkers       bool
+	noBaseFixup     bool
+	resolver        Resolver
+	baseURI         string
+	expanding       map[string]bool          // circular inclusion detection (set during recursive expansion)
+	docCache        map[string]docCacheEntry // cached raw bytes for XML documents
+	txtCache        map[string]txtCacheEntry // cached text inclusions
+	errorHandler    helium.ErrorHandler
+	maxIncludeSize  int
+	maxIncludeDepth int
+	parser          *helium.Parser
+	snapshot        *helium.Document // in-memory copy of the entry document for same-document XPointers
+	snapshotURI     string           // base URI the snapshot corresponds to
+	depth           int
+	count           int
+	totalBytes      int64 // aggregate bytes materialized across all includes (bounds amplification)
 }
 
 // Process performs XInclude processing on the document.
@@ -234,18 +288,37 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		cfg = &processorCfg{}
 	}
 	p := &processor{
-		noMarkers:      cfg.noMarkers,
-		noBaseFixup:    cfg.noBaseFixup,
-		resolver:       cfg.resolver,
-		baseURI:        cfg.baseURI,
-		errorHandler:   cfg.errorHandler,
-		maxIncludeSize: cfg.maxIncludeSize,
-		expanding:      make(map[string]bool),
-		docCache:       make(map[string]docCacheEntry),
-		txtCache:       make(map[string]txtCacheEntry),
+		noMarkers:       cfg.noMarkers,
+		noBaseFixup:     cfg.noBaseFixup,
+		resolver:        cfg.resolver,
+		baseURI:         cfg.baseURI,
+		errorHandler:    cfg.errorHandler,
+		maxIncludeSize:  cfg.maxIncludeSize,
+		maxIncludeDepth: cfg.maxIncludeDepth,
+		parser:          cfg.parser,
+		expanding:       make(map[string]bool),
+		docCache:        make(map[string]docCacheEntry),
+		txtCache:        make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
-		p.resolver = NewFSResolver(nil)
+		// Secure by default: an unset resolver denies all filesystem access
+		// (mirroring helium.NewParser()'s deny-all FS). Untrusted input cannot
+		// disclose local files via <xi:include href="/etc/passwd"/>. Callers
+		// opt back into host access with Resolver(NewFSResolver(helium.PermissiveFS()))
+		// or, preferably, a confined fs.FS (os.Root.FS).
+		p.resolver = NewFSResolver(iofs.DenyAll{})
+	}
+
+	// Capture a resolver-free snapshot of the entry document so top-level
+	// same-document XPointer references can be evaluated against the original
+	// infoset (before inclusions mutate the tree) without re-reading the base
+	// URI through the resolver. Only taken when such a reference is actually
+	// present, so documents without same-document XPointers pay no copy cost.
+	if doc := ownerDocument(node); doc != nil && hasSameDocumentXPointer(node) {
+		if snap := snapshotForXPointer(doc); snap != nil {
+			p.snapshot = snap
+			p.snapshotURI = p.baseURI
+		}
 	}
 
 	if err := p.processNode(ctx, node); err != nil {
@@ -255,10 +328,6 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 }
 
 func (p *processor) processNode(ctx context.Context, n helium.Node) error {
-	if p.depth > maxDepth {
-		return fmt.Errorf("xi:include: maximum recursion depth (%d) exceeded", maxDepth)
-	}
-
 	// Repeatedly collect and process xi:include elements at this level.
 	// Fallback processing may insert new xi:include elements as siblings,
 	// so we loop until no more are found.
@@ -298,6 +367,26 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 }
 
 func (p *processor) processInclude(ctx context.Context, inc *helium.Element) error {
+	// Reject before fetching/splicing the resource so an over-limit include
+	// never retrieves or processes its target. Expanding this include nests its
+	// content one level deeper (p.depth+1), so maxDepth is the actual ceiling on
+	// nesting depth.
+	maxDepth := p.maxIncludeDepth
+	if maxDepth <= 0 {
+		maxDepth = defaultMaxIncludeDepth
+	}
+	if p.depth+1 > maxDepth {
+		return fmt.Errorf("xi:include: maximum include depth (%d) exceeded", maxDepth)
+	}
+
+	// Aggregate-count guard: bound the total number of resources spliced across
+	// the whole expansion. p.count is the running total of substitutions made so
+	// far; reject before processing one more so repeated (cached) includes cannot
+	// amplify into unbounded subtree materialization.
+	if p.count >= maxTotalIncludes {
+		return fmt.Errorf("xi:include: aggregate of %d included resources: %w", maxTotalIncludes, ErrIncludeTooLarge)
+	}
+
 	if err := validateIncludeChildren(inc); err != nil {
 		return err
 	}
@@ -348,19 +437,25 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 		if err != nil {
 			return p.handleFallback(inc, fmt.Errorf("xi:include: cannot resolve URI %q: %w", href, err))
 		}
-	} else if fragment != "" && p.baseURI != "" {
-		// href="#fragment" with base URI set → load document from base URI
-		resolved = p.baseURI
 	}
-	// else: href absent, xpointer only → same-document (resolved stays "")
+	// else: the href had no document part (a pure fragment such as href="#a", or
+	// the href attribute was absent and only an xpointer was given) → this is a
+	// same-document reference. Leave resolved empty so includeXMLWithXPointer
+	// takes the in-memory snapshot path rather than re-loading the base URI
+	// through the resolver — which, under the deny-all default resolver, would
+	// fail even though the target is the current document.
 
-	// Circular inclusion check key includes xpointer expression
+	// Circular inclusion check key includes xpointer expression. For a
+	// same-document reference (resolved == "") the key must also carry the
+	// current document identity (p.baseURI); otherwise every fragment-only
+	// include collapses to the literal "#xptr" and an included document's own
+	// same-document include would collide with the includer's.
 	circularKey := resolved
 	if xptrExpr != "" {
 		if resolved != "" {
 			circularKey = resolved + "#" + xptrExpr
 		} else {
-			circularKey = "#" + xptrExpr
+			circularKey = p.baseURI + "#" + xptrExpr
 		}
 	}
 	if p.expanding[circularKey] {
@@ -472,15 +567,27 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	var err error
 
 	if uri == "" {
-		// Same-document reference: evaluate against a fresh parse of the
-		// current document (via base URI) to avoid seeing nodes that were
-		// inserted by previous XInclude processing in this pass.
-		if p.baseURI != "" {
+		// Same-document reference. It must be evaluated against the original
+		// document infoset (before any nodes were inserted by earlier XInclude
+		// processing in this pass), but it needs no filesystem access, so it
+		// must NOT go through the resolver — doing so would re-load the base
+		// URI and fail under the deny-all default resolver.
+		//
+		// For a top-level same-document reference we use the in-memory snapshot
+		// of the entry document taken before processing began. Inside an
+		// included document (p.baseURI has been switched to that document's URI
+		// during recursion) the original bytes are available via loadXMLDoc's
+		// cache, so re-parse from there; this only reaches the resolver when an
+		// FS-backed resolver was already used to load that included document.
+		switch {
+		case p.snapshot != nil && p.baseURI == p.snapshotURI:
+			doc = p.snapshot
+		case p.baseURI != "":
 			doc, err = p.loadXMLDoc(ctx, p.baseURI, p.baseURI, true)
 			if err != nil {
 				return err
 			}
-		} else {
+		default:
 			doc = inc.OwnerDocument()
 		}
 	} else {
@@ -516,10 +623,19 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		}
 	}
 
-	// Deep-copy result nodes into the target document
+	// Deep-copy result nodes into the target document. Each selected node is
+	// deep-copied, and an xpointer can select up to the xpath node-set limit,
+	// so over a source with many nested same-name elements (e.g. xpointer(//a))
+	// the copies are O(n^2) the source size — far larger than the bytes READ
+	// from the source. Charge the estimated copy footprint against the aggregate
+	// bound BEFORE each copy so the same guard that bounds bytes read also bounds
+	// nodes copied, failing fast instead of materializing unboundedly.
 	targetDoc := inc.OwnerDocument()
 	var copies []helium.Node
 	for _, n := range nodes {
+		if err := p.accountIncludedBytes(uri, subtreeCopyCost(n)); err != nil {
+			return err
+		}
 		c, copyErr := helium.CopyNode(n, targetDoc)
 		if copyErr != nil {
 			return fmt.Errorf("xi:include: copy failed: %w", copyErr)
@@ -543,8 +659,10 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	p.replaceWithNodes(inc, copies)
 	p.count++
 
-	// Circular detection key
-	circularKey := "#" + xptrExpr
+	// Circular detection key. For a same-document reference (uri == "") the key
+	// carries the current document identity (p.baseURI) so it matches the key
+	// computed in processNode and does not collide across documents.
+	circularKey := p.baseURI + "#" + xptrExpr
 	if uri != "" {
 		circularKey = uri + "#" + xptrExpr
 	}
@@ -650,6 +768,11 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 		if entry.err != nil {
 			return nil, entry.err
 		}
+		// A cached resource still materializes a fresh subtree on every reuse, so
+		// it counts toward the aggregate bound just like a freshly fetched one.
+		if err := p.accountIncludedBytes(uri, len(entry.data)); err != nil {
+			return nil, err
+		}
 		// Re-parse from cached bytes: each inclusion needs independent
 		// nodes since they get moved into the target document tree.
 		return p.parseXMLData(ctx, entry.data, uri, substituteEntities)
@@ -658,6 +781,12 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 	data, err := p.fetch(uri, base)
 	if err != nil {
 		p.docCache[cacheKey] = docCacheEntry{err: err}
+		return nil, err
+	}
+	if err := p.accountIncludedBytes(uri, len(data)); err != nil {
+		// Cache the bytes anyway so a later same-URI include hits the same
+		// aggregate guard rather than re-fetching.
+		p.docCache[cacheKey] = docCacheEntry{data: data}
 		return nil, err
 	}
 
@@ -688,10 +817,7 @@ func (p *processor) resolve(uri, base string) (io.ReadCloser, error) {
 // enforced against the bytes actually read so a Resolver that returns an
 // endless or oversized reader cannot exhaust memory.
 func (p *processor) readCapped(r io.Reader) ([]byte, error) {
-	limit := p.maxIncludeSize
-	if limit <= 0 {
-		limit = MaxIncludeSize
-	}
+	limit := p.effectiveMaxIncludeSize()
 
 	data, exceeded, err := iolimit.ReadAll(r, int64(limit))
 	if exceeded {
@@ -703,17 +829,128 @@ func (p *processor) readCapped(r io.Reader) ([]byte, error) {
 	return data, nil
 }
 
+// effectiveMaxIncludeSize returns the per-include byte cap in effect: the
+// configured [Processor.MaxIncludeSize] or defaultMaxIncludeSize when unset.
+func (p *processor) effectiveMaxIncludeSize() int {
+	if p.maxIncludeSize > 0 {
+		return p.maxIncludeSize
+	}
+	return defaultMaxIncludeSize
+}
+
+// accountIncludedBytes adds the bytes materialized by one included resource to
+// the running aggregate and fails once the cumulative total exceeds the
+// aggregate bound (maxIncludeAggregateMultiplier × the per-include cap). It is
+// called for every spliced occurrence — including repeated cache hits — so the
+// bound covers both many distinct includes and one cached resource reused many
+// times. uri is included for diagnostic context.
+func (p *processor) accountIncludedBytes(uri string, n int) error {
+	p.totalBytes += int64(n)
+	if p.totalBytes > int64(p.effectiveMaxIncludeSize())*maxIncludeAggregateMultiplier {
+		return fmt.Errorf("xi:include: aggregate size including %q exceeds maximum: %w", uri, ErrIncludeTooLarge)
+	}
+	return nil
+}
+
+// copiedNodeOverhead is a conservative per-node byte estimate of a DOM node's
+// in-memory footprint (struct fields and pointers), added on top of its textual
+// content so that the byte-denominated aggregate bound also meaningfully limits
+// the number of nodes a deep copy materializes.
+const copiedNodeOverhead = 64
+
+// subtreeCopyCost estimates, in bytes, the memory a deep copy of n materializes:
+// copiedNodeOverhead plus the textual length of every node in the subtree
+// (descendants and an element's attributes) AND the namespace objects that
+// helium.CopyNode allocates. It walks the SOURCE subtree — reading
+// already-resident memory — so the estimate is charged BEFORE the copy is
+// allocated. Container nodes' Content() is NOT used (it aggregates all
+// descendants, which would make the walk itself O(n^2)); only the leaf
+// text-bearing nodes contribute content length.
+//
+// Namespaces must be counted because CopyNode's over-declare path
+// (deepCopier.bindNamespacesOverDeclare) allocates a fresh Namespace object for
+// every nsDefs declaration, one more for the element's active namespace, and one
+// additional over-declared object when that active namespace's prefix was not
+// among the declarations; copyAttributes allocates one per namespaced attribute.
+// Without this, a namespace-heavy nested source could stay under the per-include
+// byte cap while xpointer(//a) multiplied copied namespace objects across
+// overlapping subtrees, bypassing the aggregate materialization bound.
+func subtreeCopyCost(n helium.Node) int {
+	var total int
+	_ = helium.Walk(n, helium.NodeWalkerFunc(func(node helium.Node) error {
+		total += copiedNodeOverhead
+		switch node.Type() {
+		case helium.ElementNode:
+			elem, ok := node.(*helium.Element)
+			if !ok {
+				return nil
+			}
+			total += len(elem.Name())
+			decls := elem.Namespaces()
+			for _, ns := range decls {
+				total += namespaceCopyCost(ns)
+			}
+			if ns := elem.Namespace(); ns != nil {
+				// SetActiveNamespace always allocates the active namespace object.
+				total += namespaceCopyCost(ns)
+				// CopyNode over-declares the active namespace too when its prefix
+				// is not already declared and its URI is non-empty.
+				if ns.URI() != "" && !nsPrefixDeclared(decls, ns.Prefix()) {
+					total += namespaceCopyCost(ns)
+				}
+			}
+			for _, a := range elem.Attributes() {
+				total += copiedNodeOverhead + len(a.Name()) + len(a.Value())
+				if a.URI() != "" {
+					// copyAttributes allocates a Namespace object per namespaced attr.
+					total += copiedNodeOverhead + len(a.Prefix()) + len(a.URI())
+				}
+			}
+		case helium.TextNode, helium.CDATASectionNode, helium.CommentNode, helium.ProcessingInstructionNode:
+			total += len(node.Content())
+		}
+		return nil
+	}))
+	return total
+}
+
+// namespaceCopyCost is the estimated footprint of one copied Namespace object:
+// the per-node overhead plus its prefix and URI strings.
+func namespaceCopyCost(ns *helium.Namespace) int {
+	return copiedNodeOverhead + len(ns.Prefix()) + len(ns.URI())
+}
+
+// nsPrefixDeclared reports whether prefix appears among the given namespace
+// declarations, mirroring the declaredPrefixes set in
+// deepCopier.bindNamespacesOverDeclare.
+func nsPrefixDeclared(decls []*helium.Namespace, prefix string) bool {
+	for _, ns := range decls {
+		if ns.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
-	parser := helium.NewParser().LoadExternalDTD(true).BaseURI(uri)
+	// Start from the caller-injected parser (for its resource limits) or a
+	// default, then force XInclude's own loading policy on top: external DTD
+	// loading and the per-include base URI. The FS is set below to the
+	// resolver's sandbox (NOT the injected parser's FS) — see Processor.Parser.
+	base := helium.NewParser()
+	if p.parser != nil {
+		base = *p.parser
+	}
+	parser := base.LoadExternalDTD(true).BaseURI(uri)
 	// Thread the resolver's filesystem into the inner parser so external
 	// entities and external DTDs declared inside the included document
 	// resolve through the SAME sandbox as XInclude itself, not the parser's
 	// default permissive filesystem. Otherwise an attacker-supplied included
 	// document could expand a SYSTEM entity (e.g. "/etc/passwd") off the host
-	// filesystem, bypassing a strict Resolver (XXE). For the default
-	// permissive resolver this is identical to the previous behavior; a custom
-	// (non-FS) resolver gets a deny-all FS so inner SYSTEM references cannot
-	// reach the host.
+	// filesystem, bypassing a strict Resolver (XXE). The default resolver is
+	// deny-all, so inner SYSTEM references are blocked unless the caller opts
+	// into an FS-backed resolver; a custom (non-FS) resolver gets a deny-all FS
+	// so inner SYSTEM references cannot reach the host.
 	//
 	// Detection uses the fsBacked capability interface rather than a concrete
 	// *fsResolver assertion so callers can wrap NewFSResolver (e.g. for
@@ -725,8 +962,13 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	// XInclude hrefs would spuriously reject the document's own external
 	// entities/DTDs.
 	if fr, ok := p.resolver.(fsBacked); ok {
-		parser = parser.FS(normalizingFS{fsys: fr.FS()})
+		// NewParser now blocks external entity/DTD loading by default; lift that
+		// block so the included document's own external references resolve, but
+		// keep them confined to the resolver's sandbox FS (set below).
+		parser = parser.BlockXXE(false).FS(normalizingFS{fsys: fr.FS()})
 	} else {
+		// Custom (non-FS) resolver: keep the default XXE block AND deny the FS so
+		// inner SYSTEM references cannot reach the host (defense in depth).
 		parser = parser.FS(denyAllFS{})
 	}
 	if substituteEntities {
@@ -780,7 +1022,15 @@ func (p *processor) includeText(inc *helium.Element, uri string, incBase string)
 
 func (p *processor) loadText(uri string, base string) ([]byte, error) {
 	if entry, ok := p.txtCache[uri]; ok {
-		return entry.data, entry.err
+		if entry.err != nil {
+			return nil, entry.err
+		}
+		// A cached text resource is re-materialized on every reuse, so it counts
+		// toward the aggregate bound just like a freshly fetched one.
+		if err := p.accountIncludedBytes(uri, len(entry.data)); err != nil {
+			return nil, err
+		}
+		return entry.data, nil
 	}
 
 	data, err := p.fetch(uri, base)
@@ -790,6 +1040,9 @@ func (p *processor) loadText(uri string, base string) ([]byte, error) {
 	}
 
 	p.txtCache[uri] = txtCacheEntry{data: data}
+	if err := p.accountIncludedBytes(uri, len(data)); err != nil {
+		return nil, err
+	}
 	return data, nil
 }
 
@@ -928,6 +1181,132 @@ func checkMultiRootInclusion(inc *helium.Element, nodes []helium.Node) error {
 	return nil
 }
 
+// ownerDocument returns the document owning n, or n itself when n is a Document.
+func ownerDocument(n helium.Node) *helium.Document {
+	if n == nil {
+		return nil
+	}
+	if doc, ok := helium.AsNode[*helium.Document](n); ok {
+		return doc
+	}
+	return n.OwnerDocument()
+}
+
+// snapshotForXPointer builds the resolver-free, ID-preserving snapshot of the
+// entry document used to evaluate top-level same-document XPointer references
+// against the original infoset (before inclusions mutate the tree).
+//
+// helium.CopyDoc alone is insufficient: it reproduces the tree and the internal
+// DTD subset but drops the ID-resolution state that XPointer shorthand pointers
+// depend on (they resolve via Document.GetElementByID). Without carrying that
+// state a source parsed with SkipIDs(true) would wrongly START resolving
+// xml:id/ID attributes in the copy, and a source whose ids were declared in an
+// external DTD subset would resolve FEWER ids than the original. So the snapshot
+// additionally:
+//
+//   - carries the source's SkipIDs state (authoritative for GetElementByID), so
+//     a SkipIDs source yields a snapshot that resolves NO ids;
+//   - carries the source's external DTD subset (CopyDoc copies only the internal
+//     subset), which GetElementByID's lazy fallback consults for ID-typed
+//     attribute declarations;
+//   - rebuilds the copy's interned ID table by translating each source ID entry's
+//     element through the source->copy element correspondence, so a parsed
+//     source's ids resolve to the copy's elements rather than the source's.
+//
+// Returns nil when the copy fails; the caller then falls back to evaluating
+// against the live (possibly mutated) document.
+func snapshotForXPointer(doc *helium.Document) *helium.Document {
+	snap, err := helium.CopyDoc(doc)
+	if err != nil {
+		return nil
+	}
+
+	// Authoritative ID-skip state first: a SkipIDs source must resolve no ids in
+	// the snapshot either.
+	snap.SetSkipIDs(doc.SkipIDs())
+
+	// CopyDoc copies only the internal subset; carry the external subset too so
+	// the lazy GetElementByID fallback sees the same ID-typed ATTLIST decls.
+	helium.CopyExtSubset(doc, snap)
+
+	// Rebuild the interned ID table by element correspondence. Skip when the
+	// source skips ids (nothing resolves) or has no interned table (an API-built
+	// source relies on the lazy fallback, already reproduced via the DTD subsets).
+	srcIDs := doc.IDTable()
+	if doc.SkipIDs() || len(srcIDs) == 0 {
+		return snap
+	}
+
+	// CopyDoc reproduces the element spine 1:1 in document order, so a parallel
+	// pre-order walk of both trees yields the source->copy element correspondence.
+	var srcElems, cpElems []*helium.Element
+	collectElementsPreorder(doc, &srcElems)
+	collectElementsPreorder(snap, &cpElems)
+	if len(srcElems) != len(cpElems) {
+		// Defensive: shapes diverged unexpectedly; skip the rebuild rather than
+		// risk mismapping ids onto the wrong elements.
+		return snap
+	}
+	idx := make(map[*helium.Element]*helium.Element, len(srcElems))
+	for i := range srcElems {
+		idx[srcElems[i]] = cpElems[i]
+	}
+	for id, srcElem := range srcIDs {
+		if cp := idx[srcElem]; cp != nil {
+			snap.RegisterID(id, cp)
+		}
+	}
+	return snap
+}
+
+// collectElementsPreorder appends every element descendant of n (document order,
+// pre-order) to out. It descends only through element nodes — matching
+// helium.CopyDoc, which does not copy elements nested inside entity-reference
+// expansions — so the source and copy walks stay aligned.
+func collectElementsPreorder(n helium.Node, out *[]*helium.Element) {
+	for c := range helium.Children(n) {
+		if elem, ok := helium.AsNode[*helium.Element](c); ok {
+			*out = append(*out, elem)
+			collectElementsPreorder(elem, out)
+		}
+	}
+}
+
+// hasSameDocumentXPointer reports whether n or any descendant is an xi:include
+// that references the current document via an XPointer (no href, or an href
+// that is only a fragment). Used to decide whether a snapshot of the entry
+// document is needed before processing begins.
+func hasSameDocumentXPointer(n helium.Node) bool {
+	if isXInclude(n) {
+		if elem, ok := helium.AsNode[*helium.Element](n); ok && isSameDocumentInclude(elem) {
+			return true
+		}
+	}
+	for c := range helium.Children(n) {
+		if hasSameDocumentXPointer(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSameDocumentInclude reports whether elem is an xi:include whose target is
+// the current document: it has an XPointer (via the xpointer attribute or an
+// href fragment) and no document-selecting href.
+func isSameDocumentInclude(elem *helium.Element) bool {
+	href := getAttr(elem, "href")
+	xptr := getAttr(elem, "xpointer")
+	var fragment string
+	if idx := strings.IndexByte(href, '#'); idx >= 0 {
+		fragment = href[idx+1:]
+		href = href[:idx]
+	}
+	if href != "" {
+		return false
+	}
+	return xptr != "" || fragment != ""
+}
+
 func isXInclude(n helium.Node) bool {
 	if n.Type() != helium.ElementNode {
 		return false
@@ -994,6 +1373,24 @@ func findAttr(elem *helium.Element, name string) (string, bool) {
 }
 
 func resolveURI(href, base string) (string, error) {
+	// A native Windows base ("D:\\dir\\main.xml", "D:/dir/main.xml", or a UNC
+	// "\\host\\share") is a local filesystem path, not a URI. url.Parse would
+	// read its drive letter "D" as a URI scheme and emit garbage like
+	// "d:///fragment.xml", so resolve it with local-path (forward-slash)
+	// semantics BEFORE the URI machinery. The shape is detected from the string
+	// alone (uripath), so this branch is exercised on POSIX too.
+	if uripath.IsWindowsAbsolute(base) {
+		hrefURL, perr := url.Parse(href)
+		if perr != nil {
+			return "", fmt.Errorf("xi:include: invalid href %q: %w", href, perr)
+		}
+		if hrefURL.IsAbs() {
+			return href, nil
+		}
+		slashBase := uripath.ToSlash(base)
+		return path.Join(path.Dir(slashBase), href), nil
+	}
+
 	hrefURL, err := url.Parse(href)
 	if err != nil {
 		return "", fmt.Errorf("xi:include: invalid href %q: %w", href, err)
@@ -1007,7 +1404,7 @@ func resolveURI(href, base string) (string, error) {
 		return href, nil
 	}
 
-	// For file-like paths (no scheme), use filepath-based resolution
+	// For file-like paths (no scheme), use slash-based resolution
 	// to avoid Go's url.ResolveReference quirk that adds leading '/'
 	// to purely relative paths.
 	// If base fails to parse as a URL, fall back to returning href unresolved.
@@ -1020,7 +1417,9 @@ func resolveURI(href, base string) (string, error) {
 		if basePath == "" {
 			basePath = base
 		}
-		return filepath.Join(filepath.Dir(basePath), href), nil
+		// Join with forward-slash (path) semantics so the result uses '/' on
+		// every OS; on Windows filepath.Dir/Join would emit '\'.
+		return path.Join(path.Dir(uripath.ToSlash(basePath)), href), nil
 	}
 
 	return baseURL.ResolveReference(hrefURL).String(), nil
@@ -1126,23 +1525,19 @@ func relativeURI(target, base string) string {
 	return makeRelativePath(targetPath, basePath)
 }
 
-// makeRelativePath computes a relative path from basePath's directory to targetPath.
+// makeRelativePath computes a relative path from basePath's directory to
+// targetPath. The computation is pure forward-slash (RFC 3986 dot-segment)
+// semantics via [uripath.SlashRel], NOT filepath.Rel: the result is an xml:base
+// relative reference that MUST be byte-identical on POSIX and Windows (where
+// filepath.Rel splits on '\', mishandles '/'-bearing inputs, and applies
+// drive-letter rules, producing wrong "../" sequences).
 func makeRelativePath(targetPath, basePath string) string {
-	// Split into directory components
-	baseDir := filepath.Dir(basePath)
+	baseDir := uripath.SlashDir(basePath)
 	if baseDir == "." {
-		// Base has no directory component — target is already relative
-		return targetPath
+		// Base has no directory component — target is already relative.
+		return uripath.ToSlash(targetPath)
 	}
-
-	// Use filepath.Rel for the computation
-	rel, err := filepath.Rel(baseDir, targetPath)
-	if err != nil {
-		return targetPath
-	}
-
-	// filepath.Rel uses OS separators; normalize to forward slashes
-	return strings.ReplaceAll(rel, string(filepath.Separator), "/")
+	return uripath.SlashRel(baseDir, targetPath)
 }
 
 func newXIncludeMarker(doc *helium.Document, etype helium.ElementType, name string) helium.Node {
@@ -1253,6 +1648,24 @@ func resolveBase(currentBase, xmlBase string) string {
 		return xmlBase
 	}
 
+	// A native Windows base ("D:\\dir\\doc.xml", "D:/dir/doc.xml", or a UNC path)
+	// is a local filesystem path, not a URI. url.Parse would read its drive
+	// letter as a scheme and emit garbage like "d:///one/two", so resolve it with
+	// local-path (forward-slash) semantics, matching resolveURI's Windows branch.
+	// xmlBase is relative here (absolute was handled above), so its directory is
+	// dropped and the new base segment is appended. The shape is detected from
+	// the string alone, so the branch runs on POSIX too.
+	if uripath.IsWindowsAbsolute(currentBase) {
+		slashBase := uripath.ToSlash(currentBase)
+		const syntheticPrefix = "synthetic://h/"
+		absBase, perr := url.Parse(syntheticPrefix + slashBase)
+		if perr != nil {
+			return path.Join(path.Dir(slashBase), xmlBase)
+		}
+		resolved := absBase.ResolveReference(xmlBaseURL)
+		return strings.TrimPrefix(resolved.String(), syntheticPrefix)
+	}
+
 	baseURL, err := url.Parse(currentBase)
 	if err != nil {
 		return xmlBase
@@ -1270,35 +1683,13 @@ func resolveBase(currentBase, xmlBase string) string {
 	syntheticBase := syntheticPrefix + currentBase
 	absBase, err := url.Parse(syntheticBase)
 	if err != nil {
-		return filepath.Join(filepath.Dir(currentBase), xmlBase)
+		// Forward-slash fallback (never filepath.Join, which emits '\' on
+		// Windows): drop the base's last segment and append the relative base.
+		return uripath.JoinLocalBaseDir(uripath.SlashDir(currentBase), xmlBase)
 	}
 	resolved := absBase.ResolveReference(xmlBaseURL)
 	result := strings.TrimPrefix(resolved.String(), syntheticPrefix)
 	return result
-}
-
-// commonAncestorDir returns the longest common directory prefix of two paths.
-func commonAncestorDir(a, b string) string {
-	aDir := filepath.Dir(filepath.Clean(a))
-	bDir := filepath.Dir(filepath.Clean(b))
-	aParts := strings.Split(aDir, string(filepath.Separator))
-	bParts := strings.Split(bDir, string(filepath.Separator))
-
-	n := min(len(aParts), len(bParts))
-
-	common := 0
-	for i := range n {
-		if aParts[i] != bParts[i] {
-			break
-		}
-		common = i + 1
-	}
-
-	if common == 0 {
-		return "."
-	}
-
-	return strings.Join(aParts[:common], string(filepath.Separator))
 }
 
 // computeFixupBases computes relative URI bases for xml:base fixup.
@@ -1306,18 +1697,21 @@ func commonAncestorDir(a, b string) string {
 // they are converted to relative paths against their common ancestor
 // directory. This ensures that ".." traversal in xml:base attributes
 // is bounded at the logical root, matching RFC 3986 URI resolution.
+//
+// The relativization is pure forward-slash ([uripath.SlashCommonDir] +
+// [uripath.SlashRel]), NOT filepath.*: sourceURI arrives in forward-slash form
+// (resolveURI normalizes it) while p.baseURI is a native OS path, so on Windows
+// they mix '/' and '\'. filepath.Clean/Dir/Rel then split on '\', fail to find
+// the common ancestor, and emit wrong "../" sequences. uripath normalizes both
+// to '/' first so the output is byte-identical on POSIX and Windows.
 func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (string, string) {
-	relSource := sourceURI
-	relTarget := p.baseURI
+	relSource := uripath.ToSlash(sourceURI)
+	relTarget := uripath.ToSlash(p.baseURI)
 
-	if filepath.IsAbs(sourceURI) && filepath.IsAbs(p.baseURI) {
-		root := commonAncestorDir(sourceURI, p.baseURI)
-		if rel, err := filepath.Rel(root, sourceURI); err == nil {
-			relSource = rel
-		}
-		if rel, err := filepath.Rel(root, p.baseURI); err == nil {
-			relTarget = rel
-		}
+	if uripath.IsAbsolutePath(sourceURI) && uripath.IsAbsolutePath(p.baseURI) {
+		root := uripath.SlashCommonDir(sourceURI, p.baseURI)
+		relSource = uripath.SlashRel(root, sourceURI)
+		relTarget = uripath.SlashRel(root, p.baseURI)
 	}
 
 	return relSource, effectiveBaseURI(inc, relTarget)
@@ -1334,10 +1728,12 @@ func isFileURI(href string) bool {
 	return u.Scheme == lexicon.SchemeFile
 }
 
-// fsResolver resolves URIs by reading from an [fs.FS]. The default FS
-// is [iofs.PermissiveRoot] which opens any OS path verbatim; callers
-// handling untrusted input should construct one with a stricter fs.FS
-// via [NewFSResolver].
+// fsResolver resolves URIs by reading from an [fs.FS]. Passing a nil fsys to
+// [NewFSResolver] yields [iofs.PermissiveRoot], which opens any OS path
+// verbatim; callers handling untrusted input should construct one with a
+// stricter fs.FS via [NewFSResolver]. Note that a Processor with no resolver
+// configured does NOT use this permissive form — it denies all access (see
+// [Processor.Resolver]).
 type fsResolver struct {
 	fsys fs.FS
 }

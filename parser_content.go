@@ -27,6 +27,13 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 
 	off := 0
 	for {
+		// Enforce the node-content cap during accumulation so a giant CDATA
+		// section fails before its closing ]]> is reached, rather than after
+		// buffering the whole run. Checking here also bounds cur.PeekAt(off)
+		// growth (and thus the cursor's internal buffer).
+		if ctx.nodeContentTooLong(buf.Len()) {
+			return "", ErrNodeContentTooLarge
+		}
 		b := cur.PeekAt(off)
 		if b == 0 {
 			break
@@ -89,6 +96,12 @@ func (pctx *parserCtx) parseMisc(ctx context.Context) error {
 			}
 		} else if isBlankByte(cur.Peek()) {
 			pctx.skipBlanks(ctx)
+			// An over-cap whitespace run (e.g. infinite blanks before the
+			// root) is a memory-amplification DoS; surface it instead of
+			// looping forever over the still-blank cursor.
+			if pctx.blankRunErr != nil {
+				return pctx.error(ctx, pctx.blankRunErr)
+			}
 		} else {
 			break
 		}
@@ -144,6 +157,11 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 
 	off := 0
 	for {
+		// Enforce the node-content cap during accumulation so a giant PI body
+		// fails before its closing ?> is reached.
+		if pctx.nodeContentTooLong(buf.Len()) {
+			return pctx.error(ctx, ErrNodeContentTooLarge)
+		}
 		b := cur.PeekAt(off)
 		if b == 0 {
 			break
@@ -320,6 +338,11 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 	off += rw
 
 	for {
+		// Enforce the node-content cap during accumulation so a giant comment
+		// body fails before its closing --> is reached.
+		if pctx.nodeContentTooLong(buf.Len()) {
+			return pctx.error(ctx, ErrNodeContentTooLarge)
+		}
 		c, w, ok := decodeRuneAt(cur, off)
 		if !ok {
 			return pctx.error(ctx, ErrInvalidComment)

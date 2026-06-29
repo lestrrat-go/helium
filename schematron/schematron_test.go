@@ -718,7 +718,8 @@ func TestValueOfInterpolation(t *testing.T) {
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collected[0].Message, "result is True")
+		// XPath 1.0 string(boolean): true() converts to "true" (lowercase).
+		require.Contains(t, collected[0].Message, "result is true")
 	})
 
 	t.Run("boolean false", func(t *testing.T) {
@@ -735,10 +736,48 @@ func TestValueOfInterpolation(t *testing.T) {
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collected[0].Message, "result is False")
+		// XPath 1.0 string(boolean): false() converts to "false" (lowercase).
+		require.Contains(t, collected[0].Message, "result is false")
 	})
 
-	t.Run("nodeset names", func(t *testing.T) {
+	t.Run("number formatting", func(t *testing.T) {
+		t.Parallel()
+		// XPath 1.0 string(number) lexical forms (xmlXPathFormatNumber):
+		// integers carry no decimal point or exponent, special values use
+		// the "NaN"/"Infinity"/"-Infinity" spellings, and negative zero
+		// renders as "0". Go's default %g formatting diverges on all of these.
+		for _, tc := range []struct {
+			name   string
+			expr   string
+			expect string
+		}{
+			{"large integer", "1234567", "n=1234567"},
+			{"decimal", "3 div 2", "n=1.5"},
+			{"NaN", "0 div 0", "n=NaN"},
+			{"positive infinity", "1 div 0", "n=Infinity"},
+			{"negative infinity", "-1 div 0", "n=-Infinity"},
+			{"negative zero", "-1 * 0", "n=0"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+					<pattern><rule context="item">
+						<assert test="false()">n=<value-of select="`+tc.expr+`"/></assert>
+					</rule></pattern>
+				</schema>`)
+				require.Equal(t, "", errs)
+
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+				require.NoError(t, err)
+
+				collected, err := validateAndCollect(t, schema, doc)
+				require.ErrorIs(t, err, schematron.ErrValidationFailed)
+				require.Contains(t, collected[0].Message, tc.expect)
+			})
+		}
+	})
+
+	t.Run("nodeset string-value", func(t *testing.T) {
 		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="root">
@@ -747,12 +786,14 @@ func TestValueOfInterpolation(t *testing.T) {
 		</schema>`)
 		require.Equal(t, "", errs)
 
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>X</a><b>Y</b><c>Z</c></root>`))
 		require.NoError(t, err)
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collected[0].Message, "children: a b c")
+		// XPath 1.0: a node-set converts to the string-value of the node
+		// first in document order, i.e. the text of <a>, not the names.
+		require.Contains(t, collected[0].Message, "children: X")
 	})
 
 	t.Run("empty nodeset", func(t *testing.T) {
@@ -1203,5 +1244,41 @@ func TestValidateNilSchema(t *testing.T) {
 			verr = schematron.NewValidator(&schematron.Schema{}).Validate(t.Context(), doc)
 		})
 		require.ErrorIs(t, verr, schematron.ErrNoSchema)
+	})
+}
+
+// TestCompilerParserInjection verifies that a parser injected via
+// Compiler.Parser governs the internal parse of the schema document: a parser
+// configured with a tiny MaxDepth rejects a deeply nested schema, while the
+// same schema compiles when no parser policy is injected.
+func TestCompilerParserInjection(t *testing.T) {
+	t.Parallel()
+
+	// schema(1) > pattern(2) > rule(3) > assert(4)
+	const schemaSrc = `<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern name="test">
+    <rule context="AAA">
+      <assert test="BBB">BBB element is missing.</assert>
+    </rule>
+  </pattern>
+</schema>`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.sch")
+	require.NoError(t, os.WriteFile(path, []byte(schemaSrc), 0o600))
+
+	t.Run("injected parser policy enforced", func(t *testing.T) {
+		t.Parallel()
+		_, err := schematron.NewCompiler().
+			Parser(helium.NewParser().MaxDepth(2)).
+			CompileFile(t.Context(), path)
+		require.Error(t, err, "schema nested deeper than the injected MaxDepth must fail to parse")
+	})
+
+	t.Run("control without injection", func(t *testing.T) {
+		t.Parallel()
+		schema, err := schematron.NewCompiler().CompileFile(t.Context(), path)
+		require.NoError(t, err)
+		require.NotNil(t, schema)
 	})
 }

@@ -21,9 +21,12 @@ func TestISO88591(t *testing.T) {
 		s, err := dec.String(v)
 		require.NoError(t, err)
 
-		if i >= 0x80 && i <= 0x9f {
-			continue
-		}
+		// True ISO-8859-1 is the identity mapping: byte i decodes to U+00xx.
+		// In particular bytes 0x80-0x9F must decode to the C1 controls
+		// U+0080-U+009F, not the Windows-1252 glyphs (e.g. 0x80 must stay
+		// U+0080, not become U+20AC €).
+		require.Equal(t, []rune{rune(i)}, []rune(s))
+
 		v1, err := enc.String(s)
 		require.NoError(t, err)
 		require.Equal(t, v, v1)
@@ -269,5 +272,27 @@ func requireEquivalentEncoding(t *testing.T, canonical, alias string) {
 		gotAlias, errAlias := aliasEnc.NewDecoder().String(sample)
 		require.Equal(t, errCanonical == nil, errAlias == nil, "decode error mismatch: canonical=%q alias=%q sample=%#v", canonical, alias, sample)
 		require.Equal(t, gotCanonical, gotAlias, "decoded output mismatch: canonical=%q alias=%q sample=%#v", canonical, alias, sample)
+	}
+}
+
+func TestUSASCIIStrictDecode(t *testing.T) {
+	t.Parallel()
+
+	for _, alias := range []string{"US-ASCII", "ascii", "ANSI_X3.4-1968", "csASCII"} {
+		e := xmlenc.Load(alias)
+		require.NotNil(t, e, "alias %q must be loadable", alias)
+
+		// Valid 7-bit input decodes unchanged.
+		got, err := e.NewDecoder().String("hello world")
+		require.NoError(t, err, "alias %q: 7-bit input must decode", alias)
+		require.Equal(t, "hello world", got)
+
+		// A byte >= 0x80 is malformed for US-ASCII and must error, even when
+		// it would form a valid UTF-8 multibyte sequence.
+		_, err = e.NewDecoder().String(string([]byte{0xc3, 0xa9}))
+		require.Error(t, err, "alias %q: high byte must be rejected", alias)
+
+		_, err = e.NewDecoder().String(string([]byte{0x80}))
+		require.Error(t, err, "alias %q: 0x80 must be rejected", alias)
 	}
 }

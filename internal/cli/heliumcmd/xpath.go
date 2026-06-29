@@ -17,6 +17,7 @@ type xpathConfig struct {
 	expr          string
 	version       bool
 	maxInputBytes int64
+	maxDepth      int
 }
 
 type xpathCommand struct {
@@ -79,12 +80,13 @@ func (c *xpathCommand) showUsage() {
 	Evaluate an XPath expression against XML input
 	--engine N : XPath engine version (1 or 3, default 3)
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
-	cfg := &xpathConfig{engine: "3", maxInputBytes: DefaultMaxInputBytes}
+	cfg := &xpathConfig{engine: "3", maxInputBytes: DefaultMaxInputBytes, maxDepth: -1}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -111,6 +113,18 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 				return nil, nil
 			}
 			cfg.maxInputBytes = n
+		case flagMaxDepth:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.maxDepth = n
 		default:
 			if strings.HasPrefix(arg, "-") {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
@@ -156,6 +170,9 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 	}
 
 	p := helium.NewParser()
+	if cfg.maxDepth >= 0 {
+		p = p.MaxDepth(cfg.maxDepth)
+	}
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}

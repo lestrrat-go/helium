@@ -15,8 +15,12 @@ import (
 type compileConfig struct {
 	label        string // label for error messages (e.g. source filename)
 	baseDir      string
-	fsys         fs.FS // filesystem for loading include/externalRef targets
+	fsys         fs.FS          // filesystem for loading include/externalRef targets
+	parser       *helium.Parser // parser governing schema-document parse policy
 	errorHandler helium.ErrorHandler
+	// maxResourceBytes caps the bytes read from a single include/externalRef
+	// target. Zero means the package default (defaultMaxResourceBytes).
+	maxResourceBytes int
 }
 
 type validateConfig struct {
@@ -65,8 +69,13 @@ func (c Compiler) BaseDir(dir string) Compiler {
 }
 
 // FS sets the [fs.FS] used to load schemas referenced by include and
-// externalRef during compilation. A nil value restores the default,
-// which opens any path supplied to the compiler via [os.Open].
+// externalRef during compilation.
+//
+// The default (and what a nil value restores) is a deny-all FS that refuses
+// every open: a compiler from [NewCompiler] loads no include/externalRef target
+// from the host filesystem, so an untrusted schema cannot disclose host files.
+// To opt into host access, pass [helium.PermissiveFS] (any os.Open path) or —
+// preferably — a confined [fs.FS] rooted at a trusted directory.
 //
 // Note: the names handed to the FS are built with [filepath.Join] from
 // [Compiler.BaseDir] and the include href, so they may be absolute and
@@ -79,9 +88,34 @@ func (c Compiler) BaseDir(dir string) Compiler {
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {
-		fsys = iofs.PermissiveRoot{}
+		fsys = iofs.DenyAll{}
 	}
 	c.cfg.fsys = fsys
+	return c
+}
+
+// MaxResourceBytes sets the maximum number of bytes read from a single schema
+// resource pulled in via include or externalRef. A resource larger than the cap
+// fails to load with a compile error. A value <= 0 restores the package default
+// (10 MiB). The cap bounds memory consumed when loading schemas through a
+// permissive [Compiler.FS].
+func (c Compiler) MaxResourceBytes(n int) Compiler {
+	c = c.clone()
+	c.cfg.maxResourceBytes = n
+	return c
+}
+
+// Parser sets the [helium.Parser] used to parse RELAX NG schema documents —
+// the top-level schema in [Compiler.CompileFile] as well as every schema pulled
+// in via include and externalRef. When unset, a default [helium.NewParser] is
+// used. The injected parser supplies parse policy — resource limits and
+// XXE/network controls — so a caller can apply one uniform policy across every
+// helium component. Schema documents are parsed plain: the compiler's
+// [Compiler.FS] still fetches the bytes, and no functional options or base URI
+// are forced onto the injected parser.
+func (c Compiler) Parser(p helium.Parser) Compiler {
+	c = c.clone()
+	c.cfg.parser = &p
 	return c
 }
 
@@ -130,7 +164,11 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 		c.closeHandler()
 		return nil, err
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	p := helium.NewParser()
+	if cfg.parser != nil {
+		p = *cfg.parser
+	}
+	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		if pe, ok := errors.AsType[helium.ErrParseError](err); ok {
 			filename := cfg.label

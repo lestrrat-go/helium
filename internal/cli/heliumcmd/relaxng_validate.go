@@ -16,6 +16,7 @@ type relaxNGValidateConfig struct {
 	timing        bool
 	version       bool
 	maxInputBytes int64
+	maxDepth      int
 }
 
 type relaxNGValidateInput struct {
@@ -68,9 +69,29 @@ func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) 
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	grammar, err := relaxng.NewCompiler().CompileFile(ctx, cfg.schemaFile)
+	// The schema path is supplied explicitly on the command line by the user,
+	// so host-filesystem access for include/externalRef is expected (like
+	// xmllint). The compiler's FS now defaults to deny-all, so opt into
+	// permissive loading here to preserve CLI behavior. This mirrors the lint
+	// and xslt subcommands, which also opt into a permissive FS.
+	//
+	// Compile with a Label and an ErrorHandler so fatal schema diagnostics
+	// (e.g. an over-cap include/externalRef "exceeds the maximum resource
+	// size") reach stderr and fail compilation, rather than being discarded.
+	// The RELAX NG compiler may return a (grammar, nil) with a poisoned
+	// notAllowed grammar on a fatal diagnostic; validating against it would
+	// misreport schema-load failure as per-input validation failure.
+	ceh := &compileErrorHandler{w: c.stderr}
+	grammar, err := relaxng.NewCompiler().
+		FS(helium.PermissiveFS()).
+		Label(cfg.schemaFile).
+		ErrorHandler(ceh).
+		CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
+	}
+	if err == nil && ceh.fatal {
+		err = errSchemaCompilation
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to compile schema: %s\n", c.prog, err)
@@ -94,12 +115,13 @@ func (c *relaxNGValidateCommand) showUsage() {
 	Validate XML files against a RELAX NG schema
 	--timing : print timing information to stderr
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfig, []string) {
-	cfg := &relaxNGValidateConfig{maxInputBytes: DefaultMaxInputBytes}
+	cfg := &relaxNGValidateConfig{maxInputBytes: DefaultMaxInputBytes, maxDepth: -1}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -121,6 +143,18 @@ func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfi
 				return nil, nil
 			}
 			cfg.maxInputBytes = n
+		case flagMaxDepth:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.maxDepth = n
 		default:
 			if len(arg) > 0 && arg[0] == '-' {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
@@ -162,6 +196,9 @@ func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGV
 	}
 
 	p := helium.NewParser()
+	if cfg.maxDepth >= 0 {
+		p = p.MaxDepth(cfg.maxDepth)
+	}
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}

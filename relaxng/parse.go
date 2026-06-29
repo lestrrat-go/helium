@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -20,16 +23,28 @@ const (
 	combineChoice     = "choice"
 )
 
+// defaultMaxResourceBytes bounds the number of bytes read from a single
+// include/externalRef target when no cap is configured via
+// [Compiler.MaxResourceBytes]. It guards against a hostile or pathological
+// resource (e.g. a named pipe to /dev/zero behind a permissive FS) exhausting
+// memory. Aligned with the parser's external-entity cap and XInclude's
+// per-include cap (10 MiB).
+const defaultMaxResourceBytes = 10 << 20 // 10 MiB
+
 // compiler holds state during schema compilation.
 type compiler struct {
 	grammar      *Grammar
 	baseDir      string
-	fsys         fs.FS // filesystem for loading include/externalRef targets
+	fsys         fs.FS          // filesystem for loading include/externalRef targets
+	parser       *helium.Parser // parser governing parse policy for nested include/externalRef schemas
 	filename     string
 	errorHandler helium.ErrorHandler
 	errorCount   int
 	includeStack map[string]struct{} // recursion guard for include/externalRef (lookup in O(1))
 	includeLimit int
+	// maxResourceBytes caps the bytes read from a single include/externalRef
+	// target. Zero means use defaultMaxResourceBytes.
+	maxResourceBytes int
 	// grammarStack tracks nested grammars for parentRef resolution. It holds
 	// the currently-open lexical grammar scopes during parsing; the top is the
 	// nearest enclosing <grammar>.
@@ -42,6 +57,13 @@ type compiler struct {
 	// scopes holds every grammar scope ever created (kept alive after pop) so
 	// the post-parse passes can enumerate all defines across nested grammars.
 	scopes []*grammarScope
+	// elementNodes maps every parsed <element> pattern to its source node so the
+	// RELAX NG §7.2 content-type check can report against the original element
+	// node. The check itself walks the LIVE grammar (start pattern plus the
+	// post-override scope.defines), not this map, so an element removed or
+	// replaced by an <include> override is never checked even though its node is
+	// still recorded here.
+	elementNodes map[*pattern]*helium.Element
 }
 
 // pendingRef is a ref/parentRef node awaiting compile-time resolution against
@@ -66,6 +88,17 @@ type defineEntry struct {
 	noCombine int    // count of definitions with no combine attribute
 }
 
+// parse parses a nested schema document (include/externalRef) using the
+// injected parser policy when one was configured on the Compiler, or a default
+// [helium.NewParser] otherwise.
+func (c *compiler) parse(ctx context.Context, data []byte) (*helium.Document, error) {
+	p := helium.NewParser()
+	if c.parser != nil {
+		p = *c.parser
+	}
+	return p.Parse(ctx, data)
+}
+
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Grammar, error) { //nolint:unparam // error always nil but callers check for future-proofing
 	var eh helium.ErrorHandler = helium.NilErrorHandler{}
 	if cfg.errorHandler != nil {
@@ -80,7 +113,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		label = "(string)"
 	}
 
-	fsys := fs.FS(iofs.PermissiveRoot{})
+	// Default to a deny-all FS so untrusted schemas cannot read host files via
+	// include/externalRef hrefs. Callers opt into host access (or a confined
+	// directory) explicitly with [Compiler.FS]. Mirrors [helium.NewParser].
+	fsys := fs.FS(iofs.DenyAll{})
 	if cfg.fsys != nil {
 		fsys = cfg.fsys
 	}
@@ -88,11 +124,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		grammar: &Grammar{
 			defines: make(map[string]*pattern),
 		},
-		baseDir:      baseDir,
-		fsys:         fsys,
-		filename:     label,
-		errorHandler: eh,
-		includeLimit: 1000,
+		baseDir:          baseDir,
+		fsys:             fsys,
+		parser:           cfg.parser,
+		filename:         label,
+		errorHandler:     eh,
+		includeLimit:     1000,
+		maxResourceBytes: cfg.maxResourceBytes,
 	}
 
 	root := findDocumentElement(doc)
@@ -121,6 +159,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// the entire grammar tree (including nested grammars and forward-declared
 	// defines) has been parsed.
 	c.resolveScopedRefs(ctx)
+	c.checkContentTypes(ctx, startPat)
 	c.checkRefCycles(ctx)
 
 	c.grammar.start = startPat
@@ -489,7 +528,12 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 	// branches from bypassing the containment guard.
 	var resolved string
 	switch {
-	case filepath.IsAbs(href):
+	case uripath.IsAbsolutePath(href):
+		// uripath.IsAbsolutePath recognizes both POSIX- ("/etc/passwd") and
+		// Windows-absolute ("C:\\x", UNC) shapes regardless of GOOS, so an
+		// absolute href is kept verbatim — and the containment guard below sees
+		// it as absolute — on every OS. filepath.IsAbs alone would miss
+		// "/etc/passwd" on Windows and wrongly join it onto baseDir.
 		resolved = href
 	default:
 		if doc := elem.OwnerDocument(); doc != nil {
@@ -538,18 +582,35 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 		return resolved, nil
 	}
 
-	// filepath.Rel fails when one path is absolute and the other relative
-	// (e.g. a relative baseDir against an absolute href). That mismatch is
-	// itself a containment failure: an absolute href can never be proven to
-	// live inside a relative baseDir, so reject rather than silently skip.
-	rel, err := filepath.Rel(c.baseDir, filepath.Clean(checkPath))
+	// Containment is computed in forward-slash space so it is GOOS-independent:
+	// on Windows filepath.Rel/Separator would key off '\' and mis-handle the
+	// POSIX-shaped paths that flow through here (e.g. a "/etc/passwd" href).
+	//
+	// An absolute checkPath (under either OS convention) can never be proven to
+	// live inside a relative baseDir, and filepath.Rel mixing absolute+relative
+	// is itself a containment failure — so reject up front when only one side is
+	// absolute.
+	slashBase := uripath.ToSlash(c.baseDir)
+	slashTarget := path.Clean(uripath.ToSlash(checkPath))
+	baseAbs := uripath.IsAbsolutePath(slashBase)
+	targetAbs := uripath.IsAbsolutePath(slashTarget)
+	if baseAbs != targetAbs {
+		return "", fmt.Errorf("href %q escapes base directory", href)
+	}
+	rel, err := filepath.Rel(slashBase, slashTarget)
 	if err != nil {
 		return "", fmt.Errorf("href %q escapes base directory", href)
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel = uripath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") {
 		return "", fmt.Errorf("href %q escapes base directory", href)
 	}
-	return resolved, nil
+	// The returned path is used as a key into the configured fs.FS, whose
+	// contract mandates forward slashes (see io/fs.ValidPath). On Windows
+	// filepath.Join above would have produced backslashes, which never match a
+	// MapFS / os.DirFS key, so normalize to slashes here. POSIX paths already
+	// use '/', so this is a no-op there.
+	return uripath.ToSlash(resolved), nil
 }
 
 // uriScheme returns the URI scheme of s if s begins with a "<scheme>://"
@@ -585,6 +646,26 @@ func uriScheme(s string) string {
 	return strings.ToLower(scheme)
 }
 
+// readResource opens path through the configured fs.FS and reads it under the
+// per-resource byte cap (defaultMaxResourceBytes unless overridden via
+// [Compiler.MaxResourceBytes]). exceeded reports that the resource was larger
+// than the cap; in that case the returned data is truncated and must not be
+// used. The cap is enforced against bytes actually read so a hostile or endless
+// resource behind a permissive FS cannot exhaust memory.
+func (c *compiler) readResource(path string) (data []byte, exceeded bool, err error) {
+	f, err := c.fsys.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer f.Close()
+
+	limit := c.maxResourceBytes
+	if limit <= 0 {
+		limit = defaultMaxResourceBytes
+	}
+	return iolimit.ReadAll(f, int64(limit))
+}
+
 // parseInclude parses an <include> element.
 func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	href := getUnqualifiedAttr(elem, "href")
@@ -618,13 +699,18 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	defer delete(c.includeStack, path)
 
 	// Read and parse the included file
-	data, err := fs.ReadFile(c.fsys, path)
+	data, exceeded, err := c.readResource(path)
+	if exceeded {
+		msg := fmt.Sprintf("xmlRelaxNGParse: %s exceeds the maximum resource size", href)
+		c.addBareSchemaError(ctx, msg)
+		return
+	}
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)
 		return
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)
@@ -654,7 +740,7 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 
 	// Parse the included grammar content, skipping overridden components.
 	oldBaseDir := c.baseDir
-	c.baseDir = filepath.Dir(path)
+	c.baseDir = uripath.SlashDir(path)
 	c.parseGrammarContentSkipping(ctx, root, skip)
 	c.baseDir = oldBaseDir
 
@@ -879,21 +965,21 @@ attrConflictDone:
 		c.addSchemaError(ctx, node, "xmlRelaxNGParseElement: element has no content")
 	}
 
-	// Check: content type error (mixing data/value with element/group patterns)
-	if hasDataContent(contentChildren) && hasElementContent(contentChildren) {
-		eName := p.name
-		if eName == "" && p.nameClass != nil {
-			eName = p.nameClass.name
-		}
-		c.addSchemaError(ctx, node, fmt.Sprintf("Element %s has a content type error", eName))
-	}
-
 	// Wrap content
 	if len(contentChildren) > 1 {
 		p.children = []*pattern{{kind: patternGroup, children: contentChildren}}
 	} else if len(contentChildren) == 1 {
 		p.children = contentChildren
 	}
+
+	// Record this element's source node for the deferred §7.2 content-type check
+	// (run after scoped refs are resolved over the live grammar). Reporting needs
+	// the original node; whether this element is actually checked depends on it
+	// still being reachable from the live grammar after include overrides.
+	if c.elementNodes == nil {
+		c.elementNodes = make(map[*pattern]*helium.Element)
+	}
+	c.elementNodes[p] = node
 
 	return p
 }
@@ -933,6 +1019,16 @@ func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pa
 		if pat != nil {
 			p.children = append(p.children, pat)
 		}
+	}
+
+	// An <attribute> must carry a name, either via the "name" attribute or a
+	// name-class child. Without one, nameClass stays nil and name/ns stay empty,
+	// which would make attributeMatches fall through to true and match any name
+	// (fail-open). Report a schema error and install a no-match name class so
+	// validation fails closed.
+	if p.nameClass == nil && p.name == "" && p.ns == "" {
+		c.addSchemaError(ctx, node, "xmlRelaxNGParseAttribute: attribute has no name")
+		p.nameClass = &nameClass{kind: ncNoMatch}
 	}
 
 	// If no content specified, attribute has <text/> content by default
@@ -1042,13 +1138,18 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	c.includeStack[path] = struct{}{}
 	defer delete(c.includeStack, path)
 
-	data, err := fs.ReadFile(c.fsys, path)
+	data, exceeded, err := c.readResource(path)
+	if exceeded {
+		msg := fmt.Sprintf("xmlRelaxNGParse: %s exceeds the maximum resource size", href)
+		c.addBareSchemaError(ctx, msg)
+		return nil
+	}
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)
 		return nil
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)
@@ -1064,7 +1165,7 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	}
 
 	oldBaseDir := c.baseDir
-	c.baseDir = filepath.Dir(path)
+	c.baseDir = uripath.SlashDir(path)
 
 	// An <externalRef> target is an INDEPENDENT schema (unlike <include>, which
 	// merges into the includer). It must NOT see the includer's grammar scope:
@@ -1394,30 +1495,219 @@ func (c *compiler) addSchemaError(ctx context.Context, node *helium.Element, msg
 	c.errorCount++
 }
 
-// hasDataContent checks if any pattern in the slice is a data/value/list pattern.
-func hasDataContent(pats []*pattern) bool {
-	for _, p := range pats {
-		switch p.kind {
-		case patternData, patternValue, patternList:
-			return true
+// rngContentType is a RELAX NG §7.2 content-type. The ordering
+// empty < complex < simple is what maxContentType uses for the
+// choice/group/interleave rules.
+type rngContentType int
+
+const (
+	ctEmpty rngContentType = iota
+	ctComplex
+	ctSimple
+)
+
+// maxContentType returns the larger of two content-types under the ordering
+// empty < complex < simple (RELAX NG §7.2 max()).
+func maxContentType(a, b rngContentType) rngContentType {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// groupableContentTypes reports whether two content-types may be combined by a
+// <group>, <interleave>, or <oneOrMore>/<zeroOrMore> per RELAX NG §7.2: the
+// empty content-type is groupable with anything, and complex is groupable with
+// complex. A simple content-type (data/value/list) is groupable only with
+// empty — two string-sequence values cannot be grouped together, and simple
+// content cannot be grouped with element/text (complex) content.
+func groupableContentTypes(a, b rngContentType) bool {
+	return a == ctEmpty || b == ctEmpty || (a == ctComplex && b == ctComplex)
+}
+
+// checkContentTypes enforces the RELAX NG §7.2 content-type constraints on every
+// <element> body reachable in the LIVE grammar. It runs AFTER resolveScopedRefs
+// so the content-type of data/value/list/element content hidden behind a
+// <ref>/<parentRef> is resolved through the define body. A body whose
+// content-type cannot be derived — a <group>/<interleave> mixing simple
+// (data/value/list) content with element/text (complex) content, two simple
+// values grouped together, or a <oneOrMore>/<zeroOrMore> of simple content — is
+// a content-type error. A <choice> of those same patterns is NOT an error: its
+// branches are independent alternatives that never coexist.
+//
+// The live element bodies are gathered by walking ONLY from the resolved start
+// pattern (collectLiveElements, following resolved refs under a cycle guard),
+// reaching every <element> reachable through the live start/define graph —
+// including those inside referenced defines and nested grammars. Seeding from the
+// start alone, rather than from every append-only c.scopes entry, is what keeps a
+// removed/overridden define out of the check: a nested-grammar scope created
+// while parsing a define that an <include> override later deletes stays in
+// c.scopes forever, but is unreachable from the live start, so its (now dead)
+// content is no longer wrongly flagged. The define that REPLACED an overridden
+// one is reachable from start and so IS checked.
+func (c *compiler) checkContentTypes(ctx context.Context, startPat *pattern) {
+	walkVisited := make(map[*pattern]struct{})
+	var elems []*pattern
+	c.collectLiveElements(startPat, walkVisited, &elems)
+
+	for _, ep := range elems {
+		visited := make(map[*pattern]struct{})
+		if _, ok := c.contentTypeOfSeq(ep.children, visited); ok {
+			continue
 		}
+		eName := ep.name
+		if eName == "" && ep.nameClass != nil {
+			eName = ep.nameClass.name
+		}
+		msg := fmt.Sprintf("Element %s has a content type error", eName)
+		if node := c.elementNodes[ep]; node != nil {
+			c.addSchemaError(ctx, node, msg)
+			continue
+		}
+		c.addBareSchemaError(ctx, msg)
 	}
-	return false
 }
 
-// hasElementContent checks if any pattern in the slice contains an element pattern.
-func hasElementContent(pats []*pattern) bool {
-	return slices.ContainsFunc(pats, containsElement)
-}
-
-func containsElement(p *pattern) bool {
+// collectLiveElements walks a live pattern tree, appending every reachable
+// <element> pattern (each once) to out. It descends into children, attribute
+// patterns, and resolved <ref>/<parentRef> targets, using walkVisited (keyed by
+// pattern pointer) both to dedupe shared/recursively-referenced element patterns
+// and to terminate reference cycles. Element bodies ARE descended (to find
+// nested elements), but the per-element body content-type classification stops
+// at element boundaries on its own.
+func (c *compiler) collectLiveElements(p *pattern, walkVisited map[*pattern]struct{}, out *[]*pattern) {
 	if p == nil {
-		return false
+		return
 	}
+	if _, seen := walkVisited[p]; seen {
+		return
+	}
+	walkVisited[p] = struct{}{}
 	if p.kind == patternElement {
-		return true
+		*out = append(*out, p)
 	}
-	return slices.ContainsFunc(p.children, containsElement)
+	for _, ch := range p.children {
+		c.collectLiveElements(ch, walkVisited, out)
+	}
+	for _, a := range p.attrs {
+		c.collectLiveElements(a, walkVisited, out)
+	}
+	c.collectLiveElements(p.resolved, walkVisited, out)
+}
+
+// contentTypeOfSeq combines a sequence of sibling patterns as an implicit
+// <group>: each successive content-type must be groupable with the running
+// result and the result is their max. It is used for an element body and for
+// the (possibly multi-child) body of a group/interleave/repetition/optional.
+// An empty sequence has the empty content-type. ok=false propagates a
+// content-type violation.
+func (c *compiler) contentTypeOfSeq(pats []*pattern, visited map[*pattern]struct{}) (rngContentType, bool) {
+	result := ctEmpty
+	for _, p := range pats {
+		ct, ok := c.contentTypeOf(p, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		if !groupableContentTypes(result, ct) {
+			return ctEmpty, false
+		}
+		result = maxContentType(result, ct)
+	}
+	return result, true
+}
+
+// contentTypeOf derives the RELAX NG §7.2 content-type of a single pattern,
+// returning ok=false when the pattern (or a descendant) violates a content-type
+// constraint. It stops at <element>/<attribute>/<list> boundaries — each opens a
+// fresh content context — and follows <ref>/<parentRef> through their
+// compile-time-resolved define body (visited-guarded, as a DFS stack, so a
+// reference cycle terminates while a define referenced from sibling branches is
+// still evaluated each time) so data/element content hidden behind a reference
+// is classified correctly.
+func (c *compiler) contentTypeOf(p *pattern, visited map[*pattern]struct{}) (rngContentType, bool) {
+	if p == nil {
+		return ctEmpty, true
+	}
+	switch p.kind {
+	case patternEmpty, patternNotAllowed, patternAttribute:
+		// An attribute's value is a separate content context; the attribute
+		// pattern itself contributes the empty content-type here.
+		return ctEmpty, true
+	case patternText, patternElement:
+		return ctComplex, true
+	case patternData, patternValue, patternList:
+		// A <list>'s items form a separate token context; the list still
+		// contributes the simple content-type to the enclosing element.
+		return ctSimple, true
+	case patternRef, patternParentRef:
+		// A reference contributes the content-type of its TARGET define body, not
+		// the unconditional complex() the RELAX NG §7.2 table assigns to <ref>.
+		// That table is stated for the FULLY SIMPLIFIED grammar, in which every
+		// define wraps a single <element> (so every ref is complex). helium (like
+		// libxml2) does not run that simplification, so a ref may resolve to an
+		// attribute-only/empty/data define; following the ref to its actual
+		// content-type is what matches libxml2: a ref to a group-of-attributes is
+		// EMPTY and groups with simple <value> content (e.g. libvirt.rng's
+		// ostypehvm), while a ref to <data> is SIMPLE and is correctly rejected
+		// when grouped with sibling <element> content. (Confirmed against
+		// xmllint --relaxng: both schemas behave exactly this way.) Do NOT change
+		// this to a flat complex() — it both over-rejects real schemas and
+		// under-rejects ref-to-data mixed with elements.
+		if p.resolved == nil {
+			return ctEmpty, true
+		}
+		if _, seen := visited[p.resolved]; seen {
+			// A non-element reference cycle is degenerate and is reported
+			// separately by checkRefCycles; treat it as contributing nothing.
+			return ctEmpty, true
+		}
+		visited[p.resolved] = struct{}{}
+		ct, ok := c.contentTypeOf(p.resolved, visited)
+		delete(visited, p.resolved)
+		return ct, ok
+	case patternChoice:
+		// choice combines branches with max and NO groupable constraint: the
+		// branches are independent alternatives that never coexist, so
+		// choice(data, element) is a valid simple-or-complex content model.
+		result := ctEmpty
+		for _, ch := range p.children {
+			ct, ok := c.contentTypeOf(ch, visited)
+			if !ok {
+				return ctEmpty, false
+			}
+			result = maxContentType(result, ct)
+		}
+		return result, true
+	case patternOptional:
+		// optional(p) == choice(empty, p): no groupable constraint beyond its
+		// own (grouped) body.
+		return c.contentTypeOfSeq(p.children, visited)
+	case patternGroup, patternInterleave:
+		return c.contentTypeOfSeq(p.children, visited)
+	case patternOneOrMore, patternZeroOrMore:
+		// oneOrMore(p) requires groupable(ct, ct); zeroOrMore is
+		// optional(oneOrMore(p)) and carries the same constraint. So a
+		// repetition of simple content (e.g. oneOrMore(data)) is an error.
+		ct, ok := c.contentTypeOfSeq(p.children, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		if !groupableContentTypes(ct, ct) {
+			return ctEmpty, false
+		}
+		return ct, true
+	}
+	// Unknown/unsupported kinds: combine children without a groupable
+	// constraint so an unexpected node can never cause a false rejection.
+	result := ctEmpty
+	for _, ch := range p.children {
+		ct, ok := c.contentTypeOf(ch, visited)
+		if !ok {
+			return ctEmpty, false
+		}
+		result = maxContentType(result, ct)
+	}
+	return result, true
 }
 
 // resolveQName resolves a QName from a schema element, returning the local name

@@ -142,6 +142,43 @@ func TestCatalogRelPath(t *testing.T) {
 	})
 }
 
+// TestContainmentRejectsAbsoluteAnyOS is the security regression for the
+// path-traversal guard: a reference that is absolute under EITHER POSIX or
+// Windows conventions must be rejected on every host OS. Before the fix the
+// guards used filepath.IsAbs, which is single-OS: a POSIX "/etc/passwd" slipped
+// through on Windows and a Windows "C:\\Windows\\..." slipped through on POSIX.
+// These string inputs exercise BOTH shapes, so the Windows-absolute path is
+// covered even when the test runs on Linux.
+func TestContainmentRejectsAbsoluteAnyOS(t *testing.T) {
+	root := filepath.Join("/tmp", "assets")
+	dir := filepath.Join(root, "tests", "insn")
+	sourceDir := filepath.Join("/tmp", "source")
+
+	absRefs := []string{
+		"/etc/passwd",         // POSIX-absolute
+		`C:\Windows\system32`, // Windows drive-absolute, backslash
+		`C:/Windows/system32`, // Windows drive-absolute, forward slash
+		`D:\secrets\key.pem`,  // another drive
+		`\\evil-host\share\x`, // UNC
+		`\rooted\escape`,      // backslash-rooted
+	}
+
+	for _, ref := range absRefs {
+		t.Run("containedPath rejects "+ref, func(t *testing.T) {
+			_, err := containedPath(root, ref)
+			require.Error(t, err, "absolute ref %q must be rejected", ref)
+		})
+		t.Run("resolveDep rejects "+ref, func(t *testing.T) {
+			_, ok := resolveDep(root, dir, ref)
+			require.False(t, ok, "absolute ref %q must be rejected", ref)
+		})
+		t.Run("catalogRelPath rejects "+ref, func(t *testing.T) {
+			_, ok := catalogRelPath(sourceDir, "tests/insn", ref)
+			require.False(t, ok, "absolute ref %q must be rejected", ref)
+		})
+	}
+}
+
 // TestAddTransitiveDepsContainment verifies that the dependency-collection entry
 // point used while populating the asset set never records a dependency that
 // escapes sourceDir, even when the entry stylesheet imports an outside file.

@@ -24,16 +24,15 @@ func compileXSD(t *testing.T, schemaXML string) (xsd.Validator, string) {
 	return xsd.NewValidator(s), ""
 }
 
-// TestIDCFieldXPathEvalError covers a field XPath that COMPILES but fails at
-// evaluation (e.g. an unknown function). Previously the evaluation error was
-// swallowed — the field was treated as absent and the selected node silently
-// dropped from the constraint, so a unique/keyref could miss a violation. The
-// failure must now surface as a validity error.
-func TestIDCFieldXPathEvalError(t *testing.T) {
+// TestIDCFieldXPathFunctionRejected covers a field XPath that uses a function
+// call. Such an expression is outside the XSD identity-constraint XPath subset
+// (selectors/fields are restricted location paths), so it must be a fatal schema
+// compilation error. Previously it compiled and the field's evaluation error was
+// swallowed, silently disabling the constraint so a unique/keyref could miss a
+// violation; now the out-of-subset XPath is rejected up front.
+func TestIDCFieldXPathFunctionRejected(t *testing.T) {
 	t.Parallel()
 
-	// "bogusfn(.)" parses and compiles in xpath1 but errors at Evaluate with
-	// ErrUnknownFunction. The selector still selects the two <item> nodes.
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
     <xs:complexType>
@@ -52,17 +51,9 @@ func TestIDCFieldXPathEvalError(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-	v, compileErrs := compileXSD(t, schemaXML)
-	require.Empty(t, compileErrs, "schema should compile clean; the failure is at evaluation")
-
-	doc, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<root><item id="a"/><item id="b"/></root>`))
-	require.NoError(t, err)
-
-	var errs string
-	err = validateWithOutput(t, v, doc, &errs)
-	require.Error(t, err, "a failing field XPath must surface as a validation error, not be swallowed")
-	require.Contains(t, errs, "itemKey")
+	_, compileErrs := compileXSD(t, schemaXML)
+	require.NotEmpty(t, compileErrs, "an out-of-subset field XPath must be a fatal schema error")
+	require.Contains(t, compileErrs, "is not a valid field")
 }
 
 // TestIDCCrossElementKeyRefOutOfScope verifies the XSD identity-constraint scope

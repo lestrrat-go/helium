@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
 )
@@ -29,7 +31,7 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 	pctx.intSubName = name
 
 	pctx.skipBlanks(ctx)
-	u, eid, err := pctx.parseExternalID(ctx)
+	u, eid, err := pctx.parseExternalID(ctx, true)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
@@ -201,7 +203,18 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		return err
 	}
 
+	// skipBlanks records an over-cap whitespace run in pctx.blankRunErr but only
+	// returns a bool, so a guard tripped while skipping conditional-section HEADER
+	// whitespace (after "<![", after a "%pe;", after INCLUDE/IGNORE) must be
+	// surfaced here. Otherwise this function would proceed and return a generic
+	// conditional-section sentinel (ErrConditionalSectionKeyword /
+	// ErrConditionalSectionNotFinished) which the top-level external-subset loop
+	// TOLERATES — downgrading a resource-limit violation to "stop parsing the
+	// subset" instead of failing closed at the source.
 	pctx.skipBlanks(ctx)
+	if pctx.blankRunErr != nil {
+		return pctx.blankRunErr
+	}
 
 	cur = pctx.getCursor()
 	if cur != nil && cur.Peek() == '%' {
@@ -209,6 +222,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 		pctx.skipBlanks(ctx)
+		if pctx.blankRunErr != nil {
+			return pctx.blankRunErr
+		}
 	}
 
 	cur = pctx.getCursor()
@@ -221,6 +237,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 		pctx.skipBlanks(ctx)
+		if pctx.blankRunErr != nil {
+			return pctx.blankRunErr
+		}
 		cur = pctx.getCursor()
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
@@ -255,14 +274,13 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 					return ErrConditionalSectionNotFinished
 				}
 
-				n := 0
-				for b := sec.PeekAt(n); isBlankByte(b) && !sec.Done(); b = sec.PeekAt(n) {
-					n++
-				}
-				if n > 0 {
-					if err := sec.Advance(n); err != nil {
-						return err
-					}
+				// Bounded blank skip (NOT skipBlanks, which would consume a
+				// "%pe;" reference without expanding it). skipBlankRun only
+				// advances over whitespace, so it is safe here and caps an
+				// oversized blank run inside the section with
+				// ErrNodeContentTooLarge.
+				if _, err := pctx.skipBlankRun(ctx, sec); err != nil {
+					return err
 				}
 
 				if sec.Done() {
@@ -295,6 +313,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 		pctx.skipBlanks(ctx)
+		if pctx.blankRunErr != nil {
+			return pctx.blankRunErr
+		}
 		cur = pctx.getCursor()
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
@@ -402,16 +423,13 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	}
 
 	// Blank-only skip (see method doc): advance over whitespace, leaving "%" for
-	// parsePEReference. Do NOT route through skipBlanks here.
+	// parsePEReference. Do NOT route through skipBlanks here (it would consume a
+	// "%pe;" reference without expanding it). skipBlankRun only advances over
+	// whitespace, so it is safe here and caps an oversized blank run with
+	// ErrNodeContentTooLarge instead of buffering it unbounded.
 	if c := pctx.getCursor(); c != nil {
-		n := 0
-		for b := c.PeekAt(n); isBlankByte(b) && !c.Done(); b = c.PeekAt(n) {
-			n++
-		}
-		if n > 0 {
-			if err := c.Advance(n); err != nil {
-				return false, err
-			}
+		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
+			return false, err
 		}
 	}
 
@@ -459,6 +477,13 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 			// declaration parse error from within an INCLUDE body (e.g. a
 			// malformed "<!BOGUS" or a bad entity-value PE) must propagate.
 			if tolerateCondError && (errors.Is(err, ErrConditionalSectionNotFinished) || errors.Is(err, ErrConditionalSectionKeyword)) {
+				// A resource-limit violation (over-cap whitespace) recorded while
+				// the conditional section was being parsed must NEVER be masked by
+				// the conditional-section tolerance: propagate it as a real fatal
+				// error instead of stopping the loop silently.
+				if pctx.blankRunErr != nil {
+					return false, pctx.blankRunErr
+				}
 				return true, nil
 			}
 			return false, err
@@ -541,6 +566,56 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			if err := pctx.warning(ctx, "Internal: %%%s; is not a parameter entity\n", name); err != nil {
 				return err
 			}
+		} else if etype == enum.ExternalParameterEntity {
+			// External parameter entity: the replacement text is the content of
+			// the referenced external resource, not inline text. Load it from
+			// the resolver (gated by the XXE secure default) and push the RAW
+			// bytes so the surrounding DTD declaration loop parses them — the
+			// same mechanism the external subset body uses. This must NOT go
+			// through decodeEntities like an internal PE: the loaded resource is
+			// a DTD fragment whose own references are resolved lexically during
+			// declaration parsing. When external loading is disabled the load
+			// returns empty content and behavior is unchanged (no input pushed).
+			ent, ok := entity.(*Entity)
+			if !ok {
+				return pctx.error(ctx, errors.New("internal: external parameter entity is not *helium.Entity"))
+			}
+			// Reject a self/mutually recursive external PE BEFORE loading or
+			// pushing: while a PE's replacement text is being parsed its input is
+			// still on the stack (externalPEActive), so a nested "%pe;" to the same
+			// entity would otherwise keep pushing cursors until the amplification
+			// ceiling trips. A counter check fails closed and reports a parse error
+			// instead. Internal PEs are guarded separately by the decode-depth cap.
+			if pctx.externalPEActive(ent) {
+				return pctx.error(ctx, fmt.Errorf("parse error: external parameter entity %%%s; references itself", name))
+			}
+			// loadExternalParameterEntityContent already strips and decodes any
+			// leading TextDecl ("<?xml ... encoding=...?>") at the shared
+			// load/cache chokepoint, so the bytes returned here are the
+			// post-TextDecl replacement text ready for the declaration loop — the
+			// "<?xml" is never seen as a stray PI, and the entity-value expansion
+			// path sees the identical decoded bytes.
+			content, peURI, err := pctx.loadExternalParameterEntityContent(ctx, ent)
+			if err != nil {
+				return err
+			}
+			// Charge the loaded bytes (plus the per-reference fixed cost) against
+			// the amplification guard so a small DTD cannot reference a large
+			// external PE repeatedly to drive unbounded expansion.
+			if err := pctx.entityCheck(entity, len(content)); err != nil {
+				return pctx.error(ctx, err)
+			}
+			if len(content) > 0 {
+				// Scope baseURI to the PE's OWN resolved URI while its replacement
+				// text is parsed, so a relative system ID in a declaration INSIDE
+				// the PE (e.g. <!ENTITY e SYSTEM "leaf.ent"> in sub/pe.ent)
+				// resolves against the PE's location, not the containing DTD. The
+				// override (and the active-recursion mark) is cleared when this
+				// pushed cursor is popped.
+				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(content)), peURI, ent)
+			}
+			pctx.hasPERefs = true
+			return nil
 		} else {
 			// Capture the PE's replacement text once: Entity.Content()
 			// allocates a fresh []byte copy on every call, so we reuse this
@@ -576,4 +651,132 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 	}
 	pctx.hasPERefs = true
 	return nil
+}
+
+// loadExternalParameterEntityContent returns the replacement text of an external
+// parameter entity, loading it from the resolved external resource on first use
+// and caching it on the entity for subsequent references. External loading
+// honors the parser's secure-default gating: when XXE loading is disabled
+// (parseNoXXE) or the resolver declines to open the resource, nothing is loaded
+// and empty content is returned, leaving the caller's behavior unchanged. The
+// read is byte-capped (externalEntityMaxBytes) and the opened input is closed as
+// soon as the bounded read completes, mirroring parseExternalEntityPrivate.
+func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, string, error) {
+	if len(e.content) > 0 {
+		// Return the URI the bytes were ORIGINALLY loaded from (cached on first
+		// load), not e.URI(): the first load may have used a catalog/custom-resolver
+		// URI, and relative system IDs inside the cached PE must resolve against
+		// that same base regardless of which reference triggered the load first.
+		return []byte(e.content), e.resolvedURI, nil
+	}
+	if pctx.options.IsSet(parseNoXXE) {
+		return nil, "", nil
+	}
+
+	var input sax.ParseInput
+	if s := pctx.sax; s != nil {
+		resolved, err := s.ResolveEntity(ctx, e.externalID, e.URI())
+		switch err {
+		case nil:
+			input = resolved
+		case sax.ErrHandlerUnspecified:
+		default:
+			return nil, "", pctx.error(ctx, err)
+		}
+	}
+	if input == nil {
+		return nil, "", nil
+	}
+
+	// The resolved input carries the URI actually opened (a catalog-resolved URI
+	// or the entity's resolved system URI), which is the correct base for
+	// relative system IDs in declarations inside this PE. Fall back to the
+	// entity's declared URI when the resolver did not supply one.
+	uri := input.URI()
+	if uri == "" {
+		uri = e.URI()
+	}
+
+	// Read through a bounded reader so an unbounded source cannot exhaust memory,
+	// and close the input immediately at the read boundary (not deferred) so an
+	// underlying OS resource is never held open for the lifetime of the parse.
+	content, exceeded, err := iolimit.ReadAll(input, externalEntityMaxBytes)
+	if c, ok := input.(io.Closer); ok {
+		_ = c.Close()
+	}
+	if err != nil {
+		return nil, "", pctx.error(ctx, fmt.Errorf("reading external parameter entity: %w", err))
+	}
+	if exceeded {
+		return nil, "", pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
+	}
+
+	// Strip and decode any leading TextDecl ("<?xml ... encoding=...?>") HERE, at
+	// the single shared load/cache chokepoint, so EVERY consumer of an external
+	// PE's replacement text — the top-level "%pe;" declaration loop AND the
+	// entity-value expansion path (parameterEntityReplacement →
+	// decodeEntitiesInternal / expandEntityValueForRefCheck) — sees the same
+	// post-TextDecl bytes regardless of reference order. Caching the decoded
+	// bytes means a later reference (from either path) reuses them consistently,
+	// instead of one path getting raw bytes that embed the TextDecl into a
+	// general entity's stored value.
+	content, err = pctx.decodeExternalPEContent(ctx, content)
+	if err != nil {
+		return nil, "", err
+	}
+
+	e.content = string(content)
+	e.resolvedURI = uri
+	return content, uri, nil
+}
+
+// decodeExternalPEContent consumes an OPTIONAL TextDecl at the start of an
+// external parameter entity's replacement text and returns the post-TextDecl
+// bytes decoded to UTF-8. An external parsed entity may begin with
+// "<?xml version=... encoding=...?>"; pushed raw, the DTD declaration loop would
+// reject the "<?xml" as a processing instruction (a PI target may not be "xml"),
+// so the TextDecl must be stripped here and any declared encoding honored — the
+// same treatment parseExternalEntityPrivate gives an external general entity.
+// When no TextDecl is present the content is returned unchanged. Only the
+// ASCII-compatible TextDecl shape is handled (the DTD-fragment case in scope);
+// a non-ASCII-leading encoding is left to the caller's raw push.
+func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []byte) ([]byte, error) {
+	if len(content) == 0 {
+		return content, nil
+	}
+	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(content))) {
+		return content, nil
+	}
+
+	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
+	// declared encoding switches only this sub-cursor. Inherit the parent's
+	// options (encoding-ignore policy). The TextDecl grammar is enforced by
+	// parseTextDecl: VersionInfo is optional, EncodingDecl is REQUIRED, and no
+	// StandaloneDecl is permitted — a version-only or standalone-bearing
+	// declaration is rejected rather than leniently accepted.
+	sub := &parserCtx{}
+	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
+		return nil, err
+	}
+	defer func() { _ = sub.release() }()
+	sub.options = pctx.options
+
+	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
+		if err := sub.parseTextDecl(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := sub.switchEncoding(); err != nil {
+		return nil, err
+	}
+
+	cur := sub.getCursor()
+	if cur == nil {
+		return nil, nil
+	}
+	rest, err := io.ReadAll(cur.Unused())
+	if err != nil {
+		return nil, err
+	}
+	return rest, nil
 }

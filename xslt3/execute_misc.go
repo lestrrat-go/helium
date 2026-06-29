@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -84,13 +85,88 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	// Zero-length matches are handled by advancing past each one to avoid
 	// infinite loops (see below).
 
-	// Find all matches.
-	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0
-	// which raised XTDE1150). We handle them by advancing past each
-	// zero-length match to avoid infinite loops.
-	matches, err := re.FindAllSubmatchIndex(input, -1)
-	if err != nil {
-		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", err)
+	// Bound the number of matches against the execution resource budget. An
+	// empty- or near-empty-matching regex matches at every character boundary,
+	// so an N-byte input yields ~N matches; accumulating every match (e.g. via
+	// FindAllSubmatchIndex) would amplify a bounded input string into millions
+	// of match/segment allocations and exhaust memory before a cancelled
+	// context can intervene. The streamable paths enumerate one match at a time
+	// and the per-resource byte cap (MaxResourceBytes; <0 selects unbounded)
+	// caps how many they will surface; the default cap is far above any
+	// legitimate match count, so valid inputs are unaffected. A leading-context
+	// pattern that cannot stream is additionally bounded by xpath3's own, much
+	// smaller, full-context allocation ceiling, which surfaces as
+	// xpath3.ErrRegexMatchLimit (handled below).
+	maxMatches := -1
+	if limit := resolveResourceLimit(ec.resourceLimit()); limit >= 0 {
+		maxMatches = max(clampInt64ToInt(limit), 1)
+	}
+
+	// findLimit caps how many matches EachSubmatchIndex may produce. The callback
+	// rejects once it observes match maxMatches+1, so the enumeration must be able
+	// to surface that one extra match; passing maxMatches+1 lets the callback see
+	// it. A non-positive maxMatches (unbounded cap) and an int overflow both fall
+	// back to -1 (no enumeration limit).
+	findLimit := -1
+	if maxMatches >= 0 {
+		if n := maxMatches + 1; n > 0 {
+			findLimit = n
+		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// First pass: count the alternating non-match/match segments so
+	// position()/last() inside the bodies see the right focus, streaming the
+	// matches one at a time via EachSubmatchIndex so live memory stays bounded
+	// regardless of input size. The match-count ceiling is enforced DURING
+	// enumeration — an over-budget input is rejected after maxMatches+1 matches
+	// without ever materializing a slice proportional to the match count. In
+	// XSLT 3.0 zero-length matches are allowed (unlike XSLT 2.0's XTDE1150);
+	// EachSubmatchIndex advances past each one.
+	totalSegments := 0
+	matchCount := 0
+	pos := 0
+	var earlyErr error
+	countErr := re.EachSubmatchIndex(input, findLimit, func(m []int) bool {
+		if err := ctx.Err(); err != nil {
+			earlyErr = err
+			return false
+		}
+		matchCount++
+		if maxMatches >= 0 && matchCount > maxMatches {
+			earlyErr = dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more than %d matches, exceeding the configured resource limit", maxMatches)
+			return false
+		}
+		if m[0] > pos {
+			totalSegments++
+		}
+		totalSegments++
+		pos = m[1]
+		return true
+	})
+	if earlyErr != nil {
+		return earlyErr
+	}
+	if countErr != nil {
+		// A leading-context pattern (^ with the m flag, \b, ...) can't be
+		// streamed, so xpath3 materializes its matches in one bounded pass and
+		// reports ErrRegexMatchLimit when the input would exceed the safe
+		// allocation ceiling. Surface that as the same resource-exhaustion
+		// condition as the running match-count cap above (XTDE1140 +
+		// ErrResourceTooLarge) so xsl:catch can match on $err:code and callers
+		// can detect it via errors.Is.
+		if errors.Is(countErr, xpath3.ErrRegexMatchLimit) {
+			return dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more matches than the safe resource limit allows: %v", countErr)
+		}
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", countErr)
+	}
+	if pos < len(input) {
+		totalSegments++
 	}
 
 	// Save and restore context state
@@ -109,62 +185,74 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		ec.regexGroups = savedGroups
 	}()
 
-	// Build segments: alternating non-match/match segments
-	type segment struct {
-		text    string
-		isMatch bool
-		groups  []string // captured groups (only for matches)
+	segIdx := 0
+	// runSegment sets the focus for one segment and executes its body.
+	runSegment := func(text string, body []instruction, groups []string) error {
+		segIdx++
+		ec.position = segIdx
+		ec.size = totalSegments
+		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: text}
+		ec.contextNode = nil
+		ec.currentNode = nil
+		ec.regexGroups = groups
+		for _, bodyInst := range body {
+			if err := ec.executeInstruction(ctx, bodyInst); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	var segments []segment
-	pos := 0
-	for _, m := range matches {
+
+	// Second pass: re-stream the matches and execute each segment's body as its
+	// span is discovered. Like the count pass, matches are never accumulated.
+	pos = 0
+	var execErr error
+	execIterErr := re.EachSubmatchIndex(input, findLimit, func(m []int) bool {
+		if err := ctx.Err(); err != nil {
+			execErr = err
+			return false
+		}
 		start, end := m[0], m[1]
 		if start > pos {
-			segments = append(segments, segment{text: input[pos:start], isMatch: false})
+			if err := runSegment(input[pos:start], inst.NonMatchingBody, nil); err != nil {
+				execErr = err
+				return false
+			}
 		}
-		// Collect captured groups
-		var groups []string
-		groups = append(groups, input[start:end]) // group 0 = full match
+		// Collect captured groups (group 0 = full match).
+		groups := make([]string, 0, len(m)/2)
+		groups = append(groups, input[start:end])
 		for g := 1; g < len(m)/2; g++ {
 			gs, ge := m[2*g], m[2*g+1]
 			if gs < 0 || ge < 0 {
 				groups = append(groups, "")
-			} else {
-				groups = append(groups, input[gs:ge])
+				continue
 			}
+			groups = append(groups, input[gs:ge])
 		}
-		segments = append(segments, segment{text: input[start:end], isMatch: true, groups: groups})
+		if err := runSegment(input[start:end], inst.MatchingBody, groups); err != nil {
+			execErr = err
+			return false
+		}
 		pos = end
+		return true
+	})
+	if execErr != nil {
+		return execErr
+	}
+	if execIterErr != nil {
+		if errors.Is(execIterErr, xpath3.ErrRegexMatchLimit) {
+			return dynamicErrorCause(errCodeXTDE1140, ErrResourceTooLarge,
+				"xsl:analyze-string produced more matches than the safe resource limit allows: %v", execIterErr)
+		}
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", execIterErr)
 	}
 	if pos < len(input) {
-		segments = append(segments, segment{text: input[pos:], isMatch: false})
-	}
-
-	// Set size = total number of segments
-	totalSegments := len(segments)
-
-	// Execute appropriate body for each segment
-	for i, seg := range segments {
-		ec.position = i + 1
-		ec.size = totalSegments
-		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: seg.text}
-		ec.contextNode = nil
-		ec.currentNode = nil
-
-		if seg.isMatch {
-			ec.regexGroups = seg.groups
-			for _, bodyInst := range inst.MatchingBody {
-				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-					return err
-				}
-			}
-		} else {
-			ec.regexGroups = nil
-			for _, bodyInst := range inst.NonMatchingBody {
-				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-					return err
-				}
-			}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := runSegment(input[pos:], inst.NonMatchingBody, nil); err != nil {
+			return err
 		}
 	}
 
@@ -702,37 +790,40 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		if ncSeq != nil {
 			ncLen = sequence.Len(ncSeq)
 		}
-		// XTTE3170: namespace-context must produce a single node.
-		if ncLen > 1 {
+		// XTTE3170: when the namespace-context attribute is supplied, its value
+		// must be a single node. An empty sequence, multiple items, or a non-node
+		// item is a type error rather than being silently ignored.
+		if ncLen != 1 {
 			return dynamicError(errCodeXTTE3170,
 				"xsl:evaluate namespace-context produced %d items; a single node is required", ncLen)
 		}
-		if ncLen > 0 {
-			if ni, nodeOK := ncSeq.Get(0).(xpath3.NodeItem); nodeOK {
-				nsNode := ni.Node
-				// Walk up to find an element
-				for nsNode != nil {
-					if elem, elemOK := nsNode.(*helium.Element); elemOK {
-						// Collect in-scope namespaces walking up
-						seen := make(map[string]struct{})
-						var cur helium.Node = elem
-						for cur != nil {
-							if e, eOK := cur.(*helium.Element); eOK {
-								for _, ns := range e.Namespaces() {
-									prefix := ns.Prefix()
-									if _, exists := seen[prefix]; !exists {
-										seen[prefix] = struct{}{}
-										nsBindings[prefix] = ns.URI()
-									}
-								}
+		ni, nodeOK := ncSeq.Get(0).(xpath3.NodeItem)
+		if !nodeOK {
+			return dynamicError(errCodeXTTE3170,
+				"xsl:evaluate namespace-context must be a single node")
+		}
+		nsNode := ni.Node
+		// Walk up to find an element
+		for nsNode != nil {
+			if elem, elemOK := nsNode.(*helium.Element); elemOK {
+				// Collect in-scope namespaces walking up
+				seen := make(map[string]struct{})
+				var cur helium.Node = elem
+				for cur != nil {
+					if e, eOK := cur.(*helium.Element); eOK {
+						for _, ns := range e.Namespaces() {
+							prefix := ns.Prefix()
+							if _, exists := seen[prefix]; !exists {
+								seen[prefix] = struct{}{}
+								nsBindings[prefix] = ns.URI()
 							}
-							cur = cur.Parent()
 						}
-						break
 					}
-					nsNode = nsNode.Parent()
+					cur = cur.Parent()
 				}
+				break
 			}
+			nsNode = nsNode.Parent()
 		}
 	}
 
@@ -754,21 +845,41 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		nsBindings[""] = ec.xpathDefaultNS
 	}
 
-	// 4b. Evaluate schema-aware avt if present
+	// 4b. Evaluate schema-aware avt if present. The default is "no": only an
+	// explicit yes/true/1 makes the dynamic expression schema-aware.
+	schemaAware := false
 	if inst.SchemaAwareAVT != nil {
 		saStr, saErr := inst.SchemaAwareAVT.evaluate(ctx, ec.contextNode)
 		if saErr != nil {
 			return saErr
 		}
-		if _, ok := parseXSDBool(saStr); !ok {
+		sa, ok := parseXSDBool(saStr)
+		if !ok {
 			return staticError(errCodeXTSE0020, "xsl:evaluate: invalid value %q for schema-aware attribute", saStr)
 		}
+		schemaAware = sa
 	}
 
 	// 5. Compile the dynamic XPath expression.
 	dynExpr, compileErr := xpath3.NewCompiler().Compile(xpathStr)
 	if compileErr != nil {
 		return dynamicError(errCodeXTDE3160, "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
+	}
+
+	// 5b. XTDE3160: per XSLT 3.0 §20.3, when the dynamic expression is NOT
+	// schema-aware its static context includes only the built-in schema
+	// components — none of the schema types imported by xsl:import-schema. A
+	// SequenceType in the target expression (instance of / cast as / castable as
+	// / treat as) that names a user-defined schema type is therefore a static
+	// error when analyzing the string, surfaced as the dynamic error XTDE3160.
+	// (When schema-aware is yes the imported types ARE in scope, so the gate is
+	// skipped.) The unprefixed / no-default-namespace form already fails through
+	// the xs:-prefix resolution path; this closes the prefixed form.
+	if !schemaAware {
+		if badType := dynExprReferencesSchemaType(dynExpr.AST(), nsBindings); badType != "" {
+			return dynamicError(errCodeXTDE3160,
+				"xsl:evaluate: type %q is not in scope (schema-aware is not enabled)", badType)
+		}
 	}
 
 	// 5a. XTDE3160: certain XSLT functions are not allowed in xsl:evaluate
@@ -810,8 +921,14 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 					if key.TypeName != xpath3.TypeQName {
 						return dynamicError(errCodeXTTE3165, "xsl:evaluate: with-params map key must be xs:QName, got %s", key.TypeName)
 					}
-					qn := key.QNameVal()
-					vars[qn.Local] = value
+					// Store under the Clark-name representation used by XPath
+					// variable lookup so namespaced keys (e.g. {urn:p}x) resolve
+					// as $p:x and don't collide with no-namespace variables.
+					clark, clarkErr := paramKeyToClark(key)
+					if clarkErr != nil {
+						return clarkErr
+					}
+					vars[clark] = value
 					return nil
 				})
 				if forEachErr != nil {
@@ -827,8 +944,41 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	// and functions in the XSLT namespace.
 	evalFns := ec.xsltEvaluateFunctions()
 	eval := xpath3.NewEvaluator(xpath3.EvalBorrowing).
-		Variables(xpath3.VariablesFromMap(vars)).
-		Functions(xpath3.FunctionLibraryFromMaps(evalFns, ec.xsltEvaluateFunctionsNS()))
+		Variables(vars).
+		Functions(evalFns, ec.xsltEvaluateFunctionsNS())
+
+	// Forward the same runtime evaluator configuration that ordinary XPath
+	// evaluation uses (see buildBaseXPathEvaluator), so a dynamically-evaluated
+	// XPath honors the configured resource resolvers, resource caps, stable
+	// clock, trace sink, and shared document-order cache instead of silently
+	// dropping them. Without this, fn:unparsed-text / fn:json-doc / fn:collection
+	// inside xsl:evaluate behave differently from the same call made statically.
+	eval = eval.
+		CurrentTime(ec.currentTime).
+		ImplicitTimezone(ec.currentTime.Location()).
+		AllowXML11Chars().
+		TraceWriter(ec.traceWriter)
+	if resolver := ec.collectionResolver(); resolver != nil {
+		eval = eval.CollectionResolver(resolver)
+	}
+	if ec.transformConfig != nil {
+		if r := ec.transformConfig.uriResolver; r != nil {
+			eval = eval.URIResolver(r)
+		}
+		if c := ec.transformConfig.httpClient; c != nil {
+			eval = eval.HTTPClient(c)
+		}
+		eval = eval.MaxResourceBytes(resolveResourceLimit(ec.resourceLimit()))
+	}
+	if ec.docOrderCache != nil {
+		eval = eval.DocOrderCache(ec.docOrderCache)
+	}
+
+	// Forward the injected base parser so fn:doc / fn:parse-xml inside the
+	// dynamically-evaluated XPath uses the same parse policy as the engine.
+	if p := ec.injectedParser(); p != nil {
+		eval = eval.Parser(*p)
+	}
 
 	if len(nsBindings) > 0 {
 		eval = eval.Namespaces(nsBindings)
@@ -852,9 +1002,20 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		}
 		if baseURI != "" {
 			eval = eval.BaseURI(ensureFileURI(baseURI))
+			// The base-uri attribute governs not only the native xpath3
+			// functions (fn:unparsed-text, fn:collection — they read the
+			// evaluator BaseURI above) but also the XSLT-aware functions
+			// fn:doc / fn:document / fn:stream-available, which resolve relative
+			// URIs through ec.baseDir() / effectiveStaticBaseURI(). Install the
+			// declared base as a static-base override for the duration of the
+			// dynamic evaluation so those functions resolve against the SAME
+			// base instead of the using template's static base.
+			savedOverride := ec.staticBaseURIOverride
+			ec.staticBaseURIOverride = baseURI
+			defer func() { ec.staticBaseURIOverride = savedOverride }()
 		}
-	} else if ec.stylesheet.baseURI != "" {
-		eval = eval.BaseURI(ensureFileURI(ec.stylesheet.baseURI))
+	} else if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
+		eval = eval.BaseURI(ensureFileURI(baseURI))
 	}
 
 	// Default collation
@@ -905,6 +1066,54 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 
 	// 9. Output the result sequence.
 	return ec.outputSequence(seq)
+}
+
+// dynExprReferencesSchemaType reports the first SequenceType atomic/union type in
+// a dynamic xsl:evaluate target expression that names a user-defined schema type
+// (a type whose namespace is non-empty and is not the XSD built-in namespace). It
+// is used to detect XTDE3160 when the dynamic expression is not schema-aware: such
+// a type is not in the dynamic static context, so referencing it (in instance of /
+// cast as / castable as / treat as) is a static error.
+//
+// A prefix that resolves to no namespace, or to the XSD namespace, names a
+// built-in type and is always in scope; only a prefix bound to a non-XSD
+// namespace identifies an imported schema type. The unprefixed form is handled
+// elsewhere (it resolves through the xs: built-in path and already fails), so it
+// is not flagged here. Returns "" when no such reference is present.
+func dynExprReferencesSchemaType(ast xpath3.Expr, nsBindings map[string]string) string {
+	var found string
+	check := func(prefix, name string) bool {
+		if prefix == "" || prefix == "xs" || prefix == "xsd" {
+			return false
+		}
+		uri, ok := nsBindings[prefix]
+		if !ok || uri == "" || uri == lexicon.NamespaceXSD {
+			return false
+		}
+		found = prefix + ":" + name
+		return true
+	}
+	xpathstream.WalkExpr(ast, func(e xpath3.Expr) bool {
+		if found != "" {
+			return false
+		}
+		switch n := e.(type) {
+		case xpath3.InstanceOfExpr:
+			if t, ok := n.Type.ItemTest.(xpath3.AtomicOrUnionType); ok {
+				check(t.Prefix, t.Name)
+			}
+		case xpath3.TreatAsExpr:
+			if t, ok := n.Type.ItemTest.(xpath3.AtomicOrUnionType); ok {
+				check(t.Prefix, t.Name)
+			}
+		case xpath3.CastExpr:
+			check(n.Type.Prefix, n.Type.Name)
+		case xpath3.CastableExpr:
+			check(n.Type.Prefix, n.Type.Name)
+		}
+		return found == ""
+	})
+	return found
 }
 
 // checkEvaluateAsType checks the xsl:evaluate as= type constraint.

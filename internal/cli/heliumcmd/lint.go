@@ -13,6 +13,7 @@ import (
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/catalog"
 	henc "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xinclude"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xsd"
@@ -41,6 +42,19 @@ type config struct {
 	catalogs    bool
 	noCatalogs  bool
 	pathDirs    string
+
+	// loadExternal records that a flag requesting external DTD/entity loading
+	// (--loaddtd, --valid, --dtdattr, --noent) was given. NewParser blocks
+	// external loading by default; these flags are the user's explicit opt-in,
+	// so the parser's XXE block is lifted and a permissive FS installed.
+	loadExternal bool
+
+	// huge records --huge; maxDepth records --max-depth (-1 = unset). Both are
+	// applied once after argument parsing so the result is order-independent:
+	// --huge lifts the limits, then an explicit --max-depth (the more specific
+	// flag) re-imposes its cap and wins regardless of flag order.
+	huge     bool
+	maxDepth int
 
 	noout      bool
 	format     bool
@@ -228,7 +242,7 @@ func (c *command) showUsage() {
 	--nsclean : remove redundant namespace declarations
 	--nocdata : replace CDATA section by equivalent text nodes
 	--nonet : refuse to fetch DTDs or entities over network
-	--huge : remove any internal arbitrary parser limits
+	--huge : lift the tunable parser limits (element depth, name length, DTD content-model depth, entity-amplification ratio); the absolute 1 GB entity-expansion ceiling is always kept
 	--noenc : ignore any encoding specified inside the document
 	--noxincludenode : do not generate XInclude START/END nodes
 	--nofixup-base-uris : do not fixup xml:base URIs in XInclude
@@ -251,6 +265,7 @@ func (c *command) showUsage() {
 	--dropdtd : remove the DOCTYPE of the result
 	--repeat N : parse N times for benchmarking
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 `, c.prog)
 }
 
@@ -260,6 +275,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		pretty:        -1,
 		repeat:        1,
 		maxInputBytes: DefaultMaxInputBytes,
+		maxDepth:      -1,
 	}
 	var files []string
 
@@ -276,13 +292,17 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			cfg.parser = cfg.parser.RecoverOnError(true)
 		case "--noent":
 			cfg.parser = cfg.parser.SubstituteEntities(true)
+			cfg.loadExternal = true
 		case "--loaddtd":
 			cfg.parser = cfg.parser.LoadExternalDTD(true)
+			cfg.loadExternal = true
 		case "--dtdattr":
 			cfg.parser = cfg.parser.DefaultDTDAttributes(true)
+			cfg.loadExternal = true
 		case "--valid":
 			cfg.parser = cfg.parser.ValidateDTD(true)
 			cfg.dtdValid = true
+			cfg.loadExternal = true
 		case "--nowarning":
 			cfg.parser = cfg.parser.SuppressWarnings(true)
 		case "--pedantic":
@@ -296,7 +316,9 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--nonet":
 			cfg.parser = cfg.parser.AllowNetwork(false)
 		case "--huge":
-			cfg.parser = cfg.parser.RelaxLimits(true)
+			// Recorded and applied post-loop (see parseArgs end) so flag order
+			// does not matter relative to --max-depth.
+			cfg.huge = true
 		case "--noenc":
 			cfg.parser = cfg.parser.IgnoreEncoding(true)
 		case "--noxincludenode":
@@ -386,6 +408,18 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				return nil, nil
 			}
 			cfg.pathDirs = args[i] //nolint:gosec // bounds checked above
+		case "--max-depth":
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.maxDepth = n
 		case "--repeat":
 			i++
 			if i >= len(args) {
@@ -434,6 +468,29 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	if cfg.outputFile != "" && cfg.noout && cfg.xpathExpr == "" {
 		_, _ = fmt.Fprintf(c.stderr, "%s: --output cannot be combined with --noout\n", c.prog)
 		return nil, nil
+	}
+
+	// A flag requesting external DTD/entity loading is the user's explicit
+	// opt-in, so lift the parser's default XXE block. The permissive FS that
+	// makes loading actually reach the filesystem is installed at parse time
+	// (see run), either via --path's search FS or a plain permissive root.
+	if cfg.loadExternal {
+		cfg.parser = cfg.parser.BlockXXE(false)
+	}
+
+	// Apply --huge then --max-depth so the result is independent of flag order.
+	// --huge lifts the tunable limits (including the depth cap); an explicit
+	// --max-depth then re-imposes its cap and wins, being the more specific flag.
+	if cfg.huge {
+		cfg.parser = cfg.parser.
+			MaxNameLength(-1).
+			MaxEntityAmplification(-1).
+			MaxContentModelDepth(-1).
+			MaxNodeContentSize(-1).
+			MaxDepth(0)
+	}
+	if cfg.maxDepth >= 0 {
+		cfg.parser = cfg.parser.MaxDepth(cfg.maxDepth)
 	}
 
 	return cfg, files
@@ -501,12 +558,46 @@ func (c *command) pathDirs(cfg *config) []string {
 		return nil
 	}
 	var dirs []string
-	for d := range strings.SplitSeq(cfg.pathDirs, ":") {
+	for _, d := range splitSearchPath(cfg.pathDirs) {
 		if d != "" {
 			dirs = append(dirs, d)
 		}
 	}
 	return dirs
+}
+
+// splitSearchPath splits a colon-separated DTD/entity search path (xmllint
+// style) while keeping a Windows drive-letter prefix ("D:\\dtd", "C:/x")
+// attached to its directory. A naive strings.Split on ':' would shatter
+// "D:\\dtd" into "D" and "\\dtd", corrupting the search path on Windows and
+// making a DTD resolved via --path unfindable (validation then spuriously
+// fails). A colon is treated as a drive separator — and NOT a list separator —
+// only when it is the SECOND character of a segment, follows a single ASCII
+// letter, and is itself followed by a path separator ('/' or '\\') or the end
+// of the segment. This is GOOS-independent (string-shape based), so the
+// behavior is exercised on POSIX too; a genuine POSIX list like
+// "/a/b:/c/d" still splits normally because "/a/b" does not match the
+// drive-prefix shape.
+func splitSearchPath(s string) []string {
+	var out []string
+	start := 0
+	for i := range len(s) {
+		if s[i] != ':' {
+			continue
+		}
+		// A "X:" at the very start of the current segment, where X is a single
+		// ASCII letter and the next char is a separator (or segment end), is a
+		// Windows drive prefix, not a list separator.
+		if i == start+1 && uripath.IsWindowsDriveLetter(s[start]) {
+			if i+1 >= len(s) || s[i+1] == '/' || s[i+1] == '\\' {
+				continue
+			}
+		}
+		out = append(out, s[start:i])
+		start = i + 1
+	}
+	out = append(out, s[start:])
+	return out
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
@@ -515,8 +606,12 @@ func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, 
 	// discards them and the user sees only the terminal "schema compilation
 	// failed" summary with no clue what went wrong.
 	handler := &compileErrorHandler{w: c.stderr, suppressWarnings: cfg.quiet}
+	// The xsd compiler now denies nested-schema FS access by default; the CLI is
+	// a trusted local tool, so restore permissive host access for
+	// xs:include/xs:import/xs:redefine (mirrors the parser FS lift below).
 	schema, err := xsd.NewCompiler().
 		Label(cfg.schemaFile).
+		FS(iofsPermissiveRoot()).
 		ErrorHandler(handler).
 		CompileFile(ctx, cfg.schemaFile)
 	if err == nil && handler.fatal {
@@ -560,6 +655,11 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		if dirs := c.pathDirs(cfg); len(dirs) > 0 {
 			p = p.FS(pathSearchFS{base: iofsPermissiveRoot(), dirs: dirs})
+		} else if cfg.loadExternal {
+			// External loading opted in (see parseArgs) but no --path given:
+			// NewParser now defaults to a deny-all FS, so install the permissive
+			// root that the historical CLI used to open DTDs/entities.
+			p = p.FS(iofsPermissiveRoot())
 		}
 
 		doc, err = p.Parse(ctx, buf)
@@ -583,7 +683,15 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		if cfg.timing {
 			t0 = time.Now()
 		}
-		xiProc := xinclude.NewProcessor()
+		// xinclude.NewProcessor() now denies all filesystem access by default;
+		// the CLI processes user-supplied local files, so install the same
+		// permissive (or --path-rooted) FS the parser uses above to preserve the
+		// historical --xinclude behavior of reading includes off disk.
+		xiFS := iofsPermissiveRoot()
+		if dirs := c.pathDirs(cfg); len(dirs) > 0 {
+			xiFS = pathSearchFS{base: iofsPermissiveRoot(), dirs: dirs}
+		}
+		xiProc := xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(xiFS))
 		if cfg.noXIncNode {
 			xiProc = xiProc.NoXIncludeMarkers()
 		}

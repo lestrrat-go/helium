@@ -997,10 +997,7 @@ func (integerIdentityFn) FuncReturnType() *xpath3.SequenceType {
 func TestFunctionLookupTypedParamValidation(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("f", integerIdentityFn{})
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"f": integerIdentityFn{}}, nil)
 
 	t.Run("bad-typed arg raises XPTY0004", func(t *testing.T) {
 		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)("bad")`)
@@ -1089,10 +1086,7 @@ func (customPrefixParamFn) FuncReturnType() *xpath3.SequenceType {
 func TestFunctionLookupCustomPrefixParamNoPanic(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("f", customPrefixParamFn{})
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"f": customPrefixParamFn{}}, nil)
 
 	compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(1)`)
 	require.NoError(t, err)
@@ -1535,4 +1529,27 @@ func TestFnIndexOfSearchCardinality(t *testing.T) {
 		seq := evalExpr(t, doc, `index-of((), 5)`)
 		require.Equal(t, 0, seq.Len())
 	})
+}
+
+func TestBuiltinFunctionQueries(t *testing.T) {
+	require.True(t, xpath3.IsBuiltinFunction("abs"))
+	require.False(t, xpath3.IsBuiltinFunction("definitely-not-a-builtin"))
+
+	require.True(t, xpath3.IsBuiltinFunctionNS(xpath3.NSFn, "count"))
+	require.False(t, xpath3.IsBuiltinFunctionNS("urn:nope", "count"))
+
+	require.True(t, xpath3.BuiltinFunctionAcceptsArity(xpath3.NSFn, "abs", 1))
+	require.False(t, xpath3.BuiltinFunctionAcceptsArity(xpath3.NSFn, "abs", 5))
+	require.False(t, xpath3.BuiltinFunctionAcceptsArity(xpath3.NSFn, "nope", 1))
+}
+
+func TestPredeclaredNamespaces(t *testing.T) {
+	ns := xpath3.PredeclaredNamespaces()
+	require.Equal(t, xpath3.NSFn, ns["fn"])
+	require.NotEmpty(t, ns["xs"])
+
+	// Mutating the returned copy must not affect package state.
+	ns["fn"] = "tampered"
+	ns2 := xpath3.PredeclaredNamespaces()
+	require.Equal(t, xpath3.NSFn, ns2["fn"])
 }

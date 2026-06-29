@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -32,11 +33,8 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("$x")
 		require.NoError(t, err)
 
-		vars := xpath3.NewVariables()
-		vars.Set("x", xpath3.SingleString("test-value"))
-
 		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-			Variables(vars).
+			Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("test-value")}).
 			Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
 
@@ -69,14 +67,8 @@ func TestEvaluator(t *testing.T) {
 
 		base := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
-		vars1 := xpath3.NewVariables()
-		vars1.Set("x", xpath3.SingleString("one"))
-
-		vars2 := xpath3.NewVariables()
-		vars2.Set("x", xpath3.SingleString("two"))
-
-		e1 := base.Variables(vars1)
-		e2 := base.Variables(vars2)
+		e1 := base.Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("one")})
+		e2 := base.Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("two")})
 
 		r1, err := e1.Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
@@ -110,12 +102,9 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("$x")
 		require.NoError(t, err)
 
-		vars := xpath3.NewVariables()
-		vars.Set("x", xpath3.SingleString("from-zero"))
-
 		// Fluent methods on a zero-value Evaluator must not panic.
 		var ev xpath3.Evaluator
-		result, err := ev.Variables(vars).Evaluate(t.Context(), expr, doc)
+		result, err := ev.Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("from-zero")}).Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
 
 		s, ok := result.IsString()
@@ -141,6 +130,34 @@ func TestEvaluator(t *testing.T) {
 	})
 }
 
+func TestParserInjection(t *testing.T) {
+	// fn:parse-xml on a string literal whose element name is 9 bytes long.
+	// An injected parser with MaxNameLength(8) must reject it; without the
+	// injection (default parser) the same parse succeeds. This proves the
+	// injected parser's policy reaches the fn:parse-xml parse site.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	expr, err := xpath3.NewCompiler().Compile(`parse-xml("<elementXY/>")`)
+	require.NoError(t, err)
+
+	t.Run("default parser parses long element name", func(t *testing.T) {
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), expr, doc)
+		require.NoError(t, err)
+		nodes, err := result.Nodes()
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("injected parser enforces MaxNameLength", func(t *testing.T) {
+		_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Parser(helium.NewParser().MaxNameLength(8)).
+			Evaluate(t.Context(), expr, doc)
+		require.Error(t, err)
+	})
+}
+
 func TestDocEmptyArgFragmentBaseURI(t *testing.T) {
 	// doc("") resolves to the base URI verbatim. When that base URI carries a
 	// fragment identifier the call must raise FODC0005, the same as a fragment
@@ -159,4 +176,91 @@ func TestDocEmptyArgFragmentBaseURI(t *testing.T) {
 	var xerr *xpath3.XPathError
 	require.ErrorAs(t, err, &xerr)
 	require.Equal(t, "FODC0005", xerr.Code)
+}
+
+func TestEvaluatorBuilders(t *testing.T) {
+	doc := mustParseXML(t, "<root><a/><b/></root>")
+	root := doc.DocumentElement()
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Position(2).
+		Size(5).
+		PreservedIDAnnotations(map[helium.Node]string{}).
+		AllowXML11Chars()
+
+	compiled, err := xpath3.NewCompiler().Compile(`position()`)
+	require.NoError(t, err)
+	res, err := eval.Evaluate(t.Context(), compiled, root)
+	require.NoError(t, err)
+	n, ok := res.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(2), n)
+
+	compiledLast, err := xpath3.NewCompiler().Compile(`last()`)
+	require.NoError(t, err)
+	res, err = eval.Evaluate(t.Context(), compiledLast, root)
+	require.NoError(t, err)
+	n, ok = res.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(5), n)
+}
+
+func TestVariableAndFunctionResolver(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		VariableResolver(varResolver{}).
+		FunctionResolver(funcResolver{})
+
+	compiled, err := xpath3.NewCompiler().Compile(`$dynamic`)
+	require.NoError(t, err)
+	res, err := eval.Evaluate(t.Context(), compiled, doc)
+	require.NoError(t, err)
+	n, ok := res.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(99), n)
+}
+
+type varResolver struct{}
+
+func (varResolver) ResolveVariable(_ context.Context, name string) (xpath3.Sequence, bool, error) {
+	if name == "dynamic" {
+		return atomicSeq(intAtomic(99)), true, nil
+	}
+	return nil, false, nil
+}
+
+type funcResolver struct{}
+
+func (funcResolver) ResolveFunction(_ context.Context, _, _ string, _ int) (xpath3.Function, bool, error) {
+	return nil, false, nil
+}
+
+func TestFnContextNode(t *testing.T) {
+	doc := mustParseXML(t, "<root><child/></root>")
+	root := doc.DocumentElement()
+
+	captured := &capturingFn{}
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"capture": captured}, nil)
+	compiled, err := xpath3.NewCompiler().Compile(`capture()`)
+	require.NoError(t, err)
+	_, err = eval.Evaluate(t.Context(), compiled, root)
+	require.NoError(t, err)
+	require.NotNil(t, captured.node)
+	require.Equal(t, root, captured.node)
+	// Direct (non-dynamic) call: IsDynamicCall is false.
+	require.False(t, captured.dynamic)
+}
+
+type capturingFn struct {
+	node    helium.Node
+	dynamic bool
+}
+
+func (*capturingFn) MinArity() int { return 0 }
+func (*capturingFn) MaxArity() int { return 0 }
+func (c *capturingFn) Call(ctx context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+	c.node = xpath3.FnContextNode(ctx)
+	c.dynamic = xpath3.IsDynamicCall(ctx)
+	return atomicSeq(intAtomic(1)), nil
 }

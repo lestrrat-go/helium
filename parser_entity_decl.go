@@ -15,42 +15,43 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 )
 
+// parameterEntityReplacement returns the replacement text of a resolved
+// parameter entity. For an EXTERNAL parameter entity the replacement text is the
+// content of the referenced external resource, which is loaded on demand through
+// loadExternalParameterEntityContent (XXE-gated, byte-capped, cached on the
+// entity). For an internal parameter entity it is the stored Content().
+//
+// This is the single chokepoint so a PE reference that appears inside an entity
+// value (decodeEntitiesInternal) or in the entity-value reference syntax check
+// (expandEntityValueForRefCheck) expands an external PE the same way and
+// regardless of reference order, instead of seeing an empty Content() until the
+// top-level parsePEReference happens to load and cache it first. When external
+// loading is disabled (secure default: parseNoXXE, or the resolver declines) the
+// load returns empty, so the result is the same empty replacement text as before
+// — no behavior change in secure mode.
+func (pctx *parserCtx) parameterEntityReplacement(ctx context.Context, ent sax.Entity) ([]byte, error) {
+	if ent.EntityType() == enum.ExternalParameterEntity {
+		if he, ok := ent.(*Entity); ok {
+			content, _, err := pctx.loadExternalParameterEntityContent(ctx, he)
+			if err != nil {
+				return nil, err
+			}
+			return content, nil
+		}
+	}
+	return ent.Content(), nil
+}
+
 func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
 		return "", pctx.error(ctx, errNoCursor)
 	}
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
-	off := 0
-	for {
-		b := cur.PeekAt(off)
-		if b == 0 || b == qch {
-			break
-		}
-		if b < 0x80 {
-			if !isChar(rune(b)) {
-				break
-			}
-			buf.WriteByte(b)
-			off++
-			continue
-		}
-		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isCharWidth(r, w) {
-			break
-		}
-		buf.WriteRune(r)
-		off += w
-	}
-	if off > 0 {
-		if err := cur.Advance(off); err != nil {
-			return "", pctx.error(ctx, err)
-		}
-		return buf.String(), nil
-	}
-	return "", nil
+	// The entity value is an indivisible content run; scanQuotedLiteral bounds it
+	// by the node-content cap and advances in chunks so an unbounded literal (e.g.
+	// over an EBCDIC ParseReader stream) fails closed with ErrNodeContentTooLarge
+	// instead of growing memory before any per-node cap fires.
+	return pctx.scanQuotedLiteral(ctx, cur, qch, false)
 }
 
 func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what SubstitutionType) (ret string, err error) {
@@ -58,78 +59,214 @@ func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what Substi
 	return
 }
 
-func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, what SubstitutionType, depth int) (string, error) {
-	if depth > 40 {
-		return "", errors.New("entity loop (depth > 40)")
-	}
+// entityDecodeSink is the output target for decodeEntitiesToSink. The string
+// path (decodeEntitiesInternal) accumulates into a pooled buffer; the
+// attribute-value path streams directly into the attribute buffer through the
+// node-content cap so an over-cap expansion fails DURING decode instead of being
+// fully materialized first. count() reports the running output length so a
+// nested expansion's contributed size can be measured for entityCheck without
+// materializing the nested replacement string.
+type entityDecodeSink interface {
+	writeByte(context.Context, byte) error
+	write(context.Context, []byte) error
+	writeString(context.Context, string) error
+	writeRune(context.Context, rune) error
+	count() int
+}
 
+// entityStringSink accumulates decoded output into a buffer and returns it as a
+// string. It imposes no cap (the historical decodeEntities behavior) and ignores
+// the context.
+type entityStringSink struct {
+	buf *bytes.Buffer
+}
+
+func (s *entityStringSink) writeByte(_ context.Context, b byte) error {
+	return s.buf.WriteByte(b)
+}
+
+func (s *entityStringSink) write(_ context.Context, p []byte) error {
+	_, err := s.buf.Write(p)
+	return err
+}
+
+func (s *entityStringSink) writeString(_ context.Context, p string) error {
+	_, err := s.buf.WriteString(p)
+	return err
+}
+
+func (s *entityStringSink) writeRune(_ context.Context, r rune) error {
+	_, err := s.buf.WriteRune(r)
+	return err
+}
+
+func (s *entityStringSink) count() int { return s.buf.Len() }
+
+// attrEntitySink streams decoded entity-replacement bytes into an attribute
+// buffer, applying attribute-value whitespace normalization (TAB/CR/LF -> space)
+// and enforcing the node-content cap on every byte. Because the cap is checked
+// before each append, an over-cap expansion (e.g. <r a="&big;"/> with
+// SubstituteEntities, or a forced-replacement namespace attr xmlns:x="&big;")
+// fails with ErrNodeContentTooLarge as soon as the running total would exceed
+// the remaining budget, never materializing the full replacement first.
+type attrEntitySink struct {
+	pctx *parserCtx
+	b    *bytes.Buffer
+}
+
+func (s *attrEntitySink) writeByte(ctx context.Context, by byte) error {
+	switch by {
+	case 0xD, 0xA, 0x9:
+		by = 0x20
+	}
+	return s.pctx.writeAttrByte(ctx, s.b, by)
+}
+
+func (s *attrEntitySink) write(ctx context.Context, p []byte) error {
+	for i := range p {
+		if err := s.writeByte(ctx, p[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *attrEntitySink) writeString(ctx context.Context, p string) error {
+	for i := range len(p) {
+		if err := s.writeByte(ctx, p[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *attrEntitySink) writeRune(ctx context.Context, r rune) error {
+	// A sub-0x80 rune may be a TAB/CR/LF char ref that must normalize to space,
+	// so route it through writeByte. A multi-byte rune never contains a
+	// 0x09/0x0A/0x0D byte, so writeAttrRune (cap-enforced, no normalization) is
+	// correct and avoids a re-encode.
+	if r < 0x80 {
+		return s.writeByte(ctx, byte(r))
+	}
+	return s.pctx.writeAttrRune(ctx, s.b, r)
+}
+
+func (s *attrEntitySink) count() int { return s.b.Len() }
+
+func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, what SubstitutionType, depth int) (string, error) {
 	out := bufferPool.Get()
 	defer releaseBuffer(out)
+
+	sink := &entityStringSink{buf: out}
+	if err := pctx.decodeEntitiesToSink(ctx, s, what, depth, sink); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+// decodeEntitiesToSink performs the entity-substitution decode, writing every
+// output byte through sink. It is the shared core of the string-returning
+// decodeEntitiesInternal and the bounded attribute-value path: the only
+// difference between the two is the sink. A nested expansion's contributed size
+// is measured as the sink's count() delta across the recursive call (equal to
+// len(rep) in the old string-only code), so amplification accounting is
+// unchanged.
+func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what SubstitutionType, depth int, sink entityDecodeSink) error {
+	if depth > 40 {
+		return errors.New("entity loop (depth > 40)")
+	}
 
 	for len(s) > 0 {
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
 			val, width, err := parseStringCharRef(s)
 			if err != nil {
-				return "", err
+				return err
 			}
-			out.WriteRune(val)
+			if err := sink.writeRune(ctx, val); err != nil {
+				return err
+			}
 			s = s[width:]
 		} else if s[0] == '&' && what&SubstituteRef == SubstituteRef {
 			ent, width, err := pctx.parseStringEntityRef(ctx, s)
 			if err != nil {
-				return "", err
+				return err
 			}
 			if ent == nil {
-				_, _ = out.Write(s[:width])
+				if err := sink.write(ctx, s[:width]); err != nil {
+					return err
+				}
 				s = s[width:]
 				continue
 			}
 			if err := pctx.entityCheck(ent, 0); err != nil {
-				return "", err
+				return err
 			}
 
 			if ent.EntityType() == enum.InternalPredefinedEntity {
 				if len(ent.Content()) == 0 {
-					return "", errors.New("predefined entity has no content")
+					return errors.New("predefined entity has no content")
 				}
-				_, _ = out.Write(ent.Content())
+				if err := sink.write(ctx, ent.Content()); err != nil {
+					return err
+				}
 			} else if len(ent.Content()) != 0 {
-				rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), what, depth+1)
-				if err != nil {
-					return "", err
+				before := sink.count()
+				if err := pctx.decodeEntitiesToSink(ctx, ent.Content(), what, depth+1, sink); err != nil {
+					return err
 				}
-				if err := pctx.entityCheck(ent, len(rep)); err != nil {
-					return "", err
+				if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
+					return err
 				}
-
-				_, _ = out.WriteString(rep)
 			} else {
-				_, _ = out.WriteString(ent.Name())
+				if err := sink.writeString(ctx, ent.Name()); err != nil {
+					return err
+				}
 			}
 			s = s[width:]
 		} else if s[0] == '%' && what&SubstitutePERef == SubstitutePERef {
 			ent, width, err := pctx.parseStringPEReference(ctx, s)
 			if err != nil {
-				return "", err
+				return err
+			}
+			if ent == nil {
+				// An undeclared parameter entity in a context with an external
+				// subset (or after a prior PE reference) is a validity error,
+				// not a fatal one: parseStringPEReference has already cleared
+				// pctx.valid and returns a nil entity with no error. It is not
+				// expanded. Skip it without dereferencing the nil entity,
+				// mirroring the '&' branch above and expandEntityValueForRefCheck.
+				// Still charge the reference against entity-expansion accounting
+				// (entityCheck tolerates a nil ent) so an unresolved PE ref can't
+				// be used to dodge the amplification/ceiling limits.
+				if err := pctx.entityCheck(ent, width); err != nil {
+					return err
+				}
+				s = s[width:]
+				continue
 			}
 			if err := pctx.entityCheck(ent, width); err != nil {
-				return "", err
+				return err
 			}
-			rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), what, depth+1)
+			peContent, err := pctx.parameterEntityReplacement(ctx, ent)
 			if err != nil {
-				return "", err
+				return err
 			}
-			if err := pctx.entityCheck(ent, len(rep)); err != nil {
-				return "", err
+			before := sink.count()
+			if err := pctx.decodeEntitiesToSink(ctx, peContent, what, depth+1, sink); err != nil {
+				return err
 			}
-			_, _ = out.WriteString(rep)
+			if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
+				return err
+			}
 			s = s[width:]
 		} else {
-			_ = out.WriteByte(s[0])
+			if err := sink.writeByte(ctx, s[0]); err != nil {
+				return err
+			}
 			s = s[1:]
 		}
 	}
-	return out.String(), nil
+	return nil
 }
 
 func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, error) {
@@ -207,7 +344,7 @@ func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) er
 	if err != nil {
 		return err
 	}
-	return scanEntityValueGeneralRefs(expanded)
+	return scanEntityValueGeneralRefs(expanded, pctx.maxNameLength)
 }
 
 // expandEntityValueForRefCheck produces the lexical stream over which general
@@ -262,8 +399,14 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 				// brought in by the PE becomes a literal '&' that can combine
 				// with surrounding text into a general reference. General
 				// references (&Name;) in the replacement text are left intact for
-				// the subsequent scan.
-				rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), SubstitutePERef, depth+1)
+				// the subsequent scan. An external PE's replacement text is loaded
+				// on demand (parameterEntityReplacement) so the check sees the same
+				// bytes regardless of reference order.
+				peContent, err := pctx.parameterEntityReplacement(ctx, ent)
+				if err != nil {
+					return nil, err
+				}
+				rep, err := pctx.decodeEntitiesInternal(ctx, peContent, SubstitutePERef, depth+1)
 				if err != nil {
 					return nil, err
 				}
@@ -284,7 +427,7 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 // scanEntityValueGeneralRefs validates that every '&' in the (PE-expanded)
 // EntityValue stream begins a well-formed character or general reference. A
 // missing semicolon or an otherwise malformed reference is rejected.
-func scanEntityValueGeneralRefs(s []byte) error {
+func scanEntityValueGeneralRefs(s []byte, maxNameLength int) error {
 	for len(s) > 0 {
 		i := bytes.IndexByte(s, '&')
 		if i < 0 {
@@ -304,7 +447,7 @@ func scanEntityValueGeneralRefs(s []byte) error {
 		if len(s) < 2 {
 			return errors.New("malformed entity reference in entity value")
 		}
-		_, width, err := parseStringName(s[1:])
+		_, width, err := parseStringName(s[1:], maxNameLength)
 		if err != nil {
 			return errors.New("malformed entity reference in entity value")
 		}
@@ -372,13 +515,21 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 		} else {
-			literal, uri, err = pctx.parseExternalID(ctx)
+			// parseExternalID returns (systemURI, publicID). Mirror the external
+			// general-entity path below: guard on the system URI (a SYSTEM
+			// declaration carries no public ID, so guarding on the public ID would
+			// drop every SYSTEM parameter entity), and pass publicID/systemID to
+			// EntityDecl in that order.
+			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
-				return pctx.error(ctx, ErrValueRequired)
+				// Preserve a resource-limit (ErrNodeContentTooLarge) or
+				// parse-abort error verbatim; only an empty/missing literal
+				// falls back to the generic ErrValueRequired.
+				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
 			}
 
-			if uri != "" {
-				u, err := url.Parse(uri)
+			if literal != "" {
+				u, err := url.Parse(literal)
 				if err != nil {
 					return pctx.error(ctx, err)
 				}
@@ -386,7 +537,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				if u.Fragment != "" {
 					return pctx.error(ctx, errors.New("err uri fragment"))
 				} else if s := pctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, literal, uri, ""); err {
+					switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, uri, literal, ""); err {
 					case nil, sax.ErrHandlerUnspecified:
 					default:
 						return pctx.error(ctx, err)
@@ -409,9 +560,12 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				}
 			}
 		} else {
-			literal, uri, err = pctx.parseExternalID(ctx)
+			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
-				return pctx.error(ctx, ErrValueRequired)
+				// Preserve a resource-limit (ErrNodeContentTooLarge) or
+				// parse-abort error verbatim; only an empty/missing literal
+				// falls back to the generic ErrValueRequired.
+				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -504,10 +658,20 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 // elemDepth, so element nesting that crosses an entity-expansion boundary keeps
 // accumulating against the same limit rather than restarting at 0.
 //
-// It does NOT touch newctx.doc, newctx.external, or the amplification counters
-// (sizeentcopy/inputSize/maxAmpl); those are handled by the caller because their
-// lifecycle (document swap, external flag, write-back on return) differs between
-// the two paths.
+// It does NOT touch newctx.doc, newctx.external, or the per-context amplification
+// counters (sizeentcopy/inputSize/maxAmpl); those are handled by the caller
+// because their lifecycle (document swap, external flag, write-back on return)
+// differs between the two paths.
+//
+// It DOES carry the ebcdicConsumed pointer, because that is a SHARED live
+// byte-counter over the underlying EBCDIC stream (not a per-context value): on
+// the EBCDIC ParseReader path inputSize was seeded only from the bounded sniff
+// prefix, so entityCheckLimits compares the amplification budget against this
+// live consumed-byte count instead. A nested entity sub-parse must see the same
+// pointer or an internal entity referenced from entity replacement text would be
+// falsely rejected as amplification (its newctx.inputSize is the parent's prefix
+// size while the real document bytes were already consumed at the top level). It
+// is nil on every non-EBCDIC path.
 func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.sax = pctx.sax
 	newctx.treeBuilder = pctx.treeBuilder
@@ -519,10 +683,25 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.pedantic = pctx.pedantic
 	newctx.charBufferSize = pctx.charBufferSize
 	newctx.maxExtDTDSize = pctx.maxExtDTDSize
+	// Carry the name-length and content-model-depth caps so a configured limit
+	// (Parser.MaxNameLength / Parser.MaxContentModelDepth) is enforced on
+	// entity-expansion sub-parses too. (These used to ride in options via
+	// XML_PARSE_HUGE; the granular limit knobs store them as separate fields.)
+	newctx.maxNameLength = pctx.maxNameLength
+	newctx.maxCMDepth = pctx.maxCMDepth
+	// Carry the node-content cap so a configured Parser.MaxNodeContentSize is
+	// enforced on the CDATA/comment/PI/char-data runs of entity-expansion
+	// sub-parses too, not just the top-level document.
+	newctx.maxNodeContent = pctx.maxNodeContent
 	// Carry both the element-depth limit and the current depth so nesting that
 	// crosses the entity boundary keeps counting toward MaxDepth.
 	newctx.maxElemDepth = pctx.maxElemDepth
 	newctx.elemDepth = pctx.elemDepth
+	// Carry the shared live EBCDIC consumed-byte counter so the amplification
+	// guard inside a nested entity sub-parse compares against the real document
+	// size, not the bounded sniff prefix that seeded newctx.inputSize. nil except
+	// on the EBCDIC ParseReader path.
+	newctx.ebcdicConsumed = pctx.ebcdicConsumed
 	// Inherit the parent's security/resolution policy so any external reference
 	// reached while expanding this replacement text honors the same FS sandbox,
 	// catalog, and base URI as the top-level parse rather than falling back to

@@ -116,3 +116,87 @@ func TestCharRefValidAccepted(t *testing.T) {
 		require.Equal(t, tc.want, string(root.Content()))
 	}
 }
+
+// TestCreateCharRefForms covers the CreateCharRef name-stripping branches.
+func TestCreateCharRefForms(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+
+	plain, err := doc.CreateCharRef("foo")
+	require.NoError(t, err)
+	require.Equal(t, "foo", plain.Name())
+
+	// "&foo;" -> "foo"
+	full, err := doc.CreateCharRef("&foo;")
+	require.NoError(t, err)
+	require.Equal(t, "foo", full.Name())
+
+	// "&foo" (no trailing semicolon) -> "foo"
+	noSemi, err := doc.CreateCharRef("&foo")
+	require.NoError(t, err)
+	require.Equal(t, "foo", noSemi.Name())
+
+	// Empty name and a name that decodes to empty are rejected.
+	_, err = doc.CreateCharRef("")
+	require.Error(t, err)
+	_, err = doc.CreateCharRef("&;")
+	require.Error(t, err)
+}
+
+// TestValidCharRefForms parses documents with valid hex/decimal char refs to
+// drive the success branches of parseCharRef.
+func TestValidCharRefForms(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>&#65;&#x42;&#x4A;</root>`))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	require.Equal(t, "ABJ", string(root.Content()))
+}
+
+// TestResolveCharRefsViaEntityContent indirectly exercises resolveCharRefs by
+// round-tripping a document whose internal entity content contains char refs.
+func TestResolveCharRefsViaParse(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY e "A&#66;C&#x44;E">
+]>
+<doc>&e;</doc>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "doc")
+}
+
+// TestMalformedCharAndEntityRefs drives parseCharRef / parseEntityRef error
+// branches with a table of malformed-reference documents.
+func TestMalformedCharAndEntityRefs(t *testing.T) {
+	t.Parallel()
+
+	bad := []struct {
+		name string
+		src  string
+	}{
+		{"hex-missing-digits", `<root>&#x;</root>`},
+		{"dec-missing-digits", `<root>&#;</root>`},
+		{"hex-invalid-digit", `<root>&#xZZ;</root>`},
+		{"dec-invalid-digit", `<root>&#12A3;</root>`},
+		{"charref-out-of-range", `<root>&#x110000;</root>`},
+		{"charref-control", `<root>&#x0;</root>`},
+		{"undeclared-entity-standalone", `<?xml version="1.0" standalone="yes"?><root>&undeclared;</root>`},
+		{"entity-empty-name", `<root>&;</root>`},
+	}
+
+	for _, tc := range bad {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := helium.NewParser().Parse(t.Context(), []byte(tc.src))
+			require.Error(t, err, "expected parse error for %q", tc.src)
+		})
+	}
+}

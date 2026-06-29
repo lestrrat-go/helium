@@ -1042,6 +1042,326 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	// Mixed-compositor group:group derivations. XSD 3.9.6 (Particle Valid
+	// (Restriction)) defines NO derivation rule for choice:sequence, choice:all,
+	// all:sequence, or all:choice, so a derived group of one of those compositors
+	// restricting a base group of an incompatible compositor is NOT a valid
+	// restriction. The catch-all "accept" branch previously let these through.
+	t.Run("rejects choice restricting sequence", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence (a,b) requires "ab"; derived choice (a|b) admits "a" or "b"
+		// alone — content the base sequence does not accept.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:choice>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects all restricting sequence", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence (a,b) requires the order "ab"; derived all (a,b) also admits
+		// "ba", which the base sequence does not accept.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:all>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects all restricting choice", func(t *testing.T) {
+		t.Parallel()
+		// Base choice (a|b) admits exactly one element; derived all (a,b) admits both
+		// "ab" — content the base choice does not accept.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:all>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts pointless single-branch choice restricting sequence", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence (a); derived choice (a). A choice with a single branch and
+		// min=max=1 is a pointless wrapper equivalent to element a — so it must stay
+		// ACCEPTED even though raw choice:sequence has no derivation rule.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:choice>
+          <xs:element name="a" type="xs:string"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// RecurseUnordered (derived SEQUENCE restricts a base ALL). XSD 3.9.6 maps
+	// each derived sequence particle to a DISTINCT base all particle it validly
+	// restricts; every unmatched base particle must be emptiable. Order is
+	// irrelevant in the base all.
+	t.Run("rejects sequence adding element restricting all", func(t *testing.T) {
+		t.Parallel()
+		// Base all (a,b); derived sequence (a,c). c maps to no base all particle —
+		// an added/renamed particle the base all does not allow.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects sequence dropping required all member", func(t *testing.T) {
+		t.Parallel()
+		// Base all (a, b both required); derived sequence (a) leaves required base
+		// particle b unmatched and b is not emptiable — drops required content.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts sequence restricting all in different order", func(t *testing.T) {
+		t.Parallel()
+		// Base all (a,b); derived sequence (b,a) maps each member onto a distinct
+		// base all particle — order is irrelevant in an all, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="b" type="xs:string"/>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts sequence dropping optional all member", func(t *testing.T) {
+		t.Parallel()
+		// Base all (a, b?); derived sequence (a) leaves the optional base particle b
+		// unmatched — b is emptiable, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts singleton sequence restricting all of optionals", func(t *testing.T) {
+		t.Parallel()
+		// Base all (a?, b?); derived sequence (a?) is a SINGLETON sequence. Per
+		// RecurseUnordered it maps a? onto base a? and leaves the emptiable b?
+		// unmatched — a valid restriction. The singleton must be routed through
+		// recurseAll, NOT collapsed to a bare element (which elementRestrictsGroup
+		// would over-reject against the 1..1-particle base all).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string" minOccurs="0"/>
+      <xs:element name="b" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts empty sequence restricting optional all", func(t *testing.T) {
+		t.Parallel()
+		// Base all is OPTIONAL (minOccurs="0") with required members a,b, so it
+		// accepts empty content; derived restricts it to an explicit empty
+		// <xs:sequence/>. recurseAll must NOT demand each base all child be
+		// individually emptiable — the base all PARTICLE is emptiable, so empty
+		// content is a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all minOccurs="0">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts empty sequence with non-subset occurrence restricting optional all", func(t *testing.T) {
+		t.Parallel()
+		// Base all is OPTIONAL (minOccurs="0"), so it accepts empty content; the
+		// derived empty <xs:sequence maxOccurs="2"/> still emits nothing — its raw
+		// group occurrence (1..2) is NOT a subset of the base all's (0..1), but a
+		// non-emitting derived particle admits no content, so the occurrence interplay
+		// is irrelevant. The empty-content shortcut (accept iff the base all particle
+		// is emptiable) must be evaluated BEFORE the occurrence-range check, so this
+		// valid empty-language restriction is not false-rejected.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all minOccurs="0">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence maxOccurs="2"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects empty sequence restricting required all", func(t *testing.T) {
+		t.Parallel()
+		// Base all is REQUIRED (default minOccurs="1") with required members a,b, so
+		// it is NOT emptiable; restricting it to an explicit empty <xs:sequence/>
+		// drops required content — not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
 	t.Run("rejects value-space-different fixed restriction", func(t *testing.T) {
 		t.Parallel()
 		// Base element a fixed="1" (xs:integer); derived fixed="2" — a different

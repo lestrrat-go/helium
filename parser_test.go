@@ -12,12 +12,15 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	heliumencoding "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
@@ -268,6 +271,45 @@ func TestParseNamespace(t *testing.T) {
 	require.Equal(t, "value", attr.Value())
 }
 
+func TestParseRejectsMalformedDTDDefaultNamespace(t *testing.T) {
+	// A namespace declaration supplied as a DTD <!ATTLIST> default must be
+	// subject to the same Namespaces in XML validity checks an inline xmlns
+	// declaration gets. These all bind a prefix illegally and must be
+	// rejected even though the binding is never written on the element.
+	reject := []string{
+		// reuse of the reserved xmlns namespace name
+		`<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root xmlns:foo CDATA #FIXED "http://www.w3.org/2000/xmlns/">
+]>
+<root/>`,
+		// reserved xml prefix bound to the wrong URI
+		`<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root xmlns:xml CDATA #FIXED "urn:wrong">
+]>
+<root/>`,
+	}
+	p := helium.NewParser()
+	for _, input := range reject {
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "Parse should reject malformed DTD-defaulted namespace: %s", input)
+	}
+
+	// A well-formed DTD-defaulted xmlns:xml mapped to its canonical URI is
+	// accepted (and not pushed as a real binding).
+	const ok = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root xmlns:xml CDATA #FIXED "http://www.w3.org/XML/1998/namespace">
+]>
+<root/>`
+	_, err := p.Parse(t.Context(), []byte(ok))
+	require.NoError(t, err, "canonical xml prefix binding must be accepted")
+}
+
 func findDocumentElement(doc *helium.Document) helium.Node {
 	return doc.DocumentElement()
 }
@@ -436,7 +478,7 @@ func TestParseExternalEntity(t *testing.T) {
 		"ext.xml": &fstest.MapFile{Data: []byte("<inner>hello</inner>")},
 	}
 
-	p := helium.NewParser().SubstituteEntities(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
 	require.NotNil(t, doc, "external entity parse should produce a document")
@@ -487,9 +529,24 @@ func TestParseExternalEntityMalformedEncoding(t *testing.T) {
 
 	fsys := fstest.MapFS{"ext.xml": &fstest.MapFile{Data: ent}}
 
-	p := helium.NewParser().SubstituteEntities(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed UTF-16 external entity must fail rather than inserting U+FFFD")
+}
+
+func TestParseUSASCIIStrict(t *testing.T) {
+	t.Parallel()
+
+	// A document declaring US-ASCII is strictly 7-bit; a byte >= 0x80 is
+	// malformed even when it forms a valid UTF-8 multibyte sequence.
+	highByte := "<?xml version=\"1.0\" encoding=\"US-ASCII\"?><root>\xc3\xa9</root>"
+	_, err := helium.NewParser().Parse(t.Context(), []byte(highByte))
+	require.Error(t, err, "US-ASCII document with a byte >= 0x80 must be rejected")
+
+	// Valid 7-bit US-ASCII still parses.
+	valid := `<?xml version="1.0" encoding="US-ASCII"?><root>hello</root>`
+	_, err = helium.NewParser().Parse(t.Context(), []byte(valid))
+	require.NoError(t, err, "valid 7-bit US-ASCII must parse")
 }
 
 func TestParseExternalDTDSizeLimit(t *testing.T) {
@@ -504,7 +561,7 @@ func TestParseExternalDTDSizeLimit(t *testing.T) {
 	oversized := bytes.Repeat([]byte(" "), helium.MaxExternalDTDSize+1)
 	fsys := fstest.MapFS{"huge.dtd": &fstest.MapFile{Data: oversized}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "oversized external DTD must produce a parse error")
 }
@@ -564,7 +621,7 @@ func TestParseExternalDTDBoundedRead(t *testing.T) {
 	var read int64
 	fsys := underReportingFS{read: &read}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "oversized external DTD must produce a parse error even when Stat under-reports size")
 	require.ErrorIs(t, err, helium.ErrExternalDTDTooLarge, "rejection must come from the byte-count cap")
@@ -630,7 +687,7 @@ func TestParseExternalDTDReadErrorStillCapped(t *testing.T) {
 	var hitReadErr bool
 	fsys := errReadingFS{cap: smallCap, hitReadErr: &hitReadErr}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).
 		MaxExternalDTDBytes(smallCap).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.True(t, hitReadErr, "the simulated non-EOF read error must actually be returned by the fake")
@@ -694,7 +751,7 @@ func TestParseExternalDTDStatAdvisory(t *testing.T) {
 	// subset was actually loaded and applied, not silently skipped.
 	fsys := overReportingFS{data: []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">")}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "small valid DTD must load even when Stat over-reports its size")
 
@@ -719,7 +776,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		oversized := bytes.Repeat([]byte(" "), 2<<10)
 		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: oversized}}
 
-		p := helium.NewParser().
+		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			DefaultDTDAttributes(true).
 			MaxExternalDTDBytes(1 << 10).
@@ -737,7 +794,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		// not silently skipped.
 		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">")}}
 
-		p := helium.NewParser().
+		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			DefaultDTDAttributes(true).
 			MaxExternalDTDBytes(1 << 10).
@@ -761,7 +818,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		large := append([]byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">"), bytes.Repeat([]byte(" "), 4<<10)...)
 		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: large}}
 
-		p := helium.NewParser().
+		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			DefaultDTDAttributes(true).
 			FS(fsys)
@@ -818,7 +875,7 @@ func TestParseExternalDTDPartialReadErrorSurfaces(t *testing.T) {
 	// accept the document as if no external subset existed.
 	fsys := partialReadFS{prefix: []byte("<!ELEMENT r EMPTY>")}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "a truncated external DTD read must surface as a parse error")
 }
@@ -835,7 +892,7 @@ func TestParseExternalDTDMalformedDeclTerminates(t *testing.T) {
 	// terminating error instead of an infinite loop.
 	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 
 	done := make(chan struct{})
 	var err error
@@ -871,7 +928,7 @@ func TestParseExternalDTDParameterEntityExpands(t *testing.T) {
 `
 	fsys := fstest.MapFS{"pe.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "valid external-subset parameter-entity reference must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -906,7 +963,7 @@ func TestParseExternalDTDPEConditionalSectionFollowedByDecl(t *testing.T) {
 `
 	fsys := fstest.MapFS{"cs.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE expanding to a conditional section must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -941,7 +998,7 @@ func TestParseExternalDTDPEWhitespaceFollowedByDecl(t *testing.T) {
 `
 	fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE expanding to only whitespace must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -975,7 +1032,7 @@ func TestParseExternalDTDPEInIncludeSectionExpands(t *testing.T) {
 ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE reference inside an INCLUDE section must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -1001,7 +1058,7 @@ func TestParseExternalDTDMalformedDeclLocation(t *testing.T) {
 	// active so the reported File carries the DTD path.
 	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "a malformed external DTD declaration must produce a parse error")
 
@@ -1027,7 +1084,7 @@ func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
 	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "a malformed declaration inside a top-level INCLUDE section must surface as a parse error")
 }
@@ -1071,6 +1128,14 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 	}
 }
 
+// dtdSystemID is the external-DTD SYSTEM identifier (and MapFS filename) shared
+// by the external-subset parser tests in this package.
+const dtdSystemID = "d.dtd"
+
+// peSystemID is the external parameter-entity SYSTEM identifier (and MapFS
+// filename) shared by the external-PE parser tests in this package.
+const peSystemID = "pe.ent"
+
 func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
 	t.Parallel()
 
@@ -1087,7 +1152,7 @@ func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
 	// them from the parsed document. Inspecting the floor cursor directly (rather
 	// than via getCursor) stops at the floor instead, so the misc nodes survive.
 	const dtd = "<!ELEMENT r EMPTY>\n"
-	fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+	fsys := fstest.MapFS{dtdSystemID: &fstest.MapFile{Data: []byte(dtd)}}
 
 	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
@@ -1834,7 +1899,7 @@ func TestEntitySubParserFSSandbox(t *testing.T) {
 		rfs := &recordingFS{inner: fstest.MapFS{
 			"outer.xml": &fstest.MapFile{Data: []byte(`<wrap>&secret;</wrap>`)},
 		}}
-		p := helium.NewParser().SubstituteEntities(true).FS(rfs)
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(rfs)
 		doc, _ := p.Parse(t.Context(), []byte(input))
 
 		// The on-disk secret must never surface in the resulting document.
@@ -1867,7 +1932,7 @@ func TestEntitySubParserFSSandbox(t *testing.T) {
 			"outer.xml":   &fstest.MapFile{Data: []byte(`<wrap>&allowed;</wrap>`)},
 			"allowed.xml": &fstest.MapFile{Data: []byte("<inner>ok</inner>")},
 		}}
-		p := helium.NewParser().SubstituteEntities(true).FS(rfs)
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(rfs)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.True(t, rfs.wasOpened("allowed.xml"),
@@ -2360,7 +2425,7 @@ func TestMaxDepth(t *testing.T) {
 			"nested.xml": &fstest.MapFile{Data: []byte(`<a/>`)},
 		}
 		input := []byte(`<!DOCTYPE r [<!ENTITY e SYSTEM "nested.xml">]><r>&e;</r>`)
-		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1).FS(fsys)
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).MaxDepth(1).FS(fsys)
 
 		_, err := p.Parse(t.Context(), input)
 		require.Error(t, err)
@@ -2770,6 +2835,439 @@ func TestParseReaderEBCDICDataWithEOFInFirstRead(t *testing.T) {
 		"ParseReader output must match Parse([]byte) when EBCDIC arrives with io.EOF in one read")
 }
 
+// stoppableEBCDICReader serves a finite EBCDIC head (whose invariant prefix
+// triggers EBCDIC detection) on the first Reads, then an endless run of EBCDIC
+// space bytes — an unterminated whitespace character-data run inside <root> —
+// that never reaches EOF, until Stop is called (after which Read returns
+// io.EOF). It models a hostile, never-ending stream. The parser must terminate
+// it via its incremental per-node content cap WITHOUT buffering the tail; Stop
+// plus a test timeout guarantee that even a regression cannot hang or OOM the
+// test process.
+type stoppableEBCDICReader struct {
+	head    []byte
+	pos     int
+	stopped atomic.Bool
+}
+
+func (r *stoppableEBCDICReader) Stop() { r.stopped.Store(true) }
+
+func (r *stoppableEBCDICReader) Read(p []byte) (int, error) {
+	if r.stopped.Load() {
+		return 0, io.EOF
+	}
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	for i := range p {
+		p[i] = 0x40 // EBCDIC space: an unterminated whitespace run, never EOF
+	}
+	return len(p), nil
+}
+
+// TestParseReaderEBCDICUnboundedStreamBoundedByNodeCap guards the streaming
+// EBCDIC reader path against unbounded memory growth: EBCDIC now streams through
+// the normal cursor pipeline, so a hostile never-ending stream is bounded by the
+// parser's incremental per-node content cap (the single whitespace run inside
+// <root> exceeds MaxNodeContentSize) and fails with ErrNodeContentTooLarge —
+// never buffered whole into memory. The reader runs in a goroutine with a
+// timeout and a Stop so a regression that reintroduced whole-stream buffering
+// cannot hang or OOM the test.
+func TestParseReaderEBCDICUnboundedStreamBoundedByNodeCap(t *testing.T) {
+	t.Parallel()
+
+	const decl = `<?xml version="1.0" encoding="IBM037"?><root>`
+	head, err := charmap.CodePage037.NewEncoder().Bytes([]byte(decl))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, head[:4],
+		"encoded head must start with the EBCDIC invariant prefix")
+
+	r := &stoppableEBCDICReader{head: head}
+	defer r.Stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		// A small cap keeps the test fast: the per-node cap must fire well before
+		// the infinite tail could exhaust memory.
+		_, perr := helium.NewParser().MaxNodeContentSize(4096).ParseReader(t.Context(), r)
+		errCh <- perr
+	}()
+
+	select {
+	case perr := <-errCh:
+		require.ErrorIs(t, perr, helium.ErrNodeContentTooLarge,
+			"an unbounded EBCDIC stream must be bounded by the per-node content cap")
+	case <-time.After(5 * time.Second):
+		r.Stop() // unblock the parser so the leaked goroutine can exit
+		t.Fatal("ParseReader did not terminate an unbounded EBCDIC stream within the timeout")
+	}
+}
+
+// TestParseReaderEBCDICLargeFiniteDocUnderNodeCap guards the key property of the
+// streaming EBCDIC path: a finite document whose TOTAL size exceeds
+// MaxNodeContentSize but whose every individual node is well under the cap must
+// parse successfully and identically to Parse([]byte). A total-input cap (the
+// earlier, wrong approach) would have wrongly rejected this document and
+// diverged from Parse([]byte); the per-node cap accepts it.
+func TestParseReaderEBCDICLargeFiniteDocUnderNodeCap(t *testing.T) {
+	t.Parallel()
+
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0" encoding="IBM037"?><root>`)
+	for range 500 {
+		sb.WriteString(`<c>x</c>`)
+	}
+	sb.WriteString(`</root>`)
+	xml := sb.String()
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Greater(t, len(ebcdic), 1024,
+		"the document must be larger than the per-node cap used below")
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// A cap smaller than the total document but larger than any single node.
+	bytesDoc, err := helium.NewParser().MaxNodeContentSize(1024).Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must accept a large finite EBCDIC doc with small nodes")
+	want := serialize(bytesDoc)
+
+	readerDoc, err := helium.NewParser().MaxNodeContentSize(1024).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err,
+		"ParseReader must accept a large finite EBCDIC doc whose nodes are under the per-node cap")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a large finite EBCDIC doc")
+}
+
+// TestParseReaderEBCDICLargeEntityNotFalselyAmplified guards against a
+// regression where the streaming EBCDIC path left inputSize seeded from the
+// bounded sniff prefix (~256/512 bytes) rather than the real document size. A
+// large internal entity referenced exactly once is legitimate (no
+// amplification), and Parse([]byte) accepts it because inputSize is the full
+// slice length. With only the prefix length as the divisor, the
+// amplification-ratio guard would falsely reject the same document over
+// ParseReader. Tracking the bytes consumed from the stream fixes it.
+func TestParseReaderEBCDICLargeEntityNotFalselyAmplified(t *testing.T) {
+	t.Parallel()
+
+	// Entity content just over the 1 MiB ratio-check baseline, referenced once.
+	bigContent := strings.Repeat("A", 1_500_000)
+	xml := fmt.Sprintf(`<?xml version="1.0" encoding="IBM037"?><!DOCTYPE root [<!ENTITY big "%s">]><root>&big;</root>`, bigContent)
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// Baseline: Parse([]byte) accepts it (inputSize == len(ebcdic)). Use a large
+	// per-node cap so the 1.5 MiB text node is not what trips — this test is about
+	// the amplification guard, not the node-content cap.
+	bytesDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must accept a large EBCDIC entity referenced once")
+	want := serialize(bytesDoc)
+
+	// ParseReader (unknown source size) must match: the amplification guard must
+	// use the real consumed-byte count, not the sniff-prefix length.
+	readerDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err,
+		"ParseReader must accept the same large-entity EBCDIC document as Parse([]byte)")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a large-entity EBCDIC doc")
+}
+
+// TestParseReaderEBCDICNestedLargeEntityNotFalselyAmplified guards the nested
+// entity sub-parse path. When a large entity is reached INDIRECTLY through
+// another entity's replacement text (&wrap; -> &big;), the inner &big; expansion
+// runs in a nested parser context. That nested context copied inputSize from the
+// parent (the bounded EBCDIC sniff prefix) but, before this fix, did NOT carry
+// the live ebcdicConsumed byte-counter, so the amplification-ratio guard divided
+// by the prefix length and falsely rejected a document Parse([]byte) accepts.
+// Propagating ebcdicConsumed through inheritNestedParserState fixes it.
+func TestParseReaderEBCDICNestedLargeEntityNotFalselyAmplified(t *testing.T) {
+	t.Parallel()
+
+	// Entity content just over the 1 MiB ratio-check baseline, referenced once
+	// through a wrapping entity so the expansion happens inside a nested context.
+	bigContent := strings.Repeat("A", 1_500_000)
+	xml := fmt.Sprintf(`<?xml version="1.0" encoding="IBM037"?><!DOCTYPE root [<!ENTITY big "%s"><!ENTITY wrap "&big;">]><root>&wrap;</root>`, bigContent)
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// Baseline: Parse([]byte) accepts it (inputSize == len(ebcdic)). Disable the
+	// per-node cap so the 1.5 MiB text node is not what trips — this test is about
+	// the amplification guard inside the nested entity context.
+	bytesDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must accept a nested large EBCDIC entity referenced once")
+	want := serialize(bytesDoc)
+
+	// ParseReader (unknown source size) must match: the nested context's
+	// amplification guard must use the real consumed-byte count, not the
+	// sniff-prefix length.
+	readerDoc, err := helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err,
+		"ParseReader must accept the same nested large-entity EBCDIC document as Parse([]byte)")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a nested large-entity EBCDIC doc")
+}
+
+// TestParseReaderEBCDICAmplificationAttackStillRejected confirms the
+// inputSize-vs-consumed fix did NOT reopen the entity-amplification DoS over the
+// streaming EBCDIC reader path. The fix divides sizeentcopy by the real
+// consumed-byte count so a large entity referenced ONCE passes; an actual attack
+// (a modestly sized entity referenced MANY times) expands far beyond the
+// amplification factor of the real document size and must STILL be rejected,
+// exactly as Parse([]byte) rejects it. The per-node cap is disabled so the
+// failure is attributable to the amplification guard, not the node-content cap.
+func TestParseReaderEBCDICAmplificationAttackStillRejected(t *testing.T) {
+	t.Parallel()
+
+	// ~250 KB entity referenced 30 times: the document is ~250 KB on disk but
+	// expands to ~7.5 MB, well past 5x the real consumed size, so the
+	// amplification-ratio guard must fire (and not the 1 GB hard ceiling).
+	body := strings.Repeat("A", 250_000)
+	refs := strings.Repeat("&a;", 30)
+	xml := fmt.Sprintf(`<?xml version="1.0" encoding="IBM037"?><!DOCTYPE root [<!ENTITY a "%s">]><root>%s</root>`, body, refs)
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	// Parse([]byte) baseline: the attack must be rejected.
+	_, err = helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).Parse(t.Context(), ebcdic)
+	require.Error(t, err, "Parse([]byte) must reject an EBCDIC entity-amplification attack")
+	require.Contains(t, err.Error(), "amplification",
+		"Parse([]byte) must reject via the amplification guard")
+
+	// ParseReader (unknown source size) must STILL reject it: the consumed-byte
+	// divisor reflects the real (small) document, so the ratio guard fires.
+	_, err = helium.NewParser().SubstituteEntities(true).MaxNodeContentSize(-1).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.Error(t, err, "ParseReader must reject an EBCDIC entity-amplification attack")
+	require.Contains(t, err.Error(), "amplification",
+		"ParseReader must reject via the amplification guard, not silently accept the DoS")
+}
+
+// TestParseReaderEBCDICSmallDocUnderCap confirms the streaming EBCDIC reader
+// path parses a normal, small EBCDIC document identically to Parse([]byte).
+func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM037"?><root><child>hi</child></root>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle EBCDIC")
+	want := serialize(bytesDoc)
+
+	readerDoc, err := helium.NewParser().ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err, "a small EBCDIC doc must parse under the default ingestion cap")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a small EBCDIC doc")
+}
+
+// infiniteBlankReader streams a fixed head followed by an unbounded run of
+// ASCII spaces and never reaches EOF. It models a prolog / inter-root
+// whitespace DoS: input that keeps the parser in skipBlanks forever. The blank
+// run is OUTSIDE any element, so the char-data node-content cap never applies —
+// only the blank-run guard in skipBlanks bounds it.
+type infiniteBlankReader struct {
+	head    []byte
+	pos     int
+	stopped atomic.Bool
+}
+
+func (r *infiniteBlankReader) Stop() { r.stopped.Store(true) }
+
+func (r *infiniteBlankReader) Read(p []byte) (int, error) {
+	if r.stopped.Load() {
+		return 0, io.EOF
+	}
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	for i := range p {
+		p[i] = ' '
+	}
+	return len(p), nil
+}
+
+// TestParseReaderUnboundedPrologWhitespaceBounded guards the prolog/inter-root
+// whitespace DoS that the per-node content cap does NOT cover: an unbounded run
+// of whitespace BEFORE the root element (or after it) is consumed by skipBlanks,
+// which formerly peeked an ever-growing offset and grew the cursor buffer
+// without bound. The blank-run guard now caps it and fails the parse instead of
+// hanging or exhausting memory. A goroutine + timeout + Stop guarantees a
+// regression cannot hang or OOM the test process.
+func TestParseReaderUnboundedPrologWhitespaceBounded(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		// Infinite whitespace between the XML declaration and the root element.
+		"prolog before root": `<?xml version="1.0"?>`,
+		// Infinite whitespace in the epilogue, after a complete root element.
+		"epilogue after root": `<?xml version="1.0"?><root/>`,
+	}
+
+	for name, head := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := &infiniteBlankReader{head: []byte(head)}
+			defer r.Stop()
+
+			errCh := make(chan error, 1)
+			go func() {
+				// A small cap keeps the test fast: the blank-run guard must fire
+				// well before the infinite tail could exhaust memory.
+				_, perr := helium.NewParser().MaxNodeContentSize(4096).ParseReader(t.Context(), r)
+				errCh <- perr
+			}()
+
+			select {
+			case perr := <-errCh:
+				require.ErrorIs(t, perr, helium.ErrNodeContentTooLarge,
+					"unbounded %s whitespace must be bounded by the blank-run guard", name)
+			case <-time.After(5 * time.Second):
+				r.Stop() // unblock the parser so the leaked goroutine can exit
+				t.Fatalf("ParseReader did not terminate unbounded %s whitespace within the timeout", name)
+			}
+		})
+	}
+}
+
+// TestParseLeadingAndTrailingWhitespacePreserved confirms the bounded blank
+// skip still handles ordinary (within-cap) whitespace correctly: leading
+// whitespace before the root, whitespace around the XML declaration, and
+// trailing whitespace in the epilogue all parse without error.
+func TestParseLeadingAndTrailingWhitespacePreserved(t *testing.T) {
+	t.Parallel()
+
+	docs := map[string]string{
+		"leading before root":   "<?xml version=\"1.0\"?>\n\n  \t<root/>",
+		"trailing epilogue":     "<root/>\n  \t\n",
+		"between prolog nodes":  "<?xml version=\"1.0\"?>\n<!-- c -->\n  <root/>\n",
+		"large within-cap blob": "<?xml version=\"1.0\"?>" + strings.Repeat(" ", 5000) + "<root/>",
+	}
+
+	for name, doc := range docs {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// A cap larger than the within-cap blob; ordinary whitespace must
+			// never trip the blank-run guard.
+			d, err := helium.NewParser().MaxNodeContentSize(1<<20).Parse(t.Context(), []byte(doc))
+			require.NoError(t, err)
+			require.NotNil(t, d)
+		})
+	}
+}
+
+// prefixThenZeroThenRestReader delivers a leading prefix, then a single
+// transient (0, nil) read (which io.Reader explicitly permits while a slow
+// producer waits for more input), then the remaining bytes, then io.EOF. It
+// models a stream that splits the EBCDIC sniff prefix across a zero-progress
+// read.
+type prefixThenZeroThenRestReader struct {
+	data        []byte
+	prefixLen   int
+	pos         int
+	emittedZero bool
+}
+
+func (r *prefixThenZeroThenRestReader) Read(p []byte) (int, error) {
+	if r.pos < r.prefixLen {
+		n := copy(p, r.data[r.pos:r.prefixLen])
+		r.pos += n
+		return n, nil
+	}
+	if !r.emittedZero {
+		r.emittedZero = true
+		return 0, nil // transient empty read mid-sniff
+	}
+	if r.pos < len(r.data) {
+		n := copy(p, r.data[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	return 0, io.EOF
+}
+
+// TestParseReaderEBCDICNonIBM037SplitByZeroProgressRead guards the EBCDIC
+// sniff-extension loop against a transient (0, nil) read that splits the sniff
+// prefix before the encoding declaration has been buffered. A non-IBM037 EBCDIC
+// variant (CP1141) is declared and its content uses byte 0x4A, which decodes to
+// U+00C4 (Ä) under CP1141 but to U+00A2 (¢) under CP037. If a (0, nil) read
+// truncated the sniff prefix, ExtractEBCDICEncoding would miss the declaration,
+// the parser would default to IBM-037, and the text would wrongly decode to ¢.
+// The bounded zero-progress retry must keep reading so CP1141 is detected and
+// the document parses identically to Parse([]byte).
+func TestParseReaderEBCDICNonIBM037SplitByZeroProgressRead(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM1141"?><root>Ä</root>`
+	cp1141 := heliumencoding.Load("ibm1141")
+	require.NotNil(t, cp1141, "internal encoding registry must know CP1141")
+	ebcdic, err := cp1141.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle CP1141 EBCDIC")
+	want := serialize(bytesDoc)
+	// The writer re-encodes to the document's declared EBCDIC encoding, so assert
+	// the decoded DOM text directly: CP1141 byte 0x4A is Ä (U+00C4); the IBM-037
+	// default would have decoded it to ¢ (U+00A2).
+	require.Equal(t, "Ä", string(bytesDoc.DocumentElement().Content()),
+		"CP1141 content byte 0x4A must decode to Ä, not the IBM-037 default (¢)")
+
+	// Split the stream right after the invariant prefix so the (0, nil) read lands
+	// inside the sniff-extension loop, before the encoding declaration is buffered.
+	r := &prefixThenZeroThenRestReader{data: ebcdic, prefixLen: len(ebcdic[:4])}
+	doc, err := helium.NewParser().ParseReader(t.Context(), r)
+	require.NoError(t, err,
+		"ParseReader must parse CP1141 EBCDIC when a transient (0, nil) read splits the sniff prefix")
+	require.Equal(t, want, serialize(doc),
+		"ParseReader must detect CP1141 (not default to IBM-037) across a zero-progress read")
+}
+
 // ebcdicSlowTailReader returns the EBCDIC invariant prefix on its first Read (so
 // detection succeeds), signals when its tail is first read, then drips the tail
 // one byte at a time. The first tail byte is served immediately so the parser
@@ -2879,7 +3377,7 @@ func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
 	mainPath := filepath.Join(dir, "main.xml")
 	require.NoError(t, os.WriteFile(mainPath, []byte(main), 0o600))
 
-	doc, err := helium.NewParser().SubstituteEntities(true).ParseFile(t.Context(), mainPath)
+	doc, err := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(helium.PermissiveFS()).ParseFile(t.Context(), mainPath)
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 
@@ -2887,4 +3385,951 @@ func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
 	require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
 	require.Contains(t, buf.String(), "WORLD",
 		"relative external entity must resolve against the file's base URI")
+}
+
+// TestLenientXMLDecl exercises the LenientXMLDecl parse path, including
+// pseudo-attributes presented out of the canonical order.
+func TestLenientXMLDecl(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root/>`,
+		`<?xml encoding="UTF-8" version="1.0"?><root/>`,
+		`<?xml standalone="no" version="1.0"?><root/>`,
+		`<?xml version="1.0"?><root/>`,
+	}
+	for _, in := range inputs {
+		doc, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(), []byte(in))
+		require.NoError(t, err, "lenient parse of %q", in)
+		require.NotNil(t, doc.DocumentElement())
+	}
+}
+
+// TestMalformedXMLDecl exercises XML-declaration error branches.
+func TestMalformedXMLDecl(t *testing.T) {
+	t.Parallel()
+
+	bad := []string{
+		`<?xml?><root/>`,                         // missing version
+		`<?xml version="1.0" foo="bar"?><root/>`, // unknown pseudo-attr / unclosed
+		`<?xml version=1.0?><root/>`,             // unquoted version value
+	}
+	for _, in := range bad {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.Error(t, err, "malformed decl %q should error", in)
+	}
+}
+
+// TestProcessingInstructionsAndComments parses PIs and comments in the prolog,
+// content, and epilog positions.
+func TestProcessingInstructionsAndComments(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<?pi-prolog data?>
+<!-- prolog comment -->
+<root>
+  <?pi-content more?>
+  <!-- content comment -->
+  text
+</root>
+<!-- epilog comment -->
+<?pi-epilog x?>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<?pi-prolog")
+	require.Contains(t, out, "<!-- prolog comment -->")
+}
+
+// TestCDATASection parses CDATA sections including the tricky ]]> boundary.
+func TestCDATASection(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root><![CDATA[ raw <tag> & ]]> normal text <child/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<![CDATA[")
+}
+
+// TestCharacterReferences exercises numeric and hex character references.
+func TestCharacterReferences(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root>dec=&#65; hex=&#x42; high=&#x1F600;</root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.Equal(t, "dec=A hex=B high=\U0001F600", string(doc.DocumentElement().Content()))
+}
+
+// TestMalformedDocuments exercises well-formedness error branches across the
+// parser. Each input is malformed and must surface an error.
+func TestMalformedDocuments(t *testing.T) {
+	t.Parallel()
+
+	bad := []string{
+		`<root>`,                         // unclosed root
+		`<root></notroot>`,               // mismatched end tag
+		`<root attr></root>`,             // attribute without value
+		`<root attr=value></root>`,       // unquoted attribute value
+		`<root>&undefinedentity;</root>`, // reference to undeclared entity
+		`<root><![CDATA[ unterminated`,   // unterminated CDATA
+		`<!-- unterminated comment`,      // unterminated comment
+		`<root>&#xZZ;</root>`,            // invalid hex char ref
+		`<root>&;</root>`,                // empty reference
+		`<>`,                             // empty tag name
+		`<root></root><second/>`,         // two root elements
+	}
+	for _, in := range bad {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.Error(t, err, "malformed input %q should error", in)
+	}
+}
+
+// TestRecoverOnError exercises the recover path: a malformed document returns
+// both a (partial) document and an error.
+func TestRecoverOnErrorPartialDoc(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root><a>text</a><b></root>`
+	doc, err := helium.NewParser().RecoverOnError(true).Parse(t.Context(), []byte(src))
+	// With recovery the parser returns a partial document; an error may or may
+	// not be reported depending on how far recovery proceeds.
+	_ = err
+	require.NotNil(t, doc)
+}
+
+// TestNamespacedAttributes parses namespaced elements and attributes.
+func TestNamespacedAttributes(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root xmlns="urn:default" xmlns:p="urn:p" p:attr="v" plain="w">` +
+		`<p:child/><plain/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, `p:attr="v"`)
+	require.Contains(t, out, `xmlns:p="urn:p"`)
+}
+
+// TestParserOptionSetters exercises every boolean parser option setter with both
+// true and false (so both the Set and Clear branches run) plus the scalar/object
+// setters, then performs a parse to confirm the configured parser still works.
+func TestParserOptionSetters(t *testing.T) {
+	t.Parallel()
+
+	p := helium.NewParser().
+		RecoverOnError(true).RecoverOnError(false).
+		SubstituteEntities(true).SubstituteEntities(false).
+		LoadExternalDTD(true).LoadExternalDTD(false).
+		DefaultDTDAttributes(true).DefaultDTDAttributes(false).
+		ValidateDTD(true).ValidateDTD(false).
+		SuppressErrors(true).SuppressErrors(false).
+		SuppressWarnings(true).SuppressWarnings(false).
+		PedanticErrors(true).PedanticErrors(false).
+		StripBlanks(true).StripBlanks(false).
+		ProcessXInclude(true).ProcessXInclude(false).
+		AllowNetwork(true).AllowNetwork(false).
+		CleanNamespaces(true).CleanNamespaces(false).
+		MergeCDATA(true).MergeCDATA(false).
+		XIncludeNodes(true).XIncludeNodes(false).
+		CompactTextNodes(true).CompactTextNodes(false).
+		FixBaseURIs(true).FixBaseURIs(false).
+		MaxNameLength(-1).MaxNameLength(0).
+		MaxEntityAmplification(-1).MaxEntityAmplification(0).
+		MaxContentModelDepth(-1).MaxContentModelDepth(0).
+		IgnoreEncoding(true).IgnoreEncoding(false).
+		BigLineNumbers(true).BigLineNumbers(false).
+		BlockXXE(true).BlockXXE(false).
+		ReuseDict(true).ReuseDict(false).
+		SkipIDs(true).SkipIDs(false).
+		LenientXMLDecl(true).LenientXMLDecl(false).
+		CharBufferSize(8192).
+		MaxDepth(256).
+		MaxExternalDTDBytes(1 << 20).
+		Catalog(nopCatalog{}).
+		BaseURI("http://example.com/base.xml")
+
+	doc, err := p.Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child>text</child></root>`))
+	require.NoError(t, err, "a fully-configured parser parses a simple document")
+	require.NotNil(t, doc.DocumentElement())
+}
+
+// TestParserCharBufferSizeAffectsParse confirms a tiny char buffer (which forces
+// repeated cursor refills) still parses a larger document correctly.
+func TestParserCharBufferSizeAffectsParse(t *testing.T) {
+	t.Parallel()
+
+	var b []byte
+	b = append(b, []byte(`<root>`)...)
+	for range 200 {
+		b = append(b, []byte(`<item>x</item>`)...)
+	}
+	b = append(b, []byte(`</root>`)...)
+
+	doc, err := helium.NewParser().CharBufferSize(16).Parse(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "root", doc.DocumentElement().Name())
+}
+
+// genCharDataReader lazily produces "<root>" + n copies of fill + "</root>"
+// without ever holding the whole payload in memory, so the parser's own
+// character-data buffering is the only large allocation under test. It records
+// the cumulative number of payload bytes it has handed out in nread, which the
+// memory-bounds test samples at the first SAX callback to prove the parser
+// streams rather than draining the whole run before delivering anything.
+type genCharDataReader struct {
+	prefix []byte
+	fill   byte
+	remain int
+	suffix []byte
+	nread  int
+}
+
+func (r *genCharDataReader) Read(p []byte) (int, error) {
+	n := 0
+	if len(r.prefix) > 0 {
+		c := copy(p, r.prefix)
+		r.prefix = r.prefix[c:]
+		n += c
+	}
+	if n < len(p) && r.remain > 0 {
+		c := min(len(p)-n, r.remain)
+		for i := range c {
+			p[n+i] = r.fill
+		}
+		r.remain -= c
+		n += c
+	}
+	if n < len(p) && len(r.prefix) == 0 && r.remain == 0 && len(r.suffix) > 0 {
+		c := copy(p[n:], r.suffix)
+		r.suffix = r.suffix[c:]
+		n += c
+	}
+	if n == 0 {
+		return 0, io.EOF
+	}
+	r.nread += n
+	return n, nil
+}
+
+// TestParserCharBufferSizeBoundsCharDataMemory verifies that a large
+// delimiter-free character-data run delivered to a streaming SAX consumer is
+// scanned and delivered in bounded chunks rather than materialized whole. Before
+// the fix the entire run was buffered (in charBuf and the cursor's internal
+// buffer) before the first chunk was delivered.
+//
+// Rather than sampling a global heap signal (non-deterministic, especially
+// under t.Parallel), this instruments the reader: the parser pulls bytes from r
+// on demand, so the count of bytes read at the first SAX callback shows whether
+// delivery began before the whole payload was drained. A streaming parser fires
+// the first callback after reading only a bounded prefix (one cursor buffer ≈
+// 8 KiB), far short of the multi-megabyte run; the pre-fix whole-run buffering
+// would have drained nearly all of it first.
+func TestParserCharBufferSizeBoundsCharDataMemory(t *testing.T) {
+	t.Parallel()
+
+	const fillBytes = 32 << 20 // 32 MiB delimiter-free run
+	const bufSize = 8192
+
+	r := &genCharDataReader{
+		prefix: []byte("<root>"),
+		fill:   'a',
+		remain: fillBytes,
+		suffix: []byte("</root>"),
+	}
+
+	var chunkCount, total, maxChunk, readAtFirstChunk int
+
+	handler := sax.New()
+	record := func(_ context.Context, ch []byte) error {
+		if chunkCount == 0 {
+			readAtFirstChunk = r.nread
+		}
+		chunkCount++
+		total += len(ch)
+		maxChunk = max(maxChunk, len(ch))
+		return nil
+	}
+	handler.SetOnCharacters(sax.CharactersFunc(record))
+	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(record))
+
+	p := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize)
+	_, err := p.ParseReader(context.Background(), r)
+	require.NoError(t, err)
+
+	require.Equal(t, fillBytes, total, "every character byte is delivered")
+	require.LessOrEqual(t, maxChunk, bufSize, "no chunk exceeds the configured buffer size")
+	require.Greater(t, chunkCount, 1, "the run is delivered in multiple chunks")
+
+	// The first callback must fire before the whole run has been read; a bound
+	// well below the payload (yet generously above one cursor buffer) proves the
+	// scan buffer stays bounded instead of materializing the whole run first.
+	require.Less(t, readAtFirstChunk, 1<<20,
+		"streaming must deliver the first chunk after reading only a bounded prefix; read %d bytes first", readAtFirstChunk)
+}
+
+// TestParserCharBufferSizeConsistentWhitespaceClassification pins the chunked
+// streaming-SAX path's whitespace classification against the single-shot path,
+// which classifies the WHOLE run as one unit. The single-shot path looks over
+// the whole run to decide ignorable-whitespace vs. character data; the chunked
+// path delivers in bounded pieces and cannot, so it must not emit any
+// IgnorableWhitespace event until the whole run is proven blank: a fully-blank
+// run is ignorable whitespace, but a run containing any text is character data
+// in its entirety, leading blanks included.
+//
+// This guards against two earlier bugs: per-chunk classification, where a blank
+// run could arrive as Characters then IgnorableWhitespace under a tiny buffer;
+// and "sticky downgrade", where the leading blanks of <root>  text</root> were
+// emitted as an early IgnorableWhitespace chunk before the text was seen.
+func TestParserCharBufferSizeConsistentWhitespaceClassification(t *testing.T) {
+	t.Parallel()
+
+	type event struct {
+		ignorable bool
+		content   string
+	}
+
+	run := func(src string, bufSize int) []event {
+		var events []event
+		handler := sax.New()
+		handler.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: false, content: string(ch)})
+			return nil
+		}))
+		handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: true, content: string(ch)})
+			return nil
+		}))
+		_, err := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize).
+			Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		return events
+	}
+
+	concat := func(events []event) string {
+		var b strings.Builder
+		for _, e := range events {
+			b.WriteString(e.content)
+		}
+		return b.String()
+	}
+
+	t.Run("all-whitespace run stays ignorable across chunks", func(t *testing.T) {
+		t.Parallel()
+		events := run("<root>        </root>", 2)
+		require.Greater(t, len(events), 1, "the tiny buffer must split the run")
+		require.Equal(t, "        ", concat(events), "every whitespace byte is delivered")
+		for _, e := range events {
+			require.True(t, e.ignorable, "a fully-blank run must classify every chunk as ignorable whitespace")
+		}
+	})
+
+	t.Run("run containing text is all characters, no leading ignorable", func(t *testing.T) {
+		t.Parallel()
+		events := run("<root>      text</root>", 2)
+		require.Equal(t, "      text", concat(events), "every character byte is delivered")
+		require.NotEmpty(t, events, "a run containing text must deliver characters")
+		for _, e := range events {
+			require.False(t, e.ignorable,
+				"a run containing text is character data in its entirety; leading blanks must not be emitted as ignorable whitespace")
+		}
+	})
+}
+
+// TestParserCharBufferSizeWhitespaceBeforeEntity pins the chunked streaming-SAX
+// path's classification of an all-whitespace run that ends at an entity
+// reference ('&') rather than a start/end tag ('<'). The single-shot path
+// (areBlanksBytes) treats such a run as character data — it is ignorable
+// whitespace only when the delimiter that ends it is '<' or CR. An earlier
+// chunked implementation dropped that trailing-delimiter check and misreported
+// the leading blanks as IgnorableWhitespace. Both paths must agree.
+func TestParserCharBufferSizeWhitespaceBeforeEntity(t *testing.T) {
+	t.Parallel()
+
+	type event struct {
+		ignorable bool
+		content   string
+	}
+
+	run := func(src string, bufSize int) []event {
+		var events []event
+		handler := sax.New()
+		handler.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: false, content: string(ch)})
+			return nil
+		}))
+		handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: true, content: string(ch)})
+			return nil
+		}))
+		_, err := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize).
+			Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		return events
+	}
+
+	// Leading whitespace, then an entity reference. The run "   " ends at '&',
+	// so it is character data, not ignorable whitespace.
+	const src = `<root>   &amp;</root>`
+
+	// Single-shot path (no chunking) is the reference classification.
+	single := run(src, 0)
+	require.NotEmpty(t, single)
+	for _, e := range single {
+		require.False(t, e.ignorable,
+			"single-shot: a whitespace run ending at '&' is character data, not ignorable whitespace")
+	}
+
+	// Chunked path must match: no IgnorableWhitespace event, leading blanks
+	// delivered as characters.
+	chunked := run(src, 2)
+	require.NotEmpty(t, chunked)
+	var b strings.Builder
+	for _, e := range chunked {
+		require.False(t, e.ignorable,
+			"chunked: a whitespace run ending at '&' must match the single-shot path (character data)")
+		b.WriteString(e.content)
+	}
+	require.Equal(t, "   &", b.String(), "every character byte (including leading blanks) is delivered")
+}
+
+// TestParserCharBufferSizeBoundsWhitespaceMemory verifies that a large
+// delimiter-free all-whitespace run delivered to a streaming SAX consumer is
+// bounded in memory. A blank run cannot be proven ignorable whitespace until
+// its end is in view, so a naive implementation buffers it whole before the
+// first callback. The bounded-whitespace policy downgrades an over-budget blank
+// prefix to character data and streams the rest in fixed-size chunks, so the
+// first callback fires after reading only a bounded prefix. This mirrors
+// TestParserCharBufferSizeBoundsCharDataMemory but uses a whitespace fill byte.
+func TestParserCharBufferSizeBoundsWhitespaceMemory(t *testing.T) {
+	t.Parallel()
+
+	const fillBytes = 32 << 20 // 32 MiB delimiter-free whitespace run
+	const bufSize = 8192
+
+	r := &genCharDataReader{
+		prefix: []byte("<root>"),
+		fill:   ' ',
+		remain: fillBytes,
+		suffix: []byte("</root>"),
+	}
+
+	var chunkCount, total, maxChunk, readAtFirstChunk int
+	sawIgnorable := false
+
+	handler := sax.New()
+	record := func(ignorable bool) func(context.Context, []byte) error {
+		return func(_ context.Context, ch []byte) error {
+			if chunkCount == 0 {
+				readAtFirstChunk = r.nread
+			}
+			if ignorable {
+				sawIgnorable = true
+			}
+			chunkCount++
+			total += len(ch)
+			maxChunk = max(maxChunk, len(ch))
+			return nil
+		}
+	}
+	handler.SetOnCharacters(sax.CharactersFunc(record(false)))
+	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(record(true)))
+
+	p := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize)
+	_, err := p.ParseReader(context.Background(), r)
+	require.NoError(t, err)
+
+	require.Equal(t, fillBytes, total, "every whitespace byte is delivered")
+	require.LessOrEqual(t, maxChunk, bufSize, "no chunk exceeds the configured buffer size")
+	require.Greater(t, chunkCount, 1, "the run is delivered in multiple chunks")
+	require.False(t, sawIgnorable,
+		"an over-budget blank run is downgraded to character data, not buffered whole as ignorable whitespace")
+
+	// The first callback must fire well before the whole run has been read,
+	// proving the blank prefix is bounded rather than materialized whole.
+	require.Less(t, readAtFirstChunk, 1<<20,
+		"bounded-whitespace policy must deliver the first chunk after reading only a bounded prefix; read %d bytes first", readAtFirstChunk)
+}
+
+// TestParserCharBufferSizeNeverSplitsRune verifies the chunked streaming-SAX
+// path never splits a UTF-8 rune, even when CharBufferSize is smaller than a
+// single multi-byte rune. ScanCharDataSlice returns a lone over-budget rune
+// whole (to guarantee progress), and deliverCharacters must then deliver it
+// whole rather than slicing it into invalid UTF-8 fragments.
+func TestParserCharBufferSizeNeverSplitsRune(t *testing.T) {
+	t.Parallel()
+
+	// Mix 2-, 3-, and 4-byte runes so a 1-byte buffer is narrower than every
+	// rune in the run.
+	const content = "héllo—世界🌍ok"
+
+	var chunks []string
+	handler := sax.New()
+	collect := func(_ context.Context, ch []byte) error {
+		require.True(t, utf8.Valid(ch), "no chunk may contain a split (invalid) UTF-8 rune: %q", ch)
+		chunks = append(chunks, string(ch))
+		return nil
+	}
+	handler.SetOnCharacters(sax.CharactersFunc(collect))
+	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(collect))
+
+	_, err := helium.NewParser().SAXHandler(handler).CharBufferSize(1).
+		Parse(context.Background(), []byte("<root>"+content+"</root>"))
+	require.NoError(t, err)
+
+	require.Equal(t, content, strings.Join(chunks, ""), "every byte is delivered intact")
+}
+
+// nopCatalog is a CatalogResolver that never resolves anything. It exists only
+// to drive the Parser.Catalog configuration path.
+type nopCatalog struct{}
+
+func (nopCatalog) Resolve(_ context.Context, _, _ string) string { return "" }
+func (nopCatalog) ResolveURI(_ context.Context, _ string) string { return "" }
+
+// TestParserMalformedBranches feeds a battery of distinct malformed inputs, each
+// designed to drive a specific parser error branch (XML declaration version /
+// encoding / standalone parsing, PI target and delimiter rules, comment and
+// CDATA termination, QName / Name lexical errors). Every input must be rejected;
+// the value is in exercising the otherwise-unreached error returns.
+func TestParserMalformedBranches(t *testing.T) {
+	t.Parallel()
+
+	bad := []struct {
+		name string
+		src  string
+	}{
+		{"xml decl version unquoted", `<?xml version=1.0?><root/>`},
+		{"xml decl bad standalone", `<?xml version="1.0" standalone="maybe"?><root/>`},
+		{"xml decl encoding unquoted", `<?xml version="1.0" encoding=UTF-8?><root/>`},
+		{"xml decl encoding bad first char", `<?xml version="1.0" encoding="1bad"?><root/>`},
+		{"xml decl missing version", `<?xml encoding="UTF-8"?><root/>`},
+		{"pi target named xml mid-document", `<root><?xml data?></root>`},
+		{"pi missing space after target", `<root><?targetdata</root>`},
+		{"pi unterminated", `<root><?target data </root>`},
+		{"comment with double hyphen", `<root><!-- a -- b --></root>`},
+		{"cdata unterminated", `<root><![CDATA[unterminated</root>`},
+		{"bad qname trailing colon", `<root:></root:>`},
+		{"name starts with digit", `<1root/>`},
+		{"attribute missing equals", `<root attr "v"/>`},
+		{"unterminated start tag", `<root attr="v"`},
+		{"text with raw less-than via entity ok but bad amp", `<root>a & b</root>`},
+	}
+
+	for _, tc := range bad {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(context.Background(), []byte(tc.src))
+			require.Error(t, err, "malformed input %q must be rejected", tc.src)
+		})
+	}
+}
+
+// TestParserWellFormedVariety parses a variety of well-formed constructs that
+// exercise the success branches of the same parser functions the malformed tests
+// hit on the error side: a leading PI, a comment, a CDATA section, namespaced
+// elements/attributes, character references, and an explicit encoding/standalone
+// declaration.
+func TestParserWellFormedVariety(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?pi-target some data?>
+<!-- a leading comment -->
+<p:root xmlns:p="urn:p" xmlns="urn:default" p:attr="v" plain="w">
+  <![CDATA[ raw <markup> & stuff ]]>
+  text &#65; &#x42; &amp; more
+  <p:child/>
+  <plain-child attr="x"/>
+</p:root>`
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	require.Equal(t, "root", root.LocalName())
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "urn:p")
+	require.Contains(t, out, "CDATA")
+}
+
+// TestEncodingDeclarations parses documents with various encoding declarations
+// to exercise the encoding-switch paths.
+func TestEncodingDeclarations(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		`<?xml version="1.0" encoding="UTF-8"?><root>ascii</root>`,
+		`<?xml version="1.0" encoding="utf-8"?><root>ascii</root>`,
+		`<?xml version="1.0" encoding="US-ASCII"?><root>ascii</root>`,
+	}
+	for _, in := range inputs {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.NoError(t, err, "parse %q", in)
+		require.NotNil(t, doc.DocumentElement())
+	}
+}
+
+// TestEncodingIgnored verifies the IgnoreEncoding option does not break a parse
+// that declares an encoding.
+func TestEncodingIgnored(t *testing.T) {
+	t.Parallel()
+
+	const in = `<?xml version="1.0" encoding="ISO-8859-1"?><root>x</root>`
+	doc, err := helium.NewParser().IgnoreEncoding(true).Parse(t.Context(), []byte(in))
+	require.NoError(t, err)
+	require.NotNil(t, doc.DocumentElement())
+}
+
+// TestParseOverCapWhitespaceInDeclAndDTD guards that an over-cap whitespace run
+// inside the XML DECLARATION and inside the DTD internal subset surfaces
+// ErrNodeContentTooLarge, not a generic XML-decl / DTD syntax error. The
+// blank-skip helpers only return a bool, so the callers in those positions keep
+// going after the sticky over-cap error is recorded; without the central
+// preference for the blank-run error in errorAtLevel the follow-on syntax error
+// (a malformed version info / "DOCTYPE not finished") would mask the real cause.
+func TestParseOverCapWhitespaceInDeclAndDTD(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+
+	cases := map[string]string{
+		// Whitespace between '<?xml' and the version pseudo-attribute.
+		"xml declaration whitespace": "<?xml" + blanks + `version="1.0"?><root/>`,
+		// Whitespace inside the DTD internal subset.
+		"dtd subset whitespace": `<?xml version="1.0"?><!DOCTYPE root [` + blanks + `]><root/>`,
+	}
+
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().MaxNodeContentSize(limit).Parse(t.Context(), []byte(doc))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+				"over-cap %s must surface ErrNodeContentTooLarge, not a masking syntax error", name)
+		})
+	}
+}
+
+// TestParseOverCapWhitespaceInExternalSubset pins the blank-run cap on the two
+// external-subset blank skips that intentionally bypass skipBlanks to preserve
+// %pe; expansion: the declaration-step skip (parseExternalSubsetDeclStep) and
+// the INCLUDE-terminator skip (parseConditionalSections). Both now route through
+// skipBlankRun, so an over-cap contiguous whitespace run in either position must
+// fail with ErrNodeContentTooLarge instead of forcing the cursor to buffer the
+// whole run.
+func TestParseOverCapWhitespaceInExternalSubset(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ws.dtd">
+<r/>`
+
+	cases := map[string]string{
+		// Whitespace between two declarations in the external subset, consumed by
+		// parseExternalSubsetDeclStep's blank-only skip.
+		"external subset declaration step": "<!ELEMENT r EMPTY>" + blanks + "<!ATTLIST r x CDATA 'd'>",
+		// Whitespace just before the INCLUDE section's "]]>" terminator, consumed
+		// by parseConditionalSections's section-cursor blank skip.
+		"include section terminator": "<![INCLUDE[<!ELEMENT r EMPTY>" + blanks + "]]>",
+	}
+
+	for name, dtd := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+			p := helium.NewParser().
+				BlockXXE(false).
+				LoadExternalDTD(true).
+				DefaultDTDAttributes(true).
+				MaxNodeContentSize(limit).
+				FS(fsys)
+			_, err := p.Parse(t.Context(), []byte(input))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+				"over-cap whitespace in %s must surface ErrNodeContentTooLarge", name)
+		})
+	}
+}
+
+// TestParseOverCapWhitespaceInConditionalSectionHeader pins the blank-run cap on
+// the conditional-section HEADER whitespace skips in parseConditionalSections:
+// after "<![", after the INCLUDE keyword, and after the IGNORE keyword. These
+// positions route through skipBlanks (which records ErrNodeContentTooLarge in
+// pctx.blankRunErr but returns the conditional-section sentinel), and that
+// sentinel was previously TOLERATED by the top-level external-subset loop —
+// silently downgrading a resource-limit violation to "stop parsing the subset".
+// Each over-cap run in the header must instead fail closed with
+// ErrNodeContentTooLarge. Distinct from over-limit whitespace inside the INCLUDE
+// body / before its terminator (covered by TestParseOverCapWhitespaceInExternalSubset).
+func TestParseOverCapWhitespaceInConditionalSectionHeader(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ws.dtd">
+<r/>`
+
+	cases := map[string]string{
+		// Whitespace immediately after "<![", before the INCLUDE keyword.
+		"after open bracket": "<![" + blanks + "INCLUDE[<!ELEMENT r EMPTY>]]>",
+		// Whitespace after the INCLUDE keyword, before its "[".
+		"after include keyword": "<![INCLUDE" + blanks + "[<!ELEMENT r EMPTY>]]>",
+		// Whitespace after the IGNORE keyword, before its "[".
+		"after ignore keyword": "<!ELEMENT r EMPTY><![IGNORE" + blanks + "[ <!ELEMENT q EMPTY> ]]>",
+	}
+
+	for name, dtd := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+			p := helium.NewParser().
+				BlockXXE(false).
+				LoadExternalDTD(true).
+				DefaultDTDAttributes(true).
+				MaxNodeContentSize(limit).
+				FS(fsys)
+			_, err := p.Parse(t.Context(), []byte(input))
+			require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+				"over-cap whitespace %s must surface ErrNodeContentTooLarge (not be tolerated as a conditional-section sentinel)", name)
+		})
+	}
+}
+
+// TestParseReaderEBCDICOverCapWhitespaceInExternalSubset proves the
+// external-subset blank-run cap holds regardless of how the MAIN document is
+// delivered: an EBCDIC document fed through ParseReader, whose external subset
+// (loaded from the fs.FS) carries an over-cap contiguous whitespace run between
+// declarations, must still fail closed with ErrNodeContentTooLarge instead of
+// letting the external-subset declaration step buffer the whole run. The same
+// EBCDIC bytes via Parse([]byte) must fail identically — parity between the two
+// entry points.
+func TestParseReaderEBCDICOverCapWhitespaceInExternalSubset(t *testing.T) {
+	t.Parallel()
+
+	const limit = 4096
+	blanks := strings.Repeat(" ", limit*2)
+	dtd := "<!ELEMENT r EMPTY>" + blanks + "<!ATTLIST r x CDATA 'd'>"
+
+	const decl = `<?xml version="1.0" encoding="IBM037"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "ws.dtd">` + "\n" + `<r/>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(decl))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	newParser := func() helium.Parser {
+		return helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			MaxNodeContentSize(limit).
+			FS(fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}})
+	}
+
+	_, rerr := newParser().ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.ErrorIs(t, rerr, helium.ErrNodeContentTooLarge,
+		"over-cap external-subset whitespace must surface ErrNodeContentTooLarge via ParseReader/EBCDIC")
+
+	_, berr := newParser().Parse(t.Context(), ebcdic)
+	require.ErrorIs(t, berr, helium.ErrNodeContentTooLarge,
+		"the same EBCDIC bytes via Parse([]byte) must fail identically")
+}
+
+// TestExternalSubsetPEReferenceAfterWhitespaceStillExpands guards the property
+// the blank-run cap MUST NOT break: the external-subset declaration step uses a
+// blank-ONLY skip (skipBlankRun) precisely so a "%pe;" reference that follows
+// whitespace is left for parsePEReference to expand, rather than being consumed
+// by skipBlanks/handlePEReference without pushing its replacement text. With a
+// non-trivial (but under-cap) whitespace run before "%pe;", the PE must still
+// expand and its declarations apply — here a general entity declared inside the
+// PE is registered.
+func TestExternalSubsetPEReferenceAfterWhitespaceStillExpands(t *testing.T) {
+	t.Parallel()
+
+	ws := strings.Repeat(" ", 2048)
+	fsys := fstest.MapFS{
+		dtdSystemID: {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">` + ws + `%pe;`)},
+		peSystemID: {Data: []byte(`<!ENTITY fromPE "loaded-from-external-pe">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		MaxNodeContentSize(4096).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "under-cap whitespace before %%pe; must not break parsing")
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("fromPE")
+	require.True(t, ok, "the PE following whitespace must still expand and register its declarations")
+	require.Equal(t, "loaded-from-external-pe", string(ent.Content()))
+}
+
+// blockUntilCancelledBlankReader serves a fixed head, then (on the first read
+// past the head) signals it has reached the trailing whitespace run and blocks
+// until the test cancels the context, after which it streams ASCII spaces
+// forever. It drives a cancellation first observable while the parser is
+// scanning a whitespace run in the XML declaration or DTD subset.
+type blockUntilCancelledBlankReader struct {
+	head      []byte
+	pos       int
+	entered   chan struct{}
+	cancelled chan struct{}
+	once      sync.Once
+}
+
+func (r *blockUntilCancelledBlankReader) Read(p []byte) (int, error) {
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	r.once.Do(func() {
+		close(r.entered)
+		<-r.cancelled
+	})
+	for i := range p {
+		p[i] = ' '
+	}
+	return len(p), nil
+}
+
+// TestParseReaderCancelInDeclAndDTDWhitespace guards the cancellation contract
+// in the XML DECLARATION and DTD whitespace positions (not only prolog /
+// epilogue): a context cancelled while the parser is scanning whitespace there
+// must surface as context.Canceled with no partial document, never as a syntax
+// error. The blank-skip helpers only return a bool, so without the central
+// preference for the sticky blank-run error in errorAtLevel a follow-on syntax
+// error (e.g. "blank needed after '<?xml'") would mask the cancellation.
+func TestParseReaderCancelInDeclAndDTDWhitespace(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"xml declaration whitespace": "<?xml",
+		"dtd subset whitespace":      `<?xml version="1.0"?><!DOCTYPE root [`,
+	}
+
+	for name, head := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &blockUntilCancelledBlankReader{
+				head:      []byte(head),
+				entered:   make(chan struct{}),
+				cancelled: make(chan struct{}),
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			type result struct {
+				doc *helium.Document
+				err error
+			}
+			resCh := make(chan result, 1)
+			go func() {
+				// A generous cap so the over-cap guard does not fire first; the
+				// cancellation must win.
+				doc, err := helium.NewParser().MaxNodeContentSize(1<<20).ParseReader(ctx, r)
+				resCh <- result{doc, err}
+			}()
+
+			select {
+			case <-r.entered:
+			case <-time.After(2 * time.Second):
+				close(r.cancelled) // unblock the reader so the goroutine can exit
+				t.Fatalf("parser did not reach the %s run", name)
+			}
+			cancel()
+			close(r.cancelled)
+
+			select {
+			case res := <-resCh:
+				require.ErrorIs(t, res.err, context.Canceled,
+					"cancellation while scanning %s must surface as context.Canceled", name)
+				require.Nil(t, res.doc, "a cancelled parse must not return a partial document")
+			case <-time.After(2 * time.Second):
+				t.Fatalf("ParseReader did not return after cancellation in %s", name)
+			}
+		})
+	}
+}
+
+// headThenReadErrReader serves head bytes once, then fails every subsequent
+// Read with err. It models the push/streaming stream whose blocking Read
+// returns context.Canceled when cancellation unblocks a pending wait: the
+// ByteCursor records that as a sticky Err() while PeekAt reports 0, the same 0
+// a genuine non-blank byte / clean EOF yields. ctx is never cancelled here, so
+// the ONLY signal of the failure is the cursor's sticky read error.
+type headThenReadErrReader struct {
+	head []byte
+	pos  int
+	err  error
+}
+
+func (r *headThenReadErrReader) Read(p []byte) (int, error) {
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	return 0, r.err
+}
+
+// TestParseReaderReadErrorInXMLDeclNotMaskedAsSyntaxError pins the cancellation
+// contract for a read failure that lands RIGHT AFTER "<?xml", before the
+// declaration's required trailing blank has been read. Because the sixth byte
+// is never delivered, looksLikeXMLDecl cannot confirm the declaration and the
+// parser falls through to treating "<?xml" as a processing instruction, whose
+// reserved "xml" target then synthesizes "XML declaration allowed only at the
+// start of the document". That synthesized syntax error must NOT mask the
+// underlying read failure: a parse whose stream fails (a push-stream Read
+// returning context.Canceled on cancellation) must surface that error, never a
+// malformed-document diagnostic, and must return no partial document.
+//
+// ctx is context.Background() (never cancelled) on purpose: the only signal of
+// the failure is the cursor's sticky Err(), exactly as in the push/streaming
+// path where the stream Read returns the context error.
+func TestParseReaderReadErrorInXMLDeclNotMaskedAsSyntaxError(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		// Read fails immediately after "<?xml" with no trailing blank read, so
+		// looksLikeXMLDecl is false and "<?xml" is reparsed as a reserved PI.
+		"no blank after <?xml": "<?xml",
+		// A blank was read but the read fails before the version pseudo-attribute,
+		// so the declaration parse begins and then stalls on the failed read.
+		"blank then read error": "<?xml ",
+	}
+
+	for name, head := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := &headThenReadErrReader{head: []byte(head), err: context.Canceled}
+			doc, err := helium.NewParser().ParseReader(context.Background(), r)
+			require.ErrorIs(t, err, context.Canceled,
+				"a read failure in the XML declaration (%s) must surface as context.Canceled, not a synthesized syntax error", name)
+			require.Nil(t, doc, "a failed parse must not return a partial document")
+		})
+	}
 }

@@ -1024,7 +1024,7 @@ func TestUnionRangeFacetRejectedAtCompile(t *testing.T) {
 // rejects the schema outright — accepting it would make the range comparison a
 // no-op at validation time and silently drop the constraint.
 //
-// The compareForRangeFacet gate (orderedRangeFacetTypes) still protects the
+// The compareForRangeFacet gate (value.Orderable) still protects the
 // VALIDATION path for a genuinely reachable non-ordered atomic value (e.g. a list
 // item or an active union member at instance time); this test covers the
 // COMPILE-time rejection of the inapplicable facet on the union restriction.

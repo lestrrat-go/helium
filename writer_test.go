@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
@@ -1050,4 +1052,109 @@ func TestWriteNilNode(t *testing.T) {
 		err := helium.NewWriter().WriteTo(io.Discard, typedNil)
 		require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil document must return ErrNilNode")
 	})
+}
+
+// TestSerializeQuotedStringBranches drives the dumpQuotedString writer helper
+// through all three quoting branches by serializing notation system IDs that
+// contain: no quote, a double quote only (forces single-quote delimiting), and
+// both quote kinds (forces double-quote delimiting with &quot; escaping).
+func TestSerializeQuotedStringBranches(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	// no quote -> double-quote delimited.
+	_, err = dtd.AddNotation("plain", "", "plain.exe")
+	require.NoError(t, err)
+	// double quote only -> single-quote delimited.
+	_, err = dtd.AddNotation("dq", "", `has"dquote`)
+	require.NoError(t, err)
+	// both quotes -> double-quote delimited with &quot; escaping of the dquote.
+	_, err = dtd.AddNotation("both", "", `has"dq and 'sq'`)
+	require.NoError(t, err)
+
+	root := doc.CreateElement("doc")
+	require.NoError(t, doc.AddChild(root))
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, `"plain.exe"`, "no-quote value double-quote delimited")
+	require.Contains(t, out, `'has"dquote'`, "double-quote-only value single-quote delimited")
+	require.Contains(t, out, "&quot;", "both-quote value escapes the embedded double quote")
+}
+
+// TestSerializeEntityContentWithPercent serializes an internal general entity
+// whose replacement text contains a literal '%', driving the dumpEntityContent
+// percent-escaping branch in the DTD writer.
+func TestSerializeEntityContentWithPercent(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	// content has no orig set (AddEntity passes orig=""), so the writer falls
+	// through to dumpEntityContent; the '%' forces the escaping branch and the
+	// '"' forces the &quot; branch.
+	_, err = dtd.AddEntity("pct", enum.InternalGeneralEntity, "", "", `50% "done"`)
+	require.NoError(t, err)
+
+	root := doc.CreateElement("doc")
+	require.NoError(t, doc.AddChild(root))
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<!ENTITY pct", "entity declaration serialized")
+	require.Contains(t, out, "&#x25;", "percent escaped via dumpEntityContent")
+	require.Contains(t, out, "&quot;", "embedded quote escaped via dumpEntityContent")
+}
+
+// TestWriterOptions exercises the Writer option toggles and serialization paths.
+func TestWriterOptions(t *testing.T) {
+	t.Parallel()
+	in, err := os.ReadFile("test/att12.xml")
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), in)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = helium.NewWriter().
+		IncludeDTD(false).
+		AllowPrefixUndeclarations(true).
+		WriteTo(&buf, doc)
+	require.NoError(t, err)
+	// With the DTD excluded, the DOCTYPE must not appear.
+	require.NotContains(t, buf.String(), "<!DOCTYPE")
+
+	buf.Reset()
+	err = helium.NewWriter().IncludeDTD(true).WriteTo(&buf, doc)
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), "<!DOCTYPE")
+
+	// EscapeNonASCII path with a non-ASCII text node.
+	d2 := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	r := d2.CreateElement("r")
+	require.NoError(t, d2.AddChild(r))
+	require.NoError(t, r.AppendText([]byte("café")))
+
+	buf.Reset()
+	err = helium.NewWriter().EscapeNonASCII(true).WriteTo(&buf, d2)
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), "&#")
+}
+
+// TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
+func TestWriteStringWithoutDTD(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	require.NoError(t, root.AppendText([]byte("text & more")))
+
+	s, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.True(t, strings.Contains(s, "<root>"))
+	require.Contains(t, s, "&amp;")
 }

@@ -1,6 +1,7 @@
 package html_test
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"testing"
@@ -177,6 +178,32 @@ func TestParseReaderSurfacesReadErrorAfterLatin1Switch(t *testing.T) {
 	require.Error(t, err, "a read error after the Latin-1 switch must not be swallowed")
 	require.ErrorIs(t, err, sentinel,
 		"the underlying non-EOF read error must surface out of ParseReader")
+}
+
+// TestParseReaderSniffHeadDoesNotBypassCap guards the charset-sniff bypass: when
+// MaxContentSize is SMALLER than the 1024-byte sniff window, an undeclared stream
+// that is valid UTF-8 through the configured cap but turns non-UTF-8 LATER inside
+// the sniff head must FAIL CLOSED (ErrContentSizeExceeded), not be routed straight
+// to the Latin-1 reader and silently decoded. The earlier code scanned the whole
+// 1024-byte head with headHasGenuineInvalidUTF8 and committed to Windows-1252 the
+// moment it saw the late high byte, bypassing the deferred reader's bounded probe.
+func TestParseReaderSniffHeadDoesNotBypassCap(t *testing.T) {
+	t.Parallel()
+
+	// Undeclared charset. Valid UTF-8 (ASCII) for well past the 64-byte cap, then
+	// a lone Windows-1252 byte (0x93) at offset ~115 — still inside the 1024-byte
+	// sniff head. The whole document is < 1024 bytes, so the entire invalid run is
+	// visible to the sniff peek.
+	var doc []byte
+	doc = append(doc, []byte("<html><body><p>")...)
+	doc = append(doc, bytes.Repeat([]byte("a"), 100)...)
+	doc = append(doc, 0x93) // invalid UTF-8, past the 64-byte cap, within the sniff head
+	doc = append(doc, []byte("</p></body></html>")...)
+	require.Less(t, len(doc), 1024, "the invalid byte must lie within the 1024-byte sniff head")
+
+	_, err := html.NewParser().MaxContentSize(64).ParseReader(t.Context(), bytes.NewReader(doc))
+	require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+		"an undeclared stream valid UTF-8 past the cap must fail closed even when the invalid byte is in the sniff head")
 }
 
 // noReReadReader delivers each scripted chunk once. The chunk that carries a

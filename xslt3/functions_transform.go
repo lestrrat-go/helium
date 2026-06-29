@@ -3,12 +3,13 @@ package xslt3
 import (
 	"bytes"
 	"context"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -298,7 +299,9 @@ func resolveRelativeURI(base, ref string) string {
 		}
 		return resolved
 	}
-	return filepath.Join(filepath.Dir(base), ref)
+	// Local filesystem base: resolve with forward-slash (path) semantics so the
+	// result uses '/' on every OS; on Windows filepath.Dir/Join would emit '\'.
+	return uripath.JoinLocalBaseDir(path.Dir(uripath.ToSlash(base)), ref)
 }
 
 // resolveStylesheetLocation resolves an fn:transform stylesheet-location loc
@@ -314,7 +317,10 @@ func resolveStylesheetLocation(base, loc string) string {
 	if base == "" {
 		return loc
 	}
-	if xsd.URIScheme(base) != "" || !filepath.IsAbs(loc) {
+	// uripath.IsAbsolutePath recognizes both POSIX- and Windows-absolute shapes
+	// regardless of GOOS, so a purely-local absolute loc against a local base is
+	// left unchanged on every OS.
+	if xsd.URIScheme(base) != "" || !uripath.IsAbsolutePath(loc) {
 		return resolveRelativeURI(base, loc)
 	}
 	return loc
@@ -340,6 +346,9 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	}
 	if ss.allowExternalEntities {
 		c = c.AllowExternalEntities(true)
+	}
+	if ss.parser != nil {
+		c = c.Parser(*ss.parser)
 	}
 	return c
 }
@@ -488,7 +497,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
+		doc, parseErr := parseStylesheetDocument(ctx, ec.injectedParser(), data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes, ec.resourceLimit())
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
@@ -513,7 +522,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
+		doc, parseErr := parseStylesheetDocument(ctx, ec.injectedParser(), data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes, ec.resourceLimit())
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}
@@ -601,6 +610,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// caller. Without this the nested transform would force the secure (blocked)
 	// parse even when the outer invocation opted in.
 	fnTransformCfg.allowExternalEntities = ec.allowExternalEntities()
+	// Inherit the injected base parser so nested-transform runtime parses use the
+	// same parse policy as the caller.
+	fnTransformCfg.parser = ec.injectedParser()
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {

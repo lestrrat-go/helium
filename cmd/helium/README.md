@@ -41,7 +41,7 @@ Run `helium lint` with no arguments to print the authoritative usage text
 | `--nsclean` | Remove redundant namespace declarations |
 | `--nocdata` | Replace CDATA sections by equivalent text nodes |
 | `--nonet` | Refuse to fetch DTDs or entities over network |
-| `--huge` | Remove any internal arbitrary parser limits |
+| `--huge` | Lift the tunable parser limits (element depth, name length, DTD content-model depth, entity-amplification ratio). The absolute 1 GB entity-expansion ceiling is always retained as a billion-laughs backstop |
 | `--noenc` | Ignore any encoding specified inside the document |
 | `--noxincludenode` | Do not generate XInclude START/END nodes |
 | `--nofixup-base-uris` | Do not fix up `xml:base` URIs in XInclude |
@@ -64,16 +64,30 @@ Run `helium lint` with no arguments to print the authoritative usage text
 | `--dropdtd` | Remove the DOCTYPE of the result |
 | `--repeat N` | Parse N times for benchmarking |
 | `--max-input-bytes N` | Cap bytes read per input (`0` = unlimited) |
+| `--max-depth N` | Cap element nesting depth (default `256`, `0` = unlimited) |
+
+The parser is **secure by default** (see the library's Security section): bare
+`helium lint` blocks external entity/DTD loading and exposes no filesystem. The
+loading flags `--loaddtd`, `--dtdattr`, `--valid`, and `--noent` are an explicit
+opt-in — each one lifts that block and installs a permissive filesystem (or the
+`--path` search path) so the requested external DTD/entity is actually loaded.
+
+`--max-depth` and `--huge` govern the **document being processed**. Schema and
+stylesheet **compilation**
+(XSD / RELAX NG / Schematron / XSLT, including nested include/import/module loads)
+parses with the default parser limits; tuning those compiler-internal limits is
+a separate follow-up, not exposed here.
 
 ## `helium xpath`
 
 ```text
-helium xpath [--engine 1|3] [--max-input-bytes N] EXPR [XMLfiles ...]
+helium xpath [--engine 1|3] [--max-input-bytes N] [--max-depth N] EXPR [XMLfiles ...]
 ```
 
 Evaluates an XPath expression against XML input. Engine `3` is the default;
 engine `1` selects the XPath 1.0 implementation. `--max-input-bytes` caps the
-bytes read per XML input (default 100 MiB; `0` = unlimited).
+bytes read per XML input (default 100 MiB; `0` = unlimited). `--max-depth` caps
+element nesting depth (default 256; `0` = unlimited).
 
 ## `helium xslt`
 
@@ -86,31 +100,34 @@ Applies an XSLT 3.0 stylesheet to one or more XML documents.
 ## `helium relaxng validate`
 
 ```text
-helium relaxng validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
+helium relaxng validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles a RELAX NG schema once, then validates each input XML document
 against it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited). `--max-depth` caps element nesting depth (default 256;
 `0` = unlimited).
 
 ## `helium schematron validate`
 
 ```text
-helium schematron validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
+helium schematron validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles a Schematron schema once, then validates each input XML document
 against it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited). `--max-depth` caps element nesting depth (default 256;
 `0` = unlimited).
 
 ## `helium xsd validate`
 
 ```text
-helium xsd validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
+helium xsd validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles an XML Schema once, then validates each input XML document against
 it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited). `--max-depth` caps element nesting depth (default 256;
 `0` = unlimited).
 
 ## Common XSLT Flags
@@ -121,8 +138,11 @@ it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
 | `--param NAME VALUE` | Set stylesheet parameter to XPath expression |
 | `--stringparam NAME VALUE` | Set stylesheet parameter to string value |
 | `--noout` | Run transformation without producing output (rejected with `--output`) |
+| `--noent` | Substitute entities, loading the stylesheet's external entities (opt-in; off by default). External loading is confined to the stylesheet's directory |
+| `--loaddtd` | Load the stylesheet's external DTD subset (opt-in; off by default). External loading is confined to the stylesheet's directory |
 | `--timing` | Print compile/parse/transform timing to stderr |
 | `--max-input-bytes N` | Cap bytes read per input (default 100 MiB; `0` = unlimited) |
+| `--max-depth N` | Cap element nesting depth (default `256`, `0` = unlimited) |
 | `--version` | Display version |
 
 `--output` is refused when it names an input or the stylesheet, or when

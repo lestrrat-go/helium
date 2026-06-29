@@ -54,7 +54,7 @@ Lowering is structural for non-trivial nodes: recursive children usually become 
 ## Evaluation Rules by Expr Type
 
 ### SequenceExpr (comma)
-Evaluate each item, concatenate sequences.
+Evaluate each item, concatenate sequences through `appendBoundedSeq` so the aggregate honors `maxNodes` / OpLimit / cancellation (each operand is individually capped, but the concatenation must be bounded too).
 
 ### LocationPath
 1. Start: root node (absolute) or context node (relative)
@@ -158,10 +158,10 @@ Evaluate key/value pairs → keys must atomize to AtomicValue → build MapItem.
 ## Comparison Engine (`compare.go`)
 
 ### General Comparison (`= != < <= > >=`)
-Atomize both → for each pair → type promotion → value compare. True if ANY pair matches.
+Atomize both → for each pair → type promotion → value compare. True if ANY pair matches. The O(N·M) left×right scan charges one op (via `fnCountOp`) and checks `ctx.Err()` per candidate pair, so a comparison over two large sequences honors `OpLimit` / context cancellation instead of running unbounded.
 
 ### Value Comparison (`eq ne lt le gt ge`)
-Both must be single items. Error if sequence length > 1.
+Both must be single items. Error (XPTY0004) if sequence length > 1. Operands are atomized with an early stop (`atomizeSingletonOperand`, cap 2) so a multi-item or unbounded-lazy operand raises the cardinality error without materializing the whole sequence.
 
 ### Node Comparison (`is << >>`)
 Compare node identity or document order.

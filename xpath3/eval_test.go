@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"iter"
 	"math/big"
 	"testing"
 
@@ -66,9 +67,9 @@ func TestEvalLiteral(t *testing.T) {
 func TestEvalVariable(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"x": xpath3.SingleInteger(42),
-		}))
+		})
 	seq := evalExprWithEval(t, eval, doc, "$x")
 	require.Equal(t, 1, seq.Len())
 	av := seq.Get(0).(xpath3.AtomicValue)
@@ -309,13 +310,13 @@ func TestEvalSimpleMap(t *testing.T) {
 func TestEvalFLWOR(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"items": xpath3.ItemSlice{
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
 			},
-		}))
+		})
 
 	t.Run("simple for", func(t *testing.T) {
 		seq := evalExprWithEval(t, eval, doc, "for $x in $items return $x")
@@ -333,13 +334,13 @@ func TestEvalFLWOR(t *testing.T) {
 func TestEvalQuantified(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"nums": xpath3.ItemSlice{
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
 			},
-		}))
+		})
 
 	t.Run("some", func(t *testing.T) {
 		seq := evalExprWithEval(t, eval, doc, "some $x in $nums satisfies $x = 2")
@@ -538,9 +539,9 @@ func TestEvalUserFunction(t *testing.T) {
 	}
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(xpath3.FunctionLibraryFromMaps(map[string]xpath3.Function{
+		Functions(map[string]xpath3.Function{
 			"myfunc": fn,
-		}, nil))
+		}, nil)
 
 	parsed := mustParseExpr(t, `myfunc("arg")`)
 	compiled, err := xpath3.NewCompiler().CompileExpr(parsed)
@@ -636,4 +637,149 @@ func TestDeclaredPrefixResolvesOnEvaluate(t *testing.T) {
 	if err != nil {
 		require.NotContains(t, err.Error(), "undeclared namespace prefix")
 	}
+}
+
+// General comparisons against a range expression (1 to N) take an optimized
+// path through compareSingletonAgainstRange / compareRangeBounds /
+// compareRangeBoundsInt64 across all six comparison operators and both operand
+// orders.
+func TestGeneralComparison_AgainstRange(t *testing.T) {
+	cases := []struct {
+		expr   string
+		expect bool
+	}{
+		// singleton (op) range
+		{`5 = (1 to 10)`, true},
+		{`50 = (1 to 10)`, false},
+		{`5 != (1 to 10)`, true},
+		{`0 < (1 to 10)`, true},
+		{`11 < (1 to 10)`, false},
+		{`1 <= (1 to 10)`, true},
+		{`11 > (1 to 10)`, true},
+		{`0 > (1 to 10)`, false},
+		{`10 >= (1 to 10)`, true},
+		// range (op) singleton (rangeOnLeft)
+		{`(1 to 10) = 5`, true},
+		{`(1 to 10) < 11`, true},
+		{`(1 to 10) <= 10`, true},
+		{`(1 to 10) > 0`, true},
+		{`(1 to 10) >= 1`, true},
+		{`(1 to 10) != 5`, true},
+		// large bounds exceeding int64 fast path force the big.Int comparator.
+		{`5 = (1 to 100000000000000000000)`, true},
+		{`0 = (1 to 100000000000000000000)`, false},
+	}
+	for _, tc := range cases {
+		r, err := evaluate(t.Context(), nil, tc.expr)
+		require.NoError(t, err, tc.expr)
+		b, ok := r.IsBoolean()
+		require.True(t, ok, tc.expr)
+		require.Equal(t, tc.expect, b, tc.expr)
+	}
+}
+
+// panicPastTwoSeq is a Sequence of n integer items (1..n) that panics the
+// moment any item at index >= 2 is produced — via Get, the Items iterator, or
+// Materialize. It lets a test prove that a consumer inspects at most the first
+// two items (e.g. a singleton-cardinality probe with an early stop) and never
+// drains the whole non-singleton operand.
+type panicPastTwoSeq struct{ n int }
+
+func (s panicPastTwoSeq) Len() int { return s.n }
+
+func (s panicPastTwoSeq) Get(i int) xpath3.Item {
+	if i >= 2 {
+		panic("panicPastTwoSeq: item past index 1 accessed")
+	}
+	return xpath3.SingleInteger(int64(i + 1)).Get(0)
+}
+
+func (s panicPastTwoSeq) Items() iter.Seq[xpath3.Item] {
+	return func(yield func(xpath3.Item) bool) {
+		for i := range s.n {
+			if !yield(s.Get(i)) {
+				return
+			}
+		}
+	}
+}
+
+func (s panicPastTwoSeq) Materialize() []xpath3.Item {
+	panic("panicPastTwoSeq: Materialize called")
+}
+
+// TestGeneralComparison_RangeProbeDoesNotDrain proves the range fast-path probe
+// in compareSingletonAgainstRange inspects at most the first two atoms of the
+// NON-range operand before deciding the singleton fast-path is inapplicable. A
+// regression that atomized the whole operand (AtomizeSequence) would drain a
+// large/lazy non-singleton side just to discover it is not a singleton —
+// ignoring OpLimit / context cancellation before the bounded general comparison
+// even runs.
+//
+// The non-range operand is a panicPastTwoSeq bound via a borrowed variable:
+// producing any item past index 1 panics, so a full-drain probe panics here.
+// The early-stop probe reads exactly two atoms, falls back to the general
+// comparison, and matches on the first element (value 1 is in 1..10) — so the
+// whole evaluation touches only the first two items and never panics.
+func TestGeneralComparison_RangeProbeDoesNotDrain(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := xpath3.NewCompiler().Compile(`$big = (1 to 10)`)
+	require.NoError(t, err)
+
+	vars := map[string]xpath3.Sequence{"big": panicPastTwoSeq{n: 1 << 20}}
+
+	var res *xpath3.Result
+	var evalErr error
+	require.NotPanics(t, func() {
+		// EvalBorrowing keeps the lazy operand out of the variable-clone path so
+		// it reaches the comparison unmaterialized.
+		res, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+			Variables(vars).
+			Evaluate(t.Context(), compiled, nil)
+	})
+	require.NoError(t, evalErr)
+	b, ok := res.IsBoolean()
+	require.True(t, ok)
+	require.True(t, b)
+}
+
+// try/catch exercises parseCatchCode (parse-time) and catchCodeMatches
+// (eval-time) across the catch-code forms: "*", "err:LOCAL", "Q{uri}local",
+// "Q{uri}*", "*:LOCAL", and "err:*".
+func TestTryCatch_CodeForms(t *testing.T) {
+	const errNS = "http://www.w3.org/2005/xqt-errors"
+
+	cases := []struct {
+		expr   string
+		expect string
+	}{
+		// wildcard catch.
+		{`try { 1 div 0 } catch * { "caught" }`, "caught"},
+		// specific error code via err: prefix.
+		{`try { xs:integer("x") } catch err:FORG0001 { "forg" }`, "forg"},
+		// err:* wildcard.
+		{`try { xs:integer("x") } catch err:* { "anyerr" }`, "anyerr"},
+		// Q{uri}local form.
+		{`try { xs:integer("x") } catch Q{` + errNS + `}FORG0001 { "q" }`, "q"},
+		// Q{uri}* form.
+		{`try { xs:integer("x") } catch Q{` + errNS + `}* { "qstar" }`, "qstar"},
+		// *:LOCAL form.
+		{`try { xs:integer("x") } catch *:FORG0001 { "star" }`, "star"},
+		// successful body returns its value (no catch).
+		{`try { 1 + 1 } catch * { "x" }`, "2"},
+		// error variable access inside catch.
+		{`try { xs:integer("x") } catch * { $err:code }`, "err:FORG0001"},
+	}
+	for _, tc := range cases {
+		r, err := evaluate(t.Context(), nil, tc.expr)
+		require.NoError(t, err, tc.expr)
+		require.Equal(t, tc.expect, r.StringValue(), tc.expr)
+	}
+
+	// Non-matching catch code re-raises the original error.
+	_, err := evaluate(t.Context(), nil, `try { xs:integer("x") } catch err:XPDY0002 { "nope" }`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
 }

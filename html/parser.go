@@ -31,7 +31,61 @@ type parser struct {
 	sax       SAXHandler
 	nameStack []string // open element name stack
 	mode      insertMode
-	sawRoot   bool // true once the root <html> element has been opened
+
+	// sawRoot records that the root <html> element has been opened at least once.
+	// It distinguishes genuine PRE-root whitespace (empty stack, root never
+	// opened — drop as ignorable) from TRAILING whitespace AFTER the root has
+	// closed (empty stack, but root was opened — still emit). The insertion mode
+	// alone cannot make this distinction: opening a bare <html> does not advance
+	// mode past insertInitial, so `<html></html> \n` would otherwise mis-classify
+	// the trailing run as pre-root and drop it. Set once in pushName(elemHTML).
+	sawRoot bool
+
+	// curTextRunSignificant records that the current normal data-state text run
+	// has already emitted a non-whitespace byte and is therefore significant. A
+	// run is the maximal sequence of character data — plain text, entity /
+	// numeric char-ref output, U+FFFD, and lone literal '<' — between two real
+	// markup tags. Once set it BYPASSES whitespace suppression so a
+	// trailing/interior whitespace chunk of a known-significant run still emits.
+	//
+	// It is SET in exactly one place — emitCharacters, on any non-whitespace emit
+	// — so EVERY emit path marks the run uniformly. It is RESET in exactly one
+	// place: the main parse loop, immediately before dispatching to a real markup
+	// tag (start/end tag, comment, DOCTYPE, bogus comment, PI). A char-ref and a
+	// lone '<' are part of the same run and never reset it.
+	curTextRunSignificant bool
+
+	// pendingWS holds the LEADING whitespace of the current normal data-state run
+	// that has NOT yet been committed, because two decisions can only be made once
+	// the run's first non-whitespace byte is seen:
+	//
+	//   1. Significance (StripBlanks/noBlanks): a run is stripped only when EVERY
+	//      byte is whitespace. A leading whitespace prefix must therefore not be
+	//      suppressed on its own — a following non-whitespace byte (plain text,
+	//      char-ref output, U+FFFD, lone '<') makes the whole run significant and
+	//      the leading whitespace part of it.
+	//   2. Insertion target (implied <body>): a run containing non-whitespace
+	//      triggers htmlStartCharData, which opens the implied <body>. Emitting the
+	//      leading whitespace BEFORE that runs would land it under <html> while the
+	//      following text lands under <body>, splitting one logical run across two
+	//      parents.
+	//
+	// So a still-undecided leading whitespace prefix is accumulated here instead of
+	// being emitted. When the first non-whitespace byte arrives, emitCharacters
+	// flushes it into the now-significant run (after the caller has established the
+	// insertion target); when the run ends all-whitespace, flushPendingWSRunEnd
+	// strips it (noBlanks) or emits it under the current element. char-data tokens
+	// ('&', NUL, lone '<') do NOT flush it — they are folded into the same run. The
+	// buffer is bounded by the content cap: a whitespace prefix that overruns the
+	// cap before any significance is known hard-fails with ErrContentSizeExceeded
+	// rather than buffering unbounded. Whitespace is only deferred while a decision
+	// is genuinely pending: under StripBlanks (significance undecided) or before the
+	// body subtree is entered (implied-<body> insertion undecided). With StripBlanks
+	// OFF and the insertion target already established, in <head>, before the root
+	// element, and inside raw-text/RCDATA elements, whitespace is committed directly
+	// (its target is already fixed, it is ignorable, or it is significant under the
+	// soft cap), so it never enters this buffer.
+	pendingWS []byte
 
 	// locator for SetDocumentLocator
 	locator *parserLocator
@@ -60,7 +114,10 @@ type parser struct {
 	// deferredEncoding is non-nil when streaming an undeclared-charset
 	// document whose encoding (UTF-8 vs Windows-1252) can only be decided
 	// once a non-UTF-8 byte is seen. It is queried after parsing for the
-	// final detected encoding name.
+	// final detected encoding name. (An undeclared stream that stays valid
+	// UTF-8 past the buffering cap fails closed with a bounded-input error
+	// rather than committing to UTF-8, so the deferred reader never emits a
+	// sanitized U+FFFD of its own.)
 	deferredEncoding *deferredLatin1Reader
 
 	// fatalSAXErr is set by handleSAXErr when cfg.strict is true and a SAX
@@ -133,33 +190,46 @@ func (l *parserLocator) GetPublicID() string { return "" }
 func (l *parserLocator) GetSystemID() string { return "" }
 
 func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
+	// Detect the declared charset from the RAW input (before newline
+	// normalization), bounded to the first 1024 raw bytes by extractMetaCharset.
+	// The streaming ParseReader/push path prescans the first 1024 RAW bytes
+	// (wrapReaderForHTML reads its sniff window straight off the reader, BEFORE
+	// chaining the newlineNormReader), so Parse must detect against the same raw
+	// window. Detecting against `normalized` instead would let a CRLF-heavy head
+	// (each \r\n collapsing to \n) pull a <meta charset=...> that sits PAST raw
+	// byte 1024 INTO the post-normalization window — Parse would honor a
+	// declaration that ParseReader/push never sees, a parity divergence.
+	declared := extractMetaCharset(input)
+
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
 	var encodingErr bool
 	var encErrLine, encErrCol int
 	var detectedEnc string
-	if !utf8.Valid(normalized) {
-		if declaredCharsetIsUTF8(normalized) {
-			raw := normalized
-			var invBytes invalidByteInfo
-			normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
-			if encodingErr {
-				encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
-			}
-		} else {
-			// Assume Latin-1/Windows-1252 encoding and convert to UTF-8,
-			// matching libxml2's default behavior for non-UTF-8 documents.
-			// Distinguish explicit charset=iso-8859-1 from auto-detected:
-			// - "ISO-8859-1": strict output with &#N; for runes > 0xFF
-			// - "Windows-1252": Win-1252 reverse mapping for output
-			if declaredCharsetIsLatin1(normalized) {
-				detectedEnc = "ISO-8859-1"
-			} else {
-				detectedEnc = "Windows-1252"
-			}
-			normalized = latin1ToUTF8(normalized)
+	switch {
+	case declared == "iso-8859-1":
+		// An explicit charset=iso-8859-1 commits to Latin-1 BEFORE the utf8.Valid
+		// check below: a declared Latin-1 document whose bytes happen to be valid
+		// UTF-8 must still decode as Latin-1, exactly as the streaming ParseReader
+		// path (which routes a declared Latin-1 head straight to latin1Reader)
+		// does. Without this hoist the two APIs would diverge on such an input.
+		detectedEnc = encISO88591
+		normalized = latin1ToUTF8(normalized)
+	case utf8.Valid(normalized):
+		// Already valid UTF-8 with no Latin-1 declaration: parse as-is.
+	case declared == "utf-8":
+		raw := normalized
+		var invBytes invalidByteInfo
+		normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
+		if encodingErr {
+			encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
 		}
+	default:
+		// Undeclared non-UTF-8: assume Windows-1252 and convert to UTF-8,
+		// matching libxml2's default behavior for non-UTF-8 documents.
+		detectedEnc = encWindows1252
+		normalized = latin1ToUTF8(normalized)
 	}
 
 	p := &parser{
@@ -181,7 +251,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 // entire []byte), this chains io.Reader wrappers for newline normalization
 // and encoding conversion, feeding the result directly into the cursor.
 func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg parseConfig) *parser {
-	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r)
+	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r, cfg.contentLimit())
 
 	p := &parser{
 		cur:               strcursor.NewUTF8Cursor(wrapped),
@@ -306,29 +376,363 @@ func replaceInvalidUTF8(data []byte, info *invalidByteInfo) ([]byte, bool) {
 	return buf.Bytes(), found
 }
 
-// declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
-// <meta charset="utf-8"> declaration, returning true if found.
-func declaredCharsetIsUTF8(data []byte) bool {
-	// Case-insensitive search for charset="utf-8" or charset=utf-8
-	lower := bytes.ToLower(data)
-	// Limit scan to the first 1024 bytes (charset should appear early)
-	if len(lower) > 1024 {
-		lower = lower[:1024]
+// isASCIIWhitespace reports whether b is one of the WHATWG ASCII whitespace
+// characters (tab, LF, FF, CR, space).
+func isASCIIWhitespace(b byte) bool {
+	switch b {
+	case '\t', '\n', '\f', '\r', ' ':
+		return true
+	default:
+		return false
 	}
-	return bytes.Contains(lower, []byte("charset=\"utf-8\"")) ||
-		bytes.Contains(lower, []byte("charset=utf-8"))
 }
 
-// declaredCharsetIsLatin1 scans the raw input bytes for an explicit
-// charset=iso-8859-1 declaration. This distinguishes documents that
-// declare ISO-8859-1 from those that are just auto-detected as non-UTF-8.
-func declaredCharsetIsLatin1(data []byte) bool {
-	lower := bytes.ToLower(data)
-	if len(lower) > 1024 {
-		lower = lower[:1024]
+// extractDeclaredCharset scans the raw (possibly invalid) input bytes for a
+// charset declaration (as found in <meta charset=...> or in a <meta
+// http-equiv="content-type" content="...; charset=..."> attribute) and returns
+// the declared encoding name, lowercased, or "" if none is found.
+//
+// The value syntax mirrors the WHATWG "extracting a character encoding from a
+// meta element" algorithm: ASCII whitespace may surround the "=", and the value
+// may be wrapped in single or double quotes, or left unquoted (terminated by
+// whitespace or ";").
+func extractDeclaredCharset(data []byte) string {
+	// Bound to the first 1024 RAW bytes BEFORE case folding so the lowercase
+	// copy is never larger than the prescan window — folding the whole input
+	// just to inspect its head would allocate proportional to the document
+	// (and bytes.ToLower can expand invalid UTF-8). The charset appears early.
+	if len(data) > 1024 {
+		data = data[:1024]
 	}
-	return bytes.Contains(lower, []byte("charset=iso-8859-1")) ||
-		bytes.Contains(lower, []byte("charset=\"iso-8859-1\""))
+	lower := bytes.ToLower(data)
+	const key = "charset"
+	from := 0
+	for {
+		idx := bytes.Index(lower[from:], []byte(key))
+		if idx < 0 {
+			return ""
+		}
+		pos := from + idx + len(key)
+		from = pos
+		// Skip ASCII whitespace before '='.
+		for pos < len(lower) && isASCIIWhitespace(lower[pos]) {
+			pos++
+		}
+		// Require '='.
+		if pos >= len(lower) || lower[pos] != '=' {
+			continue
+		}
+		pos++
+		// Skip ASCII whitespace after '='.
+		for pos < len(lower) && isASCIIWhitespace(lower[pos]) {
+			pos++
+		}
+		if pos >= len(lower) {
+			return ""
+		}
+		// Quoted value: read up to the matching quote.
+		if q := lower[pos]; q == '"' || q == '\'' {
+			pos++
+			end := bytes.IndexByte(lower[pos:], q)
+			if end < 0 {
+				return ""
+			}
+			return string(lower[pos : pos+end])
+		}
+		// Unquoted value: runs until ASCII whitespace, ';', tag close '>',
+		// an enclosing quote, or end. (The crude prescan operates on raw
+		// markup, so the tag terminator must bound a bare value like in
+		// <meta charset=utf-8>. The quote terminators handle a value that
+		// sits inside a still-quoted content attribute, as in
+		// <meta http-equiv="Content-Type" content="text/html; charset=utf-8">,
+		// where the char after "charset=" is not a quote but the value is
+		// nonetheless bounded by the enclosing attribute quote.)
+		start := pos
+		for pos < len(lower) && !isASCIIWhitespace(lower[pos]) && lower[pos] != ';' && lower[pos] != '>' && lower[pos] != '"' && lower[pos] != '\'' {
+			pos++
+		}
+		return string(lower[start:pos])
+	}
+}
+
+// extractMetaCharset scans the input for a charset declared by a REAL HTML
+// <meta> element — either <meta charset=...> or a <meta http-equiv=...
+// content="...; charset=..."> — within the first 1024 bytes, returning the
+// declared encoding name lowercased, or "" if none is found.
+//
+// This honors ONLY an actual meta element: a "charset=iso-8859-1" string that
+// merely appears in ordinary text, an HTML comment, or a script does NOT count.
+// Within a genuine <meta ...> tag it further honors only a real declaration per
+// WHATWG (metaCharsetFromTag): a `charset` attribute, or a `content` attribute's
+// charset when paired with `http-equiv="content-type"`. A `charset=` token in any
+// other attribute (data-charset, name, a non-pragma content value, ...) is
+// ignored. This precision matters because the eager Latin-1/UTF-8 encoding commit
+// overrides utf8.Valid — a false positive there would corrupt a valid UTF-8
+// document (café → cafÃ©). It mirrors the WHATWG "prescan a byte stream to
+// determine its encoding" algorithm: comments are skipped, other tags are stepped
+// over, and charset extraction parses the attributes of a genuine <meta ...> tag.
+func extractMetaCharset(data []byte) string {
+	// Bound to the first 1024 RAW bytes BEFORE case folding. newParser calls
+	// this (via declaredCharsetIs{Latin1,UTF8}) ahead of utf8.Valid on every
+	// in-memory Parse([]byte), so lowercasing the whole document just to look
+	// at its head would allocate proportional to the input on the hot path
+	// (and bytes.ToLower can expand invalid UTF-8). The work is bounded to the
+	// prescan window regardless of input size.
+	if len(data) > 1024 {
+		data = data[:1024]
+	}
+	lower := bytes.ToLower(data)
+	n := len(lower)
+	for i := 0; i < n; {
+		if lower[i] != '<' {
+			i++
+			continue
+		}
+		// Mirror the main parser's char-data rule (parser.go ~888): a '<' begins
+		// markup ONLY when the byte after it is '/', '!', '?', or an ASCII letter.
+		// Any other following byte makes the '<' literal character data (e.g.
+		// `< " >` or `<x="...`). Treat it as char data — advance exactly ONE byte
+		// WITHOUT entering the quote-aware tag-skip below. Otherwise a stray
+		// non-markup '<' carrying a quote could put metaTagEnd into quote state and
+		// swallow a later genuine <meta charset=...> tag, missing the declaration.
+		var nextB byte
+		if i+1 < n {
+			nextB = lower[i+1]
+		}
+		if nextB != '/' && nextB != '!' && nextB != '?' && !isASCIIAlpha(nextB) {
+			i++
+			continue
+		}
+		// Comment: skip past the closing "-->".
+		if bytes.HasPrefix(lower[i:], []byte("<!--")) {
+			end := bytes.Index(lower[i+4:], []byte("-->"))
+			if end < 0 {
+				return ""
+			}
+			i += 4 + end + 3
+			continue
+		}
+		// <meta followed by ASCII whitespace or '/': inspect its attributes only.
+		if i+5 <= n && bytes.Equal(lower[i+1:i+5], []byte("meta")) &&
+			(i+5 == n || isASCIIWhitespace(lower[i+5]) || lower[i+5] == '/') {
+			tag := lower[i:]
+			// Bound the tag at its first UNQUOTED '>'. A '>' inside a quoted
+			// attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) is
+			// part of the value, not the tag terminator, so a naive IndexByte
+			// would truncate the tag before charset= and miss the declaration.
+			gt := metaTagEnd(tag)
+			if gt < 0 {
+				// No terminating unquoted '>' within the prescan window: the
+				// tag is cut off by the window end. Per WHATWG, running out of
+				// bytes aborts the prescan — a declaration severed by the
+				// window must NOT count, so do not parse the truncated tag.
+				return ""
+			}
+			tag = tag[:gt]
+			if cs := metaCharsetFromTag(tag); cs != "" {
+				return cs
+			}
+			i += gt + 1
+			continue
+		}
+		// End tag, processing instruction, or markup declaration (</..., <?...,
+		// <!... other than the <!-- comment handled above): per WHATWG these are
+		// skipped to the next RAW '>'. Quotes are NOT significant inside them, so
+		// the quote-aware scan must NOT be used — a stray quote inside one could
+		// otherwise enter quote state and swallow a later genuine <meta charset=>.
+		if nextB == '/' || nextB == '!' || nextB == '?' {
+			rel := bytes.IndexByte(lower[i:], '>')
+			if rel < 0 {
+				return ""
+			}
+			i += rel + 1
+			continue
+		}
+		// Any other start tag (<name ...>): step over it to its first UNQUOTED
+		// '>' (a '>' inside a quoted attribute value is not the terminator).
+		gt := metaTagEnd(lower[i:])
+		if gt < 0 {
+			return ""
+		}
+		i += gt + 1
+	}
+	return ""
+}
+
+// metaTagEnd returns the index of the byte that terminates the tag starting at
+// tag[0] (its first UNQUOTED '>'), or -1 if no unquoted '>' is present. It
+// tracks single/double quote state while scanning so a '>' that sits inside a
+// quoted attribute value (e.g. <meta data-x=">" charset=iso-8859-1>) does not
+// prematurely terminate the tag. The scan stays within the caller's bounded
+// prescan window.
+func metaTagEnd(tag []byte) int {
+	var quote byte // 0 = unquoted, '"' or '\'' inside a value
+	for j := range tag {
+		c := tag[j]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			quote = c
+		case '>':
+			return j
+		}
+	}
+	return -1
+}
+
+// metaCharsetFromTag applies the WHATWG meta-element prescan attribute rules to
+// the (already lowercased) bytes of a single tag that begins with "<meta". It
+// parses the tag's attributes and returns a declared encoding ONLY when it comes
+// from a real `charset` attribute, or from a `content` attribute paired with an
+// `http-equiv="content-type"` attribute on the same element. A `charset=` token
+// appearing in any other attribute (data-charset, name, a non-pragma content
+// value, ...) is ignored. Returns "" when no qualifying declaration is present.
+//
+// This mirrors the WHATWG "prescan a byte stream" per-meta decision: track a
+// candidate charset, whether a content-type pragma was seen (gotPragma), and
+// whether the candidate requires that pragma to be trusted (needPragma). A
+// `charset` attribute is always trusted; a `content` charset is trusted only when
+// the pragma is also present.
+func metaCharsetFromTag(tag []byte) string {
+	pos := len("<meta")
+	var charset string
+	gotPragma := false
+	// needPragma: 0 = unset (no candidate yet), 1 = content candidate (needs the
+	// content-type pragma), 2 = charset attribute (trusted unconditionally).
+	needPragma := 0
+	// WHATWG keeps a list of attribute names already seen on this element and
+	// IGNORES any duplicate name (first occurrence wins). Without this, a later
+	// duplicate would override an earlier one — e.g.
+	// `<meta charset=utf-8 charset=iso-8859-1>` would wrongly commit to Latin-1
+	// and corrupt valid UTF-8.
+	var seen map[string]struct{}
+	for {
+		name, value, next, ok := metaNextAttr(tag, pos)
+		if !ok {
+			break
+		}
+		pos = next
+		nm := string(name)
+		if _, dup := seen[nm]; dup {
+			continue
+		}
+		if seen == nil {
+			seen = make(map[string]struct{}, 4)
+		}
+		seen[nm] = struct{}{}
+		switch nm {
+		case "http-equiv":
+			if string(value) == "content-type" {
+				gotPragma = true
+			}
+		case "content":
+			if charset == "" {
+				if cs := extractDeclaredCharset(value); cs != "" {
+					charset = cs
+					needPragma = 1
+				}
+			}
+		case "charset":
+			if len(value) > 0 {
+				charset = string(value)
+				needPragma = 2
+			}
+		}
+	}
+	if needPragma == 0 {
+		return ""
+	}
+	if needPragma == 1 && !gotPragma {
+		return ""
+	}
+	return charset
+}
+
+// metaNextAttr implements the WHATWG "get an attribute" sub-algorithm of the meta
+// prescan over the (already lowercased) tag bytes starting at pos. It returns the
+// next attribute's name and value (sub-slices of tag; value is nil when the
+// attribute has no value), the position to resume scanning, and ok=false when no
+// further attribute is present. Quote-aware: a quoted value runs to its matching
+// quote; an unquoted value runs to ASCII whitespace or the tag-end '>'.
+func metaNextAttr(tag []byte, pos int) (name, value []byte, next int, ok bool) {
+	n := len(tag)
+	// Skip leading ASCII whitespace and '/' separators.
+	for pos < n && (isASCIIWhitespace(tag[pos]) || tag[pos] == '/') {
+		pos++
+	}
+	if pos >= n || tag[pos] == '>' {
+		return nil, nil, pos, false
+	}
+	// Read the attribute name. A '=' terminates the name only when the name is
+	// non-empty (a leading '=' is part of the name, per WHATWG).
+	nameStart := pos
+	for pos < n {
+		c := tag[pos]
+		if c == '=' && pos > nameStart {
+			break
+		}
+		if isASCIIWhitespace(c) || c == '/' || c == '>' {
+			break
+		}
+		pos++
+	}
+	name = tag[nameStart:pos]
+	// Skip whitespace between the name and a possible '='.
+	for pos < n && isASCIIWhitespace(tag[pos]) {
+		pos++
+	}
+	if pos >= n || tag[pos] != '=' {
+		return name, nil, pos, true
+	}
+	pos++ // consume '='
+	// Skip whitespace after '='.
+	for pos < n && isASCIIWhitespace(tag[pos]) {
+		pos++
+	}
+	if pos >= n || tag[pos] == '>' {
+		return name, nil, pos, true
+	}
+	if q := tag[pos]; q == '"' || q == '\'' {
+		pos++
+		valStart := pos
+		for pos < n && tag[pos] != q {
+			pos++
+		}
+		value = tag[valStart:pos]
+		if pos < n {
+			pos++ // consume the closing quote
+		}
+		return name, value, pos, true
+	}
+	valStart := pos
+	for pos < n && !isASCIIWhitespace(tag[pos]) && tag[pos] != '>' {
+		pos++
+	}
+	return name, tag[valStart:pos], pos, true
+}
+
+// declaredCharsetIsUTF8 reports whether a real <meta> element declares utf-8.
+// It uses extractMetaCharset (a precise meta-element prescan), NOT a loose
+// charset= scan, because its callers eagerly commit to the encoding and override
+// utf8.Valid.
+func declaredCharsetIsUTF8(data []byte) bool {
+	return extractMetaCharset(data) == "utf-8"
+}
+
+// declaredCharsetIsLatin1 reports whether a real <meta> element declares
+// iso-8859-1. This distinguishes documents that genuinely declare ISO-8859-1
+// from those that are just auto-detected as non-UTF-8. It uses extractMetaCharset
+// (a precise meta-element prescan), NOT a loose charset= scan, because its
+// callers eagerly commit to Latin-1 and override utf8.Valid — trusting a stray
+// "charset=iso-8859-1" in text/comment/script would corrupt a valid UTF-8
+// document.
+func declaredCharsetIsLatin1(data []byte) bool {
+	return extractMetaCharset(data) == "iso-8859-1"
 }
 
 // hasPrefixFold checks if the current input starts with the given prefix
@@ -520,29 +924,51 @@ func (p *parser) parse(ctx context.Context) error {
 			break
 		}
 		if p.cur.Peek() == '<' {
-			if p.cur.PeekAt(1) == '/' {
-				p.parseEndTag()
-			} else if p.cur.PeekAt(1) == '!' {
-				if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
-					p.parseComment(ctx)
-				} else if p.hasPrefixFold("<!DOCTYPE") {
-					p.parseDoctype()
-				} else {
-					// Bogus comment or similar — treat as comment
-					p.parseBogusComment(ctx)
+			// Only an actual markup-tag dispatch ends the current normal-data text
+			// run. A lone '<' that is not markup is ordinary character data
+			// belonging to the SAME run, so it must NOT end the run (emitCharacters
+			// marks the run significant via the '<' byte).
+			next := p.cur.PeekAt(1)
+			if next == '/' || next == '!' || next == '?' || isASCIIAlpha(next) {
+				// A real markup tag ends the current normal-data text run: flush any
+				// deferred all-whitespace leading run (it never became significant)
+				// and forget the run's significance before dispatching.
+				_ = p.flushPendingWSRunEnd()
+				p.curTextRunSignificant = false
+				switch next {
+				case '/':
+					p.parseEndTag()
+				case '!':
+					if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
+						p.parseComment(ctx)
+					} else if p.hasPrefixFold("<!DOCTYPE") {
+						p.parseDoctype()
+					} else {
+						// Bogus comment or similar — treat as comment
+						p.parseBogusComment(ctx)
+					}
+				case '?':
+					// Processing instruction — in HTML mode, treated as comment
+					p.parsePI(ctx)
+				default:
+					// isASCIIAlpha(next): a start tag.
+					p.parseStartTag(ctx)
 				}
-			} else if p.cur.PeekAt(1) == '?' {
-				// Processing instruction — in HTML mode, treated as comment
-				p.parsePI(ctx)
-			} else if isASCIIAlpha(p.cur.PeekAt(1)) {
-				p.parseStartTag(ctx)
 			} else {
-				// Lone '<' — emit as character data
+				// Lone '<' — ordinary character data, part of the current text run.
+				// Like the other non-whitespace emit paths (plain text, char-refs,
+				// U+FFFD), establish the insertion target FIRST via htmlStartCharData
+				// so this run's leading whitespace (held in pendingWS) and the '<' land
+				// under the SAME element, then emit. Without it, for `<html> < b` the
+				// leading space and '<' would flush under the pre-body target while the
+				// following non-whitespace opens the implied <body>, splitting one
+				// logical run across parents.
+				p.htmlStartCharData()
 				_ = p.emitCharacters([]byte("<"))
 				_ = p.cur.Advance(1)
 			}
 		} else {
-			p.parseCharacters()
+			p.parseCharacters(ctx)
 		}
 	}
 
@@ -558,6 +984,10 @@ func (p *parser) parse(ctx context.Context) error {
 		return err
 	}
 
+	// A normal-data run that ended at EOF still all-whitespace has its leading
+	// whitespace deferred in pendingWS; resolve it before closing open elements.
+	_ = p.flushPendingWSRunEnd()
+
 	p.htmlAutoCloseOnEnd()
 	p.handleSAXErr(p.sax.EndDocument())
 	return p.fatalSAXErr
@@ -568,6 +998,13 @@ func (p *parser) parseStartTag(ctx context.Context) {
 	_ = p.cur.Advance(1) // skip '<'
 
 	name := p.parseName()
+	// An over-cap tag name is an unrecoverable hard-cap failure, not a merely
+	// invalid name: parseName set fatalErr and returned "". Return BEFORE the
+	// name == "" text fallback so we never publish a stray '<' text node ahead of
+	// the fatal. The main loop surfaces fatalErr.
+	if p.fatalErr != nil {
+		return
+	}
 	if name == "" {
 		// Not a valid tag, emit '<' as text
 		_ = p.emitCharacters([]byte("<"))
@@ -578,6 +1015,12 @@ func (p *parser) parseStartTag(ctx context.Context) {
 
 	// Parse attributes
 	attrs := p.parseAttributes()
+
+	// An over-cap attribute value is unrecoverable; abort without emitting a
+	// truncated start element. The main loop surfaces fatalErr.
+	if p.fatalErr != nil {
+		return
+	}
 
 	// Skip whitespace and close
 	p.skipWhitespace()
@@ -628,6 +1071,12 @@ func (p *parser) parseEndTag() {
 	_ = p.cur.Advance(2) // skip '</'
 
 	name := p.parseName()
+	// An over-cap end-tag name set fatalErr. Return IMMEDIATELY, before the
+	// "skip to '>'" loop below, so an unterminated abusive stream is not drained
+	// (read/work bound) before the main loop surfaces the fatal.
+	if p.fatalErr != nil {
+		return
+	}
 	name = strings.ToLower(name)
 
 	// Detect malformed end tag: characters like '<' after the tag name
@@ -640,6 +1089,19 @@ func (p *parser) parseEndTag() {
 			malformed = true
 			junkChar = ch
 		}
+	}
+
+	// Bound the post-name intra-tag whitespace with the same HARD-capped
+	// skipWhitespace the rest of the tag lexer uses, BEFORE the unbounded
+	// "skip to '>'" drain loop below. Otherwise `</p` + an over-cap whitespace
+	// run + `>` would be drained byte-by-byte without limit (an unbounded-scan
+	// DoS), contradicting the documented intra-tag-whitespace hard cap. An
+	// over-cap run sets fatalErr; check it and return PROMPTLY so an abusive
+	// unterminated stream is not drained before the main loop surfaces the fatal
+	// (mirrors the parseStartTag / parseDoctype fatal-check pattern).
+	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
 	}
 
 	// Skip to closing '>'
@@ -848,11 +1310,27 @@ func (p *parser) parsePI(ctx context.Context) {
 func (p *parser) parseDoctype() {
 	// Skip <!DOCTYPE
 	_ = p.cur.Advance(9)
+
+	// Each scanner below — skipWhitespace, parseName, parseQuotedString — can set
+	// fatalErr on a hard-cap overflow (over-cap intra-tag whitespace, root name, or
+	// PUBLIC/SYSTEM literal). Check fatalErr IMMEDIATELY after each one and return
+	// before any further cursor read: on a streaming reader stalled right at the
+	// over-cap boundary, the next scanner's PeekAt would issue another (blocking)
+	// Read instead of promptly surfacing the fatal. The main loop surfaces fatalErr.
 	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
 
 	// Parse root element name
 	name := p.parseName()
+	if p.fatalErr != nil {
+		return
+	}
 	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
 
 	externalID := ""
 	systemID := ""
@@ -861,13 +1339,39 @@ func (p *parser) parseDoctype() {
 	if p.hasPrefixFold("PUBLIC") {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		externalID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		systemID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 	} else if p.hasPrefixFold("SYSTEM") {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		systemID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
+	}
+
+	// Final gate before the "skip to '>'" drain loop and the InternalSubset SAX
+	// emit (redundant given the per-scanner checks above, kept defensively): an
+	// over-cap literal/name/whitespace must not drain an unterminated abusive
+	// DOCTYPE or publish a partial subset.
+	if p.fatalErr != nil {
+		return
 	}
 
 	// Skip to '>'
@@ -882,26 +1386,43 @@ func (p *parser) parseDoctype() {
 }
 
 // parseCharacters parses character data (text content).
-func (p *parser) parseCharacters() {
-	// Collect text up to the next '<' or '&'.
-	// We need to split at whitespace→non-whitespace boundaries when inside
-	// <head> so that whitespace is emitted in <head> and non-whitespace
-	// triggers head-close + body-open.
+//
+// Each call consumes one bounded chunk of a normal data-state text run and hands
+// it to emitCharacters; the main parse loop re-enters once per chunk so one huge
+// delimiter-free span is delivered to SAX in MaxContentSize-bounded pieces rather
+// than buffered whole. The whitespace-significance and implied-<body> insertion
+// decisions are NOT made here — they are centralized in emitCharacters, which
+// defers a still-undecided leading whitespace prefix into pendingWS until the
+// run's first non-whitespace byte is seen. parseCharacters therefore just scans
+// and emits; it does not try to keep a leading whitespace prefix together with
+// the following text.
+func (p *parser) parseCharacters(ctx context.Context) {
+	// Inside <head>, stop the scan at the first non-whitespace byte so leading
+	// whitespace is emitted in <head> (its insertion target is already correct)
+	// and the following non-whitespace re-enters and triggers head-close +
+	// body-open via htmlStartCharData.
 	inHead := p.currentName() == elemHead
 
 	// A real U+0000 (NUL) byte is indistinguishable from EOF via Peek/PeekAt
-	// (both return 0), so the scan loops below would break with no progress and
+	// (both return 0), so the scan loop below would break with no progress and
 	// the outer parse loop would spin forever. Per HTML5 the data state treats
 	// U+0000 as a parse error and replaces it with U+FFFD. Consume the NUL and
 	// emit the replacement character, guaranteeing forward progress. EOF is
 	// distinguished by Done().
 	if !p.cur.Done() && p.cur.Peek() == 0 {
 		_ = p.cur.Advance(1)
+		// U+FFFD is non-whitespace: establish the insertion target, then emit. The
+		// preceding leading whitespace (if any) is held in pendingWS and flushed by
+		// emitCharacters into this now-significant run.
 		p.htmlStartCharData()
 		_ = p.emitCharacters([]byte("�"))
 		return
 	}
 
+	limit := p.cfg.contentLimit()
+
+	// Scan a run of ordinary character data up to the next char-data token
+	// ('&', a real NUL, lone '<') or markup, bounded by the content cap.
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -909,32 +1430,40 @@ func (p *parser) parseCharacters() {
 			break
 		}
 		if inHead && !isWhitespaceByte(b) {
-			// Non-whitespace while inside head — break here to emit
-			// the preceding whitespace in head, then handle the rest
 			break
 		}
 		n++
+		if n >= limit {
+			break
+		}
 	}
+	// A cap-truncated run may land mid-rune; back off (or, for a single rune
+	// larger than the cap, extend) to a whole-rune boundary so the emitted chunk
+	// is valid UTF-8.
+	n = p.clampTextChunkToRune(n, limit)
 
 	if n > 0 {
 		text := p.cur.PeekString(n)
 		_ = p.cur.Advance(n)
 		textBytes := []byte(text)
+		// Non-whitespace establishes the run's insertion target before any byte is
+		// emitted; emitCharacters then flushes any deferred leading whitespace into
+		// the now-significant run. An all-whitespace chunk is deferred/suppressed by
+		// emitCharacters without opening an implied <body>.
 		if !isAllWhitespace(textBytes) {
 			p.htmlStartCharData()
 		}
-		// Suppress whitespace before the root element has been seen
-		if !p.sawRoot && isAllWhitespace(textBytes) {
-			return
-		}
 		_ = p.emitCharacters(textBytes)
-
-		// After emitting whitespace in head, continue to collect the
-		// non-whitespace part (which will trigger head close on next call)
 		return
 	}
 
-	// If we're at a non-whitespace char (after whitespace in head), collect it
+	// n == 0. Inside <head>, the scan above stops at the FIRST non-whitespace byte
+	// (so leading whitespace is emitted in <head> first), which leaves nothing to
+	// emit on the call that begins at that non-whitespace byte. Consume the
+	// non-whitespace run here — without the in-head break — so the parse makes
+	// forward progress; htmlStartCharData closes <head> and opens <body>. Outside
+	// <head> the first scan already consumed any non-whitespace, so this only
+	// triggers for the in-head case.
 	if !p.cur.Done() && p.cur.Peek() != '<' && p.cur.Peek() != '&' {
 		n = 0
 		for {
@@ -943,7 +1472,11 @@ func (p *parser) parseCharacters() {
 				break
 			}
 			n++
+			if n >= limit {
+				break
+			}
 		}
+		n = p.clampTextChunkToRune(n, limit)
 		if n > 0 {
 			text := p.cur.PeekString(n)
 			_ = p.cur.Advance(n)
@@ -956,9 +1489,16 @@ func (p *parser) parseCharacters() {
 		return
 	}
 
-	// Handle entity references in character data
+	// At a char-data token. '&' starts a character reference. Use the cap-aware
+	// variant so a long unresolved named/numeric reference is bounded (named via a
+	// fixed lookahead, numeric via chunked digit consumption) exactly like the
+	// RCDATA path, instead of buffering the whole run through unbounded parseWhile
+	// scans. A char-ref is part of the SAME normal-data run, not a boundary: if it
+	// emits non-whitespace, emitCharacters marks the run significant and flushes
+	// any deferred leading whitespace; an all-whitespace resolution folds into
+	// pendingWS. Only a real markup tag (handled in the main parse loop) ends it.
 	if !p.cur.Done() && p.cur.Peek() == '&' {
-		p.parseCharRef()
+		p.parseCharRefBounded(ctx, limit)
 	}
 }
 
@@ -1064,56 +1604,22 @@ func resolveNamedEntity(name string, hasSemicolon bool) (val, remainder string, 
 // digits were present. Callers handle post-scan emission/normalization.
 func (p *parser) scanNumericCharRef() (codepoint int, haveDigits bool) {
 	_ = p.cur.Advance(1) // skip '#'
+	// Bound the digit scan to maxEntityNameLen so a runaway '&#'-led digit run
+	// cannot slurp unbounded into one allocation, bypassing the caller's per-byte
+	// hard cap. Any over-cap tail falls through to the caller's capped loop; no
+	// valid numeric reference needs this many digits.
 	if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 		_ = p.cur.Advance(1) // skip 'x'
-		hexStr := p.parseWhile(xmlchar.IsHexDigit)
+		hexStr, _ := p.parseWhileMaxErr(xmlchar.IsHexDigit, maxEntityNameLen)
 		codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
 	} else {
-		numStr := p.parseWhile(xmlchar.IsASCIIDigit)
+		numStr, _ := p.parseWhileMaxErr(xmlchar.IsASCIIDigit, maxEntityNameLen)
 		codepoint, haveDigits = parseNumericCharRef(numStr, 10)
 	}
 	if p.cur.Peek() == ';' {
 		_ = p.cur.Advance(1)
 	}
 	return codepoint, haveDigits
-}
-
-// parseCharRef handles entity references (&name; or &#num; or &#xhex;).
-// Emits the resolved value as a Characters SAX event (entity splitting behavior).
-func (p *parser) parseCharRef() {
-	// Entity content is non-whitespace — ensure implied elements
-	p.htmlStartCharData()
-
-	_ = p.cur.Advance(1) // skip '&'
-
-	if p.cur.Peek() == '#' {
-		codepoint, haveDigits := p.scanNumericCharRef()
-		p.emitNumericCharRef(codepoint, haveDigits)
-		return
-	}
-
-	// Named entity
-	name := p.parseWhile(isAlphanumeric)
-	hasSemicolon := false
-	if p.cur.Peek() == ';' {
-		hasSemicolon = true
-		_ = p.cur.Advance(1)
-	}
-
-	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
-		_ = p.emitCharacters([]byte(val))
-		if remainder != "" {
-			_ = p.emitCharacters([]byte(remainder))
-		}
-		return
-	}
-
-	// Unknown entity — emit as literal text
-	text := "&" + name
-	if hasSemicolon {
-		text += ";"
-	}
-	_ = p.emitCharacters([]byte(text))
 }
 
 // maxEntityNameLen is one past the length of the longest named HTML entity
@@ -1129,11 +1635,11 @@ const maxEntityNameLen = 32
 const saturatedCharRefChunk = 4096
 
 // parseCharRefBounded handles an entity reference inside cap-aware content
-// (RCDATA: title/textarea) where the surrounding text is flushed to SAX in
-// chunks no larger than limit. It makes the SAME entity-resolution decisions as
-// parseCharRef — numeric references (including overlong/leading-zero/overflow
-// runs) normalize to their HTML5 output (U+FFFD on overflow/invalid), and named
-// references resolve identically including legacy-prefix matching.
+// (the normal data state and RCDATA: title/textarea) where the surrounding
+// text is flushed to SAX in chunks no larger than limit. Numeric references
+// (including overlong/leading-zero/overflow runs) normalize to their HTML5
+// output (U+FFFD on overflow/invalid), and named references resolve including
+// legacy-prefix matching.
 //
 // Memory AND bytes-read work are kept bounded by two independent budgets:
 //
@@ -1218,7 +1724,8 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	}
 
 	// The lookahead SATURATES when the alphanumeric run reaches the fixed window
-	// AND keeps going. parseCharRef scans the WHOLE run before deciding, so its
+	// AND keeps going. The reference algorithm scans the WHOLE run before
+	// deciding, so its
 	// resolveNamedEntity sees the full (over-long) name; a long ';'-terminated
 	// name is NOT legacy-prefix-resolved (that loop is gated on !hasSemicolon),
 	// and an over-long no-semicolon name resolves only its longest legacy prefix.
@@ -1305,7 +1812,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 // overflowed the fixed maxEntityNameLen lookahead window: head holds the first
 // maxEntityNameLen bytes already CONSUMED and the run is known to continue. Such
 // a run can never match a KNOWN entity (the longest is 31 chars), so the only
-// resolution parseCharRef could ever apply to it is a legacy-prefix match — and
+// resolution the reference algorithm could ever apply to it is a legacy-prefix match — and
 // that applies ONLY when the run is NOT ';'-terminated (resolveNamedEntity gates
 // its prefix loop on !hasSemicolon). The two interpretations differ:
 //
@@ -1313,8 +1820,8 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 //     within head, ≤6 chars) and emit the unmatched remainder (rest of head plus
 //     the alphanumeric tail) as ordinary text. If head has no legacy prefix the
 //     whole run is an unresolved literal (see below).
-//   - ';'-terminated: an over-long UNKNOWN name. parseCharRef does NOT
-//     legacy-resolve it; the WHOLE run plus ';' is an unresolved literal.
+//   - ';'-terminated: an over-long UNKNOWN name. The reference algorithm does
+//     NOT legacy-resolve it; the WHOLE run plus ';' is an unresolved literal.
 //
 // Because the two interpretations EMIT DIFFERENT bytes, nothing may be emitted
 // before the ';'-vs-not decision is final — an optimistic legacy emit followed by
@@ -1400,7 +1907,8 @@ func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, 
 		_ = p.cur.Advance(1)
 	}
 
-	// No ';' and head legacy-resolves: mirror parseCharRef's no-semicolon
+	// No ';' and head legacy-resolves: mirror the reference algorithm's
+	// no-semicolon
 	// legacy-prefix path. The run fit the cap, so emit the resolution + head's
 	// leftover + the spooled tail as ordinary text. Only now, with ';' ruled out,
 	// does emission begin, so nothing was emitted prematurely.
@@ -1533,14 +2041,92 @@ func (p *parser) emitError(msg string, args ...any) error {
 	return p.sax.Error(fmt.Errorf(msg, args...))
 }
 
-// emitCharacters fires the appropriate SAX Characters event.
-// When noBlanks is set, whitespace-only data is suppressed unless
-// inside a raw-text element (script, style, etc.).
+// emitCharacters fires the appropriate SAX Characters event for normal
+// data-state character data, and is the single chokepoint for the two text-run
+// decisions that can only be made once the run's first non-whitespace byte is
+// known: whitespace-significance (StripBlanks/noBlanks) and implied-<body>
+// insertion (see the pendingWS field doc).
+//
+//   - Non-whitespace data marks the current run significant (curTextRunSignificant)
+//     and FLUSHES any deferred leading whitespace into it. ANY non-whitespace emit
+//     path — a plain text chunk, a resolved entity / numeric char-ref, an
+//     unresolved char-ref literal, a U+FFFD replacement, or a lone literal '<' —
+//     flows through here, so the run is marked uniformly.
+//   - All-whitespace data whose run is not yet significant is, when its insertion
+//     target is still undecided, DEFERRED into pendingWS rather than emitted: in
+//     <head> (target already correct) it is emitted there or dropped under
+//     noBlanks; before the root element it is ignorable and dropped; inside
+//     raw-text/RCDATA elements it is always kept.
+//
+// curTextRunSignificant is RESET only when a real markup tag is dispatched in the
+// main parse loop; a char-ref and a lone '<' are part of the same run and never
+// reset it.
 func (p *parser) emitCharacters(data []byte) error {
-	if p.cfg.noBlanks && isAllWhitespace(data) {
-		if !p.inRawTextElement() {
+	if !isAllWhitespace(data) {
+		p.curTextRunSignificant = true
+		// Flush deferred leading whitespace into the now-significant run BEFORE
+		// emitting this non-whitespace data. The caller has already established the
+		// insertion target (htmlStartCharData / lone-'<'), so it lands correctly.
+		// Route any SAX callback error through handleSAXErr exactly like the regular
+		// character-emit path (e.g. parseRawContent): an UNSET Characters handler
+		// returns ErrHandlerUnspecified and is filtered to a no-op, a real handler
+		// error is captured (strict) or warned (tolerant). Either way we must NOT
+		// short-circuit — the current non-whitespace chunk below (including the
+		// encoding-error check) still has to be emitted and processed.
+		p.handleSAXErr(p.flushPendingWS())
+	} else if !p.curTextRunSignificant && !p.inRawTextElement() {
+		// All-whitespace data whose run significance / insertion target may not yet
+		// be established.
+		switch {
+		case len(p.nameStack) == 0 && !p.sawRoot:
+			// No element is open yet AND the root <html> has never been opened, so this
+			// whitespace precedes the document content and is ignorable; drop it. The
+			// sawRoot guard distinguishes genuine pre-root whitespace from TRAILING
+			// whitespace AFTER the root has closed (stack also empty, but sawRoot is
+			// true) which must still be emitted: opening a bare <html> does not advance
+			// the insertion mode past insertInitial, so a mode-based guard would
+			// mis-drop the trailing run of `<html></html> \n`. Under SuppressImplied no
+			// <html> root is ever created, so sawRoot stays false and pre-root
+			// whitespace remains ignorable; once a non-html element is open the stack is
+			// non-empty and this path is not reached.
 			return nil
+		case p.currentName() == elemHead:
+			// Inside <head> the insertion target is already correct. StripBlanks still
+			// strips a whitespace-only run; otherwise fall out of the switch and emit
+			// it under <head>.
+			if p.cfg.noBlanks {
+				return nil
+			}
+		case p.cfg.noBlanks || (!p.cfg.noImplied && p.mode < insertInBody):
+			// Significance or insertion is genuinely UNDECIDED, so defer. Under
+			// StripBlanks a whitespace-only run is stripped, but a following
+			// non-whitespace byte makes this leading whitespace significant. And while
+			// implied insertion is ENABLED and the body subtree has not yet been
+			// entered (mode < insertInBody) the next non-whitespace byte would open the
+			// implied <body> via htmlStartCharData, so emitting now would split one
+			// logical run across parents. When implied insertion is DISABLED
+			// (SuppressImplied) and an element is already open, the insertion target is
+			// fixed, so there is nothing to defer — fall through and emit immediately.
+			// deferPendingWS hard-fails an over-cap undecidable whitespace prefix
+			// rather than buffering unbounded.
+			return p.deferPendingWS(data)
 		}
+		// Reaching here means inside <head> without StripBlanks, or an element is open
+		// with a fixed insertion target (StripBlanks OFF and either the body subtree
+		// has been entered or implied insertion is disabled). The whitespace is
+		// significant and lands in the current element regardless of what follows, so
+		// emit it immediately under the SOFT cap — no deferral, no undecidable-
+		// whitespace hard-fail. This is the normal data-state text path, e.g.
+		// <p> + over-cap spaces + </p>, including under SuppressImplied.
+		//
+		// Flush any deferred leading whitespace FIRST so output order is preserved.
+		// The insertion target is now fixed (e.g. a whitespace-producing char-ref such
+		// as &#9; / &Tab; just opened the implied <body> via htmlStartCharData), and
+		// the pendingWS prefix lexically precedes this chunk; emitting this whitespace
+		// ahead of the still-deferred prefix would reorder the run (e.g. `<html> &#9;a`
+		// must yield " \ta", not "\t a"). flushPendingWS is a no-op when nothing was
+		// deferred.
+		p.handleSAXErr(p.flushPendingWS())
 	}
 	if bytes.ContainsRune(data, '\uFFFD') {
 		if p.encodingError {
@@ -1562,8 +2148,74 @@ func (p *parser) emitCharacters(data []byte) error {
 				p.encodingSanitizer = nil
 			}
 		}
+		// The deferred undeclared-charset reader never produces a sanitized U+FFFD
+		// of its own: it stays pure UTF-8, switches the whole buffer to Latin-1, or
+		// fails closed at the buffering cap. So a U+FFFD reaching here on that path
+		// is genuine document content, not an encoding error — no diagnostic.
 	}
 	return p.sax.Characters(data)
+}
+
+// deferPendingWS appends still-undecided leading whitespace to the bounded
+// pendingWS buffer. The buffer is bounded by the content cap: if the whitespace
+// prefix alone reaches the cap before any non-whitespace byte establishes the
+// run's significance, the parse hard-fails with ErrContentSizeExceeded rather
+// than buffering unbounded — the same over-cap policy indivisible constructs use
+// elsewhere.
+func (p *parser) deferPendingWS(data []byte) error {
+	limit := p.cfg.contentLimit()
+	if len(p.pendingWS)+len(data) > limit {
+		p.fatalErr = fmt.Errorf("character data exceeds %d bytes before its whitespace significance can be determined: %w", limit, ErrContentSizeExceeded)
+		return p.fatalErr
+	}
+	p.pendingWS = append(p.pendingWS, data...)
+	return nil
+}
+
+// flushPendingWS emits deferred leading whitespace as part of a run now known
+// significant. The caller (about to emit non-whitespace) has already established
+// the insertion target, so the whitespace lands in the correct element. It is
+// emitted in cap-sized chunks (whitespace is ASCII, so splitting on byte
+// boundaries never breaks a rune).
+func (p *parser) flushPendingWS() error {
+	if len(p.pendingWS) == 0 {
+		return nil
+	}
+	ws := p.pendingWS
+	p.pendingWS = nil
+	return p.emitWSChunked(ws)
+}
+
+// flushPendingWSRunEnd resolves deferred leading whitespace when the run ends
+// without ever becoming significant — a real markup tag or EOF closes it. The
+// run is therefore entirely whitespace: StripBlanks (noBlanks) drops it,
+// pre-root whitespace (empty stack, root never opened) drops it, and otherwise
+// it is emitted under the current element. It is a no-op when nothing was
+// deferred.
+func (p *parser) flushPendingWSRunEnd() error {
+	if len(p.pendingWS) == 0 {
+		return nil
+	}
+	ws := p.pendingWS
+	p.pendingWS = nil
+	if p.cfg.noBlanks || (len(p.nameStack) == 0 && !p.sawRoot) {
+		return nil
+	}
+	return p.emitWSChunked(ws)
+}
+
+// emitWSChunked writes whitespace directly to SAX in cap-sized chunks, bypassing
+// the emitCharacters significance/deferral logic (the caller has already decided
+// the whitespace is to be emitted).
+func (p *parser) emitWSChunked(ws []byte) error {
+	limit := p.cfg.contentLimit()
+	for len(ws) > limit {
+		if err := p.sax.Characters(ws[:limit]); err != nil {
+			return err
+		}
+		ws = ws[limit:]
+	}
+	return p.sax.Characters(ws)
 }
 
 // inRawTextElement reports whether the parser is currently inside a raw-text
@@ -1811,6 +2463,30 @@ func isUTF8Continuation(b byte) bool {
 	return b&0xC0 == 0x80
 }
 
+// clampTextChunkToRune adjusts a text-run length scanned up to the content cap
+// so a chunk flushed at the cap never splits a multi-byte UTF-8 sequence. When
+// the run reached the cap (n >= limit) it backs n off to the last whole-rune
+// boundary; if the run begins with a single rune larger than the cap it extends
+// n forward to cover that rune whole rather than emitting a partial rune. A run
+// shorter than the cap (stopped at a real delimiter) is returned unchanged.
+func (p *parser) clampTextChunkToRune(n, limit int) int {
+	if n < limit {
+		return n
+	}
+	for n > 0 && isUTF8Continuation(p.cur.PeekAt(n)) {
+		n--
+	}
+	if n == 0 {
+		// A lone rune exceeds the cap. Extend to cover it whole so a partial
+		// rune is never emitted.
+		n = limit
+		for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
+			n++
+		}
+	}
+	return n
+}
+
 // parseRCDATAContent parses RCDATA content (title, textarea).
 // Like raw text but entities are expanded.
 func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
@@ -1880,23 +2556,9 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 				}
 			}
 			// The cap may land mid-rune. Back off to the last whole-rune
-			// boundary so the emitted chunk is valid UTF-8 — but only while a
-			// complete rune still precedes the boundary. If the run begins with
-			// a single rune that is itself larger than the cap, keep extending
-			// until that rune is whole rather than splitting it.
-			if n >= limit {
-				for n > 0 && isUTF8Continuation(p.cur.PeekAt(n)) {
-					n--
-				}
-				if n == 0 {
-					// A lone rune exceeds the cap. Extend to cover it whole so a
-					// partial rune is never emitted.
-					n = limit
-					for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
-						n++
-					}
-				}
-			}
+			// boundary so the emitted chunk is valid UTF-8 (extending a lone
+			// over-cap rune to cover it whole).
+			n = p.clampTextChunkToRune(n, limit)
 			if n > 0 {
 				text := p.cur.PeekString(n)
 				_ = p.cur.Advance(n)
@@ -1986,11 +2648,21 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 
 // parseName parses an HTML tag name (letters, digits, colons, hyphens).
 func (p *parser) parseName() string {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || !isNameChar(b) {
 			break
+		}
+		// A tag name is part of an indivisible start/end-tag event and cannot be
+		// chunked, so bound the unbounded PeekAt scan as a HARD cap (see
+		// scanTokenLimit): a gigantic (e.g. unterminated) name must not grow the
+		// cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("tag name exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2009,7 +2681,9 @@ func (p *parser) parseAttributes() []Attribute {
 	var attrs []Attribute
 	var seen map[string]struct{}
 
-	for {
+	// An over-cap attribute value sets fatalErr; stop scanning immediately so the
+	// main loop surfaces it rather than buffering further attributes.
+	for p.fatalErr == nil {
 		p.skipWhitespace()
 		if p.cur.Done() || p.cur.Peek() == '>' || p.cur.Peek() == '/' {
 			break
@@ -2054,11 +2728,19 @@ func (p *parser) parseAttributes() []Attribute {
 // Uses negative-logic terminators: any character that is not a terminator
 // is accepted, matching HTML's liberal attribute name rules.
 func (p *parser) parseAttrName() string {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || isWhitespaceByte(b) || b == '>' || b == '/' || b == '=' || b == '"' || b == '\'' || b == '<' {
 			break
+		}
+		// An attribute name is part of an indivisible start-tag event and cannot
+		// be chunked, so bound the unbounded PeekAt scan as a HARD cap (see
+		// scanTokenLimit). Exactly limit bytes are accepted; the limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("attribute name exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2085,9 +2767,18 @@ func (p *parser) parseAttrValue() string {
 // parseQuotedAttrValue parses a quoted attribute value with entity expansion.
 func (p *parser) parseQuotedAttrValue(quote byte) string {
 	_ = p.cur.Advance(1) // skip opening quote
+	limit := p.cfg.contentLimit()
 	var buf bytes.Buffer
 
 	for !p.cur.Done() && p.cur.Peek() != quote {
+		// An attribute value is part of an indivisible start-tag event and cannot
+		// be chunked, so enforce the content limit as a HARD cap: an unbounded
+		// (e.g. unterminated) value must not buffer without limit. Fail before
+		// accepting a byte that would push the accumulated value past the cap.
+		if buf.Len() >= limit {
+			p.fatalErr = fmt.Errorf("attribute value exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
+		}
 		if p.cur.Peek() == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
 		} else {
@@ -2103,12 +2794,19 @@ func (p *parser) parseQuotedAttrValue(quote byte) string {
 
 // parseUnquotedAttrValue parses an unquoted attribute value.
 func (p *parser) parseUnquotedAttrValue() string {
+	limit := p.cfg.contentLimit()
 	var buf bytes.Buffer
 
 	for !p.cur.Done() {
 		b := p.cur.Peek()
 		if b == '>' || b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' {
 			break
+		}
+		// Hard-cap the accumulated value the same way as the quoted form so an
+		// unbounded unquoted value cannot buffer without limit.
+		if buf.Len() >= limit {
+			p.fatalErr = fmt.Errorf("attribute value exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		if b == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
@@ -2136,7 +2834,12 @@ func (p *parser) resolveEntityInAttr() string {
 		return ""
 	}
 
-	name := p.parseWhile(isAlphanumeric)
+	// Bound the entity-name scan to maxEntityNameLen so a runaway '&'-led
+	// alphanumeric run cannot slurp unbounded into one allocation, bypassing the
+	// caller's per-byte hard cap. No real entity name reaches this length, so any
+	// over-cap tail falls through to the caller's capped loop and output for valid
+	// entities is unchanged.
+	name, _ := p.parseWhileMaxErr(isAlphanumeric, maxEntityNameLen)
 	hasSemicolon := false
 	if p.cur.Peek() == ';' {
 		hasSemicolon = true
@@ -2173,11 +2876,26 @@ func (p *parser) parseQuotedString() string {
 	}
 	quote := p.cur.Peek()
 	_ = p.cur.Advance(1)
+	limit := p.cfg.scanTokenLimit()
 	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 || b == quote {
+	// HasByteAt in the loop condition distinguishes EOF from a real NUL byte:
+	// PeekAt returns 0 for both, so a NUL inside the literal must NOT be mistaken
+	// for end-of-input — doing so would exit the scan early WITHOUT setting
+	// fatalErr and bypass the hard cap (letting parseDoctype drain an unterminated
+	// abusive literal and emit a partial subset). A NUL counts as content, like
+	// the comment/PI scanners.
+	for p.cur.HasByteAt(n) {
+		if p.cur.PeekAt(n) == quote {
 			break
+		}
+		// A DOCTYPE PUBLIC/SYSTEM literal maps to a single InternalSubset SAX
+		// argument and cannot be chunked, so bound the unbounded PeekAt scan as a
+		// HARD cap (see scanTokenLimit): an unterminated huge literal must not grow
+		// the cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails. parseDoctype checks fatalErr and stops.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("doctype literal exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2189,25 +2907,7 @@ func (p *parser) parseQuotedString() string {
 	return s
 }
 
-// parseWhile collects characters while pred returns true.
-func (p *parser) parseWhile(pred func(byte) bool) string {
-	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 || !pred(b) {
-			break
-		}
-		n++
-	}
-	if n == 0 {
-		return ""
-	}
-	s := p.cur.PeekString(n)
-	_ = p.cur.Advance(n)
-	return s
-}
-
-// parseWhileMaxErr is parseWhile with an upper bound: it consumes at most limit
+// parseWhileMaxErr collects characters while pred returns true, with an upper bound: it consumes at most limit
 // matching bytes, leaving any further matching bytes for the next call. It lets
 // a caller bound an otherwise unbounded scan (e.g. a runaway entity name) and
 // drain it in fixed-size pieces. A limit <= 0 is treated as unbounded.
@@ -2257,10 +2957,20 @@ func (p *parser) parseWhileMaxErr(pred func(byte) bool, limit int) (string, erro
 
 // skipWhitespace skips whitespace characters.
 func (p *parser) skipWhitespace() {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b != ' ' && b != '\t' && b != '\n' && b != '\r' && b != '\f' {
+			break
+		}
+		// skipWhitespace runs only in tag context (between attributes / around the
+		// tag close), so a multi-megabyte whitespace run is pathological. Bound the
+		// unbounded PeekAt scan as a HARD cap (see scanTokenLimit) so it cannot grow
+		// the cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("whitespace run exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
 			break
 		}
 		n++

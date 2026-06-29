@@ -3,12 +3,13 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -23,7 +24,7 @@ func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) erro
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:import requires href attribute")
 	}
-	return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI), href, true)
+	return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI, c.moduleRoot), href, true)
 }
 
 // resolveIncludeURI resolves an xsl:include's href to an absolute URI.
@@ -32,7 +33,7 @@ func (c *compiler) resolveIncludeURI(_ context.Context, elem *helium.Element) (s
 	if href == "" {
 		return "", "", staticError(errCodeXTSE0110, "xsl:include requires href attribute")
 	}
-	baseURI := stylesheetBaseURI(elem, c.baseURI)
+	baseURI := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 
 	var fragment string
 	if idx := strings.IndexByte(href, '#'); idx >= 0 {
@@ -82,11 +83,17 @@ func resolveModuleURI(href, baseURI string) (string, error) {
 	if xsd.URIScheme(href) != "" || xsd.URIScheme(baseURI) != "" {
 		return xsd.ResolveSchemaURI(href, baseURI) //nolint:wrapcheck // static error passthrough
 	}
-	// Local filesystem base (a FILE path): keep historical filepath semantics.
-	if filepath.IsAbs(href) {
+	// Local filesystem base (a FILE path): resolve with forward-slash (path)
+	// semantics so the result uses '/' on every OS. A Windows-absolute href was
+	// already handled by isWindowsDrivePath above; uripath.IsAbsolutePath here
+	// keeps a POSIX-absolute href verbatim. On Windows filepath.Dir/Join would
+	// emit '\' and corrupt a virtual or POSIX-shaped base (e.g. "/virtual/x.xsl"
+	// against href "common.xsl" -> "\\virtual\\common.xsl"), missing a resolver
+	// keyed on the forward-slash form.
+	if uripath.IsAbsolutePath(href) {
 		return href, nil
 	}
-	return filepath.Join(filepath.Dir(baseURI), href), nil
+	return uripath.JoinLocalBaseDir(path.Dir(uripath.ToSlash(baseURI)), href), nil
 }
 
 // isWindowsDrivePath reports whether s begins with a Windows drive-letter prefix
@@ -142,11 +149,14 @@ func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Eleme
 	}
 
 	savedBase := c.baseURI
-	c.baseURI = uri
+	c.baseURI = moduleEffectiveBaseURI(root, uri)
 	defer func() { c.baseURI = savedBase }()
 	savedModuleKey := c.moduleKey
 	c.moduleKey = importKey
 	defer func() { c.moduleKey = savedModuleKey }()
+	savedModuleRoot := c.moduleRoot
+	c.moduleRoot = embeddedModuleRoot(root)
+	defer func() { c.moduleRoot = savedModuleRoot }()
 
 	c.collectNamespaces(ctx, root)
 
@@ -202,7 +212,7 @@ func (c *compiler) loadModuleDoc(ctx context.Context, uri string) (*helium.Docum
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities, c.loadResourceBytes)
+	doc, err := parseStylesheetDocument(ctx, c.parser, data, uri, c.allowExternalEntities, c.loadResourceBytes, c.maxResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -257,10 +267,29 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
 	}
 
+	// Also cache the module document under its FOLDED effective base (the
+	// xml:base ancestor chain folded into the module URI — the module root's own
+	// xml:base for a document root, plus wrapper/document xml:base for an embedded
+	// root). This module's templates compile with BaseURI =
+	// moduleEffectiveBaseURI(root, uri), and doc('')/document('') from within the
+	// module looks up moduleDocs by that folded key; without this entry the lookup
+	// misses and wrongly falls back to the principal stylesheet. The bare-uri
+	// entry above is kept for other lookups; when no xml:base applies the folded
+	// base equals uri and this is a no-op.
+	if effBase := moduleEffectiveBaseURI(root, uri); effBase != uri {
+		c.stylesheet.moduleDocs[effBase] = doc
+	}
+
 	// Check use-when on the included/imported stylesheet's root element.
-	// If use-when evaluates to false, skip the entire module.
+	// If use-when evaluates to false, skip the entire module. Evaluate against
+	// the module's effective static base (its root xml:base folded into the
+	// module URI) so doc-available()/doc() in the root use-when resolve like the
+	// module's own globals, not the including module's base.
 	if uw := getAttr(root, xslAttrUseWhen); uw != "" {
+		savedBase := c.baseURI
+		c.baseURI = moduleEffectiveBaseURI(root, uri)
 		include, err := c.evaluateUseWhen(ctx, uw)
+		c.baseURI = savedBase
 		if err != nil {
 			return nil, err
 		}
@@ -298,15 +327,18 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 		}
 		// Simplified stylesheet — fall back to the original full include path.
 		// Simplified stylesheets have no imports, so document order is trivially correct.
-		return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI), getAttr(elem, "href"), false)
+		return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI, c.moduleRoot), getAttr(elem, "href"), false)
 	}
 
 	savedBase := c.baseURI
-	c.baseURI = uri
+	c.baseURI = moduleEffectiveBaseURI(root, uri)
 	defer func() { c.baseURI = savedBase }()
 	savedModuleKey := c.moduleKey
 	c.moduleKey = importKey
 	defer func() { c.moduleKey = savedModuleKey }()
+	savedModuleRoot := c.moduleRoot
+	c.moduleRoot = embeddedModuleRoot(root)
+	defer func() { c.moduleRoot = savedModuleRoot }()
 
 	savedDefaultMode := c.defaultMode
 	if dm := getAttr(root, "default-mode"); dm != "" {
@@ -359,7 +391,7 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 				if err == nil {
 					eval := c.staticEvaluator(ctx)
 					if len(c.staticVars) > 0 {
-						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
+						eval = eval.Variables(c.staticVars)
 					}
 					result, err := eval.Evaluate(ctx, compiled, nil)
 					if err == nil {
@@ -461,18 +493,84 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 	return nil
 }
 
-func stylesheetBaseURI(n helium.Node, fallback string) string {
-	base := fallback
+// moduleEffectiveBaseURI computes the effective static base URI against which an
+// included/imported stylesheet module's root use-when, globals, and templates
+// resolve relative references (doc(), unparsed-text(), document(”), etc.).
+//
+// The MAIN module gets this treatment in compile() via resolveRootXMLBase, but
+// external modules are loaded with c.baseURI set to the bare module URI and
+// compiled directly (loadExternalStylesheet → compileTopLevel; or the two-phase
+// include path). Without this, a root xml:base on an included/imported module
+// is silently dropped and its globals resolve against the bare module URI
+// instead of the declaration-site static base.
+//
+// For a module root that IS the document element, only its own xml:base is
+// folded (via resolveRootXMLBase). For an EMBEDDED module root (one selected by
+// a fragment identifier, whose parent is another element rather than the
+// Document) the FULL xml:base ancestor chain — the embedded root's own xml:base,
+// any wrapper element xml:base(s), and the document element's xml:base — is
+// folded onto the module URI, because all of those ancestors lie above the
+// module root and so are NOT visited by the descendant stylesheetBaseURI walk
+// (which stops at the module root). The computed base is therefore the single
+// authoritative base for the whole module: c.baseURI, the moduleDocs key, and
+// the boundary that descendant walks stop at.
+func moduleEffectiveBaseURI(root *helium.Element, uri string) string {
+	if _, isDoc := root.Parent().(*helium.Document); isDoc {
+		if xmlBase := getAttr(root, lexicon.QNameXMLBase); xmlBase != "" {
+			return resolveRootXMLBase(uri, xmlBase)
+		}
+		return uri
+	}
+	// Embedded module root: fold every xml:base from the embedded root up
+	// through the document element onto the module URI.
+	var bases []string
+	for cur := helium.Node(root); cur != nil; cur = cur.Parent() {
+		elem, ok := cur.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if xmlBase, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && xmlBase != "" {
+			bases = append(bases, xmlBase)
+		}
+	}
+	return foldXMLBases(uri, bases)
+}
+
+// embeddedModuleRoot reports root as an EMBEDDED (fragment-selected) stylesheet
+// module root — its parent is an element rather than the Document — otherwise
+// nil. The result is assigned to c.moduleRoot so descendant xml:base walks stop
+// at the embedded root (whose xml:base, plus any wrapper/document xml:base, is
+// already folded into the module's effective base URI by moduleEffectiveBaseURI).
+// A nil result restores the document-root boundary ("stop before the document
+// element"), which is correct for a non-embedded module's own document tree.
+func embeddedModuleRoot(root *helium.Element) *helium.Element {
+	if _, isDoc := root.Parent().(*helium.Document); isDoc {
+		return nil
+	}
+	return root
+}
+
+// stylesheetBaseURI folds the xml:base of n and its ancestors onto fallback,
+// yielding the effective static base URI for a node WITHIN a stylesheet module.
+// The walk stops at the module root (stopAt, the embedded stylesheet element for
+// a fragment-selected module) — or, when stopAt is nil, before the document
+// element — because the module root's xml:base (and everything above it) is
+// already folded into fallback (the module's effective base URI), so re-applying
+// it would double-count.
+func stylesheetBaseURI(n helium.Node, fallback string, stopAt *helium.Element) string {
 	var bases []string
 	for cur := n; cur != nil; cur = cur.Parent() {
 		elem, ok := cur.(*helium.Element)
 		if !ok {
 			continue
 		}
-		// Stop before the document element (stylesheet root).
-		// Its xml:base is already factored into the compiler's baseURI
-		// (the fallback parameter), so including it again would double-count.
-		if p := elem.Parent(); p != nil {
+		if stopAt != nil {
+			if elem == stopAt {
+				break
+			}
+		} else if p := elem.Parent(); p != nil {
+			// Stop before the document element (stylesheet root). Its xml:base is
+			// already factored into fallback, so including it again double-counts.
 			if _, isDoc := p.(*helium.Document); isDoc {
 				break
 			}
@@ -481,14 +579,75 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 			bases = append(bases, xmlBase)
 		}
 	}
+	return foldXMLBases(fallback, bases)
+}
+
+// foldXMLBases folds a bottom-up-ordered slice of xml:base reference values onto
+// base per RFC 3986. bases[0] is the nearest (deepest) xml:base, so the slice is
+// applied from the topmost ancestor down and the deepest value wins.
+func foldXMLBases(base string, bases []string) string {
 	for _, v := range slices.Backward(bases) {
 		if base == "" {
 			base = v
 			continue
 		}
-		base = helium.BuildURI(v, base)
+		resolved := helium.BuildURI(v, base)
+		// Per RFC 3986, resolving a directory-denoting reference (one that ends
+		// in '/', or whose last segment is "." / "..") yields a base that itself
+		// names a directory and so ends in '/'. helium.BuildURI strips that
+		// trailing slash, which would make a directory base such as the result of
+		// xml:base=".." ("…/tests/fn/") indistinguishable from a stylesheet FILE
+		// base ("…/tests/fn") — so a later sibling reference resolved through
+		// documentBaseDir (path.Dir) would drop the real "fn" segment. Restore the
+		// RFC-correct trailing slash so the directory form is preserved, inserting
+		// it into the PATH (before any '?'/'#') so a directory base carrying a
+		// query ("…/dir?v") becomes "…/dir/?v", never "…/dir?v/".
+		if resolved != "" && refDenotesDirectory(v) {
+			resolved = ensureDirSlash(resolved)
+		}
+		base = resolved
 	}
 	return base
+}
+
+// refDenotesDirectory reports whether a URI reference names a directory rather
+// than a file, i.e. resolving it per RFC 3986 produces a base ending in '/'. A
+// reference denotes a directory when its PATH portion ends in '/' or its last
+// path segment is "." or ".." (a pure dot-segment that resolves to the
+// containing directory). The query/fragment is excluded from the test, and a
+// reference with an empty path portion (query-only "?v" or fragment-only
+// "#frag") is NOT directory-denoting — path.Base("") == "." must not be
+// mistaken for a "." dot-segment.
+func refDenotesDirectory(ref string) bool {
+	pathPart := ref
+	if i := strings.IndexAny(pathPart, "?#"); i >= 0 {
+		pathPart = pathPart[:i]
+	}
+	if pathPart == "" {
+		return false
+	}
+	if strings.HasSuffix(pathPart, "/") {
+		return true
+	}
+	last := path.Base(pathPart)
+	return last == "." || last == ".."
+}
+
+// ensureDirSlash guarantees that the PATH portion of a resolved URI ends in
+// '/', inserting the slash before any query ('?') or fragment ('#') component
+// rather than at the very end. A directory base carrying a query ("…/dir?v")
+// thus becomes "…/dir/?v", never "…/dir?v/" (which would corrupt the query and
+// misplace the directory boundary). Idempotent when the path already ends in
+// '/'.
+func ensureDirSlash(uri string) string {
+	pathEnd := len(uri)
+	if i := strings.IndexAny(uri, "?#"); i >= 0 {
+		pathEnd = i
+	}
+	if pathEnd > 0 && uri[pathEnd-1] == '/' {
+		return uri
+	}
+	return uri[:pathEnd] + "/" + uri[pathEnd:]
 }
 
 func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href string, isImport bool) error {
@@ -570,6 +729,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 				packageResolver:       c.packageResolver,
 				maxResourceBytes:      c.maxResourceBytes,
 				allowExternalEntities: c.allowExternalEntities,
+				parser:                c.parser,
 			})
 			if err != nil {
 				return err
@@ -592,10 +752,38 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
-	// Check use-when on the imported/included stylesheet's root element.
-	// If use-when evaluates to false, skip the entire module.
+	// Fold the module root's xml:base chain into the effective static base URI so
+	// this module's globals and templates resolve relative references against the
+	// declaration-site base (matching the main module's compile() handling), not
+	// the bare module URI. For an EMBEDDED (fragment-selected) root this folds the
+	// embedded root's own xml:base plus any wrapper/document xml:base; moduleRoot
+	// is set so descendant xml:base walks stop at the embedded root and don't
+	// re-apply that chain. moduleDocs stays keyed on the unmodified uri too.
+	c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
+	savedModuleRoot := c.moduleRoot
+	c.moduleRoot = embeddedModuleRoot(importedRoot)
+	defer func() { c.moduleRoot = savedModuleRoot }()
+
+	// Also cache the module document under its FOLDED effective base so doc('') /
+	// document('') from within this module (whose templates compile under
+	// c.baseURI) resolves to the module's own document rather than falling back to
+	// the principal stylesheet. The bare-uri entry stored above is kept for other
+	// lookups; when no xml:base applies the folded base equals uri and this is a
+	// no-op.
+	if c.baseURI != uri {
+		c.stylesheet.moduleDocs[c.baseURI] = doc
+	}
+
+	// Check use-when on the imported/included stylesheet's root element. If
+	// use-when evaluates to false, skip the entire module. moduleEffectiveBaseURI
+	// already gives the module's full effective base (folding the embedded root's
+	// xml:base and any wrapper/document xml:base for a fragment-selected root), so
+	// c.baseURI is the correct base for the root use-when.
 	if uw := getAttr(importedRoot, xslAttrUseWhen); uw != "" {
+		savedUseWhenBase := c.baseURI
+		c.baseURI = moduleEffectiveBaseURI(importedRoot, uri)
 		include, err := c.evaluateUseWhen(ctx, uw)
+		c.baseURI = savedUseWhenBase
 		if err != nil {
 			return err
 		}
@@ -713,8 +901,10 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		c.resolver = cfg.resolver
 		c.packageResolver = cfg.packageResolver
 		c.maxResourceBytes = cfg.maxResourceBytes
+		c.parser = cfg.parser
 	}
 	c.stylesheet.maxResourceBytes = c.maxResourceBytes
+	c.stylesheet.parser = c.parser
 
 	c.collectNamespaces(ctx, root)
 

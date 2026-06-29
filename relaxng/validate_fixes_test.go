@@ -101,6 +101,62 @@ func TestMatchAttrOneOrMore(t *testing.T) {
 	})
 }
 
+// TestMatchDataExcept covers RNG-001: a <data><except>...</except></data>
+// must reject values matching the except patterns while still accepting the
+// base datatype otherwise.
+func TestMatchDataExcept(t *testing.T) {
+	t.Parallel()
+
+	schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0"
+    datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <data type="integer">
+    <except>
+      <value type="integer">5</value>
+    </except>
+  </data>
+</element>`
+
+	t.Run("excluded value rejected", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<r>5</r>`)
+		require.Error(t, err, `excepted value 5 must be rejected`)
+	})
+
+	t.Run("excluded value rejected via alternate lexical form", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<r>+5</r>`)
+		require.Error(t, err, `excepted value +5 (== 5) must be rejected`)
+	})
+
+	t.Run("non-excluded value accepted", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<r>7</r>`)
+		require.NoError(t, err, `non-excepted integer 7 should match`)
+	})
+
+	t.Run("invalid base datatype still rejected", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<r>notanumber</r>`)
+		require.Error(t, err, `non-integer must be rejected by the base datatype`)
+	})
+
+	t.Run("except choice rejects multiple values", func(t *testing.T) {
+		t.Parallel()
+		multi := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0"
+    datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <data type="integer">
+    <except>
+      <value type="integer">5</value>
+      <value type="integer">9</value>
+    </except>
+  </data>
+</element>`
+		require.Error(t, validateWith(t, multi, `<r>5</r>`), `5 must be rejected`)
+		require.Error(t, validateWith(t, multi, `<r>9</r>`), `9 must be rejected`)
+		require.NoError(t, validateWith(t, multi, `<r>7</r>`), `7 should match`)
+	})
+}
+
 // TestValidateWithLengthFacets covers bug 3: minLength/maxLength facets on a
 // <data type="string"> must be enforced.
 func TestValidateWithLengthFacets(t *testing.T) {

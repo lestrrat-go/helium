@@ -19,6 +19,10 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 	ed.ID, _ = elem.GetAttribute("Id")
 	ed.Type, _ = elem.GetAttribute("Type")
 
+	// Track CipherData separately: a decoded CipherValue can be a non-nil
+	// empty slice, so a boolean is the reliable duplicate sentinel.
+	var seenCipherData bool
+
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -26,6 +30,9 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 		}
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
+			if ed.EncryptionMethod != nil {
+				return nil, fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
+			}
 			em, err := parseEncryptionMethod(e)
 			if err != nil {
 				return nil, err
@@ -36,6 +43,10 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 				return nil, err
 			}
 		case isXMLEncElem(e, "CipherData"):
+			if seenCipherData {
+				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
+			}
+			seenCipherData = true
 			cv, err := parseCipherData(e)
 			if err != nil {
 				return nil, err
@@ -46,6 +57,12 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 
 	if ed.CipherValue == nil {
 		return nil, fmt.Errorf("%w: missing CipherData/CipherValue", ErrMalformedEncrypted)
+	}
+
+	// Populate the deprecated single EncryptedKey field with the first
+	// candidate so callers reading it keep working.
+	if len(ed.EncryptedKeys) > 0 {
+		ed.EncryptedKey = ed.EncryptedKeys[0]
 	}
 
 	return ed, nil
@@ -62,8 +79,7 @@ func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData) error {
 			if err != nil {
 				return err
 			}
-			ed.EncryptedKey = ek
-			return nil
+			ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
 		}
 	}
 	return nil
@@ -79,6 +95,8 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 	ek.ID, _ = elem.GetAttribute("Id")
 	ek.Recipient, _ = elem.GetAttribute("Recipient")
 
+	var seenCipherData bool
+
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -86,12 +104,19 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 		}
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
+			if ek.EncryptionMethod != nil {
+				return nil, fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
+			}
 			em, err := parseEncryptionMethod(e)
 			if err != nil {
 				return nil, err
 			}
 			ek.EncryptionMethod = em
 		case isXMLEncElem(e, "CipherData"):
+			if seenCipherData {
+				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
+			}
+			seenCipherData = true
 			cv, err := parseCipherData(e)
 			if err != nil {
 				return nil, err
@@ -102,16 +127,26 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 		}
 	}
 
+	if ek.CipherValue == nil {
+		return nil, fmt.Errorf("%w: EncryptedKey missing CipherData/CipherValue", ErrMalformedEncrypted)
+	}
+
 	return ek, nil
 }
 
 func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	em := &EncryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
-	if !ok {
-		return nil, fmt.Errorf("%w: EncryptionMethod missing Algorithm", ErrMalformedEncrypted)
+	if !ok || alg == "" {
+		return nil, fmt.Errorf("%w: EncryptionMethod missing/empty Algorithm", ErrMalformedEncrypted)
 	}
 	em.Algorithm = alg
+
+	// Enforce at-most-one cardinality on the optional sub-elements,
+	// mirroring the duplicate-EncryptionMethod/CipherData guards in the
+	// parent parsers. Boolean sentinels are used because an empty
+	// attribute/text value is otherwise ambiguous.
+	var seenDigestMethod, seenMGF, seenOAEPParams, seenKeySize bool
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
@@ -120,10 +155,39 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 		}
 		switch {
 		case isDSigElem(e, "DigestMethod"):
-			em.DigestMethod, _ = e.GetAttribute("Algorithm")
+			if seenDigestMethod {
+				return nil, fmt.Errorf("%w: duplicate DigestMethod", ErrMalformedEncrypted)
+			}
+			seenDigestMethod = true
+			alg, ok := e.GetAttribute("Algorithm")
+			if !ok || alg == "" {
+				return nil, fmt.Errorf("%w: DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
+			}
+			em.DigestMethod = alg
 		case isMGFElem(e):
-			em.MGFAlgorithm, _ = e.GetAttribute("Algorithm")
+			if seenMGF {
+				return nil, fmt.Errorf("%w: duplicate MGF", ErrMalformedEncrypted)
+			}
+			seenMGF = true
+			alg, ok := e.GetAttribute("Algorithm")
+			if !ok || alg == "" {
+				return nil, fmt.Errorf("%w: MGF missing/empty Algorithm", ErrMalformedEncrypted)
+			}
+			em.MGFAlgorithm = alg
+		case isXMLEncElem(e, "KeySize"):
+			// KeySize is an optional singleton in the schema. The package
+			// derives key sizes from the algorithm URI and does not consume
+			// KeySize, so enforce at-most-one cardinality to stay consistent
+			// with the other sub-element guards.
+			if seenKeySize {
+				return nil, fmt.Errorf("%w: duplicate KeySize", ErrMalformedEncrypted)
+			}
+			seenKeySize = true
 		case isXMLEncElem(e, "OAEPparams"):
+			if seenOAEPParams {
+				return nil, fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
+			}
+			seenOAEPParams = true
 			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
@@ -135,21 +199,45 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	return em, nil
 }
 
+// parseCipherData parses a CipherData element. Per the XML-Enc schema,
+// CipherData is a choice of EXACTLY ONE CipherValue or one CipherReference.
+// A second choice member of either kind (CipherValue+CipherValue,
+// CipherValue+CipherReference, CipherReference+CipherValue, or two
+// CipherReferences) is schema-invalid and rejected at parse rather than
+// silently using the first. CipherReference (indirect cipher text fetched
+// via a URI plus transforms) is not supported by helium and is rejected
+// explicitly; ignoring it would both lose data and defeat the
+// exactly-one-choice rule.
 func parseCipherData(elem *helium.Element) ([]byte, error) {
+	var decoded []byte
+	var seenChoice bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
-		if isXMLEncElem(e, "CipherValue") {
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+		switch {
+		case isXMLEncElem(e, "CipherValue"):
+			if seenChoice {
+				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+			}
+			seenChoice = true
+			d, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
 			}
-			return decoded, nil
+			decoded = d
+		case isXMLEncElem(e, "CipherReference"):
+			if seenChoice {
+				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+			}
+			return nil, fmt.Errorf("%w: CipherReference is not supported", ErrMalformedEncrypted)
 		}
 	}
-	return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	if !seenChoice {
+		return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	}
+	return decoded, nil
 }
 
 // isElemNS reports whether e has the given local name and one of the

@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// compileIncludeErrors compiles the named file from fsys (with baseDir
-// "schemas") and returns the fatal compile errors.
-func compileIncludeErrors(t *testing.T, fsys fstest.MapFS, file string) string {
+// compileIncludeErrors compiles the main schema (testMainRNGPath) from fsys
+// (with baseDir "schemas") and returns the fatal compile errors.
+func compileIncludeErrors(t *testing.T, fsys fstest.MapFS) string {
 	t.Helper()
-	data, err := fsys.ReadFile(file)
+	data, err := fsys.ReadFile(testMainRNGPath)
 	require.NoError(t, err)
 	doc, err := helium.NewParser().Parse(t.Context(), data)
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestIncludeOverrideRemovesDanglingRef(t *testing.T) {
 			testMainRNGPath:        &fstest.MapFile{Data: []byte(main)},
 			"schemas/included.rng": &fstest.MapFile{Data: []byte(included)},
 		}
-		got := compileIncludeErrors(t, fsys, testMainRNGPath)
+		got := compileIncludeErrors(t, fsys)
 		require.Empty(t, got,
 			"overriding the define that contained the dangling ref must remove it; got: %s", got)
 	})
@@ -107,7 +107,7 @@ func TestIncludeOverrideRemovesDanglingRef(t *testing.T) {
 			testMainRNGPath:        &fstest.MapFile{Data: []byte(main)},
 			"schemas/included.rng": &fstest.MapFile{Data: []byte(included)},
 		}
-		got := compileIncludeErrors(t, fsys, testMainRNGPath)
+		got := compileIncludeErrors(t, fsys)
 		require.True(t, strings.Contains(got, "missing"),
 			"a dangling ref in a NON-overridden define must still be a fatal compile error; got: %s", got)
 	})

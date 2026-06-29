@@ -39,7 +39,7 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, pkgBaseURI, c.allowExternalEntities, c.loadResourceBytes)
+	doc, err := parseStylesheetDocument(ctx, c.parser, data, pkgBaseURI, c.allowExternalEntities, c.loadResourceBytes, c.maxResourceBytes)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot parse package %q: %w", pkgName, err)
 	}
@@ -52,6 +52,7 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 		isSubPackage:          true,
 		maxResourceBytes:      c.maxResourceBytes,
 		allowExternalEntities: c.allowExternalEntities,
+		parser:                c.parser,
 	}
 	pkgSS, err := compile(ctx, doc, pkgCfg)
 	if err != nil {
