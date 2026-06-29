@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -20,6 +21,17 @@ import (
 // collision. A nested xs:include is treated as an xs:override carrying the active
 // override set. Chameleon (no-targetNamespace) referenced documents adopt the
 // overriding schema's target namespace, exactly like xs:include.
+//
+// State threading (fixes for the OVR-001/OVR-002 review findings): the "active
+// override set" is passed DOWN by value as a fresh map at each nested xs:override
+// (BRANCH-LOCAL), so a nested override's own children can never leak into the
+// suppression set of a LATER SIBLING include/override target. Each xs:override's
+// own matched children are REGISTERED IMMEDIATELY, while the document that DECLARES
+// them is still the active compiler context (form/block/final defaults,
+// xpathDefaultNamespace, base URI, diagnostic file) — never deferred to an outer
+// context. overrideLoadTarget returns the subset of the active set that matched
+// somewhere in its closure so the OWNER of each key (the level that declared it)
+// can decide registration in its own context.
 
 // overrideSymbol identifies the XSD symbol space an override child / component
 // occupies. simpleType and complexType share ONE type-definition symbol space, so
@@ -43,17 +55,11 @@ type overrideKey struct {
 	qn  QName
 }
 
-// overrideRun threads the state of one top-level xs:override resolution through
-// the (possibly recursive) document closure. children is the accumulated set of
-// replacement components, OUTER-precedence (an enclosing override's child is never
-// overwritten by a nested one). order preserves declaration order for
-// deterministic registration. matched records which keys actually replaced a
-// component somewhere in the closure; only matched children are registered, the
-// rest are dropped.
-type overrideRun struct {
-	children map[overrideKey]*helium.Element
-	order    []overrideKey
-	matched  map[overrideKey]struct{}
+// overrideChildEntry is one replacement component declared by an xs:override,
+// retaining declaration order for deterministic, in-context registration.
+type overrideChildEntry struct {
+	key  overrideKey
+	elem *helium.Element
 }
 
 // overrideChildKey returns the (symbol space, name) identity of a potential
@@ -84,31 +90,31 @@ func (c *compiler) overrideChildKey(elem *helium.Element) (overrideKey, bool) {
 	return overrideKey{}, false
 }
 
-// loadOverride handles a top-level <xs:override schemaLocation="..."> element. It
-// builds the override run from the element's children, loads and transforms the
-// referenced document closure (applying and cascading the run), then registers
-// the override children that actually replaced a component.
+// loadOverride handles a top-level <xs:override schemaLocation="..."> element. The
+// override children belong to the CURRENT (overriding) schema document, so they
+// are collected and — once the closure determines which of them matched — REGISTERED
+// HERE, while the overriding document's context is active.
 func (c *compiler) loadOverride(ctx context.Context, location string, overrideElem *helium.Element) error {
-	run := &overrideRun{
-		children: make(map[overrideKey]*helium.Element),
-		matched:  make(map[overrideKey]struct{}),
-	}
-	c.collectOverrideChildren(ctx, overrideElem, run)
+	locals := c.collectOverrideChildren(ctx, overrideElem, nil)
+	active := activeFromEntries(nil, locals)
 
-	if err := c.overrideLoadTarget(ctx, location, overrideElem, run); err != nil {
+	matched, err := c.overrideLoadTarget(ctx, location, overrideElem, active)
+	if err != nil {
 		return err
 	}
 
-	return c.registerOverrideChildren(ctx, run)
+	return c.registerMatchedChildren(ctx, locals, matched)
 }
 
-// collectOverrideChildren records the override children of overrideElem into run.
-// A child whose key duplicates another child of the SAME xs:override is a fatal
-// schema error (W3C over021). A child whose key is already present in run (an
-// OUTER override already provided it) is shadowed and dropped — the outer
-// component wins (W3C over009).
-func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *helium.Element, run *overrideRun) {
+// collectOverrideChildren returns the replacement components declared directly on
+// overrideElem, in declaration order. A child whose key duplicates another child
+// of the SAME xs:override is a fatal schema error (W3C over021). A child whose key
+// is already present in the inherited active set (an OUTER override provided it) is
+// SHADOWED and dropped — the outer component wins (W3C over009). It does NOT mutate
+// active; the caller derives the branch-local active set via activeFromEntries.
+func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *helium.Element, active map[overrideKey]*helium.Element) []overrideChildEntry {
 	localSeen := make(map[overrideKey]struct{})
+	var entries []overrideChildEntry
 	for child := range helium.Children(overrideElem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -130,13 +136,67 @@ func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *he
 			continue
 		}
 		localSeen[key] = struct{}{}
-		if _, exists := run.children[key]; exists {
+		if _, shadowed := active[key]; shadowed {
 			// Shadowed by an enclosing (outer) override; the outer child wins.
 			continue
 		}
-		run.children[key] = elem
-		run.order = append(run.order, key)
+		entries = append(entries, overrideChildEntry{key: key, elem: elem})
 	}
+	return entries
+}
+
+// activeFromEntries returns a NEW active override set = inherited (outer) keys plus
+// this level's own entries. The fresh map is the branch-local set handed to the
+// target's closure; sibling traversal keeps its own inherited map untouched, so a
+// nested override's children cannot leak into a sibling target (OVR-001).
+func activeFromEntries(inherited map[overrideKey]*helium.Element, entries []overrideChildEntry) map[overrideKey]*helium.Element {
+	out := make(map[overrideKey]*helium.Element, len(inherited)+len(entries))
+	maps.Copy(out, inherited)
+	for _, e := range entries {
+		out[e.key] = e.elem
+	}
+	return out
+}
+
+// registerMatchedChildren registers each entry whose key actually matched a
+// component in the closure (the rest are dropped, so a dangling reference to an
+// unmatched child is a schema error — W3C over003/over007/over026). It is called
+// while the document that DECLARES these children is the active compiler context.
+func (c *compiler) registerMatchedChildren(ctx context.Context, entries []overrideChildEntry, matched map[overrideKey]struct{}) error {
+	for _, e := range entries {
+		if _, ok := matched[e.key]; !ok {
+			continue
+		}
+		if err := c.registerOverrideChild(ctx, e.key, e.elem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// registerOverrideChild registers a single matched override child via the normal
+// named-component parser. The replaced component was suppressed during loading, so
+// the slot is free and no spurious duplicate is reported. Notation overrides are
+// not modeled (notations are not compiled), so a matched notation child is a no-op.
+func (c *compiler) registerOverrideChild(ctx context.Context, key overrideKey, elem *helium.Element) error {
+	switch key.sym {
+	case overrideSymType:
+		if isXSDElement(elem, elemComplexType) {
+			return c.parseNamedComplexType(ctx, elem)
+		}
+		return c.parseNamedSimpleType(ctx, elem)
+	case overrideSymElement:
+		return c.parseGlobalElement(ctx, elem)
+	case overrideSymAttribute:
+		c.parseGlobalAttribute(ctx, elem)
+	case overrideSymGroup:
+		return c.parseNamedGroup(ctx, elem)
+	case overrideSymAttrGroup:
+		return c.parseNamedAttributeGroup(ctx, elem)
+	case overrideSymNotation:
+		// notations are not modeled by the compiler; nothing to register.
+	}
+	return nil
 }
 
 // recordOverrideTarget enforces that a single schema document does not contain
@@ -163,38 +223,42 @@ func (c *compiler) recordOverrideTarget(ctx context.Context, srcElem *helium.Ele
 	return true
 }
 
-// overrideLoadTarget loads the referenced schema document, applies the override
-// run to its top-level components (suppressing replaced ones and recording
-// matches), then recurses into the document's own include/override closure with
-// the cascaded run. It mirrors loadInclude's per-document form/default/chameleon
-// handling.
-func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcElem *helium.Element, run *overrideRun) error {
+// overrideLoadTarget loads the referenced schema document and applies the active
+// override set to its top-level components (suppressing replaced ones), then
+// recurses into the document's own include/override closure with the SAME active
+// set. It returns the subset of active keys that matched a component anywhere in
+// this closure (this document plus its nested include/override targets). It does
+// NOT register override children — that is the OWNER level's job, in its own
+// context. Mirrors loadInclude's per-document form/default/chameleon handling.
+func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcElem *helium.Element, active map[overrideKey]*helium.Element) (map[overrideKey]struct{}, error) {
+	matched := make(map[overrideKey]struct{})
+
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
-		return fmt.Errorf("xsd: failed to load override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	// A document already pulled in (by a prior include/override, OR a back-edge in
 	// a circular override pointing at an ancestor) is not re-loaded: its components
 	// were already contributed and the cascade terminates here (W3C over023/024).
 	if _, seen := c.includeVisited[path]; seen {
-		return nil
+		return matched, nil
 	}
 	c.includeVisited[path] = struct{}{}
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
-		return fmt.Errorf("xsd: failed to load override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
-		return fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
+		return matched, fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
 	}
 
 	// Conditional inclusion runs per document, before the targetNamespace check.
@@ -205,7 +269,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
 	c.includeFile = savedIncludeFileVC
 	if rootExcluded {
-		return nil
+		return matched, nil
 	}
 
 	// Target namespace compatibility: same rule as xs:include (W3C over016/017). A
@@ -219,7 +283,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		}
 		c.schemaError(ctx, schemaParserError(c.filename, srcElem.Line(), srcElem.LocalName(), elemOverride,
 			"The target namespace '"+incTargetNS+"' of the overridden schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the overriding schema."))
-		return nil
+		return matched, nil
 	}
 
 	// Per-document form/default/chameleon settings, mirroring loadInclude: the
@@ -260,26 +324,30 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		c.includeFile = savedIncludeFile
 	}
 
-	// Parse the surviving (non-replaced) top-level components.
-	if err := c.overrideParseTargetChildren(ctx, incRoot, run); err != nil {
+	// Parse the surviving (non-replaced) top-level components, recording which
+	// active keys this document's own components matched.
+	if err := c.overrideParseTargetChildren(ctx, incRoot, active, matched); err != nil {
 		restore()
-		return err
+		return matched, err
 	}
 
 	// Recurse into the referenced document's own include/override/import/redefine,
-	// cascading the override run.
-	err = c.overrideProcessNested(ctx, incRoot, path, location, run)
+	// cascading the active set; merge nested matches (always a subset of active).
+	nestedMatched, nerr := c.overrideProcessNested(ctx, incRoot, path, location, active)
+	for k := range nestedMatched {
+		matched[k] = struct{}{}
+	}
 	restore()
-	return err
+	return matched, nerr
 }
 
 // overrideParseTargetChildren parses the top-level children of an overridden
 // document, dispatching exactly like parseSchemaChildren EXCEPT that a named
-// component whose key is overridden by the active run is SUPPRESSED (skipped, and
-// recorded in run.matched so the corresponding override child will be
-// registered). xs:include/xs:import/xs:override/xs:redefine/xs:annotation are
-// skipped here; they are handled by overrideProcessNested.
-func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium.Element, run *overrideRun) error {
+// component whose key is in the active override set is SUPPRESSED (skipped, and
+// recorded in matched so the owner can register the replacement). xs:include/
+// xs:import/xs:override/xs:redefine/xs:annotation are skipped here; they are
+// handled by overrideProcessNested.
+func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium.Element, active map[overrideKey]*helium.Element, matched map[overrideKey]struct{}) error {
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -289,8 +357,8 @@ func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium
 			continue
 		}
 		if key, named := c.overrideChildKey(elem); named {
-			if _, overridden := run.children[key]; overridden {
-				run.matched[key] = struct{}{}
+			if _, overridden := active[key]; overridden {
+				matched[key] = struct{}{}
 				continue
 			}
 		}
@@ -323,17 +391,22 @@ func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium
 }
 
 // overrideProcessNested processes the include/override/import/redefine children of
-// an overridden document, cascading the override run. A nested xs:include is
-// treated as an xs:override carrying the active run (the override transformation
-// is transitive through includes). A nested xs:override merges its own children
-// into the run (outer-precedence) and recurses. xs:import and xs:redefine are
-// processed normally — imports are not transformed by override (W3C over025/029),
-// and no Override test combines override with redefine. References are resolved
-// relative to the overridden document, so baseDir/filename are switched as in
-// processNestedIncludes, behind the same include-depth guard.
-func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.Element, path, location string, run *overrideRun) error {
+// an overridden document, cascading the active override set. A nested xs:include
+// is treated as an xs:override carrying the SAME active set (the override
+// transformation is transitive through includes). A nested xs:override derives a
+// BRANCH-LOCAL active set (inherited ∪ its own children, outer-precedence) for its
+// target, registers ITS OWN matched children HERE — while this (the declaring)
+// document's context is active — and never mutates the inherited set, so siblings
+// are unaffected. xs:import and xs:redefine are processed normally — imports are
+// not transformed by override (W3C over025/029), and no Override test combines
+// override with redefine. References resolve relative to the overridden document,
+// so baseDir/filename are switched as in processNestedIncludes, behind the same
+// include-depth guard. Returns the subset of the INHERITED active set that matched
+// somewhere in the nested closure, for the caller to propagate upward.
+func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.Element, path, location string, active map[overrideKey]*helium.Element) (map[overrideKey]struct{}, error) {
+	nestedMatched := make(map[overrideKey]struct{})
 	if c.includeDepth >= c.maxIncludeDepth {
-		return fmt.Errorf("%w (limit=%d, location=%q)", errIncludeDepthExceeded, c.maxIncludeDepth, location)
+		return nestedMatched, fmt.Errorf("%w (limit=%d, location=%q)", errIncludeDepthExceeded, c.maxIncludeDepth, location)
 	}
 	savedBaseDir := c.baseDir
 	savedFilename := c.filename
@@ -365,8 +438,13 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 				continue
 			}
 			// An xs:include inside an overridden document is itself transformed by
-			// the override: load it as an override target carrying the same run.
-			err = c.overrideLoadTarget(ctx, loc, elem, run)
+			// the override: load it as an override target carrying the same active
+			// set. Every matched key is (by construction) in the inherited set.
+			var m map[overrideKey]struct{}
+			m, err = c.overrideLoadTarget(ctx, loc, elem, active)
+			for k := range m {
+				nestedMatched[k] = struct{}{}
+			}
 		case isXSDElement(elem, elemOverride):
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
@@ -375,18 +453,37 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			if !c.recordOverrideTarget(ctx, elem, loc, overrideSeen) {
 				continue
 			}
-			// A nested xs:override contributes its own children (outer-precedence)
-			// and its target is loaded under the merged run.
-			c.collectOverrideChildren(ctx, elem, run)
-			err = c.overrideLoadTarget(ctx, loc, elem, run)
+			// A nested xs:override contributes its OWN children. Build a branch-local
+			// active set (outer-precedence) so these children cannot leak into a
+			// sibling target's suppression set.
+			locals := c.collectOverrideChildren(ctx, elem, active)
+			childActive := activeFromEntries(active, locals)
+			var m map[overrideKey]struct{}
+			m, err = c.overrideLoadTarget(ctx, loc, elem, childActive)
+			if err != nil {
+				break
+			}
+			// Register THIS override's own matched children NOW, while the declaring
+			// document's context (form/block/final defaults, xpathDefaultNamespace,
+			// base URI, includeFile) is still active.
+			if rerr := c.registerMatchedChildren(ctx, locals, m); rerr != nil {
+				err = rerr
+				break
+			}
+			// Propagate only the INHERITED keys that matched up to the caller; the
+			// local children were just registered and must not leak further.
+			for k := range m {
+				if _, inherited := active[k]; inherited {
+					nestedMatched[k] = struct{}{}
+				}
+			}
 		case isXSDElement(elem, elemImport):
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
 			}
 			ns := getAttr(elem, attrNamespace)
-			if prevLoc, seen := c.importedNS[ns]; seen {
-				_ = prevLoc
+			if _, seen := c.importedNS[ns]; seen {
 				continue
 			}
 			if ierr := c.loadImport(ctx, loc, ns, elem); ierr != nil {
@@ -409,51 +506,5 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 	c.includeDepth--
 	c.baseDir = savedBaseDir
 	c.filename = savedFilename
-	return err
-}
-
-// registerOverrideChildren registers the override children that actually replaced
-// a component in the referenced document closure (run.matched), in declaration
-// order. An override child that matched nothing is dropped (W3C over003/over007/
-// over026) — leaving a dangling reference to it a schema error, as intended.
-// A replaced component was suppressed during loading, so its slot is free and the
-// normal named-component parser registers the override child without a spurious
-// duplicate report. Notation overrides are not modeled (notations are not
-// compiled), so a matched notation child is a no-op.
-func (c *compiler) registerOverrideChildren(ctx context.Context, run *overrideRun) error {
-	for _, key := range run.order {
-		if _, matched := run.matched[key]; !matched {
-			continue
-		}
-		elem := run.children[key]
-		switch key.sym {
-		case overrideSymType:
-			if isXSDElement(elem, elemComplexType) {
-				if err := c.parseNamedComplexType(ctx, elem); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := c.parseNamedSimpleType(ctx, elem); err != nil {
-				return err
-			}
-		case overrideSymElement:
-			if err := c.parseGlobalElement(ctx, elem); err != nil {
-				return err
-			}
-		case overrideSymAttribute:
-			c.parseGlobalAttribute(ctx, elem)
-		case overrideSymGroup:
-			if err := c.parseNamedGroup(ctx, elem); err != nil {
-				return err
-			}
-		case overrideSymAttrGroup:
-			if err := c.parseNamedAttributeGroup(ctx, elem); err != nil {
-				return err
-			}
-		case overrideSymNotation:
-			// notations are not modeled by the compiler; nothing to register.
-		}
-	}
-	return nil
+	return nestedMatched, err
 }

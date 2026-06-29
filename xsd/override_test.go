@@ -261,3 +261,72 @@ func TestOverride_IndirectChameleon(t *testing.T) {
 	require.Error(t, overrideValidate(t, schema, `<doc xmlns="`+ns+`"><para/></doc>`),
 		"the pre-override content model must be rejected")
 }
+
+// TestOverride_NestedSiblingScope is the OVR-001 regression: a child of a NESTED
+// xs:override that matches nothing in its OWN target must NOT leak into the active
+// override set used for a LATER SIBLING include/override target. Here d.xsd
+// overrides leaf1.xsd with a `y` that matches nothing in leaf1, then includes
+// leaf2.xsd which declares `y` as xs:string; the leaked `y` must not turn leaf2's
+// string `y` into an integer.
+func TestOverride_NestedSiblingScope(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="d.xsd"/>
+</xs:schema>`)},
+		"d.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="leaf1.xsd">
+    <xs:element name="y" type="xs:integer"/>
+  </xs:override>
+  <xs:include schemaLocation="leaf2.xsd"/>
+</xs:schema>`)},
+		"leaf1.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:element name="x" type="xs:string"/>
+</xs:schema>`)},
+		"leaf2.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:element name="y" type="xs:string"/>
+  <xs:element name="doc"><xs:complexType><xs:sequence><xs:element ref="y"/></xs:sequence></xs:complexType></xs:element>
+</xs:schema>`)},
+	}
+	schema, err := compileOverride(t, fsys)
+	require.NoError(t, err)
+
+	// y must remain xs:string (leaf2), so a non-numeric value is valid. Under the
+	// leak bug y becomes xs:integer and "abc" is wrongly rejected.
+	require.NoError(t, overrideValidate(t, schema, `<doc><y>abc</y></doc>`),
+		"sibling include's y must keep its own type, not the unmatched nested-override y")
+}
+
+// TestOverride_NestedChildContext is the OVR-002 regression: an override child
+// declared in a NESTED override whose owning document sets
+// elementFormDefault="qualified" must be registered with THAT document's form
+// default, even though the ROOT schema is unqualified. The override child carries
+// a local element `para`; under the correct context it is namespace-qualified.
+func TestOverride_NestedChildContext(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	const ns = "urn:o"
+	fsys := fstest.MapFS{
+		// root: unqualified (no elementFormDefault).
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `">
+  <xs:override schemaLocation="mid.xsd"/>
+</xs:schema>`)},
+		// mid: qualified. Its override child `doc` owns a local `para`.
+		"mid.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `" elementFormDefault="qualified">
+  <xs:override schemaLocation="leaf.xsd">
+    <xs:element name="doc"><xs:complexType><xs:sequence><xs:element name="para" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
+  </xs:override>
+</xs:schema>`)},
+		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `">
+  <xs:element name="doc" type="xs:string"/>
+</xs:schema>`)},
+	}
+	schema, err := compileOverride(t, fsys)
+	require.NoError(t, err)
+
+	// mid declares elementFormDefault="qualified", so `para` lives in ns. Under the
+	// wrong-context bug it is registered unqualified and a qualified para fails.
+	require.NoError(t, overrideValidate(t, schema, `<doc xmlns="`+ns+`"><para>x</para></doc>`),
+		"nested override child's local element must be qualified per its OWN document")
+	require.Error(t, overrideValidate(t, schema, `<doc xmlns="`+ns+`"><para xmlns="">x</para></doc>`),
+		"an unqualified para must be rejected when the owning document is qualified")
+}
