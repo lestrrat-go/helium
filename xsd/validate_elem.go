@@ -895,6 +895,11 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		// walked to record descendants' ACTUAL types for pass-2 IDC
 		// canonicalization. assessLaxElement handles both cases and never lets
 		// xsi:nil bypass type validation.
+		if actual, ok := vc.resolveXsiTypeQuiet(child.elem); ok {
+			if err := vc.validateWildcardElementConsistent(ctx, edcScope, child, actual); err != nil {
+				return err
+			}
+		}
 		return vc.assessLaxElement(ctx, child.elem)
 	}
 	declType := effectiveDeclType(edecl, vc.schema)
