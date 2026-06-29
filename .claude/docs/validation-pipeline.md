@@ -530,6 +530,10 @@ facets against the original source lexical string via `ValidateCastWithNS`,
 preserving lexical facets such as a pattern on an integer restriction where
 `"05"` and canonical `"5"` must not be treated as the same lexical input; already
 typed sources validate the builtin cast result's lexical form.
+For schema-aware union casts, member types are tried recursively; after a member
+accepts, target-union facets/assertions are checked against the original lexical
+for string/untypedAtomic sources and against the accepted member-cast result for
+already typed sources.
 
 ### Key Data Model
 

@@ -13,6 +13,7 @@ import (
 
 const (
 	testBuiltinUnion = "Q{}BuiltinUnion"
+	testDateOrString = "Q{}DateOrString"
 	testMyDate       = "Q{}MyDate"
 	testMyTime       = "Q{}MyTime"
 	testRejectUnion  = "Q{}RejectUnion"
@@ -32,6 +33,8 @@ func (unionCastDecls) LookupSchemaType(local, ns string) (string, bool) {
 	switch local {
 	case "BuiltinUnion":
 		return testBuiltinUnion, true
+	case "DateOrString":
+		return testDateOrString, true
 	case "MyDate":
 		return xpath3.TypeDate, true
 	case "MyTime":
@@ -73,6 +76,12 @@ func (unionCastDecls) ValidateCast(_ context.Context, value, typeName string) er
 		_, err := xpath3.CastFromString(value, xpath3.TypeDate)
 		return err
 	}
+	if typeName == testDateOrString {
+		if strings.Contains(value, "T") {
+			return errors.New("DateOrString rejects dateTime lexical forms")
+		}
+		return nil
+	}
 	if typeName != testSmallInt {
 		return nil
 	}
@@ -93,6 +102,8 @@ func (unionCastDecls) UnionMemberTypes(typeName string) []string {
 	switch typeName {
 	case testBuiltinUnion:
 		return []string{xpath3.TypeInt, xpath3.TypeString}
+	case testDateOrString:
+		return []string{testMyDate, xpath3.TypeString}
 	case testRejectUnion:
 		return []string{testSmallInt}
 	case testUserUnion:
@@ -119,6 +130,28 @@ func TestSchemaAwareCastableUserUnion(t *testing.T) {
 	require.Equal(t, "false", res.StringValue())
 
 	res, err = eval.Evaluate(t.Context(), mustCompile(t, `'7' castable as RejectUnion`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "false", res.StringValue())
+}
+
+func TestSchemaAwareCastUserUnionValidatesTypedMemberResult(t *testing.T) {
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		SchemaDeclarations(unionCastDecls{})
+
+	res, err := eval.Evaluate(t.Context(), mustCompile(t, `xs:dateTime('2020-01-02T03:04:05Z') castable as DateOrString`), nil)
+	require.NoError(t, err)
+	require.Equal(t, "true", res.StringValue())
+
+	res, err = eval.Evaluate(t.Context(), mustCompile(t, `xs:dateTime('2020-01-02T03:04:05Z') cast as DateOrString`), nil)
+	require.NoError(t, err)
+	require.NotContains(t, res.StringValue(), "T")
+
+	av, ok := res.Sequence().Get(0).(xpath3.AtomicValue)
+	require.True(t, ok)
+	require.Equal(t, testMyDate, av.TypeName)
+	require.Equal(t, xpath3.TypeDate, av.BaseType)
+
+	res, err = eval.Evaluate(t.Context(), mustCompile(t, `'2020-01-02T03:04:05Z' castable as DateOrString`), nil)
 	require.NoError(t, err)
 	require.Equal(t, "false", res.StringValue())
 }

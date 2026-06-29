@@ -83,7 +83,16 @@ func schemaAwareCastRec(ctx context.Context, ec *evalContext, av AtomicValue, ta
 		for _, memberType := range members {
 			result, castErr := schemaAwareCastRec(ctx, ec, av, memberType, seen)
 			if castErr == nil {
-				if targetErr := schemaAwareValidateTarget(ctx, ec, av, targetType); targetErr != nil {
+				// F&O 3.1 §19.3.5 allows already-typed values to cast to the
+				// first castable atomic member of a union. Any facets on the target
+				// union then apply to that resulting member value, not to the
+				// original typed source lexical; string/untypedAtomic sources keep
+				// the lexical casting path from §19.2.
+				targetValue := av
+				if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
+					targetValue = result
+				}
+				if targetErr := schemaAwareValidateTarget(ctx, ec, targetValue, targetType); targetErr != nil {
 					return AtomicValue{}, targetErr
 				}
 				return result, nil
