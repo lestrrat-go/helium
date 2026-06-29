@@ -259,7 +259,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		// derived particle to ONE base particle, but a derived wildcard may need
 		// the UNION of the base all's wildcards, so use the wildcard-aware check.
 		if version == Version11 && (groupHasWildcard(rg) || groupHasWildcard(bg)) {
-			return allRestrictsWithWildcards(ctx, rg.Particles, bg.Particles, schema, version)
+			return allRestrictsWithWildcards(rg.Particles, bg.Particles, schema, version)
 		}
 		return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorChoice && bg.Compositor == CompositorChoice:
@@ -346,7 +346,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 			// UNION of the base all's wildcards, which recurseAll's 1:1 mapping
 			// cannot express.
 			if version == Version11 && (groupHasWildcard(rg) || groupHasWildcard(bg)) {
-				return allRestrictsWithWildcards(ctx, rg.Particles, bg.Particles, schema, version)
+				return allRestrictsWithWildcards(rg.Particles, bg.Particles, schema, version)
 			}
 			return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 		}
@@ -533,7 +533,14 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, schema 
 // each derived WILDCARD must be a namespace/notQName subset of the base wildcard
 // union with at-least-as-strong processContents and total cardinality within the
 // base wildcards' combined range; every unmatched base element must be emptiable.
-func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
+func allRestrictsWithWildcards(rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
+	// Flatten nested 1/1 all-group members on BOTH sides so a base all reached via
+	// an xs:group ref (carrying required elements alongside a wildcard) and a
+	// derived nested all are both fully accounted for, rather than appearing as an
+	// opaque ModelGroup particle that would be silently skipped.
+	bParticles = flattenAllParticles(bParticles)
+	rParticles = flattenAllParticles(rParticles)
+
 	var baseElems, baseWilds []*Particle
 	for _, bp := range bParticles {
 		switch bp.Term.(type) {
@@ -562,15 +569,21 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		}
 	}
 
-	used := make([]bool, len(baseElems))
+	// Concrete derived elements mapped to a base element contribute, SUMMED, to
+	// that base element's occurrence range (several substitution-group members, or
+	// one element repeated across an ordered derived sequence, may collectively
+	// restrict one base member with maxOccurs>1) — recurseAll's 1:1 mapping cannot
+	// express this.
+	sumMin := make([]int, len(baseElems))
+	sumMax := make([]int, len(baseElems))
 	var derivedWilds []*Particle
-	// derivedElems holds CONCRETE derived elements that are not mapped to a base
-	// element but are admitted by a base WILDCARD. They consume from the base
-	// wildcards' capacity exactly like a derived wildcard confined to their single
-	// name, so they MUST take part in the cardinality accounting below (combined
-	// totals and per-base min/max) — otherwise extra concrete elements could
-	// overload a base wildcard's maxOccurs (false-accept) and concrete elements
-	// would be ignored when satisfying a base wildcard's minOccurs (false-reject).
+	// derivedElems holds CONCRETE derived elements not mapped to a base element but
+	// admitted by a base WILDCARD. They consume from the base wildcards' capacity
+	// exactly like a derived wildcard confined to their single name, so they take
+	// part in the cardinality accounting below (combined totals and per-base
+	// min/max) — otherwise extra concrete elements could overload a base wildcard's
+	// maxOccurs (false-accept) and concrete elements would be ignored when
+	// satisfying a base wildcard's minOccurs (false-reject).
 	var derivedElems []*Particle
 	derivedWildMax := 0
 	derivedUnbounded := false
@@ -580,18 +593,15 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		}
 		switch rt := rp.Term.(type) {
 		case *ElementDecl:
-			matched := false
-			for i, bp := range baseElems {
-				if used[i] {
-					continue
+			// Map the derived element to a base element by name or substitution
+			// group (honoring block), summing its occurrence contribution.
+			if bi := findBaseAllMember(rt, baseElems, schema); bi >= 0 {
+				bd, _ := baseElems[bi].Term.(*ElementDecl)
+				if rt.Type != nil && bd != nil && bd.Type != nil && !isDerivedFrom(rt.Type, bd.Type) {
+					return false
 				}
-				if particleValidRestriction(ctx, rp, bp, schema, version) {
-					used[i] = true
-					matched = true
-					break
-				}
-			}
-			if matched {
+				sumMin[bi] = occursAdd(sumMin[bi], rp.MinOccurs)
+				sumMax[bi] = occursAdd(sumMax[bi], rp.MaxOccurs)
 				continue
 			}
 			// Not a base element — must be admitted by the base wildcard union.
@@ -633,16 +643,14 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 				derivedWildMax += rp.MaxOccurs
 			}
 		case *ModelGroup:
-			// Nested group inside the derived side — accept conservatively.
+			// A non-all nested group on the derived side — accept conservatively.
 		}
 	}
 
-	// Every unmatched base element must be emptiable.
+	// Each base element's summed derived contribution must lie within its range; an
+	// unmapped base element (sum 0) must therefore be emptiable.
 	for i, bp := range baseElems {
-		if used[i] {
-			continue
-		}
-		if !particleEmptiable(bp) && !particleEmitsNothing(bp) {
+		if !occurrenceValidRestriction(sumMin[i], sumMax[i], bp.MinOccurs, bp.MaxOccurs) {
 			return false
 		}
 	}

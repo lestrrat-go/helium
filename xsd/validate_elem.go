@@ -255,40 +255,130 @@ func flattenAllMembers(mg *ModelGroup, is11 bool) []allMember {
 }
 
 // matchAll matches children[pos:] against an all model group.
-// Returns (consumed, error). Does NOT check for leftover children.
+// Returns (consumed, error). Does NOT check for leftover children. XSD 1.0 uses
+// the legacy boolean matcher (byte-identical to before the xs:all-relaxation
+// feature); XSD 1.1 uses the per-member occurrence-counting matcher.
 func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
-	is11 := vc.version == Version11
-	members := flattenAllMembers(mg, is11)
-	counts := make([]int, len(members))
-	nameToIdx := make(map[QName]int, len(members))
-	for i, m := range members {
-		if m.ed == nil {
-			continue
-		}
-		nameToIdx[m.ed.Name] = i
-		// Also register substitution group members.
-		for _, member := range vc.schema.substGroups[m.ed.Name] {
-			nameToIdx[member.Name] = i
+	if vc.version == Version11 {
+		return vc.matchAll11(ctx, parent, mg, children, pos, edcScope)
+	}
+	return vc.matchAll10(ctx, parent, mg, children, pos)
+}
+
+// matchAll10 is the XSD 1.0 xs:all matcher: each element particle may appear at
+// most once (boolean seen[]), order-independent. It is a faithful copy of the
+// pre-relaxation matcher so 1.0 behavior and diagnostics stay byte-identical. A
+// wildcard particle (which the parser tolerates inside an xs:all even in 1.0) is
+// NEVER matched here and a wildcard particle with minOccurs>0 is reported missing
+// — exactly as the original did.
+func (vc *validationContext) matchAll10(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int) (int, error) {
+	seen := make([]bool, len(mg.Particles))
+	nameToIdx := make(map[QName]int, len(mg.Particles))
+	for i, p := range mg.Particles {
+		if ed, ok := p.Term.(*ElementDecl); ok {
+			nameToIdx[ed.Name] = i
+			for _, member := range vc.schema.substGroups[ed.Name] {
+				nameToIdx[member.Name] = i
+			}
 		}
 	}
-
-	// wcClaimed marks child positions (absolute index) consumed by a wildcard,
-	// so the element-content validation pass below skips them — a child whose
-	// name also matches a (now-exhausted) element particle must not be
-	// re-validated as that element.
-	wcClaimed := make(map[int]bool)
 
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
+		if ok && !seen[idx] {
+			if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
+				vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
+			}
+			seen[idx] = true
+			consumed++
+			continue
+		}
+		expected := unseenParticleNames(mg.Particles, seen, vc.schema)
+		msg := "This element is not expected."
+		if len(expected) > 0 {
+			msg = formatExpected("This element is not expected.", expected)
+		}
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+		return consumed, fmt.Errorf("unexpected element")
+	}
+
+	// Respect <all> group's minOccurs: if 0 and group is empty, skip required checks.
+	if mg.MinOccurs == 0 && consumed == 0 {
+		return 0, nil
+	}
+
+	hasRequired := false
+	for i, p := range mg.Particles {
+		// A wildcard particle is never matched in 1.0, so one with minOccurs>0 is
+		// always missing.
+		if _, isWC := p.Term.(*Wildcard); isWC {
+			if p.MinOccurs > 0 {
+				hasRequired = true
+				break
+			}
+			continue
+		}
+		if !seen[i] && p.MinOccurs > 0 {
+			hasRequired = true
+			break
+		}
+	}
+	if hasRequired {
+		unseen := unseenParticleNames(mg.Particles, seen, vc.schema)
+		msg := formatExpected("Missing child element(s).", unseen)
+		vc.reportValidityError(ctx, vc.filename, parent.Line(), elemDisplayName(parent), msg)
+		return consumed, fmt.Errorf("missing")
+	}
+
+	var contentErr error
+	for i := range consumed {
+		child := children[pos+i]
+		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
+		if !ok {
+			continue
+		}
+		edecl, isElem := mg.Particles[idx].Term.(*ElementDecl)
+		if !isElem {
+			continue
+		}
+		if err := vc.validateAllMatchedChild(ctx, child, edecl); err != nil {
+			contentErr = err
+		}
+	}
+	if contentErr != nil {
+		return consumed, contentErr
+	}
+	return consumed, nil
+}
+
+// matchAll11 is the XSD 1.1 xs:all matcher: order-independent per-member
+// occurrence counting over a flattened member list (element members with
+// minOccurs/maxOccurs ranges, element wildcards, and flattened nested all-group
+// members). A child is matched to an element member only if it is ADMISSIBLY
+// substitutable for it (honoring block="substitution"/derivation-block via
+// allMemberForChild); a declared element with remaining budget wins over a
+// wildcard (weak-wildcard precedence).
+func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
+	members := flattenAllMembers(mg, true)
+	counts := make([]int, len(members))
+
+	// wcClaimed marks child positions (absolute index) consumed by a wildcard,
+	// so the element-content validation pass below skips them.
+	wcClaimed := make(map[int]bool)
+
+	consumed := 0
+	for pos+consumed < len(children) {
+		child := children[pos+consumed]
 		// A declared element wins over a wildcard (weak-wildcard precedence) while
-		// it still has occurrence budget. Once exhausted, a further same-named
-		// child may instead be claimed by a wildcard member.
-		if ok && (members[idx].max == Unbounded || counts[idx] < members[idx].max) {
+		// it still has occurrence budget. Once exhausted, a further admissibly
+		// matching child may instead be claimed by a wildcard member.
+		idx := allMemberForChild(members, child, vc.schema)
+		if idx >= 0 && (members[idx].max == Unbounded || counts[idx] < members[idx].max) {
 			// Record the (possibly LOCAL) host declaration AS SOON AS this child is
-			// matched to a member — BEFORE any early return — so pass-2 IDC
-			// evaluation does not fall back to a same-named GLOBAL declaration.
+			// matched — BEFORE any early return — so pass-2 IDC evaluation does not
+			// fall back to a same-named GLOBAL declaration.
 			vc.recordElemDecl(child.elem, resolveSubstDecl(child, members[idx].ed, vc.schema))
 			counts[idx]++
 			consumed++
@@ -304,8 +394,6 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			consumed++
 			continue
 		}
-		// Not matchable: a duplicate of an exhausted element, or an undeclared
-		// child not admitted by any wildcard.
 		expected := unseenMemberNames(members, counts, vc.schema)
 		msg := "This element is not expected."
 		if len(expected) > 0 {
@@ -339,51 +427,12 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		if wcClaimed[pos+i] {
 			continue // already validated inline by the wildcard path
 		}
-		childQN := QName{Local: child.name, NS: child.ns}
-		idx, ok := nameToIdx[childQN]
-		if !ok {
+		idx := allMemberForChild(members, child, vc.schema)
+		if idx < 0 || members[idx].ed == nil {
 			continue
 		}
-		edecl := members[idx].ed
-		if edecl == nil {
-			continue
-		}
-		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
-		// The host declaration was already recorded during the initial scan above
-		// (before any early return). Nothing to record here.
-		declType := effectiveDeclType(actualDecl, vc.schema)
-		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
-		if xsiErr != nil {
-			contentErr = xsiErr
-			continue
-		}
-		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-		// here just like at matchElementParticle/root.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
-				"The xsi:type definition is blocked by the element declaration.")
-			contentErr = fmt.Errorf("blocked xsi:type")
-			continue
-		}
-		if td != nil && td.Abstract {
-			msg := msgAbstractType
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
-			contentErr = fmt.Errorf("abstract type")
-			continue
-		}
-		vc.annotateElement(ctx, child.elem, td, true)
-		if td != nil {
-			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
-			if nilErr != nil {
-				contentErr = nilErr
-			} else if nilled {
-				if err := vc.validateNilledElement(ctx, child.elem, actualDecl, td); err != nil {
-					contentErr = err
-				}
-			} else if err := vc.validateElementContent(ctx, child.elem, actualDecl, td); err != nil {
-				contentErr = err
-			}
+		if err := vc.validateAllMatchedChild(ctx, child, members[idx].ed); err != nil {
+			contentErr = err
 		}
 	}
 	if contentErr != nil {
@@ -391,6 +440,60 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 	}
 
 	return consumed, nil
+}
+
+// validateAllMatchedChild validates one element child matched to an element
+// member of an xs:all (resolving substitution, type alternatives, xsi:type, the
+// derivation-block check, xsi:nil, and the element content). Shared by the XSD
+// 1.0 and 1.1 matchers so the per-child content validation is identical.
+func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child childElem, edecl *ElementDecl) error {
+	actualDecl := resolveSubstDecl(child, edecl, vc.schema)
+	declType := effectiveDeclType(actualDecl, vc.schema)
+	declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
+	td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
+	if xsiErr != nil {
+		return xsiErr
+	}
+	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+	// here just like at matchElementParticle/root.
+	if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+			"The xsi:type definition is blocked by the element declaration.")
+		return fmt.Errorf("blocked xsi:type")
+	}
+	if td != nil && td.Abstract {
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, child.elem, td, true)
+	if td == nil {
+		return nil
+	}
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+	if nilErr != nil {
+		return nilErr
+	}
+	if nilled {
+		return vc.validateNilledElement(ctx, child.elem, actualDecl, td)
+	}
+	return vc.validateElementContent(ctx, child.elem, actualDecl, td)
+}
+
+// allMemberForChild returns the index of the element member of an xs:all whose
+// declaration the child is ADMISSIBLY substitutable for (a direct name match to a
+// non-abstract element, or a substitution-group member not blocked by
+// block="substitution"/a blocked derivation step) — using the same predicate as
+// content-model element matching (elemMatchesDeclOrSubst). Returns -1 if none.
+func allMemberForChild(members []allMember, child childElem, schema *Schema) int {
+	for i, m := range members {
+		if m.ed == nil {
+			continue
+		}
+		if elemMatchesDeclOrSubst(child, m.ed, schema) {
+			return i
+		}
+	}
+	return -1
 }
 
 // allWildcardMember returns the index of a wildcard member in an xs:all group's
@@ -414,8 +517,7 @@ func (vc *validationContext) allWildcardMember(members []allMember, counts []int
 
 // unseenMemberNames lists the expected names of xs:all members that have not yet
 // been matched (match count zero), used to build the "expected" hint in the
-// unexpected-element and missing-element diagnostics. Listing zero-count members
-// (rather than under-min members) keeps the XSD 1.0 message byte-identical.
+// XSD 1.1 unexpected-element and missing-element diagnostics.
 func unseenMemberNames(members []allMember, counts []int, schema *Schema) []string {
 	var names []string
 	for i, m := range members {
@@ -427,6 +529,25 @@ func unseenMemberNames(members []allMember, counts []int, schema *Schema) []stri
 			names = append(names, elementExpectedNamesWithSubst(m.ed, schema)...)
 		case m.wc != nil:
 			names = append(names, wildcardExpected(m.wc))
+		}
+	}
+	return names
+}
+
+// unseenParticleNames lists the expected names of xs:all PARTICLES not yet seen
+// (XSD 1.0 matcher), used for the unexpected/missing diagnostics so the 1.0
+// wording stays byte-identical to before the relaxation feature.
+func unseenParticleNames(particles []*Particle, seen []bool, schema *Schema) []string {
+	var names []string
+	for i, p := range particles {
+		if seen[i] {
+			continue
+		}
+		switch term := p.Term.(type) {
+		case *ElementDecl:
+			names = append(names, elementExpectedNamesWithSubst(term, schema)...)
+		case *Wildcard:
+			names = append(names, wildcardExpected(term))
 		}
 	}
 	return names
@@ -805,24 +926,57 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 }
 
 func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
-	is11 := vc.version == Version11
-	members := flattenAllMembers(mg, is11)
-	counts := make([]int, len(members))
-	nameToIdx := make(map[QName]int, len(members))
-	for i, m := range members {
-		if m.ed == nil {
-			continue
-		}
-		nameToIdx[m.ed.Name] = i
-		for _, member := range vc.schema.substGroups[m.ed.Name] {
-			nameToIdx[member.Name] = i
+	if vc.version == Version11 {
+		return vc.tryMatchAll11(mg, children, pos)
+	}
+	return vc.tryMatchAll10(mg, children, pos)
+}
+
+// tryMatchAll10 is the lookahead variant of the XSD 1.0 xs:all matcher (each
+// element particle at most once; no wildcard matching), byte-identical to the
+// pre-relaxation behavior.
+func (vc *validationContext) tryMatchAll10(mg *ModelGroup, children []childElem, pos int) (int, error) {
+	seen := make([]bool, len(mg.Particles))
+	nameToIdx := make(map[QName]int, len(mg.Particles))
+	for i, p := range mg.Particles {
+		if ed, ok := p.Term.(*ElementDecl); ok {
+			nameToIdx[ed.Name] = i
+			for _, member := range vc.schema.substGroups[ed.Name] {
+				nameToIdx[member.Name] = i
+			}
 		}
 	}
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
-		if ok && (members[idx].max == Unbounded || counts[idx] < members[idx].max) {
+		if !ok {
+			break
+		}
+		if seen[idx] {
+			return 0, fmt.Errorf("duplicate")
+		}
+		seen[idx] = true
+		consumed++
+	}
+	for i, p := range mg.Particles {
+		if !seen[i] && p.MinOccurs > 0 {
+			return 0, fmt.Errorf("missing required")
+		}
+	}
+	return consumed, nil
+}
+
+// tryMatchAll11 is the lookahead variant of the XSD 1.1 occurrence-counting
+// xs:all matcher (admissible substitution + wildcard members + counting).
+func (vc *validationContext) tryMatchAll11(mg *ModelGroup, children []childElem, pos int) (int, error) {
+	members := flattenAllMembers(mg, true)
+	counts := make([]int, len(members))
+	consumed := 0
+	for pos+consumed < len(children) {
+		child := children[pos+consumed]
+		idx := allMemberForChild(members, child, vc.schema)
+		if idx >= 0 && (members[idx].max == Unbounded || counts[idx] < members[idx].max) {
 			counts[idx]++
 			consumed++
 			continue
@@ -832,7 +986,7 @@ func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, chil
 			consumed++
 			continue
 		}
-		if ok {
+		if idx >= 0 {
 			return 0, fmt.Errorf("duplicate")
 		}
 		break

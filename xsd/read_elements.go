@@ -427,10 +427,12 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
 			// XSD 1.1 allows MULTIPLE substitution group heads
 			// (substitutionGroup="a b c"); the element is a member of every listed
-			// head. XSD 1.0 permits exactly one head, so the whole (possibly invalid
-			// spaced) value is resolved as a single QName, preserving 1.0 behavior.
+			// head. The value is an xs:list, so it splits on XSD whitespace only
+			// (space/tab/CR/LF via splitSpace, like memberTypes) — NOT arbitrary
+			// Unicode whitespace. XSD 1.0 permits exactly one head, so the whole
+			// value resolves as a single QName, preserving 1.0 behavior.
 			if c.version == Version11 {
-				for h := range strings.FieldsSeq(sg) {
+				for _, h := range splitSpace(sg) {
 					decl.SubstitutionGroups = append(decl.SubstitutionGroups, c.resolveQName(ctx, elem, h))
 				}
 				if len(decl.SubstitutionGroups) > 0 {

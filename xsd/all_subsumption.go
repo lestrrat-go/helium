@@ -9,21 +9,22 @@ package xsd
 // sequence) may collectively restrict a single base member, and their COMBINED
 // occurrence range must lie within that base member's range. recurseAll's
 // distinct-mapping is therefore insufficient; allRestrictsByCounting computes,
-// per base member, the summed occurrence contribution of the derived side and
-// checks it against the base member's range. It handles a derived xs:all,
-// xs:sequence, or xs:choice (the latter two restricting a base all per the
-// RecurseUnordered / map rules), including nested choices/sequences, via a
-// recursive per-name contribution walk. Wildcards are NOT handled here — those
-// route to allRestrictsWithWildcards.
+// PER BASE MEMBER, the occurrence contribution of the derived side and checks it
+// against the base member's range. It handles a derived xs:all, xs:sequence, or
+// xs:choice (the latter two restricting a base all per the RecurseUnordered / map
+// rules), including nested choices/sequences, via a recursive contribution walk
+// that maps each derived element to a base member as it goes — so the branches of
+// a choice correlate on the base member rather than on the derived element name
+// (e.g. choice(A1{2},A2{2}) with A1,A2 in base member a's substitution group
+// restricts base a{2}). Wildcards are NOT handled here — those route to
+// allRestrictsWithWildcards.
 
-// allContribution is the occurrence contribution of a derived content model to a
-// single element name: how few (min) and how many (max, Unbounded for unbounded)
-// matching children it can emit, plus the contributing element declaration for
-// the type-derivation check.
-type allContribution struct {
-	min  int
-	max  int
-	decl *ElementDecl
+// memberRange is an occurrence contribution to a single base xs:all member: how
+// few (min) and how many (max, Unbounded for unbounded) matching children the
+// derived side can emit for that member.
+type memberRange struct {
+	min int
+	max int
 }
 
 // occursAdd adds two occurrence counts, propagating Unbounded (-1).
@@ -72,105 +73,118 @@ func occursMin(a, b int) int {
 	return b
 }
 
-// particleContributions walks a derived particle and returns, per element
-// expanded name, the occurrence range it can contribute. It returns ok=false if
-// the particle contains a wildcard (handled by the wildcard-aware path instead).
-func particleContributions(p *Particle) (map[QName]allContribution, bool) {
+// memberContributions walks a derived particle and returns, per BASE xs:all
+// member (indexed like baseElems), the occurrence range the derived side can
+// contribute. It returns ok=false when the derived side contains an EMITTING
+// wildcard (route to the wildcard-aware path), names an element no base member
+// admits, or maps an element to a base member whose type it is not derived from.
+// A non-emitting particle (prohibited, or an empty group) contributes nothing.
+func memberContributions(p *Particle, baseElems []*Particle, schema *Schema) ([]memberRange, bool) {
+	// A non-emitting particle (maxOccurs=0, or a group with no emitting content)
+	// contributes nothing and must be checked BEFORE rejecting a wildcard term, so
+	// a prohibited wildcard (e.g. <xs:any maxOccurs="0"/>) does not falsely abort.
+	if particleEmitsNothing(p) {
+		return make([]memberRange, len(baseElems)), true
+	}
 	switch t := p.Term.(type) {
 	case *ElementDecl:
-		return map[QName]allContribution{
-			t.Name: {min: p.MinOccurs, max: p.MaxOccurs, decl: t},
-		}, true
+		bi := findBaseAllMember(t, baseElems, schema)
+		if bi < 0 {
+			return nil, false
+		}
+		// Type derivation: the derived element's type must be the same as, or
+		// derived from, the base member's type. When either is unresolved, accept
+		// conservatively (matching elementRestrictsElement).
+		bd, _ := baseElems[bi].Term.(*ElementDecl)
+		if t.Type != nil && bd != nil && bd.Type != nil && !isDerivedFrom(t.Type, bd.Type) {
+			return nil, false
+		}
+		vec := make([]memberRange, len(baseElems))
+		vec[bi] = memberRange{min: p.MinOccurs, max: p.MaxOccurs}
+		return vec, true
 	case *Wildcard:
 		return nil, false
 	case *ModelGroup:
-		childMaps := make([]map[QName]allContribution, 0, len(t.Particles))
+		childVecs := make([][]memberRange, 0, len(t.Particles))
 		for _, cp := range t.Particles {
-			cm, ok := particleContributions(cp)
+			cv, ok := memberContributions(cp, baseElems, schema)
 			if !ok {
 				return nil, false
 			}
-			childMaps = append(childMaps, cm)
+			childVecs = append(childVecs, cv)
 		}
-		var combined map[QName]allContribution
+		var combined []memberRange
 		if t.Compositor == CompositorChoice {
-			combined = combineChoiceContributions(childMaps)
+			combined = combineChoiceVecs(childVecs, len(baseElems))
 		} else {
 			// sequence and all combine the same way: each member's content is
 			// emitted independently, so contributions sum.
-			combined = combineSeqContributions(childMaps)
+			combined = combineSeqVecs(childVecs, len(baseElems))
 		}
 		// Scale by the group's own occurrence range.
-		for name, c := range combined {
-			combined[name] = allContribution{
-				min:  occursMul(c.min, p.MinOccurs),
-				max:  occursMul(c.max, p.MaxOccurs),
-				decl: c.decl,
+		for i := range combined {
+			combined[i] = memberRange{
+				min: occursMul(combined[i].min, p.MinOccurs),
+				max: occursMul(combined[i].max, p.MaxOccurs),
 			}
 		}
 		return combined, true
 	}
-	return map[QName]allContribution{}, true
+	return make([]memberRange, len(baseElems)), true
 }
 
-// combineSeqContributions sums per-name contributions across the members of a
-// sequence/all group (an absent name contributes nothing).
-func combineSeqContributions(childMaps []map[QName]allContribution) map[QName]allContribution {
-	result := make(map[QName]allContribution)
-	for _, cm := range childMaps {
-		for name, c := range cm {
-			prev := result[name]
-			result[name] = allContribution{
-				min:  occursAdd(prev.min, c.min),
-				max:  occursAdd(prev.max, c.max),
-				decl: pickDecl(prev.decl, c.decl),
-			}
+// combineSeqVecs sums, per base member, the contributions of a sequence/all
+// group's members (each member's content is emitted).
+func combineSeqVecs(childVecs [][]memberRange, n int) []memberRange {
+	out := make([]memberRange, n)
+	for _, cv := range childVecs {
+		for i := range n {
+			out[i] = memberRange{min: occursAdd(out[i].min, cv[i].min), max: occursAdd(out[i].max, cv[i].max)}
 		}
 	}
-	return result
+	return out
 }
 
-// combineChoiceContributions merges per-name contributions across the branches
-// of a choice: at most one branch is selected per repetition, so a name's MAX is
-// the largest branch max and its MIN is zero unless the name appears (with a
-// positive min) in EVERY branch.
-func combineChoiceContributions(childMaps []map[QName]allContribution) map[QName]allContribution {
-	names := make(map[QName]struct{})
-	for _, cm := range childMaps {
-		for name := range cm {
-			names[name] = struct{}{}
-		}
-	}
-	result := make(map[QName]allContribution)
-	for name := range names {
+// combineChoiceVecs merges, per base member, the contributions of a choice's
+// branches: at most one branch is selected per repetition, so a member's MAX is
+// the largest branch max and its MIN is the smallest branch min (a branch that
+// does not produce the member contributes min 0, so the choice guarantees the
+// member only if EVERY branch produces it). Correlating on the base member (not
+// the derived element name) keeps alternative substitution-group members of one
+// base member from being summed.
+func combineChoiceVecs(childVecs [][]memberRange, n int) []memberRange {
+	out := make([]memberRange, n)
+	for i := range n {
 		maxOcc := 0
-		minOcc := Unbounded // sentinel for "not yet set"; reduced to branch minima
-		var decl *ElementDecl
-		for _, cm := range childMaps {
-			c, present := cm[name]
-			branchMin := 0
-			branchMax := 0
-			if present {
-				branchMin = c.min
-				branchMax = c.max
-				decl = pickDecl(decl, c.decl)
-			}
-			maxOcc = occursMax(maxOcc, branchMax)
-			minOcc = occursMin(minOcc, branchMin)
+		minOcc := Unbounded // sentinel for "no branch seen yet"
+		for _, cv := range childVecs {
+			maxOcc = occursMax(maxOcc, cv[i].max)
+			minOcc = occursMin(minOcc, cv[i].min)
 		}
 		if minOcc == Unbounded {
 			minOcc = 0
 		}
-		result[name] = allContribution{min: minOcc, max: maxOcc, decl: decl}
+		out[i] = memberRange{min: minOcc, max: maxOcc}
 	}
-	return result
+	return out
 }
 
-func pickDecl(a, b *ElementDecl) *ElementDecl {
-	if a != nil {
-		return a
+// flattenAllParticles expands a particle list, recursively inlining the members
+// of any nested 1/1 xs:all group (an xs:group ref that resolved to an all group),
+// so element and wildcard members reached through a nested all are accounted for
+// alongside the direct members. Non-all groups and groups with a non-1/1
+// occurrence are left intact.
+func flattenAllParticles(particles []*Particle) []*Particle {
+	var out []*Particle
+	for _, p := range particles {
+		if mg, ok := p.Term.(*ModelGroup); ok &&
+			mg.Compositor == CompositorAll && p.MinOccurs == 1 && p.MaxOccurs == 1 {
+			out = append(out, flattenAllParticles(mg.Particles)...)
+			continue
+		}
+		out = append(out, p)
 	}
-	return b
+	return out
 }
 
 // flattenBaseAllElements returns the element particles of a base xs:all,
@@ -200,25 +214,29 @@ func flattenBaseAllElements(mg *ModelGroup) ([]*Particle, bool) {
 }
 
 // findBaseAllMember returns the index of the base xs:all element member that a
-// derived element NAME maps to: a direct expanded-name match, or a name that is
-// a member of a base element's substitution group (XSD 1.1 lets a derived all
-// restrict a base element to its substitution-group members). Returns -1 if no
-// base member admits the name.
-func findBaseAllMember(name QName, baseElems []*Particle, schema *Schema) int {
+// derived element maps to: a direct expanded-name match, or membership in a base
+// element's substitution group (XSD 1.1 lets a derived all restrict a base
+// element to its substitution-group members), honoring block="substitution" and
+// a blocked derivation step on the base member. Returns -1 if none admits it.
+func findBaseAllMember(derived *ElementDecl, baseElems []*Particle, schema *Schema) int {
 	for i, bp := range baseElems {
-		if bd, ok := bp.Term.(*ElementDecl); ok && bd.Name == name {
+		if bd, ok := bp.Term.(*ElementDecl); ok && bd.Name == derived.Name {
 			return i
 		}
 	}
 	for i, bp := range baseElems {
 		bd, ok := bp.Term.(*ElementDecl)
-		if !ok {
+		if !ok || bd.Block&BlockSubstitution != 0 {
 			continue
 		}
 		for _, m := range schema.substGroups[bd.Name] {
-			if m.Name == name {
-				return i
+			if m.Name != derived.Name {
+				continue
 			}
+			if isDerivationBlocked(m.Type, bd.Type, bd.Block) {
+				continue
+			}
+			return i
 		}
 	}
 	return -1
@@ -226,43 +244,22 @@ func findBaseAllMember(name QName, baseElems []*Particle, schema *Schema) int {
 
 // allRestrictsByCounting reports whether the derived particle is a valid XSD 1.1
 // restriction of the base xs:all by occurrence counting. Each derived element
-// name must map to a base member (by name or substitution group) whose type it
-// is derived from; the summed contribution per base member must lie within that
+// must map to a base member (by name or substitution group) whose type it is
+// derived from; the combined contribution per base member must lie within that
 // member's occurrence range; and every base member with no derived contribution
 // must be emptiable.
 func allRestrictsByCounting(derived *Particle, baseAll *ModelGroup, schema *Schema) bool {
-	contrib, ok := particleContributions(derived)
-	if !ok {
-		return false
-	}
 	baseElems, hasWildcard := flattenBaseAllElements(baseAll)
 	if hasWildcard {
 		return false
 	}
-
-	sumMin := make([]int, len(baseElems))
-	sumMax := make([]int, len(baseElems))
-	for name, c := range contrib {
-		bi := findBaseAllMember(name, baseElems, schema)
-		if bi < 0 {
-			return false
-		}
-		bd, _ := baseElems[bi].Term.(*ElementDecl)
-		// Type derivation: the derived element's type must be the same as, or
-		// derived from, the base member's type. When either is unresolved, accept
-		// conservatively (matching elementRestrictsElement).
-		if c.decl != nil && c.decl.Type != nil && bd != nil && bd.Type != nil {
-			if !isDerivedFrom(c.decl.Type, bd.Type) {
-				return false
-			}
-		}
-		sumMin[bi] = occursAdd(sumMin[bi], c.min)
-		sumMax[bi] = occursAdd(sumMax[bi], c.max)
+	vec, ok := memberContributions(derived, baseElems, schema)
+	if !ok {
+		return false
 	}
-
 	for i, bp := range baseElems {
-		// An unmapped base member (sum 0) is valid only if it is emptiable.
-		if !occurrenceValidRestriction(sumMin[i], sumMax[i], bp.MinOccurs, bp.MaxOccurs) {
+		// An unmapped base member (range 0,0) is valid only if it is emptiable.
+		if !occurrenceValidRestriction(vec[i].min, vec[i].max, bp.MinOccurs, bp.MaxOccurs) {
 			return false
 		}
 	}

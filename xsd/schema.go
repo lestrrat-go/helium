@@ -144,9 +144,10 @@ type ElementDecl struct {
 	Abstract          bool
 	Nillable          bool  // true if the element may carry xsi:nil="true"
 	SubstitutionGroup QName // QName of the (first) substitution group head (zero value if none)
-	// SubstitutionGroups holds ALL heads when XSD 1.1 multiple-head substitution
-	// is used (substitutionGroup="a b c"). It is nil for the common single-head
-	// case; SubstitutionGroup always holds the first head for back-compat.
+	// SubstitutionGroups holds ALL heads for XSD 1.1 multiple-head substitution
+	// (substitutionGroup="a b c" — the element is a member of every listed head).
+	// nil for the common single-head case; SubstitutionGroup always mirrors the
+	// first head. Populated only in XSD 1.1.
 	SubstitutionGroups []QName
 	IsRef              bool // true if this was created from a ref="..." attribute
 	IDCs               []*IDConstraint

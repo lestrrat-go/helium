@@ -744,8 +744,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 func (c *compiler) buildSubstGroups() {
 	for _, edecl := range c.schema.elements {
 		// XSD 1.1 multiple-head substitution: register the element under EVERY head
-		// it declares. SubstitutionGroups holds all heads when more than one; the
-		// common single-head case uses SubstitutionGroup.
+		// it declares (SubstitutionGroups); the common single-head case uses
+		// SubstitutionGroup.
 		if len(edecl.SubstitutionGroups) > 0 {
 			for _, head := range edecl.SubstitutionGroups {
 				c.schema.substGroups[head] = append(c.schema.substGroups[head], edecl)

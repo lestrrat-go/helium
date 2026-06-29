@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -1595,32 +1596,54 @@ func processContentsStrength(pc ProcessContentsKind) int {
 // leads back to itself. Only reports an error if the element itself is part
 // of the cycle (not if it just points to a cyclic element).
 func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDecl) {
+	// DFS over ALL heads (XSD 1.1 multiple-head substitution): a cycle may close
+	// through any one of an element's heads, so following only the first head
+	// (SubstitutionGroup) would miss cycles that run through a later head.
 	visited := map[QName]bool{}
-	current := edecl.SubstitutionGroup
-	for current != (QName{}) {
-		if current == edecl.Name {
-			// Cycle leads back to this element.
-			// libxml2 reports this error twice.
-			if src, ok := c.globalElemSources[edecl]; ok {
-				msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
-					edecl.Name.Local, current.Local)
-				errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
-				c.schemaError(ctx, errStr)
-				c.schemaError(ctx, errStr)
-			}
-			return
+	var reaches func(cur QName) bool
+	reaches = func(cur QName) bool {
+		if cur == (QName{}) {
+			return false
 		}
-		if visited[current] {
-			// Hit a cycle that doesn't include this element.
-			return
+		if cur == edecl.Name {
+			return true // cycle back to this element
 		}
-		visited[current] = true
-		head, ok := c.schema.elements[current]
+		if visited[cur] {
+			return false // a cycle not involving this element
+		}
+		visited[cur] = true
+		head, ok := c.schema.elements[cur]
 		if !ok {
-			return
+			return false
 		}
-		current = head.SubstitutionGroup
+		return slices.ContainsFunc(substHeads(head), reaches)
 	}
+	if !slices.ContainsFunc(substHeads(edecl), reaches) {
+		return
+	}
+	// Cycle leads back to this element. libxml2 reports this error twice.
+	src, ok := c.globalElemSources[edecl]
+	if !ok {
+		return
+	}
+	msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
+		edecl.Name.Local, edecl.Name.Local)
+	errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
+	c.schemaError(ctx, errStr)
+	c.schemaError(ctx, errStr)
+}
+
+// substHeads returns all substitution-group heads of an element declaration:
+// every head for XSD 1.1 multiple-head substitution, else the single head, else
+// none.
+func substHeads(edecl *ElementDecl) []QName {
+	if len(edecl.SubstitutionGroups) > 0 {
+		return edecl.SubstitutionGroups
+	}
+	if edecl.SubstitutionGroup != (QName{}) {
+		return []QName{edecl.SubstitutionGroup}
+	}
+	return nil
 }
 
 // checkFinalOnTypes checks that no type derivation violates the base type's final constraint.

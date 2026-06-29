@@ -28,6 +28,46 @@ func validateAll11(t *testing.T, schemaXML, instanceXML string) error {
 	return xsd.NewValidator(schema).Validate(t.Context(), idoc)
 }
 
+// TestAll10WildcardOnlyRegression guards the XSD 1.0 xs:all matcher against the
+// regression where the flat-member rewrite dropped wildcard particles from the
+// 1.0 required-member bookkeeping. A wildcard-only xs:all with minOccurs=1 (the
+// parser tolerates a wildcard inside an xs:all even in 1.0) must reject empty
+// content as a missing required member — exactly as the pre-rewrite matcher did,
+// and unlike 1.1 (which actually matches the wildcard). The 1.0 path never
+// matches a wildcard member, so any child is "not expected".
+func TestAll10WildcardOnlyRegression(t *testing.T) {
+	t.Parallel()
+
+	compile10 := func(t *testing.T, schemaXML string) (*xsd.Schema, error) {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		return xsd.NewCompiler().Compile(t.Context(), doc)
+	}
+	validate10 := func(t *testing.T, schema *xsd.Schema, instanceXML string) error {
+		t.Helper()
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
+	}
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:all minOccurs="1"><xs:any/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	sch, cerr := compile10(t, schema)
+	require.NoError(t, cerr, "1.0 schema with a wildcard-only xs:all should compile")
+
+	// Empty content: the required wildcard member is missing — must be rejected.
+	require.Error(t, validate10(t, sch, `<doc/>`),
+		"1.0 wildcard-only all minOccurs=1 must reject empty content (regression guard)")
+
+	// A child is never matched by a wildcard in 1.0, so it is unexpected.
+	require.Error(t, validate10(t, sch, `<doc><e/></doc>`))
+}
+
 // TestAll11MemberMaxOccurs verifies the XSD 1.1 relaxation that an element member
 // of an xs:all may carry minOccurs/maxOccurs > 1 (cos-all-limited relaxed), and
 // that order-independent per-member occurrence counting enforces those bounds.
@@ -265,6 +305,63 @@ func TestAll11RestrictionSubsumption(t *testing.T) {
 		_, cerr := compileAll11(t, schema)
 		require.Error(t, cerr)
 	})
+
+	// A derived CHOICE restricting a base all: alternative branches that each map
+	// to the SAME base member must correlate on the member (min/max over branches),
+	// not be summed as independent names. choice(A1{2,2}, A2{2,2}) emits exactly 2
+	// of base member a per selection, valid against base a{2,2}.
+	t.Run("choice branches with subst-group members correlate on base member", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element ref="a" minOccurs="2" maxOccurs="2"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:choice>
+    <xs:element ref="A1" minOccurs="2" maxOccurs="2"/>
+    <xs:element ref="A2" minOccurs="2" maxOccurs="2"/>
+  </xs:choice></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="a"/>
+  <xs:element name="A1" substitutionGroup="a"/>
+  <xs:element name="A2" substitutionGroup="a"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr) // each branch emits exactly 2 of a, within a{2,2}
+	})
+
+	// A choice branch that exceeds the base member range is still rejected (max
+	// over branches): branch a{1,8} over base a{0,5}.
+	t.Run("choice branch exceeding base member max invalid", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element name="a" minOccurs="0" maxOccurs="5"/>
+    <xs:element name="b" minOccurs="1" maxOccurs="5"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:choice>
+    <xs:sequence><xs:element name="b" minOccurs="3" maxOccurs="4"/></xs:sequence>
+    <xs:sequence><xs:element name="a" minOccurs="1" maxOccurs="8"/><xs:element name="b" minOccurs="3" maxOccurs="4"/></xs:sequence>
+  </xs:choice></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr) // second branch emits a up to 8 > base a max 5
+	})
+
+	// A prohibited (maxOccurs=0) wildcard inside the derived all emits nothing and
+	// must NOT abort counting subsumption of a no-wildcard base all.
+	t.Run("prohibited wildcard in derived all emits nothing", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:element name="a" minOccurs="0" maxOccurs="5"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:element name="a" minOccurs="1" maxOccurs="1"/>
+    <xs:any minOccurs="0" maxOccurs="0"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr)
+	})
 }
 
 // TestAll11Extension verifies that an xs:all may be extended by another xs:all in
@@ -322,12 +419,46 @@ func TestAll11Extension(t *testing.T) {
 }
 
 // TestAll11UPA verifies the Unique Particle Attribution check over xs:all members
-// with counting in XSD 1.1: an element substitutable for two distinct base
-// members (via a multi-head substitution group) is ambiguous and rejected.
+// in XSD 1.1: an xs:all with two members where one element is in the substitution
+// group of the other is ambiguous (a member-named child could attribute to either
+// particle) and is rejected. Two same-named members are likewise rejected.
 func TestAll11UPA(t *testing.T) {
 	t.Parallel()
 
-	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	t.Run("member in substitution group of another member", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="o"/>
+    <xs:element name="x" type="xs:boolean"/>
+    <xs:element ref="p"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="o" type="xs:integer"/>
+  <xs:element name="p" substitutionGroup="o"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr) // a <p> attributes to both the p member and (via subst) the o member
+	})
+
+	t.Run("two same-name members", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType><xs:all>
+    <xs:element ref="o"/>
+    <xs:element name="x" type="xs:boolean"/>
+    <xs:element ref="o"/>
+  </xs:all></xs:complexType></xs:element>
+  <xs:element name="o" type="xs:integer"/>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+
+	// XSD 1.1 multiple-head substitution: an element in the substitution group of
+	// TWO distinct all members is substitutable for both → UPA violation.
+	t.Run("multi-head substitution member ambiguous over two all members", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="doc"><xs:complexType><xs:all>
     <xs:element ref="o"/>
     <xs:element ref="p"/>
@@ -336,7 +467,28 @@ func TestAll11UPA(t *testing.T) {
   <xs:element name="p" type="xs:integer"/>
   <xs:element name="q" substitutionGroup="o p"/>
 </xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr) // q is substitutable for both o and p
+	})
+}
 
-	_, cerr := compileAll11(t, schema)
-	require.Error(t, cerr) // q is substitutable for both o and p
+// TestAll11MultiHeadSubstParsing verifies that a multiple-head substitutionGroup
+// list is split on XSD whitespace only and registers the element under every head
+// (so it is accepted where any head is expected); under XSD 1.0 the (spaced)
+// value is a single — non-matching — QName.
+func TestAll11MultiHeadSubstParsing(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType><xs:sequence>
+    <xs:element ref="h1"/>
+    <xs:element ref="h2"/>
+  </xs:sequence></xs:complexType></xs:element>
+  <xs:element name="h1" abstract="true" type="xs:string"/>
+  <xs:element name="h2" abstract="true" type="xs:string"/>
+  <xs:element name="m" substitutionGroup="h1  h2" type="xs:string"/>
+</xs:schema>`
+
+	// m is substitutable for both h1 and h2.
+	require.NoError(t, validateAll11(t, schema, `<doc><m>x</m><m>y</m></doc>`))
 }
