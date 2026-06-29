@@ -633,3 +633,62 @@ func TestAll11MultiHeadParsing(t *testing.T) {
 		require.Error(t, cerr)
 	})
 }
+
+// TestAll11WildcardRestrictionNestedGroupFailClosed guards against the
+// wildcard-aware all-restriction path SILENTLY accepting a nested non-all derived
+// group (sequence/choice). Such a group's elements/wildcards are not accounted
+// against the base wildcard, so a nested group emitting an element outside the
+// base wildcard's namespace would otherwise false-accept. The path fails closed.
+func TestAll11WildcardRestrictionNestedGroupFailClosed(t *testing.T) {
+	t.Parallel()
+
+	// Reviewer repro: base all with a namespace-limited wildcard; derived nested
+	// sequences emitting <c/> (absent namespace, not admitted by the base wildcard).
+	t.Run("nested sequence under wildcard base rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:any namespace="http://allowed.example/"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:sequence>
+    <xs:sequence><xs:element name="c"/></xs:sequence>
+  </xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+
+	// The true false-accept: base wildcard minOccurs="0" (so the missing-required
+	// min check does NOT mask the bug); derived nested choice emits <bad/> (absent
+	// namespace) which the allowed.example wildcard rejects.
+	t.Run("nested choice under optional wildcard base rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:any namespace="http://allowed.example/" minOccurs="0" maxOccurs="1"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:sequence>
+    <xs:choice><xs:element name="bad"/></xs:choice>
+  </xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.Error(t, cerr)
+	})
+
+	// Guard: a direct (non-nested) derived wildcard restricting a wildcard base all
+	// still compiles — fail-closed only rejects nested non-all groups, not the
+	// supported flat wildcard/element members.
+	t.Run("direct wildcard restriction still valid", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="b"><xs:all>
+    <xs:any namespace="http://allowed.example/" minOccurs="0" maxOccurs="3"/>
+  </xs:all></xs:complexType>
+  <xs:complexType name="r"><xs:complexContent><xs:restriction base="b"><xs:all>
+    <xs:any namespace="http://allowed.example/" minOccurs="0" maxOccurs="2"/>
+  </xs:all></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+		_, cerr := compileAll11(t, schema)
+		require.NoError(t, cerr)
+	})
+}

@@ -647,7 +647,18 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 				derivedWildMax += rp.MaxOccurs
 			}
 		case *ModelGroup:
-			// A non-all nested group on the derived side — accept conservatively.
+			// A nested sequence/choice on the derived side (nested 1/1 all-groups
+			// were already flattened away by flattenAllParticles). Its elements and
+			// wildcards are NOT decomposed and accounted against the base wildcards
+			// here, so silently accepting it would FALSE-ACCEPT a restriction whose
+			// nested group emits content OUTSIDE the base wildcard's namespace (e.g.
+			// base all{any ns="X"}, derived sequence(choice(element bad))). Fail
+			// closed: reject rather than admit content the base may forbid. No W3C
+			// conformance case needs the nested-non-all-group-under-wildcard
+			// restriction path (the wildcard restriction cases are all:all with
+			// direct wildcards; the sequence:all cases carry no wildcard), so this
+			// does not regress any test.
+			return false
 		}
 	}
 
