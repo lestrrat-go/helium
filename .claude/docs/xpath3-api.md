@@ -101,7 +101,14 @@ func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node h
 func (e *Expression) DumpVM(w io.Writer) error
 func (e *Expression) AST() Expr
 func (e *Expression) StreamInfo() StreamInfo
+func (e *Expression) StaticReferences() StaticReferences
 func (e *Expression) String() string
+
+type StaticReferences struct {
+    FreeVariables []string      // variable refs not bound by an enclosing for/let/quantified/inline-function
+    TypeNames     []TypeNameRef // atomic/union type names from cast/castable/instance of/treat as
+}
+type TypeNameRef struct{ Prefix, Name string }
 ```
 
 There is no `Expression.Evaluate`; evaluation goes through `Evaluator.Evaluate`
@@ -116,6 +123,8 @@ evaluation. The same validation runs automatically inside `Evaluate` /
 `Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does not retain the parsed AST on the `Expression`; `AST()` reparses from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
 
 `StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function names, etc.). Streamability query helpers that previously lived on the xpath3 package have been moved to `internal/xpathstream`.
+
+`StaticReferences()` walks the expression's AST (reparsing from `source` when no AST is retained) and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or inline-function parameter) and the atomic/union type names used in cast/castable/instance of/treat as. It is side-effect free and intended for schema-compile-time analysis (not the eval hot path); the XSD 1.1 conditional-type-assignment compiler uses it to reject an `xs:alternative` @test that references a variable or a non-built-in type, which the CTA static context disallows.
 
 `DumpVM()` writes a textual disassembly of compiled VM instructions. Use it for debugging or tooling around lowered expressions.
 
