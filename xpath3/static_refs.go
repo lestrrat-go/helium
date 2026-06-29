@@ -42,11 +42,15 @@ type staticRefCollector struct {
 	seenFree  map[string]struct{}
 }
 
-func variableKey(prefix, name string) string {
-	if prefix == "" {
-		return name
-	}
-	return prefix + ":" + name
+// variableKey returns the lexical key under which a variable is tracked for
+// bound/free analysis. VariableExpr.Name already carries the full lexical form
+// ("prefix:local" when prefixed, or "local" / "Q{uri}local" otherwise), exactly
+// as the for/let/quantified/inline-function binding sites store their bound
+// variable (the raw variable token value), so the key is simply that name — the
+// prefix must NOT be prepended again, which would mis-key "p:x" as "p:p:x" and
+// wrongly report a bound prefixed variable as free.
+func variableKey(name string) string {
+	return name
 }
 
 func (c *staticRefCollector) addFreeVar(key string) {
@@ -70,9 +74,37 @@ func (c *staticRefCollector) addAtomicType(prefix, name string) {
 	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: name})
 }
 
+// walkSequenceType collects every atomic-or-union type name named anywhere in a
+// sequence type, INCLUDING the user type names nested inside array(T), map(K,V),
+// and function(P...) as R item types. A purely top-level scan would miss a
+// forbidden user-defined type hidden inside such a parameterized item type (e.g.
+// "instance of array(t:T)"), so the walk descends recursively into the item test.
 func (c *staticRefCollector) walkSequenceType(st SequenceType) {
-	if aut, ok := st.ItemTest.(AtomicOrUnionType); ok {
-		c.addAtomicType(aut.Prefix, aut.Name)
+	c.walkItemTest(st.ItemTest)
+}
+
+// walkItemTest collects atomic-or-union type names reachable from an item test,
+// recursing through the parameterized array/map/function item types.
+func (c *staticRefCollector) walkItemTest(it NodeTest) {
+	switch t := it.(type) {
+	case AtomicOrUnionType:
+		c.addAtomicType(t.Prefix, t.Name)
+	case ArrayTest:
+		if !t.AnyType {
+			c.walkSequenceType(t.MemberType)
+		}
+	case MapTest:
+		if !t.AnyType {
+			c.walkItemTest(t.KeyType)
+			c.walkSequenceType(t.ValType)
+		}
+	case FunctionTest:
+		if !t.AnyFunction {
+			for _, pt := range t.ParamTypes {
+				c.walkSequenceType(pt)
+			}
+			c.walkSequenceType(t.ReturnType)
+		}
 	}
 }
 
@@ -82,7 +114,7 @@ func (c *staticRefCollector) walk(node Expr) { //nolint:gocyclo
 	}
 	switch n := node.(type) {
 	case VariableExpr:
-		c.addFreeVar(variableKey(n.Prefix, n.Name))
+		c.addFreeVar(variableKey(n.Name))
 	case CastExpr:
 		c.addAtomicType(n.Type.Prefix, n.Type.Name)
 		c.walk(n.Expr)

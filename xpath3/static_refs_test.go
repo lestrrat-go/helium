@@ -44,4 +44,51 @@ func TestStaticReferences(t *testing.T) {
 		require.Equal(t, "xs", names["int"])
 		require.Equal(t, "foo", names["bar"])
 	})
+
+	collectNames := func(refs xpath3.StaticReferences) map[string]string {
+		names := map[string]string{}
+		for _, tn := range refs.TypeNames {
+			names[tn.Name] = tn.Prefix
+		}
+		return names
+	}
+
+	t.Run("nested type name in array() reported", func(t *testing.T) {
+		refs := compile(t, "1 instance of array(t:smallInt)").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["smallInt"])
+	})
+
+	t.Run("nested type names in map() reported", func(t *testing.T) {
+		refs := compile(t, "1 instance of map(xs:string, t:foo)").StaticReferences()
+		names := collectNames(refs)
+		require.Equal(t, "xs", names["string"])
+		require.Equal(t, "t", names["foo"])
+	})
+
+	t.Run("nested type names in function() reported", func(t *testing.T) {
+		refs := compile(t, "1 treat as function(t:arg) as t:ret").StaticReferences()
+		names := collectNames(refs)
+		require.Equal(t, "t", names["arg"])
+		require.Equal(t, "t", names["ret"])
+	})
+
+	t.Run("deeply nested type name reported", func(t *testing.T) {
+		refs := compile(t, "1 instance of array(map(xs:string, t:deep))").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["deep"])
+	})
+
+	t.Run("prefixed bound variable not reported", func(t *testing.T) {
+		refs := compile(t, "for $p:x in (1) return $p:x").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
+
+	t.Run("prefixed free variable reported with prefix", func(t *testing.T) {
+		refs := compile(t, "$p:x = 'a'").StaticReferences()
+		require.Equal(t, []string{"p:x"}, refs.FreeVariables)
+	})
+
+	t.Run("prefixed quantified bound variable not reported", func(t *testing.T) {
+		refs := compile(t, "some $p:x in (1,2) satisfies $p:x = 1").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
 }
