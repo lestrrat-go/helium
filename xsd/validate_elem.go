@@ -260,7 +260,7 @@ func flattenAllMembers(mg *ModelGroup, is11 bool) []allMember {
 // feature); XSD 1.1 uses the per-member occurrence-counting matcher.
 func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
 	if vc.version == Version11 {
-		return vc.matchAll11(ctx, parent, mg, children, pos, edcScope)
+		return vc.matchAll11(ctx, parent, mg, children, pos, edcScope, false)
 	}
 	return vc.matchAll10(ctx, parent, mg, children, pos)
 }
@@ -362,7 +362,13 @@ func (vc *validationContext) matchAll10(ctx context.Context, parent *helium.Elem
 // substitutable for it (honoring block="substitution"/derivation-block via
 // allMemberForChild); a declared element with remaining budget wins over a
 // wildcard (weak-wildcard precedence).
-func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
+//
+// When lenientLeftover is true (the XSD 1.1 open-content suffix path), a child
+// that matches no member is NOT reported as unexpected: matching simply STOPS and
+// the consumed count is returned, so the caller can treat the remaining children
+// as trailing open content. Required-member (minOccurs) and matched-child content
+// checks still run.
+func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup, lenientLeftover bool) (int, error) {
 	members := flattenAllMembers(mg, true)
 	counts := make([]int, len(members))
 
@@ -395,6 +401,11 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 			wcClaimed[pos+consumed] = true
 			consumed++
 			continue
+		}
+		if lenientLeftover {
+			// Open-content suffix path: stop at the first non-member child; the caller
+			// validates the remaining children as trailing open content.
+			break
 		}
 		expected := availableMemberNames(members, counts, vc.schema)
 		msg := "This element is not expected."

@@ -385,6 +385,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaTargetNSSet := c.schemaTargetNSSet
+	savedDefaultOpenContent := c.defaultOpenContent
 	c.schemaTargetNSSet = c.schema.targetNamespace != ""
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
@@ -401,6 +402,10 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// root now (so an inherited ##defaultNamespace uses the included root's default
 	// namespace).
 	c.schemaXPathDefaultNS = ""
+	// <xs:defaultOpenContent> is PER document: the included schema's complex types
+	// use the included root's own default open content (or none), not the including
+	// schema's. Reset and read this document's value before parsing its children.
+	c.defaultOpenContent = c.readDefaultOpenContent(ctx, incRoot)
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
 		c.readSchemaDefaultAttributes(ctx, incRoot)
@@ -455,6 +460,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 	c.schemaTargetNSSet = savedSchemaTargetNSSet
+	c.defaultOpenContent = savedDefaultOpenContent
 
 	return err
 }
@@ -640,6 +646,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	savedIncludeFile := c.includeFile
 	savedXPathDefaultNS := c.schemaXPathDefaultNS
 	savedSchemaTargetNSSet := c.schemaTargetNSSet
+	savedDefaultOpenContent := c.defaultOpenContent
 	c.schemaTargetNSSet = c.schema.targetNamespace != ""
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
@@ -654,6 +661,10 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// against the redefined root now (so an inherited ##defaultNamespace uses that
 	// root's default ns).
 	c.schemaXPathDefaultNS = ""
+	// Phase A parses the REDEFINED document's own declarations, so they use the
+	// redefined root's default open content (the override children, parsed in Phase
+	// B below, get the redefining schema's default restored before then).
+	c.defaultOpenContent = c.readDefaultOpenContent(ctx, incRoot)
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
 		c.readSchemaDefaultAttributes(ctx, incRoot)
@@ -690,6 +701,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		c.schemaTargetNSSet = savedSchemaTargetNSSet
+		c.defaultOpenContent = savedDefaultOpenContent
 		return err
 	}
 
@@ -708,6 +720,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		c.schemaTargetNSSet = savedSchemaTargetNSSet
+		c.defaultOpenContent = savedDefaultOpenContent
 		return err
 	}
 
@@ -744,6 +757,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 	c.schemaTargetNSSet = savedSchemaTargetNSSet
+	// Override children belong to the REDEFINING schema, so they use ITS default
+	// open content (restored here), not the redefined document's Phase A value.
+	c.defaultOpenContent = savedDefaultOpenContent
 
 	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
 }
@@ -1181,6 +1197,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// uses the imported root's default namespace, not a selector/field's).
 	if impC.version == Version11 {
 		impC.schemaXPathDefaultNS = resolveXPathDefaultNSToken(impRoot, getAttr(impRoot, attrXPathDefaultNS), impC.schema.targetNamespace)
+		// The imported document's own <xs:defaultOpenContent> applies to its complex
+		// types (it is per-document and does not cross the import boundary).
+		impC.defaultOpenContent = impC.readDefaultOpenContent(ctx, impRoot)
 	}
 
 	// Seed the imported sub-compiler's CTA static context from the IMPORTED document

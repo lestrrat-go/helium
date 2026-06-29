@@ -7,12 +7,162 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+// resolveOpenContent computes the EFFECTIVE {open content} of every complex type
+// (XSD 1.1 §3.4.2.1/§3.4.2.2), folding in the per-document schema-level
+// <xs:defaultOpenContent>, then inheriting/merging across extension derivations
+// and checking restriction-derivation validity. It runs after the content models
+// and content types are finalized (extension merges done) and is gated to 1.1, so
+// XSD 1.0 is byte-identical. Types are processed BASE-FIRST so a derived type sees
+// its base's already-resolved open content.
+func (c *compiler) resolveOpenContent(ctx context.Context) {
+	if c.version != Version11 {
+		return
+	}
+	resolved := make(map[*TypeDef]struct{})
+	var resolve func(td *TypeDef)
+	resolve = func(td *TypeDef) {
+		if td == nil {
+			return
+		}
+		if _, ok := resolved[td]; ok {
+			return
+		}
+		resolved[td] = struct{}{}
+		if td.BaseType != nil {
+			resolve(td.BaseType)
+		}
+		c.computeEffectiveOpenContent(ctx, td)
+	}
+	for _, td := range c.schema.types {
+		resolve(td)
+	}
+	for td := range c.typeDefSources {
+		resolve(td)
+	}
+}
+
+// computeEffectiveOpenContent resolves a single complex type's {open content}:
+// the explicit <xs:openContent> (mode="none" → absent) or, absent that, the
+// per-document <xs:defaultOpenContent> (applied unless the effective content type
+// is empty and appliesToEmpty is false). For an EXTENSION the result is then
+// merged with the base's open content (§3.4.2.2: a base interleave mode wins, the
+// wildcards union; an extension may not turn a base interleave into suffix); for a
+// RESTRICTION its validity against the base open content is checked.
+func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef) {
+	if td == nil || !td.IsComplex || td.ContentType == ContentTypeSimple {
+		return
+	}
+
+	// Effective (locally specified, default-folded) open content.
+	var eff *OpenContent
+	if td.openContentExplicit {
+		eff = td.OpenContent // nil for mode="none"
+	} else if td.pendingDefaultOpenContent != nil {
+		def := td.pendingDefaultOpenContent
+		if def.AppliesToEmpty || !contentTypeEmptyForOpenContent(td) {
+			eff = &OpenContent{Mode: def.Mode, Wildcard: def.Wildcard}
+		}
+	}
+
+	if td.Derivation == DerivationExtension && td.BaseType != nil {
+		baseOC := td.BaseType.OpenContent
+		switch {
+		case eff == nil:
+			td.OpenContent = baseOC // inherit base (§3.4.2.2 4.1)
+		case baseOC == nil:
+			td.OpenContent = eff // §3.4.2.2 4.2
+		default:
+			// §3.4.6.2 1.4.3.2.2.2: an extension may not relax a base 'interleave'
+			// open content to 'suffix'.
+			if baseOC.Mode == OpenContentInterleave && eff.Mode == OpenContentSuffix {
+				c.reportOpenContentTypeError(ctx, td,
+					"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'.")
+			}
+			mode := eff.Mode
+			if baseOC.Mode == OpenContentInterleave {
+				mode = OpenContentInterleave
+			}
+			td.OpenContent = &OpenContent{Mode: mode, Wildcard: wildcardUnion(baseOC.Wildcard, eff.Wildcard, c.version)}
+		}
+		return
+	}
+
+	td.OpenContent = eff
+	if td.Derivation == DerivationRestriction && td.BaseType != nil {
+		c.checkOpenContentRestriction(ctx, td, eff, td.BaseType.OpenContent)
+	}
+}
+
+// checkOpenContentRestriction enforces §3.4.6.4: a restriction's {open content}
+// must be a valid restriction of the base's. A restriction may DROP open content
+// (derived absent) but may not ADD it (base absent, derived present); the derived
+// wildcard must be a subset of the base's; the derived processContents must be at
+// least as strong; and the derived mode may differ from the base only when the
+// base is interleave. When the derived content model is EMPTY (it matches only the
+// empty sequence) the mode/wildcard comparison is moot and skipped.
+func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef, derived, base *OpenContent) {
+	if derived == nil {
+		return // dropping open content is always a valid restriction
+	}
+	if !modelGroupHasContent(td.ContentModel) {
+		// Empty content model: the open content is the type's WHOLE content, so the
+		// declared content's open-content mode/wildcard comparison against the base is
+		// immaterial — the base's own (possibly wildcard) content already admits it.
+		return
+	}
+	if base == nil {
+		c.reportOpenContentTypeError(ctx, td,
+			"The derived type has open content but its base type does not.")
+		return
+	}
+	if base.Mode != OpenContentInterleave && derived.Mode != base.Mode {
+		c.reportOpenContentTypeError(ctx, td,
+			"The open content mode 'interleave' is not a valid restriction of base open content mode 'suffix'.")
+		return
+	}
+	if !wildcardConstraintSubset(derived.Wildcard, base.Wildcard, c.schema, false) {
+		c.reportOpenContentTypeError(ctx, td,
+			"The open content wildcard is not a valid restriction of the base type's open content wildcard.")
+		return
+	}
+	if processContentsStrength(derived.Wildcard.ProcessContents) < processContentsStrength(base.Wildcard.ProcessContents) {
+		c.reportOpenContentTypeError(ctx, td,
+			"The open content wildcard's processContents is weaker than the base type's open content wildcard.")
+	}
+}
+
+// reportOpenContentTypeError emits a complex-type-level schema error for an
+// open-content derivation violation, using the type's recorded source location.
+func (c *compiler) reportOpenContentTypeError(ctx context.Context, td *TypeDef, msg string) {
+	src, ok := c.typeDefSources[td]
+	if !ok || c.filename == "" {
+		return
+	}
+	component := componentLocalComplexType
+	if !src.isLocal {
+		component = "complex type '" + td.Name.Local + "'"
+	}
+	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
+}
+
+// contentTypeEmptyForOpenContent reports whether a complex type's effective
+// content type is empty for the purpose of <xs:defaultOpenContent>/@appliesToEmpty
+// (§3.4.2.1): a mixed or simple-content type is never empty; otherwise the type is
+// empty iff its content model carries no element/wildcard content.
+func contentTypeEmptyForOpenContent(td *TypeDef) bool {
+	if td.ContentType == ContentTypeMixed || td.ContentType == ContentTypeSimple {
+		return false
+	}
+	return !modelGroupHasContent(td.ContentModel)
+}
+
 // parseOpenContent reads an XSD 1.1 <xs:openContent> element. mode defaults to
 // "interleave"; "suffix" restricts open elements to a trailing position; "none"
 // disables open content and returns nil. The wildcard is taken from the child
 // <xs:any>. Callers must only invoke this in XSD 1.1 mode.
 func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *OpenContent {
 	mode := OpenContentInterleave
+	isNone := false
 	switch getAttr(elem, attrMode) {
 	case "", "interleave":
 		mode = OpenContentInterleave
@@ -20,7 +170,7 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 		mode = OpenContentSuffix
 	case "none":
 		// Explicitly no open content (used to override a default open content).
-		return nil
+		isNone = true
 	default:
 		if c.filename != "" {
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent, attrMode,
@@ -28,7 +178,42 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 		}
 	}
 
-	var wc *Wildcard
+	anyElem, annotations := scanOpenContentChildren(elem)
+	if annotations > 1 && c.filename != "" {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
+			"An 'openContent' must not have more than one 'annotation'."))
+	}
+
+	if isNone {
+		// mode="none" must NOT carry an <xs:any> wildcard child (bug 7069).
+		if anyElem != nil && c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
+				"An 'openContent' with mode 'none' must not contain an 'any' wildcard."))
+		}
+		return nil
+	}
+
+	if anyElem == nil {
+		// An xs:openContent with mode != none requires an xs:any wildcard.
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
+				"An 'openContent' with mode other than 'none' must contain an 'any' wildcard."))
+		}
+		return nil
+	}
+	wc := c.parseOpenContentWildcard(ctx, anyElem)
+	if wc == nil {
+		return nil
+	}
+	return &OpenContent{Mode: mode, Wildcard: wc}
+}
+
+// scanOpenContentChildren walks the children of an <xs:openContent> or
+// <xs:defaultOpenContent> element, returning the first <xs:any> wildcard element
+// (nil if none) and the number of <xs:annotation> children seen.
+func scanOpenContentChildren(elem *helium.Element) (*helium.Element, int) {
+	var anyElem *helium.Element
+	annotations := 0
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -37,20 +222,116 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 		if !ok {
 			continue
 		}
-		if isXSDElement(ce, elemAny) {
-			wc = c.readWildcard(ctx, ce)
-			break
+		switch {
+		case isXSDElement(ce, elemAnnotation):
+			annotations++
+		case isXSDElement(ce, elemAny) && anyElem == nil:
+			anyElem = ce
 		}
 	}
-	if wc == nil {
-		// An xs:openContent with mode != none requires an xs:any wildcard.
+	return anyElem, annotations
+}
+
+// parseOpenContentWildcard parses the <xs:any> child of an open-content element.
+// Unlike a content-model wildcard, an open-content <xs:any> must NOT carry
+// minOccurs/maxOccurs (bug 15618): occurrence is governed by the open-content
+// mechanism, not the wildcard particle.
+func (c *compiler) parseOpenContentWildcard(ctx context.Context, anyElem *helium.Element) *Wildcard {
+	if c.filename != "" {
+		for _, attr := range []string{attrMinOccurs, attrMaxOccurs} {
+			if hasAttr(anyElem, attr) {
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), anyElem.Line(), anyElem.LocalName(), elemAny, attr,
+					"The attribute '"+attr+"' is not allowed on the 'any' wildcard of an open content."))
+			}
+		}
+	}
+	return c.readWildcard(ctx, anyElem)
+}
+
+// readDefaultOpenContent reads the schema-level <xs:defaultOpenContent> child of
+// a schema root (XSD 1.1), if present, returning the resulting default open
+// content (nil when absent or invalid). It enforces the schema content-model
+// position constraint: <xs:defaultOpenContent> may appear only after the leading
+// composition (include/import/redefine/override) and annotation children and
+// before any schema-level component declaration; at most one is allowed. mode
+// defaults to "interleave" and may also be "suffix" ("none" is not a valid
+// default-open-content mode); appliesToEmpty defaults to false.
+func (c *compiler) readDefaultOpenContent(ctx context.Context, root *helium.Element) *OpenContent {
+	if c.version != Version11 {
+		return nil
+	}
+	var dec *helium.Element
+	sawDeclaration := false
+	sawDefault := false
+	for child := range helium.Children(root) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if isXSDElement(ce, elemDefaultOpenContent) {
+			if sawDefault && c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), elemDefaultOpenContent,
+					"A schema must not have more than one 'defaultOpenContent'."))
+				continue
+			}
+			sawDefault = true
+			if sawDeclaration && c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), elemDefaultOpenContent,
+					"The 'defaultOpenContent' must appear before any schema component declaration."))
+			}
+			dec = ce
+			continue
+		}
+		switch {
+		case isXSDElement(ce, elemAnnotation), isXSDElement(ce, elemInclude),
+			isXSDElement(ce, elemImport), isXSDElement(ce, elemRedefine),
+			isXSDElement(ce, elemOverride):
+			// composition / annotation: allowed before defaultOpenContent
+		default:
+			sawDeclaration = true
+		}
+	}
+	if dec == nil {
+		return nil
+	}
+
+	mode := OpenContentInterleave
+	switch getAttr(dec, attrMode) {
+	case "", "interleave":
+		mode = OpenContentInterleave
+	case "suffix":
+		mode = OpenContentSuffix
+	default:
 		if c.filename != "" {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
-				"An 'openContent' with mode other than 'none' must contain an 'any' wildcard."))
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent, attrMode,
+				"The value of 'mode' must be one of 'interleave' or 'suffix'."))
+		}
+	}
+	appliesToEmpty := false
+	if hasAttr(dec, attrAppliesToEmpty) {
+		appliesToEmpty = c.readBooleanAttr(ctx, dec, attrAppliesToEmpty)
+	}
+
+	anyElem, annotations := scanOpenContentChildren(dec)
+	if annotations > 1 && c.filename != "" {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,
+			"A 'defaultOpenContent' must not have more than one 'annotation'."))
+	}
+	if anyElem == nil {
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,
+				"A 'defaultOpenContent' must contain an 'any' wildcard."))
 		}
 		return nil
 	}
-	return &OpenContent{Mode: mode, Wildcard: wc}
+	wc := c.parseOpenContentWildcard(ctx, anyElem)
+	if wc == nil {
+		return nil
+	}
+	return &OpenContent{Mode: mode, Wildcard: wc, AppliesToEmpty: appliesToEmpty}
 }
 
 // collectModelElementNames returns the set of element expanded names declared
@@ -209,7 +490,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	children := collectChildElements(elem)
 
 	if oc.Mode == OpenContentSuffix {
-		consumed, err := vc.matchContentModel(ctx, elem, mg, children)
+		consumed, err := vc.matchContentModelSuffix(ctx, elem, mg, children)
 		if err != nil {
 			return err
 		}
@@ -227,7 +508,14 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 		return vc.validateOpenChildren(ctx, elem, oc.Wildcard, leftover)
 	}
 
-	// interleave
+	// interleave: §3.4.4.3.2 requires the children to be partitionable into a
+	// sub-sequence valid against the declared content model and a sub-sequence each
+	// of whose members matches the open wildcard. Start from a name-based split
+	// (children whose names are NOT declared and which match the wildcard are open),
+	// then refine: a DECLARED-named child the model cannot place at its position is
+	// moved to the open sub-sequence when it too matches the wildcard. This handles
+	// the case where open content and declared content match the same names (e.g. a
+	// second occurrence of a declared element appearing after the model is satisfied).
 	declaredNames := collectModelElementNames(mg, vc.schema)
 	var declared, open []childElem
 	for _, ch := range children {
@@ -238,10 +526,52 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 		}
 		declared = append(declared, ch)
 	}
+	declared, open = vc.refineInterleavePartition(ctx, elem, mg, oc.Wildcard, declared, open)
 	if err := vc.validateContentModelTop(ctx, elem, mg, declared); err != nil {
 		return err
 	}
 	return vc.validateOpenChildren(ctx, elem, oc.Wildcard, open)
+}
+
+// refineInterleavePartition moves declared-but-unplaceable children that match
+// the open wildcard from the declared sub-sequence into the open one, so an
+// interleave open content admits a declared name that the content model cannot
+// accommodate at its position (e.g. an extra occurrence after a bounded particle
+// is exhausted). It TRIALS the model match with diagnostics suppressed; the caller
+// re-runs the match for real on the returned declared set. The trial terminates:
+// each iteration removes one child from the (finite) declared set.
+func (vc *validationContext) refineInterleavePartition(ctx context.Context, elem *helium.Element, mg *ModelGroup, wc *Wildcard, declared, open []childElem) ([]childElem, []childElem) {
+	for {
+		vc.suppressDepth++
+		consumed, err := vc.matchContentModel(ctx, elem, mg, declared)
+		vc.suppressDepth--
+		// A genuine model error (e.g. a missing required particle), or a fully
+		// consumed declared set, cannot be improved by moving a child to open.
+		if err != nil || consumed >= len(declared) {
+			return declared, open
+		}
+		blocker := declared[consumed]
+		if !wildcardAllowsExpandedName(wc, blocker.name, blocker.ns, vc.schema, false) {
+			// The unplaceable child is not admissible as open content either; leave it
+			// in declared so the real match reports it as unexpected.
+			return declared, open
+		}
+		open = append(open, blocker)
+		declared = append(declared[:consumed], declared[consumed+1:]...)
+	}
+}
+
+// matchContentModelSuffix matches the declared content model as a leading PREFIX
+// for the open-content suffix mode, returning how many children it consumed
+// without reporting trailing children as errors (the caller validates them as open
+// content). For an xs:all group it uses the lenient member matcher so a trailing
+// open-content child does not abort the all match; for sequence/choice the normal
+// matcher already stops at the first non-matching child.
+func (vc *validationContext) matchContentModelSuffix(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) (int, error) {
+	if mg.Compositor == CompositorAll && vc.version == Version11 {
+		return vc.matchAll11(ctx, parent, mg, children, 0, mg, true)
+	}
+	return vc.matchContentModel(ctx, parent, mg, children)
 }
 
 // validateOpenChildren validates a set of open-content child elements against the

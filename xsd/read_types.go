@@ -305,8 +305,17 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
+	}
+
+	// XSD 1.1: capture the schema-level <xs:defaultOpenContent> active in this
+	// type's OWN document for resolveOpenContent to apply, but only when the type
+	// has no explicit <xs:openContent> (default open content is per-document and
+	// suppressed by an explicit openContent, including mode="none").
+	if c.version == Version11 && !td.openContentExplicit {
+		td.pendingDefaultOpenContent = c.defaultOpenContent
 	}
 
 	// If no content model and not mixed, ContentTypeEmpty is the default (no children).
@@ -319,6 +328,25 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 }
 
 func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+	// XSD 1.1: <xs:complexContent> may carry its own @mixed. The effective
+	// mixedness is complexType/@mixed OR complexContent/@mixed; if BOTH are present
+	// and disagree it is a schema error (a complexType mixed="true" with
+	// complexContent mixed="false"). At entry td.ContentType==Mixed iff the enclosing
+	// complexType set mixed="true". Set mixedness BEFORE parsing the derivation so the
+	// model-group handlers (which set ElementOnly only when not already Mixed) keep it.
+	// Gated to 1.1 so XSD 1.0 stays byte-identical (it never honored this attribute).
+	if c.version == Version11 && hasAttr(elem, "mixed") {
+		ccMixed := c.readBooleanAttr(ctx, elem, "mixed")
+		ctMixed := td.ContentType == ContentTypeMixed
+		if ctMixed && !ccMixed && c.filename != "" {
+			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
+				elem.LocalName(), componentLocalComplexType,
+				"The 'mixed' attribute on 'complexType' and 'complexContent' must not conflict."))
+		}
+		if ccMixed {
+			td.ContentType = ContentTypeMixed
+		}
+	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -483,6 +511,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
 	}
@@ -641,6 +670,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
 	}

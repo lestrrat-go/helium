@@ -32,9 +32,16 @@ type compiler struct {
 	// targetNamespace="" is no target namespace, while chameleon includes inherit
 	// the including schema's effective namespace.
 	schemaTargetNSSet bool
-	baseDir           string         // directory of the schema file, for resolving relative paths
-	fsys              fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
-	parser            *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
+	// defaultOpenContent is the schema-level <xs:defaultOpenContent> active in the
+	// CURRENT schema document being parsed (XSD 1.1). It is per-document, like the
+	// form/block/final defaults: saved/reset/restored across xs:include/xs:redefine
+	// and seeded onto import sub-compilers. Captured onto each complex type lacking
+	// an explicit <xs:openContent> (TypeDef.pendingDefaultOpenContent) so it applies
+	// only to types declared in the same document.
+	defaultOpenContent *OpenContent
+	baseDir            string         // directory of the schema file, for resolving relative paths
+	fsys               fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser             *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -671,6 +678,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(root, getAttr(root, attrXPathDefaultNS), c.schema.targetNamespace)
 		c.readSchemaDefaultAttributes(ctx, root)
+		// Schema-level <xs:defaultOpenContent> must be resolved before the schema's
+		// own declarations AND its xs:redefine override children are parsed, so each
+		// complex type captures the active per-document default.
+		c.defaultOpenContent = c.readDefaultOpenContent(ctx, root)
 	}
 
 	// Parse blockDefault attribute.

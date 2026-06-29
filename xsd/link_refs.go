@@ -366,22 +366,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Merge content models for extension types. extensionTypes is already
 	// filtered to extension types with a base, so no per-item guard is needed.
 	for _, td := range extensionTypes {
-		// XSD 1.1 §3.4.6 (Derivation Valid (Extension), 1.4.3.2.2.2): when an
-		// extension and its base both have open content, the extension's mode may
-		// only TIGHTEN — a base 'interleave' open content may not become 'suffix' in
-		// the extension (suffix→interleave and identical modes are allowed).
-		if c.version == Version11 && td.OpenContent != nil && td.BaseType != nil && td.BaseType.OpenContent != nil &&
-			td.BaseType.OpenContent.Mode == OpenContentInterleave && td.OpenContent.Mode == OpenContentSuffix {
-			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
-				component := componentLocalComplexType
-				if !src.isLocal {
-					component = "complex type '" + td.Name.Local + "'"
-				}
-				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
-					"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'."))
-			}
-			continue
-		}
+		// XSD 1.1 open-content inheritance/merge across extension (and its mode-
+		// tightening validity) is handled centrally by resolveOpenContent, AFTER the
+		// content models are merged and the effective content type (incl. the per-
+		// document <xs:defaultOpenContent>) is known.
 		if td.ContentType == ContentTypeSimple {
 			// simpleContent extension — check for base-vs-derived duplicate
 			// attributes BEFORE inheriting the base attributes, then merge. In XSD
@@ -417,6 +405,28 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 					"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."))
 			}
 			continue
+		}
+		// XSD 1.1 §3.4.6.2 (Derivation Valid (Extension), 1.4.3.2.2.1): when both the
+		// base and the derived type have complex content (element-only or mixed), they
+		// must agree on mixedness — both mixed or both element-only. (An empty base or
+		// derived particle is exempt: the extension may introduce content of either
+		// flavor.) Gated to 1.1 so XSD 1.0 stays byte-identical.
+		if c.version == Version11 {
+			baseHasContent := td.BaseType.ContentType == ContentTypeElementOnly || td.BaseType.ContentType == ContentTypeMixed
+			derivedHasContent := td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed
+			baseMixed := td.BaseType.ContentType == ContentTypeMixed
+			derivedMixed := td.ContentType == ContentTypeMixed
+			if baseHasContent && derivedHasContent && baseMixed != derivedMixed {
+				if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
+					component := componentLocalComplexType
+					if !src.isLocal {
+						component = "complex type '" + td.Name.Local + "'"
+					}
+					c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+						"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."))
+				}
+				continue
+			}
 		}
 		baseMG := td.BaseType.ContentModel
 		derivedMG := td.ContentModel
@@ -557,6 +567,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			c.finalizeEffectiveAttrs(ctx, td, merged, visiting)
 		}
 	}
+
+	// XSD 1.1: resolve each complex type's effective {open content} — fold in the
+	// per-document <xs:defaultOpenContent>, inherit/merge across extension, and
+	// check restriction-derivation validity. Runs after content models and content
+	// types are finalized so the appliesToEmpty/empty-content decisions are correct.
+	c.resolveOpenContent(ctx)
 
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.
 	// Only run UPA if there are no prior schema errors (libxml2 skips UPA when
