@@ -58,6 +58,7 @@ type evaluatorCfg struct {
 	variableResolver       VariableResolver
 	functionResolver       FunctionResolver
 	strictPrefixes         bool
+	qnameValueNoDefaultNS  bool
 	schemaDeclarations     SchemaDeclarations
 	allowXML11Chars        bool
 	docOrder               *DocOrderCache
@@ -324,6 +325,19 @@ func (e Evaluator) StrictPrefixes() Evaluator {
 	return e
 }
 
+// QNameValueNoDefaultNamespace makes the atomization of a QName/NOTATION-typed
+// node resolve an UNPREFIXED lexical value to NO namespace, instead of the node's
+// in-scope default namespace. This is XSD value-space semantics — a QName VALUE,
+// unlike an element/attribute NAME, does not pick up the default namespace — used
+// by xsd assertion evaluation. Off by default, so general XPath/XQuery and XSLT
+// atomization keep resolving an unprefixed QName value against the default
+// namespace.
+func (e Evaluator) QNameValueNoDefaultNamespace() Evaluator {
+	e = e.clone()
+	e.cfg.qnameValueNoDefaultNS = true
+	return e
+}
+
 // AllowXML11Chars enables XML 1.1 restricted characters.
 func (e Evaluator) AllowXML11Chars() Evaluator {
 	e = e.clone()
@@ -441,6 +455,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.schemaDeclarations = cfg.schemaDeclarations
 	ec.preservedIDAnnotations = cfg.preservedIDAnnotations
 	ec.strictPrefixes = cfg.strictPrefixes
+	ec.qnameValueNoDefaultNS = cfg.qnameValueNoDefaultNS
 	ec.allowXML11Chars = cfg.allowXML11Chars
 
 	// dynamic focus overrides

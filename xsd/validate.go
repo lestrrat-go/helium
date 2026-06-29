@@ -46,9 +46,22 @@ const msgAbstractType = "The type definition is abstract."
 // value and the schema fixed value respectively; they are only consulted for
 // QName/NOTATION types. When td is nil the comparison falls back to raw string
 // equality.
-func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
+func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	if td == nil {
 		return instance == fixed
+	}
+
+	// XSD 1.1: a simpleContent complex type's fixed value lives in its NARROWED
+	// content simple type, not the outer complex type's own base chain — compare in
+	// the effective content type so e.g. a content type restricted to xs:QName uses
+	// QName VALUE-space equality (a different prefix bound to the same URI matches).
+	// effectiveContentSimpleType returns a non-simpleContent type unchanged, so the
+	// simple (attribute / element / list-item / union-member) callers are
+	// unaffected. Centralized here so EVERY caller — runtime element/attribute fixed
+	// checks AND the compile-time content-model restriction check
+	// (restriction_particle.go) — is consistent. XSD 1.0 keeps the raw declared type.
+	if version == Version11 {
+		td = effectiveContentSimpleType(td)
 	}
 
 	// Branch on variety *before* normalizing with the type's own whiteSpace
@@ -59,7 +72,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// each member normalize with its own facet. List and atomic types keep their
 	// type-level normalization.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, version)
+		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version)
 	}
 
 	ws := resolveWhiteSpace(td)
@@ -67,7 +80,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	nf := normalizeWhiteSpace(fixed, ws)
 
 	if resolveVariety(td) == TypeVarietyList {
-		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, version)
+		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, schema, version)
 	}
 	return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
 }
@@ -77,7 +90,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 // variety-aware comparator on the actual item type, so a list whose item type is
 // a union (or itself a list) is compared in the correct value space rather than
 // raw lexical text.
-func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
+func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	ii := value.XSDFields(instance)
 	fi := value.XSDFields(fixed)
 	if len(ii) != len(fi) {
@@ -85,7 +98,7 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 	}
 	itemType := resolveItemType(td)
 	for i := range ii {
-		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, version) {
+		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, schema, version) {
 			return false
 		}
 	}
@@ -127,14 +140,14 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 // same per-member validateValue path the normal (non-fixed) validation uses, so
 // the fixed-comparison and ordinary-validation notions of "active member" stay
 // consistent.
-func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
+func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	members := resolveUnionMembers(td)
 
-	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, version)
+	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, schema, version)
 	if fixedMember == nil {
 		return false
 	}
-	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, version)
+	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, schema, version)
 	if instanceMember == nil {
 		return false
 	}
@@ -143,7 +156,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 		// Same active member: compare in that member's value space. A union has no
 		// whiteSpace facet of its own, so the raw values are forwarded and the
 		// member normalizes both with its own facet inside fixedValueMatches.
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, version)
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
 	}
 
 	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
@@ -154,7 +167,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// atomic members reduce to their primitive value-space family. Cross-variety
 	// pairs (a list member vs an atomic member) have no shared value space and
 	// remain unequal.
-	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, version)
+	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, schema, version)
 }
 
 // crossMemberValueComparisonMaxDepth bounds the recursion of
@@ -192,11 +205,11 @@ const crossMemberValueComparisonMaxDepth = 64
 //     normalized-lexical for the string family).
 //   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
 //     no shared value space → unequal.
-func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, version Version) bool {
-	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, version)
+func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
+	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, schema, version)
 }
 
-func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, version Version) bool {
+func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, schema *Schema, version Version) bool {
 	if depth > crossMemberValueComparisonMaxDepth {
 		return false
 	}
@@ -212,18 +225,18 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// a union nested directly inside another union, and any deeper combination, so
 	// the recursion always descends to a non-union variety before comparing.
 	if instanceVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), version)
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), schema, version)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, version)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, schema, version)
 	}
 	if fixedVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), version)
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), schema, version)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, version)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, schema, version)
 	}
 
 	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
@@ -240,7 +253,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 			return false
 		}
 		for i := range ii {
-			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, version) {
+			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, schema, version) {
 				return false
 			}
 		}
@@ -256,7 +269,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
 	// no-shared-family rule.
 	if instanceMember == fixedMember {
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, version)
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
 	}
 
 	fixedLocal := builtinBaseLocal(fixedMember)
@@ -379,9 +392,18 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // the main validation path uses — e.g. a 1.1-only lexical form ("+INF" for
 // xs:double) appearing INSIDE a union fixed-value or enumeration literal is
 // accepted in 1.1 mode rather than rejected under a defaulted Version10.
-func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, version Version) *TypeDef {
+// fixedUnionActiveMember returns the union member that accepts value. The schema
+// argument (nil when none is available) is threaded onto the throwaway
+// validation context so a member whose own xs:assertion needs schema-aware
+// resolution (e.g. `castable as t:T`) validates the same way as the real path;
+// the per-validation cast guard flows through ctx. Most callers pass nil
+// (schema-awareness is immaterial for plain fixed/enumeration comparisons); the
+// assertion $value path passes the real schema so union member typing is
+// consistent with validation.
+func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, schema *Schema, version Version) *TypeDef {
 	for _, member := range members {
 		vc := &validationContext{
+			schema:        schema,
 			errorHandler:  helium.NilErrorHandler{},
 			suppressDepth: 1,
 			version:       version,
@@ -393,7 +415,7 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 		// the active basic member within it; the validateValue success above
 		// guarantees at least one nested member accepts the value.
 		if resolveVariety(member) == TypeVarietyUnion {
-			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), version); basic != nil {
+			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), schema, version); basic != nil {
 				return basic
 			}
 		}
@@ -459,6 +481,31 @@ type validationContext struct {
 	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
 	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// assertAnnotations maps assessed element and attribute nodes to their XSD
+	// type name (the xpath3 annotation form, e.g. "xs:integer"). It is populated
+	// during validation in XSD 1.1 mode (nil otherwise) so xs:assert tests
+	// evaluate against a PSVI-typed tree: a typed attribute like @length atomizes
+	// to xs:nonNegativeInteger rather than xs:untypedAtomic (which a value
+	// comparison would cast to xs:string), and "instance of" tests see the
+	// declared type. Unassessed skip/lax-no-declaration content is deliberately
+	// excluded even when actualElemType records an xsi:type for IDC canonicalization.
+	assertAnnotations TypeAnnotations
+	// assertAnonTypes / assertAnonNames register INLINE ANONYMOUS list/union simple
+	// types under stable synthetic annotation names (Q{assertAnonNS}N). An anonymous
+	// type has no schema-table name, so xsdTypeName collapses it to a named ancestor
+	// (or xs:anyType) and its list-item / union-member metadata would be lost to
+	// xs:assert node atomization. Recording the actual *TypeDef lets schemaDecls
+	// recover that metadata. assertAnonNames dedups by *TypeDef so one inline type
+	// gets one stable name across all nodes that use it.
+	assertAnonTypes map[string]*TypeDef
+	assertAnonNames map[*TypeDef]string
+	// assertEffectiveValues records, per EMPTY element node that has a schema
+	// default/fixed value, the effective (schema-normalized) value and the namespace
+	// context to resolve a QName/NOTATION default's prefix (the DECLARATION's
+	// context). isolatedAssertTree materializes these onto the isolated copy so
+	// data(c) on a DEFAULTED descendant atomizes the default rather than "" —
+	// matching the asserted element's own $value (which already substitutes it).
+	assertEffectiveValues map[helium.Node]assertEffectiveValue
 	// attrInheritable records, for XSD 1.1, the instance attribute nodes matched to
 	// an AttrUse whose {inheritable} is true. The top-down validation walk populates
 	// it for every ancestor before a descendant's conditional type assignment runs,
@@ -490,6 +537,24 @@ type validationContext struct {
 	actualAttrType map[*helium.Attribute]*TypeDef
 }
 
+// assertEffectiveValue is a recorded element default/fixed effective value plus the
+// namespace context used to resolve a QName/NOTATION value's prefix.
+type assertEffectiveValue struct {
+	value string
+	ns    map[string]string
+	td    *TypeDef
+	// qname is true when the effective value's active type carries xs:QName or
+	// xs:NOTATION values, including list item types and active union members. The
+	// isolated assert tree then materializes every QName/NOTATION token's prefix
+	// against ns; a non-QName value that happens to contain a colon is appended
+	// verbatim with no prefix rewrite.
+	qname bool
+}
+
+// assertAnonNS is the synthetic namespace for inline anonymous list/union type
+// annotation names recorded for xs:assert node atomization (see assertAnonTypes).
+const assertAnonNS = "urn:x-helium:assert-anon"
+
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
 // key/unique tables built for the SAME host-element occurrence (XSD
 // identity-constraint scope), once every key/unique on that occurrence has been
@@ -504,7 +569,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 	if schema != nil {
 		version = schema.version
 	}
-	return &validationContext{
+	vc := &validationContext{
 		schema:           schema,
 		version:          version,
 		cfg:              cfg,
@@ -516,6 +581,13 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		assessedElemType: make(map[*helium.Element]*TypeDef),
 		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
 	}
+	if version == Version11 {
+		vc.assertAnnotations = make(TypeAnnotations)
+		vc.assertAnonTypes = make(map[string]*TypeDef)
+		vc.assertAnonNames = make(map[*TypeDef]string)
+		vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
+	}
+	return vc
 }
 
 // validationErrors is a synchronous ErrorHandler that accumulates error
@@ -774,9 +846,11 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 	}
 
 	// XSD 1.1: xs:assert constraints are evaluated against the element once its
-	// attributes and content have been validated.
+	// attributes and content have been validated. edecl carries the element's
+	// default/fixed value so $value reflects the effective simple value for an
+	// empty element.
 	if vc.version == Version11 {
-		return vc.checkAssertions(ctx, elem, td)
+		return vc.checkAssertions(ctx, elem, edecl, td)
 	}
 	return nil
 }
@@ -1026,6 +1100,21 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 	}
 
+	// Record the effective default/fixed value of an EMPTY element so an xs:assert on
+	// an ANCESTOR atomizes data(thisElement) as the schema-normalized default rather
+	// than "" (isolatedAssertTree materializes it onto the copy). A QName/NOTATION
+	// default's prefix resolves in the DECLARATION's namespace context (effectiveValueNS).
+	if isEmpty && effectiveValue != "" && vc.assertEffectiveValues != nil {
+		ns := effectiveValueNS(elem, edecl, true)
+		contentTD := effectiveContentSimpleType(td)
+		vc.assertEffectiveValues[elem] = assertEffectiveValue{
+			value: effectiveValue,
+			ns:    ns,
+			td:    contentTD,
+			qname: vc.valueHasQNameNotationCarrier(ctx, contentTD, effectiveValue, ns),
+		}
+	}
+
 	// Fixed value mismatch check (only when element has actual content).
 	// Compare in the *declared* type's value space (applying its whitespace
 	// facet) rather than an unconditional TrimSpace, so value-equal lexical
@@ -1040,19 +1129,161 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		if fixedType == nil {
 			fixedType = td
 		}
-		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.version) {
+		// In XSD 1.1 fixedValueMatches itself narrows a simpleContent type to its
+		// effective content simple type, so the raw declared type is passed here.
+		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
 		}
 	}
 
-	// Validate the text value against the type.
-	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
+	// XSD 1.1: validate the text against the EFFECTIVE content simple type, composed
+	// across the whole simpleContent derivation chain (effectiveContentSimpleType):
+	// a base type's facets/assertions are enforced (e.g. an extension of a named
+	// faceted type), and a narrowed content type is inherited through derived
+	// simpleContent types (e.g. a restriction's enumeration survives a further
+	// restriction or extension). A QName/NOTATION value substituted from the
+	// declaration's fixed/default (empty element) resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's. XSD 1.0 keeps the original
+	// gating and instance-context resolution, byte-identical.
+	if vc.version == Version11 {
+		valueNS := effectiveValueNS(elem, edecl, isEmpty)
+		effTD := effectiveContentSimpleType(td)
+		if simpleContentNeedsValidation(effTD) {
+			if err := validateValue(ctx, effectiveValue, valueNS, effTD, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+				return err
+			}
+		}
+		if err := vc.validateNestedSimpleContentBases(ctx, elem, effectiveValue, valueNS, td, effTD); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// XSD 1.0: validate the text value against the type with the historical gating.
+	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != lexicon.TypeAnySimpleType) {
 		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 	}
 
 	return nil
+}
+
+func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Context, elem *helium.Element, value string, ns map[string]string, td, effTD *TypeDef) error {
+	visited := make(map[*TypeDef]struct{})
+	for cur := td; cur != nil && cur.IsSimpleContent; cur = cur.BaseType {
+		if _, seen := visited[cur]; seen {
+			return nil
+		}
+		visited[cur] = struct{}{}
+		// A nested <xs:simpleType> restriction (or a nested type narrowed further by
+		// sibling facets) restricts the base content type per XSD §3.4.2.2; it does
+		// not REPLACE it. effectiveContentSimpleType returns such an inline type with
+		// its own declared base chain, so any ancestor complex type's inherited content
+		// facets would otherwise be bypassed after a further derivation hop. Validate
+		// each such ancestor base content type as well so both sets apply. The
+		// facet-only synthetic case (ContentSimpleType.BaseType == cur) is already
+		// re-based onto the effective base content by effectiveContentSimpleType, so
+		// it is excluded here to avoid redundant work.
+		if cur.ContentSimpleType == nil || cur.ContentSimpleType.BaseType == cur {
+			continue
+		}
+		baseContent := effectiveContentSimpleType(cur.BaseType)
+		if baseContent == effTD || !simpleContentNeedsValidation(baseContent) {
+			continue
+		}
+		if err := validateValue(ctx, value, ns, baseContent, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// effectiveValueNS returns the namespace context for resolving a QName/NOTATION
+// in a simpleContent element's effective value. A non-empty element's content is
+// the instance's own text, resolved against the instance's in-scope namespaces.
+// An EMPTY element's value is substituted from the declaration's fixed/default,
+// which was authored in the schema, so its prefixes resolve against the
+// DECLARATION's namespace context (FixedNS/DefaultNS).
+func effectiveValueNS(elem *helium.Element, edecl *ElementDecl, isEmpty bool) map[string]string {
+	if isEmpty && edecl != nil {
+		if edecl.Fixed != nil && edecl.FixedNS != nil {
+			return edecl.FixedNS
+		}
+		if edecl.Default != nil && edecl.DefaultNS != nil {
+			return edecl.DefaultNS
+		}
+	}
+	return collectNSContext(elem)
+}
+
+// effectiveContentSimpleType returns the simple type that constrains the text
+// content of a simpleContent complex type, composed across the WHOLE simpleContent
+// derivation chain. It recurses through simpleContent complex types (IsSimpleContent)
+// and stops at the underlying simpleType/builtin, which IS its own content type:
+//
+//   - extension / restriction with no own narrowing: content = base content;
+//   - restriction with a nested <xs:simpleType>: that simpleType (carries its base
+//     and facets);
+//   - restriction with direct facets (a synthetic type whose BaseType is the owning
+//     complex type): a fresh restriction of the base's EFFECTIVE content type with
+//     those facets, so an ancestor's facets compose with the derived ones.
+//
+// A visited set guards against a cyclic base chain (an invalid schema reported by
+// the circular-type check) without bounding the depth, so EVERY finite acyclic
+// chain — however deep — is walked fully and a narrowing facet far down the chain
+// is never silently skipped.
+func effectiveContentSimpleType(td *TypeDef) *TypeDef {
+	return effectiveContentSimpleTypeRec(td, make(map[*TypeDef]struct{}))
+}
+
+func effectiveContentSimpleTypeRec(td *TypeDef, visited map[*TypeDef]struct{}) *TypeDef {
+	if td == nil || !td.IsSimpleContent {
+		return td
+	}
+	if _, seen := visited[td]; seen {
+		return td // cyclic base chain; the circular-type check reports the error
+	}
+	visited[td] = struct{}{}
+	base := effectiveContentSimpleTypeRec(td.BaseType, visited)
+	cst := td.ContentSimpleType
+	if cst == nil {
+		return base
+	}
+	if cst.BaseType == td {
+		// Synthetic facet-only restriction: re-base on the effective base content
+		// type so the ancestor's facets are still applied alongside these.
+		return &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			Facets:      cst.Facets,
+			BaseType:    base,
+		}
+	}
+	// Nested <xs:simpleType>: it already carries its own base and facets.
+	return cst
+}
+
+// simpleContentNeedsValidation reports whether the effective content simple type
+// constrains its value (so validateValue must run): a list/union variety, a
+// non-string builtin base, or any facet/assertion anywhere along its base chain.
+func simpleContentNeedsValidation(td *TypeDef) bool {
+	if td == nil {
+		return false
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList, TypeVarietyUnion:
+		return true
+	}
+	if bl := builtinBaseLocal(td); bl != "" && bl != "string" && bl != lexicon.TypeAnySimpleType {
+		return true
+	}
+	for cur := range baseChain(td) {
+		if cur.Facets != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *helium.Element) error {
@@ -1196,7 +1427,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.version) {
+			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version) {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -1277,6 +1508,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if _, ok := present[au.Name]; ok {
 			continue
 		}
+		// XSD 1.1: a QName/NOTATION default/fixed value was authored in the schema, so
+		// its lexical prefix denotes the schema's namespace. Once materialized on the
+		// instance, an xs:assert / IDC that atomizes the attribute resolves the
+		// prefix against the INSTANCE's in-scope namespaces — so ensure that prefix
+		// is bound to the declaration's URI on the element (rewriting to a fresh
+		// prefix if the instance already binds it to a different URI). Gated to 1.1
+		// so XSD 1.0 inserts the value exactly as authored (byte-identical
+		// serialization — no namespace-declaration rewrite).
+		if vc.version == Version11 {
+			declNS := au.FixedNS
+			if au.Default != nil {
+				declNS = au.DefaultNS
+			}
+			defVal = vc.materializeQNameAttrValue(ctx, elem, au, defVal, declNS)
+		}
 		// Insert the default/fixed value as an attribute on the element. A
 		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
 		// "qualified") must be inserted with its namespace so later consumers
@@ -1308,6 +1554,177 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		return fmt.Errorf("attribute validation failed")
 	}
 	return nil
+}
+
+// materializeQNameAttrValue prepares a default/fixed attribute value for insertion
+// so QName/NOTATION lexical values keep their SCHEMA-intended namespace once on the
+// instance. The value is authored with the declaration's prefix bindings (declNS);
+// an instance consumer (xs:assert, IDC) resolves prefixes against the element's
+// in-scope namespaces instead, so this binds each QName/NOTATION token's prefix to
+// the declaration URI on the element. If the instance already binds that prefix to
+// a DIFFERENT URI, the token is rewritten to a fresh, non-colliding prefix. The
+// type walk is value-dependent for unions and recursive through list item types.
+func (vc *validationContext) materializeQNameAttrValue(ctx context.Context, elem *helium.Element, au *AttrUse, value string, declNS map[string]string) string {
+	if declNS == nil {
+		return value
+	}
+	td, ok := vc.attrUseType(au)
+	if !ok {
+		return value
+	}
+	materialized, _ := vc.materializeQNameValue(ctx, elem, td, value, declNS)
+	return materialized
+}
+
+func (vc *validationContext) materializeQNameValue(ctx context.Context, elem *helium.Element, td *TypeDef, value string, declNS map[string]string) (string, bool) {
+	if td == nil || declNS == nil {
+		return value, false
+	}
+	return vc.materializeQNameValueVisit(ctx, elem, td, value, declNS, map[*TypeDef]struct{}{}, make(map[string]string))
+}
+
+func (vc *validationContext) materializeQNameValueVisit(ctx context.Context, elem *helium.Element, td *TypeDef, raw string, declNS map[string]string, seen map[*TypeDef]struct{}, rewrites map[string]string) (string, bool) {
+	if td == nil {
+		return raw, false
+	}
+	if _, ok := seen[td]; ok {
+		return raw, false
+	}
+	seen[td] = struct{}{}
+	defer delete(seen, td)
+
+	switch resolveVariety(td) {
+	case TypeVarietyUnion:
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		if activeTD == nil {
+			return raw, false
+		}
+		return vc.materializeQNameValueVisit(ctx, elem, activeTD, raw, declNS, seen, rewrites)
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return raw, false
+		}
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		tokens := value.XSDFields(collapsed)
+		if len(tokens) == 0 {
+			return raw, false
+		}
+		out := make([]string, len(tokens))
+		hasCarrier := false
+		rewrote := false
+		for i, token := range tokens {
+			next, carrier := vc.materializeQNameValueVisit(ctx, elem, itemType, token, declNS, seen, rewrites)
+			out[i] = next
+			if carrier {
+				hasCarrier = true
+			}
+			if next != token {
+				rewrote = true
+			}
+		}
+		if !hasCarrier {
+			return raw, false
+		}
+		if rewrote {
+			return strings.Join(out, " "), true
+		}
+		return raw, true
+	default:
+		switch builtinBaseLocal(td) {
+		case lexicon.TypeQName, lexicon.TypeNotation:
+			collapsed := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
+			if rewritten, ok := materializeQNameToken(elem, collapsed, declNS, rewrites); ok {
+				return rewritten, true
+			}
+			return raw, true
+		default:
+			return raw, false
+		}
+	}
+}
+
+func (vc *validationContext) valueHasQNameNotationCarrier(ctx context.Context, td *TypeDef, value string, declNS map[string]string) bool {
+	return vc.valueHasQNameNotationCarrierVisit(ctx, td, value, declNS, map[*TypeDef]struct{}{})
+}
+
+func (vc *validationContext) valueHasQNameNotationCarrierVisit(ctx context.Context, td *TypeDef, raw string, declNS map[string]string, seen map[*TypeDef]struct{}) bool {
+	if td == nil {
+		return false
+	}
+	if _, ok := seen[td]; ok {
+		return false
+	}
+	seen[td] = struct{}{}
+	defer delete(seen, td)
+
+	switch resolveVariety(td) {
+	case TypeVarietyUnion:
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		return vc.valueHasQNameNotationCarrierVisit(ctx, activeTD, collapsed, declNS, seen)
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return false
+		}
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		for _, token := range value.XSDFields(collapsed) {
+			if vc.valueHasQNameNotationCarrierVisit(ctx, itemType, token, declNS, seen) {
+				return true
+			}
+		}
+		return false
+	default:
+		switch builtinBaseLocal(td) {
+		case lexicon.TypeQName, lexicon.TypeNotation:
+			return true
+		default:
+			return false
+		}
+	}
+}
+
+func materializeQNameToken(elem *helium.Element, token string, declNS map[string]string, rewrites map[string]string) (string, bool) {
+	prefix, local, found := strings.Cut(token, ":")
+	if !found || prefix == "" {
+		return token, false // no prefix → no-namespace QName; nothing to bind
+	}
+	uri, ok := declNS[prefix]
+	if !ok || uri == "" {
+		return token, false // prefix not bound in the declaration; leave as authored
+	}
+	if elem == nil {
+		return token, false
+	}
+	inScope := collectNSContext(elem)
+	cur, bound := inScope[prefix]
+	if bound && cur == uri {
+		return token, false // already resolves to the intended URI
+	}
+	if !bound {
+		elem.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		return token, false
+	}
+	key := prefix + "\x00" + uri
+	if np, ok := rewrites[key]; ok {
+		return np + ":" + local, true
+	}
+	np := freshNSPrefix(inScope, prefix)
+	rewrites[key] = np
+	elem.AddNamespaceDecl(helium.NewNamespace(np, uri))
+	return np + ":" + local, true
+}
+
+// freshNSPrefix returns a prefix not present in inScope, derived from base.
+func freshNSPrefix(inScope map[string]string, base string) string {
+	for i := 0; ; i++ {
+		candidate := fmt.Sprintf("%s_gen%d", base, i)
+		if _, taken := inScope[candidate]; !taken {
+			return candidate
+		}
+	}
 }
 
 // validateWildcardAttr validates an attribute matched by a wildcard according
@@ -1348,7 +1765,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
-	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.version) {
+	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.schema, vc.version) {
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
 		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -1662,12 +2079,85 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
+// assertAnnotationName returns the PSVI annotation name recorded for a NODE in the
+// xs:assert evaluation tree. For an INLINE ANONYMOUS list/union simple type (whose
+// list-item / union-member metadata would be lost once xsdTypeName collapses it to a
+// named ancestor) it mints a stable synthetic name and registers the actual
+// *TypeDef so schemaDecls can recover the metadata; otherwise it is xsdTypeName. In
+// either case the anonymous list-item / union-member types reachable from a list/
+// union are registered too (assertRegisterAnonChildren) — INCLUDING anonymous ATOMIC
+// (faceted) members — so active-member selection validates the actual faceted member
+// rather than a collapsed builtin ancestor. Used ONLY for the assert annotations map;
+// the user-facing annotations map keeps xsdTypeName, byte-identical. A standalone
+// anonymous ATOMIC node type keeps xsdTypeName so node annotations are not broadly
+// changed.
+func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
+	if td == nil || vc.assertAnonNames == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.assertAnonNames[td]; ok {
+		return name
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList, TypeVarietyUnion:
+		// Register anonymous members/items (recursively) regardless of whether the
+		// list/union itself is named, so a NAMED union with inline anonymous members
+		// still resolves each member's facets.
+		vc.assertRegisterAnonChildren(td)
+		if td.Name.Local == "" && td.Name.NS == "" {
+			return vc.assertRegisterAnon(td)
+		}
+	}
+	return xsdTypeName(td)
+}
+
+// assertRegisterAnon registers an ANONYMOUS TypeDef of ANY variety (atomic
+// restriction, list, or union) under a stable synthetic annotation name and returns
+// it, recursing into its anonymous item/member types; a NAMED type is left unchanged
+// (returns xsdTypeName) but its anonymous descendants are still registered. This lets
+// an inline anonymous union member — even a plain faceted atomic restriction (e.g.
+// xs:int with maxInclusive) — round-trip to its actual *TypeDef so ValidateCastWithNS
+// validates its facets during active-member selection.
+func (vc *validationContext) assertRegisterAnon(td *TypeDef) string {
+	if td == nil || vc.assertAnonNames == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.assertAnonNames[td]; ok {
+		return name
+	}
+	name := xsdTypeName(td)
+	if td.Name.Local == "" && td.Name.NS == "" {
+		name = fmt.Sprintf("Q{%s}%d", assertAnonNS, len(vc.assertAnonTypes)+1)
+		vc.assertAnonTypes[name] = td
+		vc.assertAnonNames[td] = name
+	}
+	vc.assertRegisterAnonChildren(td)
+	return name
+}
+
+// assertRegisterAnonChildren registers the anonymous list-item / union-member
+// types reachable from td and its bases. A restriction wrapper can inherit its
+// effective list/union variety from an anonymous base type, so the child
+// metadata must be registered across the full base chain.
+func (vc *validationContext) assertRegisterAnonChildren(td *TypeDef) {
+	for cur := range baseChain(td) {
+		if cur.ItemType != nil {
+			vc.assertRegisterAnon(cur.ItemType)
+		}
+		for _, m := range cur.MemberTypes {
+			vc.assertRegisterAnon(m)
+		}
+	}
+}
+
 // annotateElement records a type annotation for an element node. assessed reports
 // whether the element was actually SCHEMA-ASSESSED (vs annotated purely for pass-2
 // IDC canonicalization, as for skip/lax-no-declaration content): only an assessed
 // element is recorded in assessedElemType, which the XSD 1.1 ID/IDREF pass
 // consults. actualElemType is always recorded (post-xsi:type) for pass-2 IDC field
-// canonicalization, independent of assessment.
+// canonicalization, independent of assessment. The assert annotations map (1.1)
+// is populated only for assessed elements so xs:assert/xs:assertion tests atomize
+// the PSVI-typed tree without typing processContents="skip" subtrees.
 func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef, assessed bool) {
 	if td != nil {
 		if vc.actualElemType != nil {
@@ -1676,6 +2166,9 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 		if assessed && vc.assessedElemType != nil {
 			vc.assessedElemType[elem] = td
 		}
+	}
+	if assessed && vc.assertAnnotations != nil {
+		vc.assertAnnotations[elem] = vc.assertAnnotationName(td)
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
@@ -1717,6 +2210,11 @@ func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attrib
 	// independent of the optional user-facing annotations map.
 	if vc.actualAttrType != nil {
 		vc.actualAttrType[a] = td
+	}
+	// Record the assert annotation (1.1) so an xs:assert/xs:assertion atomizes this
+	// attribute in its schema value space.
+	if vc.assertAnnotations != nil {
+		vc.assertAnnotations[a] = vc.assertAnnotationName(td)
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return

@@ -422,6 +422,9 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	if decl.Fixed != nil {
 		decl.FixedNS = collectNSContext(elem)
 	}
+	if decl.Default != nil {
+		decl.DefaultNS = collectNSContext(elem)
+	}
 
 	if hasAttr(elem, attrBlock) {
 		decl.Block = parseBlockFlags(getAttr(elem, attrBlock))
@@ -587,6 +590,9 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
 	if au.Fixed != nil {
 		au.FixedNS = collectNSContext(elem)
+	}
+	if au.Default != nil {
+		au.DefaultNS = collectNSContext(elem)
 	}
 	// Record source info so the default/fixed constraint value can be validated
 	// against the attribute's declared simple type once type refs are resolved.
@@ -799,6 +805,7 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		if hasAttr(elem, attrDefault) {
 			v := getAttr(elem, attrDefault)
 			au.Default = &v
+			au.DefaultNS = collectNSContext(elem)
 		}
 		if hasAttr(elem, attrFixed) {
 			v := getAttr(elem, attrFixed)

@@ -108,7 +108,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 		switch bt := b.Term.(type) {
 		case *ElementDecl:
 			// NameAndTypeOK
-			return elementRestrictsElement(ctx, r, rt, b, bt, version)
+			return elementRestrictsElement(ctx, r, rt, b, bt, schema, version)
 		case *Wildcard:
 			// NSCompat: element restricts wildcard — the element's name must be
 			// allowed by the wildcard and occurrence must be a valid restriction.
@@ -173,7 +173,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 // same expanded name, occurrence range subset, and the derived element's type is
 // derived from (or equal to) the base element's type. nillable/fixed tightening
 // is checked conservatively.
-func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, version Version) bool {
+func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, schema *Schema, version Version) bool {
 	if rt.Name.Local != bt.Name.Local || rt.Name.NS != bt.Name.NS {
 		return false
 	}
@@ -206,7 +206,7 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		// prefixes against their respective FixedNS bindings. The element
 		// declaration's simple type drives the comparison; when it is unresolved,
 		// fixedValueMatches falls back to lexical equality.
-		if !fixedValueMatches(ctx, *rt.Fixed, *bt.Fixed, rt.Type, rt.FixedNS, bt.FixedNS, version) {
+		if !fixedValueMatches(ctx, *rt.Fixed, *bt.Fixed, rt.Type, rt.FixedNS, bt.FixedNS, schema, version) {
 			return false
 		}
 	}

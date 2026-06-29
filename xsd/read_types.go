@@ -613,6 +613,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 
 func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element, td *TypeDef) {
 	td.ContentType = ContentTypeSimple
+	td.IsSimpleContent = true
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -704,7 +705,86 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			}
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ae)
+		case isXSDElement(ae, elemAssert) && c.version == Version11:
+			// XSD 1.1 xs:assert on a complexType with simpleContent. The assert is
+			// evaluated against the element after content validation, with $value
+			// bound to the element's typed simple value (see checkAssertions).
+			if a := c.parseAssert(ctx, ae); a != nil {
+				td.Assertions = append(td.Assertions, a)
+			}
 		}
+	}
+
+	// XSD 1.1: a simpleContent RESTRICTION narrows the base content type via a
+	// nested <xs:simpleType> OR direct facets. Capture the resulting effective
+	// content simple type so validateSimpleContent checks the text against the
+	// narrowed type (e.g. an enumeration or a restriction to xs:float) rather than
+	// only the base. Gated to 1.1 so XSD 1.0 content validation stays byte-identical.
+	if kind == DerivationRestriction && c.version == Version11 {
+		td.ContentSimpleType = c.parseSimpleContentRestrictionType(ctx, derivation, td)
+	}
+}
+
+// parseSimpleContentRestrictionType derives the effective content simple type of
+// a simpleContent <xs:restriction>. A nested <xs:simpleType> defines the base;
+// the restriction's DIRECT facet children (siblings of that simpleType) further
+// constrain it — both must compose. So:
+//   - inline simpleType only → that simpleType;
+//   - inline simpleType + direct facets → a restriction of the inline type
+//     carrying those sibling facets (so both sets apply);
+//   - direct facets only → a restriction of the base content type (BaseType =
+//     the owning complex type, whose base chain resolves to the builtin base);
+//   - neither → nil (the restriction inherits the base content type unchanged).
+func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, derivation *helium.Element, owner *TypeDef) *TypeDef {
+	var inline *TypeDef
+	for child := range helium.Children(derivation) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if isXSDElement(ce, elemSimpleType) {
+			st, err := c.parseSimpleType(ctx, ce)
+			if err == nil {
+				inline = st
+			}
+			break
+		}
+	}
+	// Direct facet children (xs:enumeration, xs:length, …) of the restriction.
+	// parseFacets ignores the nested <xs:simpleType> (not a facet element), so
+	// these are exactly the sibling facets.
+	fs := c.parseFacets(ctx, derivation)
+
+	switch {
+	case inline != nil && fs == nil:
+		return inline
+	case inline != nil:
+		// Compose: restrict the inline type with the sibling facets.
+		syn := &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			BaseType:    inline,
+			Facets:      fs,
+		}
+		// Record the synthetic type so checkFacetConsistency runs its facet
+		// applicability / value-against-base checks (an inapplicable sibling facet,
+		// e.g. xs:minInclusive on an xs:string base, must be rejected at compile).
+		c.recordTypeDefSource(syn, derivation.Line(), true, elemSimpleType)
+		return syn
+	case fs != nil:
+		syn := &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			BaseType:    owner,
+			Facets:      fs,
+		}
+		c.recordTypeDefSource(syn, derivation.Line(), true, elemSimpleType)
+		return syn
+	default:
+		return nil
 	}
 }
 
@@ -925,6 +1005,18 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 					fmt.Sprintf("The value '%s' is not a valid regular expression: %s.", val, rerr)))
 			}
 			fs.compiledPatterns = append(fs.compiledPatterns, re)
+		case "assertion":
+			// XSD 1.1 <xs:assertion> simple-type facet. Evaluated at simple-value
+			// validation time with $value bound to the typed atomic value.
+			if c.version != Version11 {
+				continue
+			}
+			if a := c.parseAssertion(ctx, ce, elemAssertion); a != nil {
+				if fs == nil {
+					fs = &FacetSet{}
+				}
+				fs.Assertions = append(fs.Assertions, a)
+			}
 		}
 	}
 

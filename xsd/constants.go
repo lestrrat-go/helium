@@ -84,9 +84,9 @@ const (
 	attrXPath                = "xpath"
 	// attrXPathDefaultNamespace and attrXPathDefaultNS are two names for the SAME
 	// XSD 1.1 xpathDefaultNamespace attribute (on xs:schema, xs:alternative,
-	// xs:assert, xs:selector, xs:field) supplying the default element namespace for
-	// an XPath expression's unprefixed names. CTA code uses the first, IDC code the
-	// second; both are kept to avoid churning every reference site.
+	// xs:assert, xs:assertion, xs:selector, xs:field) supplying the default element
+	// namespace for an XPath expression's unprefixed names. CTA code uses the first,
+	// IDC code the second; both are kept to avoid churning every reference site.
 	attrXPathDefaultNamespace = "xpathDefaultNamespace"
 	attrXPathDefaultNS        = "xpathDefaultNamespace"
 )

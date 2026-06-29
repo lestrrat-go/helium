@@ -151,11 +151,15 @@ type ElementDecl struct {
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document. It is used to resolve
 	// a QName/NOTATION fixed value's prefix when comparing in value space.
-	FixedNS  map[string]string
-	Block    BlockFlags
-	BlockSet bool // true if block was explicitly set (even to empty)
-	Final    FinalFlags
-	FinalSet bool // true if final was explicitly set (even to empty)
+	FixedNS map[string]string
+	// DefaultNS mirrors FixedNS for the Default value: a QName/NOTATION default
+	// substituted into an empty element resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's.
+	DefaultNS map[string]string
+	Block     BlockFlags
+	BlockSet  bool // true if block was explicitly set (even to empty)
+	Final     FinalFlags
+	FinalSet  bool // true if final was explicitly set (even to empty)
 	// Alternatives is the XSD 1.1 conditional-type-assignment {type table}: the
 	// ordered xs:alternative children. At validation (when no xsi:type is present)
 	// the governing type is the one selected by the first alternative whose @test
@@ -281,6 +285,22 @@ type TypeDef struct {
 	FinalSet     bool         // true if final was explicitly set (even to empty)
 	Assertions   []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
 	OpenContent  *OpenContent // XSD 1.1 xs:openContent (nil = none)
+	// ContentSimpleType is the effective simple type that constrains the text
+	// content of a complexType with simpleContent derived by RESTRICTION (XSD 1.1):
+	// either the nested <xs:simpleType> or a synthesized restriction of the base
+	// content type carrying the restriction's direct facets. nil means the content
+	// is validated against this type's own base chain (extensions, and restrictions
+	// with no content-narrowing facets). Used by validateSimpleContent so a
+	// restricted simpleContent value is actually checked against its narrowed type.
+	ContentSimpleType *TypeDef
+	// IsSimpleContent marks a COMPLEX type whose content is simple content (an
+	// <xs:simpleContent> extension/restriction), distinguishing it from a plain
+	// <xs:simpleType> (both carry ContentType == ContentTypeSimple). The effective
+	// content-type walk (effectiveContentSimpleType) recurses through simpleContent
+	// complex types and stops at the underlying simpleType/builtin, so a base
+	// type's facets/assertions are not skipped and a narrowed content type is
+	// inherited through derived simpleContent types.
+	IsSimpleContent bool
 }
 
 // OpenContentMode is the XSD 1.1 xs:openContent mode.
@@ -337,6 +357,12 @@ type FacetSet struct {
 	// pattern failed to compile and is skipped during validation.
 	compiledPatterns []*xsdregex.Regexp
 	WhiteSpace       *string
+	// Assertions holds the XSD 1.1 <xs:assertion> facets from a single
+	// simpleType restriction step. Each is evaluated against the value being
+	// validated with $value bound to its typed atomic value (a sequence for a
+	// list type). Assertions from different derivation steps are all enforced
+	// (ANDed), handled by validateValue walking the base-type chain.
+	Assertions []*Assertion
 }
 
 // AttrUse represents an attribute use in a complex type definition.
@@ -360,6 +386,10 @@ type AttrUse struct {
 	// the Fixed value was declared in the schema document, used to resolve a
 	// QName/NOTATION fixed value's prefix when comparing in value space.
 	FixedNS map[string]string
+	// DefaultNS mirrors FixedNS for the Default value: a QName/NOTATION default
+	// materialized onto an absent attribute resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's.
+	DefaultNS map[string]string
 }
 
 // ModelGroup is a content model compositor (sequence, choice, all).

@@ -346,12 +346,13 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
-	// schemaXPathDefaultNS is likewise PER document (used by resolveXPathDefaultNS
-	// for the included schema's identity-constraint selector/field XPaths): an
-	// included root's @xpathDefaultNamespace must govern its own IDCs, not inherit
-	// the including schema's. Reset to spec-default (none) plus this document's
-	// value, RESOLVED against the included root now (so an inherited
-	// ##defaultNamespace uses the included root's default namespace).
+	// schemaXPathDefaultNS is PER document (used by the SHARED resolveXPathDefaultNS
+	// for the included schema's identity-constraint selector/field XPaths AND its
+	// xs:assert/xs:assertion XPaths): an included root's @xpathDefaultNamespace must
+	// govern its own IDCs/asserts, not inherit the including schema's. Reset to
+	// spec-default (none) plus this document's value, RESOLVED against the included
+	// root now (so an inherited ##defaultNamespace uses the included root's default
+	// namespace).
 	c.schemaXPathDefaultNS = ""
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)
@@ -585,10 +586,11 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
 	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
 	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
-	// schemaXPathDefaultNS (IDC) is PER document, like the form/block/final defaults
-	// (see loadInclude): the redefined root's @xpathDefaultNamespace governs its
-	// own identity-constraint XPaths during Phase A, RESOLVED against the redefined
-	// root now (so an inherited ##defaultNamespace uses that root's default ns).
+	// schemaXPathDefaultNS is PER document, like the form/block/final defaults (see
+	// loadInclude): the redefined root's @xpathDefaultNamespace governs its own
+	// identity-constraint AND xs:assert/xs:assertion XPaths during Phase A, RESOLVED
+	// against the redefined root now (so an inherited ##defaultNamespace uses that
+	// root's default ns).
 	c.schemaXPathDefaultNS = ""
 	if c.version == Version11 {
 		c.schemaXPathDefaultNS = resolveXPathDefaultNSToken(incRoot, getAttr(incRoot, attrXPathDefaultNS), c.schema.targetNamespace)

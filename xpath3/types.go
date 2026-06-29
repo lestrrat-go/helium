@@ -13,6 +13,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -105,10 +106,14 @@ func deepCloneItem(item Item) Item {
 		}
 		return item
 	case NodeItem:
-		if v.UnionMemberTypes == nil {
+		if v.UnionMemberTypes == nil && v.ListItemLeaves == nil {
 			return item
 		}
 		v.UnionMemberTypes = append([]string(nil), v.UnionMemberTypes...)
+		v.ListItemLeaves = append([]*NodeItemUnionMember(nil), v.ListItemLeaves...)
+		// ActiveUnionMember / ListItemLeaves entries point at immutable
+		// NodeItemUnionMember values (never mutated after construction), so the
+		// pointers are safely shared across clones.
 		return v
 	case FunctionItem:
 		if v.ParamTypes == nil && v.ReturnType == nil {
@@ -230,7 +235,46 @@ type NodeItem struct {
 	TypeAnnotation   string   // optional xs:... type annotation (schema-aware)
 	AtomizedType     string   // optional built-in base type used for typed atomization
 	ListItemType     string   // non-empty when the type is a list; the item type name
+	ListItemAtomized string   // built-in base of the list item type (e.g. xs:QName for a QName-derived item)
 	UnionMemberTypes []string // member type names for union types (for atomization)
+	// ListItemLeaves is non-nil when the list ITEM type is a UNION: one entry per
+	// whitespace token of the node value (aligned with xsdListFields), the
+	// value-dependent ACTIVE leaf member for THAT token, precomputed in nodeItemFor.
+	// So a list of a union atomizes each token through its own active member, matching
+	// $value, instead of one static ListItemAtomized base. A nil entry means the token
+	// resolved no member (the atomizer falls back to the static path).
+	ListItemLeaves []*NodeItemUnionMember
+	// ActiveUnionMember is the value-dependent ACTIVE LEAF member of a union-typed
+	// node, precomputed in nodeItemFor via full schema-aware validation (nil when the
+	// node is not a union or no member resolved). It is the resolved LEAF — when the
+	// first validating member is itself a union, resolution descends into it (mirror
+	// of fixedUnionActiveMember) so a nested union reaches its atomic/list leaf. This
+	// agrees with the $value path's active-member selection.
+	ActiveUnionMember *NodeItemUnionMember
+	// QNameNoDefaultNS, when true, atomizes an UNPREFIXED QName/NOTATION value to
+	// NO namespace instead of resolving the node's in-scope default namespace —
+	// XSD value-space semantics (a QName VALUE, unlike a name, does not pick up the
+	// default namespace). Set from the evaluator's QNameValueNoDefaultNamespace
+	// option (used by xsd assertions); off by default so general XPath/XQuery and
+	// XSLT atomization keep the default-namespace behavior.
+	QNameNoDefaultNS bool
+}
+
+// NodeItemUnionMember carries per-member atomization metadata for a union-typed
+// node, precomputed from SchemaDeclarations so value-dependent active-member
+// resolution during atomization needs no schema access.
+type NodeItemUnionMember struct {
+	TypeName     string // member type annotation name
+	Atomized     string // built-in base of an atomic member (for typing)
+	ListItem     string // non-empty if the member is a list: its item type name
+	ListItemAtom string // built-in base of the list item (e.g. xs:QName)
+	// ListItemLeaves is non-nil when this member is a LIST whose item type is itself a
+	// UNION: one entry per whitespace token of the union value (aligned with
+	// xsdListFields), the value-dependent ACTIVE leaf member for THAT token, precomputed
+	// in resolveActiveUnionLeafRec. So a union whose active member is a list-of-union
+	// atomizes each token through its own active member (matching $value), not the static
+	// ListItemAtom base. A nil entry means the token resolved no member.
+	ListItemLeaves []*NodeItemUnionMember
 }
 
 func (NodeItem) itemTag() {}
@@ -1343,7 +1387,7 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 
 // resolveQNameFromNode resolves a QName string (e.g., "my:brown-bear") using
 // the in-scope namespaces of the given node.
-func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
+func resolveQNameFromNode(s string, node helium.Node, noDefaultNS bool) (QNameValue, error) {
 	// The split kernel trims and splits at the first colon; this site does not
 	// NCName-validate, so the validNC result is ignored.
 	prefix, local, _, _ := domutil.SplitLexicalQName(s)
@@ -1352,7 +1396,12 @@ func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
 	if _, ok := scope.(*helium.Element); !ok {
 		scope = node.Parent()
 	}
-	if prefix != "" {
+	if prefix == "xml" {
+		// The "xml" prefix is predeclared (XML Namespaces) and need not be bound on
+		// any node — matches xsd.resolveLexicalQName, so e.g. xml:lang atomizes as a
+		// valid xs:QName in an assertion instead of failing with an undeclared prefix.
+		uri = lexicon.NamespaceXML
+	} else if prefix != "" {
 		// prefix is non-empty here so an empty-URI binding cannot occur and the
 		// first-match-wins helper matches the original skip-empty walk exactly.
 		var found bool
@@ -1360,7 +1409,7 @@ func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
 		if !found {
 			return QNameValue{}, fmt.Errorf("undeclared namespace prefix: %s", prefix)
 		}
-	} else {
+	} else if !noDefaultNS {
 		// Default-namespace resolution keeps the skip-empty walk inline: an
 		// ancestor xmlns="" must not stop the search for an outer default.
 		for p := scope; p != nil; p = p.Parent() {
@@ -1448,7 +1497,7 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 			// QName-like types need namespace resolution from the node's scope.
 			if v.TypeAnnotation == TypeQName || v.TypeAnnotation == TypeNOTATION ||
 				v.AtomizedType == TypeQName || v.AtomizedType == TypeNOTATION {
-				if qv, err := resolveQNameFromNode(s, v.Node); err == nil {
+				if qv, err := resolveQNameFromNode(s, v.Node, v.QNameNoDefaultNS); err == nil {
 					typeName := v.TypeAnnotation
 					if typeName == "" {
 						typeName = v.AtomizedType

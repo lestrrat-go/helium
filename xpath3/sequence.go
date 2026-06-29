@@ -159,21 +159,31 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				for tok := range strings.FieldsSeq(s) {
-					cast, err := CastFromString(tok, listItem)
+				for i, tok := range xsdListFields(s) {
+					cast, err := atomizeListTokenAt(i, tok, listItem, ni)
 					if err != nil {
-						// For user-defined schema types (Q{ns}local),
-						// the value was already validated during
-						// construction; store as string with the type name.
-						if strings.HasPrefix(listItem, "Q{") {
-							cast = AtomicValue{TypeName: listItem, Value: tok}
-						} else {
-							return false, err
-						}
+						return false, err
 					}
 					cont, err := yield(cast)
 					if err != nil {
 						return false, err
+					}
+					if !cont {
+						return false, nil
+					}
+				}
+				continue
+			}
+		}
+		// Union types whose ACTIVE member is a list: resolve the active member
+		// value-dependently and expand it to multiple atoms. An atomic active member
+		// (or no matching member) falls through to AtomizeItem for the single value.
+		if ni, ok := item.(NodeItem); ok && ni.ActiveUnionMember != nil {
+			if atoms, handled := atomizeUnionItems(ni); handled {
+				for _, av := range atoms {
+					cont, yerr := yield(av)
+					if yerr != nil {
+						return false, yerr
 					}
 					if !cont {
 						return false, nil
@@ -195,6 +205,162 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 		}
 	}
 	return true, nil
+}
+
+// atomizeListToken converts one XSD-whitespace-separated list token to an atomic
+// value of the list's item type. A QName/NOTATION item type is resolved against
+// the node's in-scope namespaces (CastFromString cannot resolve a prefix), so a
+// list whose item type is xs:QName/xs:NOTATION — or a user type derived from
+// either (whose built-in base is carried in ni.ListItemAtomized) — atomizes
+// correctly in a schema-aware context, preserving the user/list-item type name.
+// A non-QName USER-defined item type (a Q{...} name CastFromString cannot resolve)
+// is cast through its built-in base (ni.ListItemAtomized) and typed as the user
+// type with that built-in BaseType, so e.g. a list item type derived from xs:int
+// atomizes to a numeric value usable by sum()/numeric comparison (matching $value).
+func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
+	if listItem == TypeQName || listItem == TypeNOTATION ||
+		ni.ListItemAtomized == TypeQName || ni.ListItemAtomized == TypeNOTATION {
+		qv, err := resolveQNameFromNode(tok, ni.Node, ni.QNameNoDefaultNS)
+		if err != nil {
+			return AtomicValue{}, &XPathError{
+				Code:    errCodeFORG0001,
+				Message: fmt.Sprintf("invalid QName list item %q: %v", tok, err),
+			}
+		}
+		av := AtomicValue{TypeName: listItem, Value: qv}
+		if !IsKnownXSDType(listItem) {
+			base := ni.ListItemAtomized
+			if base == "" {
+				base = TypeQName
+			}
+			av.BaseType = base
+		}
+		return av, nil
+	}
+	cast, err := CastFromString(tok, listItem)
+	if err == nil {
+		return cast, nil
+	}
+	// User-defined item type (Q{ns}local): CastFromString does not know it, so cast
+	// through its built-in base and carry the user type name with that base.
+	if ni.ListItemAtomized != "" && ni.ListItemAtomized != listItem {
+		base, berr := CastFromString(tok, ni.ListItemAtomized)
+		if berr == nil {
+			base.BaseType = base.TypeName
+			base.TypeName = listItem
+			return base, nil
+		}
+	}
+	// Last resort: the value was already validated at construction; store it
+	// verbatim under the user type name so atomization does not fail.
+	if strings.HasPrefix(listItem, "Q{") {
+		return AtomicValue{TypeName: listItem, Value: tok}, nil
+	}
+	return AtomicValue{}, err
+}
+
+// atomizeListTokenAt atomizes the i-th list token. When the list ITEM type is a
+// UNION (ni.ListItemLeaves populated), it atomizes through that token's precomputed
+// ACTIVE union member (resolved value-dependently in nodeItemFor), so a list of a
+// union agrees with $value per token; otherwise it falls back to the static
+// atomizeListToken on the declared item type.
+func atomizeListTokenAt(i int, tok, listItem string, ni NodeItem) (AtomicValue, error) {
+	if i < len(ni.ListItemLeaves) {
+		if leaf := ni.ListItemLeaves[i]; leaf != nil {
+			lni := NodeItem{Node: ni.Node, ListItemAtomized: leaf.Atomized, QNameNoDefaultNS: ni.QNameNoDefaultNS}
+			return atomizeListToken(tok, leaf.TypeName, lni)
+		}
+	}
+	return atomizeListToken(tok, listItem, ni)
+}
+
+// xsdListFields splits an xs:list value into items on runs of XSD whitespace ONLY
+// (space, tab, CR, LF), matching XSD list tokenization and the validation / $value
+// paths (internal/xsd/value.XSDFields). Unlike strings.Fields it does NOT split on
+// NBSP or other Unicode whitespace, so a list item containing NBSP stays a single
+// token (and is then rejected by per-item lexical validation) rather than being
+// silently split into two atoms.
+func xsdListFields(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\r' || r == '\n'
+	})
+}
+
+// atomizeUnionItems atomizes a union-typed node through its precomputed ACTIVE
+// member (ni.ActiveUnionMember, resolved by full schema-aware validation in
+// nodeItemFor): a LIST active member yields its per-item atoms, an ATOMIC active
+// member yields a single atom TYPED AS THE ACTIVE MEMBER (so data(@u) instance of
+// the member type holds). handled is false only when no member resolved (the caller
+// falls back to AtomizeItem). A QName/NOTATION value is resolved against the node's
+// in-scope namespaces.
+func atomizeUnionItems(ni NodeItem) ([]AtomicValue, bool) {
+	if ni.ActiveUnionMember == nil {
+		return nil, false
+	}
+	m := *ni.ActiveUnionMember
+	s := ixpath.StringValue(ni.Node)
+	if m.ListItem != "" {
+		tokens := xsdListFields(s)
+		// When the active member's list item type is a UNION, m.ListItemLeaves carries
+		// the per-token active leaves (resolved value-dependently in nodeItemFor), so each
+		// token atomizes through its own active member — agreeing with $value — instead of
+		// the single static m.ListItemAtom base; atomizeListTokenAt falls back to the
+		// static path for a nil/absent leaf.
+		lni := NodeItem{Node: ni.Node, ListItemAtomized: m.ListItemAtom, ListItemLeaves: m.ListItemLeaves, QNameNoDefaultNS: ni.QNameNoDefaultNS}
+		atoms := make([]AtomicValue, 0, len(tokens))
+		for i, tok := range tokens {
+			av, err := atomizeListTokenAt(i, tok, m.ListItem, lni)
+			if err != nil {
+				return nil, false
+			}
+			atoms = append(atoms, av)
+		}
+		return atoms, true
+	}
+	av, err := atomizeUnionAtomicMember(s, m, ni)
+	if err != nil {
+		return nil, false
+	}
+	return []AtomicValue{av}, true
+}
+
+// atomizeUnionAtomicMember atomizes a union value through an ATOMIC active member,
+// typing the result as that member (preserving a user type's annotation over its
+// built-in base) so instance-of against the member type holds. A QName/NOTATION
+// member resolves the value against the node's in-scope namespaces.
+func atomizeUnionAtomicMember(s string, m NodeItemUnionMember, ni NodeItem) (AtomicValue, error) {
+	if m.Atomized == TypeQName || m.Atomized == TypeNOTATION ||
+		m.TypeName == TypeQName || m.TypeName == TypeNOTATION {
+		qv, err := resolveQNameFromNode(s, ni.Node, ni.QNameNoDefaultNS)
+		if err != nil {
+			return AtomicValue{}, err
+		}
+		av := AtomicValue{TypeName: m.TypeName, Value: qv}
+		if !IsKnownXSDType(m.TypeName) {
+			base := m.Atomized
+			if base == "" {
+				base = TypeQName
+			}
+			av.BaseType = base
+		}
+		return av, nil
+	}
+	t := m.Atomized
+	if t == "" {
+		t = m.TypeName
+	}
+	cast, err := CastFromString(s, t)
+	if err != nil {
+		if strings.HasPrefix(m.TypeName, "Q{") {
+			return AtomicValue{TypeName: m.TypeName, Value: s}, nil
+		}
+		return AtomicValue{}, err
+	}
+	if !IsKnownXSDType(m.TypeName) {
+		cast.BaseType = cast.TypeName
+		cast.TypeName = m.TypeName
+	}
+	return cast, nil
 }
 
 // builtinListItemType returns the item type for built-in XSD list types.

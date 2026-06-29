@@ -21,10 +21,10 @@ type compiler struct {
 	// schemaXPathDefaultNS is the root xs:schema @xpathDefaultNamespace (XSD 1.1)
 	// ALREADY RESOLVED to a default element-namespace URI against the schema
 	// root's context (so ##defaultNamespace uses the ROOT's default namespace,
-	// not a selector/field that may redeclare it). It is inherited verbatim by
-	// every identity-constraint selector/field that does not set its own. Empty
-	// means no default (unprefixed element = no-namespace). It is re-set per
-	// document for xs:include/xs:redefine/xs:import.
+	// not a selector/field that may redeclare it). It is inherited by every
+	// identity-constraint selector/field AND every xs:assert/xs:assertion that does
+	// not set its own. Empty means no default (unprefixed element = no-namespace).
+	// It is re-set per document for xs:include/xs:redefine/xs:import.
 	schemaXPathDefaultNS string
 	baseDir              string         // directory of the schema file, for resolving relative paths
 	fsys                 fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets

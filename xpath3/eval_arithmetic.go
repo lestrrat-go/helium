@@ -19,23 +19,26 @@ func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(left) == 0 || seqLen(right) == 0 {
+	// Atomize THROUGH the stream (atomizeSingletonOperand) so a schema-typed node
+	// whose typed value is a list/union expands; the single-operand cardinality is
+	// then checked on the ATOMIZED result (a node atomizing to >1 value is an
+	// XPTY0004), not the raw item count.
+	lAtoms, err := atomizeSingletonOperand(left)
+	if err != nil {
+		return nil, err
+	}
+	rAtoms, err := atomizeSingletonOperand(right)
+	if err != nil {
+		return nil, err
+	}
+	if len(lAtoms) == 0 || len(rAtoms) == 0 {
 		return validNilSequence, nil // empty sequence
 	}
-	if left.Len() > 1 {
+	if len(lAtoms) > 1 || len(rAtoms) > 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
-	if right.Len() > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "arithmetic operand must be a single item"}
-	}
-	la, err := AtomizeItem(left.Get(0))
-	if err != nil {
-		return nil, err
-	}
-	ra, err := AtomizeItem(right.Get(0))
-	if err != nil {
-		return nil, err
-	}
+	la := lAtoms[0]
+	ra := rAtoms[0]
 
 	// Duration/date/time arithmetic — handle before numeric promotion.
 	// Contract: evalDateTimeArithmetic returns handled==false only when both
@@ -335,16 +338,19 @@ func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(r) == 0 {
-		return validNilSequence, nil
-	}
-	if r.Len() > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "unary minus operand must be a single item"}
-	}
-	a, err := AtomizeItem(r.Get(0))
+	// Atomize through the stream so a schema-typed list/union node expands; the
+	// single-operand cardinality is checked on the atomized result.
+	rAtoms, err := atomizeSingletonOperand(r)
 	if err != nil {
 		return nil, err
 	}
+	if len(rAtoms) == 0 {
+		return validNilSequence, nil
+	}
+	if len(rAtoms) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "unary minus operand must be a single item"}
+	}
+	a := rAtoms[0]
 	// Promote xs:untypedAtomic to xs:double per XPath 3.1 spec
 	if a.TypeName == TypeUntypedAtomic {
 		castVal, err := CastAtomic(a, TypeDouble)
