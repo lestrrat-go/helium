@@ -388,3 +388,67 @@ func TestOverride_ImportWarningInTarget(t *testing.T) {
 	require.Contains(t, b.String(), "Failed to locate a schema at location 'nope.xsd'",
 		"import failure inside an overridden target must emit the same warning as processIncludes")
 }
+
+// TestOverride_DistinctActiveSetsNotDeduped is the round-3 FINDING-1 regression:
+// the SAME leaf document reached by two DIFFERENT override branches with DIFFERENT
+// active override sets must be loaded as DISTINCT transformed documents (keyed by
+// path+active-set, not path alone). Here main overrides a.xsd (which overrides
+// leaf with y→int) and b.xsd (which overrides leaf with z→int). With path-only
+// visitation the second leaf load was silently skipped, so z stayed xs:string and
+// `<z>abc</z>` wrongly validated. Loading leaf twice now surfaces the real
+// duplicate-component collision (two transformed copies of leaf's doc/y/z), so the
+// schema is rejected — NOT silently accepted with a dropped replacement.
+func TestOverride_DistinctActiveSetsNotDeduped(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="a.xsd"/>
+  <xs:override schemaLocation="b.xsd"/>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="leaf.xsd"><xs:element name="y" type="xs:int"/></xs:override>
+</xs:schema>`)},
+		"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="leaf.xsd"><xs:element name="z" type="xs:int"/></xs:override>
+</xs:schema>`)},
+		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:element name="y" type="xs:string"/>
+  <xs:element name="z" type="xs:string"/>
+  <xs:element name="doc"><xs:complexType><xs:sequence><xs:element ref="y"/><xs:element ref="z"/></xs:sequence></xs:complexType></xs:element>
+</xs:schema>`)},
+	}
+	_, err := compileOverride(t, fsys)
+	require.Error(t, err,
+		"the same leaf transformed by two distinct override sets must not be silently deduped")
+}
+
+// TestOverride_SameActiveSetDiamondDeduped guards the other side of the FINDING-1
+// fix: a legitimate DIAMOND that reaches one leaf twice with the SAME active
+// override set must still terminate (dedup) without a spurious duplicate. main
+// overrides a.xsd ({doc→date}); a.xsd includes b.xsd and c.xsd, both of which
+// include leaf.xsd — so leaf is reached twice under the SAME cascaded set.
+func TestOverride_SameActiveSetDiamondDeduped(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	fsys := fstest.MapFS{
+		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="a.xsd"><xs:element name="doc" type="xs:date"/></xs:override>
+</xs:schema>`)},
+		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:include schemaLocation="b.xsd"/>
+  <xs:include schemaLocation="c.xsd"/>
+</xs:schema>`)},
+		"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:include schemaLocation="leaf.xsd"/>
+</xs:schema>`)},
+		"c.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:include schemaLocation="leaf.xsd"/>
+</xs:schema>`)},
+		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:element name="doc" type="xs:string"/>
+</xs:schema>`)},
+	}
+	schema, err := compileOverride(t, fsys)
+	require.NoError(t, err, "a same-active-set diamond must dedup, not produce a spurious duplicate")
+	require.NoError(t, overrideValidate(t, schema, `<doc>2010-01-01</doc>`),
+		"doc must be the overridden xs:date type")
+}

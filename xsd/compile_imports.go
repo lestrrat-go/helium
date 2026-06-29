@@ -302,8 +302,8 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// include+override conflict (symmetric to overrideLoadTarget): the document was
 	// already transformed by an xs:override, so pulling in its untransformed
 	// originals via xs:include would collide. Report the fatal conflict instead of
-	// silently skipping (the override-load already added it to includeVisited).
-	if _, overridden := c.overrideVisited[path]; overridden {
+	// silently skipping.
+	if _, overridden := c.overridePaths[path]; overridden {
 		c.reportOverrideIncludeConflict(ctx, includeElem, location, elemInclude)
 		return nil
 	}
@@ -515,7 +515,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 
 	// include+override conflict (symmetric to overrideLoadTarget): a document
 	// already transformed by an xs:override cannot also be redefined.
-	if _, overridden := c.overrideVisited[path]; overridden {
+	if _, overridden := c.overridePaths[path]; overridden {
 		c.reportOverrideIncludeConflict(ctx, redefineElem, location, elemRedefine)
 		return nil
 	}

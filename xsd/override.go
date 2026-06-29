@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sort"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -158,10 +160,37 @@ func activeFromEntries(inherited map[overrideKey]*helium.Element, entries []over
 	return out
 }
 
+// overrideActiveFingerprint builds a deterministic key for the active override
+// set: the sorted (symbol space, namespace, local name, replacement-element
+// identity) of every entry. Element identity (`%p`) is included so two active
+// sets sharing the same names but DIFFERENT replacement definitions are
+// distinguished — otherwise two distinct overrides of one document with different
+// child definitions would wrongly dedup. Stable within a single compilation,
+// which is all the visitation key needs.
+func overrideActiveFingerprint(active map[overrideKey]*helium.Element) string {
+	if len(active) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(active))
+	for k, e := range active {
+		parts = append(parts, fmt.Sprintf("%d|%s|%s|%p", k.sym, k.qn.NS, k.qn.Local, e))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ";")
+}
+
 // registerMatchedChildren registers each entry whose key actually matched a
-// component in the closure (the rest are dropped, so a dangling reference to an
-// unmatched child is a schema error — W3C over003/over007/over026). It is called
-// while the document that DECLARES these children is the active compiler context.
+// component in the closure; an UNMATCHED override child is DROPPED, never added as
+// a new component. This is DELIBERATE and conformance-verified, NOT the literal
+// §4.2.5 reading (which appears to add all override children unconditionally): W3C
+// test over026 declares an override child `zonedDate` that matches nothing AND a
+// sibling `para` that references it, and expects the schema to be INVALID precisely
+// because the unmatched `zonedDate` is "ignored", making the reference dangling.
+// over003/over007 annotate their unmatched children as "ignored" too. Registering
+// unmatched children instead makes over026 (and only over026) FAIL — verified
+// empirically — so do NOT "fix" this to register them. A dangling reference to a
+// dropped child is therefore a schema error, as intended. Called while the
+// document that DECLARES these children is the active compiler context.
 func (c *compiler) registerMatchedChildren(ctx context.Context, entries []overrideChildEntry, matched map[overrideKey]struct{}) error {
 	for _, e := range entries {
 		if _, ok := matched[e.key]; !ok {
@@ -252,37 +281,44 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
-	// Override-cycle / diamond termination: a document already pulled in by THIS
-	// override transformation, or the overriding root itself reached by a back-edge,
-	// is not re-loaded — its (transformed) components were already contributed and
-	// the cascade terminates here (W3C over023/024). The root is matched by rootKey
-	// rather than its includeVisited seed so it is never re-loaded/re-registered.
-	if _, seen := c.overrideVisited[path]; seen {
-		return matched, nil
-	}
+	// Back-edge to the overriding ROOT: terminate WITHOUT re-loading/re-registering
+	// it (the root's own components are owned by the top-level compile). Checked
+	// before everything else so a circular override pointing at the root (over023)
+	// never re-parses it.
 	if path == c.rootKey {
 		return matched, nil
 	}
 
 	// include+override conflict: the target was already pulled in by a PLAIN
-	// xs:include/xs:redefine (it is in includeVisited but was NOT override-loaded
-	// and is not the seeded root). The override transform produces a DISTINCT
-	// constituent whose components would collide with the plain-included originals
-	// (§4.2.5/§F; duplicate top-level components). This is a fatal schema error —
-	// not a silent no-op — so report it and stop the override.
+	// xs:include/xs:redefine. The override transform produces a DISTINCT constituent
+	// whose components would collide with the plain-included originals (§4.2.5/§F;
+	// duplicate top-level components). This is a fatal schema error — not a silent
+	// no-op — so report it and stop the override.
 	if _, included := c.includeVisited[path]; included {
 		c.reportOverrideIncludeConflict(ctx, srcElem, location, elemOverride)
 		return matched, nil
 	}
 
+	// Override-cycle / diamond termination is keyed by (path, active-override-set):
+	// the SAME document reached with the SAME active set is a true cycle/diamond and
+	// terminates here, but the same document reached with a DIFFERENT active set is a
+	// DISTINCT transformed document and must be loaded again — keying by path alone
+	// would OVER-terminate and silently drop a sibling override's replacements (a
+	// genuine collision then surfaces via the duplicate-component check, as it
+	// should). The path-level overridePaths set still records the load for the
+	// symmetric include+override conflict check in loadInclude/loadRedefine.
+	vkey := path + "\x00" + overrideActiveFingerprint(active)
+	if _, seen := c.overrideVisited[vkey]; seen {
+		return matched, nil
+	}
 	if c.overrideVisited == nil {
 		c.overrideVisited = make(map[string]struct{})
 	}
-	c.overrideVisited[path] = struct{}{}
-	// Also mark it include-visited so a LATER plain xs:include/xs:redefine of the
-	// same document is recognized as the (include↔override) conflict by
-	// loadInclude/loadRedefine rather than silently re-registering originals.
-	c.includeVisited[path] = struct{}{}
+	if c.overridePaths == nil {
+		c.overridePaths = make(map[string]struct{})
+	}
+	c.overrideVisited[vkey] = struct{}{}
+	c.overridePaths[path] = struct{}{}
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {

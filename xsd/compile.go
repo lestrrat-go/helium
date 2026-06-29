@@ -175,13 +175,22 @@ type compiler struct {
 	// distinguishes the seeded-root entry in includeVisited from a genuine plain
 	// xs:include of a document (see override.go).
 	rootKey string
-	// overrideVisited records the resolved fs keys of schema documents pulled in by
-	// the xs:override TRANSFORMATION (override.go), tracked SEPARATELY from
-	// includeVisited (plain xs:include/xs:redefine). The separation lets the
-	// override loader (a) terminate a genuine override cycle/diamond, while (b) NOT
-	// treating a prior plain include/redefine of the same document as satisfying an
-	// override — include+override of one document is a fatal conflict, not a no-op.
+	// overrideVisited records the (path + active-override-set fingerprint) keys of
+	// schema documents pulled in by the xs:override TRANSFORMATION (override.go),
+	// tracked SEPARATELY from includeVisited (plain xs:include/xs:redefine). Keying
+	// by path AND active set (not path alone) is required: the SAME document reached
+	// with a DIFFERENT active override set is a DISTINCT transformed document and
+	// must be loaded again (letting duplicate-component checks fire on a real
+	// collision); only a true diamond/cycle reached with the SAME active set
+	// terminates here.
 	overrideVisited map[string]struct{}
+	// overridePaths records every resolved fs path ever pulled in by an
+	// xs:override transformation (regardless of active set). It is the path-level
+	// companion to overrideVisited used for the include+override CONFLICT check: a
+	// document pulled in by BOTH a plain xs:include/xs:redefine AND an xs:override
+	// is a fatal conflict (distinct constituents with colliding components), not a
+	// silent no-op.
+	overridePaths map[string]struct{}
 }
 
 // redefinableSet caches the redefinable component names a schema document
