@@ -147,6 +147,27 @@ func TestVersion11LocalAttributeTargetNamespaceRepresentationConstraints(t *test
   </xs:complexType>
 </xs:schema>`,
 		},
+		{
+			name: "xsi namespace not allowed in valid restriction",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:anyAttribute/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="x">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="base">
+          <xs:attribute name="local" type="xs:string" targetNamespace="http://www.w3.org/2001/XMLSchema-instance"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
 	}
 
 	for _, tc := range tests {

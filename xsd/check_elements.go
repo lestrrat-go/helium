@@ -586,7 +586,12 @@ func (c *compiler) checkLocalAttributeTargetNamespace(ctx context.Context, elem 
 		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 			"The attributes 'targetNamespace' and 'form' are mutually exclusive."))
 	}
-	if getAttr(elem, attrTargetNamespace) != c.schema.targetNamespace && !c.localAttributeUnderNonAnyTypeRestriction(ctx, elem) {
+	targetNS := getAttr(elem, attrTargetNamespace)
+	if targetNS == lexicon.NamespaceXSI {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", attrTargetNamespace,
+			"An attribute declaration must not be in the XSI namespace."))
+	}
+	if targetNS != c.schema.targetNamespace && !c.localAttributeUnderNonAnyTypeRestriction(ctx, elem) {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 			"A local attribute declaration with 'targetNamespace' different from the schema target namespace must appear in a restriction of a type other than xs:anyType."))
 	}
