@@ -126,3 +126,54 @@ func TestVersion11CTAStaticIsXSD10ByteIdentical(t *testing.T) {
 	_, err := xsd.NewCompiler().Compile(t.Context(), doc) // default = XSD 1.0
 	require.NoError(t, err)
 }
+
+// TestVersion11CTAElementConsistentTypeTables covers the XSD 1.1 extension to
+// Element Declarations Consistent (cos-element-consistent): two element particles
+// with the same expanded name in one content model must have the SAME {type
+// table}. Mirrors saxonData/CTA cta9009err (different tables) and cta9010err
+// (table vs no table).
+func TestVersion11CTAElementConsistentTypeTables(t *testing.T) {
+	const types = `
+  <xs:complexType name="zz"><xs:simpleContent><xs:extension base="xs:string">
+    <xs:attribute name="type" type="xs:integer"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="zzi"><xs:simpleContent><xs:restriction base="zz">
+    <xs:assertion test="$value castable as xs:integer"/></xs:restriction></xs:simpleContent></xs:complexType>
+  <xs:complexType name="zzd"><xs:simpleContent><xs:restriction base="zz">
+    <xs:assertion test="$value castable as xs:double"/></xs:restriction></xs:simpleContent></xs:complexType>`
+
+	t.Run("different type tables are inconsistent", func(t *testing.T) {
+		t.Parallel()
+		src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="zing"/>
+  <xs:complexType name="zing"><xs:sequence>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi"/><xs:alternative test="@type='2'" type="zzd"/></xs:element>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi"/></xs:element>
+  </xs:sequence></xs:complexType>` + types + `
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
+	})
+
+	t.Run("type table vs no table is inconsistent", func(t *testing.T) {
+		t.Parallel()
+		src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="zing"/>
+  <xs:complexType name="zing"><xs:sequence>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi"/></xs:element>
+    <xs:element name="a" type="zz"/>
+  </xs:sequence></xs:complexType>` + types + `
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
+	})
+
+	t.Run("identical type tables are consistent", func(t *testing.T) {
+		t.Parallel()
+		src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="zing"/>
+  <xs:complexType name="zing"><xs:sequence>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi"/><xs:alternative test="@type='2'" type="zzd"/></xs:element>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi"/><xs:alternative test="@type='2'" type="zzd"/></xs:element>
+  </xs:sequence></xs:complexType>` + types + `
+</xs:schema>`
+		require.NoError(t, compileCTASchema(t, src))
+	})
+}
