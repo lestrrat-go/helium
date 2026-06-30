@@ -32,6 +32,20 @@ type TypeNameRef struct {
 	URI    string
 }
 
+// FunctionNameRef is a static function-reference callee (a FunctionCall — including
+// constructor calls and arrow targets — or a NamedFunctionRef). URI is the resolved
+// function namespace (unprefixed → fn); Arity is the static argument count (the
+// call's argument count, an arrow's count INCLUDING its prepended left operand, or a
+// NamedFunctionRef's #arity). A caller checks (URI, Name, Arity) against a function
+// registry to reject unknown or wrong-arity functions. Prefix/Name are the lexical
+// spelling for diagnostics.
+type FunctionNameRef struct {
+	Prefix string
+	Name   string
+	URI    string
+	Arity  int
+}
+
 // StaticReferences summarizes the variable and type-name references in a compiled
 // expression, for callers that must impose static-context restrictions beyond the
 // namespace-prefix validation done by Validate. XSD 1.1 conditional type
@@ -52,10 +66,10 @@ type StaticReferences struct {
 	// FunctionNames lists the callee QNames of every static function reference — a
 	// FunctionCall (which includes user-defined-type CONSTRUCTOR calls like
 	// t:smallInt(...), and arrow targets) or a NamedFunctionRef (f#arity). Each carries
-	// its RESOLVED namespace URI; an unprefixed function name resolves to the default
-	// FUNCTION namespace (fn), NOT the default element namespace. CTA uses the URI to
-	// reject any function outside the standard library / built-in constructor namespaces.
-	FunctionNames []TypeNameRef
+	// its RESOLVED namespace URI (unprefixed → fn, NOT the default element namespace)
+	// and its static ARITY. CTA uses (URI, Name, Arity) to reject any function that is
+	// not a known standard-library function / built-in constructor of that arity.
+	FunctionNames []FunctionNameRef
 }
 
 // StaticReferences walks the expression's syntax tree and reports its free variable
@@ -111,6 +125,19 @@ func joinQName(prefix, name string) string {
 	return prefix + ":" + name
 }
 
+// splitEQName splits a lexical EQName into (prefix, local) without corrupting a
+// braced-URI Q{uri}local — for which it returns an EMPTY prefix and the local name
+// after "}" (plain splitQName would split on the first colon inside the URI). For
+// "prefix:local" / "local" it behaves like splitQName.
+func splitEQName(lexical string) (prefix, local string) {
+	if strings.HasPrefix(lexical, "Q{") {
+		if _, after, ok := strings.Cut(lexical, "}"); ok {
+			return "", after
+		}
+	}
+	return splitQName(lexical)
+}
+
 type staticRefCollector struct {
 	// bound is a REFCOUNT of in-scope variable bindings keyed by lexical name, not a
 	// flat present/absent set: an inner for/let/quantified/inline-function binding may
@@ -122,7 +149,7 @@ type staticRefCollector struct {
 	namespaces map[string]string
 	freeVars   []string
 	typeNames  []TypeNameRef
-	funcNames  []TypeNameRef
+	funcNames  []FunctionNameRef
 	seenFree   map[string]struct{}
 }
 
@@ -179,26 +206,27 @@ func (c *staticRefCollector) addAtomicType(prefix, name string) {
 // addTypeNameLexical records a type name held as a raw lexical EQName string (as
 // element()/attribute() kind tests store their type annotation, or as reconstructed
 // from a split pair), resolving its namespace URI against the default ELEMENT
-// namespace for an unprefixed name.
+// namespace for an unprefixed name. The local name is split EQName-aware so a
+// braced-URI Q{uri}local yields the bare local name, not a colon-corrupted fragment.
 func (c *staticRefCollector) addTypeNameLexical(lexical string) {
 	if lexical == "" {
 		return
 	}
-	prefix, local := splitQName(lexical)
+	prefix, local := splitEQName(lexical)
 	uri := resolveStaticNameURI(lexical, c.namespaces, c.namespaces[""])
 	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: local, URI: uri})
 }
 
-// addFunctionName records a static function-reference callee QName, resolving its
-// namespace URI against the default FUNCTION namespace (fn) for an unprefixed name.
-func (c *staticRefCollector) addFunctionName(prefix, name string) {
+// addFunctionName records a static function-reference callee QName + arity, resolving
+// its namespace URI against the default FUNCTION namespace (fn) for an unprefixed name.
+func (c *staticRefCollector) addFunctionName(prefix, name string, arity int) {
 	if name == "" {
 		return
 	}
 	lexical := joinQName(prefix, name)
-	dispPrefix, dispLocal := splitQName(lexical)
+	dispPrefix, dispLocal := splitEQName(lexical)
 	uri := resolveStaticNameURI(lexical, c.namespaces, NSFn)
-	c.funcNames = append(c.funcNames, TypeNameRef{Prefix: dispPrefix, Name: dispLocal, URI: uri})
+	c.funcNames = append(c.funcNames, FunctionNameRef{Prefix: dispPrefix, Name: dispLocal, URI: uri, Arity: arity})
 }
 
 // walkSequenceType collects every atomic-or-union type name named anywhere in a
@@ -306,12 +334,14 @@ func (c *staticRefCollector) walk(node Expr) { //nolint:gocyclo
 		c.walkSequenceType(n.Type)
 		c.walk(n.Expr)
 	case FunctionCall:
-		c.addFunctionName(n.Prefix, n.Name)
+		// Arity is the argument count; for a desugared arrow (1 => f()) the parser has
+		// already prepended the left operand, so len(Args) is the true static arity.
+		c.addFunctionName(n.Prefix, n.Name, len(n.Args))
 		for _, arg := range n.Args {
 			c.walk(arg)
 		}
 	case NamedFunctionRef:
-		c.addFunctionName(n.Prefix, n.Name)
+		c.addFunctionName(n.Prefix, n.Name, n.Arity)
 	case DynamicFunctionCall:
 		c.walk(n.Func)
 		for _, arg := range n.Args {

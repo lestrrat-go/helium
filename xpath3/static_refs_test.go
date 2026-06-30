@@ -277,4 +277,40 @@ func TestStaticReferences(t *testing.T) {
 		refs := compile(t, "1 => fn:abs()").StaticReferences(nil)
 		require.True(t, funcURIs(refs)[nsFn])
 	})
+
+	funcArity := func(refs xpath3.StaticReferences, local string) (int, bool) {
+		for _, fn := range refs.FunctionNames {
+			if fn.Name == local {
+				return fn.Arity, true
+			}
+		}
+		return 0, false
+	}
+
+	t.Run("function call arity is the argument count", func(t *testing.T) {
+		a, ok := funcArity(compile(t, "fn:concat(@a, 'b', 'c')").StaticReferences(nil), "concat")
+		require.True(t, ok)
+		require.Equal(t, 3, a)
+	})
+
+	t.Run("arrow arity includes the prepended left operand", func(t *testing.T) {
+		a, ok := funcArity(compile(t, "@a => fn:concat('b')").StaticReferences(nil), "concat")
+		require.True(t, ok)
+		require.Equal(t, 2, a) // LHS + 1 explicit arg
+	})
+
+	t.Run("named function ref arity is the hash arity", func(t *testing.T) {
+		a, ok := funcArity(compile(t, "fn:string#1").StaticReferences(nil), "string")
+		require.True(t, ok)
+		require.Equal(t, 1, a)
+	})
+
+	t.Run("braced-uri type local name is not colon-corrupted", func(t *testing.T) {
+		refs := compile(t, "1 instance of Q{"+nsXSD+"}integer").StaticReferences(nil)
+		got := map[string]bool{}
+		for _, tn := range refs.TypeNames {
+			got[tn.Name] = true
+		}
+		require.True(t, got["integer"]) // bare local, not "//www...}integer"
+	})
 }

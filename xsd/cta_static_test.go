@@ -193,6 +193,48 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 			require.NoErrorf(t, compileCTASchema(t, src), "test=%q", test)
 		}
 	})
+
+	// An xs:-namespace (or standard-function) name must actually EXIST: a bogus local
+	// name in a standard namespace, or a real function called at the wrong arity, is a
+	// static error (XPST0008 / XPST0017), not silently swallowed as a non-matching
+	// alternative.
+	t.Run("unknown standard-namespace names and wrong arity in test are invalid", func(t *testing.T) {
+		t.Parallel()
+		for _, test := range []string{
+			". instance of element(*, xs:noSuchType)", // unknown type in kind test
+			"@kind cast as xs:noSuchType = 1",         // unknown cast type
+			"xs:noSuchType(@kind) = 1",                // unknown type constructor
+			"fn:noSuchFunction(@kind) = 1",            // unknown fn: function
+			"fn:concat(@kind) = 'x'",                  // real fn:concat, but arity 1 (needs >= 2)
+		} {
+			src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="` + test + `" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+			require.Errorf(t, compileCTASchema(t, src), "test=%q", test)
+		}
+	})
+
+	t.Run("known standard functions at valid arity in test are valid", func(t *testing.T) {
+		t.Parallel()
+		for _, test := range []string{
+			"xs:integer(@kind) = 1",                            // real built-in constructor
+			"fn:string(@kind) = 'x'",                           // real fn function
+			"fn:concat(@kind, 'y') = 'xy'",                     // real fn:concat at arity 2
+			"math:sqrt(2.0) &gt; 1.0",                          // real math function
+			". instance of element(*, xs:integer)",             // real built-in type in kind test
+			". instance of element(*, xs:untyped)",             // XDM-only type (cta0018/0022)
+			"@kind instance of attribute(*, xs:untypedAtomic)", // XDM-only type (cta0019)
+		} {
+			src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="` + test + `" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+			require.NoErrorf(t, compileCTASchema(t, src), "test=%q", test)
+		}
+	})
 }
 
 // TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks

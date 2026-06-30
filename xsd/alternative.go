@@ -209,44 +209,46 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 
 // checkCTATestStaticContext enforces the XSD 1.1 static-context restrictions on an
 // xs:alternative @test XPath beyond namespace-prefix validity: the expression may
-// reference no variables (CTA exposes none), may name only built-in (xs:) types in
-// cast/castable/instance of/treat as and kind tests, and may call only functions in
-// the standard library / built-in-constructor namespaces (§F.2). A free variable, a
-// non-built-in type reference, or an out-of-context function call returns a non-nil
-// error. Resolution is delegated entirely to StaticReferences, which reports the
-// RESOLVED namespace URI of every type/function name (handling prefixed, unprefixed,
-// and braced-URI Q{uri}local forms uniformly against the alternative's in-scope
-// namespaces) — so this check is a pure URI-allowlist test with no name-form logic.
+// reference no variables (CTA exposes none), may name only ACTUAL built-in (xs:)
+// types in cast/castable/instance of/treat as and kind tests, and may call only KNOWN
+// standard-library functions / built-in type constructors at a valid arity (§F.2). A
+// free variable, an unknown/non-built-in type (XPST0008), or an unknown/wrong-arity
+// function (XPST0017) returns a non-nil error. StaticReferences reports the resolved
+// namespace URI (and, for functions, the arity) of every name — handling prefixed,
+// unprefixed, and braced-URI Q{uri}local forms uniformly against the alternative's
+// in-scope namespaces — so this check is a namespace+existence test with no name-form
+// logic of its own.
 func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3.Expression, namespaces map[string]string) error {
 	refs := compiled.StaticReferences(namespaces)
 	if len(refs.FreeVariables) > 0 {
 		return fmt.Errorf("undefined variable $%s", refs.FreeVariables[0])
 	}
 	for _, tn := range refs.TypeNames {
-		if tn.URI == lexicon.NamespaceXSD {
+		// A type reference must name an ACTUAL built-in type of the XPath/XDM type
+		// hierarchy: the namespace must be the XSD namespace AND the local name a known
+		// type. The authority is xpath3's IsKnownXSDType (the @test is an XPath
+		// expression), so the XDM-only names valid in a type position — xs:untyped,
+		// xs:untypedAtomic, xs:anyType, xs:anySimpleType, xs:anyAtomicType, xs:error,
+		// xs:numeric — are accepted, while an unknown xs:-namespace name (e.g.
+		// xs:noSuchType) is a static error (XPST0008), not tolerated by namespace alone.
+		if tn.URI == lexicon.NamespaceXSD && xpath3.IsKnownXSDType("xs:"+tn.Name) {
 			continue
 		}
 		return fmt.Errorf("the type %q is not a built-in type and is not available in a type alternative", qnameRefLabel(tn.Prefix, tn.Name))
 	}
 	for _, fn := range refs.FunctionNames {
-		if isCTAStandardFunctionNS(fn.URI) {
+		// A function reference must be a KNOWN standard-library function or built-in type
+		// constructor at the called arity (§F.2). The xpath3 built-in registry holds the
+		// fn:/math:/map:/array: functions AND the xs: type constructors, so a single
+		// (URI, local, arity) lookup rejects an unknown function (XPST0017), a wrong-arity
+		// call, an xs:noSuchType constructor, AND any user-namespace function (whose URI
+		// is absent from the registry) alike.
+		if xpath3.BuiltinFunctionAcceptsArity(fn.URI, fn.Name, fn.Arity) {
 			continue
 		}
-		return fmt.Errorf("the function %q is not in the standard function library and is not available in a type alternative", qnameRefLabel(fn.Prefix, fn.Name))
+		return fmt.Errorf("the function %q (arity %d) is not a known built-in function and is not available in a type alternative", qnameRefLabel(fn.Prefix, fn.Name), fn.Arity)
 	}
 	return nil
-}
-
-// isCTAStandardFunctionNS reports whether ns is one of the namespaces whose
-// functions are available in a CTA @test static context: the XPath functions
-// namespace, the built-in type constructors (XSD), and the standard math/map/array
-// function libraries.
-func isCTAStandardFunctionNS(ns string) bool {
-	switch ns {
-	case lexicon.NamespaceFn, lexicon.NamespaceXSD, lexicon.NamespaceMath, lexicon.NamespaceMap, lexicon.NamespaceArray:
-		return true
-	}
-	return false
 }
 
 // qnameRefLabel renders a (prefix, local) QName reference for a diagnostic.
