@@ -875,7 +875,9 @@ func contentTypeEmptyForOpenContent(td *TypeDef) bool {
 func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *OpenContent {
 	mode := OpenContentInterleave
 	isNone := false
-	switch getAttr(elem, attrMode) {
+	// @mode is an enumeration over xs:token (whiteSpace="collapse"), so the value must
+	// be whitespace-collapsed before the enum comparison — e.g. mode=" suffix " is valid.
+	switch normalizeWhiteSpace(getAttr(elem, attrMode), "collapse") {
 	case "", "interleave":
 		mode = OpenContentInterleave
 	case "suffix":
@@ -1087,7 +1089,9 @@ func (c *compiler) readDefaultOpenContent(ctx context.Context, root *helium.Elem
 	}
 
 	mode := OpenContentInterleave
-	switch getAttr(dec, attrMode) {
+	// @mode is an enumeration over xs:token (whiteSpace="collapse"): collapse before
+	// comparing so e.g. mode="  interleave  " is accepted.
+	switch normalizeWhiteSpace(getAttr(dec, attrMode), "collapse") {
 	case "", "interleave":
 		mode = OpenContentInterleave
 	case "suffix":
