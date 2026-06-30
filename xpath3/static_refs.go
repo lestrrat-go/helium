@@ -1,5 +1,22 @@
 package xpath3
 
+import "reflect"
+
+// catchErrorVarKeys are the implicit error variables the evaluator binds inside a
+// try/catch catch clause (XPath/XQuery error namespace, conventional "err" prefix),
+// keyed by the SAME lexical "err:local" form a reference site produces. They are
+// bound for the scope of each catch body so a reference to one is not reported as a
+// free variable. Kept in sync with eval_control.go buildCatchContext.
+var catchErrorVarKeys = []string{
+	"err:code",
+	"err:description",
+	"err:value",
+	"err:module",
+	"err:line-number",
+	"err:column-number",
+	"err:additional",
+}
+
 // TypeNameRef is an atomic-or-union type name referenced by an expression in a
 // cast / castable / instance of / treat as construct. Prefix is empty for an
 // unprefixed name.
@@ -106,6 +123,10 @@ func (c *staticRefCollector) walkSequenceType(st SequenceType) {
 // walkItemTest collects atomic-or-union type names reachable from an item test,
 // recursing through the parameterized array/map/function item types.
 func (c *staticRefCollector) walkItemTest(it NodeTest) {
+	it, ok := derefNodeTest(it)
+	if !ok {
+		return
+	}
 	switch t := it.(type) {
 	case AtomicOrUnionType:
 		c.addAtomicType(t.Prefix, t.Name)
@@ -128,8 +149,45 @@ func (c *staticRefCollector) walkItemTest(it NodeTest) {
 	}
 }
 
+// derefExprNode normalizes any pointer-form Expr to its value form via reflection.
+// CompileExpr stores caller-built ASTs unchanged and the VM lowerer accepts both
+// value and pointer node forms (e.g. &CastExpr{...}), so StaticReferences must too.
+// (The package's other derefExpr in streamability.go only covers a fixed handful of
+// pointer types, so it is not reused here.) ok is false for a nil node (including a
+// typed nil pointer).
+func derefExprNode(node Expr) (Expr, bool) {
+	rv := reflect.ValueOf(node)
+	if rv.Kind() != reflect.Pointer {
+		return node, node != nil
+	}
+	if rv.IsNil() {
+		return nil, false
+	}
+	if e, ok := rv.Elem().Interface().(Expr); ok {
+		return e, true
+	}
+	return node, true
+}
+
+// derefNodeTest is the NodeTest analogue of derefExpr, normalizing a pointer-form
+// item test (e.g. &ArrayTest{...}) to its value form.
+func derefNodeTest(it NodeTest) (NodeTest, bool) {
+	rv := reflect.ValueOf(it)
+	if rv.Kind() != reflect.Pointer {
+		return it, it != nil
+	}
+	if rv.IsNil() {
+		return nil, false
+	}
+	if nt, ok := rv.Elem().Interface().(NodeTest); ok {
+		return nt, true
+	}
+	return it, true
+}
+
 func (c *staticRefCollector) walk(node Expr) { //nolint:gocyclo
-	if node == nil {
+	node, ok := derefExprNode(node)
+	if !ok {
 		return
 	}
 	switch n := node.(type) {
@@ -200,10 +258,7 @@ func (c *staticRefCollector) walk(node Expr) { //nolint:gocyclo
 	case QuantifiedExpr:
 		c.walkQuantified(n)
 	case TryCatchExpr:
-		c.walk(n.Try)
-		for _, ct := range n.Catches {
-			c.walk(ct.Expr)
-		}
+		c.walkTryCatch(n)
 	case InlineFunctionExpr:
 		c.walkInlineFunction(n)
 	case LookupExpr:
@@ -262,6 +317,23 @@ func (c *staticRefCollector) walkFLWOR(n FLWORExpr) {
 	c.walk(n.Return)
 	for _, k := range added {
 		c.unbindVar(k)
+	}
+}
+
+// walkTryCatch walks a try/catch expression. Each catch body runs with the
+// implicit error variables ($err:code, …) bound by the evaluator, so they are
+// bound (refcounted, restoring any shadowed outer binding) for the duration of the
+// body and a reference to one is not reported as a free variable.
+func (c *staticRefCollector) walkTryCatch(n TryCatchExpr) {
+	c.walk(n.Try)
+	for _, ct := range n.Catches {
+		for _, k := range catchErrorVarKeys {
+			c.bindVar(k)
+		}
+		c.walk(ct.Expr)
+		for _, k := range catchErrorVarKeys {
+			c.unbindVar(k)
+		}
 	}
 }
 

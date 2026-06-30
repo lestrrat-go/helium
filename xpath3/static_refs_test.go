@@ -125,4 +125,28 @@ func TestStaticReferences(t *testing.T) {
 		refs := compile(t, "exists(function($v as array(t:deep)) as xs:boolean { true() })").StaticReferences()
 		require.Equal(t, "t", collectNames(refs)["deep"])
 	})
+
+	t.Run("catch error variables not reported free", func(t *testing.T) {
+		refs := compile(t, "try { xs:integer('x') } catch * { ($err:code, $err:description, $err:value, $err:module, $err:line-number, $err:column-number) }").StaticReferences()
+		require.Empty(t, refs.FreeVariables)
+	})
+
+	t.Run("non-error free variable in catch still reported", func(t *testing.T) {
+		refs := compile(t, "try { 1 } catch * { ($err:code, $foo) }").StaticReferences()
+		require.Equal(t, []string{testFoo}, refs.FreeVariables)
+	})
+
+	t.Run("pointer-form AST nodes are walked", func(t *testing.T) {
+		// CompileExpr accepts caller-built ASTs with POINTER node forms (the VM lowerer
+		// dereferences them); StaticReferences must walk them consistently.
+		ast := &xpath3.CastExpr{
+			Expr: &xpath3.VariableExpr{Name: "v"},
+			Type: xpath3.AtomicTypeName{Prefix: "t", Name: "T"},
+		}
+		e, err := xpath3.NewCompiler().CompileExpr(ast)
+		require.NoError(t, err)
+		refs := e.StaticReferences()
+		require.Equal(t, []string{"v"}, refs.FreeVariables)
+		require.Equal(t, "t", collectNames(refs)["T"])
+	})
 }
