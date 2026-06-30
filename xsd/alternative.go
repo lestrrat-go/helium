@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -223,6 +224,12 @@ func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3
 	if len(refs.FreeVariables) > 0 {
 		return fmt.Errorf("undefined variable $%s", refs.FreeVariables[0])
 	}
+	// schema-element()/schema-attribute() reference GLOBAL element/attribute
+	// declarations, which the CTA static context does not provide (§F.2 gives only
+	// built-in type definitions), so such a node test is out of context.
+	if len(refs.SchemaComponentTests) > 0 {
+		return fmt.Errorf("the schema-aware node test %s is not available in a type alternative", refs.SchemaComponentTests[0])
+	}
 	for _, tn := range refs.TypeNames {
 		// A type reference must name an ACTUAL built-in type of the XPath/XDM type
 		// hierarchy: the namespace must be the XSD namespace AND the local name a known
@@ -237,16 +244,17 @@ func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3
 		return fmt.Errorf("the type %q is not a built-in type and is not available in a type alternative", qnameRefLabel(tn.Prefix, tn.Name))
 	}
 	for _, fn := range refs.FunctionNames {
-		// A function reference must be a KNOWN standard-library function or built-in type
-		// constructor at the called arity (§F.2). The xpath3 built-in registry holds the
-		// fn:/math:/map:/array: functions AND the xs: type constructors, so a single
+		// A function reference must be a KNOWN STANDARD F&O 3.1 function or built-in type
+		// constructor at the called arity (§F.2). StandardFunctionAcceptsArity excludes
+		// helium's forward-looking EXTENSION functions (e.g. fn:flatten) from the registry
+		// of fn:/math:/map:/array: functions + xs: type constructors, so a single
 		// (URI, local, arity) lookup rejects an unknown function (XPST0017), a wrong-arity
-		// call, an xs:noSuchType constructor, AND any user-namespace function (whose URI
-		// is absent from the registry) alike.
-		if xpath3.BuiltinFunctionAcceptsArity(fn.URI, fn.Name, fn.Arity) {
+		// call, an xs:noSuchType constructor, a non-standard extension, AND any
+		// user-namespace function (whose URI is absent from the registry) alike.
+		if xpath3.StandardFunctionAcceptsArity(fn.URI, fn.Name, fn.Arity) {
 			continue
 		}
-		return fmt.Errorf("the function %q (arity %d) is not a known built-in function and is not available in a type alternative", qnameRefLabel(fn.Prefix, fn.Name), fn.Arity)
+		return fmt.Errorf("the function %q (arity %d) is not a standard built-in function and is not available in a type alternative", qnameRefLabel(fn.Prefix, fn.Name), fn.Arity)
 	}
 	return nil
 }
@@ -367,12 +375,29 @@ func elementAlternatives(decl *ElementDecl, schema *Schema) []*TypeAlternative {
 // alternative is the final slice entry (Test == ""), so comparing the whole slice
 // covers both {alternatives} and {default type definition}. Two empty tables (both
 // absent) are equivalent.
+//
+// The @test TEXT alone does not determine which type an alternative selects: the
+// same text evaluates differently under different in-scope namespaces (an unprefixed
+// name test, a prefixed type/function name) or a different static base URI
+// (fn:base-uri()/fn:doc()). So equivalence ALSO requires the alternative's effective
+// namespace bindings and base URI to match — otherwise two tables with identical
+// test text but different xmlns context would be wrongly treated as equivalent and
+// could govern the same element with different types depending on the path. The
+// namespace comparison is the whole in-scope map (a conservative superset of the
+// bindings the test actually depends on), which is spec-sound: a processor "may
+// treat two type alternatives as non-equivalent".
 func typeTablesEquivalent(a, b []*TypeAlternative) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
 		if a[i].Test != b[i].Test {
+			return false
+		}
+		if a[i].BaseURI != b[i].BaseURI {
+			return false
+		}
+		if !maps.Equal(a[i].Namespaces, b[i].Namespaces) {
 			return false
 		}
 		if !elementTypesConsistent(a[i].Type, b[i].Type) {

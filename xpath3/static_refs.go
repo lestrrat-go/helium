@@ -70,6 +70,11 @@ type StaticReferences struct {
 	// and its static ARITY. CTA uses (URI, Name, Arity) to reject any function that is
 	// not a known standard-library function / built-in constructor of that arity.
 	FunctionNames []FunctionNameRef
+	// SchemaComponentTests lists every schema-element()/schema-attribute() node test
+	// (rendered as "schema-element(NAME)"), which reference GLOBAL element/attribute
+	// declarations. A conformance-restricted caller whose static context lacks those
+	// schema components (XSD 1.1 CTA, §F.2) rejects an expression that uses them.
+	SchemaComponentTests []string
 }
 
 // StaticReferences walks the expression's syntax tree and reports its free variable
@@ -83,7 +88,12 @@ func (e *Expression) StaticReferences(namespaces map[string]string) StaticRefere
 	ast := e.astExpr()
 	c := &staticRefCollector{bound: map[string]int{}, namespaces: namespaces}
 	c.walk(ast)
-	return StaticReferences{FreeVariables: c.freeVars, TypeNames: c.typeNames, FunctionNames: c.funcNames}
+	return StaticReferences{
+		FreeVariables:        c.freeVars,
+		TypeNames:            c.typeNames,
+		FunctionNames:        c.funcNames,
+		SchemaComponentTests: c.schemaComponentTests,
+	}
 }
 
 // resolveStaticNameURI resolves the namespace URI of a lexical EQName for the
@@ -145,12 +155,13 @@ type staticRefCollector struct {
 	// decrements (deleting at zero). Restoring the prior count on exit keeps the outer
 	// binding visible to later references instead of unbinding it — a flat set with an
 	// unconditional delete would wrongly report the still-bound outer variable as free.
-	bound      map[string]int
-	namespaces map[string]string
-	freeVars   []string
-	typeNames  []TypeNameRef
-	funcNames  []FunctionNameRef
-	seenFree   map[string]struct{}
+	bound                map[string]int
+	namespaces           map[string]string
+	freeVars             []string
+	typeNames            []TypeNameRef
+	funcNames            []FunctionNameRef
+	schemaComponentTests []string
+	seenFree             map[string]struct{}
 }
 
 // bindVar enters a variable binding for the duration of an enclosed scope.
@@ -256,6 +267,14 @@ func (c *staticRefCollector) walkItemTest(it NodeTest) {
 		c.addTypeNameLexical(t.TypeName)
 	case AttributeTest:
 		c.addTypeNameLexical(t.TypeName)
+	case SchemaElementTest:
+		// schema-element(E) / schema-attribute(A) reference a GLOBAL element/attribute
+		// DECLARATION — a schema component that is not part of every static context. The
+		// reference is reported so a conformance-restricted caller (e.g. XSD 1.1 CTA,
+		// whose static context per §F.2 has only built-in type definitions) can reject it.
+		c.schemaComponentTests = append(c.schemaComponentTests, "schema-element("+t.Name+")")
+	case SchemaAttributeTest:
+		c.schemaComponentTests = append(c.schemaComponentTests, "schema-attribute("+t.Name+")")
 	case DocumentTest:
 		c.walkItemTest(t.Inner)
 	case ArrayTest:
@@ -343,6 +362,15 @@ func (c *staticRefCollector) walk(node Expr) { //nolint:gocyclo
 	case NamedFunctionRef:
 		c.addFunctionName(n.Prefix, n.Name, n.Arity)
 	case DynamicFunctionCall:
+		// A dynamic call applies a function VALUE (e.g. an inline function literal,
+		// `function($x){...}(1)`, or a variable/expression yielding a function). No
+		// out-of-context NAMED function is referenced: an inline function literal is an
+		// in-context XPath 3.1 language construct (its body is walked below, so any named
+		// function / out-of-context type it uses IS still gated), and a NamedFunctionRef
+		// or FunctionCall target is recorded when n.Func is walked. So nothing is recorded
+		// for the call itself — higher-order / inline functions are not forbidden by the
+		// CTA static context (§F.2 restricts the available NAMED function signatures and
+		// type definitions, not the use of function values), only their named referents.
 		c.walk(n.Func)
 		for _, arg := range n.Args {
 			c.walk(arg)

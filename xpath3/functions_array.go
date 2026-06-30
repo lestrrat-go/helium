@@ -22,7 +22,7 @@ func init() {
 	registerNS(NSArray, "reverse", 1, 1, fnArrayReverse)
 	registerNS(NSArray, "join", 1, 1, fnArrayJoin)
 	registerNS(NSArray, "flatten", 1, 1, fnArrayFlatten)
-	registerNS(NSArray, "flat-map", 2, 2, fnArrayFlatMap)
+	registerNSExt(NSArray, "flat-map", 2, 2, fnArrayFlatMap) // XPath/XQuery 4.0 — not in F&O 3.1
 	registerNS(NSArray, "filter", 2, 2, fnArrayFilter)
 	registerNS(NSArray, "fold-left", 3, 3, fnArrayFoldLeft)
 	registerNS(NSArray, "fold-right", 3, 3, fnArrayFoldRight)

@@ -235,6 +235,25 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 			require.NoErrorf(t, compileCTASchema(t, src), "test=%q", test)
 		}
 	})
+
+	// schema-element()/schema-attribute() reference global declarations that the CTA
+	// static context does not provide (§F.2), and a non-standard helium extension
+	// function (fn:flatten) is not in the standard library — both are out of context.
+	t.Run("schema-aware node tests and extension functions in test are invalid", func(t *testing.T) {
+		t.Parallel()
+		for _, test := range []string{
+			". instance of schema-element(e)",          // schema-element node test
+			"@kind instance of schema-attribute(kind)", // schema-attribute node test
+			"count(fn:flatten((1, (2, 3)))) = 3",       // helium extension function fn:flatten
+		} {
+			src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="` + test + `" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+			require.Errorf(t, compileCTASchema(t, src), "test=%q", test)
+		}
+	})
 }
 
 // TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks
@@ -304,6 +323,24 @@ func TestVersion11CTAElementConsistentTypeTables(t *testing.T) {
   </xs:sequence></xs:complexType>` + types + `
 </xs:schema>`
 		require.NoError(t, compileCTASchema(t, src))
+	})
+
+	// Same @test TEXT and selected type, but the second element's alternative has a
+	// DIFFERENT in-scope namespace context (an extra prefix binding), so the test
+	// could resolve differently — the tables are NOT equivalent and EDC must
+	// distinguish them. (An EXTRA prefix, not the default namespace, so the unprefixed
+	// @type="zzi" still resolves to the no-namespace type and the only difference is
+	// the namespace map.)
+	t.Run("same test text but different namespace context is inconsistent", func(t *testing.T) {
+		t.Parallel()
+		src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="zing"/>
+  <xs:complexType name="zing"><xs:sequence>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi"/></xs:element>
+    <xs:element name="a" type="zz"><xs:alternative test="@type='1'" type="zzi" xmlns:extra="urn:extra"/></xs:element>
+  </xs:sequence></xs:complexType>` + types + `
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
 	})
 }
 

@@ -223,6 +223,12 @@ type builtinFunc struct {
 	min  int
 	max  int // -1 = variadic
 	fn   func(ctx context.Context, args []Sequence) (Sequence, error)
+	// extension is true for functions helium provides BEYOND the F&O 3.1 standard
+	// function library (forward-looking XPath/XQuery 4.0 functions). They are available
+	// for evaluation, but are NOT part of a conformance-restricted static context such
+	// as XSD 1.1 conditional type assignment (§F.2 admits only the standard library and
+	// the built-in type constructors).
+	extension bool
 }
 
 func (f *builtinFunc) MinArity() int { return f.min }
@@ -244,7 +250,8 @@ func IsBuiltinFunctionNS(uri, name string) bool {
 }
 
 // BuiltinFunctionAcceptsArity returns true if a built-in function accepts
-// the given arity.
+// the given arity. It does NOT distinguish standard from extension functions; for a
+// conformance-restricted context use StandardFunctionAcceptsArity.
 func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
 	fn, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
 	if !ok {
@@ -253,17 +260,50 @@ func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
 	return arity >= fn.MinArity() && (fn.MaxArity() < 0 || arity <= fn.MaxArity())
 }
 
-// registerFn is a convenience for registering a built-in function in the fn: namespace.
+// StandardFunctionAcceptsArity reports whether (uri, name) is a STANDARD F&O 3.1
+// function or a built-in type constructor (i.e. registered and NOT a helium
+// extension) that accepts the given arity. Conformance-restricted static contexts
+// such as XSD 1.1 conditional type assignment must use this rather than
+// BuiltinFunctionAcceptsArity so that forward-looking extension functions (e.g.
+// fn:flatten) are not treated as available.
+func StandardFunctionAcceptsArity(uri, name string, arity int) bool {
+	fn, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
+	if !ok {
+		return false
+	}
+	if bf, ok := fn.(*builtinFunc); ok && bf.extension {
+		return false
+	}
+	return arity >= fn.MinArity() && (fn.MaxArity() < 0 || arity <= fn.MaxArity())
+}
+
+// registerFn is a convenience for registering a STANDARD built-in function in the fn: namespace.
 func registerFn(name string, minArity, maxArity int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: NSFn, Name: name}] = &builtinFunc{
 		name: name, min: minArity, max: maxArity, fn: fn,
 	}
 }
 
-// registerNS is a convenience for registering a built-in function in a specific namespace.
+// registerNS is a convenience for registering a STANDARD built-in function in a specific namespace.
 func registerNS(uri, name string, minArity, maxArity int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: uri, Name: name}] = &builtinFunc{
 		name: name, min: minArity, max: maxArity, fn: fn,
+	}
+}
+
+// registerFnExt registers an fn: function helium provides as an EXTENSION beyond the
+// F&O 3.1 standard library (so it is excluded from conformance-restricted contexts).
+func registerFnExt(name string, minArity, maxArity int, fn func(context.Context, []Sequence) (Sequence, error)) {
+	builtinFunctions3[QualifiedName{URI: NSFn, Name: name}] = &builtinFunc{
+		name: name, min: minArity, max: maxArity, fn: fn, extension: true,
+	}
+}
+
+// registerNSExt registers a namespaced function helium provides as an EXTENSION
+// beyond the F&O 3.1 standard library.
+func registerNSExt(uri, name string, minArity, maxArity int, fn func(context.Context, []Sequence) (Sequence, error)) {
+	builtinFunctions3[QualifiedName{URI: uri, Name: name}] = &builtinFunc{
+		name: name, min: minArity, max: maxArity, fn: fn, extension: true,
 	}
 }
 

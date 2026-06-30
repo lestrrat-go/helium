@@ -313,4 +313,43 @@ func TestStaticReferences(t *testing.T) {
 		}
 		require.True(t, got["integer"]) // bare local, not "//www...}integer"
 	})
+
+	t.Run("schema-element node test is reported", func(t *testing.T) {
+		refs := compile(t, ". instance of schema-element(foo)").StaticReferences(nil)
+		require.Equal(t, []string{"schema-element(foo)"}, refs.SchemaComponentTests)
+	})
+
+	t.Run("schema-attribute node test is reported", func(t *testing.T) {
+		refs := compile(t, "@x instance of schema-attribute(bar)").StaticReferences(nil)
+		require.Equal(t, []string{"schema-attribute(bar)"}, refs.SchemaComponentTests)
+	})
+
+	t.Run("inline function literal records no function name", func(t *testing.T) {
+		// function($x){...}(1) is a dynamic call of an inline literal — no out-of-context
+		// NAMED function is referenced, so FunctionNames stays empty.
+		refs := compile(t, "function($x){ $x }(1)").StaticReferences(nil)
+		require.Empty(t, refs.FunctionNames)
+		require.Empty(t, refs.FreeVariables)
+	})
+}
+
+func TestStandardFunctionAcceptsArity(t *testing.T) {
+	const nsFn = "http://www.w3.org/2005/xpath-functions"
+	const nsArray = "http://www.w3.org/2005/xpath-functions/array"
+
+	// Standard F&O 3.1 functions are accepted by BOTH predicates.
+	require.True(t, xpath3.StandardFunctionAcceptsArity(nsFn, "string", 1))
+	require.True(t, xpath3.StandardFunctionAcceptsArity(nsFn, "concat", 2))
+	require.True(t, xpath3.StandardFunctionAcceptsArity(nsArray, "flatten", 1))
+
+	// helium EXTENSION functions are registered (BuiltinFunctionAcceptsArity true) but
+	// NOT standard, so StandardFunctionAcceptsArity rejects them.
+	require.True(t, xpath3.BuiltinFunctionAcceptsArity(nsFn, "flatten", 1))
+	require.False(t, xpath3.StandardFunctionAcceptsArity(nsFn, "flatten", 1))
+	require.True(t, xpath3.BuiltinFunctionAcceptsArity(nsArray, "flat-map", 2))
+	require.False(t, xpath3.StandardFunctionAcceptsArity(nsArray, "flat-map", 2))
+
+	// Unknown / wrong arity rejected by both.
+	require.False(t, xpath3.StandardFunctionAcceptsArity(nsFn, "noSuchFunction", 1))
+	require.False(t, xpath3.StandardFunctionAcceptsArity(nsFn, "concat", 1)) // concat needs >= 2
 }

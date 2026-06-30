@@ -105,13 +105,19 @@ func (e *Expression) StaticReferences(namespaces map[string]string) StaticRefere
 func (e *Expression) String() string
 
 type StaticReferences struct {
-    FreeVariables []string          // variable refs not bound by an enclosing for/let/quantified/inline-function
-    TypeNames     []TypeNameRef     // type names from cast/castable/instance of/treat as + element()/attribute()/document-node() kind tests (incl. nested array/map/function item types and path-step node tests)
-    FunctionNames []FunctionNameRef // callee QNames of FunctionCall (incl. constructor calls + arrow targets) and NamedFunctionRef, with ARITY
+    FreeVariables        []string          // variable refs not bound by an enclosing for/let/quantified/inline-function
+    TypeNames            []TypeNameRef     // type names from cast/castable/instance of/treat as + element()/attribute()/document-node() kind tests (incl. nested array/map/function item types and path-step node tests)
+    FunctionNames        []FunctionNameRef // callee QNames of FunctionCall (incl. constructor calls + arrow targets) and NamedFunctionRef, with ARITY (an inline-function literal call records nothing — it has no named referent)
+    SchemaComponentTests []string          // schema-element(E)/schema-attribute(A) node tests (rendered "schema-element(NAME)") — reference GLOBAL declarations
 }
 type TypeNameRef struct{ Prefix, Name, URI string }            // URI is the RESOLVED namespace
 type FunctionNameRef struct{ Prefix, Name, URI string; Arity int } // arity = arg count (arrow incl. LHS) / #arity
 ```
+
+For a conformance-restricted static context, pair `StaticReferences` with
+`StandardFunctionAcceptsArity(uri, name, arity)` (NOT `BuiltinFunctionAcceptsArity`):
+it accepts only STANDARD F&O 3.1 functions + built-in type constructors, excluding
+helium's forward-looking EXTENSION functions (e.g. `fn:flatten`, `array:flat-map`).
 
 There is no `Expression.Evaluate`; evaluation goes through `Evaluator.Evaluate`
 (allocating) or `Expression.EvaluateReuse` (reusing an `EvalState`, see Reuse
@@ -126,7 +132,7 @@ evaluation. The same validation runs automatically inside `Evaluate` /
 
 `StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function names, etc.). Streamability query helpers that previously lived on the xpath3 package have been moved to `internal/xpathstream`.
 
-`StaticReferences(namespaces)` walks the expression's AST (reparsing from `source` when no AST is retained) and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or inline-function parameter), its type-name references (cast/castable/instance of/treat as, kind-test type annotations, nested array/map/function item types, and path-step node tests), and its function-call callees (FunctionCall including constructor calls and arrow targets, plus NamedFunctionRef). Every type and function name is RESOLVED to a namespace URI using the supplied in-scope `namespaces` (the same bindings `Validate` takes) plus xpath3's predeclared prefixes — handling prefixed, unprefixed (type → default element namespace; function → fn), and braced-URI `Q{uri}local` forms uniformly — and reports each function reference's static ARITY, so a caller does a pure URI+existence check with no name-form handling of its own. It is side-effect free and intended for schema-compile-time analysis (not the eval hot path); the XSD 1.1 conditional-type-assignment compiler uses it to reject an `xs:alternative` @test that references a variable, an unknown/non-built-in type (XPST0008, via `IsKnownXSDType`), or an unknown or wrong-arity standard-library function / built-in constructor (XPST0017, via `BuiltinFunctionAcceptsArity`), which the CTA static context disallows.
+`StaticReferences(namespaces)` walks the expression's AST (reparsing from `source` when no AST is retained) and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or inline-function parameter), its type-name references (cast/castable/instance of/treat as, kind-test type annotations, nested array/map/function item types, and path-step node tests), and its function-call callees (FunctionCall including constructor calls and arrow targets, plus NamedFunctionRef). Every type and function name is RESOLVED to a namespace URI using the supplied in-scope `namespaces` (the same bindings `Validate` takes) plus xpath3's predeclared prefixes — handling prefixed, unprefixed (type → default element namespace; function → fn), and braced-URI `Q{uri}local` forms uniformly — and reports each function reference's static ARITY, so a caller does a pure URI+existence check with no name-form handling of its own. It is side-effect free and intended for schema-compile-time analysis (not the eval hot path); the XSD 1.1 conditional-type-assignment compiler uses it to reject an `xs:alternative` @test that references a variable, an unknown/non-built-in type (XPST0008, via `IsKnownXSDType`), or an unknown, wrong-arity, or non-standard (extension) standard-library function / built-in constructor (XPST0017, via `StandardFunctionAcceptsArity`), or a schema-element()/schema-attribute() node test (which references a global declaration outside the CTA static context), which the CTA static context disallows.
 
 `DumpVM()` writes a textual disassembly of compiled VM instructions. Use it for debugging or tooling around lowered expressions.
 

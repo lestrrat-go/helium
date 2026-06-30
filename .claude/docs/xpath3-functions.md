@@ -21,6 +21,12 @@ type FunctionContext interface {
 ## Registry
 
 Package-level `builtinFunctions3 map[QualifiedName]Function` populated in `init()`.
+Registered via `registerFn`/`registerNS` (STANDARD F&O 3.1) or `registerFnExt`/
+`registerNSExt` (helium EXTENSIONS beyond F&O 3.1 — forward-looking XPath/XQuery 4.0,
+currently `fn:flatten` and `array:flat-map`; `builtinFunc.extension = true`).
+Membership/arity queries: `BuiltinFunctionAcceptsArity(uri,name,arity)` accepts any
+registered function; `StandardFunctionAcceptsArity(uri,name,arity)` EXCLUDES
+extensions — use it for conformance-restricted static contexts (XSD 1.1 CTA @test).
 
 ## Namespace URIs
 
