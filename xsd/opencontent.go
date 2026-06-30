@@ -151,36 +151,46 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 // this accepts ONLY the single PROVABLY-SOUND shape and rejects everything else
 // (fail-closed):
 //
-//	The base content model reduces to EXACTLY ONE wildcard particle W — NO
-//	element-declaration particles anywhere, and no second wildcard — whose
-//	EFFECTIVE occurrence (the product of minOccurs/maxOccurs along the root→W path)
-//	is optional (min product 0) and unbounded (max product unbounded). Then the
-//	base language is precisely "zero or more children matching W", so the derived
-//	open content is a language subset exactly when its wildcard is a namespace
-//	SUBSET of W (wildcardConstraintSubset) with processContents at least as strong.
+//	The base content model contains EXACTLY ONE wildcard particle W and NO
+//	element-declaration particles anywhere; W's OWN occurrence is minOccurs=0,
+//	maxOccurs=unbounded; and every ANCESTOR group on W's path is at-most-once
+//	(maxOccurs=1). Then the base content language is EXACTLY W* — every count in
+//	[0, infinity) — so the derived open content (which accepts every count) is a
+//	language subset exactly when its wildcard is a namespace SUBSET of W
+//	(wildcardConstraintSubset) with processContents at least as strong.
 //
 // Why no element declarations: a child whose name collides with a base element
 // declaration is ATTRIBUTED to that element under the base (weak-wildcard
 // attribution) and validated by its — possibly stricter — type, while the derived
 // open content would validate it only as open content; the derived would then NOT
 // be a subset of the base. A wildcard-only base has no element to win attribution.
-// Why exactly one optional-unbounded wildcard: a second wildcard, a required
-// wildcard (min product > 0, so the base would reject the empty instance the
-// derived accepts), or a bounded wildcard (max product not unbounded, so the base
-// would reject a second open child) all break the subset relation, so they are
-// conservatively deferred. open022 (a single optional unbounded wildcard, no
-// elements) is accepted; the attribution repro, the round-4/round-5 repros, and
-// the shared `(G, G)*` group-ref case (two wildcards) are all rejected.
+// Why W's OWN occurrence 0..unbounded AND every ancestor at-most-once: a min/max
+// occurrence PRODUCT of 0..unbounded is NOT sufficient — e.g.
+// `sequence(0,unbounded){ any(minOccurs=2) }` has product 0..unbounded but accepts
+// counts {0} union [2, infinity), a gap at 1 the derived (every count) would
+// exploit. Requiring W itself to be 0..unbounded and all ancestor groups
+// at-most-once makes W the sole source of repetition/optionality, so the language
+// is exactly W* with no count gaps. A second wildcard, a required/bounded wildcard,
+// or any repeating ancestor group is conservatively deferred. open022 (a single
+// optional unbounded wildcard, no elements) is accepted; the attribution repro, the
+// round-4/round-5 repros, and the shared `(G, G)*` group-ref case (two wildcards)
+// are all rejected.
 func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema) bool {
 	if base == nil || derived == nil || base.ContentModel == nil {
 		return false
 	}
 	var scan baseModelWildcardScan
-	scan.walk(base.ContentModel, 1, 1)
+	scan.walk(base.ContentModel, true)
 	if scan.elementSeen || scan.wildcardCount != 1 || scan.wildcard == nil {
 		return false
 	}
-	if scan.wildcardMin != 0 || scan.wildcardMax != Unbounded {
+	// The wildcard's OWN occurrence must be exactly optional-and-unbounded, and every
+	// ancestor group at-most-once, so the base language is EXACTLY W* (every count in
+	// [0, infinity)). A min/max occurrence PRODUCT of 0..unbounded is NOT sufficient:
+	// e.g. `sequence(0,unbounded){ any(minOccurs=2) }` has product 0..unbounded but
+	// accepts counts {0} union [2, infinity) — a gap at 1 that the derived open
+	// content (which accepts every count) would exploit, breaking the subset relation.
+	if !scan.pathAtMostOnce || scan.wildcardMin != 0 || scan.wildcardMax != Unbounded {
 		return false
 	}
 	return wildcardConstraintSubset(derived, scan.wildcard, schema, false) &&
@@ -189,27 +199,29 @@ func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema
 
 // baseModelWildcardScan accumulates a structural scan of a base content model for
 // baseModelAdmitsOpenContent: whether any element-declaration particle was seen,
-// the number of wildcard particles, and (for the last/only wildcard) its effective
-// occurrence — the product of minOccurs/maxOccurs along the root→wildcard path.
+// the number of wildcard particles, and (for the last/only wildcard) its OWN
+// minOccurs/maxOccurs plus whether every ANCESTOR group on its path is at-most-once
+// (maxOccurs == 1). When the single wildcard's own occurrence is 0..unbounded and
+// every ancestor group is at-most-once, the base content language is exactly W*.
 type baseModelWildcardScan struct {
-	elementSeen   bool
-	wildcardCount int
-	wildcard      *Wildcard
-	wildcardMin   int
-	wildcardMax   int
+	elementSeen    bool
+	wildcardCount  int
+	wildcard       *Wildcard
+	wildcardMin    int
+	wildcardMax    int
+	pathAtMostOnce bool
 }
 
-// walk descends model group mg, folding mg's OWN occurrence into the path products
-// (minProd, maxProd) on entry. A nested group particle's occurrence equals the
-// inner group's own MinOccurs/MaxOccurs (copied at parse time), so walk folds it
-// once via the recursive call's mg and does NOT re-fold the wrapping particle for
-// group terms; a leaf particle's own occurrence is folded directly.
-func (s *baseModelWildcardScan) walk(mg *ModelGroup, minProd, maxProd int) {
+// walk descends model group mg. ancestorsAtMostOnce is true iff every group from
+// the root down to (but excluding) mg has maxOccurs == 1. A nested group particle's
+// occurrence equals the inner group's own MinOccurs/MaxOccurs (copied at parse
+// time), so walk evaluates each group's occurrence once via the recursive call's mg
+// and reads the wrapping particle only for LEAF (wildcard) occurrence.
+func (s *baseModelWildcardScan) walk(mg *ModelGroup, ancestorsAtMostOnce bool) {
 	if mg == nil {
 		return
 	}
-	gMin := mulOccurs(minProd, mg.MinOccurs)
-	gMax := mulOccurs(maxProd, mg.MaxOccurs)
+	groupAtMostOnce := ancestorsAtMostOnce && mg.MaxOccurs == 1
 	for _, p := range mg.Particles {
 		switch term := p.Term.(type) {
 		case *ElementDecl:
@@ -217,10 +229,11 @@ func (s *baseModelWildcardScan) walk(mg *ModelGroup, minProd, maxProd int) {
 		case *Wildcard:
 			s.wildcardCount++
 			s.wildcard = term
-			s.wildcardMin = mulOccurs(gMin, p.MinOccurs)
-			s.wildcardMax = mulOccurs(gMax, p.MaxOccurs)
+			s.wildcardMin = p.MinOccurs
+			s.wildcardMax = p.MaxOccurs
+			s.pathAtMostOnce = groupAtMostOnce
 		case *ModelGroup:
-			s.walk(term, gMin, gMax)
+			s.walk(term, groupAtMostOnce)
 		}
 	}
 }
