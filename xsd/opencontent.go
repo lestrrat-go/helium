@@ -815,13 +815,19 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 }
 
 // pruneNonEmittingParticles returns a shallow copy of the model group with every
-// NON-EMITTING particle removed: a direct particle with maxOccurs == 0, and any
-// nested group with maxOccurs == 0 (the whole group emits nothing). Emitting group
-// particles are kept with their children recursively pruned. Element and wildcard
-// terms (and emitting non-group particles) are SHARED — the matcher only reads them.
-// Used by the XSD 1.1 open-content matcher so a prohibited particle cannot consume a
-// child (the child falls through to open content), consistent with the non-emitting
-// name-collection / drop-guard definition. The ordinary matcher is never pruned.
+// NON-EMITTING particle removed: a direct particle with maxOccurs == 0, any nested
+// group with maxOccurs == 0, and any nested group that becomes EMPTY after pruning
+// its own children. A group with no emitting members emits nothing — its retained
+// minOccurs must not make the matcher report a missing required branch (e.g. an
+// empty choice with minOccurs>=1) — so the empty group particle is dropped from its
+// parent, propagating up. Emitting group particles are kept with their children
+// recursively pruned. Element and wildcard terms (and emitting non-group particles)
+// are SHARED — the matcher only reads them. Used by the XSD 1.1 open-content matcher
+// so a prohibited particle cannot consume a child (the child falls through to open
+// content), consistent with the non-emitting name-collection / drop-guard
+// definition. The ordinary matcher is never pruned. The TOP-LEVEL model may
+// legitimately become empty (no particles); the caller (validateContentModelOpen)
+// normalizes that to an empty sequence so all children route to open content.
 func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 	if mg == nil {
 		return nil
@@ -833,8 +839,12 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 			continue // direct prohibited particle: emits nothing
 		}
 		if grp, ok := p.Term.(*ModelGroup); ok {
+			pruned := pruneNonEmittingParticles(grp)
+			if pruned == nil || len(pruned.Particles) == 0 {
+				continue // a group with no emitting members emits nothing: drop it
+			}
 			np := *p
-			np.Term = pruneNonEmittingParticles(grp)
+			np.Term = pruned
 			clone.Particles = append(clone.Particles, &np)
 			continue
 		}
@@ -981,6 +991,14 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	// td.OpenContent != nil — so the ordinary (no open content / XSD 1.0) matcher is
 	// unchanged.
 	mg = pruneNonEmittingParticles(mg)
+	if mg == nil || len(mg.Particles) == 0 {
+		// The entire declared model is non-emitting (e.g. an xs:choice all of whose
+		// branches are prohibited): it matches only the empty sequence, so every child
+		// routes to open content. Use an empty SEQUENCE with minOccurs 0 so the matcher
+		// reports "match nothing" rather than a missing required branch (an empty choice
+		// with minOccurs>=1 would otherwise fail before leftover/open-content handling).
+		mg = &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1}
+	}
 	children := collectChildElements(elem)
 
 	if oc.Mode == OpenContentSuffix {

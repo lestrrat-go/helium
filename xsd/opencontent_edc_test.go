@@ -600,3 +600,79 @@ func TestOpenContent_DirectProhibitedParticleRuntime(t *testing.T) {
 			"the ordinary matcher still validates a present prohibited element against its type (unchanged)")
 	})
 }
+
+// TestOpenContent_AllNonEmittingGroup covers the gauntlet finding that pruning a
+// group down to ZERO members (e.g. an xs:choice all of whose branches are
+// maxOccurs=0) must drop the group rather than leave an empty group whose matcher
+// reports "missing" — the all-prohibited declared model emits nothing, so every
+// child routes to open content.
+func TestOpenContent_AllNonEmittingGroup(t *testing.T) {
+	t.Parallel()
+
+	t.Run("suffix choice with all branches prohibited routes child to open content", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:choice>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="f" type="xs:int" minOccurs="0" maxOccurs="0"/>
+    </xs:choice>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"a choice with all branches prohibited emits nothing; a branch-named child is open content (suffix)")
+	})
+
+	t.Run("interleave choice with all branches prohibited routes child to open content", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:choice>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="f" type="xs:int" minOccurs="0" maxOccurs="0"/>
+    </xs:choice>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"a choice with all branches prohibited emits nothing; a branch-named child is open content (interleave)")
+	})
+
+	t.Run("sequence containing only a maxOccurs=0 choice routes child to open content", func(t *testing.T) {
+		t.Parallel()
+		// Nested empties propagate: the whole choice is maxOccurs=0 (dropped), which
+		// empties the sequence (dropped), leaving a fully-empty declared model.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:choice minOccurs="0" maxOccurs="0">
+        <xs:element name="e" type="xs:int"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"a fully non-emitting declared model means only open content applies")
+	})
+
+	t.Run("choice with at least one emitting branch still matches normally", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:choice>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="g" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><g>x</g></doc>`),
+			"an emitting branch still matches normally")
+		require.NoError(t, validateOC(t, schema, `<doc><g>x</g><e>anything</e></doc>`),
+			"the prohibited branch's name routes to open content alongside the satisfied emitting branch")
+		require.Error(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"the choice still requires its emitting branch g (the prohibited branch does not make it optional)")
+	})
+}
