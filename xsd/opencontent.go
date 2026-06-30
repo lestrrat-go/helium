@@ -382,7 +382,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			// true LOCAL decls that can diverge.)
 			if global, ok := c.schema.elements[bn]; ok {
 				for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-					if msg := globalDropsLocalConstraint(baseLocal, global); msg != "" {
+					if msg := c.globalDropsLocalConstraint(ctx, baseLocal, global); msg != "" {
 						c.reportOpenContentTypeError(ctx, td,
 							"The restriction drops the base type's local element declaration '"+bn.Local+
 								"' and re-admits it through an open-content wildcard governed by the global declaration, which "+msg+".")
@@ -416,7 +416,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 				// here means no spill, so it is safe and the loop simply does not run.)
 				if global, ok := c.schema.elements[bn]; ok {
 					for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-						if msg := globalDropsLocalConstraint(baseLocal, global); msg != "" {
+						if msg := c.globalDropsLocalConstraint(ctx, baseLocal, global); msg != "" {
 							c.reportOpenContentTypeError(ctx, td,
 								"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
 									"' below the base's; the excess spills into the enforcing interleave open content governed by the global declaration, which "+msg+".")
@@ -443,8 +443,12 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 //     (typeTablesConsistent, absent-both = equivalent) lets the global attribute the
 //     spilled/re-admitted element to a different governing type than the base would —
 //     the dynamic EDC checks only type-DEFINITION substitutability, not table equivalence.
-//   - fixed: a base local `fixed` value the global does not EXACTLY carry (no fixed,
-//     or a different lexical value) lets the global admit values the local forbade.
+//   - fixed: a base local `fixed` value the global does not carry (no fixed) or carries
+//     with a DIFFERENT VALUE lets the global admit values the local forbade. The
+//     comparison is VALUE-SPACE (fixedValueMatches, accounting for each declaration's
+//     FixedNS namespace context) — so a QName/NOTATION fixed with the same lexical form
+//     but a different prefix→namespace binding is DIFFERENT (reject), and a numeric/list
+//     fixed differing only lexically (e.g. "1.0" vs "1.00") is EQUAL.
 //   - nillable: a global that is nillable while the local is NOT would accept
 //     xsi:nil="true" the base rejected.
 //   - identity constraints: a base local xs:key/xs:unique/xs:keyref the global does not
@@ -455,10 +459,10 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 //     block="#all" rejecting an xsi:type derivation the global admits.
 //   - default (ASYMMETRIC): a BASE-LOCAL default is NOT a constraint (it only supplies
 //     a value for an empty element; it forbids nothing) — so it is not compared. But a
-//     GLOBAL default the local LACKS (or a DIFFERENT one) IS unsound: an empty <e/>
-//     re-admitted via the global gets the global's default substituted, making an
-//     otherwise type-invalid empty element valid.
-func globalDropsLocalConstraint(local, global *ElementDecl) string {
+//     GLOBAL default the local LACKS (or a VALUE-SPACE-DIFFERENT one, DefaultNS-aware) IS
+//     unsound: an empty <e/> re-admitted via the global gets the global's default
+//     substituted, making an otherwise type-invalid empty element valid.
+func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global *ElementDecl) string {
 	if local == nil || global == nil {
 		return ""
 	}
@@ -466,7 +470,7 @@ func globalDropsLocalConstraint(local, global *ElementDecl) string {
 		return "has a conditional-type-assignment {type table} that differs from the base declaration's"
 	}
 	if local.Fixed != nil {
-		if global.Fixed == nil || *global.Fixed != *local.Fixed {
+		if global.Fixed == nil || !fixedValueMatches(ctx, *local.Fixed, *global.Fixed, local.Type, local.FixedNS, global.FixedNS, c.schema, c.version) {
 			return "does not impose the base declaration's fixed value"
 		}
 	}
@@ -476,7 +480,7 @@ func globalDropsLocalConstraint(local, global *ElementDecl) string {
 	if local.Block&^global.Block != 0 {
 		return "does not block every derivation/substitution the base declaration's 'block' forbade"
 	}
-	if global.Default != nil && (local.Default == nil || *global.Default != *local.Default) {
+	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, c.schema, c.version)) {
 		return "supplies a 'default' the base declaration does not, so it would accept an empty element the base rejected"
 	}
 	for _, lc := range local.IDCs {
