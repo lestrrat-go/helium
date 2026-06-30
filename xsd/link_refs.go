@@ -287,6 +287,22 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for au, qn := range c.attrRefs {
 		ga, ok := c.schema.globalAttrs[qn]
 		if !ok {
+			// XSD 1.1: a ref to one of the four xsi: processor attributes resolves to
+			// no user-declared global attribute, but the attribute has a FIXED
+			// built-in type. Associate that built-in type (xsi:type→xs:QName,
+			// xsi:nil→xs:boolean, xsi:noNamespaceSchemaLocation→xs:anyURI) so a
+			// fixed/default constraint is validated for validity at compile time
+			// (checkAttrUseConstraints) and compared in VALUE space at runtime
+			// (fixedValueMatches) — instead of falling back to raw string equality
+			// against a nil type. xsi:schemaLocation (a list of xs:anyURI) has no
+			// scalar built-in, so its even-pair value validity stays with
+			// validateDeclaredXsiAttrValue.
+			if c.version == Version11 && qn.NS == lexicon.NamespaceXSI &&
+				au.Type == nil && au.TypeName == (QName{}) {
+				if bt, found := xsiProcessorAttrBuiltinType(qn.Local); found {
+					au.TypeName = bt
+				}
+			}
 			continue
 		}
 		if au.Default == nil {
@@ -1300,6 +1316,16 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 			val = it.au.Fixed
 		}
 		if val == nil {
+			continue
+		}
+		// A declared xsi:schemaLocation use has no scalar built-in type, so its
+		// fixed/default LITERAL is validated against the list-of-xs:anyURI value
+		// space directly (non-empty even pairs, each a valid xs:anyURI).
+		if isDeclaredXsiSchemaLocationUse(it.au, c.version) {
+			if err := validateXsiSchemaLocationValue(*val, c.version); err != nil {
+				msg := fmt.Sprintf("The value '%s' is not a valid value of the xsi:schemaLocation type (a non-empty even list of xs:anyURI).", *val)
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
+			}
 			continue
 		}
 		td := attrUseTypeDef(it.au, c.schema)

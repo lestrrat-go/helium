@@ -84,6 +84,7 @@ const (
 	attrRefer                = "refer"
 	attrRef                  = "ref"
 	attrSchemaLocation       = "schemaLocation"
+	attrNoNSSchemaLocation   = "noNamespaceSchemaLocation" // xsi: processor attribute
 	attrSource               = "source"
 	attrSubstitutionGroup    = "substitutionGroup"
 	attrTargetNamespace      = "targetNamespace"

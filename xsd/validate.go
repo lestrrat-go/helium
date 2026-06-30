@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -1420,6 +1421,115 @@ func attrDisplayName(a *helium.Attribute) string {
 	return a.LocalName()
 }
 
+// isKnownXsiProcessorAttr reports whether local is one of the FOUR processor
+// attributes that actually exist in the XSI namespace (xsi:type, xsi:nil,
+// xsi:schemaLocation, xsi:noNamespaceSchemaLocation). The XSI namespace is
+// reserved to exactly these; any other xsi:-namespace local name (e.g.
+// xsi:foo) is not a real attribute and must NOT receive the declared-xsi
+// special handling.
+func isKnownXsiProcessorAttr(local string) bool {
+	switch local {
+	case attrType, attrNil, attrSchemaLocation, attrNoNSSchemaLocation:
+		return true
+	}
+	return false
+}
+
+// xsiProcessorAttrBuiltinType returns the built-in SCALAR type a declared xsi:
+// processor-attribute reference is associated with, so its fixed/default value
+// is validated against (and compared in) that type's value space (xsi:type→
+// xs:QName, xsi:nil→xs:boolean, xsi:noNamespaceSchemaLocation→xs:anyURI). It
+// returns ("", false) for xsi:schemaLocation, whose type is a LIST of xs:anyURI
+// with no scalar built-in equivalent — its value/even-pair validity is handled
+// directly by validateDeclaredXsiAttrValue instead.
+func xsiProcessorAttrBuiltinType(local string) (QName, bool) {
+	switch local {
+	case attrType:
+		return QName{Local: lexicon.TypeQName, NS: lexicon.NamespaceXSD}, true
+	case attrNil:
+		return QName{Local: lexicon.TypeBoolean, NS: lexicon.NamespaceXSD}, true
+	case attrNoNSSchemaLocation:
+		return QName{Local: lexicon.TypeAnyURI, NS: lexicon.NamespaceXSD}, true
+	}
+	return QName{}, false
+}
+
+// xsiSchemaLocationTokens collapses a value in XSD whitespace and splits it on
+// XSD list whitespace ONLY (space/tab/CR/LF via value.XSDFields — NBSP and
+// other Unicode whitespace are NOT separators), yielding the
+// xsi:schemaLocation token list (its value space is a list of xs:anyURI).
+func xsiSchemaLocationTokens(val string) []string {
+	return value.XSDFields(normalizeWhiteSpace(val, "collapse"))
+}
+
+// validateXsiSchemaLocationValue validates a value against xsi:schemaLocation's
+// value space: a NON-empty, EVEN-length list of (namespace, location)
+// xs:anyURI pairs. An odd count, an empty value, or a non-anyURI token is an
+// error. Used for both a present instance value and a fixed/default LITERAL.
+func validateXsiSchemaLocationValue(val string, version Version) error {
+	toks := xsiSchemaLocationTokens(val)
+	if len(toks) == 0 || len(toks)%2 != 0 {
+		return fmt.Errorf("xsi:schemaLocation must be a non-empty list of anyURI pairs")
+	}
+	for _, t := range toks {
+		if err := validateBuiltinValue(t, lexicon.TypeAnyURI, version); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// xsiSchemaLocationValueEqual reports whether two xsi:schemaLocation values are
+// equal in VALUE space — equal token lists after XSD whitespace collapse and
+// XSD-whitespace tokenization — so leading/trailing/internal run-length
+// whitespace differences (e.g. " urn:a   loc.xsd " vs "urn:a loc.xsd") do not
+// matter, while raw string equality would false-reject.
+func xsiSchemaLocationValueEqual(a, b string) bool {
+	return slices.Equal(xsiSchemaLocationTokens(a), xsiSchemaLocationTokens(b))
+}
+
+// isDeclaredXsiSchemaLocationUse reports whether au is a declared xsi:schemaLocation
+// attribute use (the only one of the four xsi: processor attributes whose
+// value space is a list with no scalar built-in type, so its fixed/default is
+// handled by the list helpers above rather than a built-in TypeDef).
+func isDeclaredXsiSchemaLocationUse(au *AttrUse, version Version) bool {
+	return version == Version11 && au.Name.NS == lexicon.NamespaceXSI && au.Name.Local == attrSchemaLocation
+}
+
+// validateDeclaredXsiAttrValue validates a PRESENT xsi: processor attribute
+// whose use is EXPLICITLY declared (XSD 1.1 `ref="xsi:*"`) against the fixed
+// built-in type that attribute is defined with. `ref="xsi:type"` does not
+// resolve to a typed global attribute use, so the ordinary attribute-use value
+// check sees no type; this supplies each xsi attribute's built-in type so an
+// empty/malformed value — xsi:type="" or a malformed/unbound QName, a
+// non-boolean xsi:nil, a non-anyURI location — is a validation error rather
+// than a silently-satisfied (present) use. Only the four real xsi: processor
+// attributes are recognized (the caller gates on isKnownXsiProcessorAttr).
+// Returns nil when the value is valid.
+func (vc *validationContext) validateDeclaredXsiAttrValue(a *helium.Attribute, elem *helium.Element) error {
+	val := a.Value()
+	switch a.LocalName() {
+	case attrType:
+		// xs:QName (whiteSpace=collapse): lexically valid and, when prefixed, the
+		// prefix must be bound in scope (a non-empty, namespace-resolvable QName).
+		q := normalizeWhiteSpace(val, "collapse")
+		if err := validateQName(q); err != nil {
+			return err
+		}
+		if prefix, _, ok := strings.Cut(q, ":"); ok && lookupNS(elem, prefix) == "" {
+			return fmt.Errorf("unbound xsi:type QName prefix %q", prefix)
+		}
+		return nil
+	case attrNil:
+		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeBoolean, vc.version)
+	case attrSchemaLocation:
+		return validateXsiSchemaLocationValue(val, vc.version)
+	case attrNoNSSchemaLocation:
+		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeAnyURI, vc.version)
+	}
+	return nil
+}
+
 func (vc *validationContext) validateAttributes(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	var hasErr bool
 
@@ -1469,25 +1579,82 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
-		if vc.isSpecialAttr(a) {
-			continue
-		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
+		// True for a present, non-prohibited DECLARED xsi: processor-attribute use
+		// whose value was already validated by validateDeclaredXsiAttrValue below —
+		// so the generic type-based value check is skipped (no double validation);
+		// the fixed-value comparison still runs (against the built-in type).
+		declaredXsiValueChecked := false
+		if vc.isSpecialAttr(a) {
+			// XSD 1.1: the xsi: processor attributes (xsi:type, xsi:nil,
+			// xsi:schemaLocation, xsi:noNamespaceSchemaLocation) may be
+			// referenced explicitly as attribute uses (e.g. to make xsi:type
+			// mandatory, or to PROHIBIT it). When a type's declaration explicitly
+			// declares such an xsi: attribute — with ANY use (optional/required/
+			// prohibited) — the instance attribute participates in ordinary
+			// attribute-use validation (so a required xsi: use is satisfied and a
+			// prohibited one rejects a present xsi: attribute); otherwise xsi:
+			// (and xmlns) attributes remain unconditionally special. A prohibited
+			// use is excluded from `allowed`, so the declaration is detected via
+			// both maps. 1.0 keeps the historical skip (byte-identical).
+			_, allowedXSI := allowed[aqn]
+			_, prohibitedXSI := prohibited[aqn]
+			declaredXSI := allowedXSI || prohibitedXSI
+			// Only the four real xsi: processor attributes participate; a declared
+			// ref to any other xsi: local name (e.g. xsi:foo) is not specially
+			// accepted — it stays skipped as special, so a required use of it is
+			// never satisfied (the instance is rejected as missing).
+			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI || !isKnownXsiProcessorAttr(a.LocalName()) {
+				continue
+			}
+			// A NON-prohibited declared xsi: use must validate its value against the
+			// attribute's built-in type (ref="xsi:*" carries no resolvable type). An
+			// invalid value (e.g. xsi:type="") is a validity error and does NOT
+			// satisfy the use — it is not recorded as present, so a required use also
+			// reports missing. A prohibited use needs no value check: its mere
+			// presence is rejected below.
+			if allowedXSI {
+				if err := vc.validateDeclaredXsiAttrValue(a, elem); err != nil {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
+					continue
+				}
+				declaredXsiValueChecked = true
+			}
+		}
 		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
 			// Resolve the declared type up front so the fixed-value check can
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version) {
-				ad := attrDisplayName(a)
-				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
-				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
-				hasErr = true
+			if au.Fixed != nil {
+				// xsi:schemaLocation has no scalar built-in type, so its fixed value
+				// is compared in VALUE space as a list of xs:anyURI (collapse + XSD
+				// tokenize + token-list equality); every other use compares via
+				// fixedValueMatches against its (built-in or declared) type.
+				fixedMatches := false
+				switch {
+				case isDeclaredXsiSchemaLocationUse(au, vc.version):
+					fixedMatches = xsiSchemaLocationValueEqual(a.Value(), *au.Fixed)
+				default:
+					fixedMatches = fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version)
+				}
+				if !fixedMatches {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
+				}
 			}
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).
-			if tdOK && attrTD.ContentType == ContentTypeSimple {
+			// A declared xsi: use was already value-validated above (its built-in
+			// type is associated only for the fixed-value comparison just done), so
+			// skip the generic check to avoid validating the same value twice.
+			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
 				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
