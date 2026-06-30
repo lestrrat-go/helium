@@ -90,7 +90,79 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 	td.OpenContent = eff
 	if td.Derivation == DerivationRestriction && td.BaseType != nil {
 		c.checkOpenContentRestriction(ctx, td, eff, td.BaseType.OpenContent)
+		c.checkOpenContentDropsBaseLocal(ctx, td, eff)
 	}
+}
+
+// checkOpenContentDropsBaseLocal rejects a restriction that DROPS a base LOCAL
+// element declaration and re-admits the same name through a LENIENT open-content
+// wildcard that does not enforce the base element's declared type — so the derived
+// would accept content the base rejects (not a valid subset). The open content
+// fails to enforce the type when its wildcard is processContents="skip" (never
+// assessed) or "lax" with NO global declaration of that name (nothing to assess
+// against): in both cases the dynamic wildcard-EDC check cannot recover the base
+// local's type. A "strict" wildcard, or "lax" with a global declaration, DOES
+// resolve a governing type and the dynamic EDC (validateWildcardElementConsistent)
+// enforces consistency at validation, so those are not rejected here. A base local
+// the derived KEEPS (or properly restricts) is matched by the model via
+// weak-wildcard precedence, not the open wildcard, so it is exempt.
+func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeDef, derived *OpenContent) {
+	if derived == nil || derived.Wildcard == nil || td.BaseType == nil || td.BaseType.ContentModel == nil {
+		return
+	}
+	pc := derived.Wildcard.ProcessContents
+	if pc == ProcessStrict {
+		return // strict resolves a governing type; dynamic EDC enforces consistency
+	}
+	derivedNames := collectModelElementNames(td.ContentModel, c.schema)
+	seen := make(map[QName]struct{})
+	for _, bl := range baseLocalElementNames(td.BaseType.ContentModel) {
+		if _, dup := seen[bl]; dup {
+			continue
+		}
+		seen[bl] = struct{}{}
+		if derivedNames[bl] {
+			continue // kept by the derived model; matched there, not by the wildcard
+		}
+		if !wildcardAllowsExpandedName(derived.Wildcard, bl.Local, bl.NS, c.schema, false) {
+			continue // the open wildcard does not re-admit this name
+		}
+		if pc == ProcessLax {
+			if _, ok := c.schema.elements[bl]; ok {
+				continue // a global declaration exists; dynamic EDC enforces it
+			}
+		}
+		c.reportOpenContentTypeError(ctx, td,
+			"The restriction drops the base type's local element declaration '"+bl.Local+
+				"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
+		return
+	}
+}
+
+// baseLocalElementNames returns the expanded names of every LOCAL element
+// declaration (IsRef=false) declared anywhere in a content model, recursing
+// through nested model groups. Global element refs are excluded: a wildcard that
+// re-admits a global ref resolves to the SAME global declaration, so no type is lost.
+func baseLocalElementNames(mg *ModelGroup) []QName {
+	var names []QName
+	var walk func(g *ModelGroup)
+	walk = func(g *ModelGroup) {
+		if g == nil {
+			return
+		}
+		for _, p := range g.Particles {
+			switch term := p.Term.(type) {
+			case *ElementDecl:
+				if !term.IsRef {
+					names = append(names, term.Name)
+				}
+			case *ModelGroup:
+				walk(term)
+			}
+		}
+	}
+	walk(mg)
+	return names
 }
 
 // checkOpenContentRestriction enforces §3.4.6.4: a restriction's {open content}
@@ -686,7 +758,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 				return fmt.Errorf("unexpected element")
 			}
 		}
-		return vc.validateOpenChildren(ctx, elem, oc.Wildcard, leftover)
+		return vc.validateOpenChildren(ctx, elem, mg, oc.Wildcard, leftover)
 	}
 
 	// interleave: §3.4.4.3.2 requires the children to be partitionable into a
@@ -711,7 +783,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	if err := vc.validateContentModelTop(ctx, elem, mg, declared); err != nil {
 		return err
 	}
-	return vc.validateOpenChildren(ctx, elem, oc.Wildcard, open)
+	return vc.validateOpenChildren(ctx, elem, mg, oc.Wildcard, open)
 }
 
 // refineInterleavePartition moves declared-but-unplaceable children that match
@@ -765,13 +837,18 @@ func (vc *validationContext) matchContentModelSuffix(ctx context.Context, parent
 
 // validateOpenChildren validates a set of open-content child elements against the
 // open wildcard (processContents lax/strict/skip). Any child that does not match
-// the wildcard's namespace constraint is reported as unexpected.
-func (vc *validationContext) validateOpenChildren(ctx context.Context, parent *helium.Element, wc *Wildcard, open []childElem) error {
+// the wildcard's namespace constraint is reported as unexpected. The declared
+// content model mg is threaded as the EDC scope so an open-content-admitted child
+// gets the SAME dynamic wildcard Element-Declarations-Consistent check the ordinary
+// wildcard-particle path applies (a child whose name collides with a same-named
+// local declaration whose type is inconsistent with the wildcard's governing type
+// is rejected) — it must NOT be nil.
+func (vc *validationContext) validateOpenChildren(ctx context.Context, parent *helium.Element, mg *ModelGroup, wc *Wildcard, open []childElem) error {
 	if len(open) == 0 {
 		return nil
 	}
 	p := &Particle{MinOccurs: 0, MaxOccurs: Unbounded, Term: wc}
-	consumed, err := vc.matchWildcardParticle(ctx, parent, p, wc, open, 0, nil)
+	consumed, err := vc.matchWildcardParticle(ctx, parent, p, wc, open, 0, mg)
 	if err != nil {
 		return err
 	}
