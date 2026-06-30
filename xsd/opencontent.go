@@ -133,10 +133,13 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 // derived content model, bypassing every open-content guard. A declared wildcard wins
 // attribution, so a child it admits is validated by IT (processContents P_Wd), not by
 // O (P_O). For the derived to be a subset of the base, every derived declared wildcard
-// W_d that admits children in O's namespace must be a valid RESTRICTION of O: its
-// namespace ⊆ O's AND its processContents at least as strong as P_O. Otherwise it
-// accepts content the base's strict/lax open content rejected. Version11 / restriction
-// only; a base WITHOUT open content is unaffected.
+// W_d that admits children in O's namespace must be a valid RESTRICTION of O. When O is
+// INTERLEAVE (no ordering) that means namespace ⊆ O's AND processContents at least as
+// strong as P_O. When O is SUFFIX it ALSO imposes a trailing-ORDERING constraint that a
+// declared wildcard (non-trailing declared content) cannot preserve, so re-admitting
+// O's namespace as a declared wildcard is rejected outright (any namespace/pc), mirroring
+// the quadrant-A suffix order-loss handling. Version11 / restriction only; a base WITHOUT
+// open content is unaffected.
 //
 // Scoped to avoid a FALSE-REJECT: a derived declared wildcard that VALIDLY RESTRICTS a
 // BASE DECLARED wildcard (W_d ⊆ W_b and pc at least as strong) is a QUADRANT-D
@@ -170,8 +173,21 @@ func (c *compiler) checkDerivedWildcardReadmitsBaseOpen(ctx context.Context, td 
 		if exempt {
 			continue
 		}
-		// The derived declared wildcard re-admits the base OPEN content's language. It
-		// must be a valid restriction of O: namespace ⊆ O AND pc at least as strong.
+		// The derived declared wildcard re-admits the base OPEN content's language.
+		if base.Mode == OpenContentSuffix {
+			// SUFFIX imposes an ORDERING constraint — open children must be TRAILING (the
+			// runtime rejects a trailing declared-name child / matches the wildcard only in
+			// the suffix). Re-admitting the namespace as a DECLARED wildcard makes those
+			// children DECLARED content, which can appear NON-trailing, so the derived
+			// accepts orderings the base rejects. Reject regardless of namespace-subset or
+			// processContents-strength, mirroring the suffix order-loss handling in the
+			// quadrant-A drop guards.
+			c.reportOpenContentTypeError(ctx, td,
+				"The restriction drops the base type's suffix open content but re-admits its language through a declared wildcard, losing the trailing-ordering constraint (the re-admitted children may appear non-trailing, which the base suffix open content rejects).")
+			return
+		}
+		// INTERLEAVE imposes no ordering: the declared wildcard must be a valid restriction
+		// of O — namespace ⊆ O AND processContents at least as strong as P_O.
 		if !wildcardConstraintSubset(dw.wc, base.Wildcard, c.schema, false) ||
 			processContentsStrength(dw.wc.ProcessContents) < baseStrength {
 			c.reportOpenContentTypeError(ctx, td,
