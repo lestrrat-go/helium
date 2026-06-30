@@ -1047,3 +1047,83 @@ func TestOpenContent_SuffixAbstractSubstMember(t *testing.T) {
 			"interleave refinement moves an abstract member to open content")
 	})
 }
+
+// TestOpenContent_WildcardEDCTypeTable covers the CTA×open-content integration
+// gauntlet finding: the static Element-Declarations-Consistent type-table check must
+// also examine the type's EFFECTIVE OPEN-CONTENT wildcard. A local element with a
+// {type table} (xs:alternative) whose name is reachable through the open-content
+// wildcard to a same-named global with a NON-equivalent type table is an EDC error.
+func TestOpenContent_WildcardEDCTypeTable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("open-content wildcard reaching an inconsistent-type-table global is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:string"/>
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="lax"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e">
+        <xs:alternative test="true()" type="xs:integer"/>
+        <xs:alternative type="xs:string"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a local element with a type table reachable via open content to a no-type-table global is an EDC error")
+	})
+
+	t.Run("suffix open-content wildcard reaching an inconsistent-type-table global is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:string"/>
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="lax"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e">
+        <xs:alternative test="true()" type="xs:integer"/>
+        <xs:alternative type="xs:string"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "suffix open content reaching an inconsistent-type-table global is an EDC error")
+	})
+
+	t.Run("both type tables absent is accepted (differing type definitions allowed)", func(t *testing.T) {
+		t.Parallel()
+		// Local e is xs:int, global e is xs:string — DIFFERENT type definitions, but
+		// NEITHER has a type table, so the wildcard EDC permits it.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:string"/>
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "differing type DEFINITIONS with both type TABLES absent are EDC-consistent")
+	})
+
+	t.Run("a skip open-content wildcard imposes no EDC constraint (accept)", func(t *testing.T) {
+		t.Parallel()
+		// The open wildcard is skip — it never resolves to the global, so the local
+		// type table vs the global's absence is not an inconsistency.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:string"/>
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e">
+        <xs:alternative test="true()" type="xs:integer"/>
+        <xs:alternative type="xs:string"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a skip open-content wildcard never resolves to the global, so it imposes no EDC type-table constraint")
+	})
+}
