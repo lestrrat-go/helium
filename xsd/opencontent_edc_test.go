@@ -541,3 +541,62 @@ func TestOpenContent_NonEmittingElementConsistency(t *testing.T) {
 			"an emitting declared name after open content must still be rejected as misplaced")
 	})
 }
+
+// TestOpenContent_DirectProhibitedParticleRuntime covers the gauntlet finding that
+// a DIRECT minOccurs=0 maxOccurs=0 (prohibited) element particle must not consume a
+// child in the XSD 1.1 open-content declared-content matcher: the runtime matcher
+// otherwise grabs a matching child once before the maxOccurs check, so the child is
+// validated against the prohibited element's type instead of falling through to open
+// content. The ordinary (no open content) matcher is unchanged.
+func TestOpenContent_DirectProhibitedParticleRuntime(t *testing.T) {
+	t.Parallel()
+
+	t.Run("suffix direct prohibited element leaves child for open content", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><e>anything</e></doc>`),
+			"a trailing <e> whose only declaration is a prohibited particle must validate as open content")
+	})
+
+	t.Run("interleave direct prohibited element leaves child for open content", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><e>anything</e></doc>`),
+			"a <e> whose only declaration is a prohibited particle must validate as open content (interleave)")
+	})
+
+	t.Run("without open content a present prohibited element is still rejected", func(t *testing.T) {
+		t.Parallel()
+		// Control: the ordinary (no open content) matcher is UNCHANGED — it still
+		// matches a present maxOccurs=0 element against its declared type (here the
+		// prohibited e:int validates the child as an int, so invalid int content is
+		// rejected). This pins the ordinary-path behavior so the open-content prune
+		// does not leak into it.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.Error(t, validateOC(t, schema, `<doc><a>x</a><e>notanint</e></doc>`),
+			"the ordinary matcher still validates a present prohibited element against its type (unchanged)")
+	})
+}

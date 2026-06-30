@@ -814,6 +814,35 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 	return names
 }
 
+// pruneNonEmittingParticles returns a shallow copy of the model group with every
+// NON-EMITTING particle removed: a direct particle with maxOccurs == 0, and any
+// nested group with maxOccurs == 0 (the whole group emits nothing). Emitting group
+// particles are kept with their children recursively pruned. Element and wildcard
+// terms (and emitting non-group particles) are SHARED — the matcher only reads them.
+// Used by the XSD 1.1 open-content matcher so a prohibited particle cannot consume a
+// child (the child falls through to open content), consistent with the non-emitting
+// name-collection / drop-guard definition. The ordinary matcher is never pruned.
+func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
+	if mg == nil {
+		return nil
+	}
+	clone := *mg
+	clone.Particles = make([]*Particle, 0, len(mg.Particles))
+	for _, p := range mg.Particles {
+		if p.MaxOccurs == 0 {
+			continue // direct prohibited particle: emits nothing
+		}
+		if grp, ok := p.Term.(*ModelGroup); ok {
+			np := *p
+			np.Term = pruneNonEmittingParticles(grp)
+			clone.Particles = append(clone.Particles, &np)
+			continue
+		}
+		clone.Particles = append(clone.Particles, p)
+	}
+	return &clone
+}
+
 // resolveDefinedSiblings populates SiblingNames on every xs:any wildcard that
 // carries @notQName="##definedSibling" (XSD 1.1). The sibling set is the names
 // of the element declarations that appear in the SAME content model as the
@@ -939,6 +968,19 @@ func assignDefinedSiblings(mg *ModelGroup, siblings []QName) {
 //     always goes through the model (weak-wildcard precedence), so a misplaced or
 //     excess declared element is still a violation rather than open content.
 func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem *helium.Element, mg *ModelGroup, oc *OpenContent) error {
+	// XSD 1.1 open content: a NON-EMITTING declared particle (effective maxOccurs 0 —
+	// its own maxOccurs=0, or under a maxOccurs=0 ancestor group) emits nothing, so it
+	// must not consume a child in the declared-content matcher — a child of that name
+	// falls through to open content. The runtime matcher (matchElementParticle /
+	// matchWildcardParticle) still grabs a matching child ONCE before its maxOccurs
+	// check, so without pruning a maxOccurs=0 particle would consume the child and
+	// validate it against the prohibited element's type. Prune the model fed to the
+	// open-content matcher (and the name collection / EDC scope below) so it is
+	// consistent with the compile-time non-emitting semantics. Scoped to the Version11
+	// open-content path — validateContentModelOpen is only reached when
+	// td.OpenContent != nil — so the ordinary (no open content / XSD 1.0) matcher is
+	// unchanged.
+	mg = pruneNonEmittingParticles(mg)
 	children := collectChildElements(elem)
 
 	if oc.Mode == OpenContentSuffix {
