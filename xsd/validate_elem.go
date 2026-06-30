@@ -15,14 +15,14 @@ import (
 // The greedy matching approach assumes UPA-compliant (deterministic) content
 // models, which is enforced at compile time by checkUPA in check_upa.go.
 //
-// LIMITATION (XSD 1.1 element-over-wildcard precedence): the choice case
+// XSD 1.1 element-over-wildcard precedence: the choice case
 // (matchChoice/tryMatchChoice) gives non-wildcard particles precedence over a
-// wildcard in 1.1, so a wildcard declared before an element cannot steal that
-// element's child. The sequence case is NOT yet handled here: because sequence
-// matching is position-based and greedy (no backtracking), a minOccurs=0
-// wildcard preceding an element can still greedily consume a child the element
-// declaration should validate. Fixing it safely requires lookahead/backtracking
-// across particles; left as a remaining limitation.
+// wildcard, so a wildcard declared before an element cannot steal that element's
+// child. The sequence case is handled here too via sequenceElementReservedLimit
+// (Version11 only): before matching each particle, children a LATER element
+// particle in the same sequence is responsible for are reserved, so a leading
+// minOccurs=0 wildcard cannot greedily consume them. It is bounded lookahead (no
+// backtracking) and a no-op for all-element sequences and for XSD 1.0.
 func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
 	startPos := pos
 
@@ -35,8 +35,12 @@ func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.E
 	matchOnce := func(p int) (int, error) {
 		cur := p
 		var contentErr error
-		for _, particle := range mg.Particles {
-			consumed, e := vc.matchParticle(ctx, parent, particle, children, cur, hasWildcard, edcScope)
+		for i, particle := range mg.Particles {
+			limit := len(children)
+			if vc.version == Version11 {
+				limit = sequenceElementReservedLimit(mg.Particles, i, children, cur, vc.schema)
+			}
+			consumed, e := vc.matchParticle(ctx, parent, particle, children[:limit], cur, hasWildcard, edcScope)
 			cur += consumed
 			if e != nil {
 				if consumed == 0 {
@@ -87,8 +91,12 @@ func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.E
 
 func (vc *validationContext) tryMatchSequenceOnce(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
 	cur := pos
-	for _, p := range mg.Particles {
-		consumed, err := vc.tryMatchParticle(ctx, p, children, cur)
+	for i, p := range mg.Particles {
+		limit := len(children)
+		if vc.version == Version11 {
+			limit = sequenceElementReservedLimit(mg.Particles, i, children, cur, vc.schema)
+		}
+		consumed, err := vc.tryMatchParticle(ctx, p, children[:limit], cur)
 		if err != nil {
 			return 0, err
 		}
@@ -868,8 +876,12 @@ func (vc *validationContext) tryMatchSequence(ctx context.Context, mg *ModelGrou
 
 	scanOnce := func(p int) (int, error) {
 		cur := p
-		for _, particle := range mg.Particles {
-			consumed, err := vc.tryMatchParticle(ctx, particle, children, cur)
+		for i, particle := range mg.Particles {
+			limit := len(children)
+			if vc.version == Version11 {
+				limit = sequenceElementReservedLimit(mg.Particles, i, children, cur, vc.schema)
+			}
+			consumed, err := vc.tryMatchParticle(ctx, particle, children[:limit], cur)
 			if err != nil {
 				return 0, err
 			}
@@ -1529,6 +1541,46 @@ const (
 // bounded first-consumer determination, not full backtracking. Side-effect free.
 func particleConsumesViaElement(p *Particle, child childElem, schema *Schema) bool {
 	return particleFirstConsumerKind(p, child, schema) == consumerElement
+}
+
+// sequenceElementReservedLimit implements XSD 1.1 element-over-wildcard
+// precedence for the SEQUENCE case. It returns an end index into children that
+// the particle at index i may see while matching, so a LEADING minOccurs=0
+// wildcard (direct, or nested as the particle's first consuming term) does not
+// greedily consume a child that a LATER element particle in the same sequence is
+// responsible for validating. Without this, an effective content model like
+// sequence( any{0,unbounded} lax, state, currency, zip ) — produced by extending
+// a base whose content is just a lax unbounded wildcard — has the wildcard eat
+// the required named elements, falsely reporting "Missing child element(s)".
+//
+// The reservation fires ONLY when particle i would consume the child via a
+// wildcard, NOT via an element leaf: element-vs-element matching stays in
+// declaration order (the wildcard is the only thing element precedence
+// displaces). It returns len(children) when nothing is reserved, so an
+// all-element sequence is unaffected (byte-identical). Bounded lookahead, no
+// backtracking; mirrors the matchChoice/particleConsumesViaElement approach.
+// Callers MUST gate on Version11. Side-effect free.
+func sequenceElementReservedLimit(particles []*Particle, i int, children []childElem, cur int, schema *Schema) int {
+	for k := cur; k < len(children); k++ {
+		child := children[k]
+		reservedForLater := false
+		for j := i + 1; j < len(particles); j++ {
+			if particleConsumesViaElement(particles[j], child, schema) {
+				reservedForLater = true
+				break
+			}
+		}
+		if !reservedForLater {
+			continue
+		}
+		// Element-vs-element: particle i keeps the child by declaration order, so
+		// only a child particle i would take via a WILDCARD is reserved.
+		if particleConsumesViaElement(particles[i], child, schema) {
+			continue
+		}
+		return k
+	}
+	return len(children)
 }
 
 // particleFirstConsumerKind classifies how the particle would consume child as
