@@ -126,6 +126,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	var anyAttributeSeen bool      // whether an anyAttribute wildcard has been seen; it must be the optional final child
 	var assertSeen bool            // whether an xs:assert (trailing region) has been seen; openContent must precede it
 	var openContentSeen bool       // whether an xs:openContent has been seen; it is a sibling of the wrapper-free CHOICE branch
+	var annotationSeen bool        // whether an xs:annotation has been seen (cardinality: at most one; POSITION is deliberately tolerant)
 
 	reportExtraContent := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -355,7 +356,13 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		case isXSDElement(ce, elemAnnotation):
-			// annotation is permitted; it is collected elsewhere, ignored here.
+			// annotation is permitted (collected elsewhere). The grammar is
+			// (annotation?), so at most one — a SECOND is a schema error (1.1 only).
+			// POSITION stays deliberately tolerant (annotation may appear anywhere).
+			if c.version == Version11 && annotationSeen {
+				reportExtraContent(ce, "A complex type definition must not have more than one 'annotation'.")
+			}
+			annotationSeen = true
 		default:
 			// XSD 3.4.2: the direct complexType content model admits only annotation,
 			// simpleContent, complexContent, openContent, a model-group particle

@@ -237,3 +237,43 @@ func TestComplexTypeDirectStrayChild(t *testing.T) {
 		require.Error(t, v11err)
 	})
 }
+
+// TestComplexTypeDirectAnnotationCardinality covers F2: the direct complexType
+// grammar is (annotation?, ...), so at most ONE xs:annotation is allowed in 1.1
+// (position stays deliberately tolerant). 1.0 tolerates a second annotation.
+func TestComplexTypeDirectAnnotationCardinality(t *testing.T) {
+	t.Parallel()
+
+	wrap := func(inner string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="R">
+` + inner + `
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+	}
+
+	t.Run("one annotation compiles", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(`    <xs:annotation><xs:documentation>ok</xs:documentation></xs:annotation>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`))
+		require.NoError(t, cerr)
+	})
+
+	t.Run("two annotations is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(`    <xs:annotation><xs:documentation>one</xs:documentation></xs:annotation>
+    <xs:annotation><xs:documentation>two</xs:documentation></xs:annotation>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`))
+		require.Error(t, cerr)
+	})
+
+	t.Run("XSD 1.0 tolerates two annotations", func(t *testing.T) {
+		t.Parallel()
+		schema := wrap(`    <xs:annotation><xs:documentation>one</xs:documentation></xs:annotation>
+    <xs:annotation><xs:documentation>two</xs:documentation></xs:annotation>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`)
+		_, v10err := compileV10(t, schema)
+		require.NoError(t, v10err)
+	})
+}

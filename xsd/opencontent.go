@@ -389,6 +389,17 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 								"', whose conditional-type-assignment {type table} differs from the global declaration the open-content wildcard re-admits it to.")
 						return
 					}
+					// CONSTRAINT loss: the dynamic EDC enforces only governing-TYPE
+					// substitutability, so other declaration constraints the base LOCAL
+					// imposes — `fixed`, `nillable`, and local identity constraints — are
+					// LOST when the name is re-admitted via the GLOBAL. Reject (fail-closed)
+					// unless the global is at least as restrictive on each.
+					if msg := globalDropsLocalConstraint(baseLocal, global); msg != "" {
+						c.reportOpenContentTypeError(ctx, td,
+							"The restriction drops the base type's local element declaration '"+bn.Local+
+								"' and re-admits it through an open-content wildcard governed by the global declaration, which "+msg+".")
+						return
+					}
 				}
 			}
 			continue
@@ -409,6 +420,52 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			}
 		}
 	}
+}
+
+// globalDropsLocalConstraint reports (with a diagnostic phrase) when a GLOBAL element
+// declaration is NOT at least as restrictive as a dropped base LOCAL declaration of
+// the same name on the constraints the dynamic wildcard-EDC does NOT enforce — `fixed`,
+// `nillable`, and identity constraints — so re-admitting the name via the global
+// would accept content the base local rejected. Returns "" when the global is
+// constraint-compatible. Fail-closed: any constraint that cannot be shown at-least-as-
+// restrictive is treated as lost.
+//
+//   - fixed: a base local `fixed` value the global does not EXACTLY carry (no fixed,
+//     or a different lexical value) lets the global admit values the local forbade. (A
+//     `default` is not a constraint — it only supplies a value for an empty element —
+//     so it is not compared.)
+//   - nillable: a global that is nillable while the local is NOT would accept
+//     xsi:nil="true" the base rejected.
+//   - identity constraints: a base local xs:key/xs:unique/xs:keyref the global does not
+//     also impose (matched by resolved QName) is lost.
+func globalDropsLocalConstraint(local, global *ElementDecl) string {
+	if local == nil || global == nil {
+		return ""
+	}
+	if local.Fixed != nil {
+		if global.Fixed == nil || *global.Fixed != *local.Fixed {
+			return "does not impose the base declaration's fixed value"
+		}
+	}
+	if global.Nillable && !local.Nillable {
+		return "is nillable while the base declaration is not, so it would accept xsi:nil the base rejected"
+	}
+	for _, lc := range local.IDCs {
+		if lc == nil {
+			continue
+		}
+		found := false
+		for _, gc := range global.IDCs {
+			if gc != nil && gc.Kind == lc.Kind && gc.QName == lc.QName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "does not impose the base declaration's identity constraint '" + lc.Name + "'"
+		}
+	}
+	return ""
 }
 
 // occursCovers reports whether a derived maximum-occurrence bound covers a base
