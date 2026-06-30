@@ -801,3 +801,80 @@ func TestOpenContent_InterleaveDeclaredWildcard(t *testing.T) {
 			"suffix matches the declared wildcard as the prefix")
 	})
 }
+
+// TestOpenContent_RestrictionDropsBaseWildcard covers the gauntlet finding that the
+// restriction drop-guard must protect dropped base DECLARED WILDCARD particles, not
+// just element declarations: now that a declared wildcard wins attribution in the
+// interleave partition, dropping it and re-admitting its namespace through a WEAKER
+// open-content wildcard is unsound.
+func TestOpenContent_RestrictionDropsBaseWildcard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("dropped strict declared wildcard re-admitted by skip open is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "dropping a strict declared wildcard re-admitted by a weaker (skip) open wildcard must be rejected")
+	})
+
+	t.Run("dropped skip declared wildcard re-admitted by skip open is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="skip" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "dropping a skip declared wildcard re-admitted by an equal (skip) open wildcard is sound")
+	})
+
+	t.Run("keeping the declared wildcard is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a restriction that KEEPS the declared wildcard (covering namespace + pc + occurrence) is valid")
+	})
+
+	t.Run("suffix base dropping a declared wildcard is rejected (order loss)", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a suffix base dropping a declared wildcard re-admitted by its open content must be rejected (order loss)")
+	})
+}
