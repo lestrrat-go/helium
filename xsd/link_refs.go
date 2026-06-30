@@ -481,6 +481,17 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				allExtErr()
 				continue
 			}
+			// bug 6202 (RESOLVED WONTFIX 2008-11-21): extending an empty *mixed*
+			// base 'all' with another 'all' is invalid. A mixed base has a
+			// non-absent content type even when its 'all' is empty, so §3.4.2.2
+			// sequences the base and derived particles — producing an 'all' nested
+			// in a sequence, which All Group Limited (§3.8.6.2) forbids. An empty
+			// *non-mixed* base is genuinely empty content, so its extension by an
+			// 'all' stays valid (the non-orthogonality the WG declined to fix).
+			if !modelGroupHasContent(baseMG) && td.BaseType.ContentType == ContentTypeMixed {
+				allExtErr()
+				continue
+			}
 			merged := make([]*Particle, 0, len(baseMG.Particles)+len(derivedMG.Particles))
 			merged = append(merged, baseMG.Particles...)
 			merged = append(merged, derivedMG.Particles...)
