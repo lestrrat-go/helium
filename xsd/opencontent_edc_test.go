@@ -1127,3 +1127,110 @@ func TestOpenContent_WildcardEDCTypeTable(t *testing.T) {
 		require.NoError(t, cerr, "a skip open-content wildcard never resolves to the global, so it imposes no EDC type-table constraint")
 	})
 }
+
+// TestOpenContent_DropsBaseLocalTypeTable covers the gauntlet finding that the
+// drop guard must also reject a DROPPED base local element whose {type table} (CTA
+// xs:alternative) is NOT equivalent to the re-admitting global declaration's, even
+// on the "enforced" (strict / lax-with-global) path — the dynamic EDC checks only
+// type-DEFINITION substitutability, not type-table equivalence.
+func TestOpenContent_DropsBaseLocalTypeTable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("dropped base local with a type table re-admitted via a no-table global is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:string"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e" type="xs:integer" minOccurs="0">
+        <xs:alternative test="true()" type="xs:int"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "dropping a base local with a type table re-admitted via a no-type-table global is a type-table loss")
+	})
+
+	t.Run("dropped base local with an EQUIVALENT-table global is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:integer">
+    <xs:alternative test="true()" type="xs:int"/>
+  </xs:element>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e" type="xs:integer" minOccurs="0">
+        <xs:alternative test="true()" type="xs:int"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "an equivalent type table on the global is consistent")
+	})
+
+	t.Run("dropped base local with both tables absent is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:string"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "both type tables absent is consistent (differing type definitions allowed)")
+	})
+}
+
+// TestSimpleContent_OpenContentRejected covers the gauntlet finding that xs:openContent
+// is not permitted inside an xs:simpleContent extension or restriction.
+func TestSimpleContent_OpenContentRejected(t *testing.T) {
+	t.Parallel()
+
+	t.Run("simpleContent extension with openContent is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType><xs:simpleContent>
+    <xs:extension base="xs:string">
+      <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    </xs:extension>
+  </xs:simpleContent></xs:complexType></xs:element>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "openContent is not permitted in a simpleContent extension")
+	})
+
+	t.Run("simpleContent restriction with openContent is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string">
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="R"><xs:simpleContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+  </xs:restriction></xs:simpleContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "openContent is not permitted in a simpleContent restriction")
+	})
+}

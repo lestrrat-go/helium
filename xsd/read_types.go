@@ -836,6 +836,12 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			if a := c.parseAssert(ctx, ae); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
+		case isXSDElement(ae, elemOpenContent) && c.version == Version11:
+			// xs:openContent is not permitted in simpleContent: a simple-content type
+			// has NO element content for open content to apply to. The direct
+			// complexType grammar already rejects an openContent sibling of a
+			// simpleContent/complexContent wrapper; this rejects it INSIDE the wrapper.
+			reportOrder(ae, "The 'openContent' is not allowed in a 'simpleContent' derivation.")
 		}
 	}
 

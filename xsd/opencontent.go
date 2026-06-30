@@ -331,6 +331,25 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 						"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
 				return
 			}
+			// TYPE-TABLE loss: even when the type DEFINITION is enforced (strict, or lax
+			// with a global), the re-admitting global declaration's {type table} (CTA
+			// xs:alternative) must be consistent with the dropped base LOCAL element's —
+			// the dynamic EDC checks only governing-type substitutability, not type-table
+			// equivalence, so the base could attribute <bn> to its local CTA declaration
+			// while the derived governs it by the global with a different table. (A base
+			// REF or substitution member resolves to the SAME global in base and derived,
+			// so localElementDeclsByName — which excludes refs — finds only the true
+			// LOCAL decls that can diverge.)
+			if global, ok := c.schema.elements[bn]; ok {
+				for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
+					if !typeTablesConsistent(baseLocal, global) {
+						c.reportOpenContentTypeError(ctx, td,
+							"The restriction drops the base type's local element declaration '"+bn.Local+
+								"', whose conditional-type-assignment {type table} differs from the global declaration the open-content wildcard re-admits it to.")
+						return
+					}
+				}
+			}
 			continue
 		}
 		// The derived KEEPS bn. In SUFFIX mode a trailing declared-name child is
