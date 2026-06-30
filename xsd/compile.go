@@ -699,6 +699,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// own declarations AND its xs:redefine override children are parsed, so each
 		// complex type captures the active per-document default.
 		c.defaultOpenContent = c.readDefaultOpenContent(ctx, root)
+		// Enforce xs:ID typing/uniqueness of schema-component @id attributes
+		// across this schema document.
+		c.checkSchemaComponentIDs(ctx, root)
 	}
 
 	// Parse blockDefault attribute.

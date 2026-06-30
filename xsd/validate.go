@@ -1469,10 +1469,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
-		if vc.isSpecialAttr(a) {
-			continue
-		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
+		if vc.isSpecialAttr(a) {
+			// XSD 1.1: the xsi: processor attributes (xsi:type, xsi:nil,
+			// xsi:schemaLocation, xsi:noNamespaceSchemaLocation) may be
+			// referenced explicitly as attribute uses (e.g. to make xsi:type
+			// mandatory). When a type's declaration explicitly declares such an
+			// xsi: attribute, the instance attribute participates in ordinary
+			// attribute-use validation (so a required xsi: use is satisfied);
+			// otherwise xsi: (and xmlns) attributes remain unconditionally
+			// special. 1.0 keeps the historical skip (byte-identical).
+			_, declaredXSI := allowed[aqn]
+			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI {
+				continue
+			}
+		}
 		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
 			// Resolve the declared type up front so the fixed-value check can
