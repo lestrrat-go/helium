@@ -94,18 +94,25 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 	}
 }
 
-// checkOpenContentDropsBaseLocal rejects a restriction that DROPS a base LOCAL
-// element declaration and re-admits the same name through a LENIENT open-content
-// wildcard that does not enforce the base element's declared type — so the derived
-// would accept content the base rejects (not a valid subset). The open content
-// fails to enforce the type when its wildcard is processContents="skip" (never
-// assessed) or "lax" with NO global declaration of that name (nothing to assess
-// against): in both cases the dynamic wildcard-EDC check cannot recover the base
-// local's type. A "strict" wildcard, or "lax" with a global declaration, DOES
-// resolve a governing type and the dynamic EDC (validateWildcardElementConsistent)
-// enforces consistency at validation, so those are not rejected here. A base local
-// the derived KEEPS (or properly restricts) is matched by the model via
-// weak-wildcard precedence, not the open wildcard, so it is exempt.
+// checkOpenContentDropsBaseLocal rejects a restriction that DROPS a base element
+// declaration (a LOCAL declaration OR a ref to a global) and re-admits the same
+// name through a LENIENT open-content wildcard that does not enforce the base
+// element's declared type — so the derived would accept content the base rejects
+// (not a valid subset). The open content fails to enforce the type when its
+// wildcard is:
+//
+//   - processContents="skip" — validateWildcardChild returns BEFORE any global
+//     lookup, so the element is NEVER assessed; the base type is lost regardless of
+//     whether the base declared the name as a LOCAL or a REF-to-global; OR
+//   - processContents="lax" with NO global declaration of that name — nothing to
+//     assess against (this only arises for a base LOCAL, since a ref implies a
+//     global exists).
+//
+// A "strict" wildcard, or "lax" WITH a global declaration, resolves a governing
+// type and the dynamic EDC (validateWildcardElementConsistent) enforces consistency
+// at validation, so those are not rejected here. A base name the derived KEEPS (or
+// properly restricts) is matched by the model via weak-wildcard precedence, not the
+// open wildcard, so it is exempt.
 func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeDef, derived *OpenContent) {
 	if derived == nil || derived.Wildcard == nil || td.BaseType == nil || td.BaseType.ContentModel == nil {
 		return
@@ -116,34 +123,36 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 	}
 	derivedNames := collectModelElementNames(td.ContentModel, c.schema)
 	seen := make(map[QName]struct{})
-	for _, bl := range baseLocalElementNames(td.BaseType.ContentModel) {
-		if _, dup := seen[bl]; dup {
+	for _, bn := range baseDeclaredElementNames(td.BaseType.ContentModel) {
+		if _, dup := seen[bn]; dup {
 			continue
 		}
-		seen[bl] = struct{}{}
-		if derivedNames[bl] {
+		seen[bn] = struct{}{}
+		if derivedNames[bn] {
 			continue // kept by the derived model; matched there, not by the wildcard
 		}
-		if !wildcardAllowsExpandedName(derived.Wildcard, bl.Local, bl.NS, c.schema, false) {
+		if !wildcardAllowsExpandedName(derived.Wildcard, bn.Local, bn.NS, c.schema, false) {
 			continue // the open wildcard does not re-admit this name
 		}
 		if pc == ProcessLax {
-			if _, ok := c.schema.elements[bl]; ok {
-				continue // a global declaration exists; dynamic EDC enforces it
+			if _, ok := c.schema.elements[bn]; ok {
+				continue // a global declaration exists; lax resolves it, dynamic EDC enforces
 			}
 		}
+		// skip (any name), or lax with no global declaration: the type is not enforced.
 		c.reportOpenContentTypeError(ctx, td,
-			"The restriction drops the base type's local element declaration '"+bl.Local+
+			"The restriction drops the base type's element declaration '"+bn.Local+
 				"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
 		return
 	}
 }
 
-// baseLocalElementNames returns the expanded names of every LOCAL element
-// declaration (IsRef=false) declared anywhere in a content model, recursing
-// through nested model groups. Global element refs are excluded: a wildcard that
-// re-admits a global ref resolves to the SAME global declaration, so no type is lost.
-func baseLocalElementNames(mg *ModelGroup) []QName {
+// baseDeclaredElementNames returns the expanded names of every element particle
+// declared anywhere in a content model — both LOCAL declarations and refs to
+// globals — recursing through nested model groups. A ref carries the referenced
+// global's expanded name in ElementDecl.Name, so it is included: a skip wildcard
+// re-admitting the name enforces nothing, so the global's type is lost too.
+func baseDeclaredElementNames(mg *ModelGroup) []QName {
 	var names []QName
 	var walk func(g *ModelGroup)
 	walk = func(g *ModelGroup) {
@@ -153,9 +162,7 @@ func baseLocalElementNames(mg *ModelGroup) []QName {
 		for _, p := range g.Particles {
 			switch term := p.Term.(type) {
 			case *ElementDecl:
-				if !term.IsRef {
-					names = append(names, term.Name)
-				}
+				names = append(names, term.Name)
 			case *ModelGroup:
 				walk(term)
 			}

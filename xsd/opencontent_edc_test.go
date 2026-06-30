@@ -103,6 +103,47 @@ func TestOpenContent_RestrictionDropsBaseLocal(t *testing.T) {
 		require.NoError(t, cerr, "a restriction that KEEPS the base local element is valid")
 	})
 
+	t.Run("dropped base global ref re-admitted by a skip wildcard is rejected", func(t *testing.T) {
+		t.Parallel()
+		// The base declares the element via ref="e" (global e=int). A skip wildcard
+		// returns BEFORE any global-declaration lookup, so it never enforces the
+		// global's type — dropping the ref and re-admitting via skip is unsound.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element ref="e" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "dropping a base global ref re-admitted by a skip wildcard must be rejected")
+	})
+
+	t.Run("dropped base global ref re-admitted by lax is accepted (global enforced via dynamic EDC)", func(t *testing.T) {
+		t.Parallel()
+		// A ref implies a global declaration, so a lax wildcard always resolves and
+		// validates the global; the dynamic EDC enforces consistency at validation.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:element ref="e" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a lax wildcard re-admitting a global ref (dynamic EDC enforces) must not be rejected at compile")
+	})
+
 	t.Run("dropped base local re-admitted by strict wildcard with consistent global is accepted", func(t *testing.T) {
 		t.Parallel()
 		// A strict wildcard resolves the name to the global declaration and the
