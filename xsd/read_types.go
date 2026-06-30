@@ -377,10 +377,21 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		}
 	}
 	// XSD 3.4.2: the <xs:complexContent> content model is (annotation?, (restriction
-	// | extension)). Any other child — including a stray <xs:openContent>, which
-	// belongs INSIDE the restriction/extension wrapper, not as a sibling of it — is a
-	// grammar error; without this guard such a child was silently ignored and the
-	// schema wrongly compiled.
+	// | extension)) — EXACTLY ONE derivation, optionally preceded by an annotation,
+	// and NOTHING after it. The loop must scan ALL children (no early return on the
+	// first derivation), otherwise a stray child AFTER the derivation — notably a
+	// trailing <xs:openContent>, which belongs INSIDE the restriction/extension
+	// wrapper — would be silently ignored and the schema wrongly compiled. A SECOND
+	// restriction/extension, or any non-annotation stray (before or after), is a
+	// schema error.
+	reportStray := func(ce *helium.Element, what string) {
+		if c.filename == "" {
+			return
+		}
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what))
+	}
+	var derivationSeen bool
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -392,16 +403,23 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		switch {
 		case isXSDElement(ce, elemAnnotation):
 			continue
-		case isXSDElement(ce, elemRestriction):
-			return c.parseRestriction(ctx, ce, td)
-		case isXSDElement(ce, elemExtension):
-			return c.parseExtension(ctx, ce, td)
-		default:
-			if c.filename != "" {
-				c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
-					elem.LocalName(), componentLocalComplexType,
-					fmt.Sprintf("The element '%s' is not allowed in 'complexContent'; only 'restriction' or 'extension' is permitted.", ce.LocalName())))
+		case isXSDElement(ce, elemRestriction), isXSDElement(ce, elemExtension):
+			if derivationSeen {
+				reportStray(ce, fmt.Sprintf("A 'complexContent' must have exactly one 'restriction' or 'extension' (found a second '%s').", ce.LocalName()))
+				continue
 			}
+			derivationSeen = true
+			if isXSDElement(ce, elemRestriction) {
+				if err := c.parseRestriction(ctx, ce, td); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := c.parseExtension(ctx, ce, td); err != nil {
+				return err
+			}
+		default:
+			reportStray(ce, fmt.Sprintf("The element '%s' is not allowed in 'complexContent'; only 'restriction' or 'extension' is permitted.", ce.LocalName()))
 		}
 	}
 	return nil

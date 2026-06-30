@@ -101,7 +101,7 @@ func TestOpenContent_ChoiceEmptiablePrune(t *testing.T) {
 func TestComplexContent_StrayChildRejected(t *testing.T) {
 	t.Parallel()
 
-	t.Run("openContent directly under complexContent is a grammar error", func(t *testing.T) {
+	t.Run("openContent BEFORE the derivation under complexContent is a grammar error", func(t *testing.T) {
 		t.Parallel()
 		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
@@ -114,7 +114,55 @@ func TestComplexContent_StrayChildRejected(t *testing.T) {
   <xs:element name="doc" type="R"/>
 </xs:schema>`
 		_, _, cerr := compileV11(t, schema)
-		require.Error(t, cerr, "a stray xs:openContent under xs:complexContent must be rejected")
+		require.Error(t, cerr, "a stray xs:openContent before the derivation under xs:complexContent must be rejected")
+	})
+
+	t.Run("openContent AFTER the derivation under complexContent is a grammar error", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction>
+      <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a stray xs:openContent AFTER the derivation must be rejected (no early return)")
+	})
+
+	t.Run("two derivation children under complexContent is a grammar error", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:extension base="B"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:extension>
+      <xs:extension base="B"><xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "exactly one restriction/extension is allowed under complexContent")
+	})
+
+	t.Run("stray element after the derivation under complexContent is a grammar error", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction>
+      <xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a stray particle after the derivation must be rejected")
 	})
 
 	t.Run("annotation, restriction and extension remain valid under complexContent", func(t *testing.T) {
