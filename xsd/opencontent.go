@@ -285,15 +285,9 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 		}
 	}
 
-	anyElem, annotations, anyCount := scanOpenContentChildren(elem)
-	if annotations > 1 && c.filename != "" {
-		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
-			"An 'openContent' must not have more than one 'annotation'."))
-	}
-	if anyCount > 1 && c.filename != "" {
-		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOpenContent,
-			"An 'openContent' must not have more than one 'any' wildcard."))
-	}
+	scan := scanOpenContentChildren(elem)
+	c.reportOpenContentChildGrammar(ctx, elem, elemOpenContent, "An", "openContent", scan)
+	anyElem := scan.anyElem
 
 	if isNone {
 		// mode="none" must NOT carry an <xs:any> wildcard child (bug 7069).
@@ -340,15 +334,25 @@ func openContentOrderViolation(contentModelChild, directAttrChild string, anyAtt
 	return ""
 }
 
+// openContentChildScan records the result of scanning the children of an
+// <xs:openContent>/<xs:defaultOpenContent>, whose content model is strictly
+// (annotation?, any?): the first <xs:any> wildcard, the annotation/any counts, the
+// first stray (non-annotation, non-any) child, and whether an annotation appeared
+// AFTER the any (out of order). Callers turn the latter three into schema errors.
+type openContentChildScan struct {
+	anyElem       *helium.Element
+	annotations   int
+	anyCount      int
+	stray         *helium.Element
+	annotAfterAny bool
+}
+
 // scanOpenContentChildren walks the children of an <xs:openContent> or
-// <xs:defaultOpenContent> element, returning the FIRST <xs:any> wildcard element
-// (nil if none), the number of <xs:annotation> children, and the TOTAL number of
-// <xs:any> wildcard children seen. Callers reject more than one wildcard child as
-// a schema error (the content model permits at most one).
-func scanOpenContentChildren(elem *helium.Element) (*helium.Element, int, int) {
-	var anyElem *helium.Element
-	annotations := 0
-	anyCount := 0
+// <xs:defaultOpenContent> element and reports its child grammar. Non-element nodes
+// (whitespace/comment/PI) are ignored; every element child that is neither
+// <xs:annotation> nor <xs:any> is recorded as the first stray.
+func scanOpenContentChildren(elem *helium.Element) openContentChildScan {
+	var r openContentChildScan
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -359,15 +363,48 @@ func scanOpenContentChildren(elem *helium.Element) (*helium.Element, int, int) {
 		}
 		switch {
 		case isXSDElement(ce, elemAnnotation):
-			annotations++
+			r.annotations++
+			if r.anyCount > 0 {
+				r.annotAfterAny = true
+			}
 		case isXSDElement(ce, elemAny):
-			anyCount++
-			if anyElem == nil {
-				anyElem = ce
+			r.anyCount++
+			if r.anyElem == nil {
+				r.anyElem = ce
+			}
+		default:
+			if r.stray == nil {
+				r.stray = ce
 			}
 		}
 	}
-	return anyElem, annotations, anyCount
+	return r
+}
+
+// reportOpenContentChildGrammar emits the schema errors for an out-of-grammar
+// child of an <xs:openContent>/<xs:defaultOpenContent>: more than one annotation
+// or wildcard, an annotation after the wildcard, or a stray child. article+noun
+// name the element in diagnostics ("An"/"openContent", "A"/"defaultOpenContent").
+func (c *compiler) reportOpenContentChildGrammar(ctx context.Context, elem *helium.Element, comp, article, noun string, scan openContentChildScan) {
+	if c.filename == "" {
+		return
+	}
+	if scan.annotations > 1 {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), comp,
+			article+" '"+noun+"' must not have more than one 'annotation'."))
+	}
+	if scan.anyCount > 1 {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), comp,
+			article+" '"+noun+"' must not have more than one 'any' wildcard."))
+	}
+	if scan.annotAfterAny {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), comp,
+			"In "+article+" '"+noun+"' the 'annotation' must precede the 'any' wildcard."))
+	}
+	if scan.stray != nil {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), scan.stray.Line(), scan.stray.LocalName(), comp,
+			article+" '"+noun+"' may contain only an optional 'annotation' followed by an optional 'any' wildcard; '"+scan.stray.LocalName()+"' is not allowed."))
+	}
 }
 
 // parseOpenContentWildcard parses the <xs:any> child of an open-content element.
@@ -461,15 +498,9 @@ func (c *compiler) readDefaultOpenContent(ctx context.Context, root *helium.Elem
 		appliesToEmpty = c.readBooleanAttr(ctx, dec, attrAppliesToEmpty)
 	}
 
-	anyElem, annotations, anyCount := scanOpenContentChildren(dec)
-	if annotations > 1 && c.filename != "" {
-		c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,
-			"A 'defaultOpenContent' must not have more than one 'annotation'."))
-	}
-	if anyCount > 1 && c.filename != "" {
-		c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,
-			"A 'defaultOpenContent' must not have more than one 'any' wildcard."))
-	}
+	scan := scanOpenContentChildren(dec)
+	c.reportOpenContentChildGrammar(ctx, dec, elemDefaultOpenContent, "A", "defaultOpenContent", scan)
+	anyElem := scan.anyElem
 	if anyElem == nil {
 		if c.filename != "" {
 			c.schemaError(ctx, schemaParserError(c.diagSource(), dec.Line(), dec.LocalName(), elemDefaultOpenContent,

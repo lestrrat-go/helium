@@ -316,6 +316,11 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			// At most one openContent per complex type.
+			if openContentSeen {
+				reportExtraContent(ce, "A complex type definition must not have more than one 'openContent'.")
+				continue
+			}
 			// The direct complexType grammar is a CHOICE: either a simpleContent/
 			// complexContent WRAPPER, or the (openContent?, particle?, attrs,
 			// anyAttribute?, assert*) branch — never both. An openContent alongside a
@@ -410,6 +415,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 	var directAttrChild string
 	var anyAttributeSeen bool
 	var assertSeen bool
+	var openContentSeen bool
 
 	reportOrder := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -537,10 +543,15 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			if openContentSeen {
+				reportOrder(ce, "A complex type definition must not have more than one 'openContent'.")
+				continue
+			}
 			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen, assertSeen); msg != "" {
 				reportOrder(ce, msg)
 				continue
 			}
+			openContentSeen = true
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
@@ -568,6 +579,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 	var directAttrChild string
 	var anyAttributeSeen bool
 	var assertSeen bool
+	var openContentSeen bool
 
 	reportOrder := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -702,10 +714,15 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
+			if openContentSeen {
+				reportOrder(ce, "A complex type definition must not have more than one 'openContent'.")
+				continue
+			}
 			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen, assertSeen); msg != "" {
 				reportOrder(ce, msg)
 				continue
 			}
+			openContentSeen = true
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
