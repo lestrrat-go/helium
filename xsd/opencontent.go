@@ -214,23 +214,31 @@ func (c *compiler) checkOpenContentDropsBaseWildcard(ctx context.Context, td *Ty
 		if !baseSuffix && processContentsStrength(pc) >= bwStrength {
 			continue
 		}
-		// AGGREGATE occurrence coverage over bw's namespace region.
+		// AGGREGATE occurrence coverage over the SPILL-RELEVANT REGION = bw's namespace
+		// ∩ the derived open-content wildcard's namespace. Only names the open content
+		// ADMITS can leave the declared model and spill into open content; names bw
+		// admits but the open content excludes can never spill, so the derived needn't
+		// cover them. baseCap sums base wildcards that INTERSECT the spill region
+		// (over-estimate); derivedCap sums derived wildcards that SUPERSET the spill
+		// region (under-estimate) — fail-closed toward soundness.
+		spillCon := constraintIntersect(bwCon, openCon)
+		spillWC := constraintToWildcard(spillCon, bw.wc.ProcessContents, bw.wc.TargetNS, nil, false, false, nil)
 		baseCap := 0
 		for _, bw2 := range baseWCs {
 			if processContentsStrength(bw2.wc.ProcessContents) >= bwStrength &&
-				constraintsIntersect(wildcardConstraint(bw2.wc), bwCon) {
+				constraintsIntersect(wildcardConstraint(bw2.wc), spillCon) {
 				baseCap = maxOccursAdd(baseCap, bw2.effMax)
 			}
 		}
 		derivedCap := 0
 		for _, dw := range derivedWCs {
 			if processContentsStrength(dw.wc.ProcessContents) >= bwStrength &&
-				wildcardConstraintSubset(bw.wc, dw.wc, c.schema, false) {
+				wildcardConstraintSubset(spillWC, dw.wc, c.schema, false) {
 				derivedCap = maxOccursAdd(derivedCap, dw.effMax)
 			}
 		}
 		if occursCovers(derivedCap, baseCap) {
-			continue // the derived declared wildcards cover the base's capacity
+			continue // the derived declared wildcards cover the base's spill-region capacity
 		}
 		if baseSuffix {
 			c.reportOpenContentTypeError(ctx, td,

@@ -1295,3 +1295,68 @@ func TestOpenContent_SuffixStrictNoGlobalExempt(t *testing.T) {
 		require.NoError(t, cerr, "a strict open wildcard with no globally-declared element in urn:a admits nothing there — no spill, valid")
 	})
 }
+
+// TestOpenContent_DropsBaseWildcardSpillRegion covers the gauntlet finding that the
+// dropped/narrowed-wildcard occurrence-coverage check must be scoped to the
+// SPILL-RELEVANT REGION (base wildcard namespace ∩ open-content wildcard namespace):
+// names a base wildcard admits but the open content does NOT admit can never spill,
+// so the derived needn't cover them.
+func TestOpenContent_DropsBaseWildcardSpillRegion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("narrowing the base wildcard outside the open-content namespace is accepted", func(t *testing.T) {
+		t.Parallel()
+		// Base declared wildcard {urn:a urn:b}; open content only urn:a. Derived
+		// narrows the declared wildcard to {urn:a} (same occurrence). urn:b can never
+		// spill (open excludes it), and urn:a is covered → valid.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:a" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a urn:b" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:a" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "urn:b cannot spill (open excludes it) and urn:a is covered — valid restriction")
+	})
+
+	t.Run("narrowing occurrence within the open-content namespace spills excess (reject)", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:a" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="2"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:a" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "narrowing urn:a occurrence below base while skip open re-admits urn:a spills excess")
+	})
+
+	t.Run("narrowing the base wildcard inside the open-content namespace spills (reject)", func(t *testing.T) {
+		t.Parallel()
+		// Open content admits BOTH urn:a and urn:b; derived narrows the declared
+		// wildcard to {urn:a}, so urn:b now spills to the skip open content.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:a urn:b" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a urn:b" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:a urn:b" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "urn:b now spills to skip open content — type loss")
+	})
+}
