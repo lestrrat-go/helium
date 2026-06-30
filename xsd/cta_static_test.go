@@ -254,6 +254,18 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 			require.Errorf(t, compileCTASchema(t, src), "test=%q", test)
 		}
 	})
+
+	// A @test using empty-sequence() is legal and must not crash compilation
+	// (StaticReferences handles a Void type's nil ItemTest).
+	t.Run("empty-sequence type in test compiles", func(t *testing.T) {
+		t.Parallel()
+		src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="@kind/following-sibling::* instance of empty-sequence()" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+		require.NoError(t, compileCTASchema(t, src))
+	})
 }
 
 // TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks

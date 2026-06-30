@@ -331,6 +331,46 @@ func TestStaticReferences(t *testing.T) {
 		require.Empty(t, refs.FunctionNames)
 		require.Empty(t, refs.FreeVariables)
 	})
+
+	// Finding 2: a Void/empty-sequence() type carries a nil ItemTest; StaticReferences
+	// must not panic on it (in any position) and must report no spurious refs.
+	t.Run("empty-sequence type does not panic and reports nothing", func(t *testing.T) {
+		for _, x := range []string{
+			"() instance of empty-sequence()",
+			"[()] instance of array(empty-sequence())",
+			"() instance of function() as empty-sequence()",
+			"() treat as empty-sequence()",
+		} {
+			require.NotPanics(t, func() {
+				refs := compile(t, x).StaticReferences(nil)
+				require.Empty(t, refs.TypeNames, x)
+				require.Empty(t, refs.FunctionNames, x)
+			}, x)
+		}
+	})
+}
+
+// TestStaticReferencesDynamicLookupExtensionGate documents that helium EXTENSION
+// functions are not dynamically reachable via function-lookup (finding 1): a CTA
+// @test could otherwise invoke fn:flatten through a computed-name lookup that bypasses
+// the static StandardFunctionAcceptsArity gate.
+func TestStaticReferencesDynamicLookupExtensionGate(t *testing.T) {
+	eval := func(t *testing.T, expr string) string {
+		t.Helper()
+		e, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), e, nil)
+		require.NoError(t, err)
+		return res.StringValue()
+	}
+
+	// fn:flatten (EXTENSION) is not found by function-lookup → empty sequence (count 0).
+	require.Equal(t, "0", eval(t, "count(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions','flatten'), 1))"))
+	// array:flat-map (EXTENSION) likewise not found.
+	require.Equal(t, "0", eval(t, "count(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array','flat-map'), 2))"))
+	// A STANDARD function via function-lookup still resolves and invokes.
+	require.Equal(t, "1", eval(t, "count(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions','string'), 1))"))
+	require.Equal(t, "AB", eval(t, "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions','concat'), 2)('A','B')"))
 }
 
 func TestStandardFunctionAcceptsArity(t *testing.T) {

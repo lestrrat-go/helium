@@ -27,6 +27,9 @@ currently `fn:flatten` and `array:flat-map`; `builtinFunc.extension = true`).
 Membership/arity queries: `BuiltinFunctionAcceptsArity(uri,name,arity)` accepts any
 registered function; `StandardFunctionAcceptsArity(uri,name,arity)` EXCLUDES
 extensions — use it for conformance-restricted static contexts (XSD 1.1 CTA @test).
+Extensions are also STATIC-CALL-ONLY: `fn:function-lookup` (`lookupFunctionItem`,
+`functions_hof.go`) skips an extension built-in (`isExtensionBuiltin`) so it is not
+dynamically reachable, closing the function-lookup bypass of the static CTA gate.
 
 ## Namespace URIs
 

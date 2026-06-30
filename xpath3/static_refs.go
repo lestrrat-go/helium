@@ -246,6 +246,12 @@ func (c *staticRefCollector) addFunctionName(prefix, name string, arity int) {
 // forbidden user-defined type hidden inside such a parameterized item type (e.g.
 // "instance of array(t:T)"), so the walk descends recursively into the item test.
 func (c *staticRefCollector) walkSequenceType(st SequenceType) {
+	// A Void / empty-sequence() type carries NO item test (nil ItemTest), so skip it.
+	// derefNodeTest also tolerates a nil interface (defense in depth), but guarding here
+	// keeps the intent explicit and avoids a needless reflect call.
+	if st.Void || st.ItemTest == nil {
+		return
+	}
 	c.walkItemTest(st.ItemTest)
 }
 
@@ -317,7 +323,10 @@ func derefExprNode(node Expr) (Expr, bool) {
 }
 
 // derefNodeTest is the NodeTest analogue of derefExpr, normalizing a pointer-form
-// item test (e.g. &ArrayTest{...}) to its value form.
+// item test (e.g. &ArrayTest{...}) to its value form. ok is false for a nil node
+// test (a nil interface — e.g. an empty-sequence() type's ItemTest — yields the
+// reflect.Invalid kind, NOT a panic; a typed nil pointer is caught by IsNil), so a
+// caller can rely on this being nil-safe.
 func derefNodeTest(it NodeTest) (NodeTest, bool) {
 	rv := reflect.ValueOf(it)
 	if rv.Kind() != reflect.Pointer {

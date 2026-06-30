@@ -260,6 +260,15 @@ func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
 	return arity >= fn.MinArity() && (fn.MaxArity() < 0 || arity <= fn.MaxArity())
 }
 
+// isExtensionBuiltin reports whether fn is a registered built-in that helium
+// provides as an EXTENSION beyond the F&O 3.1 standard library. Used to keep
+// extension functions out of dynamic resolution (fn:function-lookup) so they remain
+// static-call-only and cannot bypass a conformance-restricted static context.
+func isExtensionBuiltin(fn Function) bool {
+	bf, ok := fn.(*builtinFunc)
+	return ok && bf.extension
+}
+
 // StandardFunctionAcceptsArity reports whether (uri, name) is a STANDARD F&O 3.1
 // function or a built-in type constructor (i.e. registered and NOT a helium
 // extension) that accepts the given arity. Conformance-restricted static contexts
@@ -268,10 +277,7 @@ func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
 // fn:flatten) are not treated as available.
 func StandardFunctionAcceptsArity(uri, name string, arity int) bool {
 	fn, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
-	if !ok {
-		return false
-	}
-	if bf, ok := fn.(*builtinFunc); ok && bf.extension {
+	if !ok || isExtensionBuiltin(fn) {
 		return false
 	}
 	return arity >= fn.MinArity() && (fn.MaxArity() < 0 || arity <= fn.MaxArity())
