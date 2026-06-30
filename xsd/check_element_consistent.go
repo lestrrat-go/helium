@@ -186,11 +186,22 @@ func (c *compiler) anyWildcardAllows(wildcards []*Wildcard, qn QName) bool {
 
 // typeTablesConsistent reports whether two element declarations have consistent
 // {type table}s for the wildcard EDC check. Two tables are consistent when both
-// are absent; the check flags only the asymmetric case (exactly one present),
-// which covers the observed conformance violations without false-rejecting two
-// distinct-but-present tables.
+// are absent OR both present AND EQUIVALENT; the asymmetric case (exactly one
+// present) and two present-but-NON-equivalent tables are inconsistent — matching
+// the same-name EDC (typeTablesEquivalent), so the same element cannot get
+// different governing type tables depending on whether it is reached via the local
+// particle or via a lax wildcard to the global declaration. Differing type
+// DEFINITIONS remain permitted (#886); only the TYPE TABLE is compared here.
 func typeTablesConsistent(a, b *ElementDecl) bool {
-	return (len(a.Alternatives) == 0) == (len(b.Alternatives) == 0)
+	aHas := len(a.Alternatives) > 0
+	bHas := len(b.Alternatives) > 0
+	if aHas != bHas {
+		return false
+	}
+	if !aHas {
+		return true
+	}
+	return typeTablesEquivalent(a.Alternatives, b.Alternatives)
 }
 
 // collectModelGroupParticles walks a content model and returns its LOCAL element
