@@ -406,17 +406,36 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 		}
 		// The derived KEEPS bn. In SUFFIX mode a trailing declared-name child is
 		// rejected as misplaced (never spilled), so a kept name is safe regardless of
-		// occurrence. In INTERLEAVE mode the EXCESS bn children spill into open content;
-		// when the wildcard does not enforce the type, the derived must COVER the base's
-		// effective maxOccurs (an enforcing wildcard type-checks the spill, so it is
-		// safe).
-		if derivedInterleave && !enforced {
+		// occurrence. In INTERLEAVE mode the EXCESS bn children (beyond the derived
+		// particle's maxOccurs) spill into open content, so a derived that NARROWS bn's
+		// maxOccurs below the base's effective max is only safe if the spill stays within
+		// the base's language.
+		if derivedInterleave {
 			derivedMax := maxOccursForName(td.ContentModel, bn, c.schema)
 			if !occursCovers(derivedMax, baseMax) {
-				c.reportOpenContentTypeError(ctx, td,
-					"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
-						"' below the base's while an interleave open-content wildcard re-admits it without enforcing its declared type; the excess children would escape the base type.")
-				return
+				if !enforced {
+					// UNENFORCING wildcard: the excess loses the declared TYPE entirely.
+					c.reportOpenContentTypeError(ctx, td,
+						"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
+							"' below the base's while an interleave open-content wildcard re-admits it without enforcing its declared type; the excess children would escape the base type.")
+					return
+				}
+				// ENFORCING wildcard (strict / lax-with-global): the spilled excess IS
+				// type-checked, but via the GLOBAL declaration, LOSING the base local's
+				// fixed/nillable/identity constraints (same hole as the dropped-local case).
+				// Reject when the global is not constraint-compatible with the base local.
+				// (A strict wildcard WITHOUT a global rejects the spilled child — no global
+				// here means no spill, so it is safe and the loop simply does not run.)
+				if global, ok := c.schema.elements[bn]; ok {
+					for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
+						if msg := globalDropsLocalConstraint(baseLocal, global); msg != "" {
+							c.reportOpenContentTypeError(ctx, td,
+								"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
+									"' below the base's; the excess spills into the enforcing interleave open content governed by the global declaration, which "+msg+".")
+							return
+						}
+					}
+				}
 			}
 		}
 	}
