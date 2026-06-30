@@ -742,3 +742,62 @@ func TestOpenContent_DefinedSiblingUnion(t *testing.T) {
 			"a non-sibling name is still open content under the union")
 	})
 }
+
+// TestOpenContent_InterleaveDeclaredWildcard covers the gauntlet finding that the
+// interleave partition must account for a DECLARED wildcard particle, not just
+// declared element NAMES: a child that matches a declared xs:any (in the content
+// model) must be assignable to the declared partition to satisfy that wildcard's
+// occurrence, instead of being forced into open content.
+func TestOpenContent_InterleaveDeclaredWildcard(t *testing.T) {
+	t.Parallel()
+	// Open content ##any; declared model is a single REQUIRED xs:any limited to
+	// urn:a, maxOccurs=1.
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:any namespace="urn:a" processContents="skip" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	t.Run("a child satisfying the declared wildcard is accepted", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><x xmlns="urn:a"/></doc>`),
+			"a child matching the declared wildcard satisfies it (empty open partition)")
+	})
+
+	t.Run("a required declared wildcard with no matching child is rejected", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, validateOC(t, schema, `<doc><y xmlns="urn:b"/></doc>`),
+			"a child not matching the declared wildcard goes to open; the required declared wildcard is unsatisfied")
+		require.Error(t, validateOC(t, schema, `<doc/>`),
+			"no children at all leaves the required declared wildcard unsatisfied")
+	})
+
+	t.Run("a child matching only the open wildcard still goes to open", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><x xmlns="urn:a"/><y xmlns="urn:b"/></doc>`),
+			"the urn:a child satisfies the declared wildcard; the urn:b child is open content")
+	})
+
+	t.Run("extras beyond the declared wildcard maxOccurs go to open", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><x xmlns="urn:a"/><z xmlns="urn:a"/></doc>`),
+			"one urn:a satisfies the maxOccurs=1 declared wildcard; the extra urn:a spills to open")
+	})
+
+	t.Run("suffix mode already handles a declared wildcard in the prefix", func(t *testing.T) {
+		t.Parallel()
+		const suffixSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:any namespace="urn:a" processContents="skip" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, suffixSchema, `<doc><x xmlns="urn:a"/></doc>`),
+			"suffix matches the declared wildcard as the prefix")
+	})
+}

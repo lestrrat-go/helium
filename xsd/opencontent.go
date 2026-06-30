@@ -811,6 +811,31 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 	return names
 }
 
+// modelGroupWildcardAdmitsName reports whether a content model contains a DECLARED
+// wildcard particle (recursing through nested groups) that admits the expanded name
+// {local, ns}. It backs the interleave open-content partition: a child matching a
+// declared xs:any can satisfy that wildcard in the declared sub-sequence rather than
+// being forced into open content. Non-emitting (maxOccurs=0) wildcards are skipped —
+// they emit nothing, so they cannot consume a child.
+func modelGroupWildcardAdmitsName(mg *ModelGroup, local, ns string, schema *Schema) bool {
+	if mg == nil {
+		return false
+	}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			if p.MaxOccurs != 0 && wildcardAllowsExpandedName(term, local, ns, schema, false) {
+				return true
+			}
+		case *ModelGroup:
+			if modelGroupWildcardAdmitsName(term, local, ns, schema) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // collectEmittingModelElementNames is collectModelElementNames restricted to
 // EMITTING element particles: a particle whose effective maxOccurs is 0 (its own
 // maxOccurs == 0, or any ANCESTOR group is maxOccurs == 0/prohibited) emits nothing,
@@ -1055,17 +1080,23 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 
 	// interleave: §3.4.4.3.2 requires the children to be partitionable into a
 	// sub-sequence valid against the declared content model and a sub-sequence each
-	// of whose members matches the open wildcard. Start from a name-based split
-	// (children whose names are NOT declared and which match the wildcard are open),
-	// then refine: a DECLARED-named child the model cannot place at its position is
-	// moved to the open sub-sequence when it too matches the wildcard. This handles
-	// the case where open content and declared content match the same names (e.g. a
-	// second occurrence of a declared element appearing after the model is satisfied).
+	// of whose members matches the open wildcard. Seed the declared sub-sequence with
+	// every child that matches a declared ELEMENT NAME or a declared WILDCARD particle
+	// (so it can satisfy that particle's occurrence — the declared content model may
+	// itself contain xs:any), and the open sub-sequence with the rest that match the
+	// open wildcard. Then refine: a declared-seeded child the model cannot place at
+	// its position (e.g. an excess occurrence after a bounded element/wildcard
+	// particle is exhausted) is moved to the open sub-sequence when it too matches the
+	// open wildcard — so declared and open content may match the same names/namespaces.
 	declaredNames := collectModelElementNames(mg, vc.schema)
 	var declared, open []childElem
 	for _, ch := range children {
 		qn := QName{Local: ch.name, NS: ch.ns}
-		if !declaredNames[qn] && wildcardAllowsExpandedName(oc.Wildcard, ch.name, ch.ns, vc.schema, false) {
+		if declaredNames[qn] || modelGroupWildcardAdmitsName(mg, ch.name, ch.ns, vc.schema) {
+			declared = append(declared, ch)
+			continue
+		}
+		if wildcardAllowsExpandedName(oc.Wildcard, ch.name, ch.ns, vc.schema, false) {
 			open = append(open, ch)
 			continue
 		}
