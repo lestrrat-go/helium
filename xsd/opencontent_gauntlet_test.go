@@ -112,6 +112,88 @@ func TestOpenContent_RestrictionEmptyModelStillChecked(t *testing.T) {
 		_, _, cerr := compileV11(t, schema)
 		require.NoError(t, cerr, "converting an unbounded base wildcard to open content is valid (open022)")
 	})
+
+	t.Run("empty model restriction may not add open content when the unbounded base wildcard has a REQUIRED sibling", func(t *testing.T) {
+		t.Parallel()
+		// The unbounded base wildcard sits in a sequence with a REQUIRED element a,
+		// so the base admits the open child only ALONGSIDE a — the open content is
+		// not a language subset and must be rejected.
+		schema := head + `
+  <xs:complexType name="B"><xs:sequence maxOccurs="unbounded">
+    <xs:element name="a"/>
+    <xs:any namespace="http://open.com/" processContents="lax"/>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a required sibling of the base wildcard must reject the open-content add")
+	})
+
+	t.Run("empty model restriction may not add open content when the base wildcard is unreachable (maxOccurs=0 ancestor)", func(t *testing.T) {
+		t.Parallel()
+		// A maxOccurs=0 group makes the base wildcard unreachable: the base admits NO
+		// children at all, so adding open content is not a valid restriction.
+		schema := head + `
+  <xs:complexType name="B"><xs:sequence>
+    <xs:sequence minOccurs="0" maxOccurs="0">
+      <xs:any namespace="http://open.com/" processContents="lax" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "an unreachable (maxOccurs=0) base wildcard must reject the open-content add")
+	})
+}
+
+// TestOpenContent_ChildOrderAssertAndWrapper covers the two further child-order
+// gauntlet findings: an xs:openContent appearing AFTER an xs:assert (the trailing
+// region), and an xs:openContent appearing as a SIBLING of an xs:complexContent/
+// xs:simpleContent wrapper in the direct complexType branch (a CHOICE grammar).
+func TestOpenContent_ChildOrderAssertAndWrapper(t *testing.T) {
+	t.Parallel()
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`
+	const oc = `<xs:openContent mode="suffix"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>`
+
+	cases := map[string]string{
+		"after assert (direct)": head + `
+  <xs:element name="doc"><xs:complexType>
+    <xs:sequence><xs:element name="a"/></xs:sequence>
+    <xs:assert test="true()"/>
+    ` + oc + `
+  </xs:complexType></xs:element></xs:schema>`,
+		"after assert (restriction)": head + `
+  <xs:complexType name="B"><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:sequence><xs:element name="a"/></xs:sequence>
+    <xs:assert test="true()"/>
+    ` + oc + `
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/></xs:schema>`,
+		"sibling of complexContent wrapper (direct)": head + `
+  <xs:complexType name="B"><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
+  <xs:element name="doc"><xs:complexType>
+    ` + oc + `
+    <xs:complexContent><xs:extension base="B">
+      <xs:sequence><xs:element name="d" minOccurs="0"/></xs:sequence>
+    </xs:extension></xs:complexContent>
+  </xs:complexType></xs:element></xs:schema>`,
+	}
+	for name, schema := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, _, cerr := compileV11(t, schema)
+			require.Error(t, cerr, "out-of-place openContent must be rejected")
+		})
+	}
 }
 
 // TestOpenContent_ChildOrder covers the gauntlet finding that <xs:openContent>

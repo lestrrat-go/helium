@@ -144,46 +144,129 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 }
 
 // baseModelAdmitsOpenContent reports whether the base type's DECLARED content
-// model contains a wildcard that admits the derived open-content wildcard. An
-// interleave/suffix open-content wildcard is effectively UNBOUNDED (it matches
-// 0..unbounded open children), so the base wildcard must match it in BOTH
-// directions: namespace constraint (derived ⊆ base), processContents (derived at
-// least as strong), AND effective cardinality — the base wildcard must itself be
-// effectively unbounded (its particle maxOccurs is unbounded, or it sits inside an
-// unbounded ancestor model group). A BOUNDED base wildcard (e.g. maxOccurs="1")
-// would reject a second open child, so the restriction's open content is NOT a
-// language subset of the base and is rejected. This is the valid case where a
-// restriction re-expresses a base unbounded `xs:any` particle as open content even
-// though the base carries no {open content} of its own (saxonData Open/open022),
-// while the reviewer's maxOccurs="1" base wildcard is correctly rejected.
+// model already admits the (effectively unbounded) derived open-content wildcard,
+// so a restriction may validly re-express a base `xs:any` particle as open content
+// even though the base carries no {open content} of its own (saxonData
+// Open/open022). The check is CONSERVATIVE and fail-closed: it returns true ONLY
+// when there exists a wildcard W in the base content model such that ALL of:
+//
+//	(a) W's namespace constraint is a SUPERSET of the derived open-content
+//	    wildcard's (derived ⊆ W) and W's processContents is at least as strong;
+//	(b) W is REACHABLE and effectively UNBOUNDED — the product of maxOccurs along
+//	    the path from the content-model root to W is unbounded with no zero factor
+//	    (a maxOccurs="0" ancestor or particle makes W unreachable; an effectively
+//	    bounded W, e.g. maxOccurs="1", cannot admit a second open child);
+//	(c) W is ROUTABLE with no required siblings — entering the model and consuming
+//	    W needs no other content, i.e. every OTHER particle on the path (and in any
+//	    enclosing sequence/all) is emptiable. A required sibling element (e.g.
+//	    `sequence{element a, any}`) means the base admits the open child ONLY
+//	    alongside `a`, so the open content is NOT a language subset and is rejected.
+//
+// open022 (a standalone unbounded wildcard with no required siblings) is accepted;
+// a required-sibling base, and a maxOccurs="0" ancestor, are rejected.
 func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema) bool {
-	if base == nil || derived == nil {
+	if base == nil || derived == nil || base.ContentModel == nil {
 		return false
 	}
 	admits := false
-	var walk func(mg *ModelGroup, ancestorUnbounded bool)
-	walk = func(mg *ModelGroup, ancestorUnbounded bool) {
+	var walk func(mg *ModelGroup, accReach, accUnbounded bool)
+	walk = func(mg *ModelGroup, accReach, accUnbounded bool) {
 		if mg == nil || admits {
 			return
 		}
-		groupUnbounded := ancestorUnbounded || mg.MaxOccurs == Unbounded
+		gReach := accReach && mg.MaxOccurs != 0
+		gUnbounded := accUnbounded || mg.MaxOccurs == Unbounded
 		for _, p := range mg.Particles {
+			pReach := gReach && p.MaxOccurs != 0
+			pUnbounded := gUnbounded || p.MaxOccurs == Unbounded
 			switch term := p.Term.(type) {
 			case *Wildcard:
-				effUnbounded := groupUnbounded || p.MaxOccurs == Unbounded
-				if effUnbounded &&
+				// (a) namespace superset + processContents, (b) reachable+unbounded,
+				// (c) routable with no required siblings.
+				if pReach && pUnbounded &&
 					wildcardConstraintSubset(derived, term, schema, false) &&
-					processContentsStrength(derived.ProcessContents) >= processContentsStrength(term.ProcessContents) {
+					processContentsStrength(derived.ProcessContents) >= processContentsStrength(term.ProcessContents) &&
+					openContentWildcardRoutable(base.ContentModel, p) {
 					admits = true
 					return
 				}
 			case *ModelGroup:
-				walk(term, groupUnbounded)
+				walk(term, gReach, gUnbounded)
 			}
 		}
 	}
-	walk(base.ContentModel, false)
+	walk(base.ContentModel, true, false)
 	return admits
+}
+
+// particleContains reports whether the particle subtree rooted at p contains the
+// target particle (by pointer identity).
+func particleContains(p, target *Particle) bool {
+	if p == target {
+		return true
+	}
+	mg, ok := p.Term.(*ModelGroup)
+	if !ok {
+		return false
+	}
+	for _, c := range mg.Particles {
+		if particleContains(c, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// openContentWildcardRoutable reports whether the target wildcard particle can be
+// reached and consumed within model group mg using ONLY target-matched children:
+// the branch containing target must itself be routable, and every sibling that is
+// not on the target's path must be emptiable. This is condition (c) of
+// baseModelAdmitsOpenContent.
+func openContentWildcardRoutable(mg *ModelGroup, target *Particle) bool {
+	if mg == nil {
+		return false
+	}
+	if mg.Compositor == CompositorChoice {
+		// A choice routes to target through the single branch that contains it; the
+		// other branches are simply not taken.
+		for _, c := range mg.Particles {
+			if particleContains(c, target) {
+				return openContentParticleRoutable(c, target)
+			}
+		}
+		return false
+	}
+	// sequence / all: the target's member must be routable AND every other member
+	// emptiable (so consuming target requires no sibling content).
+	found := false
+	for _, c := range mg.Particles {
+		if particleContains(c, target) {
+			if !openContentParticleRoutable(c, target) {
+				return false
+			}
+			found = true
+			continue
+		}
+		if !particleEmptiable(c) {
+			return false
+		}
+	}
+	return found
+}
+
+// openContentParticleRoutable is the per-particle helper for
+// openContentWildcardRoutable: the target particle is trivially routable, a
+// group particle routes when the target is routable within it, and any other leaf
+// is not routable.
+func openContentParticleRoutable(p, target *Particle) bool {
+	if p == target {
+		return true
+	}
+	mg, ok := p.Term.(*ModelGroup)
+	if !ok {
+		return false
+	}
+	return openContentWildcardRoutable(mg, target)
 }
 
 // reportOpenContentTypeError emits a complex-type-level schema error for an
@@ -272,9 +355,9 @@ func (c *compiler) parseOpenContent(ctx context.Context, elem *helium.Element) *
 // sequence, or "" when it is correctly placed. XSD §3.4.2 fixes the order
 // (annotation?, (openContent?, (group|all|choice|sequence)?),
 // ((attribute|attributeGroup)*, anyAttribute?), assert*), so an openContent must
-// precede the content-model particle, the attribute uses, and the anyAttribute
-// wildcard.
-func openContentOrderViolation(contentModelChild, directAttrChild string, anyAttributeSeen bool) string {
+// precede the content-model particle, the attribute uses, the anyAttribute
+// wildcard, AND the trailing xs:assert region.
+func openContentOrderViolation(contentModelChild, directAttrChild string, anyAttributeSeen, assertSeen bool) string {
 	switch {
 	case contentModelChild != "":
 		return fmt.Sprintf("The 'openContent' must appear before the content model particle '%s'.", contentModelChild)
@@ -282,6 +365,8 @@ func openContentOrderViolation(contentModelChild, directAttrChild string, anyAtt
 		return fmt.Sprintf("The 'openContent' must appear before the attribute declaration '%s'.", directAttrChild)
 	case anyAttributeSeen:
 		return "The 'openContent' must appear before the attribute wildcard 'anyAttribute'."
+	case assertSeen:
+		return "The 'openContent' must appear before the assertion 'assert'."
 	}
 	return ""
 }

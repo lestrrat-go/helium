@@ -124,6 +124,8 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	var contentWrapperChild string // "simpleContent" or "complexContent" if seen
 	var directAttrChild string     // local name of the first direct attribute/attributeGroup/anyAttribute seen
 	var anyAttributeSeen bool      // whether an anyAttribute wildcard has been seen; it must be the optional final child
+	var assertSeen bool            // whether an xs:assert (trailing region) has been seen; openContent must precede it
+	var openContentSeen bool       // whether an xs:openContent has been seen; it is a sibling of the wrapper-free CHOICE branch
 
 	reportExtraContent := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -230,6 +232,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
 				continue
 			}
+			if openContentSeen {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with 'openContent'.", ce.LocalName()))
+				continue
+			}
 			contentWrapperChild = ce.LocalName()
 			if err := c.parseComplexContent(ctx, ce, td); err != nil {
 				return nil, err
@@ -245,6 +251,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			}
 			if contentWrapperChild != "" {
 				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if openContentSeen {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with 'openContent'.", ce.LocalName()))
 				continue
 			}
 			contentWrapperChild = ce.LocalName()
@@ -301,14 +311,24 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		case isXSDElement(ce, elemAssert) && c.version == Version11:
 			// XSD 1.1: xs:assert is the optional final content of a complex type,
 			// after the attribute uses and anyAttribute wildcard.
+			assertSeen = true
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
-			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen); msg != "" {
+			// The direct complexType grammar is a CHOICE: either a simpleContent/
+			// complexContent WRAPPER, or the (openContent?, particle?, attrs,
+			// anyAttribute?, assert*) branch — never both. An openContent alongside a
+			// wrapper mixes the two branches and is rejected.
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The 'openContent' is not allowed together with '%s'.", contentWrapperChild))
+				continue
+			}
+			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen, assertSeen); msg != "" {
 				reportExtraContent(ce, msg)
 				continue
 			}
+			openContentSeen = true
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		}
@@ -389,6 +409,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 	var contentModelChild string
 	var directAttrChild string
 	var anyAttributeSeen bool
+	var assertSeen bool
 
 	reportOrder := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -511,11 +532,12 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		case isXSDElement(ce, elemAssert) && c.version == Version11:
+			assertSeen = true
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
-			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen); msg != "" {
+			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen, assertSeen); msg != "" {
 				reportOrder(ce, msg)
 				continue
 			}
@@ -545,6 +567,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 	var contentModelChild string
 	var directAttrChild string
 	var anyAttributeSeen bool
+	var assertSeen bool
 
 	reportOrder := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -674,11 +697,12 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		case isXSDElement(ce, elemAssert) && c.version == Version11:
+			assertSeen = true
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
 			}
 		case isXSDElement(ce, elemOpenContent) && c.version == Version11:
-			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen); msg != "" {
+			if msg := openContentOrderViolation(contentModelChild, directAttrChild, anyAttributeSeen, assertSeen); msg != "" {
 				reportOrder(ce, msg)
 				continue
 			}
