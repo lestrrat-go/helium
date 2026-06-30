@@ -164,70 +164,74 @@ func collectEmittingDeclaredWildcards(mg *ModelGroup) []declaredWildcardInfo {
 // checkOpenContentDropsBaseLocal (§3.4.6.4 soundness): a base content model may
 // declare an xs:any particle that WINS ATTRIBUTION over the open content (interleave
 // seeds a child matching a declared wildcard into the declared sub-sequence; suffix
-// matches it in the prefix). Dropping that declared wildcard and re-admitting its
-// namespace through the derived open content with WEAKER enforcement (or losing the
+// matches it in the prefix and a leftover declared-wildcard match — NOT flagged
+// misplaced, since that check only catches declared ELEMENT names — still spills to
+// open content). Dropping or NARROWING that declared wildcard and re-admitting its
+// namespace through the derived open content with weaker enforcement (or losing the
 // suffix ordering) lets the derived accept content the base validated more strictly.
-// For each emitting declared wildcard bw in the base content model NOT covered by a
-// derived declared wildcard (same/superset namespace AND at-least-as-strong
-// processContents) that the derived OPEN wildcard re-admits (namespace overlap):
-//   - SUFFIX base → reject for ANY processContents (a suffix base requires the
-//     wildcard's children in the prefix region; dropping it loses that ordering); OR
-//   - INTERLEAVE base → reject when the open content's processContents is WEAKER than
-//     bw's (type/validation loss); equal-or-stronger enforces at least as strictly.
 //
-// A KEPT covering wildcard is exempt (suffix never spills; interleave is safe when
-// the open content enforces OR the covering wildcard's occurrence covers bw's, since
-// the EXCESS beyond it spills into open content like the kept-element case).
+// For each emitting declared base wildcard bw whose namespace the derived OPEN
+// wildcard ACTUALLY re-admits (constraintsIntersect — finding 3: an open content
+// that excludes bw's namespace cannot receive its excess, so it is exempt), and
+// where the open content does NOT enforce at least as strictly (interleave: open pc
+// weaker than bw's; suffix: ANY pc — a suffix base imposes an ordering the derived
+// loses), check OCCURRENCE COVERAGE with AGGREGATE capacity (finding 2): the base's
+// total declared-wildcard capacity over bw's namespace region (every overlapping
+// base wildcard at least as strong as bw, summed) must be covered by the derived's
+// total declared-wildcard capacity that fully supersets bw with adequate pc (summed);
+// else the uncovered excess spills into the weaker open content → reject. The
+// accounting OVER-estimates base capacity (overlap, not subset) and UNDER-estimates
+// derived capacity (subset, not overlap), so it is fail-closed toward soundness.
+// (UPA forbids two overlapping declared wildcards in one content model, so the
+// aggregate reduces to single-wildcard occurrence coverage for constructible
+// schemas; the sums are kept for defensive correctness.)
 func (c *compiler) checkOpenContentDropsBaseWildcard(ctx context.Context, td *TypeDef, derived *OpenContent) {
 	if derived == nil || derived.Wildcard == nil || td.BaseType == nil || td.BaseType.ContentModel == nil {
 		return
 	}
 	pc := derived.Wildcard.ProcessContents
 	baseSuffix := td.BaseType.OpenContent != nil && td.BaseType.OpenContent.Mode == OpenContentSuffix
-	derivedInterleave := derived.Mode == OpenContentInterleave
-	derivedWCs := collectEmittingDeclaredWildcards(td.ContentModel)
 	openCon := wildcardConstraint(derived.Wildcard)
-	for _, bw := range collectEmittingDeclaredWildcards(td.BaseType.ContentModel) {
-		// A covering derived declared wildcard (bw's namespace is a subset of it, its
-		// processContents at least as strong) KEEPS the wildcard.
-		var covering *declaredWildcardInfo
-		for i := range derivedWCs {
-			dw := &derivedWCs[i]
-			if wildcardConstraintSubset(bw.wc, dw.wc, c.schema, false) &&
-				processContentsStrength(dw.wc.ProcessContents) >= processContentsStrength(bw.wc.ProcessContents) {
-				covering = dw
-				break
-			}
+	baseWCs := collectEmittingDeclaredWildcards(td.BaseType.ContentModel)
+	derivedWCs := collectEmittingDeclaredWildcards(td.ContentModel)
+	for _, bw := range baseWCs {
+		bwStrength := processContentsStrength(bw.wc.ProcessContents)
+		bwCon := wildcardConstraint(bw.wc)
+		if !constraintsIntersect(openCon, bwCon) {
+			continue // the derived open content does not re-admit bw's namespace
 		}
-		if covering != nil {
-			if !derivedInterleave {
-				continue // suffix: a misplaced trailing match is rejected, never spilled
-			}
-			if processContentsStrength(pc) >= processContentsStrength(bw.wc.ProcessContents) {
-				continue // the open content enforces the spilled excess at least as strictly
-			}
-			if occursCovers(covering.effMax, bw.effMax) {
-				continue // the covering wildcard absorbs all matches; no excess spills
-			}
-			c.reportOpenContentTypeError(ctx, td,
-				"The restriction narrows the occurrence of a kept declared wildcard below the base's while an interleave open-content wildcard re-admits its namespace without enforcing it as strongly; the excess children would escape the base's wildcard validation.")
-			return
-		}
-		// DROPPED. Only a concern if the derived open content actually re-admits bw's
-		// namespace.
-		if !constraintsIntersect(openCon, wildcardConstraint(bw.wc)) {
+		// Interleave is safe when the open content enforces at least as strictly as bw
+		// (no type loss, interleave imposes no ordering). Suffix loses the ordering for
+		// ANY pc, so it is always checked.
+		if !baseSuffix && processContentsStrength(pc) >= bwStrength {
 			continue
+		}
+		// AGGREGATE occurrence coverage over bw's namespace region.
+		baseCap := 0
+		for _, bw2 := range baseWCs {
+			if processContentsStrength(bw2.wc.ProcessContents) >= bwStrength &&
+				constraintsIntersect(wildcardConstraint(bw2.wc), bwCon) {
+				baseCap = maxOccursAdd(baseCap, bw2.effMax)
+			}
+		}
+		derivedCap := 0
+		for _, dw := range derivedWCs {
+			if processContentsStrength(dw.wc.ProcessContents) >= bwStrength &&
+				wildcardConstraintSubset(bw.wc, dw.wc, c.schema, false) {
+				derivedCap = maxOccursAdd(derivedCap, dw.effMax)
+			}
+		}
+		if occursCovers(derivedCap, baseCap) {
+			continue // the derived declared wildcards cover the base's capacity
 		}
 		if baseSuffix {
 			c.reportOpenContentTypeError(ctx, td,
-				"The restriction drops a base declared wildcard whose children the base's suffix open content requires in the prefix region; the derived re-admits them as trailing open content, losing the ordering constraint.")
+				"The restriction drops or narrows a base declared wildcard whose children the base's suffix open content requires in the prefix region; the derived re-admits the excess as trailing open content, losing the ordering constraint.")
 			return
 		}
-		if processContentsStrength(pc) < processContentsStrength(bw.wc.ProcessContents) {
-			c.reportOpenContentTypeError(ctx, td,
-				"The restriction drops a base declared wildcard but re-admits its namespace through an open-content wildcard whose processContents is weaker than the base wildcard's, so children escape its validation.")
-			return
-		}
+		c.reportOpenContentTypeError(ctx, td,
+			"The restriction drops or narrows a base declared wildcard but re-admits its namespace through an open-content wildcard whose processContents is weaker, so the excess children escape the base wildcard's validation.")
+		return
 	}
 }
 

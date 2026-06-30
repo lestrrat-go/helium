@@ -878,3 +878,107 @@ func TestOpenContent_RestrictionDropsBaseWildcard(t *testing.T) {
 		require.Error(t, cerr, "a suffix base dropping a declared wildcard re-admitted by its open content must be rejected (order loss)")
 	})
 }
+
+// TestOpenContent_DropsBaseWildcardCoverage covers the three follow-up gauntlet
+// findings on checkOpenContentDropsBaseWildcard: (3) the kept/narrow spill check
+// must first require namespace intersection with the derived open wildcard; (1)
+// suffix kept wildcards are NOT blanket-exempt (suffix runtime spills a leftover
+// declared-wildcard match to open content); (2) occurrence coverage must be
+// AGGREGATE across overlapping base wildcards and across multiple derived wildcards.
+func TestOpenContent_DropsBaseWildcardCoverage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("F3 narrowed declared wildcard whose namespace the open content EXCLUDES is accepted", func(t *testing.T) {
+		t.Parallel()
+		// The open content only admits urn:b, so the narrowed urn:a declared wildcard's
+		// excess cannot spill into open content (the derived model rejects it).
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:b" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:b" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "an open content that excludes the declared wildcard's namespace cannot receive its excess; must be accepted")
+	})
+
+	t.Run("F1 suffix narrowing a strict declared wildcard with weaker suffix open is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "suffix narrowing a strict declared wildcard while a weaker suffix open re-admits its namespace spills excess unenforced")
+	})
+
+	t.Run("F1 suffix keeping a fully-covering declared wildcard is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a suffix kept declared wildcard with full occurrence coverage is valid")
+	})
+
+	// NOTE: the multi-wildcard AGGREGATE scenario from finding 2 (two overlapping
+	// base/derived wildcards) is not constructible as a valid schema — UPA
+	// (cos-nonambig) rejects two overlapping declared wildcards in a content model —
+	// so the operative logic is single-wildcard occurrence coverage (occursCovers).
+	// The aggregate accounting is implemented defensively; these two cases exercise
+	// the coverage path that the aggregate sums reduce to in the single-wildcard case.
+
+	t.Run("F2 interleave narrowing a strict wildcard maxOccurs below base spills excess to weaker open (reject)", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "narrowing a strict wildcard's maxOccurs below the base while a weaker open re-admits its namespace spills excess unenforced")
+	})
+
+	t.Run("F2 interleave keeping a strict wildcard's full occurrence is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="2"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0" maxOccurs="2"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a kept strict wildcard with full occurrence coverage is valid")
+	})
+}
