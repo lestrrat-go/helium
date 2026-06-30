@@ -931,10 +931,23 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 			}
 			return vc.validateContentModelOpen(ctx, elem, mg, td.OpenContent)
 		}
-		return vc.validateEmptyContent(ctx, elem)
+		return vc.validateEmptyContent(ctx, elem, false)
 	case ContentTypeSimple:
 		return vc.validateSimpleContent(ctx, elem, edecl, td)
 	case ContentTypeElementOnly, ContentTypeMixed:
+		// XSD 1.1: a genuinely-EMPTY element-only content type — an empty
+		// <xs:sequence/>, an empty model group, or no model group at all — with no
+		// effective open content has an "empty" content type per §3.4.2, so it must
+		// reject ALL character content INCLUDING whitespace (cvc-complex-type.2.1),
+		// not merely non-whitespace text. read_types.go classifies an empty
+		// compositor as element-only with a non-nil empty model group, so the
+		// emptiness is detected via modelGroupHasContent here rather than at
+		// classification time. XSD 1.0 keeps the historical whitespace tolerance
+		// (rejectNonWhitespaceText below), byte-identical.
+		if td.ContentType == ContentTypeElementOnly && vc.version == Version11 && td.OpenContent == nil &&
+			(td.ContentModel == nil || !modelGroupHasContent(td.ContentModel)) {
+			return vc.validateEmptyContent(ctx, elem, true)
+		}
 		// For element-only content, non-whitespace text children are not allowed.
 		if td.ContentType == ContentTypeElementOnly {
 			if err := vc.rejectNonWhitespaceText(ctx, elem); err != nil {
@@ -956,7 +969,7 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 			// No content model and no open content means anything goes (for mixed) or
 			// empty (for element-only).
 			if td.ContentType == ContentTypeElementOnly {
-				return vc.validateEmptyContent(ctx, elem)
+				return vc.validateEmptyContent(ctx, elem, false)
 			}
 			// Mixed content with no model group (xs:anyType and similar lax/open
 			// content) admits arbitrary child elements. Pass 2 IDC evaluation can
@@ -1348,7 +1361,13 @@ func simpleContentNeedsValidation(td *TypeDef) bool {
 	return false
 }
 
-func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *helium.Element) error {
+// validateEmptyContent validates an element whose content type permits no child
+// elements. When strict is true (an XSD 1.1 "empty" content type, e.g. a
+// genuinely-empty <xs:sequence/> with no effective open content), ALL character
+// content is rejected including whitespace (cvc-complex-type.2.1). When strict
+// is false (a simple/empty content type, or the historical XSD 1.0 behavior),
+// whitespace-only character content is tolerated.
+func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *helium.Element, strict bool) error {
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
@@ -1359,6 +1378,10 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), ce.LocalName(), "This element is not expected.")
 			return fmt.Errorf("not expected")
 		case helium.TextNode, helium.CDATASectionNode:
+			if strict {
+				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the content type is empty.")
+				return fmt.Errorf("not expected")
+			}
 			if !xmlchar.IsAllSpace(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
 				return fmt.Errorf("not expected")
