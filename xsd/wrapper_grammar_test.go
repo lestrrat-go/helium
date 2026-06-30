@@ -277,3 +277,70 @@ func TestComplexTypeDirectAnnotationCardinality(t *testing.T) {
 		require.NoError(t, v10err)
 	})
 }
+
+// TestComplexTypeWrapperAssertExclusivity covers the direct-complexType CHOICE between
+// the wrapper branch (simpleContent|complexContent) and the non-wrapper branch
+// (which includes the trailing assert*): an xs:assert may not be a sibling of a
+// wrapper, in EITHER order. Version11-gated; 1.0 tolerant.
+func TestComplexTypeWrapperAssertExclusivity(t *testing.T) {
+	t.Parallel()
+
+	const base = `  <xs:complexType name="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
+	wrap := func(inner string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + base + `
+  <xs:complexType name="R">
+` + inner + `
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+	}
+	const cc = `    <xs:complexContent><xs:restriction base="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent>`
+	const sc = `    <xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`
+	const assertChild = `    <xs:assert test="true()"/>`
+
+	t.Run("assert before complexContent is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(assertChild+"\n"+cc))
+		require.Error(t, cerr)
+	})
+
+	t.Run("complexContent followed by sibling assert is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(cc+"\n"+assertChild))
+		require.Error(t, cerr)
+	})
+
+	t.Run("assert before simpleContent is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(assertChild+"\n"+sc))
+		require.Error(t, cerr)
+	})
+
+	t.Run("simpleContent followed by sibling assert is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(sc+"\n"+assertChild))
+		require.Error(t, cerr)
+	})
+
+	t.Run("valid wrapper-only complexType compiles", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(cc))
+		require.NoError(t, cerr)
+	})
+
+	t.Run("valid non-wrapper complexType with trailing assert compiles", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(`    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    <xs:assert test="true()"/>`))
+		require.NoError(t, cerr)
+	})
+
+	t.Run("XSD 1.0 tolerates assert beside a wrapper (assert ignored)", func(t *testing.T) {
+		t.Parallel()
+		// In 1.0 xs:assert is not a recognized complexType child, so it is ignored and
+		// the wrapper alone governs — byte-identical to origin.
+		_, v10err := compileV10(t, wrap(cc+"\n"+assertChild))
+		require.NoError(t, v10err)
+	})
+}

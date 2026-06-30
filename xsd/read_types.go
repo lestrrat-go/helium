@@ -243,6 +243,14 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with 'openContent'.", ce.LocalName()))
 				continue
 			}
+			// The direct grammar is a CHOICE: a wrapper OR the non-wrapper branch
+			// (openContent?, particle?, attrs, anyAttribute?, assert*) — never both. An
+			// xs:assert belongs INSIDE the derivation body, not as a wrapper sibling.
+			// assertSeen is 1.1-only, so this never affects XSD 1.0.
+			if assertSeen {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the assertion 'assert'.", ce.LocalName()))
+				continue
+			}
 			contentWrapperChild = ce.LocalName()
 			if err := c.parseComplexContent(ctx, ce, td); err != nil {
 				return nil, err
@@ -262,6 +270,14 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			}
 			if openContentSeen {
 				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with 'openContent'.", ce.LocalName()))
+				continue
+			}
+			// The direct grammar is a CHOICE: a wrapper OR the non-wrapper branch
+			// (openContent?, particle?, attrs, anyAttribute?, assert*) — never both. An
+			// xs:assert belongs INSIDE the derivation body, not as a wrapper sibling.
+			// assertSeen is 1.1-only, so this never affects XSD 1.0.
+			if assertSeen {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the assertion 'assert'.", ce.LocalName()))
 				continue
 			}
 			contentWrapperChild = ce.LocalName()
@@ -329,7 +345,13 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		case isXSDElement(ce, elemAssert) && c.version == Version11:
 			// XSD 1.1: xs:assert is the optional final content of a complex type,
-			// after the attribute uses and anyAttribute wildcard.
+			// after the attribute uses and anyAttribute wildcard. It belongs to the
+			// non-wrapper branch, so a wrapper sibling (simple/complexContent) excludes
+			// it — assertions for wrapped content belong INSIDE the derivation body.
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The assertion '%s' is not allowed together with '%s'; an assertion for wrapped content belongs inside the 'restriction' or 'extension'.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
 			assertSeen = true
 			if a := c.parseAssert(ctx, ce); a != nil {
 				td.Assertions = append(td.Assertions, a)
