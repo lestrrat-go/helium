@@ -200,6 +200,14 @@ func (c *compiler) checkOpenContentDropsBaseWildcard(ctx context.Context, td *Ty
 		if !constraintsIntersect(openCon, bwCon) {
 			continue // the derived open content does not re-admit bw's namespace
 		}
+		// The derived open content actually ACCEPTS something in bw's region only if a
+		// STRICT open wildcard can resolve it: strict admits ONLY a child with a matching
+		// GLOBAL element declaration, so if no global element's name is admitted by BOTH
+		// the open wildcard AND bw, a strict open accepts NOTHING there (no spill) → a
+		// valid (more restrictive) drop/narrow. (skip/lax always accept.)
+		if pc == ProcessStrict && !c.strictOpenAdmitsGlobalIn(derived.Wildcard, bw.wc) {
+			continue
+		}
 		// Interleave is safe when the open content enforces at least as strictly as bw
 		// (no type loss, interleave imposes no ordering). Suffix loses the ordering for
 		// ANY pc, so it is always checked.
@@ -233,6 +241,21 @@ func (c *compiler) checkOpenContentDropsBaseWildcard(ctx context.Context, td *Ty
 			"The restriction drops or narrows a base declared wildcard but re-admits its namespace through an open-content wildcard whose processContents is weaker, so the excess children escape the base wildcard's validation.")
 		return
 	}
+}
+
+// strictOpenAdmitsGlobalIn reports whether a STRICT open-content wildcard could
+// actually accept any element in base wildcard bw's namespace region: a strict
+// wildcard admits ONLY a child with a matching GLOBAL element declaration, so it can
+// spill into open content only if some global element's expanded name is admitted by
+// BOTH the open wildcard and bw. With none, the strict open accepts nothing there.
+func (c *compiler) strictOpenAdmitsGlobalIn(open, bw *Wildcard) bool {
+	for qn := range c.schema.elements {
+		if wildcardAllowsExpandedName(open, qn.Local, qn.NS, c.schema, false) &&
+			wildcardAllowsExpandedName(bw, qn.Local, qn.NS, c.schema, false) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkOpenContentDropsBaseLocal rejects a restriction that DROPS a base element
@@ -313,7 +336,17 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			}
 		}
 		if !derivedNames[bn] {
-			// The derived FULLY DROPS bn.
+			// The derived FULLY DROPS bn. The guard only fires if the derived open
+			// content would ACTUALLY ACCEPT bn: skip accepts all (validates nothing);
+			// lax accepts (validating only if a global exists); but a STRICT wildcard
+			// accepts bn ONLY with a matching GLOBAL declaration — strict-WITHOUT-global
+			// REJECTS bn, so the derived accepts FEWER documents than the base (which
+			// admitted it via the local declaration): a valid (more restrictive) drop.
+			if pc == ProcessStrict {
+				if _, ok := c.schema.elements[bn]; !ok {
+					continue
+				}
+			}
 			if baseSuffix {
 				// ORDER loss: the suffix base requires bn in the prefix region; the
 				// derived accepts it as trailing open content even when the type is

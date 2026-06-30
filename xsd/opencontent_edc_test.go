@@ -1234,3 +1234,64 @@ func TestSimpleContent_OpenContentRejected(t *testing.T) {
 		require.Error(t, cerr, "openContent is not permitted in a simpleContent restriction")
 	})
 }
+
+// TestOpenContent_SuffixStrictNoGlobalExempt covers the gauntlet finding that a
+// suffix order-loss reject must fire only when the derived open content would
+// ACTUALLY ACCEPT the dropped name: a strict open wildcard with NO matching global
+// declaration REJECTS the child (no spill), so the derived is MORE restrictive and
+// the restriction is VALID — it must NOT be rejected.
+func TestOpenContent_SuffixStrictNoGlobalExempt(t *testing.T) {
+	t.Parallel()
+
+	t.Run("suffix dropped local with NO global + strict OC is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a strict open wildcard with no global e rejects <e>, so the derived is more restrictive — valid")
+	})
+
+	t.Run("suffix dropped local WITH a global + strict OC is rejected (order loss)", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a strict open wildcard WITH a global e re-admits <e>, losing the suffix ordering")
+	})
+
+	t.Run("suffix dropped declared wildcard, strict OC with no global in the region, is accepted", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:any namespace="urn:a" processContents="strict" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a strict open wildcard with no globally-declared element in urn:a admits nothing there — no spill, valid")
+	})
+}
