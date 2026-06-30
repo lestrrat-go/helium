@@ -126,6 +126,86 @@ func TestXSIAttributeReferenceValueValidation(t *testing.T) {
 	})
 }
 
+// TestXSIAttributeReferenceFixedDefault verifies that a declared xsi: processor
+// attribute use is associated with its built-in type so that fixed/default
+// constraints are (1) validated for validity at compile time and (2) compared
+// in VALUE space at runtime — not by raw string equality against a nil type.
+func TestXSIAttributeReferenceFixedDefault(t *testing.T) {
+	t.Parallel()
+
+	validateSchema := func(t *testing.T, schema, instance string) (compileErr, validateErr error) {
+		t.Helper()
+		s, cerr := compileVer(t, schema, xsd.Version11)
+		if cerr != nil {
+			return cerr, nil
+		}
+		idoc, perr := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, perr)
+		return nil, xsd.NewValidator(s).Validate(t.Context(), idoc)
+	}
+
+	const xsiNS = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+
+	t.Run("xsi:nil fixed value-space match", func(t *testing.T) {
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:element name="root" type="B" nillable="true"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:attribute ref="xsi:nil" fixed="true"/>
+  </xs:complexType>
+</xs:schema>`
+		// xsi:nil="1" equals fixed "true" in the xs:boolean value space; without a
+		// built-in type the raw-string compare "1" != "true" would false-reject.
+		cerr, verr := validateSchema(t, schema, `<root `+xsiNS+` xsi:nil="1"/>`)
+		require.NoError(t, cerr)
+		require.NoError(t, verr, `xsi:nil="1" must satisfy fixed="true" by value space`)
+	})
+
+	t.Run("xsi:nil fixed invalid → schema error", func(t *testing.T) {
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:element name="root" type="B"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:attribute ref="xsi:nil" fixed="notbool"/>
+  </xs:complexType>
+</xs:schema>`
+		_, cerr := compileVer(t, schema, xsd.Version11)
+		require.Error(t, cerr, `fixed="notbool" is not a valid xs:boolean`)
+	})
+
+	t.Run("xsi:nil default invalid → schema error", func(t *testing.T) {
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:element name="root" type="B"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:attribute ref="xsi:nil" default="notbool"/>
+  </xs:complexType>
+</xs:schema>`
+		_, cerr := compileVer(t, schema, xsd.Version11)
+		require.Error(t, cerr, `default="notbool" is not a valid xs:boolean`)
+	})
+
+	t.Run("xsi:type fixed value-space match (different prefix, same ns)", func(t *testing.T) {
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:t="urn:t" targetNamespace="urn:t">
+  <xs:element name="root" type="t:B"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:attribute ref="xsi:type" use="required" fixed="t:B"/>
+  </xs:complexType>
+</xs:schema>`
+		// A different prefix u (same urn:t) → QName value-space equal to fixed t:B.
+		cerr, verr := validateSchema(t, schema,
+			`<t:root xmlns:t="urn:t" xmlns:u="urn:t" `+xsiNS+` xsi:type="u:B"/>`)
+		require.NoError(t, cerr)
+		require.NoError(t, verr, `xsi:type="u:B" must satisfy fixed="t:B" by QName value space`)
+	})
+}
+
 // TestSchemaComponentIDIgnoresAnnotationPayload verifies that the @id walk does
 // NOT descend into xs:appinfo / xs:documentation payload (arbitrary content,
 // not schema components), while the xs:annotation element's OWN @id still

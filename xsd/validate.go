@@ -1434,6 +1434,25 @@ func isKnownXsiProcessorAttr(local string) bool {
 	return false
 }
 
+// xsiProcessorAttrBuiltinType returns the built-in SCALAR type a declared xsi:
+// processor-attribute reference is associated with, so its fixed/default value
+// is validated against (and compared in) that type's value space (xsi:type→
+// xs:QName, xsi:nil→xs:boolean, xsi:noNamespaceSchemaLocation→xs:anyURI). It
+// returns ("", false) for xsi:schemaLocation, whose type is a LIST of xs:anyURI
+// with no scalar built-in equivalent — its value/even-pair validity is handled
+// directly by validateDeclaredXsiAttrValue instead.
+func xsiProcessorAttrBuiltinType(local string) (QName, bool) {
+	switch local {
+	case attrType:
+		return QName{Local: lexicon.TypeQName, NS: lexicon.NamespaceXSD}, true
+	case attrNil:
+		return QName{Local: lexicon.TypeBoolean, NS: lexicon.NamespaceXSD}, true
+	case attrNoNSSchemaLocation:
+		return QName{Local: lexicon.TypeAnyURI, NS: lexicon.NamespaceXSD}, true
+	}
+	return QName{}, false
+}
+
 // validateDeclaredXsiAttrValue validates a PRESENT xsi: processor attribute
 // whose use is EXPLICITLY declared (XSD 1.1 `ref="xsi:*"`) against the fixed
 // built-in type that attribute is defined with. `ref="xsi:type"` does not
@@ -1531,6 +1550,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
+		// True for a present, non-prohibited DECLARED xsi: processor-attribute use
+		// whose value was already validated by validateDeclaredXsiAttrValue below —
+		// so the generic type-based value check is skipped (no double validation);
+		// the fixed-value comparison still runs (against the built-in type).
+		declaredXsiValueChecked := false
 		if vc.isSpecialAttr(a) {
 			// XSD 1.1: the xsi: processor attributes (xsi:type, xsi:nil,
 			// xsi:schemaLocation, xsi:noNamespaceSchemaLocation) may be
@@ -1567,6 +1591,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 					hasErr = true
 					continue
 				}
+				declaredXsiValueChecked = true
 			}
 		}
 		present[aqn] = struct{}{}
@@ -1583,7 +1608,10 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).
-			if tdOK && attrTD.ContentType == ContentTypeSimple {
+			// A declared xsi: use was already value-validated above (its built-in
+			// type is associated only for the fixed-value comparison just done), so
+			// skip the generic check to avoid validating the same value twice.
+			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
 				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
