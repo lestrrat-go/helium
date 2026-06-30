@@ -1560,6 +1560,15 @@ func particleConsumesViaElement(p *Particle, child childElem, schema *Schema) bo
 // all-element sequence is unaffected (byte-identical). Bounded lookahead, no
 // backtracking; mirrors the matchChoice/particleConsumesViaElement approach.
 // Callers MUST gate on Version11. Side-effect free.
+//
+// REACHABILITY: a later element particle P(j) only competes for children[k] if
+// it is reachable from the current position with the wildcard yielding the
+// child — i.e. every intervening particle P(i+1..j-1) is emptiable. A REQUIRED
+// (non-emptiable) intervening particle must itself consume content here, so it
+// blocks P(j) from the child; that child is then NOT reserved (the wildcard or
+// the required particle handles it in declaration order). Without this gating an
+// optional element after a required one would steal a child the required element
+// (or the wildcard) must keep — an over-rejection.
 func sequenceElementReservedLimit(particles []*Particle, i int, children []childElem, cur int, schema *Schema) int {
 	for k := cur; k < len(children); k++ {
 		child := children[k]
@@ -1567,6 +1576,12 @@ func sequenceElementReservedLimit(particles []*Particle, i int, children []child
 		for j := i + 1; j < len(particles); j++ {
 			if particleConsumesViaElement(particles[j], child, schema) {
 				reservedForLater = true
+				break
+			}
+			// P(j) does not consume this child via an element. If it is not
+			// emptiable it is required here and blocks any later particle from
+			// reaching this child, so stop looking past it.
+			if !particleEmptiable(particles[j]) {
 				break
 			}
 		}
