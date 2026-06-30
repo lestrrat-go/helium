@@ -95,24 +95,30 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 }
 
 // checkOpenContentDropsBaseLocal rejects a restriction that DROPS a base element
-// declaration (a LOCAL declaration OR a ref to a global) and re-admits the same
-// name through a LENIENT open-content wildcard that does not enforce the base
-// element's declared type — so the derived would accept content the base rejects
-// (not a valid subset). The open content fails to enforce the type when its
-// wildcard is:
+// declaration and re-admits a name the base ADMITTED there — its own name (LOCAL
+// declaration or ref-to-global) OR any INSTANCE-ADMISSIBLE substitution-group
+// member of it — through a LENIENT open-content wildcard that does not enforce the
+// base element's declared type, so the derived would accept content the base
+// rejects (not a valid subset). Runtime matching (elemMatchesDeclOrSubst) admits a
+// base element particle's concrete transitive substitution members, so a derived
+// wildcard that re-admits a member m (e.g. excluding the head h via notQName="h"
+// while still admitting m) loses m's type just as it would the head's. The open
+// content fails to enforce the type when its wildcard is:
 //
 //   - processContents="skip" — validateWildcardChild returns BEFORE any global
 //     lookup, so the element is NEVER assessed; the base type is lost regardless of
-//     whether the base declared the name as a LOCAL or a REF-to-global; OR
+//     whether the base declared the name as a LOCAL, a REF-to-global, or admitted
+//     it as a substitution member; OR
 //   - processContents="lax" with NO global declaration of that name — nothing to
-//     assess against (this only arises for a base LOCAL, since a ref implies a
-//     global exists).
+//     assess against (only arises for a base LOCAL, since a ref/substitution member
+//     implies a global exists).
 //
 // A "strict" wildcard, or "lax" WITH a global declaration, resolves a governing
 // type and the dynamic EDC (validateWildcardElementConsistent) enforces consistency
-// at validation, so those are not rejected here. A base name the derived KEEPS (or
-// properly restricts) is matched by the model via weak-wildcard precedence, not the
-// open wildcard, so it is exempt.
+// at validation, so those are not rejected here. A name the derived KEEPS (matched
+// by the model via weak-wildcard precedence), or one the derived wildcard EXCLUDES
+// (notQName/##defined — never re-admitted), is exempt. xsi:type is instance-driven
+// (governed by the dynamic EDC), not a compile-time name source.
 func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeDef, derived *OpenContent) {
 	if derived == nil || derived.Wildcard == nil || td.BaseType == nil || td.BaseType.ContentModel == nil {
 		return
@@ -123,7 +129,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 	}
 	derivedNames := collectModelElementNames(td.ContentModel, c.schema)
 	seen := make(map[QName]struct{})
-	for _, bn := range baseDeclaredElementNames(td.BaseType.ContentModel) {
+	for _, bn := range baseAdmissibleElementNames(td.BaseType.ContentModel, c.schema) {
 		if _, dup := seen[bn]; dup {
 			continue
 		}
@@ -147,12 +153,14 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 	}
 }
 
-// baseDeclaredElementNames returns the expanded names of every element particle
-// declared anywhere in a content model — both LOCAL declarations and refs to
-// globals — recursing through nested model groups. A ref carries the referenced
-// global's expanded name in ElementDecl.Name, so it is included: a skip wildcard
-// re-admitting the name enforces nothing, so the global's type is lost too.
-func baseDeclaredElementNames(mg *ModelGroup) []QName {
+// baseAdmissibleElementNames returns every element name a content model ADMITS at
+// runtime: for each element particle (a LOCAL declaration or a ref-to-global,
+// resolved by resolveRefs to carry the global's Type/Abstract/Block) its OWN name
+// when CONCRETE, plus its INSTANCE-ADMISSIBLE (abstract-excluded) transitive
+// substitution-group members — exactly the set elemMatchesDeclOrSubst matches.
+// Recurses through nested model groups. An abstract head's own name is excluded (no
+// instance bears it), so a derived wildcard admitting only that name is not flagged.
+func baseAdmissibleElementNames(mg *ModelGroup, schema *Schema) []QName {
 	var names []QName
 	var walk func(g *ModelGroup)
 	walk = func(g *ModelGroup) {
@@ -162,7 +170,12 @@ func baseDeclaredElementNames(mg *ModelGroup) []QName {
 		for _, p := range g.Particles {
 			switch term := p.Term.(type) {
 			case *ElementDecl:
-				names = append(names, term.Name)
+				if !term.Abstract {
+					names = append(names, term.Name)
+				}
+				for _, m := range instanceSubstMembers(term, schema) {
+					names = append(names, m.Name)
+				}
 			case *ModelGroup:
 				walk(term)
 			}

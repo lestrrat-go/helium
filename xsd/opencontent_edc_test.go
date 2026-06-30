@@ -164,4 +164,70 @@ func TestOpenContent_RestrictionDropsBaseLocal(t *testing.T) {
 		_, _, cerr := compileV11(t, schema)
 		require.NoError(t, cerr, "a strict wildcard re-admitting the name (dynamic EDC enforces) must not be rejected at compile")
 	})
+
+	t.Run("dropped base head re-admitting a substitution member via skip is rejected", func(t *testing.T) {
+		t.Parallel()
+		// The base declares ref="h"; m (xs:int) is substitutable for h. Runtime
+		// matching admits <m> for the ref via substitution. The derived drops the ref
+		// and a skip wildcard that EXCLUDES the head name h via notQName="h" still
+		// re-admits the member m without enforcing its type — unsound. (Excluding the
+		// head does NOT exclude the member.)
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:integer"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element ref="h" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip" notQName="h"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "dropping a base head whose substitution member is re-admitted by skip must be rejected")
+	})
+
+	t.Run("dropped base head with notQName excluding head and members is accepted", func(t *testing.T) {
+		t.Parallel()
+		// The derived skip wildcard EXCLUDES both h and its member m via notQName, so
+		// it re-admits neither — the derived accepts fewer, still a valid subset.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:integer"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element ref="h" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip" notQName="h m"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a derived wildcard excluding the head and members via notQName must not be rejected")
+	})
+
+	t.Run("dropped base head re-admitting a substitution member via strict is accepted", func(t *testing.T) {
+		t.Parallel()
+		// A strict wildcard resolves m to its global declaration; the dynamic EDC
+		// enforces consistency at validation, so dropping the ref is valid.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:integer"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element ref="h" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a strict wildcard re-admitting a substitution member (dynamic EDC enforces) must not be rejected")
+	})
 }
