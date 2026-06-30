@@ -179,6 +179,29 @@ func TestOpenContent_RestrictionEmptyModelStillChecked(t *testing.T) {
 		require.Error(t, cerr, "a shared group-ref wildcard with a required sibling must reject the open-content add")
 	})
 
+	t.Run("empty model restriction may not add open content when the base has a declared (emptiable) sibling element", func(t *testing.T) {
+		t.Parallel()
+		// Base has an OPTIONAL element a:int alongside an unbounded wildcard. A child
+		// named a is ATTRIBUTED to element a under the base (validated as xs:int), but
+		// the derived skip open content would accept <a>bad</a>; so the derived is NOT
+		// a subset of the base. A declared element ANYWHERE in the base disqualifies
+		// the open-content conversion (weak-wildcard attribution), even when the
+		// element is emptiable and the base is otherwise emptiable.
+		schema := head + `
+  <xs:complexType name="B"><xs:sequence>
+    <xs:element name="a" type="xs:int" minOccurs="0"/>
+    <xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a declared sibling element in the base must reject the open-content add")
+	})
+
 	t.Run("empty model restriction may add open content via a single group-ref unbounded wildcard with no siblings", func(t *testing.T) {
 		t.Parallel()
 		// Positive control: the base wildcard is reached THROUGH a group-ref

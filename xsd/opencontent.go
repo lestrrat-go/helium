@@ -143,115 +143,86 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 	}
 }
 
-// baseModelAdmitsOpenContent reports whether the base type's DECLARED content
-// model already admits the (effectively unbounded) derived open-content wildcard,
-// so a restriction may validly re-express a base `xs:any` particle as open content
-// even though the base carries no {open content} of its own (saxonData
-// Open/open022). The check is CONSERVATIVE and fail-closed: it returns true ONLY
-// when there exists a wildcard W in the base content model such that ALL of:
+// baseModelAdmitsOpenContent reports whether a restriction may validly re-express
+// the base type's DECLARED content model as the (effectively unbounded) derived
+// open-content wildcard, even though the base carries no {open content} of its own
+// (saxonData Open/open022). The full content-model restriction-subsumption +
+// weak-wildcard-attribution problem is out of scope; rather than approximate it,
+// this accepts ONLY the single PROVABLY-SOUND shape and rejects everything else
+// (fail-closed):
 //
-//	(a) W's namespace constraint is a SUPERSET of the derived open-content
-//	    wildcard's (derived ⊆ W) and W's processContents is at least as strong;
-//	(b) W is REACHABLE and effectively UNBOUNDED — the product of maxOccurs along
-//	    the path from the content-model root to W is unbounded with no zero factor
-//	    (a maxOccurs="0" ancestor or particle makes W unreachable; an effectively
-//	    bounded W, e.g. maxOccurs="1", cannot admit a second open child);
-//	(c) W has NO required siblings — entering the model and consuming W needs no
-//	    other content, i.e. at every sequence/all level on the path every OTHER
-//	    sibling particle is emptiable (a choice imposes no sibling requirement). A
-//	    required sibling element (e.g. `sequence{element a, any}`) means the base
-//	    admits the open child ONLY alongside `a`, so the open content is NOT a
-//	    language subset and is rejected.
+//	The base content model reduces to EXACTLY ONE wildcard particle W — NO
+//	element-declaration particles anywhere, and no second wildcard — whose
+//	EFFECTIVE occurrence (the product of minOccurs/maxOccurs along the root→W path)
+//	is optional (min product 0) and unbounded (max product unbounded). Then the
+//	base language is precisely "zero or more children matching W", so the derived
+//	open content is a language subset exactly when its wildcard is a namespace
+//	SUBSET of W (wildcardConstraintSubset) with processContents at least as strong.
 //
-// The decision is made STRUCTURALLY during a single descent (see
-// openContentAdmitWalker): each wildcard is judged at its ACTUAL position with its
-// own ancestor occurrence product and sibling set, never by reconstructing a path
-// via *Particle pointer identity. This is required because group-ref expansion
-// SHARES the group definition's particle slice (link_refs.go
-// `placeholder.Particles = grp.Particles`), so the SAME wildcard *Particle pointer
-// can appear at two sibling positions (e.g. `(G, G)*`); a pointer-based path check
-// would treat both positions as "on the target path" and miss the OTHER G as a
-// required sibling. open022 (a standalone unbounded wildcard with no required
-// siblings) is accepted; a required-sibling base, a maxOccurs="0" ancestor, and
-// the shared `(G, G)*` group-ref case are rejected.
+// Why no element declarations: a child whose name collides with a base element
+// declaration is ATTRIBUTED to that element under the base (weak-wildcard
+// attribution) and validated by its — possibly stricter — type, while the derived
+// open content would validate it only as open content; the derived would then NOT
+// be a subset of the base. A wildcard-only base has no element to win attribution.
+// Why exactly one optional-unbounded wildcard: a second wildcard, a required
+// wildcard (min product > 0, so the base would reject the empty instance the
+// derived accepts), or a bounded wildcard (max product not unbounded, so the base
+// would reject a second open child) all break the subset relation, so they are
+// conservatively deferred. open022 (a single optional unbounded wildcard, no
+// elements) is accepted; the attribution repro, the round-4/round-5 repros, and
+// the shared `(G, G)*` group-ref case (two wildcards) are all rejected.
 func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema) bool {
 	if base == nil || derived == nil || base.ContentModel == nil {
 		return false
 	}
-	w := openContentAdmitWalker{derived: derived, schema: schema}
-	// The root is reachable, not-yet-unbounded, and has no required sibling above
-	// it; the root group's own occurrence is folded in by descend.
-	return w.descend(base.ContentModel, true, false, true)
+	var scan baseModelWildcardScan
+	scan.walk(base.ContentModel, 1, 1)
+	if scan.elementSeen || scan.wildcardCount != 1 || scan.wildcard == nil {
+		return false
+	}
+	if scan.wildcardMin != 0 || scan.wildcardMax != Unbounded {
+		return false
+	}
+	return wildcardConstraintSubset(derived, scan.wildcard, schema, false) &&
+		processContentsStrength(derived.ProcessContents) >= processContentsStrength(scan.wildcard.ProcessContents)
 }
 
-// openContentAdmitWalker carries the immutable inputs of the
-// baseModelAdmitsOpenContent descent: the derived open-content wildcard whose
-// admissibility is sought, and the schema for wildcard-subset resolution.
-type openContentAdmitWalker struct {
-	derived *Wildcard
-	schema  *Schema
+// baseModelWildcardScan accumulates a structural scan of a base content model for
+// baseModelAdmitsOpenContent: whether any element-declaration particle was seen,
+// the number of wildcard particles, and (for the last/only wildcard) its effective
+// occurrence — the product of minOccurs/maxOccurs along the root→wildcard path.
+type baseModelWildcardScan struct {
+	elementSeen   bool
+	wildcardCount int
+	wildcard      *Wildcard
+	wildcardMin   int
+	wildcardMax   int
 }
 
-// descend visits model group mg, folding mg's OWN occurrence into the path state:
-//   - reachable: the maxOccurs product along the root→mg path has no zero factor
-//     (a maxOccurs="0" anywhere on the path makes everything below unreachable);
-//   - unbounded: some maxOccurs along that path is unbounded;
-//   - noRequiredSibling: every sequence/all sibling NOT descended into so far is
-//     emptiable (a choice level contributes no requirement).
-//
-// It returns true when a wildcard satisfying conditions (a)-(c) is found. A nested
-// group particle's occurrence equals the inner group's own MinOccurs/MaxOccurs
-// (copied at parse time), so descend folds it once via the recursive call's mg and
-// does NOT re-fold the wrapping particle for group terms.
-func (w openContentAdmitWalker) descend(mg *ModelGroup, reachable, unbounded, noRequiredSibling bool) bool {
+// walk descends model group mg, folding mg's OWN occurrence into the path products
+// (minProd, maxProd) on entry. A nested group particle's occurrence equals the
+// inner group's own MinOccurs/MaxOccurs (copied at parse time), so walk folds it
+// once via the recursive call's mg and does NOT re-fold the wrapping particle for
+// group terms; a leaf particle's own occurrence is folded directly.
+func (s *baseModelWildcardScan) walk(mg *ModelGroup, minProd, maxProd int) {
 	if mg == nil {
-		return false
+		return
 	}
-	reachable = reachable && mg.MaxOccurs != 0
-	if !reachable {
-		return false
-	}
-	unbounded = unbounded || mg.MaxOccurs == Unbounded
-	isChoice := mg.Compositor == CompositorChoice
-	for i, p := range mg.Particles {
-		// Descending into particle i: for a sequence/all every OTHER sibling must be
-		// emptiable; a choice picks one branch, so siblings impose no requirement.
-		siblingOK := noRequiredSibling
-		if !isChoice {
-			siblingOK = siblingOK && othersEmptiableExcept(mg, i)
-		}
+	gMin := mulOccurs(minProd, mg.MinOccurs)
+	gMax := mulOccurs(maxProd, mg.MaxOccurs)
+	for _, p := range mg.Particles {
 		switch term := p.Term.(type) {
+		case *ElementDecl:
+			s.elementSeen = true
 		case *Wildcard:
-			pReachable := reachable && p.MaxOccurs != 0
-			pUnbounded := unbounded || p.MaxOccurs == Unbounded
-			if pReachable && pUnbounded && siblingOK &&
-				wildcardConstraintSubset(w.derived, term, w.schema, false) &&
-				processContentsStrength(w.derived.ProcessContents) >= processContentsStrength(term.ProcessContents) {
-				return true
-			}
+			s.wildcardCount++
+			s.wildcard = term
+			s.wildcardMin = mulOccurs(gMin, p.MinOccurs)
+			s.wildcardMax = mulOccurs(gMax, p.MaxOccurs)
 		case *ModelGroup:
-			if w.descend(term, reachable, unbounded, siblingOK) {
-				return true
-			}
+			s.walk(term, gMin, gMax)
 		}
 	}
-	return false
-}
-
-// othersEmptiableExcept reports whether every particle in mg other than the one at
-// index skip is emptiable. It compares by INDEX, not pointer, so a model group
-// holding the same *Particle pointer twice (possible after shared group-ref
-// expansion) still evaluates each sibling position independently.
-func othersEmptiableExcept(mg *ModelGroup, skip int) bool {
-	for i, p := range mg.Particles {
-		if i == skip {
-			continue
-		}
-		if !particleEmptiable(p) {
-			return false
-		}
-	}
-	return true
 }
 
 // reportOpenContentTypeError emits a complex-type-level schema error for an
