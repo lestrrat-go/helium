@@ -195,6 +195,14 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 			return false
 		}
 	}
+	// XSD 1.1 Particle Valid (Restriction) clause 4.6: the derived and base element
+	// declarations' {type table}s must be both absent or both present and
+	// EQUIVALENT (conditional type assignment). A restriction whose type table
+	// selects a different type for the same @test than the base's is invalid
+	// (cta0043). Equivalence is the conservative structural comparison.
+	if version == Version11 && !typeTablesEquivalent(elementAlternatives(rt, schema), elementAlternatives(bt, schema)) {
+		return false
+	}
 	// A base element that is fixed forces the derived element to carry the same
 	// fixed value; a base that is not nillable forbids the derived from becoming
 	// nillable. These are tightening rules — only flag the clear widening cases.

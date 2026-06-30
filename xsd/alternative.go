@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -31,7 +32,10 @@ type altTypeRef struct {
 //
 // Callers must only invoke this in XSD 1.1 mode.
 func (c *compiler) parseTypeAlternatives(ctx context.Context, elem *helium.Element) []*TypeAlternative {
-	var alts []*TypeAlternative
+	// Gather the xs:alternative child elements in document order first, so the
+	// testless-default ordering constraint can be checked positionally (only the
+	// LAST alternative may omit @test).
+	var altElems []*helium.Element
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -39,6 +43,20 @@ func (c *compiler) parseTypeAlternatives(ctx context.Context, elem *helium.Eleme
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok || !isXSDElement(ce, elemAlternative) {
 			continue
+		}
+		altElems = append(altElems, ce)
+	}
+
+	var alts []*TypeAlternative
+	for i, ce := range altElems {
+		// A testless alternative (no @test) is the unconditional default and must be
+		// LAST in document order; an earlier testless alternative would render every
+		// following alternative unreachable, which is a schema error (cta9001err).
+		if !hasAttr(ce, attrTest) && i != len(altElems)-1 {
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), elemAlternative,
+					"Only the last xs:alternative may omit the 'test' attribute."))
+			}
 		}
 		alt := c.parseTypeAlternative(ctx, ce)
 		if alt != nil {
@@ -174,9 +192,79 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 			}
 			return nil
 		}
+		// The CTA @test runs in a static context with NO in-scope variables and whose
+		// in-scope schema types are the built-in (xs:) types only; a free variable
+		// reference (cta9002err) or a user-defined type named in cast/castable/instance
+		// of/treat as (cta9003err / s3_12ii06) is a schema error.
+		if err := c.checkCTATestStaticContext(elem, compiled, alt.Namespaces); err != nil {
+			if c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
+					fmt.Sprintf("The XPath expression '%s' of the type alternative is not valid: %v.", test, err)))
+			}
+			return nil
+		}
 		alt.compiled = compiled
 	}
 	return alt
+}
+
+// checkCTATestStaticContext enforces the XSD 1.1 static-context restrictions on an
+// xs:alternative @test XPath beyond namespace-prefix validity: the expression may
+// reference no variables (CTA exposes none), may name only ACTUAL built-in (xs:)
+// types in cast/castable/instance of/treat as and kind tests, and may call only KNOWN
+// standard-library functions / built-in type constructors at a valid arity (§F.2). A
+// free variable, an unknown/non-built-in type (XPST0008), or an unknown/wrong-arity
+// function (XPST0017) returns a non-nil error. StaticReferences reports the resolved
+// namespace URI (and, for functions, the arity) of every name — handling prefixed,
+// unprefixed, and braced-URI Q{uri}local forms uniformly against the alternative's
+// in-scope namespaces — so this check is a namespace+existence test with no name-form
+// logic of its own.
+func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3.Expression, namespaces map[string]string) error {
+	refs := compiled.StaticReferences(namespaces)
+	if len(refs.FreeVariables) > 0 {
+		return fmt.Errorf("undefined variable $%s", refs.FreeVariables[0])
+	}
+	// schema-element()/schema-attribute() reference GLOBAL element/attribute
+	// declarations, which the CTA static context does not provide (§F.2 gives only
+	// built-in type definitions), so such a node test is out of context.
+	if len(refs.SchemaComponentTests) > 0 {
+		return fmt.Errorf("the schema-aware node test %s is not available in a type alternative", refs.SchemaComponentTests[0])
+	}
+	for _, tn := range refs.TypeNames {
+		// A type reference must name an ACTUAL built-in type of the XPath/XDM type
+		// hierarchy: the namespace must be the XSD namespace AND the local name a known
+		// type. The authority is xpath3's IsKnownXSDType (the @test is an XPath
+		// expression), so the XDM-only names valid in a type position — xs:untyped,
+		// xs:untypedAtomic, xs:anyType, xs:anySimpleType, xs:anyAtomicType, xs:error,
+		// xs:numeric — are accepted, while an unknown xs:-namespace name (e.g.
+		// xs:noSuchType) is a static error (XPST0008), not tolerated by namespace alone.
+		if tn.URI == lexicon.NamespaceXSD && xpath3.IsKnownXSDType("xs:"+tn.Name) {
+			continue
+		}
+		return fmt.Errorf("the type %q is not a built-in type and is not available in a type alternative", qnameRefLabel(tn.Prefix, tn.Name))
+	}
+	for _, fn := range refs.FunctionNames {
+		// A function reference must be a KNOWN STANDARD F&O 3.1 function or built-in type
+		// constructor at the called arity (§F.2). StandardFunctionAcceptsArity excludes
+		// helium's forward-looking EXTENSION functions (e.g. fn:flatten) from the registry
+		// of fn:/math:/map:/array: functions + xs: type constructors, so a single
+		// (URI, local, arity) lookup rejects an unknown function (XPST0017), a wrong-arity
+		// call, an xs:noSuchType constructor, a non-standard extension, AND any
+		// user-namespace function (whose URI is absent from the registry) alike.
+		if xpath3.StandardFunctionAcceptsArity(fn.URI, fn.Name, fn.Arity) {
+			continue
+		}
+		return fmt.Errorf("the function %q (arity %d) is not a standard built-in function and is not available in a type alternative", qnameRefLabel(fn.Prefix, fn.Name), fn.Arity)
+	}
+	return nil
+}
+
+// qnameRefLabel renders a (prefix, local) QName reference for a diagnostic.
+func qnameRefLabel(prefix, name string) string {
+	if prefix == "" {
+		return name
+	}
+	return prefix + ":" + name
 }
 
 // countInlineAlternativeTypes returns the number of inline anonymous
@@ -239,15 +327,84 @@ func (c *compiler) effectiveXPathDefaultNS(elem *helium.Element) (string, bool) 
 	if hasAttr(elem, attrXPathDefaultNamespace) {
 		return resolveXPathDefaultNSToken(elem, getAttr(elem, attrXPathDefaultNamespace), c.schema.targetNamespace), true
 	}
-	// Otherwise inherit the schema-level value. It is ALREADY RESOLVED against the
-	// schema ROOT at root-read time (compiler.schemaXPathDefaultNS, shared with the
-	// identity-constraint path), so an inherited ##defaultNamespace uses the ROOT's
-	// default namespace — NOT a nested default-namespace redeclaration in scope at
-	// the alternative element (CTA-861-001).
+	// Otherwise inherit the schema-level token, but resolve it against the HOST
+	// element (the alternative), NOT the schema root. Per the XSD 1.1 {xpath default
+	// namespace} mapping the ##defaultNamespace keyword always uses the in-scope
+	// default namespace of the element bearing the XPath, even when the
+	// xpathDefaultNamespace attribute is inherited from <schema> — so an
+	// alternative's own xmlns redeclaration governs (cta0005). The pre-resolved
+	// root value (schemaXPathDefaultNS) is therefore NOT used here; only the raw
+	// token is inherited and re-resolved at elem. ##targetNamespace/##local/literal
+	// URI tokens resolve identically at either element, so this is a strict
+	// refinement of the ##defaultNamespace case.
 	if c.xpathDefaultNSSet {
-		return c.schemaXPathDefaultNS, true
+		return resolveXPathDefaultNSToken(elem, c.schemaXPathDefaultNSToken, c.schema.targetNamespace), true
 	}
 	return "", false
+}
+
+// elementAlternatives returns the effective {type table} alternatives for an
+// element declaration: its own, or — for an <xs:element ref="g"> particle that
+// does not carry the table — the referenced global declaration's. Mirrors
+// effectiveAlternatives (validation) / declAlternatives (EDC) for the restriction
+// and consistency checks that run at compile time.
+func elementAlternatives(decl *ElementDecl, schema *Schema) []*TypeAlternative {
+	if decl == nil {
+		return nil
+	}
+	if len(decl.Alternatives) > 0 {
+		return decl.Alternatives
+	}
+	if decl.IsRef && schema != nil {
+		if g, ok := schema.LookupElement(decl.Name.Local, decl.Name.NS); ok && g != decl {
+			return g.Alternatives
+		}
+	}
+	return nil
+}
+
+// typeTablesEquivalent reports whether two {type table}s are equivalent for the XSD
+// 1.1 constraints that require it (Element Declarations Consistent; element
+// restriction Particle Valid (Restriction) clause 4.6). Per the spec a Type Table
+// T1 is equivalent to T2 iff their {alternatives} have the same length with
+// equivalent corresponding entries (and equivalent default type definitions). The
+// comparison is the spec-sanctioned CONSERVATIVE one — a processor "may treat two
+// type alternatives as non-equivalent" unless it detects they are the same: two
+// alternatives are equivalent only when their {test}s are identical and their
+// {type definition}s are the same type definition. The default (testless)
+// alternative is the final slice entry (Test == ""), so comparing the whole slice
+// covers both {alternatives} and {default type definition}. Two empty tables (both
+// absent) are equivalent.
+//
+// The @test TEXT alone does not determine which type an alternative selects: the
+// same text evaluates differently under different in-scope namespaces (an unprefixed
+// name test, a prefixed type/function name) or a different static base URI
+// (fn:base-uri()/fn:doc()). So equivalence ALSO requires the alternative's effective
+// namespace bindings and base URI to match — otherwise two tables with identical
+// test text but different xmlns context would be wrongly treated as equivalent and
+// could govern the same element with different types depending on the path. The
+// namespace comparison is the whole in-scope map (a conservative superset of the
+// bindings the test actually depends on), which is spec-sound: a processor "may
+// treat two type alternatives as non-equivalent".
+func typeTablesEquivalent(a, b []*TypeAlternative) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Test != b[i].Test {
+			return false
+		}
+		if a[i].BaseURI != b[i].BaseURI {
+			return false
+		}
+		if !maps.Equal(a[i].Namespaces, b[i].Namespaces) {
+			return false
+		}
+		if !elementTypesConsistent(a[i].Type, b[i].Type) {
+			return false
+		}
+	}
+	return true
 }
 
 // isErrorType reports whether td is the XSD 1.1 built-in xs:error type, whose

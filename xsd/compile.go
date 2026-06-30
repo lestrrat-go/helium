@@ -27,6 +27,15 @@ type compiler struct {
 	// not set its own. Empty means no default (unprefixed element = no-namespace).
 	// It is re-set per document for xs:include/xs:redefine/xs:import.
 	schemaXPathDefaultNS string
+	// schemaXPathDefaultNSToken is the RAW current-document schema-level
+	// xpathDefaultNamespace token (e.g. "##defaultNamespace", "##targetNamespace", a
+	// URI, or ""), as authored — NOT pre-resolved. The CTA path needs it because the
+	// {xpath default namespace} mapping resolves ##defaultNamespace against the
+	// in-scope namespaces of the HOST element (the xs:alternative), even when the
+	// attribute is inherited from <schema>; the pre-resolved schemaXPathDefaultNS
+	// (resolved at the root) cannot reconstruct that. Per-document like
+	// schemaXPathDefaultNS/xpathDefaultNSSet.
+	schemaXPathDefaultNSToken string
 	// schemaTargetNSSet tracks whether the current schema document has a non-empty
 	// effective target namespace. This is distinct from @targetNamespace presence:
 	// targetNamespace="" is no target namespace, while chameleon includes inherit
@@ -625,6 +634,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	if hasAttr(root, attrXPathDefaultNamespace) {
 		c.xpathDefaultNSSet = true
 	}
+	c.schemaXPathDefaultNSToken = getAttr(root, attrXPathDefaultNamespace)
 	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 
