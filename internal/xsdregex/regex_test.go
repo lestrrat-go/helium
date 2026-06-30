@@ -91,6 +91,32 @@ func TestNegatedCharClassUnaffected(t *testing.T) {
 	require.False(t, re.MatchString("a"))
 }
 
+func TestCharClassHyphenRangeEndpoint(t *testing.T) {
+	// In the XSD/XPath regex grammar a '-' is a literal only at the start of a
+	// character class or immediately before the closing ']'. An interior '-'
+	// is a range operator, and its endpoints must be single characters — never
+	// another '-'. Go's RE2 happily accepts '[--z]' (range '-'..'z') and
+	// '[!--]' (range '!'..'-'), so the translator must reject these explicitly.
+	t.Run("reject hyphen as range endpoint", func(t *testing.T) {
+		for _, pat := range []string{`[--z]`, `[!--]`, `[^--z]`, `[a--z]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.Error(t, err, "pattern %q must be rejected", pat)
+				require.Contains(t, err.Error(), "invalid character class")
+			})
+		}
+	})
+
+	t.Run("accept valid hyphen neighbors", func(t *testing.T) {
+		for _, pat := range []string{`[+-]`, `[-+]`, `[a-z-+]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.NoError(t, err, "pattern %q must be accepted", pat)
+			})
+		}
+	})
+}
+
 func TestDefaultMatchTimeoutAccessors(t *testing.T) {
 	orig := xsdregex.DefaultMatchTimeout()
 	t.Cleanup(func() { xsdregex.SetDefaultMatchTimeout(orig) })
