@@ -1318,6 +1318,16 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		if val == nil {
 			continue
 		}
+		// A declared xsi:schemaLocation use has no scalar built-in type, so its
+		// fixed/default LITERAL is validated against the list-of-xs:anyURI value
+		// space directly (non-empty even pairs, each a valid xs:anyURI).
+		if isDeclaredXsiSchemaLocationUse(it.au, c.version) {
+			if err := validateXsiSchemaLocationValue(*val, c.version); err != nil {
+				msg := fmt.Sprintf("The value '%s' is not a valid value of the xsi:schemaLocation type (a non-empty even list of xs:anyURI).", *val)
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
+			}
+			continue
+		}
 		td := attrUseTypeDef(it.au, c.schema)
 		if td == nil || td.ContentType != ContentTypeSimple {
 			continue

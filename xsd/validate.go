@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -1453,6 +1454,48 @@ func xsiProcessorAttrBuiltinType(local string) (QName, bool) {
 	return QName{}, false
 }
 
+// xsiSchemaLocationTokens collapses a value in XSD whitespace and splits it on
+// XSD list whitespace ONLY (space/tab/CR/LF via value.XSDFields — NBSP and
+// other Unicode whitespace are NOT separators), yielding the
+// xsi:schemaLocation token list (its value space is a list of xs:anyURI).
+func xsiSchemaLocationTokens(val string) []string {
+	return value.XSDFields(normalizeWhiteSpace(val, "collapse"))
+}
+
+// validateXsiSchemaLocationValue validates a value against xsi:schemaLocation's
+// value space: a NON-empty, EVEN-length list of (namespace, location)
+// xs:anyURI pairs. An odd count, an empty value, or a non-anyURI token is an
+// error. Used for both a present instance value and a fixed/default LITERAL.
+func validateXsiSchemaLocationValue(val string, version Version) error {
+	toks := xsiSchemaLocationTokens(val)
+	if len(toks) == 0 || len(toks)%2 != 0 {
+		return fmt.Errorf("xsi:schemaLocation must be a non-empty list of anyURI pairs")
+	}
+	for _, t := range toks {
+		if err := validateBuiltinValue(t, lexicon.TypeAnyURI, version); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// xsiSchemaLocationValueEqual reports whether two xsi:schemaLocation values are
+// equal in VALUE space — equal token lists after XSD whitespace collapse and
+// XSD-whitespace tokenization — so leading/trailing/internal run-length
+// whitespace differences (e.g. " urn:a   loc.xsd " vs "urn:a loc.xsd") do not
+// matter, while raw string equality would false-reject.
+func xsiSchemaLocationValueEqual(a, b string) bool {
+	return slices.Equal(xsiSchemaLocationTokens(a), xsiSchemaLocationTokens(b))
+}
+
+// isDeclaredXsiSchemaLocationUse reports whether au is a declared xsi:schemaLocation
+// attribute use (the only one of the four xsi: processor attributes whose
+// value space is a list with no scalar built-in type, so its fixed/default is
+// handled by the list helpers above rather than a built-in TypeDef).
+func isDeclaredXsiSchemaLocationUse(au *AttrUse, version Version) bool {
+	return version == Version11 && au.Name.NS == lexicon.NamespaceXSI && au.Name.Local == attrSchemaLocation
+}
+
 // validateDeclaredXsiAttrValue validates a PRESENT xsi: processor attribute
 // whose use is EXPLICITLY declared (XSD 1.1 `ref="xsi:*"`) against the fixed
 // built-in type that attribute is defined with. `ref="xsi:type"` does not
@@ -1480,20 +1523,7 @@ func (vc *validationContext) validateDeclaredXsiAttrValue(a *helium.Attribute, e
 	case attrNil:
 		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeBoolean, vc.version)
 	case attrSchemaLocation:
-		// A list of (namespace, location) xs:anyURI pairs: a non-empty, even token
-		// count, each a valid xs:anyURI. Tokenize on XSD list whitespace ONLY
-		// (space/tab/CR/LF via value.XSDFields, applied to the XSD-collapsed value),
-		// NOT strings.Fields, so a value joined by NBSP is ONE token (and fails).
-		toks := value.XSDFields(normalizeWhiteSpace(val, "collapse"))
-		if len(toks) == 0 || len(toks)%2 != 0 {
-			return fmt.Errorf("xsi:schemaLocation must be a non-empty list of anyURI pairs")
-		}
-		for _, t := range toks {
-			if err := validateBuiltinValue(t, lexicon.TypeAnyURI, vc.version); err != nil {
-				return err
-			}
-		}
-		return nil
+		return validateXsiSchemaLocationValue(val, vc.version)
 	case attrNoNSSchemaLocation:
 		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeAnyURI, vc.version)
 	}
@@ -1600,11 +1630,24 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version) {
-				ad := attrDisplayName(a)
-				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
-				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
-				hasErr = true
+			if au.Fixed != nil {
+				// xsi:schemaLocation has no scalar built-in type, so its fixed value
+				// is compared in VALUE space as a list of xs:anyURI (collapse + XSD
+				// tokenize + token-list equality); every other use compares via
+				// fixedValueMatches against its (built-in or declared) type.
+				fixedMatches := false
+				switch {
+				case isDeclaredXsiSchemaLocationUse(au, vc.version):
+					fixedMatches = xsiSchemaLocationValueEqual(a.Value(), *au.Fixed)
+				default:
+					fixedMatches = fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version)
+				}
+				if !fixedMatches {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
+				}
 			}
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).

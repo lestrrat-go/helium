@@ -204,6 +204,43 @@ func TestXSIAttributeReferenceFixedDefault(t *testing.T) {
 		require.NoError(t, cerr)
 		require.NoError(t, verr, `xsi:type="u:B" must satisfy fixed="t:B" by QName value space`)
 	})
+
+	schemaLoc := func(constraint string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:element name="root" type="B"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:attribute ref="xsi:schemaLocation" ` + constraint + `/>
+  </xs:complexType>
+</xs:schema>`
+	}
+
+	t.Run("xsi:schemaLocation default odd → schema error", func(t *testing.T) {
+		// "urn:a" is one token (odd) — not an even (namespace, location) pair list.
+		_, cerr := compileVer(t, schemaLoc(`default="urn:a"`), xsd.Version11)
+		require.Error(t, cerr, `default="urn:a" is not a valid xsi:schemaLocation (odd token count)`)
+	})
+
+	t.Run("xsi:schemaLocation default empty → schema error", func(t *testing.T) {
+		// An empty value is zero tokens — not a non-empty even pair list.
+		_, cerr := compileVer(t, schemaLoc(`default=""`), xsd.Version11)
+		require.Error(t, cerr, `default="" is not a valid xsi:schemaLocation (no tokens)`)
+	})
+
+	t.Run("xsi:schemaLocation default even valid → compiles", func(t *testing.T) {
+		_, cerr := compileVer(t, schemaLoc(`default="urn:a loc.xsd"`), xsd.Version11)
+		require.NoError(t, cerr, `default="urn:a loc.xsd" is a valid even anyURI pair list`)
+	})
+
+	t.Run("xsi:schemaLocation fixed value-space match", func(t *testing.T) {
+		// The instance value differs only by whitespace runs; it is value-space
+		// equal to the fixed value (same token list after collapse + tokenize).
+		cerr, verr := validateSchema(t, schemaLoc(`fixed="urn:a loc.xsd"`),
+			"<root "+xsiNS+" xsi:schemaLocation=\"  urn:a   loc.xsd  \"/>")
+		require.NoError(t, cerr)
+		require.NoError(t, verr, `whitespace-equivalent xsi:schemaLocation must satisfy the fixed value`)
+	})
 }
 
 // TestSchemaComponentIDIgnoresAnnotationPayload verifies that the @id walk does
