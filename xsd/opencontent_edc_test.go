@@ -231,3 +231,111 @@ func TestOpenContent_RestrictionDropsBaseLocal(t *testing.T) {
 		require.NoError(t, cerr, "a strict wildcard re-admitting a substitution member (dynamic EDC enforces) must not be rejected")
 	})
 }
+
+// TestOpenContent_RestrictionNarrowsKeptName covers the gauntlet finding that the
+// kept-name exemption must require OCCURRENCE COVERAGE in interleave mode: a
+// restriction that KEEPS a base element but NARROWS its maxOccurs while an
+// unenforcing interleave open-content wildcard re-admits the name lets the EXCESS
+// children spill into open content (where the base type is not enforced).
+func TestOpenContent_RestrictionNarrowsKeptName(t *testing.T) {
+	t.Parallel()
+
+	t.Run("interleave narrows kept element maxOccurs with skip OC is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Base e:int maxOccurs="unbounded"; derived narrows e to maxOccurs="1". A 2nd
+		// <e> spills into the interleave skip open content (unenforced), but the base
+		// validates both <e> as the int element → not a subset.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "narrowing a kept element's maxOccurs while skip OC re-admits it must be rejected")
+	})
+
+	t.Run("interleave keeps element maxOccurs covering the base is accepted", func(t *testing.T) {
+		t.Parallel()
+		// Derived keeps e:int maxOccurs="unbounded" (covers the base) — no excess
+		// spills, every <e> is enforced as the int element.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "keeping the base element's maxOccurs coverage must not be rejected")
+	})
+
+	t.Run("interleave narrows kept element but OC is strict-with-global is accepted", func(t *testing.T) {
+		t.Parallel()
+		// A strict wildcard resolves the spilled <e> to the global e and the dynamic
+		// EDC enforces consistency at validation, so the narrowing is sound.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "narrowing with a strict wildcard (dynamic EDC enforces) must not be rejected")
+	})
+
+	t.Run("interleave narrows kept element but OC notQName-excludes it is accepted", func(t *testing.T) {
+		t.Parallel()
+		// The derived wildcard EXCLUDES e via notQName, so the excess <e> is NOT
+		// re-admitted as open content — the derived rejects it as a misplaced element,
+		// preserving the subset relation.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip" notQName="e"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "narrowing with a wildcard that excludes the name via notQName must not be rejected")
+	})
+
+	t.Run("suffix narrows kept element with skip OC is accepted", func(t *testing.T) {
+		t.Parallel()
+		// In SUFFIX mode a trailing child whose name is declared is rejected as
+		// misplaced (never spilled into open content), so narrowing a kept element is
+		// safe even with an unenforcing wildcard.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" maxOccurs="1"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "suffix mode rejects misplaced kept-name children, so narrowing is safe")
+	})
+}

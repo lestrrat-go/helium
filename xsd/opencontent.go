@@ -127,6 +127,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 	if pc == ProcessStrict {
 		return // strict resolves a governing type; dynamic EDC enforces consistency
 	}
+	interleave := derived.Mode == OpenContentInterleave
 	derivedNames := collectModelElementNames(td.ContentModel, c.schema)
 	seen := make(map[QName]struct{})
 	for _, bn := range baseAdmissibleElementNames(td.BaseType.ContentModel, c.schema) {
@@ -134,9 +135,6 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			continue
 		}
 		seen[bn] = struct{}{}
-		if derivedNames[bn] {
-			continue // kept by the derived model; matched there, not by the wildcard
-		}
 		if !wildcardAllowsExpandedName(derived.Wildcard, bn.Local, bn.NS, c.schema, false) {
 			continue // the open wildcard does not re-admit this name
 		}
@@ -145,12 +143,109 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 				continue // a global declaration exists; lax resolves it, dynamic EDC enforces
 			}
 		}
-		// skip (any name), or lax with no global declaration: the type is not enforced.
-		c.reportOpenContentTypeError(ctx, td,
-			"The restriction drops the base type's element declaration '"+bn.Local+
-				"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
-		return
+		// The unenforcing wildcard (skip, or lax with no global) re-admits bn.
+		if !derivedNames[bn] {
+			// The derived FULLY DROPS bn: a bn child spills into open content in BOTH
+			// modes (interleave moves it; suffix leaves it as a non-declared trailing
+			// child the open wildcard absorbs) — its base type is lost.
+			c.reportOpenContentTypeError(ctx, td,
+				"The restriction drops the base type's element declaration '"+bn.Local+
+					"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
+			return
+		}
+		// The derived KEEPS bn as a declared element. In SUFFIX mode a trailing child
+		// whose name is declared is rejected as misplaced (never spilled), so a kept
+		// name is safe regardless of occurrence. In INTERLEAVE mode the EXCESS bn
+		// children (beyond the derived particle's effective maxOccurs) are moved into
+		// the open content and escape the base element's type, so the derived must
+		// COVER the base's effective maxOccurs for bn.
+		if interleave {
+			baseMax := maxOccursForName(td.BaseType.ContentModel, bn, c.schema)
+			derivedMax := maxOccursForName(td.ContentModel, bn, c.schema)
+			if !occursCovers(derivedMax, baseMax) {
+				c.reportOpenContentTypeError(ctx, td,
+					"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
+						"' below the base's while an interleave open-content wildcard re-admits it without enforcing its declared type; the excess children would escape the base type.")
+				return
+			}
+		}
 	}
+}
+
+// occursCovers reports whether a derived maximum-occurrence bound covers a base
+// bound: an unbounded base requires an unbounded derived; an unbounded derived
+// covers any base; otherwise the derived count must be at least the base's.
+func occursCovers(derivedMax, baseMax int) bool {
+	if baseMax == Unbounded {
+		return derivedMax == Unbounded
+	}
+	if derivedMax == Unbounded {
+		return true
+	}
+	return derivedMax >= baseMax
+}
+
+// maxOccursForName returns the maximum number of element children named n (matched
+// DIRECTLY or as a substitution-group member of a particle's declaration, mirroring
+// elemMatchesDeclOrSubst) that the content model can match as DECLARED content, with
+// Unbounded for an unbounded maximum. A sequence/all sums its members; a choice
+// takes the max member; each group multiplies by its own maxOccurs.
+func maxOccursForName(mg *ModelGroup, n QName, schema *Schema) int {
+	if mg == nil {
+		return 0
+	}
+	inner := 0
+	for _, p := range mg.Particles {
+		cnt := particleMaxOccursForName(p, n, schema)
+		if mg.Compositor == CompositorChoice {
+			inner = maxOccursOf(inner, cnt)
+		} else {
+			inner = maxOccursAdd(inner, cnt)
+		}
+	}
+	return mulOccurs(inner, mg.MaxOccurs)
+}
+
+func particleMaxOccursForName(p *Particle, n QName, schema *Schema) int {
+	switch term := p.Term.(type) {
+	case *ElementDecl:
+		if elementDeclAdmitsName(term, n, schema) {
+			return p.MaxOccurs
+		}
+		return 0
+	case *ModelGroup:
+		// A nested group particle's occurrence equals the inner group's own MaxOccurs
+		// (copied at parse), so recurse without re-folding p's occurrence.
+		return maxOccursForName(term, n, schema)
+	}
+	return 0
+}
+
+// elementDeclAdmitsName reports whether an element particle's declaration admits a
+// child named n — its own name when CONCRETE, or any of its instance-admissible
+// (abstract-excluded) substitution-group members — matching elemMatchesDeclOrSubst.
+func elementDeclAdmitsName(term *ElementDecl, n QName, schema *Schema) bool {
+	if !term.Abstract && term.Name == n {
+		return true
+	}
+	for _, m := range instanceSubstMembers(term, schema) {
+		if m.Name == n {
+			return true
+		}
+	}
+	return false
+}
+
+// maxOccursOf returns the larger of two maximum-occurrence bounds, treating
+// Unbounded (-1) as the maximum.
+func maxOccursOf(a, b int) int {
+	if a == Unbounded || b == Unbounded {
+		return Unbounded
+	}
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // baseAdmissibleElementNames returns every element name a content model ADMITS at
