@@ -72,7 +72,11 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 			source = c.filename
 		}
 		c.checkContentModelConsistent(ctx, ct.td.ContentModel, source, ct.src.line, c.complexTypeComponent(ct.td, ct.src))
-		c.checkWildcardElementConsistent(ctx, ct.td.ContentModel, source, ct.src.line, "complexType", c.complexTypeComponent(ct.td, ct.src))
+		// The type's EFFECTIVE open-content wildcard can also resolve a same-named
+		// declared local element to a global (interleave moves an extra occurrence to
+		// the open partition; suffix matches a trailing one), so it participates in the
+		// type-table EDC exactly like a content-model wildcard.
+		c.checkWildcardElementConsistent(ctx, ct.td.ContentModel, ct.td.OpenContent, source, ct.src.line, "complexType", c.complexTypeComponent(ct.td, ct.src))
 	}
 
 	// Run the same consistency check over standalone named model group
@@ -111,7 +115,8 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 	for _, g := range groups {
 		component := "model group '" + g.qn.Local + "'"
 		c.checkNamedGroupConsistent(ctx, g.mg, g.src, component)
-		c.checkWildcardElementConsistent(ctx, g.mg, g.src.source, g.src.line, "group", component)
+		// A named group has no open content (it is a complexType-level construct).
+		c.checkWildcardElementConsistent(ctx, g.mg, nil, g.src.source, g.src.line, "group", component)
 	}
 }
 
@@ -135,13 +140,24 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 // observed conformance violations), so two distinct-but-present type tables are
 // not false-rejected.
 //
+// The type's EFFECTIVE open-content wildcard (oc) is folded into the wildcard set:
+// interleave open content can move an extra same-name declared child into the open
+// partition, and suffix can match a trailing one, where validateWildcardChild governs
+// it via the GLOBAL declaration's CTA type table — so an inconsistent type table is
+// reachable through it exactly as through a content-model wildcard. A skip
+// open-content wildcard imposes no constraint (anyWildcardAllows skips it), like a
+// content-model skip wildcard. oc is nil for a named group (no open content).
+//
 // Gated on XSD 1.1: a wildcard never resolves to a same-named global in 1.0 mode
 // for this constraint, and 1.0 stays byte-identical.
-func (c *compiler) checkWildcardElementConsistent(ctx context.Context, mg *ModelGroup, source string, line int, kind, component string) {
+func (c *compiler) checkWildcardElementConsistent(ctx context.Context, mg *ModelGroup, oc *OpenContent, source string, line int, kind, component string) {
 	if c.version != Version11 || mg == nil {
 		return
 	}
 	elems, wildcards := c.collectModelGroupParticles(mg)
+	if oc != nil && oc.Wildcard != nil {
+		wildcards = append(wildcards, oc.Wildcard)
+	}
 	if len(wildcards) == 0 || len(elems) == 0 {
 		return
 	}

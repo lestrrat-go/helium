@@ -932,7 +932,19 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 			}
 		}
 		if td.ContentModel == nil {
-			// No content model means anything goes (for mixed) or empty (for element-only).
+			// XSD 1.1: effective open content on a type with NO declared model group
+			// (e.g. a mixed or appliesToEmpty type that picked up a
+			// <xs:defaultOpenContent>) turns the empty declared content into an empty
+			// model plus the open content, so every child element must match the open
+			// wildcard — it does NOT admit arbitrary children. Element-only text was
+			// already rejected above; mixed text stays allowed (the open-content
+			// matcher inspects child elements only).
+			if vc.version == Version11 && td.OpenContent != nil {
+				mg := &ModelGroup{Compositor: CompositorSequence, MinOccurs: 1, MaxOccurs: 1}
+				return vc.validateContentModelOpen(ctx, elem, mg, td.OpenContent)
+			}
+			// No content model and no open content means anything goes (for mixed) or
+			// empty (for element-only).
 			if td.ContentType == ContentTypeElementOnly {
 				return vc.validateEmptyContent(ctx, elem)
 			}

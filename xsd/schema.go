@@ -332,6 +332,20 @@ type TypeDef struct {
 	// type's facets/assertions are not skipped and a narrowed content type is
 	// inherited through derived simpleContent types.
 	IsSimpleContent bool
+
+	// openContentExplicit records that an <xs:openContent> child (of ANY mode,
+	// including mode="none") was present on this complex type's definition. It
+	// distinguishes an explicit mode="none" (OpenContent nil, default suppressed)
+	// from an absent <xs:openContent> (OpenContent nil, schema-level
+	// <xs:defaultOpenContent> may still apply). Set at parse time (read_types).
+	openContentExplicit bool
+	// pendingDefaultOpenContent is the schema-level <xs:defaultOpenContent> active
+	// in THIS type's own schema document at parse time, captured only when the type
+	// has no explicit <xs:openContent>. Default open content is per-document
+	// (§3.4.2.1) and does not cross include/import boundaries, so it is captured at
+	// parse time rather than read globally in resolveRefs. resolveOpenContent
+	// applies it (subject to appliesToEmpty and the effective content type).
+	pendingDefaultOpenContent *OpenContent
 }
 
 // OpenContentMode is the XSD 1.1 xs:openContent mode.
@@ -349,6 +363,10 @@ const (
 type OpenContent struct {
 	Mode     OpenContentMode
 	Wildcard *Wildcard // the xs:any wildcard governing the open content
+	// AppliesToEmpty is meaningful only for a schema-level
+	// <xs:defaultOpenContent>: when false (the default), the default open content
+	// is NOT applied to a complex type whose effective content type is empty.
+	AppliesToEmpty bool
 }
 
 // FacetSet holds facet constraints for a simple type restriction.
