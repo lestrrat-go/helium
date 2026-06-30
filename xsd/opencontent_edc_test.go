@@ -391,3 +391,88 @@ func TestOpenContent_RestrictionDropsNonEmittingBaseElement(t *testing.T) {
 		require.Error(t, cerr, "dropping a genuine emitting base element re-admitted by skip must still be rejected")
 	})
 }
+
+// TestOpenContent_RestrictionDropsSuffixOrdered covers the gauntlet finding that a
+// SUFFIX-mode base imposes an ORDERING constraint (a declared element must appear in
+// the prefix region, not after open content) that a restriction loses by dropping
+// the element — so a dropped base-declared name re-admitted by the derived suffix
+// open content must be rejected for ANY processContents, even strict /
+// lax-with-global where the dynamic EDC enforces the TYPE but not the ORDER.
+func TestOpenContent_RestrictionDropsSuffixOrdered(t *testing.T) {
+	t.Parallel()
+
+	t.Run("suffix base drops global e re-admitted by strict OC is rejected (order lost)", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element ref="e" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a suffix base dropping a declared element re-admitted by its open content must be rejected even under strict")
+	})
+
+	t.Run("suffix base drops local e re-admitted by skip OC is rejected", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a suffix base dropping a declared element re-admitted by skip must be rejected")
+	})
+
+	t.Run("interleave base drops global e re-admitted by strict OC is accepted", func(t *testing.T) {
+		t.Parallel()
+		// Interleave imposes no ordering, so strict type enforcement (dynamic EDC) is
+		// sufficient — dropping e is a valid restriction.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element ref="e" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "an interleave base dropping a declared element with strict OC (dynamic EDC enforces) must be accepted")
+	})
+
+	t.Run("suffix base keeps e is accepted", func(t *testing.T) {
+		t.Parallel()
+		// The derived KEEPS e, so the derived suffix model still order-constrains it —
+		// the ordering is preserved.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element ref="e" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:element ref="e" minOccurs="0"/></xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a suffix base that KEEPS the declared element preserves the ordering")
+	})
+}

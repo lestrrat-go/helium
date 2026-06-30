@@ -113,21 +113,33 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 //     assess against (only arises for a base LOCAL, since a ref/substitution member
 //     implies a global exists).
 //
-// A "strict" wildcard, or "lax" WITH a global declaration, resolves a governing
-// type and the dynamic EDC (validateWildcardElementConsistent) enforces consistency
-// at validation, so those are not rejected here. A name the derived KEEPS (matched
-// by the model via weak-wildcard precedence), or one the derived wildcard EXCLUDES
-// (notQName/##defined — never re-admitted), is exempt. xsi:type is instance-driven
-// (governed by the dynamic EDC), not a compile-time name source.
+// There are two unsoundness sources. TYPE loss: a DROPPED name re-admitted by an
+// unenforcing wildcard (processContents="skip", which is never assessed, or "lax"
+// with NO global declaration) escapes the base element's type. A "strict" wildcard,
+// or "lax" WITH a global declaration, resolves a governing type whose consistency
+// the dynamic EDC (validateWildcardElementConsistent) enforces, so it is type-safe.
+// ORDER loss: a SUFFIX-mode BASE requires a declared name to appear in the prefix
+// region (a leftover declared name is rejected as misplaced); dropping that name
+// makes the derived accept it as trailing open content REGARDLESS of processContents
+// — the dynamic EDC enforces only the TYPE, not the ORDER — so a dropped name a
+// suffix base declares is rejected for ANY processContents. (An interleave base
+// imposes no ordering.) A name the derived KEEPS as a declared element is matched by
+// the model via weak-wildcard precedence; in INTERLEAVE mode the EXCESS beyond the
+// derived particle's maxOccurs spills into open content, so a kept name needs
+// OCCURRENCE COVERAGE when the wildcard is unenforcing; SUFFIX keeps a misplaced
+// excess child rejected, so a kept name is always safe there. A name the derived
+// wildcard EXCLUDES (notQName/##defined) is never re-admitted; a NON-EMITTING base
+// name (effective base maxOccurs 0) is admitted by the base only via open content,
+// not the element — both exempt. xsi:type is instance-driven (dynamic EDC), not a
+// compile-time name source. Substitution: the protected set is every name the base
+// ADMITS at runtime (baseAdmissibleElementNames mirrors elemMatchesDeclOrSubst).
 func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeDef, derived *OpenContent) {
 	if derived == nil || derived.Wildcard == nil || td.BaseType == nil || td.BaseType.ContentModel == nil {
 		return
 	}
 	pc := derived.Wildcard.ProcessContents
-	if pc == ProcessStrict {
-		return // strict resolves a governing type; dynamic EDC enforces consistency
-	}
-	interleave := derived.Mode == OpenContentInterleave
+	baseSuffix := td.BaseType.OpenContent != nil && td.BaseType.OpenContent.Mode == OpenContentSuffix
+	derivedInterleave := derived.Mode == OpenContentInterleave
 	derivedNames := collectModelElementNames(td.ContentModel, c.schema)
 	seen := make(map[QName]struct{})
 	for _, bn := range baseAdmissibleElementNames(td.BaseType.ContentModel, c.schema) {
@@ -147,28 +159,43 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 		if !wildcardAllowsExpandedName(derived.Wildcard, bn.Local, bn.NS, c.schema, false) {
 			continue // the open wildcard does not re-admit this name
 		}
+		// Whether the derived open content ENFORCES bn's declared type: strict always
+		// resolves a governing type; lax resolves only when a global declaration exists;
+		// skip never assesses.
+		enforced := pc == ProcessStrict
 		if pc == ProcessLax {
 			if _, ok := c.schema.elements[bn]; ok {
-				continue // a global declaration exists; lax resolves it, dynamic EDC enforces
+				enforced = true
 			}
 		}
-		// The unenforcing wildcard (skip, or lax with no global) re-admits bn.
 		if !derivedNames[bn] {
-			// The derived FULLY DROPS bn: a bn child spills into open content in BOTH
-			// modes (interleave moves it; suffix leaves it as a non-declared trailing
-			// child the open wildcard absorbs) — its base type is lost.
-			c.reportOpenContentTypeError(ctx, td,
-				"The restriction drops the base type's element declaration '"+bn.Local+
-					"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
-			return
+			// The derived FULLY DROPS bn.
+			if baseSuffix {
+				// ORDER loss: the suffix base requires bn in the prefix region; the
+				// derived accepts it as trailing open content even when the type is
+				// enforced. Reject for any processContents.
+				c.reportOpenContentTypeError(ctx, td,
+					"The restriction drops the base type's element declaration '"+bn.Local+
+						"' which the base's suffix open content requires in the prefix region; the derived re-admits it as trailing open content, losing the ordering constraint.")
+				return
+			}
+			if !enforced {
+				// TYPE loss: an interleave base re-admits bn through an unenforcing
+				// wildcard (skip, or lax with no global), so its base type is lost.
+				c.reportOpenContentTypeError(ctx, td,
+					"The restriction drops the base type's element declaration '"+bn.Local+
+						"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
+				return
+			}
+			continue
 		}
-		// The derived KEEPS bn as a declared element. In SUFFIX mode a trailing child
-		// whose name is declared is rejected as misplaced (never spilled), so a kept
-		// name is safe regardless of occurrence. In INTERLEAVE mode the EXCESS bn
-		// children (beyond the derived particle's effective maxOccurs) are moved into
-		// the open content and escape the base element's type, so the derived must
-		// COVER the base's effective maxOccurs for bn.
-		if interleave {
+		// The derived KEEPS bn. In SUFFIX mode a trailing declared-name child is
+		// rejected as misplaced (never spilled), so a kept name is safe regardless of
+		// occurrence. In INTERLEAVE mode the EXCESS bn children spill into open content;
+		// when the wildcard does not enforce the type, the derived must COVER the base's
+		// effective maxOccurs (an enforcing wildcard type-checks the spill, so it is
+		// safe).
+		if derivedInterleave && !enforced {
 			derivedMax := maxOccursForName(td.ContentModel, bn, c.schema)
 			if !occursCovers(derivedMax, baseMax) {
 				c.reportOpenContentTypeError(ctx, td,
