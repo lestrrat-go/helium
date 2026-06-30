@@ -156,117 +156,102 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 //	    the path from the content-model root to W is unbounded with no zero factor
 //	    (a maxOccurs="0" ancestor or particle makes W unreachable; an effectively
 //	    bounded W, e.g. maxOccurs="1", cannot admit a second open child);
-//	(c) W is ROUTABLE with no required siblings — entering the model and consuming
-//	    W needs no other content, i.e. every OTHER particle on the path (and in any
-//	    enclosing sequence/all) is emptiable. A required sibling element (e.g.
-//	    `sequence{element a, any}`) means the base admits the open child ONLY
-//	    alongside `a`, so the open content is NOT a language subset and is rejected.
+//	(c) W has NO required siblings — entering the model and consuming W needs no
+//	    other content, i.e. at every sequence/all level on the path every OTHER
+//	    sibling particle is emptiable (a choice imposes no sibling requirement). A
+//	    required sibling element (e.g. `sequence{element a, any}`) means the base
+//	    admits the open child ONLY alongside `a`, so the open content is NOT a
+//	    language subset and is rejected.
 //
-// open022 (a standalone unbounded wildcard with no required siblings) is accepted;
-// a required-sibling base, and a maxOccurs="0" ancestor, are rejected.
+// The decision is made STRUCTURALLY during a single descent (see
+// openContentAdmitWalker): each wildcard is judged at its ACTUAL position with its
+// own ancestor occurrence product and sibling set, never by reconstructing a path
+// via *Particle pointer identity. This is required because group-ref expansion
+// SHARES the group definition's particle slice (link_refs.go
+// `placeholder.Particles = grp.Particles`), so the SAME wildcard *Particle pointer
+// can appear at two sibling positions (e.g. `(G, G)*`); a pointer-based path check
+// would treat both positions as "on the target path" and miss the OTHER G as a
+// required sibling. open022 (a standalone unbounded wildcard with no required
+// siblings) is accepted; a required-sibling base, a maxOccurs="0" ancestor, and
+// the shared `(G, G)*` group-ref case are rejected.
 func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema) bool {
 	if base == nil || derived == nil || base.ContentModel == nil {
 		return false
 	}
-	admits := false
-	var walk func(mg *ModelGroup, accReach, accUnbounded bool)
-	walk = func(mg *ModelGroup, accReach, accUnbounded bool) {
-		if mg == nil || admits {
-			return
-		}
-		gReach := accReach && mg.MaxOccurs != 0
-		gUnbounded := accUnbounded || mg.MaxOccurs == Unbounded
-		for _, p := range mg.Particles {
-			pReach := gReach && p.MaxOccurs != 0
-			pUnbounded := gUnbounded || p.MaxOccurs == Unbounded
-			switch term := p.Term.(type) {
-			case *Wildcard:
-				// (a) namespace superset + processContents, (b) reachable+unbounded,
-				// (c) routable with no required siblings.
-				if pReach && pUnbounded &&
-					wildcardConstraintSubset(derived, term, schema, false) &&
-					processContentsStrength(derived.ProcessContents) >= processContentsStrength(term.ProcessContents) &&
-					openContentWildcardRoutable(base.ContentModel, p) {
-					admits = true
-					return
-				}
-			case *ModelGroup:
-				walk(term, gReach, gUnbounded)
-			}
-		}
-	}
-	walk(base.ContentModel, true, false)
-	return admits
+	w := openContentAdmitWalker{derived: derived, schema: schema}
+	// The root is reachable, not-yet-unbounded, and has no required sibling above
+	// it; the root group's own occurrence is folded in by descend.
+	return w.descend(base.ContentModel, true, false, true)
 }
 
-// particleContains reports whether the particle subtree rooted at p contains the
-// target particle (by pointer identity).
-func particleContains(p, target *Particle) bool {
-	if p == target {
-		return true
-	}
-	mg, ok := p.Term.(*ModelGroup)
-	if !ok {
+// openContentAdmitWalker carries the immutable inputs of the
+// baseModelAdmitsOpenContent descent: the derived open-content wildcard whose
+// admissibility is sought, and the schema for wildcard-subset resolution.
+type openContentAdmitWalker struct {
+	derived *Wildcard
+	schema  *Schema
+}
+
+// descend visits model group mg, folding mg's OWN occurrence into the path state:
+//   - reachable: the maxOccurs product along the root→mg path has no zero factor
+//     (a maxOccurs="0" anywhere on the path makes everything below unreachable);
+//   - unbounded: some maxOccurs along that path is unbounded;
+//   - noRequiredSibling: every sequence/all sibling NOT descended into so far is
+//     emptiable (a choice level contributes no requirement).
+//
+// It returns true when a wildcard satisfying conditions (a)-(c) is found. A nested
+// group particle's occurrence equals the inner group's own MinOccurs/MaxOccurs
+// (copied at parse time), so descend folds it once via the recursive call's mg and
+// does NOT re-fold the wrapping particle for group terms.
+func (w openContentAdmitWalker) descend(mg *ModelGroup, reachable, unbounded, noRequiredSibling bool) bool {
+	if mg == nil {
 		return false
 	}
-	for _, c := range mg.Particles {
-		if particleContains(c, target) {
-			return true
+	reachable = reachable && mg.MaxOccurs != 0
+	if !reachable {
+		return false
+	}
+	unbounded = unbounded || mg.MaxOccurs == Unbounded
+	isChoice := mg.Compositor == CompositorChoice
+	for i, p := range mg.Particles {
+		// Descending into particle i: for a sequence/all every OTHER sibling must be
+		// emptiable; a choice picks one branch, so siblings impose no requirement.
+		siblingOK := noRequiredSibling
+		if !isChoice {
+			siblingOK = siblingOK && othersEmptiableExcept(mg, i)
+		}
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			pReachable := reachable && p.MaxOccurs != 0
+			pUnbounded := unbounded || p.MaxOccurs == Unbounded
+			if pReachable && pUnbounded && siblingOK &&
+				wildcardConstraintSubset(w.derived, term, w.schema, false) &&
+				processContentsStrength(w.derived.ProcessContents) >= processContentsStrength(term.ProcessContents) {
+				return true
+			}
+		case *ModelGroup:
+			if w.descend(term, reachable, unbounded, siblingOK) {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// openContentWildcardRoutable reports whether the target wildcard particle can be
-// reached and consumed within model group mg using ONLY target-matched children:
-// the branch containing target must itself be routable, and every sibling that is
-// not on the target's path must be emptiable. This is condition (c) of
-// baseModelAdmitsOpenContent.
-func openContentWildcardRoutable(mg *ModelGroup, target *Particle) bool {
-	if mg == nil {
-		return false
-	}
-	if mg.Compositor == CompositorChoice {
-		// A choice routes to target through the single branch that contains it; the
-		// other branches are simply not taken.
-		for _, c := range mg.Particles {
-			if particleContains(c, target) {
-				return openContentParticleRoutable(c, target)
-			}
-		}
-		return false
-	}
-	// sequence / all: the target's member must be routable AND every other member
-	// emptiable (so consuming target requires no sibling content).
-	found := false
-	for _, c := range mg.Particles {
-		if particleContains(c, target) {
-			if !openContentParticleRoutable(c, target) {
-				return false
-			}
-			found = true
+// othersEmptiableExcept reports whether every particle in mg other than the one at
+// index skip is emptiable. It compares by INDEX, not pointer, so a model group
+// holding the same *Particle pointer twice (possible after shared group-ref
+// expansion) still evaluates each sibling position independently.
+func othersEmptiableExcept(mg *ModelGroup, skip int) bool {
+	for i, p := range mg.Particles {
+		if i == skip {
 			continue
 		}
-		if !particleEmptiable(c) {
+		if !particleEmptiable(p) {
 			return false
 		}
 	}
-	return found
-}
-
-// openContentParticleRoutable is the per-particle helper for
-// openContentWildcardRoutable: the target particle is trivially routable, a
-// group particle routes when the target is routable within it, and any other leaf
-// is not routable.
-func openContentParticleRoutable(p, target *Particle) bool {
-	if p == target {
-		return true
-	}
-	mg, ok := p.Term.(*ModelGroup)
-	if !ok {
-		return false
-	}
-	return openContentWildcardRoutable(mg, target)
+	return true
 }
 
 // reportOpenContentTypeError emits a complex-type-level schema error for an

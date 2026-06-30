@@ -119,7 +119,7 @@ func TestOpenContent_RestrictionEmptyModelStillChecked(t *testing.T) {
 		// so the base admits the open child only ALONGSIDE a — the open content is
 		// not a language subset and must be rejected.
 		schema := head + `
-  <xs:complexType name="B"><xs:sequence maxOccurs="unbounded">
+  <xs:complexType name="B"><xs:sequence minOccurs="0" maxOccurs="unbounded">
     <xs:element name="a"/>
     <xs:any namespace="http://open.com/" processContents="lax"/>
   </xs:sequence></xs:complexType>
@@ -151,6 +151,54 @@ func TestOpenContent_RestrictionEmptyModelStillChecked(t *testing.T) {
 </xs:schema>`
 		_, _, cerr := compileV11(t, schema)
 		require.Error(t, cerr, "an unreachable (maxOccurs=0) base wildcard must reject the open-content add")
+	})
+
+	t.Run("empty model restriction may not add open content when a SHARED group-ref wildcard has a required sibling", func(t *testing.T) {
+		t.Parallel()
+		// Base B = (G, G)* where G is exactly one required wildcard. Group-ref
+		// expansion SHARES G's particle slice, so the two <xs:group ref="G"/>
+		// siblings hold the SAME wildcard *Particle pointer. The base requires TWO
+		// open children (one per G); the derived open content admits ONE, so R's
+		// language is not a subset of B and must be rejected. A pointer-identity path
+		// check would wrongly treat both G positions as the target path and accept.
+		schema := head + `
+  <xs:group name="G"><xs:sequence>
+    <xs:any namespace="http://open.com/" processContents="lax"/>
+  </xs:sequence></xs:group>
+  <xs:complexType name="B"><xs:sequence minOccurs="0" maxOccurs="unbounded">
+    <xs:group ref="G"/>
+    <xs:group ref="G"/>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "a shared group-ref wildcard with a required sibling must reject the open-content add")
+	})
+
+	t.Run("empty model restriction may add open content via a single group-ref unbounded wildcard with no siblings", func(t *testing.T) {
+		t.Parallel()
+		// Positive control: the base wildcard is reached THROUGH a group-ref
+		// expansion and is unbounded with no required sibling, so the open-content
+		// add is valid — confirming the descent reaches through expanded placeholders.
+		schema := head + `
+  <xs:group name="G"><xs:sequence>
+    <xs:any namespace="http://open.com/" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:sequence></xs:group>
+  <xs:complexType name="B"><xs:sequence>
+    <xs:group ref="G"/>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a single unbounded group-ref wildcard with no siblings must accept")
 	})
 }
 
