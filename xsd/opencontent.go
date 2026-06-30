@@ -123,6 +123,61 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 		c.checkOpenContentRestriction(ctx, td, eff, td.BaseType.OpenContent)
 		c.checkOpenContentDropsBaseLocal(ctx, td, eff)
 		c.checkOpenContentDropsBaseWildcard(ctx, td, eff)
+		c.checkDerivedWildcardReadmitsBaseOpen(ctx, td)
+	}
+}
+
+// checkDerivedWildcardReadmitsBaseOpen guards QUADRANT B of the restriction
+// content-interaction matrix (§3.4.6.4): a restriction may DROP the base's open
+// content O but then re-introduce O's admitted language as a DECLARED WILDCARD in the
+// derived content model, bypassing every open-content guard. A declared wildcard wins
+// attribution, so a child it admits is validated by IT (processContents P_Wd), not by
+// O (P_O). For the derived to be a subset of the base, every derived declared wildcard
+// W_d that admits children in O's namespace must be a valid RESTRICTION of O: its
+// namespace ⊆ O's AND its processContents at least as strong as P_O. Otherwise it
+// accepts content the base's strict/lax open content rejected. Version11 / restriction
+// only; a base WITHOUT open content is unaffected.
+//
+// Scoped to avoid a FALSE-REJECT: a derived declared wildcard that VALIDLY RESTRICTS a
+// BASE DECLARED wildcard (W_d ⊆ W_b and pc at least as strong) is a QUADRANT-D
+// restriction handled by restriction_particle.go, so it is exempt here; and a derived
+// declared wildcard that is itself a valid restriction of O (⊆ namespace, ≥ pc) passes.
+func (c *compiler) checkDerivedWildcardReadmitsBaseOpen(ctx context.Context, td *TypeDef) {
+	if c.version != Version11 || td.BaseType == nil {
+		return
+	}
+	base := td.BaseType.OpenContent
+	if base == nil || base.Wildcard == nil {
+		return // quadrant B requires the BASE to carry open content
+	}
+	baseStrength := processContentsStrength(base.Wildcard.ProcessContents)
+	openCon := wildcardConstraint(base.Wildcard)
+	baseWCs := collectEmittingDeclaredWildcards(td.BaseType.ContentModel)
+	for _, dw := range collectEmittingDeclaredWildcards(td.ContentModel) {
+		if !constraintsIntersect(wildcardConstraint(dw.wc), openCon) {
+			continue // the derived declared wildcard does not touch the base open content's namespace
+		}
+		// Exempt a derived declared wildcard that validly RESTRICTS a base DECLARED
+		// wildcard — that interaction is quadrant D (restriction_particle.go).
+		exempt := false
+		for _, bw := range baseWCs {
+			if wildcardConstraintSubset(dw.wc, bw.wc, c.schema, false) &&
+				processContentsStrength(dw.wc.ProcessContents) >= processContentsStrength(bw.wc.ProcessContents) {
+				exempt = true
+				break
+			}
+		}
+		if exempt {
+			continue
+		}
+		// The derived declared wildcard re-admits the base OPEN content's language. It
+		// must be a valid restriction of O: namespace ⊆ O AND pc at least as strong.
+		if !wildcardConstraintSubset(dw.wc, base.Wildcard, c.schema, false) ||
+			processContentsStrength(dw.wc.ProcessContents) < baseStrength {
+			c.reportOpenContentTypeError(ctx, td,
+				"The restriction drops the base type's open content but re-admits its language through a declared wildcard whose namespace or processContents is not a valid restriction of the base open-content wildcard.")
+			return
+		}
 	}
 }
 
