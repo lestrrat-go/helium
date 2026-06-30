@@ -104,6 +104,61 @@ func TestXSIAttributeReferenceValueValidation(t *testing.T) {
 		// Empty → reject.
 		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:nil=""/>`))
 	})
+
+	t.Run("xsi:schemaLocation", func(t *testing.T) {
+		s := compileType(t, "xsi:schemaLocation")
+		// Valid: an even list of anyURI pairs, space-separated (XSD whitespace).
+		require.NoError(t, validate(t, s, `<root `+xsiNS+` xsi:schemaLocation="urn:a loc.xsd"/>`))
+		// NBSP (U+00A0) is NOT XSD list whitespace, so "urn:a loc.xsd" is ONE
+		// token (odd count) → reject. strings.Fields would wrongly split it in two.
+		require.Error(t, validate(t, s, "<root "+xsiNS+" xsi:schemaLocation=\"urn:a loc.xsd\"/>"))
+		// Odd token count → reject.
+		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:schemaLocation="urn:a"/>`))
+	})
+
+	// F3: a declared ref to a non-standard xsi: local name (xsi:foo) is NOT
+	// specially accepted — it stays skipped as a special attribute, so a required
+	// use of it is never satisfied and the instance is rejected.
+	t.Run("xsi:foo not specially accepted", func(t *testing.T) {
+		s := compileType(t, "xsi:foo")
+		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:foo="x"/>`),
+			"a required ref=xsi:foo use must not be satisfied by a present xsi:foo")
+	})
+}
+
+// TestSchemaComponentIDIgnoresAnnotationPayload verifies that the @id walk does
+// NOT descend into xs:appinfo / xs:documentation payload (arbitrary content,
+// not schema components), while the xs:annotation element's OWN @id still
+// participates in xs:ID uniqueness.
+func TestSchemaComponentIDIgnoresAnnotationPayload(t *testing.T) {
+	t.Parallel()
+
+	// A duplicate `id` on an element embedded INSIDE xs:appinfo must not reject
+	// the schema (it collides with the real schema-component id "dup", but
+	// annotation payload is not a schema component).
+	const embeddedDup = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a" id="dup">
+    <xs:annotation>
+      <xs:appinfo>
+        <xs:element name="embedded" id="dup"/>
+      </xs:appinfo>
+      <xs:documentation>
+        <thing id="dup"/>
+      </xs:documentation>
+    </xs:annotation>
+  </xs:element>
+</xs:schema>`
+	_, err := compileVer(t, embeddedDup, xsd.Version11)
+	require.NoError(t, err, "duplicate id inside annotation payload must NOT reject the schema")
+
+	// The xs:annotation element's OWN @id still participates: two annotations
+	// sharing an @id is a duplicate xs:ID.
+	const annDup = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:annotation id="annA"/>
+  <xs:annotation id="annA"/>
+</xs:schema>`
+	_, err = compileVer(t, annDup, xsd.Version11)
+	require.Error(t, err, "duplicate @id on xs:annotation elements must reject")
 }
 
 // TestSchemaComponentIDValidity covers saxon Open.testSet open038 / open039: a

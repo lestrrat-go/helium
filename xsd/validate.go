@@ -1420,6 +1420,20 @@ func attrDisplayName(a *helium.Attribute) string {
 	return a.LocalName()
 }
 
+// isKnownXsiProcessorAttr reports whether local is one of the FOUR processor
+// attributes that actually exist in the XSI namespace (xsi:type, xsi:nil,
+// xsi:schemaLocation, xsi:noNamespaceSchemaLocation). The XSI namespace is
+// reserved to exactly these; any other xsi:-namespace local name (e.g.
+// xsi:foo) is not a real attribute and must NOT receive the declared-xsi
+// special handling.
+func isKnownXsiProcessorAttr(local string) bool {
+	switch local {
+	case attrType, attrNil, attrSchemaLocation, attrNoNSSchemaLocation:
+		return true
+	}
+	return false
+}
+
 // validateDeclaredXsiAttrValue validates a PRESENT xsi: processor attribute
 // whose use is EXPLICITLY declared (XSD 1.1 `ref="xsi:*"`) against the fixed
 // built-in type that attribute is defined with. `ref="xsi:type"` does not
@@ -1427,7 +1441,9 @@ func attrDisplayName(a *helium.Attribute) string {
 // check sees no type; this supplies each xsi attribute's built-in type so an
 // empty/malformed value — xsi:type="" or a malformed/unbound QName, a
 // non-boolean xsi:nil, a non-anyURI location — is a validation error rather
-// than a silently-satisfied (present) use. Returns nil when the value is valid.
+// than a silently-satisfied (present) use. Only the four real xsi: processor
+// attributes are recognized (the caller gates on isKnownXsiProcessorAttr).
+// Returns nil when the value is valid.
 func (vc *validationContext) validateDeclaredXsiAttrValue(a *helium.Attribute, elem *helium.Element) error {
 	val := a.Value()
 	switch a.LocalName() {
@@ -1446,8 +1462,10 @@ func (vc *validationContext) validateDeclaredXsiAttrValue(a *helium.Attribute, e
 		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeBoolean, vc.version)
 	case attrSchemaLocation:
 		// A list of (namespace, location) xs:anyURI pairs: a non-empty, even token
-		// count, each a valid xs:anyURI.
-		toks := strings.Fields(val)
+		// count, each a valid xs:anyURI. Tokenize on XSD list whitespace ONLY
+		// (space/tab/CR/LF via value.XSDFields, applied to the XSD-collapsed value),
+		// NOT strings.Fields, so a value joined by NBSP is ONE token (and fails).
+		toks := value.XSDFields(normalizeWhiteSpace(val, "collapse"))
 		if len(toks) == 0 || len(toks)%2 != 0 {
 			return fmt.Errorf("xsi:schemaLocation must be a non-empty list of anyURI pairs")
 		}
@@ -1528,7 +1546,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			_, allowedXSI := allowed[aqn]
 			_, prohibitedXSI := prohibited[aqn]
 			declaredXSI := allowedXSI || prohibitedXSI
-			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI {
+			// Only the four real xsi: processor attributes participate; a declared
+			// ref to any other xsi: local name (e.g. xsi:foo) is not specially
+			// accepted — it stays skipped as special, so a required use of it is
+			// never satisfied (the instance is rejected as missing).
+			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI || !isKnownXsiProcessorAttr(a.LocalName()) {
 				continue
 			}
 			// A NON-prohibited declared xsi: use must validate its value against the

@@ -54,6 +54,16 @@ func (c *compiler) walkComponentIDs(ctx context.Context, elem *helium.Element, s
 		if !ok {
 			continue
 		}
+		// Do NOT descend into xs:appinfo / xs:documentation payload: their content
+		// is arbitrary application/human data, NOT schema components, so an `id`
+		// attribute on an element embedded there is not a schema-component xs:ID
+		// and must not be collected (an xs:appinfo MAY itself contain XSD-namespace
+		// elements). The xs:annotation element's OWN @id was already collected
+		// above before this descent; only its annotation-payload children are
+		// skipped here.
+		if ce.URI() == lexicon.NamespaceXSD && (ce.LocalName() == elemAppinfo || ce.LocalName() == elemDocumentation) {
+			continue
+		}
 		c.walkComponentIDs(ctx, ce, seen)
 	}
 }
