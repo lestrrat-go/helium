@@ -45,10 +45,65 @@ func TestXSIAttributeReferenceRequired(t *testing.T) {
 		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
 	}
 
-	// A present xsi:type satisfies the required use.
+	// A present, valid xsi:type satisfies the required use.
 	require.NoError(t, validate(t, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="B"><e/></root>`))
 	// Missing xsi:type is rejected (the required use is unmet).
 	require.Error(t, validate(t, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><e/></root>`))
+	// An EMPTY xsi:type is not a valid xs:QName, so it does not satisfy the
+	// required use (false-accept guard).
+	require.Error(t, validate(t, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type=""><e/></root>`))
+}
+
+// TestXSIAttributeReferenceValueValidation verifies that a DECLARED xsi:
+// attribute use validates its value against the attribute's built-in type, so
+// an empty/malformed value does not silently satisfy a required use.
+func TestXSIAttributeReferenceValueValidation(t *testing.T) {
+	t.Parallel()
+
+	compileType := func(t *testing.T, ref string) *xsd.Schema {
+		t.Helper()
+		// root is nillable so a valid xsi:nil="true" is not rejected by cvc-elt.3.1
+		// (this test isolates the declared-xsi VALUE validation).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:element name="root" type="B" nillable="true"/>
+  <xs:complexType name="B">
+    <xs:sequence/>
+    <xs:attribute ref="` + ref + `" use="required"/>
+  </xs:complexType>
+</xs:schema>`
+		s, cerr := compileVer(t, schema, xsd.Version11)
+		require.NoError(t, cerr, "schema must compile")
+		return s
+	}
+	validate := func(t *testing.T, s *xsd.Schema, instanceXML string) error {
+		t.Helper()
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(s).Validate(t.Context(), idoc)
+	}
+
+	const xsiNS = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+
+	t.Run("xsi:type", func(t *testing.T) {
+		s := compileType(t, "xsi:type")
+		// Valid namespace-resolvable QName.
+		require.NoError(t, validate(t, s, `<root `+xsiNS+` xsi:type="B"/>`))
+		// Empty value → invalid QName → reject.
+		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:type=""/>`))
+		// Malformed QName → reject.
+		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:type="a:b:c"/>`))
+	})
+
+	t.Run("xsi:nil", func(t *testing.T) {
+		s := compileType(t, "xsi:nil")
+		// Valid boolean.
+		require.NoError(t, validate(t, s, `<root `+xsiNS+` xsi:nil="true"/>`))
+		// Non-boolean → reject.
+		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:nil="notbool"/>`))
+		// Empty → reject.
+		require.Error(t, validate(t, s, `<root `+xsiNS+` xsi:nil=""/>`))
+	})
 }
 
 // TestSchemaComponentIDValidity covers saxon Open.testSet open038 / open039: a

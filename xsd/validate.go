@@ -1420,6 +1420,49 @@ func attrDisplayName(a *helium.Attribute) string {
 	return a.LocalName()
 }
 
+// validateDeclaredXsiAttrValue validates a PRESENT xsi: processor attribute
+// whose use is EXPLICITLY declared (XSD 1.1 `ref="xsi:*"`) against the fixed
+// built-in type that attribute is defined with. `ref="xsi:type"` does not
+// resolve to a typed global attribute use, so the ordinary attribute-use value
+// check sees no type; this supplies each xsi attribute's built-in type so an
+// empty/malformed value — xsi:type="" or a malformed/unbound QName, a
+// non-boolean xsi:nil, a non-anyURI location — is a validation error rather
+// than a silently-satisfied (present) use. Returns nil when the value is valid.
+func (vc *validationContext) validateDeclaredXsiAttrValue(a *helium.Attribute, elem *helium.Element) error {
+	val := a.Value()
+	switch a.LocalName() {
+	case attrType:
+		// xs:QName (whiteSpace=collapse): lexically valid and, when prefixed, the
+		// prefix must be bound in scope (a non-empty, namespace-resolvable QName).
+		q := normalizeWhiteSpace(val, "collapse")
+		if err := validateQName(q); err != nil {
+			return err
+		}
+		if prefix, _, ok := strings.Cut(q, ":"); ok && lookupNS(elem, prefix) == "" {
+			return fmt.Errorf("unbound xsi:type QName prefix %q", prefix)
+		}
+		return nil
+	case attrNil:
+		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeBoolean, vc.version)
+	case attrSchemaLocation:
+		// A list of (namespace, location) xs:anyURI pairs: a non-empty, even token
+		// count, each a valid xs:anyURI.
+		toks := strings.Fields(val)
+		if len(toks) == 0 || len(toks)%2 != 0 {
+			return fmt.Errorf("xsi:schemaLocation must be a non-empty list of anyURI pairs")
+		}
+		for _, t := range toks {
+			if err := validateBuiltinValue(t, lexicon.TypeAnyURI, vc.version); err != nil {
+				return err
+			}
+		}
+		return nil
+	case attrNoNSSchemaLocation:
+		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeAnyURI, vc.version)
+	}
+	return nil
+}
+
 func (vc *validationContext) validateAttributes(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	var hasErr bool
 
@@ -1487,6 +1530,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			declaredXSI := allowedXSI || prohibitedXSI
 			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI {
 				continue
+			}
+			// A NON-prohibited declared xsi: use must validate its value against the
+			// attribute's built-in type (ref="xsi:*" carries no resolvable type). An
+			// invalid value (e.g. xsi:type="") is a validity error and does NOT
+			// satisfy the use — it is not recorded as present, so a required use also
+			// reports missing. A prohibited use needs no value check: its mere
+			// presence is rejected below.
+			if allowedXSI {
+				if err := vc.validateDeclaredXsiAttrValue(a, elem); err != nil {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
+					continue
+				}
 			}
 		}
 		present[aqn] = struct{}{}
