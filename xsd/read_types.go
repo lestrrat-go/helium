@@ -165,6 +165,12 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild))
 				continue
 			}
+			// assert* is the trailing region (1.1 only — assertSeen is never set in
+			// 1.0), so a content model particle after an assert is out of order.
+			if assertSeen {
+				reportExtraContent(ce, fmt.Sprintf("The content model particle '%s' must appear before the assertion 'assert'.", ce.LocalName()))
+				continue
+			}
 			contentModelChild = ce.LocalName()
 		}
 
@@ -268,6 +274,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
 				continue
 			}
+			if assertSeen {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the assertion 'assert'.", ce.LocalName()))
+				continue
+			}
 			if directAttrChild == "" {
 				directAttrChild = ce.LocalName()
 			}
@@ -280,6 +290,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			}
 			if anyAttributeSeen {
 				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
+				continue
+			}
+			if assertSeen {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the assertion 'assert'.", ce.LocalName()))
 				continue
 			}
 			if directAttrChild == "" {
@@ -301,6 +315,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			}
 			if anyAttributeSeen {
 				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName()))
+				continue
+			}
+			if assertSeen {
+				reportExtraContent(ce, fmt.Sprintf("The attribute wildcard '%s' must appear before the assertion 'assert'.", ce.LocalName()))
 				continue
 			}
 			if directAttrChild == "" {
@@ -377,22 +395,57 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		}
 	}
 	// XSD 3.4.2: the <xs:complexContent> content model is (annotation?, (restriction
-	// | extension)) — EXACTLY ONE derivation, optionally preceded by an annotation,
-	// and NOTHING after it. The loop must scan ALL children (no early return on the
-	// first derivation), otherwise a stray child AFTER the derivation — notably a
-	// trailing <xs:openContent>, which belongs INSIDE the restriction/extension
-	// wrapper — would be silently ignored and the schema wrongly compiled. A SECOND
-	// restriction/extension, or any non-annotation stray (before or after), is a
-	// schema error.
-	reportStray := func(ce *helium.Element, what string) {
+	// | extension)). The NEW strict enforcement (exactly one derivation; annotation
+	// only before it; reject zero/second/stray/trailing children) is Version11-only;
+	// XSD 1.0 keeps its original lenient behavior — dispatch the FIRST
+	// restriction/extension and ignore everything else — so goldens stay
+	// byte-identical to origin.
+	if c.version != Version11 {
+		for child := range helium.Children(elem) {
+			if child.Type() != helium.ElementNode {
+				continue
+			}
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			switch {
+			case isXSDElement(ce, elemRestriction):
+				return c.parseRestriction(ctx, ce, td)
+			case isXSDElement(ce, elemExtension):
+				return c.parseExtension(ctx, ce, td)
+			}
+		}
+		return nil
+	}
+	return c.parseDerivationWrapper(ctx, elem, func(ce *helium.Element, kind DerivationKind) error {
+		if kind == DerivationRestriction {
+			return c.parseRestriction(ctx, ce, td)
+		}
+		return c.parseExtension(ctx, ce, td)
+	})
+}
+
+// parseDerivationWrapper enforces the XSD 1.1 schema-for-schemas content model
+// (annotation?, (restriction | extension)) shared by <xs:complexContent> and
+// <xs:simpleContent>: an optional leading annotation, then EXACTLY ONE restriction
+// or extension, and nothing else. A second derivation, a missing derivation, an
+// annotation AFTER the derivation, or any other stray child is a schema error. The
+// single derivation is handed to dispatch (with its kind). This is Version11 ONLY —
+// the 1.0 callers keep their own historical lenient loops (which differ:
+// complexContent processed only the FIRST derivation, simpleContent processed ALL),
+// so factoring them here would change 1.0 behavior. Centralizing the 1.1 grammar in
+// one helper keeps the two wrappers from diverging again.
+func (c *compiler) parseDerivationWrapper(ctx context.Context, wrapper *helium.Element, dispatch func(ce *helium.Element, kind DerivationKind) error) error {
+	report := func(ce *helium.Element, what string) {
 		if c.filename == "" {
 			return
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what))
+			wrapper.LocalName(), componentLocalComplexType, what))
 	}
 	var derivationSeen bool
-	for child := range helium.Children(elem) {
+	for child := range helium.Children(wrapper) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -402,25 +455,29 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		}
 		switch {
 		case isXSDElement(ce, elemAnnotation):
+			if derivationSeen {
+				report(ce, fmt.Sprintf("An 'annotation' in '%s' must appear before the 'restriction' or 'extension'.", wrapper.LocalName()))
+			}
 			continue
 		case isXSDElement(ce, elemRestriction), isXSDElement(ce, elemExtension):
 			if derivationSeen {
-				reportStray(ce, fmt.Sprintf("A 'complexContent' must have exactly one 'restriction' or 'extension' (found a second '%s').", ce.LocalName()))
+				report(ce, fmt.Sprintf("A '%s' must have exactly one 'restriction' or 'extension' (found a second '%s').", wrapper.LocalName(), ce.LocalName()))
 				continue
 			}
 			derivationSeen = true
-			if isXSDElement(ce, elemRestriction) {
-				if err := c.parseRestriction(ctx, ce, td); err != nil {
-					return err
-				}
-				continue
+			kind := DerivationRestriction
+			if isXSDElement(ce, elemExtension) {
+				kind = DerivationExtension
 			}
-			if err := c.parseExtension(ctx, ce, td); err != nil {
+			if err := dispatch(ce, kind); err != nil {
 				return err
 			}
 		default:
-			reportStray(ce, fmt.Sprintf("The element '%s' is not allowed in 'complexContent'; only 'restriction' or 'extension' is permitted.", ce.LocalName()))
+			report(ce, fmt.Sprintf("The element '%s' is not allowed in '%s'; only 'restriction' or 'extension' is permitted.", ce.LocalName(), wrapper.LocalName()))
 		}
+	}
+	if !derivationSeen {
+		report(wrapper, fmt.Sprintf("A '%s' must have exactly one 'restriction' or 'extension'.", wrapper.LocalName()))
 	}
 	return nil
 }
@@ -764,35 +821,50 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element, td *TypeDef) {
 	td.ContentType = ContentTypeSimple
 	td.IsSimpleContent = true
-	for child := range helium.Children(elem) {
-		if child.Type() != helium.ElementNode {
-			continue
-		}
-		ce, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
-		switch {
-		case isXSDElement(ce, elemExtension):
-			baseRef := getAttr(ce, attrBase)
-			if baseRef != "" {
-				qn := c.resolveQName(ctx, ce, baseRef)
-				c.typeRefs[td] = qn
-				c.markChameleonEligible(td, ce, baseRef)
+	// XSD 3.4.2: the <xs:simpleContent> content model is (annotation?, (restriction
+	// | extension)). The NEW strict enforcement (exactly one derivation; annotation
+	// only before it; reject zero/second/stray/trailing children, e.g. a direct
+	// trailing <xs:openContent>) is Version11-only — it shares parseDerivationWrapper
+	// with complexContent so the two cannot diverge. XSD 1.0 keeps its original
+	// lenient behavior — dispatch EVERY restriction/extension child, no rejection —
+	// so goldens stay byte-identical to origin.
+	if c.version != Version11 {
+		for child := range helium.Children(elem) {
+			if child.Type() != helium.ElementNode {
+				continue
 			}
-			td.Derivation = DerivationExtension
-			c.parseSimpleContentChildren(ctx, ce, td, DerivationExtension)
-		case isXSDElement(ce, elemRestriction):
-			baseRef := getAttr(ce, attrBase)
-			if baseRef != "" {
-				qn := c.resolveQName(ctx, ce, baseRef)
-				c.typeRefs[td] = qn
-				c.markChameleonEligible(td, ce, baseRef)
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
 			}
-			td.Derivation = DerivationRestriction
-			c.parseSimpleContentChildren(ctx, ce, td, DerivationRestriction)
+			switch {
+			case isXSDElement(ce, elemExtension):
+				c.dispatchSimpleContentDerivation(ctx, ce, td, DerivationExtension)
+			case isXSDElement(ce, elemRestriction):
+				c.dispatchSimpleContentDerivation(ctx, ce, td, DerivationRestriction)
+			}
 		}
+		return
 	}
+	_ = c.parseDerivationWrapper(ctx, elem, func(ce *helium.Element, kind DerivationKind) error {
+		c.dispatchSimpleContentDerivation(ctx, ce, td, kind)
+		return nil
+	})
+}
+
+// dispatchSimpleContentDerivation resolves the base reference of a simpleContent
+// restriction/extension and parses its attribute children. Shared by the XSD 1.0
+// lenient loop and the XSD 1.1 strict wrapper so both behave identically once a
+// derivation is selected.
+func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *helium.Element, td *TypeDef, kind DerivationKind) {
+	baseRef := getAttr(ce, attrBase)
+	if baseRef != "" {
+		qn := c.resolveQName(ctx, ce, baseRef)
+		c.typeRefs[td] = qn
+		c.markChameleonEligible(td, ce, baseRef)
+	}
+	td.Derivation = kind
+	c.parseSimpleContentChildren(ctx, ce, td, kind)
 }
 
 // parseSimpleContentChildren parses attribute/attributeGroup children within
