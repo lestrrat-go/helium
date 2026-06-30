@@ -339,3 +339,55 @@ func TestOpenContent_RestrictionNarrowsKeptName(t *testing.T) {
 		require.NoError(t, cerr, "suffix mode rejects misplaced kept-name children, so narrowing is safe")
 	})
 }
+
+// TestOpenContent_RestrictionDropsNonEmittingBaseElement covers the gauntlet
+// finding that the drop guard must IGNORE a base element whose effective maxOccurs
+// is 0 (a prohibited particle/group emits nothing): the base admits that name only
+// through its open content, not the element, so dropping it in the derived while
+// keeping the same open content is a VALID restriction (false-reject otherwise).
+func TestOpenContent_RestrictionDropsNonEmittingBaseElement(t *testing.T) {
+	t.Parallel()
+
+	t.Run("base element under a maxOccurs=0 group is not protected (dropped + same OC accepts)", func(t *testing.T) {
+		t.Parallel()
+		// e is inside a maxOccurs="0" group → non-emitting; B admits e only via the
+		// skip open content. R drops it (empty model) and keeps the same open content,
+		// so both admit e only via open content — a valid restriction.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:sequence minOccurs="0" maxOccurs="0">
+        <xs:element name="e" type="xs:int"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a base element with effective maxOccurs=0 must not be protected by the drop guard")
+	})
+
+	t.Run("genuine dropped emitting element is still rejected", func(t *testing.T) {
+		t.Parallel()
+		// Control: e is emitting (maxOccurs=1) in the base, so dropping it while a skip
+		// wildcard re-admits it remains unsound and must be rejected.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.Error(t, cerr, "dropping a genuine emitting base element re-admitted by skip must still be rejected")
+	})
+}

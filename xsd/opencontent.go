@@ -135,6 +135,15 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			continue
 		}
 		seen[bn] = struct{}{}
+		// The base must actually EMIT bn through an element particle: a name whose
+		// effective base maxOccurs is 0 (its particle, or any ancestor group, is
+		// maxOccurs="0" — prohibited/non-emitting) is admitted by the base ONLY via
+		// its open content, NOT the element, so dropping it in the derived while
+		// keeping the same open content is a valid restriction — do not protect it.
+		baseMax := maxOccursForName(td.BaseType.ContentModel, bn, c.schema)
+		if baseMax == 0 {
+			continue
+		}
 		if !wildcardAllowsExpandedName(derived.Wildcard, bn.Local, bn.NS, c.schema, false) {
 			continue // the open wildcard does not re-admit this name
 		}
@@ -160,7 +169,6 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 		// the open content and escape the base element's type, so the derived must
 		// COVER the base's effective maxOccurs for bn.
 		if interleave {
-			baseMax := maxOccursForName(td.BaseType.ContentModel, bn, c.schema)
 			derivedMax := maxOccursForName(td.ContentModel, bn, c.schema)
 			if !occursCovers(derivedMax, baseMax) {
 				c.reportOpenContentTypeError(ctx, td,
