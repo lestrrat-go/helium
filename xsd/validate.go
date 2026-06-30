@@ -764,6 +764,15 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		}
 	}
 
+	// Fourth walk: XSD 1.1 document-wide xs:ENTITY / xs:ENTITIES value-space
+	// validation (cvc-id / §3.3.11). Gated to 1.1 so XSD 1.0 stays byte-identical
+	// (helium validates these datatypes only lexically in 1.0).
+	if vc.version == Version11 {
+		if !vc.validateEntities(ctx, doc) {
+			valid = false
+		}
+	}
+
 	return valid
 }
 
