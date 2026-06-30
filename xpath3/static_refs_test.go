@@ -53,6 +53,18 @@ func TestStaticReferences(t *testing.T) {
 		return names
 	}
 
+	collectFuncs := func(refs xpath3.StaticReferences) map[string]bool {
+		m := map[string]bool{}
+		for _, fn := range refs.FunctionNames {
+			key := fn.Name
+			if fn.Prefix != "" {
+				key = fn.Prefix + ":" + fn.Name
+			}
+			m[key] = true
+		}
+		return m
+	}
+
 	t.Run("nested type name in array() reported", func(t *testing.T) {
 		refs := compile(t, "1 instance of array(t:smallInt)").StaticReferences()
 		require.Equal(t, "t", collectNames(refs)["smallInt"])
@@ -168,5 +180,21 @@ func TestStaticReferences(t *testing.T) {
 	t.Run("type name in path-step kind test reported", func(t *testing.T) {
 		refs := compile(t, "self::element(*, t:T)").StaticReferences()
 		require.Equal(t, "t", collectNames(refs)["T"])
+	})
+
+	t.Run("prefixed function call callee reported", func(t *testing.T) {
+		// A user-type constructor is a function call carrying a user-namespace callee.
+		refs := compile(t, "t:smallInt(@kind) = 1").StaticReferences()
+		require.True(t, collectFuncs(refs)["t:smallInt"])
+	})
+
+	t.Run("unprefixed function call callee reported", func(t *testing.T) {
+		refs := compile(t, "string(@kind)").StaticReferences()
+		require.True(t, collectFuncs(refs)["string"])
+	})
+
+	t.Run("named function ref callee reported", func(t *testing.T) {
+		refs := compile(t, "t:f#1").StaticReferences()
+		require.True(t, collectFuncs(refs)["t:f"])
 	})
 }

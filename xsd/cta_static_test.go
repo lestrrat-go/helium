@@ -126,6 +126,34 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 </xs:schema>`
 		require.Error(t, compileCTASchema(t, src))
 	})
+
+	t.Run("user-defined type constructor function call in test is invalid", func(t *testing.T) {
+		t.Parallel()
+		src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="t:smallInt(@kind) = 1" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
+	})
+
+	t.Run("built-in constructor and standard-library functions in test are valid", func(t *testing.T) {
+		t.Parallel()
+		for _, test := range []string{
+			"xs:integer(@kind) = 1",   // built-in type constructor (xs:)
+			"fn:string(@kind) = 'x'",  // explicit fn: prefix
+			"string(@kind) = 'x'",     // unprefixed -> default function namespace (fn)
+			"count(@kind) = 1",        // standard library, unprefixed
+			"math:sqrt(2.0) &gt; 1.0", // math: standard library
+		} {
+			src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="` + test + `" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+			require.NoErrorf(t, compileCTASchema(t, src), "test=%q", test)
+		}
+	})
 }
 
 // TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks

@@ -37,9 +37,17 @@ type StaticReferences struct {
 	// binding or inline-function parameter within the expression itself.
 	FreeVariables []string
 	// TypeNames lists the atomic-or-union type names named by cast / castable /
-	// instance of / treat as. Kind-test type names (element()/attribute()) are not
-	// included.
+	// instance of / treat as, AND the type annotations of element()/attribute()/
+	// document-node() kind tests, wherever they appear (including nested array/map/
+	// function item types and path-step node tests).
 	TypeNames []TypeNameRef
+	// FunctionNames lists the callee QNames of every static function reference — a
+	// FunctionCall (which includes user-defined-type CONSTRUCTOR calls like
+	// t:smallInt(...)) or a NamedFunctionRef (f#arity). Each is a (Prefix, local-Name)
+	// pair; an unprefixed name resolves to the default FUNCTION namespace (fn), not the
+	// default element namespace. CTA uses this to reject any function outside the
+	// standard function library / built-in constructor namespaces.
+	FunctionNames []TypeNameRef
 }
 
 // StaticReferences walks the expression's syntax tree and reports its free
@@ -49,7 +57,7 @@ func (e *Expression) StaticReferences() StaticReferences {
 	ast := e.astExpr()
 	c := &staticRefCollector{bound: map[string]int{}}
 	c.walk(ast)
-	return StaticReferences{FreeVariables: c.freeVars, TypeNames: c.typeNames}
+	return StaticReferences{FreeVariables: c.freeVars, TypeNames: c.typeNames, FunctionNames: c.funcNames}
 }
 
 type staticRefCollector struct {
@@ -62,6 +70,7 @@ type staticRefCollector struct {
 	bound     map[string]int
 	freeVars  []string
 	typeNames []TypeNameRef
+	funcNames []TypeNameRef
 	seenFree  map[string]struct{}
 }
 
@@ -109,6 +118,15 @@ func (c *staticRefCollector) addAtomicType(prefix, name string) {
 		return
 	}
 	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: name})
+}
+
+// addFunctionName records a static function-reference callee QName. Prefix is
+// empty for an unprefixed name (default function namespace).
+func (c *staticRefCollector) addFunctionName(prefix, name string) {
+	if name == "" {
+		return
+	}
+	c.funcNames = append(c.funcNames, TypeNameRef{Prefix: prefix, Name: name})
 }
 
 // addTypeNameLexical records a type name held as a raw lexical "prefix:local"
@@ -227,9 +245,12 @@ func (c *staticRefCollector) walk(node Expr) { //nolint:gocyclo
 		c.walkSequenceType(n.Type)
 		c.walk(n.Expr)
 	case FunctionCall:
+		c.addFunctionName(n.Prefix, n.Name)
 		for _, arg := range n.Args {
 			c.walk(arg)
 		}
+	case NamedFunctionRef:
+		c.addFunctionName(n.Prefix, n.Name)
 	case DynamicFunctionCall:
 		c.walk(n.Func)
 		for _, arg := range n.Args {
