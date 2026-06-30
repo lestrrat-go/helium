@@ -1,6 +1,9 @@
 package xpath3
 
-import "reflect"
+import (
+	"reflect"
+	"strings"
+)
 
 // catchErrorVarKeys are the implicit error variables the evaluator binds inside a
 // try/catch catch clause (XPath/XQuery error namespace, conventional "err" prefix),
@@ -17,12 +20,16 @@ var catchErrorVarKeys = []string{
 	"err:additional",
 }
 
-// TypeNameRef is an atomic-or-union type name referenced by an expression in a
-// cast / castable / instance of / treat as construct. Prefix is empty for an
-// unprefixed name.
+// TypeNameRef is a QName reference (a type name or a function-call callee) named
+// by an expression. URI is the namespace the name RESOLVES to in the expression's
+// static context (the convergent identity for an allowlist check — uniform across
+// prefixed, unprefixed, and braced-URI Q{uri}local forms); Prefix and Name are the
+// lexical spelling, retained for diagnostics. Prefix is empty for an unprefixed (or
+// braced-URI) name.
 type TypeNameRef struct {
 	Prefix string
 	Name   string
+	URI    string
 }
 
 // StaticReferences summarizes the variable and type-name references in a compiled
@@ -36,28 +43,72 @@ type StaticReferences struct {
 	// unprefixed, "local") that are NOT bound by an enclosing for/let/quantified
 	// binding or inline-function parameter within the expression itself.
 	FreeVariables []string
-	// TypeNames lists the atomic-or-union type names named by cast / castable /
-	// instance of / treat as, AND the type annotations of element()/attribute()/
-	// document-node() kind tests, wherever they appear (including nested array/map/
-	// function item types and path-step node tests).
+	// TypeNames lists the type names named by cast / castable / instance of / treat
+	// as, AND the type annotations of element()/attribute()/document-node() kind
+	// tests, wherever they appear (including nested array/map/function item types and
+	// path-step node tests). Each carries its RESOLVED namespace URI (an unprefixed
+	// type name resolves to the default element namespace).
 	TypeNames []TypeNameRef
 	// FunctionNames lists the callee QNames of every static function reference — a
 	// FunctionCall (which includes user-defined-type CONSTRUCTOR calls like
-	// t:smallInt(...)) or a NamedFunctionRef (f#arity). Each is a (Prefix, local-Name)
-	// pair; an unprefixed name resolves to the default FUNCTION namespace (fn), not the
-	// default element namespace. CTA uses this to reject any function outside the
-	// standard function library / built-in constructor namespaces.
+	// t:smallInt(...), and arrow targets) or a NamedFunctionRef (f#arity). Each carries
+	// its RESOLVED namespace URI; an unprefixed function name resolves to the default
+	// FUNCTION namespace (fn), NOT the default element namespace. CTA uses the URI to
+	// reject any function outside the standard library / built-in constructor namespaces.
 	FunctionNames []TypeNameRef
 }
 
-// StaticReferences walks the expression's syntax tree and reports its free
-// variable references and atomic type-name references. It is side-effect free and
-// intended for schema-compile-time analysis, not the evaluation hot path.
-func (e *Expression) StaticReferences() StaticReferences {
+// StaticReferences walks the expression's syntax tree and reports its free variable
+// references, type-name references, and function-call callees, with every type and
+// function name RESOLVED to a namespace URI using the supplied in-scope namespaces
+// (the same bindings Validate takes) plus xpath3's predeclared prefixes — so a
+// caller does a pure URI check with no prefix/Q{}-form handling of its own. It is
+// side-effect free and intended for schema-compile-time analysis, not the
+// evaluation hot path.
+func (e *Expression) StaticReferences(namespaces map[string]string) StaticReferences {
 	ast := e.astExpr()
-	c := &staticRefCollector{bound: map[string]int{}}
+	c := &staticRefCollector{bound: map[string]int{}, namespaces: namespaces}
 	c.walk(ast)
 	return StaticReferences{FreeVariables: c.freeVars, TypeNames: c.typeNames, FunctionNames: c.funcNames}
+}
+
+// resolveStaticNameURI resolves the namespace URI of a lexical EQName for the
+// static analysis, uniformly across the three name forms — matching the resolution
+// the parser/Validate/evaluator apply to these names:
+//   - Q{uri}local  -> uri (the braced URI literally);
+//   - prefix:local -> the in-scope binding if present, else the predeclared binding
+//     (xs/fn/math/map/array/err);
+//   - local        -> defaultNS, which the caller supplies as the default ELEMENT
+//     namespace for a type name, or the default FUNCTION namespace (fn) for a
+//     function name.
+//
+// An unresolved prefix yields "".
+func resolveStaticNameURI(lexical string, namespaces map[string]string, defaultNS string) string {
+	if strings.HasPrefix(lexical, "Q{") {
+		if i := strings.IndexByte(lexical, '}'); i >= 0 {
+			return lexical[2:i]
+		}
+	}
+	prefix, _ := splitQName(lexical)
+	if prefix == "" {
+		return defaultNS
+	}
+	if ns, ok := namespaces[prefix]; ok {
+		return ns
+	}
+	if pn, ok := PredeclaredNamespace(prefix); ok {
+		return pn
+	}
+	return ""
+}
+
+// joinQName reconstructs the lexical "prefix:local" form (or "local"/"Q{uri}local"
+// when prefix is empty) from a split QName.
+func joinQName(prefix, name string) string {
+	if prefix == "" {
+		return name
+	}
+	return prefix + ":" + name
 }
 
 type staticRefCollector struct {
@@ -67,11 +118,12 @@ type staticRefCollector struct {
 	// decrements (deleting at zero). Restoring the prior count on exit keeps the outer
 	// binding visible to later references instead of unbinding it — a flat set with an
 	// unconditional delete would wrongly report the still-bound outer variable as free.
-	bound     map[string]int
-	freeVars  []string
-	typeNames []TypeNameRef
-	funcNames []TypeNameRef
-	seenFree  map[string]struct{}
+	bound      map[string]int
+	namespaces map[string]string
+	freeVars   []string
+	typeNames  []TypeNameRef
+	funcNames  []TypeNameRef
+	seenFree   map[string]struct{}
 }
 
 // bindVar enters a variable binding for the duration of an enclosed scope.
@@ -113,31 +165,40 @@ func (c *staticRefCollector) addFreeVar(key string) {
 	c.freeVars = append(c.freeVars, key)
 }
 
+// addAtomicType records a type name from a split (Prefix, Name) pair — e.g. an
+// AtomicOrUnionType / AtomicTypeName from the parser. It reconstructs the lexical
+// form (so a braced-URI Q{uri}local mis-split by splitQName round-trips) before
+// recording, so URI resolution is uniform across all forms.
 func (c *staticRefCollector) addAtomicType(prefix, name string) {
 	if name == "" {
 		return
 	}
-	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: name})
+	c.addTypeNameLexical(joinQName(prefix, name))
 }
 
-// addFunctionName records a static function-reference callee QName. Prefix is
-// empty for an unprefixed name (default function namespace).
-func (c *staticRefCollector) addFunctionName(prefix, name string) {
-	if name == "" {
-		return
-	}
-	c.funcNames = append(c.funcNames, TypeNameRef{Prefix: prefix, Name: name})
-}
-
-// addTypeNameLexical records a type name held as a raw lexical "prefix:local"
-// string (as element()/attribute() kind tests store their type annotation),
-// splitting it the same way the parser splits AtomicOrUnionType/AtomicTypeName.
+// addTypeNameLexical records a type name held as a raw lexical EQName string (as
+// element()/attribute() kind tests store their type annotation, or as reconstructed
+// from a split pair), resolving its namespace URI against the default ELEMENT
+// namespace for an unprefixed name.
 func (c *staticRefCollector) addTypeNameLexical(lexical string) {
 	if lexical == "" {
 		return
 	}
 	prefix, local := splitQName(lexical)
-	c.addAtomicType(prefix, local)
+	uri := resolveStaticNameURI(lexical, c.namespaces, c.namespaces[""])
+	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: local, URI: uri})
+}
+
+// addFunctionName records a static function-reference callee QName, resolving its
+// namespace URI against the default FUNCTION namespace (fn) for an unprefixed name.
+func (c *staticRefCollector) addFunctionName(prefix, name string) {
+	if name == "" {
+		return
+	}
+	lexical := joinQName(prefix, name)
+	dispPrefix, dispLocal := splitQName(lexical)
+	uri := resolveStaticNameURI(lexical, c.namespaces, NSFn)
+	c.funcNames = append(c.funcNames, TypeNameRef{Prefix: dispPrefix, Name: dispLocal, URI: uri})
 }
 
 // walkSequenceType collects every atomic-or-union type name named anywhere in a

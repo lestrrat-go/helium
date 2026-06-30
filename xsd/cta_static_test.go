@@ -154,6 +154,45 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 			require.NoErrorf(t, compileCTASchema(t, src), "test=%q", test)
 		}
 	})
+
+	// Braced-URI (Q{uri}local) names carry the namespace directly; the URI-based
+	// allowlist must reject a user namespace and accept the XSD namespace in EVERY
+	// position — type reference, constructor call, named-function ref, arrow target.
+	const xsdNS = "http://www.w3.org/2001/XMLSchema"
+
+	t.Run("braced-uri user names in test are invalid", func(t *testing.T) {
+		t.Parallel()
+		for _, test := range []string{
+			". instance of Q{urn:t}smallInt",     // instance-of type reference
+			"@kind cast as Q{urn:t}smallInt = 1", // cast type reference
+			"Q{urn:t}smallInt(@kind) = 1",        // constructor call
+			"exists(Q{urn:t}f#1)",                // named-function ref
+			"(1 => Q{urn:t}f()) = 1",             // arrow target
+		} {
+			src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="` + test + `" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+			require.Errorf(t, compileCTASchema(t, src), "test=%q", test)
+		}
+	})
+
+	t.Run("braced-uri built-in names in test are valid", func(t *testing.T) {
+		t.Parallel()
+		for _, test := range []string{
+			". instance of Q{" + xsdNS + "}string",
+			"@kind cast as Q{" + xsdNS + "}integer = 1",
+			"Q{" + xsdNS + "}integer(@kind) = 1",
+		} {
+			src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="` + test + `" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+			require.NoErrorf(t, compileCTASchema(t, src), "test=%q", test)
+		}
+	})
 }
 
 // TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks

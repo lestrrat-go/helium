@@ -209,51 +209,32 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 
 // checkCTATestStaticContext enforces the XSD 1.1 static-context restrictions on an
 // xs:alternative @test XPath beyond namespace-prefix validity: the expression may
-// reference no variables (CTA exposes none) and may name only built-in (xs:) atomic
-// types in cast/castable/instance of/treat as. A user-defined type reference or a
-// free variable returns a non-nil error. The type-name namespace is resolved
-// against the alternative's in-scope namespaces (unprefixed → the default element
-// namespace binding, "").
+// reference no variables (CTA exposes none), may name only built-in (xs:) types in
+// cast/castable/instance of/treat as and kind tests, and may call only functions in
+// the standard library / built-in-constructor namespaces (§F.2). A free variable, a
+// non-built-in type reference, or an out-of-context function call returns a non-nil
+// error. Resolution is delegated entirely to StaticReferences, which reports the
+// RESOLVED namespace URI of every type/function name (handling prefixed, unprefixed,
+// and braced-URI Q{uri}local forms uniformly against the alternative's in-scope
+// namespaces) — so this check is a pure URI-allowlist test with no name-form logic.
 func (c *compiler) checkCTATestStaticContext(_ *helium.Element, compiled *xpath3.Expression, namespaces map[string]string) error {
-	refs := compiled.StaticReferences()
+	refs := compiled.StaticReferences(namespaces)
 	if len(refs.FreeVariables) > 0 {
 		return fmt.Errorf("undefined variable $%s", refs.FreeVariables[0])
 	}
 	for _, tn := range refs.TypeNames {
-		if resolveCTAPrefixNS(tn.Prefix, namespaces) == lexicon.NamespaceXSD {
+		if tn.URI == lexicon.NamespaceXSD {
 			continue
 		}
 		return fmt.Errorf("the type %q is not a built-in type and is not available in a type alternative", qnameRefLabel(tn.Prefix, tn.Name))
 	}
-	// The CTA static context's function signatures are the BUILT-IN type constructors
-	// (xs:) plus the standard function library (fn:/math:/map:/array:) — §F.2. Any
-	// function call/reference in another namespace (a user-defined-type constructor
-	// like t:smallInt(...), or any user-namespace function) is out of context and a
-	// schema error. An UNPREFIXED function name resolves to the default function
-	// namespace (fn), which is in the standard library, so it is always allowed.
 	for _, fn := range refs.FunctionNames {
-		if fn.Prefix == "" || isCTAStandardFunctionNS(resolveCTAPrefixNS(fn.Prefix, namespaces)) {
+		if isCTAStandardFunctionNS(fn.URI) {
 			continue
 		}
 		return fmt.Errorf("the function %q is not in the standard function library and is not available in a type alternative", qnameRefLabel(fn.Prefix, fn.Name))
 	}
 	return nil
-}
-
-// resolveCTAPrefixNS resolves a namespace-prefix to its URI for the CTA static
-// checks: an in-scope declaration in the alternative's namespaces wins, otherwise
-// xpath3's predeclared binding (fn/math/map/array/xs) is used — mirroring
-// Expression.Validate, which accepts a predeclared prefix even when the schema
-// element does not literally declare it. An empty (unprefixed) prefix returns the
-// in-scope default element namespace binding ("").
-func resolveCTAPrefixNS(prefix string, namespaces map[string]string) string {
-	if ns, ok := namespaces[prefix]; ok {
-		return ns
-	}
-	if pn, predeclared := xpath3.PredeclaredNamespace(prefix); predeclared {
-		return pn
-	}
-	return ""
 }
 
 // isCTAStandardFunctionNS reports whether ns is one of the namespaces whose
