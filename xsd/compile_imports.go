@@ -430,6 +430,14 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	beforeGroups := snapshotKeys(c.schema.groups)
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
 
+	// Enforce xs:ID typing/uniqueness of schema-component @id attributes within
+	// THIS included document (a fresh per-document scope; the same value may
+	// recur across documents). Runs after conditional-inclusion pruning so
+	// vc-excluded components' @ids don't count.
+	if c.version == Version11 {
+		c.checkSchemaComponentIDs(ctx, incRoot)
+	}
+
 	// Parse the included schema's declarations into the current compiler.
 	// (Conditional inclusion already ran above, before the TNS check.)
 	err = c.parseSchemaChildren(ctx, incRoot)
@@ -690,6 +698,13 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	beforeTypes := snapshotKeys(c.schema.types)
 	beforeGroups := snapshotKeys(c.schema.groups)
 	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
+
+	// Enforce xs:ID typing/uniqueness of schema-component @id attributes within
+	// THIS redefined document (a fresh per-document scope). Runs after
+	// conditional-inclusion pruning.
+	if c.version == Version11 {
+		c.checkSchemaComponentIDs(ctx, incRoot)
+	}
 
 	// Parse the included schema's declarations into the current compiler.
 	// (Conditional inclusion already ran above, before the TNS check.)
@@ -1252,6 +1267,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	}
 
 	if impC.version == Version11 {
+		// Enforce xs:ID typing/uniqueness of schema-component @id attributes
+		// within THIS imported document (a fresh per-document scope), after
+		// conditional-inclusion pruning. Diagnostics are flushed to the parent
+		// via propagateImpErrors on the fatal exit paths and the final merge.
+		impC.checkSchemaComponentIDs(ctx, impRoot)
 		impC.readSchemaDefaultAttributes(ctx, impRoot)
 		// The imported document's own <xs:defaultOpenContent> applies to its complex
 		// types (it is per-document and does not cross the import boundary). Read it

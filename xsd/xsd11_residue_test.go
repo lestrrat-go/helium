@@ -2,6 +2,7 @@ package xsd_test
 
 import (
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -79,4 +80,114 @@ func TestSchemaComponentIDValidity(t *testing.T) {
 	require.NoError(t, err, "duplicate xs:ID is tolerated in 1.0")
 	_, err = compileVer(t, badID, xsd.Version10)
 	require.NoError(t, err, "invalid NCName id is tolerated in 1.0")
+}
+
+const (
+	residueMainXSD = "main.xsd"
+	residueIncXSD  = "inc.xsd"
+	residueBXSD    = "b.xsd"
+)
+
+func residueMapFile(body string) *fstest.MapFile {
+	return &fstest.MapFile{Data: []byte(body)}
+}
+
+// compileFSVer compiles residueMainXSD from fsys at the given version.
+func compileFSVer(t *testing.T, fsys fstest.MapFS, v xsd.Version) error {
+	t.Helper()
+	data, err := fsys.ReadFile(residueMainXSD)
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
+	require.NoError(t, err)
+	_, cerr := xsd.NewCompiler().Version(v).Label(residueMainXSD).FS(fsys).Compile(t.Context(), doc)
+	return cerr
+}
+
+// TestSchemaComponentIDValidityNestedDocuments verifies that @id xs:ID
+// uniqueness/NCName validity is enforced PER nested schema document
+// (xs:include/xs:import), not only the entry document, and that the scope is
+// per-document — the same @id value may recur ACROSS documents.
+func TestSchemaComponentIDValidityNestedDocuments(t *testing.T) {
+	t.Parallel()
+
+	// Duplicate @id WITHIN an included document → schema error.
+	t.Run("dup-in-include", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			residueMainXSD: residueMapFile(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`),
+			residueIncXSD: residueMapFile(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a" id="dupe"/>
+  <xs:element name="b" id="dupe"/>
+</xs:schema>`),
+		}
+		require.Error(t, compileFSVer(t, fsys, xsd.Version11), "duplicate @id in included doc must fail in 1.1")
+		require.NoError(t, compileFSVer(t, fsys, xsd.Version10), "1.0 stays lenient")
+	})
+
+	// Invalid (non-NCName) @id in an IMPORTED document → schema error.
+	t.Run("bad-in-import", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			residueMainXSD: residueMapFile(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:b="urn:b">
+  <xs:import namespace="urn:b" schemaLocation="b.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`),
+			residueBXSD: residueMapFile(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:b">
+  <xs:element name="x" id="bad/name"/>
+</xs:schema>`),
+		}
+		require.Error(t, compileFSVer(t, fsys, xsd.Version11), "invalid @id in imported doc must fail in 1.1")
+		require.NoError(t, compileFSVer(t, fsys, xsd.Version10), "1.0 stays lenient")
+	})
+
+	// The SAME @id value in two DIFFERENT documents is fine (per-document scope).
+	t.Run("same-id-across-docs", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			residueMainXSD: residueMapFile(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:element name="root" type="xs:string" id="shared"/>
+</xs:schema>`),
+			residueIncXSD: residueMapFile(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a" id="shared"/>
+</xs:schema>`),
+		}
+		require.NoError(t, compileFSVer(t, fsys, xsd.Version11), "same @id across documents is per-document valid")
+	})
+}
+
+// TestXSIAttributeReferenceProhibited verifies that a DECLARED xsi: attribute
+// use with use="prohibited" participates in validation: a present xsi: attribute
+// matching it is rejected (not skipped as a special attribute), while its absence
+// is valid.
+func TestXSIAttributeReferenceProhibited(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:element name="root" type="B"/>
+  <xs:complexType name="B">
+    <xs:sequence>
+      <xs:element name="e" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute ref="xsi:type" use="prohibited"/>
+  </xs:complexType>
+</xs:schema>`
+
+	compiled, cerr := compileVer(t, schema, xsd.Version11)
+	require.NoError(t, cerr, "schema must compile")
+
+	validate := func(t *testing.T, instanceXML string) error {
+		t.Helper()
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+		return xsd.NewValidator(compiled).Validate(t.Context(), idoc)
+	}
+
+	// A present xsi:type is rejected by the prohibited use.
+	require.Error(t, validate(t, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="B"><e/></root>`))
+	// Absent xsi:type is valid.
+	require.NoError(t, validate(t, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><e/></root>`))
 }

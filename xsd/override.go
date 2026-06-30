@@ -426,6 +426,13 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		return matched, nil
 	}
 
+	// Enforce xs:ID typing/uniqueness of schema-component @id attributes within
+	// THIS overridden document (a fresh per-document scope), after
+	// conditional-inclusion pruning. xs:override is Version11-only.
+	if c.version == Version11 {
+		c.checkSchemaComponentIDs(ctx, incRoot)
+	}
+
 	// Target namespace compatibility: same rule as xs:include (W3C over016/017). A
 	// referenced document with no targetNamespace is a chameleon and adopts the
 	// overriding schema's namespace.

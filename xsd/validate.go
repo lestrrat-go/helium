@@ -1474,12 +1474,17 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// XSD 1.1: the xsi: processor attributes (xsi:type, xsi:nil,
 			// xsi:schemaLocation, xsi:noNamespaceSchemaLocation) may be
 			// referenced explicitly as attribute uses (e.g. to make xsi:type
-			// mandatory). When a type's declaration explicitly declares such an
-			// xsi: attribute, the instance attribute participates in ordinary
-			// attribute-use validation (so a required xsi: use is satisfied);
-			// otherwise xsi: (and xmlns) attributes remain unconditionally
-			// special. 1.0 keeps the historical skip (byte-identical).
-			_, declaredXSI := allowed[aqn]
+			// mandatory, or to PROHIBIT it). When a type's declaration explicitly
+			// declares such an xsi: attribute — with ANY use (optional/required/
+			// prohibited) — the instance attribute participates in ordinary
+			// attribute-use validation (so a required xsi: use is satisfied and a
+			// prohibited one rejects a present xsi: attribute); otherwise xsi:
+			// (and xmlns) attributes remain unconditionally special. A prohibited
+			// use is excluded from `allowed`, so the declaration is detected via
+			// both maps. 1.0 keeps the historical skip (byte-identical).
+			_, allowedXSI := allowed[aqn]
+			_, prohibitedXSI := prohibited[aqn]
+			declaredXSI := allowedXSI || prohibitedXSI
 			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI {
 				continue
 			}
