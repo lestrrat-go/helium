@@ -32,12 +32,47 @@ func (c *compiler) resolveOpenContent(ctx context.Context) {
 			resolve(td.BaseType)
 		}
 		c.computeEffectiveOpenContent(ctx, td)
+		c.resolveOpenContentDefinedSiblings(td)
 	}
 	for _, td := range c.schema.types {
 		resolve(td)
 	}
 	for td := range c.typeDefSources {
 		resolve(td)
+	}
+}
+
+// resolveOpenContentDefinedSiblings populates SiblingNames on a complex type's
+// EFFECTIVE open-content wildcard when it carries @notQName="##definedSibling" — the
+// runtime exclusion (wildcardExcludesName) checks SiblingNames, not the marker, so
+// without this an open-content ##definedSibling wildcard excludes nothing and a
+// declared sibling name could be moved into open content (e.g. an interleave
+// refinement of an extra occurrence of a declared element). The sibling set is the
+// element names declared in the type's OWN content model (the same set
+// resolveDefinedSiblings uses for content-model wildcards). The wildcard is CLONED
+// before assignment because the effective open content may share its *Wildcard with
+// other types (a per-document <xs:defaultOpenContent>, or a merged extension union),
+// whose sibling sets differ. Runs after computeEffectiveOpenContent so td.OpenContent
+// is final, and after resolveDefinedSiblings (resolveRefs ordering) so the content
+// model is fully expanded.
+func (c *compiler) resolveOpenContentDefinedSiblings(td *TypeDef) {
+	if td == nil || td.OpenContent == nil || td.OpenContent.Wildcard == nil {
+		return
+	}
+	if !td.OpenContent.Wildcard.NotQNameDefinedSibling {
+		return
+	}
+	names := collectModelElementNames(td.ContentModel, c.schema)
+	siblings := make([]QName, 0, len(names))
+	for qn := range names {
+		siblings = append(siblings, qn)
+	}
+	wc := *td.OpenContent.Wildcard
+	wc.SiblingNames = siblings
+	td.OpenContent = &OpenContent{
+		Mode:           td.OpenContent.Mode,
+		Wildcard:       &wc,
+		AppliesToEmpty: td.OpenContent.AppliesToEmpty,
 	}
 }
 

@@ -676,3 +676,30 @@ func TestOpenContent_AllNonEmittingGroup(t *testing.T) {
 			"the choice still requires its emitting branch g (the prohibited branch does not make it optional)")
 	})
 }
+
+// TestOpenContent_DefinedSiblingWildcard covers the gauntlet finding that an
+// open-content wildcard carrying notQName="##definedSibling" must have its
+// SiblingNames resolved (the element names declared in the same content model), so
+// the runtime exclusion applies: a declared sibling name cannot be moved into open
+// content even when the declared model cannot place an extra occurrence.
+func TestOpenContent_DefinedSiblingWildcard(t *testing.T) {
+	t.Parallel()
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any processContents="skip" notQName="##definedSibling"/></xs:openContent>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	t.Run("a defined sibling is excluded from open content", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, validateOC(t, schema, `<doc><a>x</a><a>y</a></doc>`),
+			"a second <a> (a defined sibling) must not be accepted as open content")
+	})
+
+	t.Run("a non-sibling child is still admitted as open content", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><other/></doc>`),
+			"a non-sibling name is still open content")
+	})
+}

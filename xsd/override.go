@@ -64,6 +64,17 @@ type overrideChildEntry struct {
 	elem *helium.Element
 }
 
+// overrideMatchCtx records the per-DOCUMENT default state of the document where a
+// matched (suppressed) component was DECLARED, so its replacement is registered
+// under THAT document's @defaultAttributes AND <xs:defaultOpenContent> (§4.2.5 — a
+// replacement is governed by the document where the matched component was declared,
+// which for a nested-include target is the included document, NOT the direct
+// override target).
+type overrideMatchCtx struct {
+	defAttrs schemaDefaultAttrsState
+	oc       *OpenContent
+}
+
 // schemaDefaultAttrsState captures a schema document's XSD 1.1
 // @defaultAttributes resolution: the referenced attribute-group QName, whether
 // the attribute was present and well-formed, and its source. An xs:override
@@ -132,22 +143,16 @@ func (c *compiler) loadOverride(ctx context.Context, location string, overrideEl
 	locals := c.collectOverrideChildren(ctx, overrideElem, nil)
 	active := activeFromEntries(nil, locals)
 
-	matched, targetDefAttrs, targetOC, err := c.overrideLoadTarget(ctx, location, overrideElem, active)
+	matched, err := c.overrideLoadTarget(ctx, location, overrideElem, active)
 	if err != nil {
 		return err
 	}
 
-	// Register the replacement components under the TARGET document's
-	// @defaultAttributes AND default open content (§4.2.5): they are copied into the
-	// transformed target, so the overriding document's defaults must not govern them.
-	saved := c.schemaDefaultAttrs()
-	savedOC := c.defaultOpenContent
-	c.applySchemaDefaultAttrs(targetDefAttrs)
-	c.defaultOpenContent = targetOC
-	defer func() {
-		c.applySchemaDefaultAttrs(saved)
-		c.defaultOpenContent = savedOC
-	}()
+	// Each matched key carries the per-document @defaultAttributes / default open
+	// content of the document where its component was DECLARED (§4.2.5); the
+	// overriding document's defaults must not govern the replacements, and a
+	// replacement matched in a nested INCLUDED document uses that document's defaults
+	// — registerMatchedChildren applies each key's recorded context.
 	return c.registerMatchedChildren(ctx, locals, matched)
 }
 
@@ -234,12 +239,26 @@ func overrideActiveFingerprint(active map[overrideKey]*helium.Element) string {
 // empirically — so do NOT "fix" this to register them. A dangling reference to a
 // dropped child is therefore a schema error, as intended. Called while the
 // document that DECLARES these children is the active compiler context.
-func (c *compiler) registerMatchedChildren(ctx context.Context, entries []overrideChildEntry, matched map[overrideKey]struct{}) error {
+func (c *compiler) registerMatchedChildren(ctx context.Context, entries []overrideChildEntry, matched map[overrideKey]overrideMatchCtx) error {
 	for _, e := range entries {
-		if _, ok := matched[e.key]; !ok {
+		mctx, ok := matched[e.key]
+		if !ok {
 			continue
 		}
-		if err := c.registerOverrideChild(ctx, e.key, e.elem); err != nil {
+		// Register under the DECLARING document's per-document @defaultAttributes AND
+		// default open content (§4.2.5) — which for a replacement matched in a nested
+		// included document is that included document's, not the direct target's. Only
+		// these two defaults are swapped; the rest of the context (form/block/final
+		// defaults, xpathDefaultNamespace, base URI, includeFile) stays the declaring
+		// OVERRIDE document's, which is the caller's active context.
+		savedDefAttrs := c.schemaDefaultAttrs()
+		savedOC := c.defaultOpenContent
+		c.applySchemaDefaultAttrs(mctx.defAttrs)
+		c.defaultOpenContent = mctx.oc
+		err := c.registerOverrideChild(ctx, e.key, e.elem)
+		c.applySchemaDefaultAttrs(savedDefAttrs)
+		c.defaultOpenContent = savedOC
+		if err != nil {
 			return err
 		}
 	}
@@ -328,8 +347,8 @@ func (c *compiler) recordOverrideTarget(ctx context.Context, srcElem *helium.Ele
 // this closure (this document plus its nested include/override targets). It does
 // NOT register override children — that is the OWNER level's job, in its own
 // context. Mirrors loadInclude's per-document form/default/chameleon handling.
-func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcElem *helium.Element, active map[overrideKey]*helium.Element) (map[overrideKey]struct{}, schemaDefaultAttrsState, *OpenContent, error) {
-	matched := make(map[overrideKey]struct{})
+func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcElem *helium.Element, active map[overrideKey]*helium.Element) (map[overrideKey]overrideMatchCtx, error) {
+	matched := make(map[overrideKey]overrideMatchCtx)
 	var targetDefAttrs schemaDefaultAttrsState
 	// §4.2.5: the override children are copied INTO the transformed target document,
 	// so the TARGET document's <xs:defaultOpenContent> — not the overriding
@@ -339,7 +358,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
-		return matched, targetDefAttrs, targetOC, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	// Back-edge to the overriding ROOT: terminate WITHOUT re-loading/re-registering
@@ -347,7 +366,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// before everything else so a circular override pointing at the root (over023)
 	// never re-parses it.
 	if path == c.rootKey {
-		return matched, targetDefAttrs, targetOC, nil
+		return matched, nil
 	}
 
 	// include+override conflict: the target was already pulled in by a PLAIN
@@ -357,7 +376,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// no-op — so report it and stop the override.
 	if _, included := c.includeVisited[path]; included {
 		c.reportOverrideIncludeConflict(ctx, srcElem, location, elemOverride)
-		return matched, targetDefAttrs, targetOC, nil
+		return matched, nil
 	}
 
 	// Override-cycle / diamond termination is keyed by (path, active-override-set):
@@ -370,7 +389,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// symmetric include+override conflict check in loadInclude/loadRedefine.
 	vkey := path + "\x00" + overrideActiveFingerprint(active)
 	if _, seen := c.overrideVisited[vkey]; seen {
-		return matched, targetDefAttrs, targetOC, nil
+		return matched, nil
 	}
 	if c.overrideVisited == nil {
 		c.overrideVisited = make(map[string]struct{})
@@ -383,17 +402,17 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
-		return matched, targetDefAttrs, targetOC, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return matched, targetDefAttrs, targetOC, fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
-		return matched, targetDefAttrs, targetOC, fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
+		return matched, fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
 	}
 
 	// Conditional inclusion runs per document, before the targetNamespace check.
@@ -404,7 +423,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
 	c.includeFile = savedIncludeFileVC
 	if rootExcluded {
-		return matched, targetDefAttrs, targetOC, nil
+		return matched, nil
 	}
 
 	// Target namespace compatibility: same rule as xs:include (W3C over016/017). A
@@ -418,7 +437,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		}
 		c.schemaError(ctx, schemaParserError(c.filename, srcElem.Line(), srcElem.LocalName(), elemOverride,
 			"The target namespace '"+incTargetNS+"' of the overridden schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the overriding schema."))
-		return matched, targetDefAttrs, targetOC, nil
+		return matched, nil
 	}
 
 	// Per-document form/default/chameleon settings, mirroring loadInclude: the
@@ -492,17 +511,15 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// active keys this document's own components matched.
 	if err := c.overrideParseTargetChildren(ctx, incRoot, active, matched); err != nil {
 		restore()
-		return matched, targetDefAttrs, targetOC, err
+		return matched, err
 	}
 
 	// Recurse into the referenced document's own include/override/import/redefine,
 	// cascading the active set; merge nested matches (always a subset of active).
 	nestedMatched, nerr := c.overrideProcessNested(ctx, incRoot, path, location, active)
-	for k := range nestedMatched {
-		matched[k] = struct{}{}
-	}
+	maps.Copy(matched, nestedMatched)
 	restore()
-	return matched, targetDefAttrs, targetOC, nerr
+	return matched, nerr
 }
 
 // overrideParseTargetChildren parses the top-level children of an overridden
@@ -511,7 +528,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 // recorded in matched so the owner can register the replacement). xs:include/
 // xs:import/xs:override/xs:redefine/xs:annotation are skipped here; they are
 // handled by overrideProcessNested.
-func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium.Element, active map[overrideKey]*helium.Element, matched map[overrideKey]struct{}) error {
+func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium.Element, active map[overrideKey]*helium.Element, matched map[overrideKey]overrideMatchCtx) error {
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -522,7 +539,10 @@ func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium
 		}
 		if key, named := c.overrideChildKey(elem); named {
 			if _, overridden := active[key]; overridden {
-				matched[key] = struct{}{}
+				// Record the DECLARING (this) document's per-document defaults so the
+				// replacement is registered under THEM (§4.2.5). c.defaultOpenContent /
+				// c.schemaDefaultAttrs() are this target document's at suppression time.
+				matched[key] = overrideMatchCtx{defAttrs: c.schemaDefaultAttrs(), oc: c.defaultOpenContent}
 				continue
 			}
 		}
@@ -572,8 +592,8 @@ func (c *compiler) overrideParseTargetChildren(ctx context.Context, root *helium
 // so baseDir/filename are switched as in processNestedIncludes, behind the same
 // include-depth guard. Returns the subset of the INHERITED active set that matched
 // somewhere in the nested closure, for the caller to propagate upward.
-func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.Element, path, location string, active map[overrideKey]*helium.Element) (map[overrideKey]struct{}, error) {
-	nestedMatched := make(map[overrideKey]struct{})
+func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.Element, path, location string, active map[overrideKey]*helium.Element) (map[overrideKey]overrideMatchCtx, error) {
+	nestedMatched := make(map[overrideKey]overrideMatchCtx)
 	if c.includeDepth >= c.maxIncludeDepth {
 		return nestedMatched, fmt.Errorf("%w (limit=%d, location=%q)", errIncludeDepthExceeded, c.maxIncludeDepth, location)
 	}
@@ -609,11 +629,9 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			// An xs:include inside an overridden document is itself transformed by
 			// the override: load it as an override target carrying the same active
 			// set. Every matched key is (by construction) in the inherited set.
-			var m map[overrideKey]struct{}
-			m, _, _, err = c.overrideLoadTarget(ctx, loc, elem, active)
-			for k := range m {
-				nestedMatched[k] = struct{}{}
-			}
+			var m map[overrideKey]overrideMatchCtx
+			m, err = c.overrideLoadTarget(ctx, loc, elem, active)
+			maps.Copy(nestedMatched, m)
 		case isXSDElement(elem, elemOverride):
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
@@ -627,34 +645,27 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			// sibling target's suppression set.
 			locals := c.collectOverrideChildren(ctx, elem, active)
 			childActive := activeFromEntries(active, locals)
-			var m map[overrideKey]struct{}
-			var nestedDefAttrs schemaDefaultAttrsState
-			var nestedOC *OpenContent
-			m, nestedDefAttrs, nestedOC, err = c.overrideLoadTarget(ctx, loc, elem, childActive)
+			var m map[overrideKey]overrideMatchCtx
+			m, err = c.overrideLoadTarget(ctx, loc, elem, childActive)
 			if err != nil {
 				break
 			}
 			// Register THIS override's own matched children NOW, while the declaring
 			// document's context (form/block/final defaults, xpathDefaultNamespace,
-			// base URI, includeFile) is still active — but under the TARGET document's
-			// @defaultAttributes AND default open content (§4.2.5: the replacements are
-			// copied into the transformed target).
-			savedDefAttrs := c.schemaDefaultAttrs()
-			savedNestedOC := c.defaultOpenContent
-			c.applySchemaDefaultAttrs(nestedDefAttrs)
-			c.defaultOpenContent = nestedOC
+			// base URI, includeFile) is still active — registerMatchedChildren applies
+			// each matched key's recorded @defaultAttributes AND default open content
+			// (§4.2.5: the replacement uses the document where its component was
+			// declared, which for a nested-include match is the included document).
 			rerr := c.registerMatchedChildren(ctx, locals, m)
-			c.applySchemaDefaultAttrs(savedDefAttrs)
-			c.defaultOpenContent = savedNestedOC
 			if rerr != nil {
 				err = rerr
 				break
 			}
 			// Propagate only the INHERITED keys that matched up to the caller; the
 			// local children were just registered and must not leak further.
-			for k := range m {
+			for k, v := range m {
 				if _, inherited := active[k]; inherited {
-					nestedMatched[k] = struct{}{}
+					nestedMatched[k] = v
 				}
 			}
 		case isXSDElement(elem, elemImport):
