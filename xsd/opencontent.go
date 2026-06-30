@@ -442,21 +442,29 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 }
 
 // globalDropsLocalConstraint reports (with a diagnostic phrase) when a GLOBAL element
-// declaration is NOT at least as restrictive as a dropped base LOCAL declaration of
-// the same name on the constraints the dynamic wildcard-EDC does NOT enforce — `fixed`,
-// `nillable`, and identity constraints — so re-admitting the name via the global
-// would accept content the base local rejected. Returns "" when the global is
+// declaration is NOT at least as restrictive as a base LOCAL declaration of the same
+// name on the constraints the dynamic wildcard-EDC does NOT enforce — `fixed`,
+// `nillable`, identity constraints, {disallowed substitutions} (`block`), and the
+// asymmetric `default` direction — so re-admitting the name via the global would
+// accept content the base local rejected. Returns "" when the global is
 // constraint-compatible. Fail-closed: any constraint that cannot be shown at-least-as-
 // restrictive is treated as lost.
 //
 //   - fixed: a base local `fixed` value the global does not EXACTLY carry (no fixed,
-//     or a different lexical value) lets the global admit values the local forbade. (A
-//     `default` is not a constraint — it only supplies a value for an empty element —
-//     so it is not compared.)
+//     or a different lexical value) lets the global admit values the local forbade.
 //   - nillable: a global that is nillable while the local is NOT would accept
 //     xsi:nil="true" the base rejected.
 //   - identity constraints: a base local xs:key/xs:unique/xs:keyref the global does not
 //     also impose (matched by resolved QName) is lost.
+//   - block / {disallowed substitutions}: validateWildcardChild applies the GLOBAL's
+//     block, so any restriction/extension/substitution the LOCAL blocks but the global
+//     does not (`local.Block &^ global.Block != 0`) is lost — e.g. a base local
+//     block="#all" rejecting an xsi:type derivation the global admits.
+//   - default (ASYMMETRIC): a BASE-LOCAL default is NOT a constraint (it only supplies
+//     a value for an empty element; it forbids nothing) — so it is not compared. But a
+//     GLOBAL default the local LACKS (or a DIFFERENT one) IS unsound: an empty <e/>
+//     re-admitted via the global gets the global's default substituted, making an
+//     otherwise type-invalid empty element valid.
 func globalDropsLocalConstraint(local, global *ElementDecl) string {
 	if local == nil || global == nil {
 		return ""
@@ -468,6 +476,12 @@ func globalDropsLocalConstraint(local, global *ElementDecl) string {
 	}
 	if global.Nillable && !local.Nillable {
 		return "is nillable while the base declaration is not, so it would accept xsi:nil the base rejected"
+	}
+	if local.Block&^global.Block != 0 {
+		return "does not block every derivation/substitution the base declaration's 'block' forbade"
+	}
+	if global.Default != nil && (local.Default == nil || *global.Default != *local.Default) {
+		return "supplies a 'default' the base declaration does not, so it would accept an empty element the base rejected"
 	}
 	for _, lc := range local.IDCs {
 		if lc == nil {
