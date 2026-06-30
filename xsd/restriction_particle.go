@@ -685,6 +685,51 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		}
 	}
 
+	// A base element the derived side DROPS (no derived particle maps to it,
+	// sumMax==0) but whose NAME a derived wildcard re-admits is an invalid
+	// restriction: in the base the name is governed by the dropped element's own
+	// (specific) type, while in the derived it is governed by the wildcard. A lax
+	// or skip wildcard, or a strict wildcard resolving to a GLOBAL element whose
+	// type does not validly restrict the dropped base element's, lets the derived
+	// type ACCEPT content for that name the base type REJECTS — so the derived is
+	// not a valid restriction. (wild069: base all{e:union(date,time), …} dropped to
+	// all{…, any ##local lax}, with a global <e type="xs:duration"> the lax wildcard
+	// admits — zang accepts <e>duration</e> that zing rejects.)
+	//
+	// SCOPING: only DROPPED base elements are checked. A base element the derived
+	// KEEPS (sumMax>0, also admitted by the same ##local/##targetNamespace wildcard,
+	// e.g. f here) is governed by its own derived declaration, not the wildcard, so
+	// it must be skipped — otherwise every all-with-wildcard restriction whose
+	// wildcard namespace covers a kept element would be false-rejected.
+	//
+	// EXEMPTION: a STRICT derived wildcard resolving to a GLOBAL element whose type
+	// validly restricts the dropped base element (derivedElemNameAndTypeOK) keeps the
+	// content within the base type, so it is a valid restriction.
+	for i, bp := range baseElems {
+		if sumMax[i] != 0 {
+			continue // kept in the derived — governed by its derived declaration
+		}
+		if particleEmitsNothing(bp) {
+			continue // prohibited base element — admits no content to lose
+		}
+		be, ok := bp.Term.(*ElementDecl)
+		if !ok {
+			continue
+		}
+		for _, dw := range derivedWilds {
+			dwc, _ := dw.Term.(*Wildcard)
+			if !wildcardAllowsName(dwc, be.Name, schema) {
+				continue
+			}
+			if dwc.ProcessContents == ProcessStrict {
+				if g, found := schema.elements[be.Name]; found && derivedElemNameAndTypeOK(ctx, g, be, schema, version) {
+					continue
+				}
+			}
+			return false
+		}
+	}
+
 	// Per-base-wildcard MINIMUM cardinality: each base wildcard requires at least
 	// minOccurs elements in ITS namespace. The derived content GUARANTEED to land
 	// in that namespace is the sum of minOccurs of the derived wildcards whose
