@@ -376,6 +376,11 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 			td.ContentType = ContentTypeMixed
 		}
 	}
+	// XSD 3.4.2: the <xs:complexContent> content model is (annotation?, (restriction
+	// | extension)). Any other child — including a stray <xs:openContent>, which
+	// belongs INSIDE the restriction/extension wrapper, not as a sibling of it — is a
+	// grammar error; without this guard such a child was silently ignored and the
+	// schema wrongly compiled.
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -385,10 +390,18 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 			continue
 		}
 		switch {
+		case isXSDElement(ce, elemAnnotation):
+			continue
 		case isXSDElement(ce, elemRestriction):
 			return c.parseRestriction(ctx, ce, td)
 		case isXSDElement(ce, elemExtension):
 			return c.parseExtension(ctx, ce, td)
+		default:
+			if c.filename != "" {
+				c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
+					elem.LocalName(), componentLocalComplexType,
+					fmt.Sprintf("The element '%s' is not allowed in 'complexContent'; only 'restriction' or 'extension' is permitted.", ce.LocalName())))
+			}
 		}
 	}
 	return nil

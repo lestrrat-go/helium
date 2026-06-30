@@ -1047,18 +1047,28 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 
 // pruneNonEmittingParticles returns a shallow copy of the model group with every
 // NON-EMITTING particle removed: a direct particle with maxOccurs == 0, any nested
-// group with maxOccurs == 0, and any nested group that becomes EMPTY after pruning
-// its own children. A group with no emitting members emits nothing — its retained
-// minOccurs must not make the matcher report a missing required branch (e.g. an
-// empty choice with minOccurs>=1) — so the empty group particle is dropped from its
-// parent, propagating up. Emitting group particles are kept with their children
-// recursively pruned. Element and wildcard terms (and emitting non-group particles)
-// are SHARED — the matcher only reads them. Used by the XSD 1.1 open-content matcher
-// so a prohibited particle cannot consume a child (the child falls through to open
-// content), consistent with the non-emitting name-collection / drop-guard
-// definition. The ordinary matcher is never pruned. The TOP-LEVEL model may
-// legitimately become empty (no particles); the caller (validateContentModelOpen)
-// normalizes that to an empty sequence so all children route to open content.
+// group with maxOccurs == 0, and any nested group whose members are all pruned away.
+// A group with no emitting members emits nothing, but it is still EMPTIABLE (it
+// matches ONLY the empty sequence), and that emptiability is SEMANTICALLY LOAD-BEARING
+// inside an xs:choice: an empty branch makes the whole choice emptiable, so silently
+// dropping it would turn a previously-emptiable choice into one that REQUIRES another
+// branch (a false reject). The prune is therefore semantics-preserving:
+//
+//   - In a SEQUENCE (or xs:all) parent, an emptied member is a no-op (matching empty
+//     consumes nothing), so it is dropped — a required sibling stays required.
+//   - In a CHOICE parent, an emptied branch is REPLACED by a normalized emptiable
+//     empty-SEQUENCE particle (minOccurs 0). The choice thus stays emptiable (one
+//     branch matches empty), and the branch is a SEQUENCE — never a literally-empty
+//     choice the matcher would treat as a missing required branch (round-15/16).
+//
+// Emitting group particles are kept with their children recursively pruned. Element
+// and wildcard terms (and emitting non-group particles) are SHARED — the matcher only
+// reads them. Used by the XSD 1.1 open-content matcher so a prohibited particle cannot
+// consume a child (the child falls through to open content), consistent with the
+// non-emitting name-collection / drop-guard definition. The ordinary matcher is never
+// pruned. The TOP-LEVEL model may legitimately become empty (no particles); the caller
+// (validateContentModelOpen) normalizes that to an empty sequence so all children route
+// to open content.
 func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 	if mg == nil {
 		return nil
@@ -1072,7 +1082,19 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 		if grp, ok := p.Term.(*ModelGroup); ok {
 			pruned := pruneNonEmittingParticles(grp)
 			if pruned == nil || len(pruned.Particles) == 0 {
-				continue // a group with no emitting members emits nothing: drop it
+				// The group emits nothing but is EMPTIABLE. In a SEQUENCE/all parent an
+				// empty member is a no-op: drop it. In a CHOICE parent the emptiable
+				// branch keeps the choice emptiable: preserve it as a normalized empty
+				// SEQUENCE branch (minOccurs 0) so the matcher still matches the choice by
+				// consuming nothing, and never via a literally-empty choice.
+				if mg.Compositor == CompositorChoice {
+					clone.Particles = append(clone.Particles, &Particle{
+						MinOccurs: 0,
+						MaxOccurs: 1,
+						Term:      &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1},
+					})
+				}
+				continue
 			}
 			np := *p
 			np.Term = pruned
