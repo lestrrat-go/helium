@@ -191,3 +191,49 @@ func TestComplexTypeDirectAssertOrdering(t *testing.T) {
 		require.Error(t, cerr)
 	})
 }
+
+// TestComplexTypeDirectStrayChild covers the direct <xs:complexType> child switch:
+// only annotation, simpleContent, complexContent, openContent, a model-group
+// particle, attribute, attributeGroup, anyAttribute, and assert are allowed; any
+// other child is a schema error in 1.1 and tolerated in 1.0.
+func TestComplexTypeDirectStrayChild(t *testing.T) {
+	t.Parallel()
+
+	wrap := func(inner string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="R">
+` + inner + `
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+	}
+
+	t.Run("valid complexType compiles", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(`    <xs:annotation><xs:documentation>ok</xs:documentation></xs:annotation>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>`))
+		require.NoError(t, cerr)
+	})
+
+	t.Run("direct xs:element under complexType is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(`    <xs:element name="x" type="xs:string"/>`))
+		require.Error(t, cerr, "a direct xs:element is not a valid child of xs:complexType")
+	})
+
+	t.Run("unknown XSD element under complexType is an error", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, wrap(`    <xs:notAThing/>`))
+		require.Error(t, cerr)
+	})
+
+	t.Run("XSD 1.0 tolerates a stray child under complexType", func(t *testing.T) {
+		t.Parallel()
+		schema := wrap(`    <xs:element name="x" type="xs:string"/>`)
+		_, v10err := compileV10(t, schema)
+		require.NoError(t, v10err, "1.0 keeps its lenient behavior (byte-identity)")
+		_, _, v11err := compileV11(t, schema)
+		require.Error(t, v11err)
+	})
+}
