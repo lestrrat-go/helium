@@ -946,14 +946,17 @@ func modelGroupWildcardAdmitsName(mg *ModelGroup, local, ns string, schema *Sche
 	return false
 }
 
-// collectEmittingModelElementNames is collectModelElementNames restricted to
-// EMITTING element particles: a particle whose effective maxOccurs is 0 (its own
-// maxOccurs == 0, or any ANCESTOR group is maxOccurs == 0/prohibited) emits nothing,
-// so neither its name nor its substitution members can be matched by the model — a
-// child of that name is open content, not a declared element. Used by the
-// open-content drop guard (kept/dropped split) and suffix validation (misplaced
-// trailing-name check), consistent with the baseModelAdmitsOpenContent scan's and
-// the drop guard's maxOccursForName==0 non-emitting definition.
+// collectEmittingModelElementNames returns every element name the content model can
+// ACTUALLY MATCH as declared content: restricted to EMITTING element particles (a
+// particle whose effective maxOccurs is 0 — its own maxOccurs == 0, or any ANCESTOR
+// group is maxOccurs == 0/prohibited — emits nothing, so a child of that name is open
+// content) AND to names elemMatchesDeclOrSubst can consume — the particle's OWN name
+// when CONCRETE plus its INSTANCE-ADMISSIBLE (abstract-EXCLUDED) substitution-group
+// members. An ABSTRACT head/member can never appear as declared content, so its name
+// is open-content-eligible and must NOT count as a misplaced declared name. Used by
+// the open-content drop guard (kept/dropped split) and suffix validation (misplaced
+// trailing-name check), consistent with baseAdmissibleElementNames / instanceSubstMembers
+// and the drop guard's maxOccursForName==0 non-emitting definition.
 func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 	names := make(map[QName]bool)
 	var walk func(g *ModelGroup, ancestorsEmitting bool)
@@ -966,8 +969,10 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 			switch term := p.Term.(type) {
 			case *ElementDecl:
 				if groupEmitting && p.MaxOccurs != 0 {
-					names[term.Name] = true
-					for _, m := range substitutableMembersFor(term, schema) {
+					if !term.Abstract {
+						names[term.Name] = true
+					}
+					for _, m := range instanceSubstMembers(term, schema) {
 						names[m.Name] = true
 					}
 				}

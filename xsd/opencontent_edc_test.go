@@ -982,3 +982,68 @@ func TestOpenContent_DropsBaseWildcardCoverage(t *testing.T) {
 		require.NoError(t, cerr, "a kept strict wildcard with full occurrence coverage is valid")
 	})
 }
+
+// TestOpenContent_SuffixAbstractSubstMember covers the gauntlet finding that the
+// suffix misplaced-trailing-name set must EXCLUDE abstract substitution-group
+// members (and abstract heads): an abstract member can never be matched by the
+// declared model (instance matching excludes it), so a trailing child of that name
+// is open content, not a misplaced declared element.
+func TestOpenContent_SuffixAbstractSubstMember(t *testing.T) {
+	t.Parallel()
+	// head is abstract; m is an abstract member; c is a concrete member. The declared
+	// model optionally admits head's CONCRETE members (c) after the required <a>.
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:string" abstract="true"/>
+  <xs:element name="m" type="xs:string" abstract="true" substitutionGroup="head"/>
+  <xs:element name="c" type="xs:string" substitutionGroup="head"/>
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element ref="head" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	t.Run("an abstract substitution member in the suffix region is open content", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><m/></doc>`),
+			"an abstract member name cannot be consumed by the declared model; it is open content")
+	})
+
+	t.Run("an unknown trailing child is open content (control)", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><z/></doc>`),
+			"an unknown local name is open content")
+	})
+
+	t.Run("a CONCRETE substitution member misplaced after the prefix is rejected", func(t *testing.T) {
+		t.Parallel()
+		// The first <c> satisfies the optional head ref; the second <c> is a misplaced
+		// declared (concrete) member in the suffix region.
+		require.Error(t, validateOC(t, schema, `<doc><a>x</a><c>p</c><c>q</c></doc>`),
+			"a concrete substitution member appearing in the suffix region is misplaced declared content")
+	})
+
+	t.Run("interleave also treats an abstract member as open content (refinement recovers it)", func(t *testing.T) {
+		t.Parallel()
+		// The interleave name-split seeds <m> (an abstract member, included in the
+		// name set) into the declared partition, but the matcher (elemMatchesDeclOrSubst)
+		// cannot consume an abstract member, so refineInterleavePartition moves it to
+		// the open sub-sequence — no false-reject.
+		const interleaveSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:string" abstract="true"/>
+  <xs:element name="m" type="xs:string" abstract="true" substitutionGroup="head"/>
+  <xs:element name="c" type="xs:string" substitutionGroup="head"/>
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element ref="head" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, interleaveSchema, `<doc><a>x</a><m/></doc>`),
+			"interleave refinement moves an abstract member to open content")
+	})
+}
