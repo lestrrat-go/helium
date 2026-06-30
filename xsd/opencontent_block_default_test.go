@@ -114,3 +114,51 @@ func TestOpenContent_KeptNarrowBlockDefault(t *testing.T) {
 		require.NoError(t, cerr, "the global blocks everything the base local blocked")
 	})
 }
+
+// TestOpenContent_KeptNarrowTypeTable covers the {type table} cell on the
+// KEPT-but-narrowed path (now enforced via globalDropsLocalConstraint, shared with
+// the dropped-local path): a kept local that narrows maxOccurs spills excess into the
+// enforcing interleave open content governed by the global, whose CTA {type table}
+// must be equivalent to the base local's.
+func TestOpenContent_KeptNarrowTypeTable(t *testing.T) {
+	t.Parallel()
+
+	// base/derived local e carry a {type table} (alternative→TA, baseAlt); the global
+	// e carries globalAlt. base maxOccurs=3, derived maxOccurs=1 (narrowed).
+	build := func(globalAlt string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="ET"><xs:attribute name="k" type="xs:string"/></xs:complexType>
+  <xs:complexType name="TA"><xs:complexContent><xs:restriction base="t:ET"><xs:attribute name="k" type="xs:string"/></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:complexType name="TB"><xs:complexContent><xs:restriction base="t:ET"><xs:attribute name="k" type="xs:string"/></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="e" type="t:ET">` + globalAlt + `</xs:element>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="strict"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e" type="t:ET" minOccurs="0" maxOccurs="3"><xs:alternative test="@k='a'" type="t:TA"/></xs:element>
+      <xs:element name="keep" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="t:B">
+    <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="strict"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e" type="t:ET" minOccurs="0" maxOccurs="1"><xs:alternative test="@k='a'" type="t:TA"/></xs:element>
+      <xs:element name="keep" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="t:R"/>
+</xs:schema>`
+	}
+
+	// NOTE: the kept-narrowed type-table REJECT cell is UNREACHABLE as an independent
+	// false-accept — a restriction cannot change an element's CTA {type table} (so the
+	// kept local's table equals the base local's), and an enforcing open content that
+	// re-admits the name is already caught by the static wildcard-EDC
+	// (checkWildcardElementConsistent) on both the base and derived types. The shared
+	// helper enforcing {type table} is therefore defense-in-depth here; this accept case
+	// confirms it does not NEWLY reject a valid (equivalent-table) kept-narrowed schema.
+	t.Run("kept-narrowed local with a type-table-equivalent global is accepted", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, build(`<xs:alternative test="@k='a'" type="t:TA"/>`))
+		require.NoError(t, cerr, "the global's type table matches the base local's, so nothing is lost")
+	})
+}

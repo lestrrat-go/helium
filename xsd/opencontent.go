@@ -372,28 +372,16 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 						"' but re-admits it through an open-content wildcard that does not enforce its declared type.")
 				return
 			}
-			// TYPE-TABLE loss: even when the type DEFINITION is enforced (strict, or lax
-			// with a global), the re-admitting global declaration's {type table} (CTA
-			// xs:alternative) must be consistent with the dropped base LOCAL element's —
-			// the dynamic EDC checks only governing-type substitutability, not type-table
-			// equivalence, so the base could attribute <bn> to its local CTA declaration
-			// while the derived governs it by the global with a different table. (A base
-			// REF or substitution member resolves to the SAME global in base and derived,
-			// so localElementDeclsByName — which excludes refs — finds only the true
-			// LOCAL decls that can diverge.)
+			// CONSTRAINT loss: the dynamic EDC enforces only governing-TYPE
+			// substitutability, so the other declaration properties the base LOCAL imposes
+			// — {type table}, `fixed`, `nillable`, identity constraints, `block`, and an
+			// asymmetric `default` — are LOST when the name is re-admitted via the GLOBAL.
+			// Reject (fail-closed) unless the global is at least as restrictive on each.
+			// (A base REF or substitution member resolves to the SAME global in base and
+			// derived, so localElementDeclsByName — which excludes refs — finds only the
+			// true LOCAL decls that can diverge.)
 			if global, ok := c.schema.elements[bn]; ok {
 				for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-					if !typeTablesConsistent(baseLocal, global) {
-						c.reportOpenContentTypeError(ctx, td,
-							"The restriction drops the base type's local element declaration '"+bn.Local+
-								"', whose conditional-type-assignment {type table} differs from the global declaration the open-content wildcard re-admits it to.")
-						return
-					}
-					// CONSTRAINT loss: the dynamic EDC enforces only governing-TYPE
-					// substitutability, so other declaration constraints the base LOCAL
-					// imposes — `fixed`, `nillable`, and local identity constraints — are
-					// LOST when the name is re-admitted via the GLOBAL. Reject (fail-closed)
-					// unless the global is at least as restrictive on each.
 					if msg := globalDropsLocalConstraint(baseLocal, global); msg != "" {
 						c.reportOpenContentTypeError(ctx, td,
 							"The restriction drops the base type's local element declaration '"+bn.Local+
@@ -443,13 +431,18 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 
 // globalDropsLocalConstraint reports (with a diagnostic phrase) when a GLOBAL element
 // declaration is NOT at least as restrictive as a base LOCAL declaration of the same
-// name on the constraints the dynamic wildcard-EDC does NOT enforce — `fixed`,
-// `nillable`, identity constraints, {disallowed substitutions} (`block`), and the
-// asymmetric `default` direction — so re-admitting the name via the global would
+// name on the SIX properties the dynamic wildcard-EDC does NOT enforce — {type table},
+// `fixed`, `nillable`, identity constraints, {disallowed substitutions} (`block`), and
+// the asymmetric `default` direction — so re-admitting the name via the global would
 // accept content the base local rejected. Returns "" when the global is
 // constraint-compatible. Fail-closed: any constraint that cannot be shown at-least-as-
-// restrictive is treated as lost.
+// restrictive is treated as lost. Used by BOTH the dropped-local and kept-narrowed call
+// sites (a kept local that narrows maxOccurs spills excess to the global identically).
 //
+//   - type table: a base local CTA {type table} NOT EQUIVALENT to the global's
+//     (typeTablesConsistent, absent-both = equivalent) lets the global attribute the
+//     spilled/re-admitted element to a different governing type than the base would —
+//     the dynamic EDC checks only type-DEFINITION substitutability, not table equivalence.
 //   - fixed: a base local `fixed` value the global does not EXACTLY carry (no fixed,
 //     or a different lexical value) lets the global admit values the local forbade.
 //   - nillable: a global that is nillable while the local is NOT would accept
@@ -468,6 +461,9 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 func globalDropsLocalConstraint(local, global *ElementDecl) string {
 	if local == nil || global == nil {
 		return ""
+	}
+	if !typeTablesConsistent(local, global) {
+		return "has a conditional-type-assignment {type table} that differs from the base declaration's"
 	}
 	if local.Fixed != nil {
 		if global.Fixed == nil || *global.Fixed != *local.Fixed {
