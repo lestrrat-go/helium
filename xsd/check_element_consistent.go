@@ -186,11 +186,22 @@ func (c *compiler) anyWildcardAllows(wildcards []*Wildcard, qn QName) bool {
 
 // typeTablesConsistent reports whether two element declarations have consistent
 // {type table}s for the wildcard EDC check. Two tables are consistent when both
-// are absent; the check flags only the asymmetric case (exactly one present),
-// which covers the observed conformance violations without false-rejecting two
-// distinct-but-present tables.
+// are absent OR both present AND EQUIVALENT; the asymmetric case (exactly one
+// present) and two present-but-NON-equivalent tables are inconsistent — matching
+// the same-name EDC (typeTablesEquivalent), so the same element cannot get
+// different governing type tables depending on whether it is reached via the local
+// particle or via a lax wildcard to the global declaration. Differing type
+// DEFINITIONS remain permitted (#886); only the TYPE TABLE is compared here.
 func typeTablesConsistent(a, b *ElementDecl) bool {
-	return (len(a.Alternatives) == 0) == (len(b.Alternatives) == 0)
+	aHas := len(a.Alternatives) > 0
+	bHas := len(b.Alternatives) > 0
+	if aHas != bHas {
+		return false
+	}
+	if !aHas {
+		return true
+	}
+	return typeTablesEquivalent(a.Alternatives, b.Alternatives)
 }
 
 // collectModelGroupParticles walks a content model and returns its LOCAL element
@@ -290,8 +301,24 @@ func (c *compiler) declsConsistent(decls []*ElementDecl) bool {
 		if !elementTypesConsistent(firstType, c.resolveDeclaredType(other)) {
 			return false
 		}
+		// XSD 1.1 extends cos-element-consistent to require the same {type table}
+		// (conditional type assignment) on same-named element declarations, so a
+		// content model with two same-named elements carrying DIFFERENT type tables
+		// (or one with a table and one without) is inconsistent (cta9009err/cta9010err).
+		if c.version == Version11 && !c.typeTablesEDCConsistent(decls[0], other) {
+			return false
+		}
 	}
 	return true
+}
+
+// typeTablesEDCConsistent reports whether two same-named element declarations have
+// equivalent {type table}s for the XSD 1.1 Element Declarations Consistent
+// constraint (both must be absent or equivalent). It resolves each declaration's
+// effective alternatives (own or, for a ref, the global's) and defers the
+// structural comparison to the shared typeTablesEquivalent.
+func (c *compiler) typeTablesEDCConsistent(a, b *ElementDecl) bool {
+	return typeTablesEquivalent(elementAlternatives(a, c.schema), elementAlternatives(b, c.schema))
 }
 
 // sortedNames returns the keys of byName in a deterministic (namespace, local)

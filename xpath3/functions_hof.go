@@ -355,6 +355,15 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	}
 	if !ok {
 		fn, ok = builtinFunctions3[QualifiedName{URI: qv.URI, Name: qv.Local}]
+		if ok && isExtensionBuiltin(fn) {
+			// helium EXTENSION functions (e.g. fn:flatten, array:flat-map) are
+			// STATIC-CALL-ONLY: not dynamically reachable via fn:function-lookup. This
+			// keeps a conformance-restricted static context (XSD 1.1 CTA, which rejects a
+			// static extension call via StandardFunctionAcceptsArity) from invoking an
+			// extension through a computed-name lookup that the static gate cannot see.
+			// (A user-registered function of the same name still resolves above.)
+			fn, ok = nil, false
+		}
 		if ok && checkArity(fn, qv.Local, arity) != nil {
 			ok = false
 		}

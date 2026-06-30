@@ -417,8 +417,10 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// schema's. Save/restore mirrors the form/default handling above.
 	savedSchemaBaseURI := c.schemaBaseURI
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	savedXPathDefaultNSToken := c.schemaXPathDefaultNSToken
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
+	c.schemaXPathDefaultNSToken = getAttr(incRoot, attrXPathDefaultNamespace)
 
 	// Snapshot the component-name sets BEFORE parsing so the delta records which
 	// components this included document contributes. A later xs:redefine of the
@@ -457,6 +459,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 	c.schemaBaseURI = savedSchemaBaseURI
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
+	c.schemaXPathDefaultNSToken = savedXPathDefaultNSToken
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 	c.schemaTargetNSSet = savedSchemaTargetNSSet
@@ -675,8 +678,10 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// before processRedefineOverrides, like the defaults above.
 	savedSchemaBaseURI := c.schemaBaseURI
 	savedCTAXPathDefaultNSSet := c.xpathDefaultNSSet
+	savedXPathDefaultNSToken := c.schemaXPathDefaultNSToken
 	c.schemaBaseURI = path
 	c.xpathDefaultNSSet = hasAttr(incRoot, attrXPathDefaultNamespace)
+	c.schemaXPathDefaultNSToken = getAttr(incRoot, attrXPathDefaultNamespace)
 	// Snapshot the component-name sets per kind BEFORE Phase A. The including
 	// (main) schema's root declarations are already registered at this point,
 	// so taking the snapshot after Phase A would wrongly treat pre-existing
@@ -698,6 +703,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
+		c.schemaXPathDefaultNSToken = savedXPathDefaultNSToken
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		c.schemaTargetNSSet = savedSchemaTargetNSSet
@@ -717,6 +723,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 		c.schemaBaseURI = savedSchemaBaseURI
 		c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
+		c.schemaXPathDefaultNSToken = savedXPathDefaultNSToken
 		c.includeFile = savedIncludeFile
 		c.schemaXPathDefaultNS = savedXPathDefaultNS
 		c.schemaTargetNSSet = savedSchemaTargetNSSet
@@ -754,6 +761,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.schema.defaultAttrsSrc = savedDefaultAttrsSrc
 	c.schemaBaseURI = savedSchemaBaseURI
 	c.xpathDefaultNSSet = savedCTAXPathDefaultNSSet
+	c.schemaXPathDefaultNSToken = savedXPathDefaultNSToken
 	c.includeFile = savedIncludeFile
 	c.schemaXPathDefaultNS = savedXPathDefaultNS
 	c.schemaTargetNSSet = savedSchemaTargetNSSet
@@ -1207,6 +1215,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	if hasAttr(impRoot, attrXPathDefaultNamespace) {
 		impC.xpathDefaultNSSet = true
 	}
+	impC.schemaXPathDefaultNSToken = getAttr(impRoot, attrXPathDefaultNamespace)
 
 	registerBuiltinTypes(impC.schema, impC.version)
 

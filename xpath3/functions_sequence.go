@@ -30,7 +30,7 @@ func init() {
 	registerFn("last", 0, 0, fnLast)
 	registerFn("position", 0, 0, fnPosition)
 	registerFn("sort", 1, 3, fnSort)
-	registerFn("flatten", 1, 1, fnFlatten)
+	registerFnExt("flatten", 1, 1, fnFlatten) // XPath/XQuery 4.0 — not in F&O 3.1
 }
 
 func fnEmpty(_ context.Context, args []Sequence) (Sequence, error) {
