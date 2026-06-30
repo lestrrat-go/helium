@@ -703,3 +703,42 @@ func TestOpenContent_DefinedSiblingWildcard(t *testing.T) {
 			"a non-sibling name is still open content")
 	})
 }
+
+// TestOpenContent_DefinedSiblingUnion covers the gauntlet finding that the
+// ##definedSibling SiblingNames must be MATERIALIZED on the open-content wildcard
+// BEFORE the extension union (cos-aw-union): in a union where one operand excludes
+// the sibling via notQName and the other via ##definedSibling, the union must
+// retain that sibling as a finite exclusion even though the live marker is folded
+// away — otherwise the sibling exclusion vanishes and an extra declared-sibling
+// child is wrongly accepted as open content.
+func TestOpenContent_DefinedSiblingUnion(t *testing.T) {
+	t.Parallel()
+	// Base B excludes `a` from its open content via explicit notQName="a"; derived R
+	// (an extension) excludes `a` via notQName="##definedSibling". Their union must
+	// keep `a` excluded.
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip" notQName="a"/></xs:openContent>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent><xs:extension base="B">
+      <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="skip" notQName="##definedSibling"/></xs:openContent>
+      <xs:sequence/>
+    </xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+
+	t.Run("a sibling excluded by both union operands stays excluded", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, validateOC(t, schema, `<doc><a>x</a><a>y</a></doc>`),
+			"a second <a> (excluded by both union operands) must not be accepted as open content")
+	})
+
+	t.Run("a non-sibling child is still admitted by the union", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><other/></doc>`),
+			"a non-sibling name is still open content under the union")
+	})
+}
