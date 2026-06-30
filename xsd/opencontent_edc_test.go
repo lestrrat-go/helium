@@ -476,3 +476,68 @@ func TestOpenContent_RestrictionDropsSuffixOrdered(t *testing.T) {
 		require.NoError(t, cerr, "a suffix base that KEEPS the declared element preserves the ordering")
 	})
 }
+
+// TestOpenContent_NonEmittingElementConsistency covers the gauntlet findings that a
+// NON-EMITTING element (effective maxOccurs 0 — its particle or an ancestor group is
+// maxOccurs="0") emits nothing, so it must be ignored consistently: in
+// baseModelAdmitsOpenContent (it does not disqualify the wildcard-only-base shape)
+// and in suffix validation (a trailing child of that name is open content, not a
+// misplaced declared element).
+func TestOpenContent_NonEmittingElementConsistency(t *testing.T) {
+	t.Parallel()
+
+	t.Run("baseModelAdmitsOpenContent accepts W* plus a prohibited element", func(t *testing.T) {
+		t.Parallel()
+		// Base = unbounded wildcard W* PLUS a maxOccurs=0 (prohibited) element e. e
+		// emits nothing, so the base is effectively wildcard-only; the empty-model
+		// restriction re-expressing W as open content is valid.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B"><xs:sequence>
+    <xs:any namespace="http://open.com/" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:sequence minOccurs="0" maxOccurs="0">
+      <xs:element name="e" type="xs:int"/>
+    </xs:sequence>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="B">
+    <xs:openContent mode="interleave"><xs:any namespace="http://open.com/" processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "a prohibited (maxOccurs=0) element must not disqualify the wildcard-only-base shape")
+	})
+
+	t.Run("suffix validation treats a non-emitting declared name as open content", func(t *testing.T) {
+		t.Parallel()
+		// e is non-emitting (inside a maxOccurs=0 group); a trailing <e> matching the
+		// skip wildcard is open content, not a misplaced declared element.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:sequence minOccurs="0" maxOccurs="0">
+        <xs:element name="e" type="xs:int"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc><a>x</a><e>anything</e></doc>`),
+			"a trailing child whose only declaration is non-emitting must validate as open content")
+	})
+
+	t.Run("suffix validation still rejects an EMITTING declared name in the suffix region", func(t *testing.T) {
+		t.Parallel()
+		// Control: an emitting declared name appearing after open content is still a
+		// misplaced declared element.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="http://open.com/" processContents="skip"/></xs:openContent>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.Error(t, validateOC(t, schema, `<doc><a>x</a><extra xmlns="http://open.com/"/><a>y</a></doc>`),
+			"an emitting declared name after open content must still be rejected as misplaced")
+	})
+}

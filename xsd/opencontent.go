@@ -140,7 +140,10 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 	pc := derived.Wildcard.ProcessContents
 	baseSuffix := td.BaseType.OpenContent != nil && td.BaseType.OpenContent.Mode == OpenContentSuffix
 	derivedInterleave := derived.Mode == OpenContentInterleave
-	derivedNames := collectModelElementNames(td.ContentModel, c.schema)
+	// EMITTING names only: a derived particle the restriction narrows to maxOccurs=0
+	// (prohibited) can no longer match its name, so the name is effectively DROPPED
+	// (it spills to open content) and must be treated as dropped, not kept.
+	derivedNames := collectEmittingModelElementNames(td.ContentModel, c.schema)
 	seen := make(map[QName]struct{})
 	for _, bn := range baseAdmissibleElementNames(td.BaseType.ContentModel, c.schema) {
 		if _, dup := seen[bn]; dup {
@@ -402,7 +405,7 @@ func baseModelAdmitsOpenContent(base *TypeDef, derived *Wildcard, schema *Schema
 		return false
 	}
 	var scan baseModelWildcardScan
-	scan.walk(base.ContentModel, true)
+	scan.walk(base.ContentModel, true, true)
 	if scan.elementSeen || scan.wildcardCount != 1 || scan.wildcard == nil {
 		return false
 	}
@@ -435,27 +438,39 @@ type baseModelWildcardScan struct {
 }
 
 // walk descends model group mg. ancestorsAtMostOnce is true iff every group from
-// the root down to (but excluding) mg has maxOccurs == 1. A nested group particle's
-// occurrence equals the inner group's own MinOccurs/MaxOccurs (copied at parse
-// time), so walk evaluates each group's occurrence once via the recursive call's mg
-// and reads the wrapping particle only for LEAF (wildcard) occurrence.
-func (s *baseModelWildcardScan) walk(mg *ModelGroup, ancestorsAtMostOnce bool) {
+// the root down to (but excluding) mg has maxOccurs == 1; ancestorsEmitting is true
+// iff no ancestor group has maxOccurs == 0 (prohibited/non-emitting). A NON-EMITTING
+// particle (its own maxOccurs == 0, or under a maxOccurs == 0 ancestor) emits
+// nothing, so it contributes neither a disqualifying element nor a counted wildcard:
+// a base equivalent to W* plus a prohibited element is still effectively
+// wildcard-only. A nested group particle's occurrence equals the inner group's own
+// MinOccurs/MaxOccurs (copied at parse time), so walk evaluates each group's
+// occurrence once via the recursive call's mg and reads the wrapping particle only
+// for LEAF occurrence.
+func (s *baseModelWildcardScan) walk(mg *ModelGroup, ancestorsAtMostOnce, ancestorsEmitting bool) {
 	if mg == nil {
 		return
 	}
 	groupAtMostOnce := ancestorsAtMostOnce && mg.MaxOccurs == 1
+	groupEmitting := ancestorsEmitting && mg.MaxOccurs != 0
 	for _, p := range mg.Particles {
+		emitting := groupEmitting && p.MaxOccurs != 0
 		switch term := p.Term.(type) {
 		case *ElementDecl:
-			s.elementSeen = true
+			if emitting {
+				s.elementSeen = true
+			}
 		case *Wildcard:
+			if !emitting {
+				continue // a prohibited wildcard emits nothing
+			}
 			s.wildcardCount++
 			s.wildcard = term
 			s.wildcardMin = p.MinOccurs
 			s.wildcardMax = p.MaxOccurs
 			s.pathAtMostOnce = groupAtMostOnce
 		case *ModelGroup:
-			s.walk(term, groupAtMostOnce)
+			s.walk(term, groupAtMostOnce, groupEmitting)
 		}
 	}
 }
@@ -765,6 +780,40 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 	return names
 }
 
+// collectEmittingModelElementNames is collectModelElementNames restricted to
+// EMITTING element particles: a particle whose effective maxOccurs is 0 (its own
+// maxOccurs == 0, or any ANCESTOR group is maxOccurs == 0/prohibited) emits nothing,
+// so neither its name nor its substitution members can be matched by the model — a
+// child of that name is open content, not a declared element. Used by the
+// open-content drop guard (kept/dropped split) and suffix validation (misplaced
+// trailing-name check), consistent with the baseModelAdmitsOpenContent scan's and
+// the drop guard's maxOccursForName==0 non-emitting definition.
+func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
+	names := make(map[QName]bool)
+	var walk func(g *ModelGroup, ancestorsEmitting bool)
+	walk = func(g *ModelGroup, ancestorsEmitting bool) {
+		if g == nil {
+			return
+		}
+		groupEmitting := ancestorsEmitting && g.MaxOccurs != 0
+		for _, p := range g.Particles {
+			switch term := p.Term.(type) {
+			case *ElementDecl:
+				if groupEmitting && p.MaxOccurs != 0 {
+					names[term.Name] = true
+					for _, m := range substitutableMembersFor(term, schema) {
+						names[m.Name] = true
+					}
+				}
+			case *ModelGroup:
+				walk(term, groupEmitting)
+			}
+		}
+	}
+	walk(mg, true)
+	return names
+}
+
 // resolveDefinedSiblings populates SiblingNames on every xs:any wildcard that
 // carries @notQName="##definedSibling" (XSD 1.1). The sibling set is the names
 // of the element declarations that appear in the SAME content model as the
@@ -898,10 +947,12 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 			return err
 		}
 		leftover := children[consumed:]
-		// A trailing child whose name is declared in the model is a misplaced
-		// declared element, not open content (weak-wildcard precedence): the model
-		// already had its chance to consume it, so it is unexpected.
-		declaredNames := collectModelElementNames(mg, vc.schema)
+		// A trailing child whose name is declared by an EMITTING particle is a
+		// misplaced declared element, not open content (weak-wildcard precedence): the
+		// model already had its chance to consume it, so it is unexpected. A
+		// NON-EMITTING declared name (maxOccurs=0 particle/ancestor) cannot be matched
+		// by the model, so such a trailing child is legitimately open content.
+		declaredNames := collectEmittingModelElementNames(mg, vc.schema)
 		for _, ch := range leftover {
 			if declaredNames[QName{Local: ch.name, NS: ch.ns}] {
 				vc.reportValidityError(ctx, vc.filename, ch.elem.Line(), ch.displayName, "This element is not expected.")
