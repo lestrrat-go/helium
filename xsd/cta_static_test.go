@@ -106,6 +106,26 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 </xs:schema>`
 		require.Error(t, compileCTASchema(t, src))
 	})
+
+	t.Run("user-defined type hidden in element() kind test is invalid", func(t *testing.T) {
+		t.Parallel()
+		src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test=". instance of element(*, t:smallInt)" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
+	})
+
+	t.Run("user-defined type hidden in path-step kind test is invalid", func(t *testing.T) {
+		t.Parallel()
+		src := head + `
+  <xs:element name="e" type="t:base">
+    <xs:alternative test="self::element(*, t:smallInt)" type="t:der"/>
+  </xs:element>
+</xs:schema>`
+		require.Error(t, compileCTASchema(t, src))
+	})
 }
 
 // TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks

@@ -149,4 +149,24 @@ func TestStaticReferences(t *testing.T) {
 		require.Equal(t, []string{"v"}, refs.FreeVariables)
 		require.Equal(t, "t", collectNames(refs)["T"])
 	})
+
+	t.Run("type name in element() kind test reported", func(t *testing.T) {
+		refs := compile(t, ". instance of element(*, t:T)").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["T"])
+	})
+
+	t.Run("type name in attribute() kind test reported", func(t *testing.T) {
+		refs := compile(t, ". instance of attribute(*, t:T)").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["T"])
+	})
+
+	t.Run("type name in document-node(element()) kind test reported", func(t *testing.T) {
+		refs := compile(t, ". instance of document-node(element(*, t:T))").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["T"])
+	})
+
+	t.Run("type name in path-step kind test reported", func(t *testing.T) {
+		refs := compile(t, "self::element(*, t:T)").StaticReferences()
+		require.Equal(t, "t", collectNames(refs)["T"])
+	})
 }

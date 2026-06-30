@@ -111,6 +111,17 @@ func (c *staticRefCollector) addAtomicType(prefix, name string) {
 	c.typeNames = append(c.typeNames, TypeNameRef{Prefix: prefix, Name: name})
 }
 
+// addTypeNameLexical records a type name held as a raw lexical "prefix:local"
+// string (as element()/attribute() kind tests store their type annotation),
+// splitting it the same way the parser splits AtomicOrUnionType/AtomicTypeName.
+func (c *staticRefCollector) addTypeNameLexical(lexical string) {
+	if lexical == "" {
+		return
+	}
+	prefix, local := splitQName(lexical)
+	c.addAtomicType(prefix, local)
+}
+
 // walkSequenceType collects every atomic-or-union type name named anywhere in a
 // sequence type, INCLUDING the user type names nested inside array(T), map(K,V),
 // and function(P...) as R item types. A purely top-level scan would miss a
@@ -121,7 +132,8 @@ func (c *staticRefCollector) walkSequenceType(st SequenceType) {
 }
 
 // walkItemTest collects atomic-or-union type names reachable from an item test,
-// recursing through the parameterized array/map/function item types.
+// recursing through the parameterized array/map/function item types and the
+// type-annotated kind tests (element()/attribute()/document-node()).
 func (c *staticRefCollector) walkItemTest(it NodeTest) {
 	it, ok := derefNodeTest(it)
 	if !ok {
@@ -130,6 +142,15 @@ func (c *staticRefCollector) walkItemTest(it NodeTest) {
 	switch t := it.(type) {
 	case AtomicOrUnionType:
 		c.addAtomicType(t.Prefix, t.Name)
+	case ElementTest:
+		// element(name?, type?) — the optional second arg is a user/built-in type
+		// annotation. The name arg is an element NAME test, not a type, so it is not
+		// recorded. TypeName is the raw lexical "prefix:local" (parser scanQName).
+		c.addTypeNameLexical(t.TypeName)
+	case AttributeTest:
+		c.addTypeNameLexical(t.TypeName)
+	case DocumentTest:
+		c.walkItemTest(t.Inner)
 	case ArrayTest:
 		if !t.AnyType {
 			c.walkSequenceType(t.MemberType)
@@ -287,6 +308,9 @@ func (c *staticRefCollector) walkLocationPath(lp *LocationPath) {
 		return
 	}
 	for i := range lp.Steps {
+		// A step's node test may be a type-annotated kind test (e.g.
+		// self::element(*, t:T)), which carries a user/built-in type name.
+		c.walkItemTest(lp.Steps[i].NodeTest)
 		for _, p := range lp.Steps[i].Predicates {
 			c.walk(p)
 		}
