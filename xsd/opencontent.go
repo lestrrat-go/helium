@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -179,9 +180,14 @@ func (c *compiler) checkDerivedWildcardReadmitsBaseOpen(ctx context.Context, td 
 			// runtime rejects a trailing declared-name child / matches the wildcard only in
 			// the suffix). Re-admitting the namespace as a DECLARED wildcard makes those
 			// children DECLARED content, which can appear NON-trailing, so the derived
-			// accepts orderings the base rejects. Reject regardless of namespace-subset or
-			// processContents-strength, mirroring the suffix order-loss handling in the
-			// quadrant-A drop guards.
+			// accepts orderings the base rejects → reject. BUT the order is only lost if
+			// the derived declared wildcard ACTUALLY admits a child in the intersecting
+			// region: skip/lax always admit, but a STRICT wildcard with NO matching global
+			// element declaration there admits NOTHING (it rejects the child), so no order
+			// is lost → EXEMPT (mirrors the quadrant-A strict/no-global exemption).
+			if dw.wc.ProcessContents == ProcessStrict && !c.strictOpenAdmitsGlobalIn(dw.wc, base.Wildcard) {
+				continue
+			}
 			c.reportOpenContentTypeError(ctx, td,
 				"The restriction drops the base type's suffix open content but re-admits its language through a declared wildcard, losing the trailing-ordering constraint (the re-admitted children may appear non-trailing, which the base suffix open content rejects).")
 			return
@@ -1484,22 +1490,59 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 // consumed (consumed >= len) — including the "missing required particle at the
 // end" case, which no move can fix — or the blocker is not admissible as open
 // content (left in declared so the real match reports it as unexpected).
+//
+// A child a declared WILDCARD structurally CONSUMED but whose CONTENT validation FAILS
+// (e.g. a strict declared `xs:any` matching a child with no valid global declaration)
+// is counted as consumed by the matcher, so the trial reports an ERROR with `consumed`
+// already at the end. Per the same existential partition that child may instead be OPEN
+// content, so the trial ERROR (not just a structural shortfall) must also trigger a
+// move: when every child was consumed but the trial errored, move the LAST declared
+// child that matches the open wildcard AND is NOT a declared ELEMENT NAME (a declared
+// name must be validated as the element — weak-wildcard precedence — never spilled) to
+// the open sub-sequence and re-trial. A child invalid as BOTH declared and open does not
+// match the open wildcard, so it is not moved and the real match / open validation still
+// rejects it (no false-accept). Termination: every iteration removes one child.
 func (vc *validationContext) refineInterleavePartition(ctx context.Context, elem *helium.Element, mg *ModelGroup, wc *Wildcard, declared, open []childElem) ([]childElem, []childElem) {
+	declaredNames := collectModelElementNames(mg, vc.schema)
 	for {
 		vc.suppressDepth++
-		consumed, _ := vc.matchContentModel(ctx, elem, mg, declared)
+		consumed, err := vc.matchContentModel(ctx, elem, mg, declared)
 		vc.suppressDepth--
-		if consumed >= len(declared) {
+		if err == nil && consumed >= len(declared) {
 			return declared, open
 		}
-		blocker := declared[consumed]
-		if !wildcardAllowsExpandedName(wc, blocker.name, blocker.ns, vc.schema, false) {
-			// The unplaceable child is not admissible as open content either; leave it
-			// in declared so the real match reports it as unexpected.
+		if consumed < len(declared) {
+			// STRUCTURAL blocker: the child at `consumed` cannot be placed (an excess
+			// occurrence after a bounded element/wildcard particle, or an unexpected name).
+			// Move it to open when it matches the open wildcard; otherwise leave it for the
+			// real match to report.
+			blocker := declared[consumed]
+			if !wildcardAllowsExpandedName(wc, blocker.name, blocker.ns, vc.schema, false) {
+				return declared, open
+			}
+			open = append(open, blocker)
+			declared = append(declared[:consumed], declared[consumed+1:]...)
+			continue
+		}
+		// CONTENT failure: err != nil but every declared child was structurally consumed —
+		// a declared WILDCARD match failed content validation. Move the last open-eligible,
+		// non-declared-name child to open and re-trial.
+		moved := false
+		for i, c := range slices.Backward(declared) {
+			if declaredNames[QName{Local: c.name, NS: c.ns}] {
+				continue // a declared element name is validated as the element, not spilled
+			}
+			if !wildcardAllowsExpandedName(wc, c.name, c.ns, vc.schema, false) {
+				continue // not admissible as open content
+			}
+			open = append(open, c)
+			declared = append(declared[:i], declared[i+1:]...)
+			moved = true
+			break
+		}
+		if !moved {
 			return declared, open
 		}
-		open = append(open, blocker)
-		declared = append(declared[:consumed], declared[consumed+1:]...)
 	}
 }
 

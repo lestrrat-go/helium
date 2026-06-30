@@ -119,3 +119,86 @@ func TestOpenContent_DerivedWildcardReadmitsBaseOpenSuffix(t *testing.T) {
 		require.NoError(t, cerr, "no derived declared wildcard re-admits the base open content")
 	})
 }
+
+// TestOpenContent_QuadrantBSuffixStrictNoGlobal covers F1: the quadrant-B suffix
+// order-loss reject must only fire when the derived declared wildcard ACTUALLY admits
+// a child. A STRICT wildcard with no matching global element in the intersecting
+// namespace admits nothing, so no ordering is lost → EXEMPT.
+func TestOpenContent_QuadrantBSuffixStrictNoGlobal(t *testing.T) {
+	t.Parallel()
+
+	build := func(derivedWC string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="B">
+    <xs:openContent mode="suffix"><xs:any namespace="##any" processContents="strict"/></xs:openContent>
+    <xs:sequence><xs:choice minOccurs="0"><xs:element name="a" type="xs:string"/></xs:choice></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="t:B">
+    <xs:sequence>` + derivedWC + `</xs:sequence>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="doc" type="t:R"/>
+</xs:schema>`
+	}
+
+	t.Run("strict wildcard with no matching global is exempt (accept)", func(t *testing.T) {
+		t.Parallel()
+		// ##other excludes the target namespace; the only global element (doc) is in the
+		// target namespace, so the strict wildcard admits no child → no order loss.
+		_, _, cerr := compileV11(t, build(`<xs:any namespace="##other" processContents="strict" minOccurs="0" maxOccurs="unbounded"/>`))
+		require.NoError(t, cerr, "a strict wildcard with no matching global admits nothing, so no suffix order is lost")
+	})
+
+	t.Run("strict wildcard WITH a matching global is rejected (order loss)", func(t *testing.T) {
+		t.Parallel()
+		// ##any admits the global element doc, so the wildcard re-admits a child non-trailing.
+		_, _, cerr := compileV11(t, build(`<xs:any namespace="##any" processContents="strict" minOccurs="0" maxOccurs="unbounded"/>`))
+		require.Error(t, cerr, "a strict wildcard admitting a global re-admits the suffix language non-trailing")
+	})
+
+	t.Run("skip wildcard is rejected (always admits)", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, build(`<xs:any namespace="##any" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>`))
+		require.Error(t, cerr)
+	})
+
+	t.Run("lax wildcard is rejected (always admits)", func(t *testing.T) {
+		t.Parallel()
+		_, _, cerr := compileV11(t, build(`<xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>`))
+		require.Error(t, cerr)
+	})
+}
+
+// TestOpenContent_InterleavePartitionStrictWildcardFailure covers F2: a declared
+// optional STRICT xs:any that greedily consumes a child and fails its validation must
+// not prevent the valid partition where that child is OPEN content.
+func TestOpenContent_InterleavePartitionStrictWildcardFailure(t *testing.T) {
+	t.Parallel()
+
+	schema := func(openPC string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="interleave"><xs:any namespace="##any" processContents="` + openPC + `"/></xs:openContent>
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="strict" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+	}
+
+	t.Run("child invalid as strict-declared but valid as lax-open is accepted", func(t *testing.T) {
+		t.Parallel()
+		// <unknown> has no global declaration: it fails the strict DECLARED wildcard but
+		// is valid against the LAX open content (laxly assessed). The optional declared
+		// wildcard is satisfied by zero matches.
+		require.NoError(t, validateOC(t, schema("lax"), `<doc xmlns="urn:t"><unknown>x</unknown></doc>`),
+			"the child belongs to the open partition, leaving the optional declared wildcard empty")
+	})
+
+	t.Run("child invalid as both declared and open is rejected", func(t *testing.T) {
+		t.Parallel()
+		// With a STRICT open content too, <unknown> (no global) is invalid as declared AND
+		// as open content → must still reject (no false-accept).
+		require.Error(t, validateOC(t, schema("strict"), `<doc xmlns="urn:t"><unknown>x</unknown></doc>`),
+			"a child invalid as both declared and open content must reject")
+	})
+}
