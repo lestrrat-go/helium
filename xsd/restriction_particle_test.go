@@ -1402,7 +1402,7 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
         <xs:attribute name="attr1">
           <xs:simpleType>
             <xs:restriction base="baseSimple">
-              <xs:maxInclusive value="10"/>
+              <xs:maxInclusive value="5"/>
             </xs:restriction>
           </xs:simpleType>
         </xs:attribute>
