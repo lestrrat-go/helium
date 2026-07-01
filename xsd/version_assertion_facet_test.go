@@ -30,8 +30,9 @@ func validateAssertion(t *testing.T, schema *xsd.Schema, instance string) error 
 
 // TestVersion11AssertionFacet covers the XSD 1.1 <xs:assertion> simple-type facet:
 // $value bound to the typed atomic value, inheritance along the restriction chain,
-// list typing, the absent-context-item rule, XSD 1.0 ignoring the facet, and a
-// malformed facet XPath being a compile error.
+// list typing, the absent-context-item rule, XSD 1.0 rejecting the 1.1-only facet
+// as a stray restriction-body child, and a malformed facet XPath being a compile
+// error.
 func TestVersion11AssertionFacet(t *testing.T) {
 	t.Run("typed $value comparison", func(t *testing.T) {
 		t.Parallel()
@@ -150,8 +151,11 @@ func TestVersion11AssertionFacet(t *testing.T) {
 		require.ErrorIs(t, validateAssertion(t, schema, `<n>10f4</n>`), xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 ignores the assertion facet", func(t *testing.T) {
+	t.Run("1.0 rejects the assertion facet as a stray child", func(t *testing.T) {
 		t.Parallel()
+		// xs:assertion is a 1.1-only constraining facet, so under XSD 1.0 it is an
+		// unrecognized XSD-namespace element in the restriction body and the
+		// schema-representation grammar rejects the schema at compile time.
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="even">
     <xs:simpleType>
@@ -161,10 +165,8 @@ func TestVersion11AssertionFacet(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		schema, err := compileAssertion(t, xsd.NewCompiler(), schemaXML)
-		require.NoError(t, err)
-		// The facet is not enforced in 1.0, so an odd value is accepted.
-		require.NoError(t, validateAssertion(t, schema, `<even>3</even>`))
+		_, err := compileAssertion(t, xsd.NewCompiler(), schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 
 	t.Run("malformed facet XPath is a compile error", func(t *testing.T) {

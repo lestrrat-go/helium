@@ -424,9 +424,12 @@ func TestVersion11ExplicitTimezoneFixedFacetRestriction(t *testing.T) {
 	}
 }
 
-func TestVersion10IgnoresExplicitTimezoneFacet(t *testing.T) {
+func TestVersion10RejectsExplicitTimezoneFacet(t *testing.T) {
 	t.Parallel()
 
+	// xs:explicitTimezone is a 1.1-only constraining facet, so under XSD 1.0 it is
+	// an unrecognized XSD-namespace element in the restriction body and the
+	// schema-representation grammar rejects the schema at compile time.
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="tzRequired">
     <xs:restriction base="xs:dateTime">
@@ -436,8 +439,10 @@ func TestVersion10IgnoresExplicitTimezoneFacet(t *testing.T) {
   <xs:element name="v" type="tzRequired"/>
 </xs:schema>`
 
-	require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schemaXML,
-		`<v>2020-01-01T00:00:00</v>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 }
 
 func TestVersion11DateTimeStampFixedBuiltInFacets(t *testing.T) {
