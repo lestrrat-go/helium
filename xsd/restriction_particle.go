@@ -282,7 +282,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		}
 		return recurseAll(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorChoice && bg.Compositor == CompositorChoice:
-		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+		if !occurrenceEmptiableRestriction(r, b, version) {
 			return false
 		}
 		return recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, schema, version)
@@ -1121,6 +1121,23 @@ func occurrenceValidRestriction(rMin, rMax, bMin, bMax int) bool {
 		return false // derived unbounded but base bounded — widening
 	}
 	return rMax <= bMax
+}
+
+// occurrenceEmptiableRestriction is occurrenceValidRestriction with the XSD 1.1
+// relaxation that an EMPTIABLE base group particle has an effective minOccurs of
+// 0. An emptiable base already accepts the empty sequence, so a derived particle
+// whose minOccurs falls below the base's declared minOccurs never admits content
+// the base rejects — the derived's "zero occurrences" case is already in the base
+// language. This lets a restriction narrow e.g. a base choice{1,1} whose branch
+// is emptiable to a derived choice{0,1} (XSD 1.1 §3.9.6, addB118/test74966),
+// which XSD 1.0's strict rMin >= bMin rejects. Gated on Version11 so 1.0 stays
+// byte-identical.
+func occurrenceEmptiableRestriction(r, b *Particle, version Version) bool {
+	bMin := b.MinOccurs
+	if version == Version11 && particleEmptiable(b) {
+		bMin = 0
+	}
+	return occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, bMin, b.MaxOccurs)
 }
 
 // particleEmptiable reports whether a particle can be satisfied by zero
