@@ -1262,6 +1262,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		itemTypeRefs:              make(map[*TypeDef]QName),
 		chameleonEligible:         make(map[any]struct{}),
 		attrRefs:                  make(map[*AttrUse]QName),
+		attrRefSources:            make(map[*AttrUse]attrConstraintSource),
 		attrUseConstraintSources:  make(map[*AttrUse]attrConstraintSource),
 		attrUseSources:            make(map[*AttrUse]attrConstraintSource),
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
@@ -1568,6 +1569,15 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.chameleonEligible, impC.chameleonEligible)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
+	// Merge attribute-ref sources, preserving the originating file so the
+	// ref-kind diagnostic (checkAttributeResolution) cites the file whose line it
+	// carries, not the importing schema.
+	for au, src := range impC.attrRefSources {
+		if src.source == "" {
+			src.source = impC.filename
+		}
+		c.attrRefSources[au] = src
+	}
 	maps.Copy(c.notations, impC.notations)
 	// Merge attribute-use default/fixed constraint sources, preserving the
 	// originating file. An attribute use parsed directly in the imported document

@@ -146,6 +146,11 @@ type compiler struct {
 	chameleonEligible map[any]struct{}
 	// unresolved attribute references: maps from AttrUse to global attr QName
 	attrRefs map[*AttrUse]QName
+	// source info for every <xs:attribute ref="..."> use, used by the post-resolve
+	// ref-kind check (checkAttributeResolution) so a ref that names a non-attribute
+	// component (attributeGroup/complexType/element) or nothing is reported with a
+	// line number.
+	attrRefSources map[*AttrUse]attrConstraintSource
 	// source info for attribute uses carrying a default/fixed value, used to
 	// validate the constraint value against the attribute's simple type once
 	// all type references are resolved (deferred to resolveRefs).
@@ -614,6 +619,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		itemTypeRefs:              make(map[*TypeDef]QName),
 		chameleonEligible:         make(map[any]struct{}),
 		attrRefs:                  make(map[*AttrUse]QName),
+		attrRefSources:            make(map[*AttrUse]attrConstraintSource),
 		attrUseConstraintSources:  make(map[*AttrUse]attrConstraintSource),
 		attrUseSources:            make(map[*AttrUse]attrConstraintSource),
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),

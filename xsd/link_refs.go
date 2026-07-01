@@ -240,6 +240,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// EXISTING group and so is unaffected).
 	c.checkAttrGroupRefsResolve(ctx)
 
+	// Reject an <xs:attribute> whose @type resolves to a complex type or whose @ref
+	// resolves to a non-attribute component (src-resolve / §3.2.2). Both are
+	// component-kind mis-resolutions the lexical QName check cannot catch, and both
+	// are version-independent.
+	c.checkAttributeResolution(ctx)
+
 	// Detect and cut INDIRECT xs:attributeGroup reference cycles (e.g. h -> i,
 	// i -> h) BEFORE any flattening or expansion. A circular attribute-group
 	// reference is disallowed outside <redefine> (XSD §3.6.2 src-attribute_group.3),
@@ -1299,6 +1305,126 @@ func (c *compiler) checkAttrGroupRefsResolve(ctx context.Context) {
 		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) attribute group definition.", d.qn.NS, d.qn.Local)
 		c.schemaError(ctx, schemaParserErrorAttr(d.source, d.line, d.elemLocal, elemAttributeGroup, attrRef, msg))
 	}
+}
+
+// checkAttributeResolution enforces the two component-kind resolution rules on
+// an <xs:attribute> (§3.2.2 / src-resolve), version-INDEPENDENT so it runs in
+// BOTH XSD 1.0 and 1.1:
+//
+//   - the {type definition} named by @type must be a SIMPLE type — a @type that
+//     resolves to a complexType (including the ur-type xs:anyType) is a schema
+//     error (an attribute cannot have complex content); and
+//   - a @ref must resolve to a globally-declared ATTRIBUTE — a ref naming a
+//     component in a DIFFERENT symbol space (an attributeGroup, a complexType, a
+//     global element) or a name declared nowhere is a schema error.
+//
+// Only actual mis-resolutions are reported: a @type that resolves to a simple
+// type (built-in or user), an inline anonymous <xs:simpleType> (au.Type, no
+// TypeName), and a @ref to a real global attribute all pass untouched. A @type
+// that does not resolve at all is left to the existing (missing-type) handling —
+// this check only ADDS the complex-type rejection. In XSD 1.1 a @ref to one of
+// the four reserved xsi: processor attributes resolves to no user-declared global
+// attribute but is legitimate, so it is exempt.
+//
+// Diagnostics are collected and sorted by (source, line, local) so the output is
+// independent of Go map iteration order.
+func (c *compiler) checkAttributeResolution(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	type issue struct {
+		source string
+		line   int
+		local  string
+		qn     QName
+		msg    string
+	}
+	var issues []issue
+
+	// Part A: @type must resolve to a simple type. attrUseSources tracks every
+	// non-ref attribute use (a ref use carries no explicit @type here — its
+	// TypeName is copied from the referenced global, which is always simple).
+	for au, src := range c.attrUseSources {
+		if au.TypeName == (QName{}) {
+			continue
+		}
+		td := c.resolveNamedType(au.TypeName)
+		if td == nil || !td.IsComplex {
+			continue
+		}
+		issues = append(issues, issue{
+			source: c.diagSourceOrRecorded(src.source),
+			line:   src.line,
+			local:  src.local,
+			qn:     au.TypeName,
+			msg: fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) simple type definition.",
+				au.TypeName.NS, au.TypeName.Local),
+		})
+	}
+
+	// Part B: @ref must resolve to a global attribute declaration.
+	for au, qn := range c.attrRefs {
+		if _, ok := c.schema.globalAttrs[qn]; ok {
+			continue
+		}
+		// An unprefixed ref resolves to the schema's targetNamespace, but the global
+		// attribute may come from a no-targetNamespace (chameleon) imported schema;
+		// mirror the empty-namespace fallback used for element/type/attributeGroup
+		// references so a valid no-NS-import reference is not flagged.
+		if qn.NS != "" {
+			if _, ok := c.schema.globalAttrs[QName{Local: qn.Local}]; ok {
+				continue
+			}
+		}
+		// A ref into the reserved XSI namespace never resolves to a user-declared
+		// global attribute (a schema may not declare an attribute there): the four
+		// processor attributes are provided implicitly, and any other xsi: local name
+		// is tolerated as a skipped special attribute (a required use of it is instead
+		// left unsatisfied at instance validation). Exempt the whole namespace so
+		// neither form is reported as an unresolvable ref.
+		if qn.NS == lexicon.NamespaceXSI {
+			continue
+		}
+		src := c.attrRefSources[au]
+		issues = append(issues, issue{
+			source: c.diagSourceOrRecorded(src.source),
+			line:   src.line,
+			local:  src.local,
+			qn:     qn,
+			msg: fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) attribute declaration.",
+				qn.NS, qn.Local),
+		})
+	}
+
+	sort.Slice(issues, func(i, j int) bool {
+		if issues[i].source != issues[j].source {
+			return issues[i].source < issues[j].source
+		}
+		if issues[i].line != issues[j].line {
+			return issues[i].line < issues[j].line
+		}
+		return issues[i].local < issues[j].local
+	})
+	for _, is := range issues {
+		c.schemaError(ctx, schemaParserErrorAttr(is.source, is.line, elemAttribute, elemAttribute, is.local, is.msg))
+	}
+}
+
+// resolveNamedType resolves a named type reference to its definition, mirroring
+// the chameleon empty-namespace fallback used elsewhere: an unprefixed reference
+// resolves to the schema targetNamespace, but the type may come from a
+// no-targetNamespace imported schema.
+func (c *compiler) resolveNamedType(qn QName) *TypeDef {
+	if td, ok := c.schema.types[qn]; ok {
+		return td
+	}
+	if qn.NS != "" {
+		if td, ok := c.schema.types[QName{Local: qn.Local}]; ok {
+			return td
+		}
+	}
+	return nil
 }
 
 // checkCircularAttrGroupRefs detects INDIRECT xs:attributeGroup reference cycles
