@@ -234,3 +234,44 @@ func TestDefaultMatchTimeoutNoRace(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestCompileRejectsNonXSDConstructs verifies that the XSD Compile path rejects
+// regex constructs (reluctant quantifiers, '(?...)' group extensions, unbalanced
+// parentheses) that are valid in the XPath flavor but not in the XML Schema
+// regex grammar (XML Schema Part 2 Appendix F).
+func TestCompileRejectsNonXSDConstructs(t *testing.T) {
+	invalid := []string{
+		`a.*?c`, `([0-9]+?)([a-z]+?)`, `ab??bc`, `ab{1,3}?bc`, `(a+|b){0,1}?`,
+		`a(?:b|c|d)(.)`, `(?:..)*a`, `(a+)(?:b*)(ccc)`, `^(?:a?b?)*$`,
+		`(.)(?:b|c|d){4,5}?a`, `)(`, `(abc`, `abc)`,
+	}
+	for _, p := range invalid {
+		_, err := xsdregex.Compile(p)
+		require.Errorf(t, err, "XSD Compile must reject non-XSD construct %q", p)
+	}
+}
+
+// TestCompileAcceptsValidXSDPatterns guards against over-rejection: patterns that
+// ARE valid XML Schema regular expressions must still compile.
+func TestCompileAcceptsValidXSDPatterns(t *testing.T) {
+	valid := []string{
+		`[0-9]+`, `(abc)*`, `(a|b)+`, `a?b?c?`, `a{2,3}`, `a\?\??`, `\p{L}?`,
+		`(foo|bar)(baz)?`, `a.*c`, `\i\c*`, `x(~~)*`, `(a)?(b)?`, `\d{3}-\d{4}`,
+	}
+	for _, p := range valid {
+		_, err := xsdregex.Compile(p)
+		require.NoErrorf(t, err, "XSD Compile must accept valid XSD pattern %q", p)
+	}
+}
+
+// TestXPathFlavorKeepsReluctantAndNonCapturing verifies that the shared XPath
+// flavor (Translate/Validate, used by xpath3) still permits reluctant quantifiers
+// and non-capturing groups — the new XSD-only strictness must not leak into it.
+func TestXPathFlavorKeepsReluctantAndNonCapturing(t *testing.T) {
+	xpathValid := []string{`a.*?c`, `a{2,3}?`, `(?:ab)+c`, `(?:a|b)*`}
+	for _, p := range xpathValid {
+		require.NoErrorf(t, xsdregex.Validate(p, false), "Validate must accept XPath-valid %q", p)
+		_, err := xsdregex.Translate(p, false, false)
+		require.NoErrorf(t, err, "Translate must accept XPath-valid %q", p)
+	}
+}
