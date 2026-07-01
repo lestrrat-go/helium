@@ -1771,12 +1771,13 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 }
 
 // checkElementDeclConstraints validates each element declaration's explicit
-// default/fixed value against its declared simple (content) type (XSD 1.1
-// "Schema Component Constraint: Element Default Valid (Immediate)"). It mirrors
-// checkAttrUseConstraints: an invalid value (e.g. a list/union default that does
-// not satisfy the type) is a schema error caught at compile time rather than
-// silently injected into the instance. Sources are recorded only in Version11, so
-// 1.0 never reaches this check.
+// default/fixed value against its declared simple (content) type (§3.3.6
+// "Schema Component Constraint: Element Default Valid (Immediate)" — a
+// version-independent XSD rule enforced in BOTH 1.0 and 1.1). It mirrors
+// checkAttrUseConstraints: an invalid value (e.g. a decimal default of "XII", a
+// boolean "Yes", or a list/union default that does not satisfy the type) is a
+// schema error caught at compile time rather than silently injected into the
+// instance.
 //
 // The type checked is the element's EFFECTIVE declared type (effectiveDeclType),
 // so a no-type substitution-group member is validated against its inherited head

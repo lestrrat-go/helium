@@ -452,10 +452,10 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	}
 	// Record source info so an EXPLICIT default/fixed on this declaration can be
 	// validated against the element's simple (content) type once type refs are
-	// resolved (XSD 1.1 Element Default Valid). A ref="" element inheriting the
-	// global's value is not recorded here — the global declaration's own entry
-	// covers it.
-	if c.version == Version11 && (decl.Default != nil || decl.Fixed != nil) {
+	// resolved (§3.3.6 Element Default Valid (Immediate) — version-independent). A
+	// ref="" element inheriting the global's value is not recorded here — the global
+	// declaration's own entry covers it.
+	if decl.Default != nil || decl.Fixed != nil {
 		c.elemDeclConstraintSources[decl] = attrConstraintSource{
 			line:   elem.Line(),
 			local:  opts.name,

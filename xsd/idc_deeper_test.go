@@ -194,11 +194,11 @@ func TestElementDefaultValidity(t *testing.T) {
 		require.NoError(t, compile(t, strings.ReplaceAll(intSchema, "DEFVAL", "42")))
 	})
 
-	t.Run("XSD 1.0 does not enforce element default validity (byte-identical)", func(t *testing.T) {
+	t.Run("XSD 1.0 also enforces element default validity", func(t *testing.T) {
 		t.Parallel()
-		// The element-default check is gated to 1.1; 1.0 stays as before (it does not
-		// reject an invalid element default at compile time).
-		require.NoError(t, compile10(t, strings.ReplaceAll(intSchema, "DEFVAL", "notint")))
+		// Element Default Valid (Immediate) (§3.3.6) is a version-independent XSD rule,
+		// so an invalid element default is a schema error in 1.0 as well as 1.1.
+		require.ErrorIs(t, compile10(t, strings.ReplaceAll(intSchema, "DEFVAL", "notint")), xsd.ErrCompilationFailed)
 	})
 
 	// PR885-EDV-SG-INHERIT: a no-type global substitution-group member inherits its
@@ -264,5 +264,78 @@ func TestElementDefaultValidity(t *testing.T) {
 		t.Parallel()
 		// "ab" satisfies both the nested minLength=1 and the inherited maxLength=2.
 		require.NoError(t, compile(t, strings.ReplaceAll(scBaseSchema, "DEFVAL", "ab")))
+	})
+}
+
+// TestElementDefaultValidityXSD10 exercises Element Default Valid (Immediate)
+// (§3.3.6) under the DEFAULT (XSD 1.0) compiler. The rule is version-independent:
+// an element declaration's explicit default/fixed value must be valid against its
+// declared simple (content) type in 1.0 exactly as in 1.1. These cases mirror the
+// sun sunMeta/ElemDecl.testSet valueConstraint invalid schemas (a decimal "XII",
+// a boolean "Yes", a float "1.0F-2", a pattern-violating restriction, a
+// simpleContent extension of xs:boolean).
+func TestElementDefaultValidityXSD10(t *testing.T) {
+	t.Parallel()
+
+	compile := func(t *testing.T, schemaXML string) error {
+		t.Helper()
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Compile(t.Context(), sdoc)
+		return err
+	}
+
+	for _, tc := range []struct {
+		name       string
+		decl       string
+		wantReject bool
+	}{
+		{"decimal default XII invalid", `<xs:element name="root" type="xs:decimal" default="XII"/>`, true},
+		{"boolean default Yes invalid", `<xs:element name="E" type="xs:boolean" default="Yes"/>`, true},
+		{"boolean fixed Yes invalid", `<xs:element name="E" type="xs:boolean" fixed="Yes"/>`, true},
+		{"float fixed 1.0F-2 invalid", `<xs:element name="root" type="xs:float" fixed="1.0F-2"/>`, true},
+		{"float default 1.0F-2 invalid", `<xs:element name="root" type="xs:float" default="1.0F-2"/>`, true},
+		{"decimal default 12 valid", `<xs:element name="root" type="xs:decimal" default="12"/>`, false},
+		{"boolean default true valid", `<xs:element name="E" type="xs:boolean" default="true"/>`, false},
+		{"float fixed 1.0 valid", `<xs:element name="root" type="xs:float" fixed="1.0"/>`, false},
+		{"ur-type default alpha valid", `<xs:element name="root" default="alpha"/>`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + tc.decl + `</xs:schema>`
+			err := compile(t, s)
+			if tc.wantReject {
+				require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+
+	// A restriction with a pattern the default violates is rejected, and a
+	// simpleContent extension of xs:boolean validates its default against the base
+	// boolean type — both under the default 1.0 compiler.
+	t.Run("restriction pattern violated by default invalid", func(t *testing.T) {
+		t.Parallel()
+		s := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="E" type="answer" default="false"/>
+  <xs:simpleType name="answer">
+    <xs:restriction base="xs:boolean"><xs:pattern value="true"/></xs:restriction>
+  </xs:simpleType>
+</xs:schema>`
+		require.ErrorIs(t, compile(t, s), xsd.ErrCompilationFailed)
+	})
+
+	t.Run("simpleContent extension of boolean with invalid default invalid", func(t *testing.T) {
+		t.Parallel()
+		s := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="E" type="answer" default="Yes"/>
+  <xs:complexType name="answer">
+    <xs:simpleContent>
+      <xs:extension base="xs:boolean"><xs:attribute name="certainty"/></xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>`
+		require.ErrorIs(t, compile(t, s), xsd.ErrCompilationFailed)
 	})
 }
