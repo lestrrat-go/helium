@@ -91,6 +91,55 @@ func TestNegatedCharClassUnaffected(t *testing.T) {
 	require.False(t, re.MatchString("a"))
 }
 
+func TestUnknownBlockNegatedInCharClass(t *testing.T) {
+	// XSD 1.1 (test bug 13670): an unrecognized \p{Is<block>} matches every
+	// character and its negation \P{Is<block>} matches none. A character class
+	// whose only members are such negated-unknown-block contributions therefore
+	// denotes the empty set, which must compile to a never-matching construct
+	// rather than an empty [] that RE2 cannot parse.
+	t.Run("xsd11 negated-unknown-block sole member matches nothing", func(t *testing.T) {
+		re, err := xsdregex.CompileVersion(`[\P{IsFoo}]`, true)
+		require.NoError(t, err, `[\P{IsFoo}] must compile in XSD 1.1`)
+		require.False(t, re.MatchString(""), "matches no empty value")
+		require.False(t, re.MatchString("a"), "matches no character")
+		require.False(t, re.MatchString("x"), "matches no character")
+	})
+
+	t.Run("xsd11 complement of negated-unknown-block matches any single char", func(t *testing.T) {
+		re, err := xsdregex.CompileVersion(`[^\P{IsFoo}]`, true)
+		require.NoError(t, err, `[^\P{IsFoo}] must compile in XSD 1.1`)
+		require.True(t, re.MatchString("a"), "matches any single character")
+		require.True(t, re.MatchString("x"), "matches any single character")
+		require.False(t, re.MatchString(""), "a class still requires one character")
+	})
+
+	t.Run("xsd11 negated-unknown-block with another member keeps that member", func(t *testing.T) {
+		re, err := xsdregex.CompileVersion(`[a\P{IsFoo}]`, true)
+		require.NoError(t, err)
+		require.True(t, re.MatchString("a"), "the concrete member still matches")
+		require.False(t, re.MatchString("b"), "no other character matches")
+	})
+
+	t.Run("xsd11 standalone negated-unknown-block matches nothing", func(t *testing.T) {
+		re, err := xsdregex.CompileVersion(`\P{IsFoo}`, true)
+		require.NoError(t, err)
+		require.False(t, re.MatchString("a"))
+		require.False(t, re.MatchString("x"))
+	})
+
+	t.Run("xsd10 unknown block still rejected", func(t *testing.T) {
+		// The default (XSD 1.0 / xpath3 / relaxng) path passes xsd11=false and
+		// must keep the FORX0002 rejection, byte-identical.
+		_, err := xsdregex.CompileVersion(`[\P{IsFoo}]`, false)
+		require.Error(t, err, "xsd11=false must reject an unknown block")
+		require.Contains(t, err.Error(), "unknown Unicode block: IsFoo")
+
+		_, err = xsdregex.Compile(`[\P{IsFoo}]`)
+		require.Error(t, err, "Compile (XSD 1.0) must reject an unknown block")
+		require.Contains(t, err.Error(), "unknown Unicode block: IsFoo")
+	})
+}
+
 func TestCharClassHyphenRangeEndpoint(t *testing.T) {
 	// In the XSD/XPath regex grammar a '-' is a literal only at the start of a
 	// character class or immediately before the closing ']'. An interior '-'

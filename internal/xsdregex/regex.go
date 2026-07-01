@@ -263,7 +263,28 @@ func processCharClass(runes []rune, xsd11 bool) (string, error) {
 	// Character class subtraction [base-[subtract]] is not supported by Go's RE2.
 	// Pass through as-is — Go will interpret it differently but many tests still
 	// pass because Go's (incorrect) interpretation gives the expected result.
-	return translateClassContent(s, xsd11)
+	result, err := translateClassContent(s, xsd11)
+	if err != nil {
+		return "", err
+	}
+	// In XSD 1.1 a negated unknown \P{Is<block>} contributes no characters
+	// (bug 13670), so a class whose only members are such contributions
+	// translates to an empty class ([] or [^]) that RE2 cannot parse. Emit an
+	// explicit never-matching (or, when negated, match-any) construct instead,
+	// mirroring the standalone \P{Is<block>} translation. The source-empty
+	// forms [] / [^] are already rejected by validateXPathCharClassStructure,
+	// so these can only arise from negated-unknown-block members.
+	if xsd11 {
+		switch result {
+		case "[]":
+			// Only negated-unknown-block members: matches nothing.
+			return "[^" + matchAnyCharRange + "]", nil
+		case "[^]":
+			// Complement of a match-nothing class: matches everything.
+			return "[" + matchAnyCharRange + "]", nil
+		}
+	}
+	return result, nil
 }
 
 func validateXPathCharClassStructure(class string) error {
