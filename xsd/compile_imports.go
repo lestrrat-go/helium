@@ -1136,14 +1136,28 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// Circular-import guard: if this document is already on the active import
 	// ancestry it is mid-parse in an ancestor loader, so a mutual (A ↔ B) or self
 	// import would recurse forever and can contribute no new components. Short-
-	// circuit — the ancestor provides the document's components and cross-namespace
-	// references resolve at the top level after all sub-compilers merge up. Pushed
-	// before descending and popped on unwind (via the shared map) so a diamond
-	// import of the same document on two disjoint branches still loads independently.
-	if _, active := c.importActive[path]; active {
+	// circuit the RELOAD — the ancestor provides the document's components and
+	// cross-namespace references resolve at the top level after all sub-compilers
+	// merge up. Pushed before descending and popped on unwind (via the shared map)
+	// so a diamond import of the same document on two disjoint branches still loads
+	// independently. src-import validity is NOT skipped: the back-edge's requested
+	// namespace must still match the namespace recorded for the mid-parse target (the
+	// target's targetNamespace, validated on its first non-cycle load), else it is a
+	// genuine src-import mismatch — including the namespace-absent case (ns=""), which
+	// must import a no-targetNamespace schema — that the acyclic path would report.
+	if expectedNS, active := c.importActive[path]; active {
+		if ns != expectedNS {
+			displayLoc := location
+			if c.filename != "" {
+				displayLoc = schemaDisplayLoc(c.filename, location)
+			}
+			c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
+				importElem.LocalName(), elemImport,
+				"The namespace '"+expectedNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
+		}
 		return nil
 	}
-	c.importActive[path] = struct{}{}
+	c.importActive[path] = ns
 	defer delete(c.importActive, path)
 
 	data, err := c.readNestedSchema(path)
