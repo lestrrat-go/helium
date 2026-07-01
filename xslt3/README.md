@@ -70,12 +70,13 @@ source: [examples/xslt3_transform_string_example_test.go](https://github.com/les
 "Basic XSLT Processor" is the only required conformance level; the spec's
 other seven levels are optional features.
 
-Against the W3C XSLT 3.0 test suite (default run, on `main`):
+Against the W3C XSLT 3.0 test suite (run from the sibling `helium-w3c-tests`
+module; see "Running the conformance tests" below):
 
 | Outcome | Count |
 |---------|-------|
-| Pass    | 11,120 |
-| Skip    | 2,007  |
+| Pass    | 11,156 |
+| Skip    | 1,971  |
 | Fail    | 0      |
 | Total   | 13,127 |
 
@@ -114,26 +115,19 @@ feature set and will not be implemented.
 
 ### Running the conformance tests
 
-The test fixtures are committed under `testdata/xslt30/testdata`, so the suite
-runs out of the box — no download step is required:
+The W3C XSLT 3.0 conformance suite (generator, harness, generated case tables,
+and fixtures) lives in the sibling
+[`helium-w3c-tests`](https://github.com/lestrrat-go/helium-w3c-tests) module,
+which depends on this module via a `replace` directive. Run it from there:
 
 ```sh
-# Run the whole W3C XSLT 3.0 suite
-go test ./xslt3/ -run TestW3C
+# in ../helium-w3c-tests
+go run ./cmd/w3cgen fetch xslt30      # clone upstream + copy fixtures
+go run ./cmd/w3cgen generate xslt30   # regenerate the case tables
+go run ./cmd/w3ctest xslt30           # run the suite, emit JUnit XML
 
-# Run a single category (test functions are named TestW3C_<category>)
-go test ./xslt3/ -run TestW3C_for_each_group
-
-# Include the performance-gated tests that are skipped by default
-HELIUM_SLOW_TESTS=1 go test ./xslt3/ -run TestW3C
+# include the performance-gated tests skipped by default
+HELIUM_SLOW_TESTS=1 go test ./xslt3/ -run TestXSLT30W3C
 ```
 
-The generated `w3c_*_gen_test.go` files and their fixtures are produced from the
-upstream [w3c/xslt30-test](https://github.com/w3c/xslt30-test) suite. To refresh
-them against a newer revision, clone the upstream suite into the (gitignored)
-`testdata/xslt30/source` directory and regenerate:
-
-```sh
-testdata/xslt30/fetch.sh      # clones/updates the pinned upstream suite
-go run ./tools/xslt3gen       # regenerates w3c_*_gen_test.go + fixtures
-```
+Helium itself keeps only the `xslt3` unit tests.

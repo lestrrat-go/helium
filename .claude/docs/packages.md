@@ -126,7 +126,7 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - Output methods: `xml`, `html`, `xhtml`, `text`, `json`, `adaptive`
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder + orchestration), `compile_*.go` (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation), `execute*.go` (runtime), `functions*.go` (built-ins + `fn:transform` bridge), `stylesheet.go`, `invocation.go`, `instruction.go`, `parameters.go`, `options.go`, `output*.go` (`output.go`, `output_xml.go`, `output_html.go`, `output_json.go`, `output_adaptive.go`, `output_charmap.go`), `sort.go`, `types.go`, `avt.go`, `keys.go`, `qname_resolve.go`, `number_words.go`, `source_schema.go`, `schema_constructors.go`, `schema_context.go`, `schema_resolver_fs.go`, `package_*.go`, `streamability*.go`, `errors.go`, `resource_limit.go` (per-resource read cap + `MaxResourceBytes`/`ErrResourceTooLarge`); the XSLT element registry lives in `xslt3/internal/elements` (`elements.go`, `data.go`, see below)
 - Imports: helium, xpath3, xsd, html, internal/lexicon, internal/sequence, xslt3/internal/elements
-- Tests: hand-written unit tests + generated W3C suites `w3c_*_gen_test.go` with shared `w3c_helpers_test.go`; W3C source suite fetched into `testdata/xslt30/source/`
+- Tests: hand-written unit tests only. The W3C XSLT 3.0 conformance suite lives in the sibling `helium-w3c-tests` module (fetches upstream, depends on this module via a replace directive)
 
 ## xslt3/internal/elements/
 

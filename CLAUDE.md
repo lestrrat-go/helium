@@ -59,7 +59,7 @@ Do NOT implement XSLT 1.0/2.0 backwards compatibility mode. Tests skipped with r
 
 ## Generated Files
 
-- NEVER modify generated files by hand. Regenerate through owning generator, e.g. `xslt3gen`.
+- NEVER modify generated files by hand. Regenerate through owning generator, e.g. `qt3gen`.
 
 ## Pre-Read Rules
 
