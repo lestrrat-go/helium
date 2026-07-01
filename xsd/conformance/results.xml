@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="967" failures="0" skipped="0" time="0.010">
-  <testsuite name="xsd11-conformance" tests="967" failures="0" skipped="0" time="0.010">
+<testsuites tests="1049" failures="0" skipped="0" time="0.090">
+  <testsuite name="xsd11-conformance" tests="1049" failures="0" skipped="0" time="0.090">
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/allGroup.testSet/s3_3_6ii01" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/allGroup.testSet/s3_3_6ii02" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/allGroup.testSet/s3_3_6ii03" time="0.000"></testcase>
@@ -484,6 +484,80 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/yearMonthDuration.testSet/d3_4_26v04" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/yearMonthDuration.testSet/d3_4_26v05" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/yearMonthDuration.testSet/d3_4_26v06" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB078" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB078A" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB078B" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB095" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB118" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB121" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/addB153" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/isDefault060_2" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Additional_w3c.xml/isDefault069" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/AttributeGroup_w3c.xml/attgC010" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/AttributeGroup_w3c.xml/attgC020" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/AttributeGroup_w3c.xml/attgC031" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/AttributeGroup_w3c.xml/attgD015" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attKb009" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attKc009" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attP029" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attP031" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attZ013a" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attZ013b" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attZ014a" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Attribute_w3c.xml/attZ014b" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/ComplexType_w3c.xml/ctM004" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/anyURI_a001_1336" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/anyURI_a003_1338" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/anyURI_b004_1354" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/anyURI_b006_1356" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/dateTime011_2008" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/double018_1956" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/dtZ107447_a_2245" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/DataTypes_w3c.xml/float018_1917" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Element_w3c.xml/elemZ016" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Element_w3c.xml/elemZ032a" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Element_w3c.xml/elemZ032b" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Group_w3c.xml/groupH021v" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/IdentityConstraint_w3c.xml/idZ011" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/ModelGroups_w3c.xml/mgA016" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/ModelGroups_w3c.xml/mgO001" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/ModelGroups_w3c.xml/mgO018" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesFb003" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesHa161" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesHb008" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesHb011" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesS002" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesT002" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesT009" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesZ001" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesZ023" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesZ024" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesZ028" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Particles_w3c.xml/particlesZ031" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reF20" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reF21" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reF22" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reF23" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG26" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG27" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG28" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG29" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG30" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG31" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG32" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reG33" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reH19" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reH20" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reH21" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reK88" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reZ006i" time="0.080"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Schema_w3c.xml/schL3" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Schema_w3c.xml/schL5" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/SimpleType_w3c.xml/stE053" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/SimpleType_w3c.xml/stZ007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/SimpleType_w3c.xml/stZ047" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/SimpleType_w3c.xml/stZ055" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Wildcards_w3c.xml/wildZ013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/oracleMeta/Zone.testSet/zone401" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/oracleMeta/Zone.testSet/zone402" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/oracleMeta/Zone.testSet/zone403" time="0.000"></testcase>
@@ -834,6 +908,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/TargetNS.testSet/target003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/TargetNS.testSet/target004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/TargetNS.testSet/target007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc005" time="0.000"></testcase>
@@ -849,6 +924,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc021" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc023" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc024-11" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc901" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc903" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/VC.testSet/vc904" time="0.000"></testcase>
@@ -961,6 +1037,12 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/Zone.testSet/zone302" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/Zone.testSet/zone303" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/saxonMeta/Zone.testSet/zone304" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/sunMeta/ElemDecl.testSet/idconstrdefs00301m" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/sunMeta/ElemDecl.testSet/valueconstraint01001m2" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/sunMeta/ElemDecl.testSet/valueconstraint01001m3" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/sunMeta/ElemDecl.testSet/valueconstraint01001m5" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/sunMeta/ElemDecl.testSet/valueconstraint01001m6" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/sunMeta/MGroup.testSet/particles00104m1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/wgMeta/IRI.testSet/iri-001" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/wgMeta/substitution-groups.testSet/sg-abstract-edc" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/wgMeta/substitution-groups.testSet/sg-abstract-upa" time="0.000"></testcase>
