@@ -108,6 +108,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			c.reportUnresolvedTypeRef(ctx, td, qn)
 			base = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 			c.schema.types[qn] = base
+			if c.recoveryBaseTypes == nil {
+				c.recoveryBaseTypes = make(map[*TypeDef]bool)
+			}
+			c.recoveryBaseTypes[base] = true
 		}
 		td.BaseType = base
 	}
@@ -167,6 +171,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 		}
 	}
+
+	// Enforce src-ct.2 (Complex Type Definition Representation OK): a
+	// <xs:simpleContent> derivation's base type must be of the right kind. Runs
+	// after the base types above are resolved.
+	c.checkSimpleContentBase(ctx)
 
 	// Resolve group references — replace placeholder content with actual group content.
 	//
@@ -717,6 +726,95 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			c.checkUPA(ctx, t.td, t.src)
 		}
 	}
+}
+
+// checkSimpleContentBase enforces src-ct.2 (Complex Type Definition
+// Representation OK, XSD §3.4.2): when a complex type uses <xs:simpleContent>,
+// the base type resolved by the derivation's @base must have the right KIND and
+// content. This is version-INDEPENDENT — the same constraint holds in XSD 1.0
+// and 1.1 — so it runs in both. Called from resolveRefs after base types are
+// resolved.
+//
+//	extension:   base must be a simple type, OR a complex type whose {content
+//	             type} is a simple type. (clauses 2.1, 2.2)
+//	restriction: base must be a complex type whose {content type} is a simple
+//	             type, OR a complex type whose content is mixed with an emptiable
+//	             particle AND the restriction carries a nested <xs:simpleType>.
+//	             A simple-type base is invalid for a restriction — clause 2.2 is
+//	             extension-only. (clauses 2.1, 2.3)
+func (c *compiler) checkSimpleContentBase(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	tds := make([]*TypeDef, 0, len(c.typeRefs))
+	for td := range c.typeRefs {
+		if td.IsSimpleContent && td.BaseType != nil {
+			tds = append(tds, td)
+		}
+	}
+	sort.Slice(tds, func(i, j int) bool {
+		si, sj := c.typeDefSources[tds[i]], c.typeDefSources[tds[j]]
+		if si.line != sj.line {
+			return si.line < sj.line
+		}
+		return si.ordinal < sj.ordinal
+	})
+	for _, td := range tds {
+		base := td.BaseType
+		if c.recoveryBaseTypes[base] {
+			continue // base ref did not resolve; already reported
+		}
+		baseIsSimpleType := !base.IsComplex
+		baseIsSimpleContent := base.IsComplex && base.ContentType == ContentTypeSimple
+		var ok bool
+		switch td.Derivation {
+		case DerivationExtension:
+			ok = baseIsSimpleType || baseIsSimpleContent
+		case DerivationRestriction:
+			switch {
+			case baseIsSimpleContent:
+				ok = true
+			case base.IsComplex && base.ContentType == ContentTypeMixed &&
+				contentModelEmptiable(base.ContentModel) && td.scHasSimpleTypeChild:
+				ok = true
+			case base.Name.NS == lexicon.NamespaceXSD && base.Name.Local == typeAnySimpleType:
+				// xs:anySimpleType is the simple ur-type; a simpleContent restriction
+				// may base on it and define a fresh simple content via a nested
+				// <xs:simpleType>. (A non-narrowing restriction that leaves the content
+				// as xs:anySimpleType is rejected separately by checkAnySimpleTypeUsage
+				// in 1.1.)
+				ok = true
+			}
+		}
+		if ok {
+			continue
+		}
+		src, srcOK := c.typeDefSources[td]
+		if !srcOK {
+			continue
+		}
+		component := componentLocalComplexType
+		if !src.isLocal {
+			component = "complex type '" + td.Name.Local + "'"
+		}
+		var msg string
+		if td.Derivation == DerivationExtension {
+			msg = "The base type of a 'simpleContent' extension must be a simple type or a complex type with simple content."
+		} else {
+			msg = "The base type of a 'simpleContent' restriction must be a complex type with simple content."
+		}
+		c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
+	}
+}
+
+// contentModelEmptiable reports whether a complex type's content model can match
+// the empty sequence (src-ct.2.3 "emptiable particle"). A nil model group (e.g.
+// xs:anyType, or an attribute-only content type) is emptiable.
+func contentModelEmptiable(mg *ModelGroup) bool {
+	if mg == nil {
+		return true
+	}
+	return particleEmptiable(&Particle{Term: mg, MinOccurs: mg.MinOccurs, MaxOccurs: mg.MaxOccurs})
 }
 
 // expandAttrGroupUses returns the effective attribute uses contributed by the

@@ -333,6 +333,12 @@ type TypeDef struct {
 	// inherited through derived simpleContent types.
 	IsSimpleContent bool
 
+	// scHasSimpleTypeChild records that a <xs:simpleContent> RESTRICTION carried a
+	// nested <xs:simpleType> child. It is consulted by checkSimpleContentBase for
+	// src-ct.2 clause 2.3: a restriction of a complex type whose content is mixed
+	// with an emptiable particle is valid ONLY when such a simpleType is present.
+	scHasSimpleTypeChild bool
+
 	// openContentExplicit records that an <xs:openContent> child (of ANY mode,
 	// including mode="none") was present on this complex type's definition. It
 	// distinguishes an explicit mode="none" (OpenContent nil, default suppressed)

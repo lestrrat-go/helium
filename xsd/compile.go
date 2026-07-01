@@ -53,7 +53,13 @@ type compiler struct {
 	parser             *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
-	elemRefs map[*ElementDecl]QName
+	// recoveryBaseTypes marks the placeholder TypeDefs inserted when a @base/
+	// itemType/memberTypes reference does not resolve (reportUnresolvedTypeRef).
+	// Downstream derivation checks (checkSimpleContentBase) skip a derivation
+	// whose base is such a placeholder — the unresolved ref was already reported,
+	// so the base kind is unknown and any further diagnostic would be spurious.
+	recoveryBaseTypes map[*TypeDef]bool
+	elemRefs          map[*ElementDecl]QName
 	// unresolved xs:alternative (conditional type assignment) @type references,
 	// resolved in resolveRefs. A slice (not a map) so nil-append works without
 	// per-compiler initialization.
@@ -589,6 +595,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		fsys:                      fsys,
 		parser:                    parser,
 		typeRefs:                  make(map[*TypeDef]QName),
+		recoveryBaseTypes:         make(map[*TypeDef]bool),
 		elemRefs:                  make(map[*ElementDecl]QName),
 		elemRefSources:            make(map[*ElementDecl]elemRefSource),
 		groupRefs:                 make(map[*ModelGroup]QName),
