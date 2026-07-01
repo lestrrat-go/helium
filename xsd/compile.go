@@ -955,14 +955,12 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 	// a key/unique declared on a DIFFERENT element; matching must be by full
 	// {namespace}local identity, not local name only (a local-name match could
 	// bind the wrong constraint when two namespaces share a local name).
-	keyNames := make(map[QName]struct{})
 	keyByName := make(map[QName]*IDConstraint)
 	for _, idc := range idcs {
 		if idc.IsConstraintRef {
 			continue
 		}
 		if idc.Kind == IDCKey || idc.Kind == IDCUnique {
-			keyNames[idc.QName] = struct{}{}
 			keyByName[idc.QName] = idc
 		}
 	}
