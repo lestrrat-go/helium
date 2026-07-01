@@ -505,9 +505,14 @@ func nfaLanguageSubset(d, b *nfa, alpha map[QName]struct{}, schema *Schema) bool
 	bstart := b.eclose(map[int]struct{}{b.start: {}})
 
 	type pair struct{ ds, bs map[int]struct{} }
-	visited := map[string]struct{}{}
+	// A structured [2]string key: setKey returns a raw byte string that may
+	// contain any separator byte, so concatenating with a delimiter could make
+	// distinct (ds,bs) pairs collide, skip a reachable product state, and
+	// false-accept an invalid restriction. A two-element array keeps the two
+	// set encodings unambiguously separate.
+	visited := map[[2]string]struct{}{}
 	queue := []pair{{dstart, bstart}}
-	visited[setKey(dstart)+"|"+setKey(bstart)] = struct{}{}
+	visited[[2]string{setKey(dstart), setKey(bstart)}] = struct{}{}
 
 	for len(queue) > 0 {
 		if len(visited) > subsumePairStateCap {
@@ -532,7 +537,7 @@ func nfaLanguageSubset(d, b *nfa, alpha map[QName]struct{}, schema *Schema) bool
 				// d can still emit name here but b cannot follow it.
 				return false
 			}
-			key := setKey(ds2) + "|" + setKey(bs2)
+			key := [2]string{setKey(ds2), setKey(bs2)}
 			if _, ok := visited[key]; ok {
 				continue
 			}
