@@ -472,7 +472,7 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 	})
 }
 
-// parseDerivationWrapper enforces the XSD 1.1 schema-for-schemas content model
+// parseDerivationWrapper enforces the schema-for-schemas content model
 // (annotation?, (restriction | extension)) shared by <xs:complexContent> and
 // <xs:simpleContent>: an optional leading annotation, then EXACTLY ONE restriction
 // or extension, and nothing else. A second derivation, a missing derivation, an
