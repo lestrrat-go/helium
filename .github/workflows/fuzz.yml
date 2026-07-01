@@ -1,7 +1,9 @@
 name: Fuzz
 on:
+  push:
+    branches: [main] # short fuzz on every push to main (in practice, each PR merge); non-gating, PRs run no fuzz
   schedule:
-    - cron: '0 3 * * 3' # Weekly on Wednesday at 03:00 UTC
+    - cron: '0 3 * * 3' # Weekly deep fuzz on Wednesday at 03:00 UTC
   workflow_dispatch:
     inputs:
       fuzz-time:
@@ -37,7 +39,12 @@ jobs:
             fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-
       - name: Run fuzz tests
         run: |
-          FUZZTIME="${{ github.event.inputs.fuzz-time || '5m' }}"
+          set -o pipefail
+          # Merge (push) runs get a short budget for a prompt post-merge signal;
+          # the weekly schedule runs deep; manual dispatch uses its input.
+          # (github.event.inputs.fuzz-time is valid dot-access — GitHub Actions
+          # allows hyphens in property dereference; it is NOT parsed as subtraction.)
+          FUZZTIME="${{ github.event.inputs.fuzz-time || (github.event_name == 'push' && '60s') || '5m' }}"
           mkdir -p /tmp/fuzz-output
           for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
             echo "::group::${target}"
