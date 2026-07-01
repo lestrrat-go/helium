@@ -985,25 +985,44 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			}
 			// Patch self-reference: find newly-added groupRefs entries referencing qn.
 			if origGroup != nil {
+				// Collect the newly-parsed self-references (a group ref inside the
+				// redefine child whose ref names the redefined group itself).
+				var selfRefs []*ModelGroup
 				for mg, refQN := range c.groupRefs {
 					if existingRefs[mg] {
 						continue
 					}
 					if refQN == qn {
-						// The self-reference resolves to the original group's
-						// content. resolveRefs deletes this entry from groupRefs
-						// before it can run checkAllGroupRef, so the all-group
-						// placement rule (cos-all-limited) would be bypassed for a
-						// redefine that nests an all-group self-reference inside a
-						// sequence/choice. Enforce it here, while the source record
-						// is still available, before the entry is removed.
-						if origGroup.Compositor == CompositorAll {
-							c.checkAllGroupRef(ctx, mg)
-						}
-						mg.Compositor = origGroup.Compositor
-						mg.Particles = origGroup.Particles
-						delete(c.groupRefs, mg)
+						selfRefs = append(selfRefs, mg)
 					}
+				}
+				// src-redefine.6.1.1/6.1.2 (§4.2.3): a <group> child of <redefine>
+				// that references itself must do so exactly ONCE and with
+				// minOccurs = maxOccurs = 1. A group without a self-reference is
+				// governed by clause 6.2 (valid restriction of the original) and is
+				// not constrained here. Version-independent, so enforced in XSD 1.0.
+				if len(selfRefs) > 1 {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+						fmt.Sprintf("src-redefine.6.1.1: The group '%s' redefined inside <redefine> must not reference itself more than once.", qn.Local)))
+				}
+				for _, mg := range selfRefs {
+					if mg.MinOccurs != 1 || mg.MaxOccurs != 1 {
+						c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+							fmt.Sprintf("src-redefine.6.1.2: The self-reference to group '%s' inside <redefine> must have minOccurs = maxOccurs = 1.", qn.Local)))
+					}
+					// The self-reference resolves to the original group's content.
+					// resolveRefs deletes this entry from groupRefs before it can
+					// run checkAllGroupRef, so the all-group placement rule
+					// (cos-all-limited) would be bypassed for a redefine that nests
+					// an all-group self-reference inside a sequence/choice. Enforce
+					// it here, while the source record is still available, before the
+					// entry is removed.
+					if origGroup.Compositor == CompositorAll {
+						c.checkAllGroupRef(ctx, mg)
+					}
+					mg.Compositor = origGroup.Compositor
+					mg.Particles = origGroup.Particles
+					delete(c.groupRefs, mg)
 				}
 			}
 		case isXSDElement(elem, elemAttributeGroup):
