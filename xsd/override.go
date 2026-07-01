@@ -432,6 +432,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	if c.version == Version11 {
 		c.checkSchemaComponentIDs(ctx, incRoot)
 	}
+	c.checkIDConstraintPlacement(ctx, incRoot)
 
 	// Target namespace compatibility: same rule as xs:include (W3C over016/017). A
 	// referenced document with no targetNamespace is a chameleon and adopts the

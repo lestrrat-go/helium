@@ -14,20 +14,8 @@ import (
 // valid xs:ID — i.e. a valid NCName after whitespace collapse (xs:ID derives
 // from xs:token, whose whitespace facet is "collapse") — and must be unique.
 //
-// Gated to Version11: enforcing it under XSD 1.0 could change the compile
-// outcome of an existing 1.0 schema that carries a duplicate/invalid id which
-// libxml2 tolerated, breaking the byte-identical 1.0 golden contract. The
-// constraint itself is not 1.1-specific, but the opt-in version toggle keeps
-// 1.0 behavior frozen.
+// This is a version-independent XSD rule, enforced in both 1.0 and 1.1.
 func (c *compiler) checkSchemaComponentIDs(ctx context.Context, root *helium.Element) {
-	// Self-guard the Version11 gating (every caller already gates too) so the
-	// "Gated to Version11" contract is self-contained: enforcing @id uniqueness
-	// under XSD 1.0 would change the compile outcome of a 1.0 schema libxml2
-	// tolerated and break the byte-identical 1.0 golden contract. Mirrors the
-	// adjacent readDefaultOpenContent, which self-guards the same way.
-	if c.version != Version11 {
-		return
-	}
 	if c.filename == "" {
 		return
 	}

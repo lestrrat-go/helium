@@ -483,9 +483,8 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// THIS included document (a fresh per-document scope; the same value may
 	// recur across documents). Runs after conditional-inclusion pruning so
 	// vc-excluded components' @ids don't count.
-	if c.version == Version11 {
-		c.checkSchemaComponentIDs(ctx, incRoot)
-	}
+	c.checkSchemaComponentIDs(ctx, incRoot)
+	c.checkIDConstraintPlacement(ctx, incRoot)
 
 	// Parse the included schema's declarations into the current compiler.
 	// (Conditional inclusion already ran above, before the TNS check.)
@@ -757,9 +756,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// Enforce xs:ID typing/uniqueness of schema-component @id attributes within
 	// THIS redefined document (a fresh per-document scope). Runs after
 	// conditional-inclusion pruning.
-	if c.version == Version11 {
-		c.checkSchemaComponentIDs(ctx, incRoot)
-	}
+	c.checkSchemaComponentIDs(ctx, incRoot)
+	c.checkIDConstraintPlacement(ctx, incRoot)
 
 	// Parse the included schema's declarations into the current compiler.
 	// (Conditional inclusion already ran above, before the TNS check.)
@@ -1322,11 +1320,6 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	}
 
 	if impC.version == Version11 {
-		// Enforce xs:ID typing/uniqueness of schema-component @id attributes
-		// within THIS imported document (a fresh per-document scope), after
-		// conditional-inclusion pruning. Diagnostics are flushed to the parent
-		// via propagateImpErrors on the fatal exit paths and the final merge.
-		impC.checkSchemaComponentIDs(ctx, impRoot)
 		impC.readSchemaDefaultAttributes(ctx, impRoot)
 		// The imported document's own <xs:defaultOpenContent> applies to its complex
 		// types (it is per-document and does not cross the import boundary). Read it
@@ -1334,6 +1327,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		// a vc-excluded <xs:defaultOpenContent> is not captured and applied.
 		impC.defaultOpenContent = impC.readDefaultOpenContent(ctx, impRoot)
 	}
+	// The @id xs:ID validity/uniqueness and identity-constraint placement/content
+	// rules are version-independent, so enforce them on the imported document in
+	// 1.0 and 1.1 alike.
+	impC.checkSchemaComponentIDs(ctx, impRoot)
+	impC.checkIDConstraintPlacement(ctx, impRoot)
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err

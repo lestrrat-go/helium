@@ -933,6 +933,15 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			"The attribute 'name' is required but missing.")
 		return nil
 	}
+	// The @name of an identity constraint is an NCName (XSD Structures 3.11.1).
+	// A value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g.
+	// "1foo") is a schema error; the constraint is dropped so it does not enter
+	// the target-namespace symbol space under a bogus name.
+	if !hasRef && !xmlchar.IsValidNCName(name) {
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'.")
+		return nil
+	}
 
 	// XSD 1.1 identity-constraint @ref: the constraint reuses a referenced
 	// constraint's name/selector/field. The ref form may carry only annotation/id
@@ -1008,6 +1017,12 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 		Namespaces: collectNSContext(elem),
 		Line:       elem.Line(),
 		Source:     source,
+	}
+	// @refer is permitted ONLY on xs:keyref (XSD Structures 3.11.1). A key or
+	// unique carrying @refer is a schema error.
+	if kind != IDCKeyRef && hasAttr(elem, attrRefer) {
+		c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+			"The attribute 'refer' is not allowed.")
 	}
 	if kind == IDCKeyRef {
 		idc.Refer = getAttr(elem, attrRefer)

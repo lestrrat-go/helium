@@ -699,10 +699,14 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// own declarations AND its xs:redefine override children are parsed, so each
 		// complex type captures the active per-document default.
 		c.defaultOpenContent = c.readDefaultOpenContent(ctx, root)
-		// Enforce xs:ID typing/uniqueness of schema-component @id attributes
-		// across this schema document.
-		c.checkSchemaComponentIDs(ctx, root)
 	}
+
+	// Enforce xs:ID typing/uniqueness of schema-component @id attributes across
+	// this schema document, and the structural placement/content rules of
+	// identity-constraint components. Both are version-independent XSD rules, so
+	// they run in 1.0 and 1.1 alike.
+	c.checkSchemaComponentIDs(ctx, root)
+	c.checkIDConstraintPlacement(ctx, root)
 
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
@@ -952,12 +956,14 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 	// {namespace}local identity, not local name only (a local-name match could
 	// bind the wrong constraint when two namespaces share a local name).
 	keyNames := make(map[QName]struct{})
+	keyByName := make(map[QName]*IDConstraint)
 	for _, idc := range idcs {
 		if idc.IsConstraintRef {
 			continue
 		}
 		if idc.Kind == IDCKey || idc.Kind == IDCUnique {
 			keyNames[idc.QName] = struct{}{}
+			keyByName[idc.QName] = idc
 		}
 	}
 
@@ -989,7 +995,16 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 				schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			continue
 		}
-		if _, ok := keyNames[idc.ReferQName]; ok {
+		if target, ok := keyByName[idc.ReferQName]; ok {
+			// A keyref must have the same number of {fields} as the key/unique it
+			// refers to (XSD Structures 3.11.1: keyref cardinality). A mismatch is a
+			// schema error.
+			if len(idc.Fields) != len(target.Fields) {
+				msg := fmt.Sprintf("The keyref identity-constraint '%s' has %d field(s) but the referenced key or unique '%s' has %d.",
+					idc.Name, len(idc.Fields), idc.Refer, len(target.Fields))
+				c.schemaError(ctx,
+					schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
+			}
 			continue
 		}
 		msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
