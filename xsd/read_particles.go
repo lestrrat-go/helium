@@ -107,6 +107,19 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			// the attribute. libxml2 warns and SKIPS it, so the wildcard still
 			// admits the attribute. Mirror that here (parent type is attributeGroup).
 			if getAttr(ce, attrUse) == attrValProhibited {
+				// XSD 1.1 Schema Representation Constraint (Attribute Declaration
+				// Representation OK): a prohibited attribute use must not carry a
+				// value constraint. The use itself is skipped as pointless (below),
+				// but the fixed-value defect is still a schema error in 1.1. Gated on
+				// Version11 so 1.0 stays byte-identical (default is already rejected
+				// in both versions by checkAttributeUse's "default requires
+				// use=optional" rule, but that path is not reached here — a prohibited
+				// use with default inside a group is silently skipped in 1.0, matching
+				// origin, so only fixed is flagged and only in 1.1).
+				if c.version == Version11 && hasAttr(ce, attrFixed) {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attribute",
+						"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
+				}
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.diagSource(), ce.Line(), ce.LocalName(), "attribute",
 						"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>."), helium.ErrorLevelWarning))
