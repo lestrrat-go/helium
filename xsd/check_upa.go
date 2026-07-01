@@ -547,10 +547,15 @@ func entriesOverlap(a, b firstSetEntry, version Version) bool {
 		if a.qname != b.qname {
 			return false
 		}
-		if version == Version11 {
-			return a.origin != b.origin
-		}
-		return true
+		// Element-vs-element ambiguity (cos-nonambig) is VERSION-INDEPENDENT: two
+		// element positions compete only when they are DISTINCT particles. Occurrence
+		// copies of ONE textual leaf (same origin) are the same particle repeated —
+		// e.g. `sequence maxOccurs="100"(a maxOccurs="unbounded")`, whose expansion
+		// produces several same-named `a` positions reachable from one state — and are
+		// never a UPA violation, while two same-named DISTINCT leaves (distinct origins,
+		// e.g. choice(a,a)) do overlap. This applies in both 1.0 and 1.1; only the
+		// element-vs-wildcard weak-wildcard rule below is version-specific.
+		return a.origin != b.origin
 	}
 	// Element vs wildcard: in 1.1 the element wins (no conflict); in 1.0 they
 	// overlap when the wildcard's namespace admits the element's namespace.

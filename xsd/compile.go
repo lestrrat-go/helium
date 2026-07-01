@@ -168,6 +168,17 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// importActive records the resolved fs paths of schema documents currently on
+	// the active xs:import ancestry (the load stack), SHARED by pointer across every
+	// sub-compiler in one import tree. A re-import of a document already on this
+	// stack is a cycle (mutual A ↔ B, self import): the document is mid-parse above,
+	// so re-loading it would recurse forever and can add no new components. loadImport
+	// short-circuits such a re-import (the ancestor loader provides the components;
+	// cross-namespace refs resolve at the top level after all merges). Entries are
+	// pushed before descending into an import and popped on unwind, so a diamond
+	// (two disjoint branches importing the same document) is NOT cut — each branch
+	// loads it independently, deduped by the "if not exists" merge guards.
+	importActive map[string]struct{}
 	// includeVisited records the resolved fs paths of schema documents already
 	// pulled in via xs:include/xs:redefine on this compiler, so a transitive or
 	// diamond chain loads each included document at most once. It is the cycle
@@ -596,6 +607,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
 		importedNS:                make(map[string]string),
 		maxImportDepth:            defaultMaxImportDepth,
+		importActive:              make(map[string]struct{}),
 		includeVisited:            make(map[string]struct{}),
 		maxIncludeDepth:           defaultMaxIncludeDepth,
 		loadedRedefinable:         make(map[string]*redefinableSet),
@@ -609,6 +621,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// re-parsing it and emitting spurious duplicate-component errors.
 		if cfg.rootKey != "" {
 			c.includeVisited[cfg.rootKey] = struct{}{}
+			// Also mark the root as on the active import ancestry, so a descendant
+			// that imports back to the top-level document's own path is cut as a cycle.
+			c.importActive[cfg.rootKey] = struct{}{}
 			c.rootKey = cfg.rootKey
 		}
 		c.filename = cfg.label

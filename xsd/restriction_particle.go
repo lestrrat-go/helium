@@ -165,13 +165,23 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// wildcard is reached through the base particle b (b.Term).
 			return groupRestrictsWildcard(r, rt, b, schema)
 		case *ElementDecl:
-			// A derived model GROUP restricting a base single ELEMENT. This is only a
-			// valid restriction when the group is a "pointless" wrapper that emits
-			// exactly one element which itself validly restricts the base element:
-			// every sequence valid against the derived group must be {one matching
-			// element} so it stays valid against the base element. A group that can
-			// emit a different element, two-or-more elements, or zero elements where
-			// the base requires one admits content the base does not.
+			// A derived model GROUP restricting a base single ELEMENT. XSD 1.0 §3.9.6
+			// has NO Sequence/Choice/All:Element derivation rule, so this is valid ONLY
+			// when the group is §3.9.6-POINTLESS — it folds (safe occurrence hoisting:
+			// at each level the group's or the single member's {max occurs} is 1) down
+			// to a single element particle that validly restricts the base element. A
+			// genuinely REPEATING group (e.g. sequence maxOccurs="2" of element{1,2},
+			// which emits the element 1..4 times) is NOT pointless and admits content the
+			// base single element does not, so it is rejected. XSD 1.1 keeps the broader
+			// language-inclusion leniency (groupRestrictsElement), backed by the
+			// particleLanguageSubset fallback, so its behavior is unchanged.
+			if version == Version10 {
+				red, reduced := pointlessReduce(r)
+				if !reduced {
+					return false
+				}
+				return particleValidRestriction(ctx, red, b, schema, version)
+			}
 			return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
 		}
 	}
@@ -427,6 +437,50 @@ func reduceSingletonGroup(p *Particle) *Particle {
 		}
 		if count != 1 {
 			return p
+		}
+		p = &Particle{
+			MinOccurs: mulOccurs(p.MinOccurs, only.MinOccurs),
+			MaxOccurs: mulOccurs(p.MaxOccurs, only.MaxOccurs),
+			Term:      only.Term,
+		}
+	}
+}
+
+// pointlessReduce folds a §3.9.6-POINTLESS model-group particle down to its
+// single element-emitting member, applying SAFE occurrence hoisting only: a
+// level folds when the group has exactly one emitting member AND either the
+// group's own {max occurs} or that member's {max occurs} is 1 (so the two
+// occurrence ranges combine into one without conflating distinct emission
+// counts). It returns the reduced particle and reports whether it fully reduced
+// to a NON-group term (an element or wildcard). A repeating group whose own max
+// and whose member's max are BOTH greater than 1 is NOT pointless and does not
+// reduce, so the caller rejects it (there is no Sequence/Choice:Element rule in
+// XSD 1.0). Unlike reduceSingletonGroup this refuses the unsafe both->1 fold.
+func pointlessReduce(p *Particle) (*Particle, bool) {
+	for {
+		mg, ok := p.Term.(*ModelGroup)
+		if !ok {
+			return p, true
+		}
+		var only *Particle
+		count := 0
+		for _, child := range mg.Particles {
+			if particleEmitsNothing(child) {
+				continue
+			}
+			count++
+			if count > 1 {
+				break
+			}
+			only = child
+		}
+		if count != 1 {
+			return p, false
+		}
+		// Safe hoist only: at least one side must be at-most-once, else the two
+		// repeats produce an emission count the single member cannot represent.
+		if p.MaxOccurs != 1 && only.MaxOccurs != 1 {
+			return p, false
 		}
 		p = &Particle{
 			MinOccurs: mulOccurs(p.MinOccurs, only.MinOccurs),
