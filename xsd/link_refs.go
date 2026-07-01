@@ -498,12 +498,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			continue
 		}
-		// XSD 1.1 §3.4.6.2 (Derivation Valid (Extension), 1.4.3.2.2.1): when both the
-		// base and the derived type have complex content (element-only or mixed), they
-		// must agree on mixedness — both mixed or both element-only. (An empty base or
-		// derived particle is exempt: the extension may introduce content of either
-		// flavor.) Gated to 1.1 so XSD 1.0 stays byte-identical.
-		if c.version == Version11 {
+		// §3.4.6.2 (Derivation Valid (Extension), cos-ct-extends 1.4.3.2.2.1): when both
+		// the base and the derived type have complex content (element-only or mixed),
+		// they must agree on mixedness — both mixed or both element-only. (An empty base
+		// or derived particle is exempt: the extension may introduce content of either
+		// flavor.) This is a version-INDEPENDENT XSD rule (enforced in both 1.0 and 1.1).
+		{
 			baseHasContent := td.BaseType.ContentType == ContentTypeElementOnly || td.BaseType.ContentType == ContentTypeMixed
 			derivedHasContent := td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed
 			baseMixed := td.BaseType.ContentType == ContentTypeMixed
