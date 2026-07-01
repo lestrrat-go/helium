@@ -339,6 +339,13 @@ type TypeDef struct {
 	// from an absent <xs:openContent> (OpenContent nil, schema-level
 	// <xs:defaultOpenContent> may still apply). Set at parse time (read_types).
 	openContentExplicit bool
+	// syntheticComplexBase marks a compiler-synthesized content simple type
+	// (parseSimpleContentRestrictionType) that deliberately bases on its owning
+	// simpleContent COMPLEX type to compose the restriction's direct facets over
+	// the base content type. It is not a source-level simpleType restriction, so
+	// checkSimpleTypeResolution skips it — the complex base is intentional here.
+	syntheticComplexBase bool
+
 	// pendingDefaultOpenContent is the schema-level <xs:defaultOpenContent> active
 	// in THIS type's own schema document at parse time, captured only when the type
 	// has no explicit <xs:openContent>. Default open content is per-document
