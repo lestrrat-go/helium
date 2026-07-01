@@ -96,6 +96,68 @@ func TestGroupRestrictsElementPointlessness(t *testing.T) {
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
 
+	t.Run("rejects emptiable group over multi-occur member (emission hole)", func(t *testing.T) {
+		t.Parallel()
+		// Derived branch sequence{0,1} wrapping e1{2,2} emits e1 {0,2} times — a
+		// hole at 1 — so it is NOT §3.9.6-pointless: folding to e1{0,2} would
+		// widen the language (allow 1). The group{0,1} own max is 1, but the
+		// member minOccurs=2 introduces the gap, so it must still be rejected.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="base">
+    <xs:choice minOccurs="2" maxOccurs="unbounded">
+      <xs:element name="e1" minOccurs="0" maxOccurs="10"/>
+      <xs:element name="e2" minOccurs="0"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:choice minOccurs="2" maxOccurs="unbounded">
+            <xs:sequence minOccurs="0" maxOccurs="1">
+              <xs:element name="e1" minOccurs="2" maxOccurs="2"/>
+            </xs:sequence>
+            <xs:element name="e2"/>
+          </xs:choice>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts emptiable wrapper over at-most-once member", func(t *testing.T) {
+		t.Parallel()
+		// Derived branch sequence{0,1} wrapping e1{1,1} emits e1 {0,1} times —
+		// no hole ({0}∪{1}=[0,1]) — so it folds exactly to e1{0,1}, a valid
+		// restriction of base e1{0,10}. The optional group max is 1 and the
+		// member minOccurs<=1, so the exact-fold branch accepts it.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="base">
+    <xs:choice minOccurs="2" maxOccurs="unbounded">
+      <xs:element name="e1" minOccurs="0" maxOccurs="10"/>
+      <xs:element name="e2" minOccurs="0"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:choice minOccurs="2" maxOccurs="unbounded">
+            <xs:sequence minOccurs="0" maxOccurs="1">
+              <xs:element name="e1"/>
+            </xs:sequence>
+            <xs:element name="e2"/>
+          </xs:choice>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("accepts pointless single-element wrapper restricting an element", func(t *testing.T) {
 		t.Parallel()
 		// Base choice branch e1{0,10}; derived branch is a 1/1 sequence wrapping a

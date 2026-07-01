@@ -459,14 +459,15 @@ func reduceSingletonGroup(p *Particle) *Particle {
 
 // pointlessReduce folds a §3.9.6-POINTLESS model-group particle down to its
 // single element-emitting member, applying SAFE occurrence hoisting only: a
-// level folds when the group has exactly one emitting member AND either the
-// group's own {max occurs} or that member's {max occurs} is 1 (so the two
-// occurrence ranges combine into one without conflating distinct emission
-// counts). It returns the reduced particle and reports whether it fully reduced
-// to a NON-group term (an element or wildcard). A repeating group whose own max
-// and whose member's max are BOTH greater than 1 is NOT pointless and does not
-// reduce, so the caller rejects it (there is no Sequence/Choice:Element rule in
-// XSD 1.0). Unlike reduceSingletonGroup this refuses the unsafe both->1 fold.
+// level folds when the group has exactly one emitting member AND the
+// bounds-multiplication is EXACT — the folded range preserves the group's true
+// emission count-set with no HOLE. It returns the reduced particle and reports
+// whether it fully reduced to a NON-group term (an element or wildcard). A group
+// whose fold would introduce a hole (e.g. a genuinely repeating group, or a
+// group{0,1} over a member with minOccurs >= 2, which emits {0} ∪ [mmin, mmax])
+// is NOT pointless and does not reduce, so the caller rejects it (there is no
+// Sequence/Choice:Element rule in XSD 1.0). Unlike reduceSingletonGroup this
+// refuses any non-language-preserving fold.
 func pointlessReduce(p *Particle) (*Particle, bool) {
 	for {
 		mg, ok := p.Term.(*ModelGroup)
@@ -488,9 +489,24 @@ func pointlessReduce(p *Particle) (*Particle, bool) {
 		if count != 1 {
 			return p, false
 		}
-		// Safe hoist only: at least one side must be at-most-once, else the two
-		// repeats produce an emission count the single member cannot represent.
-		if p.MaxOccurs != 1 && only.MaxOccurs != 1 {
+		// Safe hoist only when the bounds-multiplication is EXACT — the folded
+		// range [gmin*mmin, gmax*mmax] must equal the group's TRUE emission set
+		// {g*m}, with no occurrence-count HOLE. §3.9.6 pointlessness permits
+		// erasing a group wrapper only when it preserves the language. Two
+		// hole-free shapes cover every reachable fold:
+		//   - the member occurs at most once (only.MaxOccurs == 1): each group
+		//     iteration contributes 0 or 1, so the total sweeps its range
+		//     contiguously; or
+		//   - the group occurs at most once (p.MaxOccurs == 1) AND it is either a
+		//     pure {1,1} wrapper (min == max) or its member's minOccurs <= 1, so
+		//     the "zero iterations" count 0 abuts the member's [mmin, mmax] with no
+		//     gap.
+		// A group{0,1} over a member with minOccurs >= 2 emits {0} ∪ [mmin, mmax]
+		// (a hole at 1..mmin-1) yet folds to [0, mmax], so it is NOT pointless and
+		// does not reduce (the caller then rejects, matching strict §3.9.6).
+		safe := only.MaxOccurs == 1 ||
+			(p.MaxOccurs == 1 && (p.MinOccurs == p.MaxOccurs || only.MinOccurs <= 1))
+		if !safe {
 			return p, false
 		}
 		p = &Particle{
