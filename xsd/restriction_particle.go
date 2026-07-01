@@ -233,6 +233,16 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 	if version == Version11 && !typeTablesEquivalent(elementAlternatives(rt, schema), elementAlternatives(bt, schema)) {
 		return false
 	}
+	// Particle Valid (Restriction), NameAndTypeOK clause 3.2.4 (§3.9.6,
+	// version-INDEPENDENT): R's declaration's {disallowed substitutions} must be a
+	// SUPERSET of B's. In flag terms every block bit set on the base element must
+	// also be set on the derived element — a restriction may TIGHTEN the disallowed
+	// set but never LOOSEN it (e.g. a base block="#all" cannot be restricted by a
+	// derived block="extension"). Both Block values already fold in blockDefault
+	// when the attribute is absent, so the comparison is on the effective sets.
+	if bt.Block&^rt.Block != 0 {
+		return false
+	}
 	// A base element that is fixed forces the derived element to carry the same
 	// fixed value; a base that is not nillable forbids the derived from becoming
 	// nillable. These are tightening rules — only flag the clear widening cases.
