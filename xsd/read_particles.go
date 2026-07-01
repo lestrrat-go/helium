@@ -5,12 +5,26 @@ import (
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) error {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named group missing name")
+	}
+
+	// The @name of a global model group definition is an xs:NCName (XSD Structures
+	// §3.7.2). A value with a colon (e.g. "a:b") or an otherwise invalid NCName
+	// (e.g. "1") is a schema error; the group is dropped so it does not enter the
+	// target-namespace symbol space under a bogus name. Version-independent XSD rule.
+	if !xmlchar.IsValidNCName(name) {
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(),
+				elem.LocalName(), "group",
+				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+		}
+		return nil
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
