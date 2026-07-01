@@ -4,6 +4,18 @@ The `xsd` package compiles XML Schema documents and validates XML instances.
 
 Import path: `github.com/lestrrat-go/helium/xsd`
 
+## Schema version
+
+The compiler targets **XSD 1.0** by default. **XSD 1.1** is opt-in via
+`Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"` attribute on the
+root `<xs:schema>` when the version is not set explicitly). XSD 1.1 support
+includes assertions, conditional type assignment, open content, wildcard
+`notNamespace`/`notQName`, `xs:all` relaxations, `xs:override`, document-wide
+xs:ID/xs:IDREF/xs:ENTITY value-space validation, and identity-constraint
+scoping. It passes the IBM and Saxon XSD 1.1 test sets of the W3C XML Schema
+Test Suite (967 test groups, 0 failures); the suite's XSD 1.0-era collections
+(Microsoft, NIST, Sun) are not part of that run.
+
 <!-- INCLUDE(examples/xsd_validate_example_test.go) -->
 ```go
 package examples_test
