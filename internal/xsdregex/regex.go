@@ -1452,8 +1452,9 @@ func CompileVersion(pattern string, xsd11 bool) (*Regexp, error) {
 	}
 	// The XSD xs:pattern grammar is stricter than the shared XPath flavor: it
 	// forbids reluctant quantifiers, '(?...)' group extensions, and unbalanced
-	// parentheses. Enforce them here (Compile path only) so xpath3/relaxng's
-	// Translate/Validate keep the XPath semantics.
+	// parentheses. Enforce them here (Compile/CompileVersion path only) so
+	// xpath3's Translate/Validate keep the XPath semantics. relaxng compiles
+	// via Compile, so it is intentionally subject to this rejection too.
 	if err := rejectNonXSDConstructs(pattern); err != nil {
 		return nil, err
 	}
