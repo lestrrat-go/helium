@@ -480,9 +480,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// injecting an invalid value into the instance during validation.
 	c.checkAttrUseConstraints(ctx)
 
-	// XSD 1.1: validate element-declaration default/fixed constraint values against
-	// the element's simple (content) type now that all type refs are resolved. Gated
-	// to 1.1 (sources are only recorded in 1.1 mode), so 1.0 stays byte-identical.
+	// Validate element-declaration default/fixed constraint values against the
+	// element's simple (content) type now that all type refs are resolved. §3.3.6
+	// Element Default Valid is version-independent, so this runs in both XSD 1.0
+	// and 1.1 (sources are recorded unconditionally).
 	c.checkElementDeclConstraints(ctx)
 
 	// Topologically order extension types so each base type is merged before
