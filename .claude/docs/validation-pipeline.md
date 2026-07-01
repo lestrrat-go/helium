@@ -251,8 +251,9 @@ reported as a schema parser error (`The value '…' is not a valid regular
 expression.`); its `compiledPatterns` entry stays nil and is skipped at validation.
 
 The XSD xs:pattern grammar (XML Schema Part 2 Appendix F) is stricter than the
-shared XPath/XQuery regex flavor, so `xsdregex.Compile`/`CompileVersion`
-(the XSD/relaxng entry points — NOT the `Translate`/`Validate` used by `xpath3`)
+shared XPath/XQuery regex flavor, so `xsdregex.CompileVersion` (the XSD compiler
+entry point, with the 1.1 toggle) and its `xsdregex.Compile` wrapper (used by
+relaxng) — NOT the `Translate`/`Validate` used by `xpath3` —
 run an extra `rejectNonXSDConstructs` pass that rejects, in BOTH 1.0 and 1.1
 mode, three construct classes valid in XPath but forbidden in XSD: reluctant
 (non-greedy) quantifiers (`a*?`, `b{1,3}?`), `(?...)` group extensions
