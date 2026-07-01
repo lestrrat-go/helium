@@ -974,6 +974,82 @@ func isAnySimpleTypeDef(td *TypeDef) bool {
 	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == lexicon.TypeAnySimpleType
 }
 
+// checkSimpleTypeResolution enforces the type-resolution kind rules for simple
+// type definitions (XSD Structures §3.14.6 / Part 2 §2.4), version-INDEPENDENT so
+// it runs in BOTH XSD 1.0 and 1.1:
+//
+//   - a restriction's {base type definition} must be a SIMPLE type definition —
+//     naming a complexType (including the ur-type xs:anyType) is a schema error
+//     (cos-st-restricts.1 / st-props-correct);
+//   - a list's {item type definition} must be a simple type whose variety is
+//     atomic or union — naming a complexType, or another LIST type (a list of
+//     lists is forbidden), is a schema error (cos-list-of-atomic);
+//   - each union {member type definition} must be a simple type — naming a
+//     complexType is a schema error.
+//
+// It walks every parsed simple type, including inline anonymous ones (recorded in
+// typeDefSources); the built-in datatypes are registered separately and never
+// appear there, so they are not re-examined. Complex type definitions are skipped
+// entirely (td.IsComplex) — their derivation rules are enforced elsewhere. The
+// base/item/member type pointers are already resolved by resolveRefs, and cyclic
+// simple types have been rejected before this runs, so the resolveVariety base
+// walk terminates.
+func (c *compiler) checkSimpleTypeResolution(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	type entry struct {
+		td  *TypeDef
+		src typeDefSource
+	}
+	var entries []entry
+	for td, src := range c.typeDefSources {
+		if td.IsComplex || td.syntheticComplexBase || td.Name.NS == lexicon.NamespaceXSD {
+			continue
+		}
+		entries = append(entries, entry{td: td, src: src})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].src.line != entries[j].src.line {
+			return entries[i].src.line < entries[j].src.line
+		}
+		if entries[i].td.Name.Local != entries[j].td.Name.Local {
+			return entries[i].td.Name.Local < entries[j].td.Name.Local
+		}
+		return entries[i].src.ordinal < entries[j].src.ordinal
+	})
+
+	qnameOf := func(td *TypeDef) string {
+		return fmt.Sprintf("{%s}%s", td.Name.NS, td.Name.Local)
+	}
+
+	for _, e := range entries {
+		td := e.td
+		component := td.Name.Local
+		if component == "" || e.src.isLocal {
+			component = componentLocalSimpleType
+		}
+		report := func(msg string) {
+			c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(e.src.source), e.src.line,
+				elemSimpleType, component, msg))
+		}
+
+		switch {
+		case td.Derivation == DerivationRestriction && td.BaseType != nil && td.BaseType.IsComplex:
+			report(fmt.Sprintf("The base type '%s' of a simpleType restriction must be a simple type definition.", qnameOf(td.BaseType)))
+		case td.ItemType != nil && td.ItemType.IsComplex:
+			report(fmt.Sprintf("The item type '%s' of a list must be a simple type definition.", qnameOf(td.ItemType)))
+		case td.ItemType != nil && resolveVariety(td.ItemType) == TypeVarietyList:
+			report(fmt.Sprintf("The item type '%s' of a list must not itself be a list type.", qnameOf(td.ItemType)))
+		default:
+			if i := slices.IndexFunc(td.MemberTypes, func(m *TypeDef) bool { return m != nil && m.IsComplex }); i >= 0 {
+				report(fmt.Sprintf("The member type '%s' of a union must be a simple type definition.", qnameOf(td.MemberTypes[i])))
+			}
+		}
+	}
+}
+
 // checkAnySimpleTypeUsage (XSD 1.1) rejects user derivations that restrict the
 // simple ur-type xs:anySimpleType. Per the note in XML Schema Part 2 §2.4.1 (and
 // the resolution of W3C bug 14559) the simple ur-type must not be named as the

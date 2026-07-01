@@ -790,6 +790,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, ErrCompilationFailed
 	}
 
+	// Enforce the simple-type type-resolution kind rules (a restriction base, a
+	// list item type, or a union member type must resolve to a SIMPLE type — not a
+	// complexType/xs:anyType — and a list item type must not itself be a list).
+	// Version-independent; runs after the circular check so the base-chain walk
+	// terminates.
+	c.checkSimpleTypeResolution(ctx)
+
 	// Check facet consistency after refs are resolved (base types are available).
 	c.checkFacetConsistency(ctx)
 

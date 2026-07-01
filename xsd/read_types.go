@@ -1064,6 +1064,11 @@ func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, deriva
 			Derivation:  DerivationRestriction,
 			BaseType:    owner,
 			Facets:      fs,
+			// This synthetic content simple type deliberately bases on the owning
+			// simpleContent COMPLEX type (its base chain resolves to the builtin
+			// content base). It is a compiler artifact, not a source-level simpleType
+			// restriction, so the simple-type kind check must not flag its complex base.
+			syntheticComplexBase: true,
 		}
 		c.recordTypeDefSource(syn, derivation.Line(), true, elemSimpleType)
 		return syn
