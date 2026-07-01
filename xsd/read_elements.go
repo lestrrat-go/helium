@@ -175,9 +175,12 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	}
 
 	// minOccurs must not exceed maxOccurs (Unbounded is treated as +inf, so it
-	// can never be exceeded). Suppress this when the ">= 1" rule already fired on
-	// maxOccurs; libxml2 reports only the maxOccurs error there.
-	if minPresent && maxPresent && minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
+	// can never be exceeded). The comparison uses the EFFECTIVE occurrences:
+	// minVal/maxVal default to 1 when the attribute is absent, so a minOccurs=2
+	// with an ABSENT maxOccurs (effective 1) is rejected the same as an explicit
+	// maxOccurs=1. Suppress this when the ">= 1" rule already fired on maxOccurs;
+	// libxml2 reports only the maxOccurs error there.
+	if minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
 		c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
 			"The value must not be greater than the value of 'maxOccurs'."))
 	}
