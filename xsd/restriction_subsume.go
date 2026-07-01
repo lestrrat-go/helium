@@ -186,7 +186,15 @@ func (b *cmBuilder) leafToRe(term ParticleTerm) reNode {
 	case *ElementDecl:
 		syms := b.elemSymbols(t)
 		if len(syms) == 0 {
-			// An abstract element with no concrete members can emit nothing.
+			// An element that resolves to NO instance-admissible emittable name
+			// (an abstract element with no concrete substitution members) matches
+			// NOTHING — the empty LANGUAGE ∅, NOT the empty STRING {ε}. Modeling it
+			// as reEmpty{} (which matches ε) would, on the BASE side, silently drop
+			// a REQUIRED matchless element and false-accept a derived model that
+			// dropped it (`modeled-L(base) ⊋ real-L(base)`). A ∅ leaf on EITHER side
+			// means the fallback cannot reliably prove subset, so bail (fail-closed
+			// → "not proven", keeping the syntactic rejection).
+			b.ok = false
 			return reEmpty{}
 		}
 		if len(syms) == 1 {

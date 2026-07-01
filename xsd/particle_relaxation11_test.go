@@ -170,9 +170,37 @@ func TestVersion11ParticleLanguageSubset(t *testing.T) {
   </xs:complexType>
 </xs:schema>`
 
+	// derived DROPS a REQUIRED base element whose declaration resolves to NO
+	// instance-admissible name (an ABSTRACT element with no substitution members).
+	// L(base)=∅ (a required E-substitute exists nowhere), L(derived)={b}; {b} ⊄ ∅,
+	// so this is NOT a valid restriction. Modeling the matchless required leaf as
+	// the empty STRING instead of the empty LANGUAGE ∅ would drop the requirement
+	// and false-accept it. Invalid in BOTH 1.0 and 1.1.
+	dropRequiredMatchless := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="E" abstract="true" type="xs:string"/>
+  <xs:complexType name="base">
+    <xs:sequence><xs:element ref="E"/><xs:element name="b" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
 	t.Run("element restricts choice valid in 1.1", func(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compileParticleVer(t, xsd.Version11, elemRestrictsChoice))
+	})
+	t.Run("drop required matchless (abstract-no-members) rejected in 1.1", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileParticleVer(t, xsd.Version11, dropRequiredMatchless), xsd.ErrCompilationFailed)
+	})
+	t.Run("drop required matchless (abstract-no-members) rejected in 1.0", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileParticleVer(t, xsd.Version10, dropRequiredMatchless), xsd.ErrCompilationFailed)
 	})
 	t.Run("required-to-optional min-widening rejected in 1.1", func(t *testing.T) {
 		t.Parallel()
