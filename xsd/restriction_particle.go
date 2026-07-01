@@ -65,15 +65,19 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 		c.reportInvalidRestriction(ctx, td, base, src)
 		return
 	}
-	// The derived type has a content model but the base does not (empty/simple
-	// content base). A derived model group that emits NO content — e.g. an empty
-	// <xs:sequence/> — still restricts the base to empty content and is a valid
-	// restriction (§3.9.6: its language is the empty sequence, a subset of the
-	// base's empty content type). Only a model group with emitting particles adds
-	// content the base does not allow, which is an invalid restriction. (The
-	// xs:anyType base case is handled above.)
+	// The derived type has a content model but the base does not. A base without a
+	// model group is either an EMPTY content type (attribute-only) or a SIMPLE
+	// content type (<xs:simpleContent>, which carries character content). A derived
+	// model group that emits NO content — e.g. an empty <xs:sequence/> — restricts
+	// the base to EMPTY element content. That is a valid restriction of an EMPTY
+	// (or mixed-emptiable) base — §3.9.6: the empty sequence is a subset of the
+	// base's empty content type — but NOT of a SIMPLE-content base: a simple
+	// (character) content type cannot be restricted down to empty element content
+	// (cos-ct-restricts §3.4.6.4 forbids simple→empty). So accept the non-emitting
+	// derived model only for a non-simple base; a derived model group with emitting
+	// particles is rejected either way. (The xs:anyType base case is handled above.)
 	if baseMG == nil {
-		if !modelGroupHasContent(derivedMG) {
+		if base.ContentType != ContentTypeSimple && !modelGroupHasContent(derivedMG) {
 			return
 		}
 		c.reportInvalidRestriction(ctx, td, base, src)
