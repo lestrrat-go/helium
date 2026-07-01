@@ -423,3 +423,74 @@ func compileFSErrors(t *testing.T, fsys fstest.MapFS, mainName string) string {
 	_, errStr := partitionCompileErrors(collector.Errors())
 	return errStr
 }
+
+// TestAttrGroupRefResolution verifies that an <xs:attributeGroup ref="..."> whose
+// ref does not resolve to a globally-declared attribute group is rejected in XSD
+// 1.0 (src-resolve / Attribute Group Definition Representation OK 3): a ref naming
+// a component in the wrong symbol space (a complexType or a global attribute of
+// the same name), a name declared nowhere, and an empty ref value are all schema
+// errors, while a ref to a genuine attribute group compiles.
+func TestAttrGroupRefResolution(t *testing.T) {
+	t.Parallel()
+
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`
+	const tail = `</xs:schema>`
+
+	for _, tc := range []struct {
+		name   string
+		body   string
+		reject bool
+	}{
+		{
+			name: "valid ref to a global attribute group",
+			body: `
+  <xs:attributeGroup name="g"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>
+  <xs:complexType name="t"><xs:attributeGroup ref="g"/></xs:complexType>`,
+			reject: false,
+		},
+		{
+			name: "ref names a complexType (wrong symbol space)",
+			body: `
+  <xs:complexType name="foo"><xs:sequence><xs:element name="e"/></xs:sequence></xs:complexType>
+  <xs:complexType name="t"><xs:attributeGroup ref="foo"/></xs:complexType>`,
+			reject: true,
+		},
+		{
+			name: "ref names a global attribute (wrong symbol space)",
+			body: `
+  <xs:attribute name="foo" type="xs:string"/>
+  <xs:complexType name="t"><xs:attributeGroup ref="foo"/></xs:complexType>`,
+			reject: true,
+		},
+		{
+			name:   "ref names nothing",
+			body:   `<xs:complexType name="t"><xs:attributeGroup ref="nope"/></xs:complexType>`,
+			reject: true,
+		},
+		{
+			name:   "empty ref value",
+			body:   `<xs:complexType name="t"><xs:attributeGroup ref=""/></xs:complexType>`,
+			reject: true,
+		},
+		{
+			name: "nested ref inside a global group names a simpleType",
+			body: `
+  <xs:simpleType name="st"><xs:restriction base="xs:string"/></xs:simpleType>
+  <xs:attributeGroup name="g"><xs:attributeGroup ref="st"/></xs:attributeGroup>
+  <xs:complexType name="t"><xs:attributeGroup ref="g"/></xs:complexType>`,
+			reject: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, errs := compileWithErrors(t, head+tc.body+tail)
+			if tc.reject {
+				require.Contains(t, errs, "does not resolve to a(n) attribute group definition",
+					"an unresolved attribute-group reference must be rejected; got: %q", errs)
+				return
+			}
+			require.NotContains(t, errs, "does not resolve to a(n) attribute group definition",
+				"a valid attribute-group reference must compile; got: %q", errs)
+		})
+	}
+}
