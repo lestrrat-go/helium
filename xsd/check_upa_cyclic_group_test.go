@@ -103,7 +103,7 @@ func TestCyclicGroupRefRejectedVersion11(t *testing.T) {
 		Compile(t.Context(), doc)
 	requireCompileResultErr(t, cerr)
 	require.Error(t, cerr, "a circular group reference must make Version11 compilation fail")
-	_ = collector.Close()
+	require.NoError(t, collector.Close())
 	_, errs := partitionCompileErrors(collector.Errors())
 	require.Contains(t, errs, "Circular reference to the model group definition",
 		"a circular group reference must be reported as circular under Version11; got: %q", errs)
