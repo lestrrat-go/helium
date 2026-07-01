@@ -9,6 +9,7 @@ import (
 	"path"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/uripath"
 )
@@ -182,7 +183,10 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				continue
 			}
 			if err := c.loadInclude(ctx, loc, elem); err != nil {
-				return err
+				if c.nestedLoadFailureFatal(err) {
+					return err
+				}
+				c.reportSchemaLoadWarning(ctx, elem, elemInclude, "include", loc)
 			}
 		case isXSDElement(elem, elemImport):
 			if err := c.processImport(ctx, elem); err != nil {
@@ -194,7 +198,10 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				continue
 			}
 			if err := c.loadRedefine(ctx, loc, elem); err != nil {
-				return err
+				if c.nestedLoadFailureFatal(err) {
+					return err
+				}
+				c.reportSchemaLoadWarning(ctx, elem, elemRedefine, "redefine", loc)
 			}
 		case c.version == Version11 && isXSDElement(elem, elemOverride):
 			// xs:override is an XSD 1.1 construct. In 1.0 mode it is ignored
@@ -212,6 +219,44 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 		}
 	}
 	return nil
+}
+
+// nestedLoadFailureFatal reports whether an xs:include/xs:redefine load error must
+// abort compilation rather than be demoted to a warning. A schemaLocation is only a
+// hint, so a genuinely-missing target on an explicitly-configured FS is a warning
+// (matching libxml2, which skips it). But three conditions stay FATAL: a
+// security-limit breach ([IsFatalSchemaLoad], e.g. include-depth or byte-cap); a
+// parse or structural failure (anything that is NOT a plain "file not found", e.g. a
+// node-content-size breach during parsing); and a refusal by the default deny-all FS
+// (the secure default surfaces the denial instead of silently handing back a
+// half-assembled schema — a caller who wants host access opts in via Compiler.FS).
+func (c *compiler) nestedLoadFailureFatal(err error) bool {
+	if IsFatalSchemaLoad(err) {
+		return true
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return true
+	}
+	_, denyAll := c.fsys.(iofs.DenyAll)
+	return denyAll
+}
+
+// reportSchemaLoadWarning demotes a non-fatal xs:include/xs:import/xs:redefine
+// load failure to the libxml2 "I/O warning" + "Failed to locate … Skipping the
+// <verb>." warning pair, so an unresolvable schemaLocation hint skips that
+// composition element rather than aborting compilation. libxml2 treats a missing
+// include/import/redefine target as a warning; only a fatal load condition
+// ([IsFatalSchemaLoad], e.g. a security-limit breach) aborts. elemKind is the XSD
+// element local name and verb the word after "Skipping the".
+func (c *compiler) reportSchemaLoadWarning(ctx context.Context, elem *helium.Element, elemKind, verb, loc string) {
+	if c.filename == "" {
+		return
+	}
+	displayLoc := schemaDisplayLoc(c.filename, loc)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
+		elem.LocalName(), elemKind,
+		"Failed to locate a schema at location '"+displayLoc+"'. Skipping the "+verb+"."), helium.ErrorLevelWarning))
 }
 
 // processImport handles a single xs:import element: it enforces the
@@ -250,13 +295,7 @@ func (c *compiler) processImport(ctx context.Context, elem *helium.Element) erro
 			return err
 		}
 		// Import failure — report warning if we have a filename.
-		if c.filename != "" {
-			displayLoc := schemaDisplayLoc(c.filename, loc)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
-				elem.LocalName(), elemImport,
-				"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."), helium.ErrorLevelWarning))
-		}
+		c.reportSchemaLoadWarning(ctx, elem, elemImport, "import", loc)
 		return nil
 	}
 
