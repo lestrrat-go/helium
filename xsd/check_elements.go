@@ -582,6 +582,25 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		}
 	}
 
+	// Schema Representation Constraint on the `ref` attribute of <xs:attribute>
+	// (version-INDEPENDENT — enforced in BOTH XSD 1.0 and 1.1, §3.2.2). A
+	// top-level (global) attribute declaration is typed by the schema-for-schemas
+	// `topLevelAttribute`, which omits `ref` (like `use`/`form`), so a `ref` on a
+	// global attribute is a schema error. And `xs:attribute/@ref` is an xs:QName,
+	// so a present value that is not a lexically valid QName (empty `ref=""`, a
+	// leading-colon `:_`, a leading-digit `123`, …) is a schema-representation
+	// error; without this an empty/malformed ref slips past prefix resolution and
+	// silently resolves as an unprefixed reference.
+	if hasAttr(elem, attrRef) {
+		switch {
+		case isGlobalAttributeDecl(elem):
+			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
+				"The attribute 'ref' is not allowed."))
+		case !xmlchar.IsValidQName(ref):
+			c.reportInvalidQNameValue(ctx, elem, ref)
+		}
+	}
+
 	if ref != "" {
 		// ref and name are mutually exclusive.
 		if getAttr(elem, attrName) != "" {
@@ -697,6 +716,17 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 				c.schemaError(ctx, schemaParserError(c.filename, line, local, "attribute",
 					"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."))
 			}
+		}
+
+		// The `type` attribute of <xs:attribute> is an xs:QName (§3.2.2), so a
+		// present value that is not a lexically valid QName (a leading-colon `:_`,
+		// a leading-digit `123`, …) is a schema-representation error. Without this
+		// such a value slips past prefix resolution and silently resolves as an
+		// unprefixed reference. (Version-INDEPENDENT — enforced in 1.0 and 1.1. A
+		// syntactically valid @type that resolves to a non-simple-type component is
+		// a separate, resolution-time check.)
+		if t := getAttr(elem, attrType); t != "" && !xmlchar.IsValidQName(t) {
+			c.reportInvalidQNameValue(ctx, elem, t)
 		}
 
 		// type and inline simpleType are mutually exclusive.
