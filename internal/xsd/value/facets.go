@@ -92,6 +92,16 @@ func IsDecimalFamily(builtinLocal string) bool {
 	return ok
 }
 
+// IsIntegerFamily reports whether builtinLocal is xs:integer or one of its
+// derivations (long, int, short, byte, nonPositiveInteger, negativeInteger,
+// nonNegativeInteger, unsignedLong/Int/Short/Byte, positiveInteger). Every type
+// in this family carries the xs:integer built-in fixed facet fractionDigits=0, so
+// a restriction may not set fractionDigits to any non-zero value. xs:decimal
+// itself is excluded (it does not fix fractionDigits).
+func IsIntegerFamily(builtinLocal string) bool {
+	return IsDecimalFamily(builtinLocal) && builtinLocal != lexicon.TypeDecimal
+}
+
 // CountTotalDigits counts the total number of significant digits in a decimal
 // value. Per the XSD datatype spec: strip the sign, then count digits in the
 // numeral excluding leading zeros before the integer part and trailing zeros

@@ -240,6 +240,16 @@ instance of the base type; the shortcut is only used when that exclusive bound i
 still the effective inherited bound for that side after considering any tighter
 intermediate inclusive/exclusive bounds.
 
+`checkBuiltinFixedFacetRestriction` enforces the built-in FIXED facets a
+restriction may not change (version-INDEPENDENT — run in BOTH XSD 1.0 and 1.1):
+the `collapse` `whiteSpace` and `explicitTimezone` values fixed on the date/time
+family, and — for `xs:integer` and every type derived from it
+(`value.IsIntegerFamily`: the `xs:decimal` family minus `xs:decimal` itself) —
+the fixed facet `fractionDigits=0`, so a non-zero `fractionDigits` on an
+integer-family type is a schema error (an explicit `fractionDigits="0"` equals
+the fixed value and is permitted; `xs:decimal` does not fix `fractionDigits`, so
+a non-zero value on it stays valid).
+
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema
 compile time via `xsdregex.Compile`. Patterns in the same step are ORed (value

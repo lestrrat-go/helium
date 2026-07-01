@@ -1466,6 +1466,18 @@ func rangeFacetValueEqual(a, b, builtinLocal string) bool {
 
 func (c *compiler) checkBuiltinFixedFacetRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	builtinLocal := builtinBaseLocal(td)
+
+	// xs:integer and every type derived from it carry the built-in FIXED facet
+	// fractionDigits=0 (§3.3.13). A restriction may not change a fixed facet, so a
+	// non-zero fractionDigits on an integer-family type is a schema error (an
+	// explicit fractionDigits="0" is permitted — it equals the fixed value). This
+	// is version-independent; the fixed facet holds identically in XSD 1.0 and 1.1.
+	if fs.FractionDigits != nil && *fs.FractionDigits != 0 && value.IsIntegerFamily(builtinLocal) {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The value '%d' of the facet 'fractionDigits' does not match the fixed value '0' of the base type 'xs:%s'.",
+				*fs.FractionDigits, builtinLocal)))
+	}
+
 	if fs.WhiteSpace != nil {
 		if fixed, ok := fixedBuiltinWhiteSpace(builtinLocal); ok && *fs.WhiteSpace != fixed {
 			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
