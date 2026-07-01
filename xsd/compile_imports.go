@@ -842,6 +842,29 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
 }
 
+// checkRedefineSelfDerivation enforces src-redefine.5: a <simpleType> or
+// <complexType> child of <xs:redefine> must have a <restriction> (or, for a
+// complexType, <extension>) whose 'base' names the redefined type itself. The
+// just-parsed replacement records its base ref in c.typeRefs; a self-derivation
+// is present iff that ref equals the type's own name qn. When it is absent (a
+// different base, an imported same-local base in another namespace, or no
+// derivation at all) the redefine is invalid: a schema error is reported and
+// false is returned so the caller skips the self-reference patch. The rule is
+// version-independent — xs:redefine carries the same constraint in XSD 1.0 and
+// 1.1.
+func (c *compiler) checkRedefineSelfDerivation(ctx context.Context, elem *helium.Element, newType *TypeDef, qn QName, kind string) bool {
+	if refQN, ok := c.typeRefs[newType]; ok && refQN == qn {
+		return true
+	}
+	deriv := "restriction or extension"
+	if kind == elemSimpleType {
+		deriv = "restriction"
+	}
+	c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), kind,
+		fmt.Sprintf("src-redefine.5: The %s '%s' redefined inside <redefine> must have a %s whose 'base' names itself ('%s').", kind, qn.Local, deriv, qn.Local)))
+	return false
+}
+
 // processRedefineOverrides applies the override children of an xs:redefine
 // element against phaseAKeys, the component set loaded from the redefined
 // document. consumed, when non-nil, is the cross-redefine consumption set shared
@@ -900,12 +923,13 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			// holding the original type, so resolveRefs handles extension
 			// merge (content model + attribute inheritance) naturally.
 			newType := c.schema.types[qn]
+			if !c.checkRedefineSelfDerivation(ctx, elem, newType, qn, elemComplexType) {
+				continue
+			}
 			if origType != nil {
-				if refQN, ok := c.typeRefs[newType]; ok && refQN == qn {
-					origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
-					c.schema.types[origKey] = origType
-					c.typeRefs[newType] = origKey
-				}
+				origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
+				c.schema.types[origKey] = origType
+				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemSimpleType):
 			name := getAttr(elem, attrName)
@@ -926,12 +950,13 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				return err
 			}
 			newType := c.schema.types[qn]
+			if !c.checkRedefineSelfDerivation(ctx, elem, newType, qn, elemSimpleType) {
+				continue
+			}
 			if origType != nil {
-				if refQN, ok := c.typeRefs[newType]; ok && refQN == qn {
-					origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
-					c.schema.types[origKey] = origType
-					c.typeRefs[newType] = origKey
-				}
+				origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
+				c.schema.types[origKey] = origType
+				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemGroup):
 			name := getAttr(elem, attrName)
