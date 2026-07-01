@@ -999,6 +999,13 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		}
 	}
 
+	// Record whether a simpleContent RESTRICTION carried a nested <xs:simpleType>
+	// child (src-ct.2 clause 2.3); consumed by checkSimpleContentBase. Version-
+	// independent: the base-kind constraint holds in both XSD 1.0 and 1.1.
+	if kind == DerivationRestriction && simpleTypeSeen {
+		td.scHasSimpleTypeChild = true
+	}
+
 	// XSD 1.1: a simpleContent RESTRICTION narrows the base content type via a
 	// nested <xs:simpleType> OR direct facets. Capture the resulting effective
 	// content simple type so validateSimpleContent checks the text against the
