@@ -760,6 +760,28 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		}
 	}
 
+	// Validate elementFormDefault / attributeFormDefault. Both are of the
+	// schema-for-schemas `formChoice` type (§3.1 Layer 3), an enumeration over
+	// {qualified, unqualified}, so any other value — the empty string, a
+	// capitalized "Qualified"/"Unqualified", or a two-token "qualified
+	// unqualified" — is a schema-representation error. This is a version-
+	// independent XSD rule (enforced in BOTH XSD 1.0 and 1.1), mirroring the
+	// blockDefault/finalDefault validation above; the comparison matches the
+	// local <xs:attribute>/@form check (no whitespace collapse). The presence of
+	// the attribute is detected with hasAttr so an explicit empty value is
+	// rejected rather than treated as absent.
+	for _, fa := range []string{attrElementFormDefault, attrAttributeFormDefault} {
+		if !hasAttr(root, fa) || c.filename == "" {
+			continue
+		}
+		switch v := getAttr(root, fa); v {
+		case attrValQualified, attrValUnqualified:
+		default:
+			c.schemaError(ctx, schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, fa,
+				"The value '"+v+"' is not valid. Expected is '(qualified | unqualified)'."))
+		}
+	}
+
 	// First pass: collect all named types and global elements.
 	if err := c.parseSchemaChildren(ctx, root); err != nil {
 		return nil, err
