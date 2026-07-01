@@ -280,8 +280,8 @@ func TestSchemaComponentIDIgnoresAnnotationPayload(t *testing.T) {
 
 // TestSchemaComponentIDValidity covers saxon Open.testSet open038 / open039: a
 // schema-component @id must be a valid xs:ID (NCName after whitespace collapse)
-// and unique within the schema document. Enforced in XSD 1.1; XSD 1.0 keeps the
-// historical lenient behavior (byte-identical goldens).
+// and unique within the schema document. This is a version-independent XSD rule,
+// enforced in both 1.0 and 1.1.
 func TestSchemaComponentIDValidity(t *testing.T) {
 	t.Parallel()
 
@@ -302,11 +302,12 @@ func TestSchemaComponentIDValidity(t *testing.T) {
 	_, err = compileVer(t, badID, xsd.Version11)
 	require.Error(t, err, "invalid NCName id must fail in 1.1")
 
-	// XSD 1.0 stays lenient (no @id enforcement) to preserve byte-identity.
+	// The @id xs:ID validity/uniqueness rule is version-independent, so 1.0
+	// rejects the same schemas.
 	_, err = compileVer(t, dupID, xsd.Version10)
-	require.NoError(t, err, "duplicate xs:ID is tolerated in 1.0")
+	require.Error(t, err, "duplicate xs:ID must fail in 1.0")
 	_, err = compileVer(t, badID, xsd.Version10)
-	require.NoError(t, err, "invalid NCName id is tolerated in 1.0")
+	require.Error(t, err, "invalid NCName id must fail in 1.0")
 }
 
 const (
@@ -350,7 +351,7 @@ func TestSchemaComponentIDValidityNestedDocuments(t *testing.T) {
 </xs:schema>`),
 		}
 		require.Error(t, compileFSVer(t, fsys, xsd.Version11), "duplicate @id in included doc must fail in 1.1")
-		require.NoError(t, compileFSVer(t, fsys, xsd.Version10), "1.0 stays lenient")
+		require.Error(t, compileFSVer(t, fsys, xsd.Version10), "duplicate @id in included doc must fail in 1.0")
 	})
 
 	// Invalid (non-NCName) @id in an IMPORTED document → schema error.
@@ -367,7 +368,7 @@ func TestSchemaComponentIDValidityNestedDocuments(t *testing.T) {
 </xs:schema>`),
 		}
 		require.Error(t, compileFSVer(t, fsys, xsd.Version11), "invalid @id in imported doc must fail in 1.1")
-		require.NoError(t, compileFSVer(t, fsys, xsd.Version10), "1.0 stays lenient")
+		require.Error(t, compileFSVer(t, fsys, xsd.Version10), "invalid @id in imported doc must fail in 1.0")
 	})
 
 	// The SAME @id value in two DIFFERENT documents is fine (per-document scope).
