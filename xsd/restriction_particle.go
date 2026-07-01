@@ -492,8 +492,10 @@ func pointlessReduce(p *Particle) (*Particle, bool) {
 		// Safe hoist only when the bounds-multiplication is EXACT — the folded
 		// range [gmin*mmin, gmax*mmax] must equal the group's TRUE emission set
 		// {g*m}, with no occurrence-count HOLE. §3.9.6 pointlessness permits
-		// erasing a group wrapper only when it preserves the language. Two
-		// hole-free shapes cover every reachable fold:
+		// erasing a group wrapper only when it preserves the language. This is a
+		// CONSERVATIVE, fail-closed subset: two cheaply-recognized hole-free shapes
+		// are accepted, and any fold this predicate does NOT recognize is left for
+		// the caller to reject. The accepted shapes:
 		//   - the member occurs at most once (only.MaxOccurs == 1): each group
 		//     iteration contributes 0 or 1, so the total sweeps its range
 		//     contiguously; or
@@ -501,6 +503,12 @@ func pointlessReduce(p *Particle) (*Particle, bool) {
 		//     pure {1,1} wrapper (min == max) or its member's minOccurs <= 1, so
 		//     the "zero iterations" count 0 abuts the member's [mmin, mmax] with no
 		//     gap.
+		// Some genuinely hole-free folds are NOT recognized and are conservatively
+		// rejected — e.g. a fixed-count wrapper group{2,2}(member{3,3}) emits
+		// exactly {6} (hole-free) yet neither side has maxOccurs == 1. Rejecting a
+		// pointless group is always SOUND (it only forgoes an accept, never admits
+		// an invalid restriction); the W3C XSD 1.0 suite shows no conformance
+		// regression from this conservatism.
 		// A group{0,1} over a member with minOccurs >= 2 emits {0} ∪ [mmin, mmax]
 		// (a hole at 1..mmin-1) yet folds to [0, mmax], so it is NOT pointless and
 		// does not reduce (the caller then rejects, matching strict §3.9.6).
