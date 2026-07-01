@@ -130,7 +130,7 @@ evaluation. The same validation runs automatically inside `Evaluate` /
 
 `Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does not retain the parsed AST on the `Expression`; `AST()` reparses from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
 
-`StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function names, etc.). Streamability query helpers that previously lived on the xpath3 package have been moved to `internal/xpathstream`.
+`StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function names, etc.). Streamability query helpers live in `internal/xpathstream`, not on the xpath3 package.
 
 `StaticReferences(namespaces)` walks the expression's AST (reparsing from `source` when no AST is retained) and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or inline-function parameter), its type-name references (cast/castable/instance of/treat as, kind-test type annotations, nested array/map/function item types, and path-step node tests), and its function-call callees (FunctionCall including constructor calls and arrow targets, plus NamedFunctionRef). Every type and function name is RESOLVED to a namespace URI using the supplied in-scope `namespaces` (the same bindings `Validate` takes) plus xpath3's predeclared prefixes — handling prefixed, unprefixed (type → default element namespace; function → fn), and braced-URI `Q{uri}local` forms uniformly — and reports each function reference's static ARITY, so a caller does a pure URI+existence check with no name-form handling of its own. It is side-effect free and intended for schema-compile-time analysis (not the eval hot path); the XSD 1.1 conditional-type-assignment compiler uses it to reject an `xs:alternative` @test that references a variable, an unknown/non-built-in type (XPST0008, via `IsKnownXSDType`), or an unknown, wrong-arity, or non-standard (extension) standard-library function / built-in constructor (XPST0017, via `StandardFunctionAcceptsArity`), or a schema-element()/schema-attribute() node test (which references a global declaration outside the CTA static context), which the CTA static context disallows.
 
@@ -180,7 +180,7 @@ func (r *Regex) EachSubmatchIndex(s string, limit int, fn func(m []int) bool) er
   patterns (e.g. a multi-line `^`, which matches at every line start) cannot be
   streamed incrementally on RE2, so they are matched against the whole string by
   Go's `regexp` in one bounded `FindAllStringSubmatchIndex` pass — staying linear
-  (no backtracking-ReDoS regression for RE2-compatible patterns like `^(a+)+b`).
+  (no backtracking-ReDoS blowup for RE2-compatible patterns like `^(a+)+b`).
   `limit` caps how many matches that pass may materialize: a caller enforcing a
   budget of N passes `limit = N+1` so the allocation stays proportional to the
   budget rather than to the input's match count (`limit<=0` = uncapped).
