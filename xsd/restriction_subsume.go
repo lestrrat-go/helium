@@ -486,8 +486,9 @@ func setKey(set map[int]struct{}) string {
 		ids = append(ids, s)
 	}
 	slices.Sort(ids)
-	// Encode as a compact string of varint-free space-separated ints via a
-	// byte builder; determinism only requires a stable key.
+	// Encode the sorted ids as fixed 4-byte little-endian chunks (one per id).
+	// This is injective over the sorted id list, so distinct state sets get
+	// distinct keys; determinism only requires a stable key.
 	b := make([]byte, 0, len(ids)*3)
 	for _, id := range ids {
 		b = append(b, byte(id), byte(id>>8), byte(id>>16), byte(id>>24))
