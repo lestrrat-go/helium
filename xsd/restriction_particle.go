@@ -66,9 +66,16 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 		return
 	}
 	// The derived type has a content model but the base does not (empty/simple
-	// content base). Adding content where the base allows none is not a valid
-	// restriction. (The xs:anyType base case is handled above.)
+	// content base). A derived model group that emits NO content — e.g. an empty
+	// <xs:sequence/> — still restricts the base to empty content and is a valid
+	// restriction (§3.9.6: its language is the empty sequence, a subset of the
+	// base's empty content type). Only a model group with emitting particles adds
+	// content the base does not allow, which is an invalid restriction. (The
+	// xs:anyType base case is handled above.)
 	if baseMG == nil {
+		if !modelGroupHasContent(derivedMG) {
+			return
+		}
 		c.reportInvalidRestriction(ctx, td, base, src)
 		return
 	}
