@@ -131,6 +131,18 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		return fmt.Errorf("xsd: named attributeGroup missing name")
 	}
 
+	// The @name of a global attribute group definition is an xs:NCName (XSD
+	// Structures §3.6.2). A value with a colon (e.g. "a:b") or an otherwise invalid
+	// NCName (e.g. a leading digit like "0") is a schema error; the group is dropped
+	// so it does not enter the target-namespace symbol space under a bogus name.
+	// Version-INDEPENDENT XSD rule, mirroring parseNamedGroup / parseNamedSimpleType.
+	if c.filename != "" && !xmlchar.IsValidNCName(name) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(),
+			elem.LocalName(), "attributeGroup",
+			"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+		return nil
+	}
+
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
 	// An xs:redefine override that was validated and consumed by the redefine
 	// loop is pre-authorized and skips the report.
@@ -217,6 +229,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// reaches this point is genuinely circular and is reported and dropped (the
 		// reference is cut to avoid further confusion, matching libxml2).
 		if isXSDElement(ce, elemAttributeGroup) {
+			c.checkAttrGroupRef(ctx, ce)
 			if c.version == Version11 && anyAttributeSeen {
 				reportAfterWildcard(ce)
 				continue
@@ -241,6 +254,18 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 				// the owning group's declaration line.
 				c.attrGroupRefSources[qn] = append(c.attrGroupRefSources[qn], attrGroupSource{line: ce.Line(), source: c.diagSource()})
 			}
+			continue
+		}
+		// The XML representation of an attribute group DEFINITION is
+		// (annotation?, ((attribute | attributeGroup)*, anyAttribute?)) (§3.6.2).
+		// Any other XSD-namespace element child (e.g. a stray xs:element) is a
+		// schema-representation error. annotation and anyAttribute are permitted
+		// content (anyAttribute is silently accepted in XSD 1.0, so it is excused
+		// here rather than flagged). Version-INDEPENDENT XSD rule.
+		if c.filename != "" && ce.URI() == lexicon.NamespaceXSD &&
+			!isXSDElement(ce, elemAnnotation) && !isXSDElement(ce, elemAnyAttribute) {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
+				fmt.Sprintf("The element '%s' is not allowed in an attributeGroup; content is restricted to (annotation?, ((attribute | attributeGroup)*, anyAttribute?)).", ce.LocalName())))
 		}
 	}
 	c.schema.attrGroups[qn] = attrs
@@ -250,6 +275,39 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	// IDConstraint.Source).
 	c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.diagSource()}
 	return nil
+}
+
+// checkAttrGroupRef enforces the XML representation of an attributeGroup
+// REFERENCE (§3.6.2): a nested <xs:attributeGroup> appearing inside a named
+// attribute group definition, a complexType, or a derivation body is a reference,
+// whose content model is (annotation?) and whose only relevant attribute is 'ref'.
+// A '@name' — the DEFINITION form, which is valid only as a top-level xs:schema or
+// xs:redefine child — is a schema-representation error, as is any non-annotation
+// element child (e.g. a nested xs:attribute/xs:attributeGroup/xs:anyAttribute). The
+// PERMITTED XSD 1.1 circular self-reference uses this reference form (ref only, no
+// name, no content) and is therefore unaffected. Version-INDEPENDENT XSD rule.
+func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+	if hasAttr(ce, attrName) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", attrName,
+			"The attribute 'name' is not allowed on an attributeGroup reference; use 'ref'."))
+	}
+	for child := range helium.Children(ce) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		sub, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if isXSDElement(sub, elemAnnotation) {
+			continue
+		}
+		c.schemaError(ctx, schemaParserError(c.diagSource(), sub.Line(), sub.LocalName(), "attributeGroup",
+			fmt.Sprintf("The content of an attributeGroup reference is restricted to (annotation?); the element '%s' is not allowed.", sub.LocalName())))
+	}
 }
 
 func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
