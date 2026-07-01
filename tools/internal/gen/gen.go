@@ -1,6 +1,6 @@
 // Package gen holds helpers shared by the helium code generators
-// (tools/qt3gen and tools/xslt3gen). It is module-internal tooling, not part
-// of the helium library API.
+// (tools/qt3gen). It is module-internal tooling, not part of the helium
+// library API.
 package gen
 
 import (
