@@ -1385,4 +1385,91 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	t.Run("accepts empty sequence restricting empty base", func(t *testing.T) {
+		t.Parallel()
+		// Base complex type has attribute content only (empty content type / no
+		// model group); the derived complexContent restriction supplies an empty
+		// <xs:sequence/> and narrows the attribute. An empty model group emits no
+		// content, so its language (the empty sequence) is a subset of the base's
+		// empty content type: this is a valid restriction and must compile. Mirrors
+		// MS DataTypes int_maxInclusive004a etc.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="DerivedCT">
+    <xs:complexContent>
+      <xs:restriction base="BaseCT">
+        <xs:sequence/>
+        <xs:attribute name="attr1">
+          <xs:simpleType>
+            <xs:restriction base="baseSimple">
+              <xs:maxInclusive value="5"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:attribute>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="BaseCT">
+    <xs:attribute name="attr1" type="baseSimple"/>
+  </xs:complexType>
+  <xs:simpleType name="baseSimple">
+    <xs:restriction base="xs:int">
+      <xs:maxInclusive value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="DerivedCT"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects empty sequence restricting simple-content base", func(t *testing.T) {
+		t.Parallel()
+		// The base is a SIMPLE content type (<xs:simpleContent>, character content),
+		// which has no model group. An empty <xs:sequence/> derived model restricts
+		// it to EMPTY element content, but a simple (character) content type cannot
+		// be restricted down to empty element content (cos-ct-restricts §3.4.6.4
+		// forbids simple→empty), so this is NOT a valid restriction even though the
+		// derived model emits nothing.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="BaseCT">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="attr1" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="DerivedCT">
+    <xs:complexContent>
+      <xs:restriction base="BaseCT">
+        <xs:sequence/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="DerivedCT"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects emitting model restricting empty base", func(t *testing.T) {
+		t.Parallel()
+		// The base has empty content (attribute only); the derived restriction adds
+		// an emitting element particle, which is NOT within the base's empty content
+		// type — an invalid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="BaseCT">
+    <xs:attribute name="attr1" type="xs:int"/>
+  </xs:complexType>
+  <xs:complexType name="DerivedCT">
+    <xs:complexContent>
+      <xs:restriction base="BaseCT">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="DerivedCT"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }

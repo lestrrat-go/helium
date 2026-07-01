@@ -797,13 +797,18 @@ func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *heli
 // isSimpleTypeFacetElement reports whether localName names an XSD constraining
 // facet (valid inside an <xs:restriction> of a simple type / simpleContent). The
 // facet VALUES themselves are parsed by parseFacets; this drives only the
-// simpleContent restriction-body child-order/cardinality grammar check.
-func isSimpleTypeFacetElement(localName string) bool {
+// simpleType / simpleContent restriction-body child-order/cardinality grammar
+// check. v11 selects XSD 1.1: xs:assertion and xs:explicitTimezone are 1.1-only
+// facets (parseFacets silently ignores them under 1.0), so in 1.0 they are NOT
+// recognized as facets and fall through to the stray-XSD-child rejection.
+func isSimpleTypeFacetElement(localName string, v11 bool) bool {
 	switch localName {
 	case facetMinExclusive, facetMinInclusive, facetMaxExclusive, facetMaxInclusive,
 		"totalDigits", "fractionDigits", "length", "minLength", "maxLength",
-		"enumeration", "whiteSpace", "pattern", elemAssertion, elemExplicitTimezone:
+		"enumeration", "whiteSpace", "pattern":
 		return true
+	case elemAssertion, elemExplicitTimezone:
+		return v11
 	}
 	return false
 }
@@ -887,7 +892,7 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 				}
 			}
 			simpleTypeSeen = true
-		case ae.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ae.LocalName()):
+		case ae.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ae.LocalName(), c.version == Version11):
 			// Parsed by parseFacets below; only enforce order.
 			if strict {
 				switch {
@@ -1066,6 +1071,25 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 	// simpleTypes, not just top-level named ones.
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 
+	// XSD Structures §3.14.2: the content of an xs:simpleType is
+	//   (annotation?, (restriction | list | union)).
+	// Enforce that ordering and cardinality — at most one annotation and it must
+	// be first, exactly one of restriction/list/union, and no other children.
+	// This is a version-INDEPENDENT schema-representation rule, so it runs in
+	// BOTH XSD 1.0 and 1.1. Report-and-continue so a valid derivation still
+	// parses; a second/mis-ordered derivation is reported and skipped.
+	var annotationSeen bool    // an xs:annotation has been seen (at most one)
+	var sawNonAnnotation bool  // a non-annotation child has been seen (annotation must be first)
+	var derivationChild string // local name of the restriction/list/union already parsed
+
+	reportSTErr := func(line int, msg string) {
+		if c.filename == "" {
+			return
+		}
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), line,
+			elem.LocalName(), componentLocalSimpleType, msg))
+	}
+
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -1074,8 +1098,35 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 		if !ok {
 			continue
 		}
+		if isXSDElement(ce, elemAnnotation) {
+			if annotationSeen {
+				reportSTErr(ce.Line(), "A simple type definition must not have more than one annotation.")
+				continue
+			}
+			if sawNonAnnotation {
+				reportSTErr(ce.Line(), "The annotation must appear before the restriction, list, or union.")
+				continue
+			}
+			annotationSeen = true
+			continue
+		}
+		isDerivation := isXSDElement(ce, elemRestriction) || isXSDElement(ce, elemList) || isXSDElement(ce, elemUnion)
+		if !isDerivation {
+			sawNonAnnotation = true
+			if ce.URI() == lexicon.NamespaceXSD {
+				reportSTErr(ce.Line(), fmt.Sprintf("The element '%s' is not allowed as a child of a simpleType; expected one of annotation, restriction, list, or union.", ce.LocalName()))
+			}
+			continue
+		}
+		sawNonAnnotation = true
+		if derivationChild != "" {
+			reportSTErr(ce.Line(), fmt.Sprintf("A simple type definition must have exactly one of restriction, list, or union (found '%s' after '%s').", ce.LocalName(), derivationChild))
+			continue
+		}
+		derivationChild = ce.LocalName()
 		switch {
 		case isXSDElement(ce, elemRestriction):
+			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			baseRef := getAttr(ce, attrBase)
 			if baseRef != "" {
 				qn := c.resolveQName(ctx, ce, baseRef)
@@ -1104,6 +1155,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 			td.Derivation = DerivationRestriction
 			td.Facets = c.parseFacets(ctx, ce)
 		case isXSDElement(ce, elemList):
+			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			td.Variety = TypeVarietyList
 			itemRef := getAttr(ce, attrItemType)
 			if itemRef != "" {
@@ -1131,6 +1183,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 				}
 			}
 		case isXSDElement(ce, elemUnion):
+			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			td.Variety = TypeVarietyUnion
 			// Parse memberTypes attribute (space-separated QNames).
 			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
@@ -1163,7 +1216,115 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 		}
 	}
 
+	if derivationChild == "" {
+		reportSTErr(elem.Line(), "A simple type definition must have one of restriction, list, or union.")
+	}
+
 	return td, nil
+}
+
+// checkSimpleTypeDerivationBody enforces the schema-representation content model
+// of an xs:restriction/xs:list/xs:union that is the derivation child of an
+// xs:simpleType (XSD Structures §3.14.2/§3.15.2/§3.16.2):
+//
+//	restriction: (annotation?, (simpleType?, facet*))  — base attr XOR simpleType child
+//	list:        (annotation?, simpleType?)            — itemType attr XOR simpleType child
+//	union:       (annotation?, simpleType*)            — memberTypes attr and/or simpleType children
+//
+// It reports (does not abort) ordering/cardinality violations, stray XSD-namespace
+// children, an empty itemType attribute, and the base/itemType-vs-simpleType and
+// missing-source constraints. Version-INDEPENDENT: runs in both XSD 1.0 and 1.1.
+// owner is the enclosing xs:simpleType (used for the diagnostic element name).
+func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, deriv *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+	kind := deriv.LocalName()
+	report := func(line int, msg string) {
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), line,
+			owner.LocalName(), componentLocalSimpleType, msg))
+	}
+
+	isRestriction := kind == elemRestriction
+	isList := kind == elemList
+	isUnion := kind == elemUnion
+
+	hasBase := hasAttr(deriv, attrBase)
+	hasItemType := hasAttr(deriv, attrItemType)
+	hasMemberTypes := normalizeWhiteSpace(getAttr(deriv, attrMemberTypes), "collapse") != ""
+
+	// An empty itemType attribute is not a valid xs:QName (it must name the list's
+	// item type). getAttr treats absent and empty identically, so the empty case
+	// is only reachable via hasAttr.
+	if isList && hasItemType && normalizeWhiteSpace(getAttr(deriv, attrItemType), "collapse") == "" {
+		report(deriv.Line(), "The 'itemType' attribute of a list must be a valid QName; it must not be empty.")
+	}
+
+	var annotationSeen bool
+	var sawNonAnnotation bool
+	var simpleTypeSeen bool
+	var facetSeen bool
+
+	for child := range helium.Children(deriv) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+
+		if isXSDElement(ce, elemAnnotation) {
+			if annotationSeen {
+				report(ce.Line(), fmt.Sprintf("A '%s' must not have more than one annotation.", kind))
+				continue
+			}
+			if sawNonAnnotation {
+				report(ce.Line(), fmt.Sprintf("The annotation must be the first child of a '%s'.", kind))
+			}
+			annotationSeen = true
+			continue
+		}
+
+		if isXSDElement(ce, elemSimpleType) {
+			sawNonAnnotation = true
+			if simpleTypeSeen && !isUnion {
+				report(ce.Line(), fmt.Sprintf("A '%s' must not have more than one simpleType child.", kind))
+				continue
+			}
+			if isRestriction && facetSeen {
+				report(ce.Line(), "The simpleType child of a restriction must appear before the facets.")
+			}
+			if isRestriction && hasBase {
+				report(ce.Line(), "A restriction must not have both a 'base' attribute and a simpleType child.")
+			}
+			if isList && hasItemType {
+				report(ce.Line(), "A list must not have both an 'itemType' attribute and a simpleType child.")
+			}
+			simpleTypeSeen = true
+			continue
+		}
+
+		if isRestriction && ce.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ce.LocalName(), c.version == Version11) {
+			sawNonAnnotation = true
+			facetSeen = true
+			continue
+		}
+
+		sawNonAnnotation = true
+		if ce.URI() == lexicon.NamespaceXSD {
+			report(ce.Line(), fmt.Sprintf("The element '%s' is not allowed as a child of a '%s'.", ce.LocalName(), kind))
+		}
+	}
+
+	switch {
+	case isRestriction && !hasBase && !simpleTypeSeen:
+		report(deriv.Line(), "A restriction must have either a 'base' attribute or a simpleType child.")
+	case isList && !hasItemType && !simpleTypeSeen:
+		report(deriv.Line(), "A list must have either an 'itemType' attribute or a simpleType child.")
+	case isUnion && !hasMemberTypes && !simpleTypeSeen:
+		report(deriv.Line(), "A union must have a 'memberTypes' attribute or at least one simpleType child.")
+	}
 }
 
 // parseFacets extracts facet constraints from an xs:restriction element.
