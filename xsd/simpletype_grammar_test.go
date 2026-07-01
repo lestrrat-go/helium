@@ -34,7 +34,7 @@ func TestSimpleTypeGrammar(t *testing.T) {
 			{"restriction-then-stray", `<xsd:simpleType name="t"><xsd:restriction base="xsd:string"/><xsd:attribute name="a"/></xsd:simpleType>`},
 			{"two-lists", `<xsd:simpleType name="t"><xsd:list itemType="xsd:string"/><xsd:list itemType="xsd:string"/></xsd:simpleType>`},
 			{"list-then-restriction", `<xsd:simpleType name="t"><xsd:list itemType="xsd:string"/><xsd:restriction base="xsd:string"/></xsd:simpleType>`},
-			{"annotation-after-derivation-then-derivation", `<xsd:simpleType name="t"><xsd:annotation/><xsd:annotation/><xsd:restriction base="xsd:string"/></xsd:simpleType>`},
+			{"annotation-after-derivation-then-derivation", `<xsd:simpleType name="t"><xsd:restriction base="xsd:string"/><xsd:annotation/><xsd:restriction base="xsd:integer"/></xsd:simpleType>`},
 			{"restriction-two-simpleTypes", `<xsd:simpleType name="t"><xsd:restriction><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType><xsd:simpleType><xsd:restriction base="xsd:integer"/></xsd:simpleType></xsd:restriction></xsd:simpleType>`},
 			{"restriction-with-attribute", `<xsd:simpleType name="t"><xsd:restriction base="xsd:integer"><xsd:maxExclusive value="5"/><xsd:attribute name="a"/></xsd:restriction></xsd:simpleType>`},
 			{"restriction-base-and-simpleType", `<xsd:simpleType name="t"><xsd:restriction base="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:restriction></xsd:simpleType>`},
