@@ -471,3 +471,69 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 		require.Same(t, sigElem, root.FirstChild(), "signature element must be restored after rejection")
 	})
 }
+
+func TestFindElementsByID(t *testing.T) {
+	// findElementsByID recognizes the "id" attribute token in any ASCII casing
+	// (Id/ID/id) plus xml:id and DTD/schema-declared ID typing. Distinct
+	// convention tokens (e.g. wsu:Id) are NOT recognized by name.
+	const wantID = "foo"
+	testcases := []struct {
+		name  string
+		xml   string
+		id    string
+		count int // number of matching elements expected
+	}{
+		{
+			name:  "capitalized Id",
+			xml:   `<root><target Id="foo"/></root>`,
+			id:    wantID,
+			count: 1,
+		},
+		{
+			name:  "uppercase ID",
+			xml:   `<root><target ID="foo"/></root>`,
+			id:    wantID,
+			count: 1,
+		},
+		{
+			name:  "lowercase id",
+			xml:   `<root><target id="foo"/></root>`,
+			id:    wantID,
+			count: 1,
+		},
+		{
+			name:  "xml:id",
+			xml:   `<root><target xml:id="foo"/></root>`,
+			id:    wantID,
+			count: 1,
+		},
+		{
+			name:  "no match",
+			xml:   `<root><target id="bar"/></root>`,
+			id:    wantID,
+			count: 0,
+		},
+		{
+			name:  "distinct token not recognized",
+			xml:   `<root xmlns:wsu="http://x"><target wsu:Id="foo"/></root>`,
+			id:    wantID,
+			count: 0,
+		},
+		{
+			name:  "duplicate id is ambiguous",
+			xml:   `<root><a Id="foo"/><b id="foo"/></root>`,
+			id:    wantID,
+			count: 2,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.xml))
+			require.NoError(t, err)
+
+			matches := findElementsByID(doc, tc.id)
+			require.Len(t, matches, tc.count)
+		})
+	}
+}

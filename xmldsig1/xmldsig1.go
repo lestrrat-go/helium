@@ -172,6 +172,21 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 // that the element they intend to consume was signed. This is the primary
 // defense against XML Signature Wrapping (XSW) attacks at the application
 // layer.
+//
+// Same-document reference resolution (ds:Reference URI="#id") locates the
+// target element by its ID attribute. An attribute is recognized as an ID
+// when it is any of:
+//
+//   - declared ID-typed by a DTD or schema the document was parsed with;
+//   - xml:id (ID-typed by the W3C xml:id Recommendation);
+//   - the "id" attribute token in any ASCII casing: "Id", "ID", or "id".
+//
+// This name set is deliberately limited to the "id" token. Other conventions
+// (for example "wsu:Id" or SAML "AssertionID") are ID-typed only by their own
+// schemas, so a document relying on them must carry that typing — via its
+// DTD/schema, or by marking the attribute's type as an ID before verifying —
+// rather than have it inferred from the name. If more than one element matches
+// the referenced ID the reference is refused (ErrAmbiguousReference).
 func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResult, error) {
 	sigs := findSignatureElements(doc.DocumentElement())
 	switch len(sigs) {
@@ -187,6 +202,9 @@ func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResu
 // VerifyElement verifies a specific Signature element. Use this when the
 // document contains more than one Signature, or when the caller wants
 // explicit control over which Signature is targeted.
+//
+// Same-document reference resolution recognizes the same ID attributes as
+// [Verifier.Verify].
 func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) (*VerifyResult, error) {
 	return verifySignature(ctx, v.cfg, doc, sig)
 }
