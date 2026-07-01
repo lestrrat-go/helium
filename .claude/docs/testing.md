@@ -155,11 +155,12 @@ Run specific test subsets via env vars:
 
 ## Fuzz CI
 
-- `ci.yml` runs normal test/build verification and smoke fuzzing on pull requests.
-- Smoke fuzzing covers every fuzz-enabled package, but runs one representative `Fuzz...` target per package for `5s`.
-- `fuzz.yml` runs deep fuzzing on weekly schedule + manual dispatch.
-- Deep fuzz duration default → `5m` per discovered `Fuzz...` target.
-- Deep fuzzing discovers fuzz targets via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`.
+- Pull requests run NO fuzzing — `ci.yml` is normal test/build/lint/vuln verification only, so PR turnaround stays fast and deterministic (live fuzzing is nondeterministic and cannot gate a PR without flaking).
+- `fuzz.yml` runs fuzzing OFF the PR path, always non-gating:
+  - on every `push` to `main` (i.e. each merge) → short `60s` per target, for a prompt post-merge signal attributed to the merge commit.
+  - on the weekly `schedule` → deep `5m` per target.
+  - on manual `workflow_dispatch` → its `fuzz-time` input (default `5m`).
+- Fuzz targets are discovered per package via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`; a failing run uploads the crashing corpus as an artifact (it is not committed).
 
 ## Common Test Patterns
 
