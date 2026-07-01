@@ -20,6 +20,14 @@ import (
 // constraint itself is not 1.1-specific, but the opt-in version toggle keeps
 // 1.0 behavior frozen.
 func (c *compiler) checkSchemaComponentIDs(ctx context.Context, root *helium.Element) {
+	// Self-guard the Version11 gating (every caller already gates too) so the
+	// "Gated to Version11" contract is self-contained: enforcing @id uniqueness
+	// under XSD 1.0 would change the compile outcome of a 1.0 schema libxml2
+	// tolerated and break the byte-identical 1.0 golden contract. Mirrors the
+	// adjacent readDefaultOpenContent, which self-guards the same way.
+	if c.version != Version11 {
+		return
+	}
 	if c.filename == "" {
 		return
 	}
