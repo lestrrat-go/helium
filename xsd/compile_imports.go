@@ -268,11 +268,16 @@ func (c *compiler) reportSchemaLoadWarning(ctx context.Context, elem *helium.Ele
 // xs:override nested processor so an import inside an overridden document gets the
 // same diagnostics as a top-level import.
 func (c *compiler) processImport(ctx context.Context, elem *helium.Element) error {
+	ns := getAttr(elem, attrNamespace)
+	// Record the namespace as import-declared BEFORE any early return, so a
+	// location-less import (and, below, one whose load fails) still marks the
+	// namespace referenceable — its declarations are simply unknown.
+	c.importDeclaredNS[ns] = struct{}{}
+
 	loc := getAttr(elem, attrSchemaLocation)
 	if loc == "" {
 		return nil
 	}
-	ns := getAttr(elem, attrNamespace)
 
 	// Check if this namespace was already imported.
 	if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
@@ -1268,6 +1273,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
 		filename:                  impFilename,
 		importedNS:                make(map[string]string),
+		importDeclaredNS:          make(map[string]struct{}),
 		importDepth:               c.importDepth + 1,
 		maxImportDepth:            c.maxImportDepth,
 		// Share the active import-ancestry set by pointer so the whole import tree
@@ -1477,6 +1483,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.elemRefs, impC.elemRefs)
 	maps.Copy(c.elemRefSources, impC.elemRefSources)
 	maps.Copy(c.typeRefs, impC.typeRefs)
+	// A namespace imported anywhere in the assembly is referenceable everywhere the
+	// merged refs are resolved (the ref check runs on the parent), so union the
+	// import-declared namespaces up.
+	maps.Copy(c.importDeclaredNS, impC.importDeclaredNS)
 	// Offset each imported type's parse-order ordinal past the parent's counter
 	// so ordinals remain globally unique across the merged compilers; otherwise
 	// a parent type and an imported type sharing a source line and an empty name
