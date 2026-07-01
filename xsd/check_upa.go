@@ -59,6 +59,16 @@ type positionAutomaton struct {
 	schema    *Schema
 	positions []upaPosition
 	followpos map[int][]int
+	// nextOrigin assigns each position an ORIGIN tag identifying its source leaf's
+	// textual site in the model tree. applyOccurs RESETS this counter before each
+	// occurrence copy it walks, so all occurrence-copies of ONE textual leaf (at
+	// any nesting depth) share an origin, while two DISTINCT textual leaves — even
+	// same-named, even sharing an *ElementDecl through a group ref — get distinct
+	// origins. In XSD 1.1 two element positions with the same name but the same
+	// origin are the same particle (occurrence repetition) and never a
+	// cos-nonambig (UPA) violation; distinct origins with the same name are two
+	// competing declarations and DO violate it (see entriesOverlap).
+	nextOrigin int
 }
 
 func newPositionAutomaton(schema *Schema) *positionAutomaton {
@@ -72,9 +82,14 @@ type posInfo struct {
 	last     []int
 }
 
-// newPos allocates a fresh position for a leaf entry and returns it.
+// newPos allocates a fresh position for a leaf entry and returns it. The entry
+// is stamped with the next ORIGIN tag (see positionAutomaton.nextOrigin): the
+// deterministic walk assigns the same origin sequence to corresponding leaves
+// across the occurrence copies applyOccurs re-walks.
 func (a *positionAutomaton) newPos(entry firstSetEntry) int {
 	id := len(a.positions)
+	entry.origin = a.nextOrigin
+	a.nextOrigin++
 	a.positions = append(a.positions, upaPosition{id: id, entry: entry})
 	return id
 }
@@ -145,6 +160,12 @@ func (a *positionAutomaton) walkParticle(p *Particle) posInfo {
 // that case the whole range collapses to a single loop copy, matching the
 // original construction.
 func (a *positionAutomaton) applyOccurs(minOccurs, maxOccurs int, body func() posInfo) posInfo {
+	// Baseline origin for this expansion: every occurrence copy walked below is
+	// reset to it before body() runs, so corresponding leaves across copies of
+	// the SAME textual site share an origin (see nextOrigin). The counter ends at
+	// one copy's worth past the baseline, so later siblings continue from there.
+	originBase := a.nextOrigin
+
 	// Build the first copy and inspect it. Probing nullability with a throwaway
 	// walk would double-allocate positions, so this copy is always reused below.
 	first := body()
@@ -222,10 +243,15 @@ func (a *positionAutomaton) applyOccurs(minOccurs, maxOccurs int, body func() po
 
 	acc := first
 	for i := 1; i < required; i++ {
+		// Realign this copy's origins with the first copy: same textual leaves,
+		// same origins, so the inter-copy boundary followpos is not mistaken for a
+		// two-declaration ambiguity in 1.1.
+		a.nextOrigin = originBase
 		acc = a.concat(acc, body())
 	}
 
 	if hasTail {
+		a.nextOrigin = originBase
 		tail := body()
 		if tailLoops {
 			for _, l := range tail.last {
@@ -464,6 +490,10 @@ type firstSetEntry struct {
 	wildcard   string    // for wildcards (namespace constraint)
 	targetNS   string    // for wildcards
 	wc         *Wildcard // for wildcards: the full term (carries XSD 1.1 notNamespace/notQName)
+	// origin identifies the source leaf's textual site (see
+	// positionAutomaton.nextOrigin). Occurrence-copies of one leaf share it; two
+	// distinct textual leaves get distinct origins even when same-named.
+	origin int
 }
 
 // entriesOverlap checks if two first-set entries can match the same element.
@@ -482,9 +512,22 @@ type firstSetEntry struct {
 // minOccurs=0 wildcard preceding an element in a sequence), which the
 // position-based sequence matcher does not yet override.
 func entriesOverlap(a, b firstSetEntry, version Version) bool {
-	// Two elements overlap if they have the same QName.
+	// Two element positions overlap (are ambiguous) when they can match the same
+	// element name AND belong to DIFFERENT particles. In XSD 1.1 two positions
+	// with the same origin are occurrence-copies of ONE element declaration (the
+	// same particle), so they are never ambiguous — e.g. `e1{1,2}` nested in a
+	// repeating group, whose unrolled copies would otherwise collide by name.
+	// Distinct origins with the same name are two competing declarations and DO
+	// overlap. XSD 1.0 keeps the pure name comparison (byte-identical): the origin
+	// tag is ignored, so its position numbering is irrelevant there.
 	if !a.isWildcard && !b.isWildcard {
-		return a.qname == b.qname
+		if a.qname != b.qname {
+			return false
+		}
+		if version == Version11 {
+			return a.origin != b.origin
+		}
+		return true
 	}
 	// Element vs wildcard: in 1.1 the element wins (no conflict); in 1.0 they
 	// overlap when the wildcard's namespace admits the element's namespace.

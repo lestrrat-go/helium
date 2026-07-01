@@ -82,6 +82,15 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 		return
 	}
 
+	// XSD 1.1 relaxes Particle Valid (Restriction): a derived content model is a
+	// valid restriction whenever its language is a subset of the base's (with
+	// type-compatible element declarations), even where the 1.0 syntactic clauses
+	// reject it. As a SOUND, fail-closed fallback, prove L(derived) ⊆ L(base) by
+	// automaton product simulation. XSD 1.0 keeps the syntactic verdict.
+	if c.version == Version11 && particleLanguageSubset(ctx, derivedP, baseP, c.schema, c.version) {
+		return
+	}
+
 	c.reportInvalidRestriction(ctx, td, base, src)
 }
 
