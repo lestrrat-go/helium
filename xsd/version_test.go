@@ -136,10 +136,15 @@ func TestVersion11UnionActiveMember(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("1.0 union fixed value +INF rejects instance +INF", func(t *testing.T) {
+	t.Run("1.0 union fixed value +INF rejects at compile time", func(t *testing.T) {
 		t.Parallel()
-		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaFixed, `<v>+INF</v>`)
-		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		// In 1.0 "+INF" is valid against neither union member, so the element's fixed
+		// value is invalid against its type — an Element Default Valid (§3.3.6) schema
+		// error caught at compile time (version-independent), before any instance.
+		schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaFixed))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), schemaDOC)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 
 	t.Run("1.1 union enumeration +INF accepts instance +INF", func(t *testing.T) {
