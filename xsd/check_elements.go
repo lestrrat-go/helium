@@ -100,6 +100,14 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	if name == "" {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."))
+	} else if !xmlchar.IsValidNCName(name) {
+		// The {name} of an element declaration must be an NCName (XSD
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName). A value
+		// that is empty-after-trim, starts with a non-name character, or
+		// contains a colon (a QName, not an NCName) is a schema-representation
+		// error.
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
+			"The value '"+name+"' is not a valid 'NCName'."))
 	}
 
 	// ref is not allowed at global level.
@@ -392,6 +400,14 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Named local element constraints.
 		// Matches libxml2 ordering: maxOccurs, not-allowed attrs,
 		// block/final value checks, default+fixed, type/content children.
+
+		// The {name} of a local element declaration must be an NCName (XSD
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName), exactly as
+		// for global declarations.
+		if !xmlchar.IsValidNCName(name) {
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
+				"The value '"+name+"' is not a valid 'NCName'."))
+		}
 
 		// maxOccurs must be a non-negative integer (or "unbounded"). A maxOccurs of
 		// 0 is a legal prohibited particle when the effective minOccurs is also 0;
