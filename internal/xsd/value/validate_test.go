@@ -13,6 +13,7 @@ import (
 const (
 	testAbc      = "abc"
 	testP1Y      = "P1Y"
+	testP1M      = "P1M"
 	test1foo     = "1foo"
 	testUnderBar = "_bar"
 	testDT0      = "2023-01-15T10:30:00"
@@ -68,7 +69,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: lexicon.TypeDuration,
-			valid:    []string{testP1Y, "P1M", "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"},
+			valid:    []string{testP1Y, testP1M, "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"},
 			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", "P1YT", "P1DT", "P1Y2MT", testAbc},
 		},
 		{
@@ -242,13 +243,39 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		t.Run(tt.typeName, func(t *testing.T) {
 			t.Parallel()
 			for _, v := range tt.valid {
-				err := value.ValidateBuiltin(v, tt.typeName)
+				err := value.ValidateBuiltin(v, tt.typeName, value.Version11)
 				require.NoError(t, err, "type %s should accept %q", tt.typeName, v)
 			}
 			for _, v := range tt.invalid {
-				err := value.ValidateBuiltin(v, tt.typeName)
+				err := value.ValidateBuiltin(v, tt.typeName, value.Version11)
 				require.Error(t, err, "type %s should reject %q", tt.typeName, v)
 			}
+		})
+	}
+}
+
+func TestCalendarYearExpandedLexicalRejectsLeadingZeroes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		typ   string
+		valid string
+		bad   string
+	}{
+		{lexicon.TypeDate, "10000-01-01", "00000-01-01"},
+		{lexicon.TypeDateTime, "10000-01-01T00:00:00", "00000-01-01T00:00:00"},
+		{lexicon.TypeDateTimeStamp, "10000-01-01T00:00:00Z", "00000-01-01T00:00:00Z"},
+		{typeGYear, "10000", "00000"},
+		{typeGYearMonth, "10000-01", "00000-01"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.typ, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, value.ValidateBuiltin(tt.valid, tt.typ, value.Version11))
+			require.Error(t, value.ValidateBuiltin(tt.bad, tt.typ, value.Version11))
+			require.Error(t, value.ValidateBuiltin("-"+tt.bad, tt.typ, value.Version11))
+			require.Error(t, value.ValidateBuiltin(tt.bad, tt.typ, value.Version10))
 		})
 	}
 }
@@ -353,6 +380,11 @@ func TestCompareValues(t *testing.T) {
 		// Genuinely indeterminate: ±14:00 interval straddles the bound.
 		{lexicon.TypeDateTime, "2020-01-01T00:00:00", refDateTimeZ, 0, false},
 		{lexicon.TypeDateTime, refDateTimeZ, "2020-01-01T00:00:00", 0, false},
+		// Year 0000 is a present full XSD 1.1 calendar year, not a missing year
+		// component. Mixed-timezone comparisons involving it still use the
+		// determinate ±14:00 rule.
+		{lexicon.TypeDateTime, "0000-01-10T00:00:00", "0000-01-01T00:00:00Z", 1, true},
+		{lexicon.TypeDateTime, "0000-01-01T00:00:00Z", "0000-01-10T00:00:00", -1, true},
 		// A leading '+' on the year is not a valid xs:dateTime lexical form, so it
 		// must NOT compare equal to the unsigned form (indeterminate, not 0/true).
 		{lexicon.TypeDateTime, "+2023-01-01T00:00:00", "2023-01-01T00:00:00", 0, false},
@@ -425,6 +457,7 @@ func TestCompareValues(t *testing.T) {
 		// has a full calendar date, and compareTime assigns a reference date.
 		{lexicon.TypeDate, "2019-12-01", "2020-01-01Z", -1, true}, // interval entirely below bound
 		{lexicon.TypeDate, "2020-01-01", "2020-01-01Z", 0, false}, // ±14:00 straddles -> indeterminate
+		{lexicon.TypeDate, "0000-01-10", "0000-01-01Z", 1, true},  // year 0000 is present, not missing
 		{lexicon.TypeTime, "00:00:00", "20:00:00Z", -1, true},     // determinately earlier
 		{lexicon.TypeTime, "12:00:00", "12:00:00Z", 0, false},     // ±14:00 straddles -> indeterminate
 
@@ -436,7 +469,10 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDuration, "P1D", "PT86400S", 0, true},
 		{lexicon.TypeDuration, "-P1Y", testP1Y, -1, true},
 		{lexicon.TypeDuration, "P1Y2M", "P1Y3M", -1, true},
-		{lexicon.TypeDuration, "P1M", "P30D", 0, false}, // indeterminate: months vs days
+		{lexicon.TypeDuration, testP1M, "P30D", 0, false}, // indeterminate: months vs days
+		{lexicon.TypeDuration, testP1M, "P27D", 1, true},
+		{lexicon.TypeDuration, "P27D", testP1M, -1, true},
+		{lexicon.TypeDuration, testP1M, "P32D", -1, true},
 
 		// Strict lexical validation gates comparison: the lenient internal date
 		// parsers used to accept these, but Compare now validates each operand
@@ -590,8 +626,8 @@ func TestTimezoneUppercaseZOnly(t *testing.T) {
 	for _, tt := range zTypes {
 		t.Run(tt.typ, func(t *testing.T) {
 			t.Parallel()
-			require.NoError(t, value.ValidateBuiltin(tt.validZ, tt.typ), "uppercase Z must be valid")
-			require.Error(t, value.ValidateBuiltin(tt.invalidz, tt.typ), "lowercase z must be invalid")
+			require.NoError(t, value.ValidateBuiltin(tt.validZ, tt.typ, value.Version11), "uppercase Z must be valid")
+			require.Error(t, value.ValidateBuiltin(tt.invalidz, tt.typ, value.Version11), "lowercase z must be invalid")
 		})
 	}
 

@@ -159,6 +159,11 @@ type evalConfig struct {
 	opLimit     int                        // 0 = unlimited (default); matches libxml2's opLimit
 	functions   map[string]Function        // unqualified custom functions
 	functionsNS map[QualifiedName]Function // namespace-qualified custom functions
+	// defaultElemNS is the default namespace URI applied to UNPREFIXED element
+	// name tests (never to attributes). XPath 1.0 has no default element
+	// namespace, so this is empty by default; it exists to support XSD 1.1
+	// identity-constraint selector/field @xpathDefaultNamespace.
+	defaultElemNS string
 }
 
 func (c *evalConfig) clone() *evalConfig {
@@ -194,6 +199,18 @@ func (e Evaluator) clone() Evaluator {
 func (e Evaluator) Namespaces(ns map[string]string) Evaluator {
 	out := e.clone()
 	out.cfg.namespaces = maps.Clone(ns)
+	return out
+}
+
+// DefaultElementNamespace returns a new Evaluator that resolves UNPREFIXED
+// element name tests against the given namespace URI instead of no-namespace.
+// It never affects attribute name tests (attributes have no default namespace).
+// XPath 1.0 itself has no default element namespace; this supports the XSD 1.1
+// identity-constraint @xpathDefaultNamespace feature. An empty uri restores the
+// XPath 1.0 default (unprefixed element = no-namespace).
+func (e Evaluator) DefaultElementNamespace(uri string) Evaluator {
+	out := e.clone()
+	out.cfg.defaultElemNS = uri
 	return out
 }
 

@@ -1036,9 +1036,9 @@ func (v *vm) evalInstruction(ctx context.Context, ec *evalContext, ref compiledE
 	case vmOpVariable:
 		return vmEvalPayload(inst, func(e VariableExpr) (Sequence, error) { return evalVariable(ctx, ec, e) })
 	case vmOpRoot:
-		return evalRootExpr(ec)
+		return evalRootExpr(ctx, ec)
 	case vmOpContextItem:
-		return evalContextItemExpr(ec)
+		return evalContextItemExpr(ctx, ec)
 	case vmOpLocationPath:
 		return vmEvalPayload(inst, func(e vmLocationPathExpr) (Sequence, error) { return evalVMLocationPath(v.evalExpr, ctx, ec, e) })
 	case vmOpBinary:

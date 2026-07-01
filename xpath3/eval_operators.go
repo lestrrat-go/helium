@@ -211,20 +211,24 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
+	// Atomize through the stream so a schema-typed list/union node expands; the
+	// at-most-one cardinality is checked on the atomized result.
+	sAtoms, err := atomizeSingletonOperand(startSeq)
+	if err != nil {
+		return nil, err
+	}
+	eAtoms, err := atomizeSingletonOperand(endSeq)
+	if err != nil {
+		return nil, err
+	}
+	if len(sAtoms) == 0 || len(eAtoms) == 0 {
 		return validNilSequence, nil
 	}
-	if seqLen(startSeq) > 1 || seqLen(endSeq) > 1 {
+	if len(sAtoms) > 1 || len(eAtoms) > 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "to operator operands must each be xs:integer? (at most one item)"}
 	}
-	sa, err := AtomizeItem(startSeq.Get(0))
-	if err != nil {
-		return nil, err
-	}
-	ea, err := AtomizeItem(endSeq.Get(0))
-	if err != nil {
-		return nil, err
-	}
+	sa := sAtoms[0]
+	ea := eAtoms[0]
 	// Per spec, operands are converted using function coercion rules for xs:integer?.
 	// This allows untypedAtomic → integer, but rejects double/float/decimal → integer.
 	saInt, err := coerceToInteger(sa)
@@ -293,7 +297,7 @@ func evalUnionExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	}
 	result := make(ItemSlice, len(merged))
 	for i, n := range merged {
-		result[i] = nodeItemFor(ec, n)
+		result[i] = nodeItemFor(ctx, ec, n)
 	}
 	return result, nil
 }
@@ -338,7 +342,7 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ctx context.Context, ec *eval
 	}
 	seq := make(ItemSlice, len(result))
 	for i, n := range result {
-		seq[i] = nodeItemFor(ec, n)
+		seq[i] = nodeItemFor(ctx, ec, n)
 	}
 	return seq, nil
 }
@@ -359,7 +363,7 @@ func evalFilterExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 		}
 		result := make(ItemSlice, len(nodes))
 		for i, n := range nodes {
-			result[i] = nodeItemFor(ec, n)
+			result[i] = nodeItemFor(ctx, ec, n)
 		}
 		return result, nil
 	}
@@ -454,7 +458,7 @@ func evalPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	}
 	seq := make(ItemSlice, len(deduped))
 	for i, n := range deduped {
-		seq[i] = nodeItemFor(ec, n)
+		seq[i] = nodeItemFor(ctx, ec, n)
 	}
 	return seq, nil
 }
@@ -493,7 +497,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	}
 	seq := make(ItemSlice, len(deduped))
 	for i, n := range deduped {
-		seq[i] = nodeItemFor(ec, n)
+		seq[i] = nodeItemFor(ctx, ec, n)
 	}
 	return seq, nil
 }
@@ -585,7 +589,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		}
 		seq := make(ItemSlice, len(allNodes))
 		for i, n := range allNodes {
-			seq[i] = nodeItemFor(ec, n)
+			seq[i] = nodeItemFor(ctx, ec, n)
 		}
 		return seq, nil
 	}

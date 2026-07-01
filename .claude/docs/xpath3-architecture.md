@@ -95,7 +95,7 @@ func NodePrefix(n helium.Node) string
 | `variables.go` | Variable binding management |
 | `collation.go` | Collation support |
 | `regex.go` | Adapter to `internal/xsdregex` (XPath regex→Go regex translation); wraps errors as FORX0002. Shared with `xsd` so pattern facets use the same translator |
-| `regex_cache.go` | Bounded LRU cache (`regexLRUCache`) for compiled XPath regexes keyed by pattern+flags; 1024-entry cap with LRU eviction (replaces the old unbounded `sync.Map`) |
+| `regex_cache.go` | Bounded LRU cache (`regexLRUCache`) for compiled XPath regexes keyed by pattern+flags; 1024-entry cap with LRU eviction |
 | `static_check.go` | Static expression checks |
 | `streamability.go` | Internal streamability precomputation (unexported) plus exported `StreamInfo` struct + accessor; query helpers moved to `internal/xpathstream` |
 | `node_identity.go` | Node identity comparison |

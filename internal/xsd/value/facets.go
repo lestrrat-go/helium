@@ -10,8 +10,9 @@ import (
 // space is ORDERED, so the range facets (min/maxInclusive, min/maxExclusive) may
 // apply to them. Per XSD 1.1 (§4.2.x, the {ordered} fundamental facet), the
 // ordered primitives are the numeric types (decimal and its derived integers,
-// float, double) and the date/time/duration family (duration, dateTime, time,
-// date, and the gregorian g-types). Every other primitive — string-family,
+// float, double) and the date/time/duration family (duration,
+// dayTimeDuration, yearMonthDuration, dateTime, dateTimeStamp, time, date, and
+// the gregorian g-types). Every other primitive — string-family,
 // boolean, hexBinary, base64Binary, anyURI, QName, NOTATION — is {ordered}=false,
 // so a range facet is INAPPLICABLE to it and the bound is treated as satisfied.
 //
@@ -22,17 +23,19 @@ import (
 // regardless of what Compare would return.
 //
 // The xs:decimal family is reused from numericComparableTypes (the single source
-// of that set); the float/double and date/time/duration members are added on top.
+// of that set); the float/double and date/time/duration members are added on
+// top.
 var orderedRangeFacetTypes = newOrderedRangeFacetTypes()
 
 func newOrderedRangeFacetTypes() map[string]struct{} {
-	m := make(map[string]struct{}, len(numericComparableTypes)+11)
+	m := make(map[string]struct{}, len(numericComparableTypes)+14)
 	for k := range numericComparableTypes {
 		m[k] = struct{}{}
 	}
 	for _, t := range []string{
 		lexicon.TypeFloat, lexicon.TypeDouble,
-		lexicon.TypeDateTime, lexicon.TypeDate, lexicon.TypeTime, lexicon.TypeDuration,
+		lexicon.TypeDateTime, lexicon.TypeDateTimeStamp, lexicon.TypeDate, lexicon.TypeTime,
+		lexicon.TypeDuration, lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration,
 		lexicon.TypeGYear, lexicon.TypeGYearMonth, lexicon.TypeGMonth, lexicon.TypeGDay, lexicon.TypeGMonthDay,
 	} {
 		m[t] = struct{}{}

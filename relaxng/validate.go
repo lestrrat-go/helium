@@ -1927,7 +1927,7 @@ func matchXSDValue(typeName, text, expected string) int {
 	// (e.g. "1foo" for NCName, or "5.0" for integer) is rejected even when the two
 	// forms are byte-identical. value.ValidateBuiltin imposes no constraint on
 	// xs:string / xs:anyURI, so those stay effectively lexical-only.
-	if value.ValidateBuiltin(text, typeName) != nil || value.ValidateBuiltin(expected, typeName) != nil {
+	if value.ValidateBuiltin(text, typeName, value.Version10) != nil || value.ValidateBuiltin(expected, typeName, value.Version10) != nil {
 		return -1
 	}
 
@@ -2136,7 +2136,7 @@ func validateXSDType(typeName, text string, params []*param) int {
 	// collapse for everything else here) before lexical validation, so a value
 	// such as xs:token "a  b" (collapses to "a b") is accepted.
 	text = value.Normalize(text, typeName)
-	if value.ValidateBuiltin(text, typeName) != nil {
+	if value.ValidateBuiltin(text, typeName, value.Version10) != nil {
 		return -1
 	}
 	// Apply the supported length facets to the whitespace-normalized value for

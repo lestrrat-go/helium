@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -30,13 +31,13 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 	if ec.vars != nil {
 		// Try exact name first
 		if v, ok := ec.vars.Lookup(e.Name); ok {
-			return enrichNodeItems(ec, v), nil
+			return enrichNodeItems(ctx, ec, v), nil
 		}
 		// If EQName (Q{uri}local), normalize to {uri}local and retry
 		if strings.HasPrefix(e.Name, "Q{") {
 			resolved := e.Name[1:] // strip leading "Q"
 			if v, ok := ec.vars.Lookup(resolved); ok {
-				return enrichNodeItems(ec, v), nil
+				return enrichNodeItems(ctx, ec, v), nil
 			}
 		}
 		// If prefixed, resolve to {uri}local and retry
@@ -45,7 +46,7 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 				local := e.Name[len(e.Prefix)+1:] // strip "prefix:"
 				resolved := helium.ClarkName(uri, local)
 				if v, ok := ec.vars.Lookup(resolved); ok {
-					return enrichNodeItems(ec, v), nil
+					return enrichNodeItems(ctx, ec, v), nil
 				}
 			}
 		}
@@ -55,7 +56,7 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 		if v, ok, err := ec.variableResolver.ResolveVariable(ctx, e.Name); err != nil {
 			return nil, err
 		} else if ok {
-			return enrichNodeItems(ec, v), nil
+			return enrichNodeItems(ctx, ec, v), nil
 		}
 	}
 	return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
@@ -65,7 +66,7 @@ func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequenc
 // and related fields set from the evalContext's type annotations map. This is
 // needed because variables may store NodeItems created before type annotations
 // were available (e.g., validated after construction).
-func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
+func enrichNodeItems(ctx context.Context, ec *evalContext, seq Sequence) Sequence {
 	if ec == nil || ec.typeAnnotations == nil {
 		return seq
 	}
@@ -85,7 +86,7 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 	i := 0
 	for item := range seqItems(seq) {
 		if ni, ok := item.(NodeItem); ok && ni.TypeAnnotation == "" {
-			enriched := nodeItemFor(ec, ni.Node)
+			enriched := nodeItemFor(ctx, ec, ni.Node)
 			result[i] = enriched
 		} else {
 			result[i] = item
@@ -152,7 +153,7 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 
 	result := make(ItemSlice, len(nodes))
 	for i, n := range nodes {
-		result[i] = nodeItemFor(ec, n)
+		result[i] = nodeItemFor(ctx, ec, n)
 	}
 	return result, nil
 }
@@ -191,27 +192,188 @@ func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 
 	result := make(ItemSlice, len(nodes))
 	for i, n := range nodes {
-		result[i] = nodeItemFor(ec, n)
+		result[i] = nodeItemFor(ctx, ec, n)
 	}
 	return result, nil
 }
 
-func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
+func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
 	ni := NodeItem{Node: n}
 	if ec == nil || ec.typeAnnotations == nil {
 		return ni
 	}
 	ni.TypeAnnotation = ec.typeAnnotations[n]
 	ni.AtomizedType = atomizedTypeForAnnotation(ni.TypeAnnotation, ec.schemaDeclarations)
+	ni.QNameNoDefaultNS = ec.qnameValueNoDefaultNS
 	if ec.schemaDeclarations != nil && ni.TypeAnnotation != "" {
 		if itemType, ok := ec.schemaDeclarations.ListItemType(ni.TypeAnnotation); ok {
 			ni.ListItemType = itemType
+			ni.ListItemAtomized = atomizedTypeForAnnotation(itemType, ec.schemaDeclarations)
+			// When the list ITEM type is a UNION, the static ListItemAtomized base is
+			// one member only; resolve EACH token's active union member so the list
+			// atomizes per-token consistently with $value.
+			if members := ec.schemaDeclarations.UnionMemberTypes(itemType); len(members) > 0 {
+				tokens := xsdListFields(ixpath.StringValue(n))
+				leaves := make([]*NodeItemUnionMember, len(tokens))
+				for i, tok := range tokens {
+					leaves[i] = resolveActiveUnionLeafForValue(ctx, ec, n, itemType, ni.QNameNoDefaultNS, tok)
+				}
+				ni.ListItemLeaves = leaves
+			}
 		}
 		if members := ec.schemaDeclarations.UnionMemberTypes(ni.TypeAnnotation); len(members) > 0 {
 			ni.UnionMemberTypes = members
+			if leaf := resolveActiveUnionLeaf(ctx, ec, n, ni.TypeAnnotation, ni.QNameNoDefaultNS); leaf != nil {
+				ni.ActiveUnionMember = leaf
+			}
 		}
 	}
 	return ni
+}
+
+// resolveActiveUnionLeaf resolves a union node's value-dependent ACTIVE LEAF member:
+// the first DIRECT member (declaration order) the value fully validates against;
+// when that member is ITSELF a union it descends recursively to find the nested
+// leaf, mirroring fixedUnionActiveMember so data() and $value agree for arbitrarily
+// nested unions. Full validation = the lexical/value cast (and, for a list member,
+// every token plus the list structure) AND the member's own facets/assertions via
+// SchemaDeclarations.ValidateCastWithNS (a no-op for built-ins, where the cast check
+// already covers validity). Returns nil when no member validates.
+func resolveActiveUnionLeaf(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool) *NodeItemUnionMember {
+	return resolveActiveUnionLeafForValue(ctx, ec, n, unionType, qnameNoDefault, ixpath.StringValue(n))
+}
+
+// resolveActiveUnionLeafForValue resolves the active leaf member of unionType for an
+// EXPLICIT value (rather than the node's whole string value), used to resolve EACH
+// token of an xs:list whose item type is a union — so a list-of-union node atomizes
+// each token through its own active member (matching $value), not one static base.
+// QName/NOTATION members still resolve their prefix against the node n's namespaces.
+func resolveActiveUnionLeafForValue(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool, val string) *NodeItemUnionMember {
+	nsMap := inScopeNSMap(n)
+	// visited tracks union type NAMES currently being descended, so any finite
+	// acyclic nesting (however deep) is fully walked while a cyclic union graph
+	// still terminates — mirroring the validation side's visited-set guards rather
+	// than capping at an arbitrary depth.
+	visited := map[string]struct{}{unionType: {}}
+	return resolveActiveUnionLeafRec(ctx, ec, n, unionType, qnameNoDefault, val, nsMap, visited)
+}
+
+func resolveActiveUnionLeafRec(ctx context.Context, ec *evalContext, n helium.Node, unionType string, qnameNoDefault bool, val string, nsMap map[string]string, visited map[string]struct{}) *NodeItemUnionMember {
+	for _, m := range ec.schemaDeclarations.UnionMemberTypes(unionType) {
+		// A member that is itself a union: full-validate the value against it, then
+		// descend to its nested active leaf (matches fixedUnionActiveMember). A member
+		// already on the descent path is a cycle — skip it (the cyclic graph is
+		// invalid, but node atomization must still terminate).
+		if nested := ec.schemaDeclarations.UnionMemberTypes(m); len(nested) > 0 {
+			if _, seen := visited[m]; seen {
+				continue
+			}
+			if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m, nsMap); err != nil {
+				continue
+			}
+			visited[m] = struct{}{}
+			leaf := resolveActiveUnionLeafRec(ctx, ec, n, m, qnameNoDefault, val, nsMap, visited)
+			delete(visited, m)
+			if leaf != nil {
+				return leaf
+			}
+			continue
+		}
+		meta := unionMemberMeta(ec.schemaDeclarations, m)
+		if !unionMemberCastOK(val, meta, n, qnameNoDefault) {
+			continue
+		}
+		if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, val, m, nsMap); err != nil {
+			continue
+		}
+		// When this active member is a LIST whose item type is itself a UNION, resolve
+		// EACH list token's active leaf so the member atomizes per-token (matching
+		// $value), not through one static ListItemAtom base.
+		if meta.ListItem != "" {
+			if itemMembers := ec.schemaDeclarations.UnionMemberTypes(meta.ListItem); len(itemMembers) > 0 {
+				tokens := xsdListFields(val)
+				leaves := make([]*NodeItemUnionMember, len(tokens))
+				for i, tok := range tokens {
+					leaves[i] = resolveActiveUnionLeafForValue(ctx, ec, n, meta.ListItem, qnameNoDefault, tok)
+				}
+				meta.ListItemLeaves = leaves
+			}
+		}
+		leaf := meta
+		return &leaf
+	}
+	return nil
+}
+
+// unionMemberMeta builds the per-member atomization metadata (built-in base, and
+// list-item info when the member is a list) for a union member type name.
+func unionMemberMeta(decls SchemaDeclarations, member string) NodeItemUnionMember {
+	meta := NodeItemUnionMember{
+		TypeName: member,
+		Atomized: atomizedTypeForAnnotation(member, decls),
+	}
+	if li, ok := decls.ListItemType(member); ok {
+		meta.ListItem = li
+		meta.ListItemAtom = atomizedTypeForAnnotation(li, decls)
+	}
+	return meta
+}
+
+// unionMemberCastOK reports whether val is lexically/value-valid for a NON-UNION
+// union member (a list member requires every whitespace token to atomize, an atomic
+// member to cast / a QName/NOTATION member to resolve as a single token). It does
+// NOT check user facets — resolveActiveUnionLeafRec layers ValidateCastWithNS on top
+// — but it is what enforces BUILT-IN member validity (ValidateCast is a no-op for
+// built-ins).
+func unionMemberCastOK(val string, m NodeItemUnionMember, node helium.Node, qnameNoDefault bool) bool {
+	if m.ListItem != "" {
+		// An EMPTY list value (zero tokens) is a valid list lexically — the validator
+		// accepts it unless a facet (e.g. minLength) disallows it, which the
+		// ValidateCastWithNS layer enforces. Do NOT reject it here, else active-member
+		// selection for node atomization would disagree with validation/$value (a
+		// union(IntList, xs:string) with value "" must resolve to the empty list).
+		lni := NodeItem{Node: node, ListItemAtomized: m.ListItemAtom, QNameNoDefaultNS: qnameNoDefault}
+		for _, tok := range xsdListFields(val) {
+			if _, err := atomizeListToken(tok, m.ListItem, lni); err != nil {
+				return false
+			}
+		}
+		return true
+	}
+	if m.Atomized == TypeQName || m.Atomized == TypeNOTATION ||
+		m.TypeName == TypeQName || m.TypeName == TypeNOTATION {
+		if len(xsdListFields(val)) != 1 {
+			return false
+		}
+		_, err := resolveQNameFromNode(val, node, qnameNoDefault)
+		return err == nil
+	}
+	t := m.Atomized
+	if t == "" {
+		t = m.TypeName
+	}
+	_, err := CastFromString(val, t)
+	return err == nil
+}
+
+// inScopeNSMap returns the in-scope namespace bindings (prefix → URI) for a node,
+// used to resolve QName prefixes when validating a union member value-dependently.
+func inScopeNSMap(n helium.Node) map[string]string {
+	scope := n
+	if _, ok := scope.(*helium.Element); !ok {
+		if p := n.Parent(); p != nil {
+			scope = p
+		}
+	}
+	e, ok := scope.(*helium.Element)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string)
+	for prefix, ns := range domutil.InScopeNamespaces(e, false) {
+		out[prefix] = ns.URI()
+	}
+	return out
 }
 
 func evalStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {

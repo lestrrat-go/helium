@@ -357,6 +357,61 @@ func TestCastAtomic(t *testing.T) {
 	})
 }
 
+// TestCastAtomicUserTypeNormalization covers the schema-derived USER type
+// normalization in CastAtomic (a source whose TypeName is a non-XSD user type is
+// normalized to its recorded builtin BaseType so it casts like its base) and its
+// two guards.
+func TestCastAtomicUserTypeNormalization(t *testing.T) {
+	// A KNOWN XSD BaseType normalizes: a user xs:integer-derived atom casts to
+	// xs:integer via the identity short-circuit, returning the value.
+	t.Run("known XSD BaseType normalizes", func(t *testing.T) {
+		v := xpath3.AtomicValue{TypeName: "Q{urn:x}MyInt", BaseType: xpath3.TypeInteger, Value: big.NewInt(5)}
+		result, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
+		require.NoError(t, err)
+		require.Equal(t, xpath3.TypeInteger, result.TypeName)
+		require.Equal(t, int64(5), result.BigInt().Int64())
+	})
+
+	// PR859-CAST-EMPTY: an EMPTY TypeName is not a schema-derived USER type, so even a
+	// KNOWN XSD BaseType must NOT trigger normalization — the atom stays opaque and
+	// falls through to the normal XPTY0004 path on a non-string-like target.
+	t.Run("empty TypeName with known BaseType stays opaque", func(t *testing.T) {
+		v := xpath3.AtomicValue{BaseType: xpath3.TypeInteger, Value: big.NewInt(5)}
+		_, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
+		require.Error(t, err)
+		require.Equal(t, "XPTY0004", castErrorCode(t, err))
+	})
+
+	// PR859-CAST-NORM-002: a NON-XSD BaseType must NOT alter dispatch — it stays
+	// opaque. Casting to the (also non-XSD) BaseType name must NOT become an identity
+	// success via TypeName rewriting; it falls through to the normal XPTY0004 path.
+	t.Run("non-XSD BaseType does not alter dispatch", func(t *testing.T) {
+		v := xpath3.AtomicValue{TypeName: "Q{urn:x}Custom", BaseType: "Q{urn:x}Weird", Value: "x"}
+		_, err := xpath3.CastAtomic(v, "Q{urn:x}Weird")
+		require.Error(t, err)
+		require.Equal(t, "XPTY0004", castErrorCode(t, err))
+	})
+
+	// PR859-CAST-DTS-001: normalization can surface xs:dateTimeStamp from a user
+	// type; the post-normalization identity return must still enforce the
+	// mandatory-timezone invariant, matching the built-in source path.
+	t.Run("dateTimeStamp BaseType identity enforces timezone", func(t *testing.T) {
+		t.Run("missing timezone rejected", func(t *testing.T) {
+			v := xpath3.AtomicValue{TypeName: "Q{urn:x}MyDTS", BaseType: xpath3.TypeDateTimeStamp, Value: mustParseDateTime("2024-03-15T10:30:00")}
+			_, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
+			require.Error(t, err)
+			require.Equal(t, "FORG0001", castErrorCode(t, err))
+		})
+
+		t.Run("with timezone accepted", func(t *testing.T) {
+			v := xpath3.AtomicValue{TypeName: "Q{urn:x}MyDTS", BaseType: xpath3.TypeDateTimeStamp, Value: mustParseDateTime("2024-03-15T10:30:00Z")}
+			result, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
+			require.NoError(t, err)
+			require.Equal(t, xpath3.TypeDateTimeStamp, result.TypeName)
+		})
+	})
+}
+
 // castErrorCode extracts the structured XPathError code from a CastAtomic error.
 func castErrorCode(t *testing.T, err error) string {
 	t.Helper()

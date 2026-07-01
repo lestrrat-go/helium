@@ -77,6 +77,16 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		return nil
 	}
 	var attrs []*AttrUse
+	// XSD 1.1: an xs:anyAttribute, if present, must be the OPTIONAL FINAL child of
+	// the group (XSD 3.6.2), and there may be at most one. anyAttributeSeen tracks
+	// it so a later attribute/attributeGroup child, or a second wildcard, is
+	// rejected. Gated on Version11 (1.0 ignores group wildcards entirely, so its
+	// grammar handling stays byte-identical).
+	var anyAttributeSeen bool
+	reportAfterWildcard := func(ce *helium.Element) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
+			fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName())))
+	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -86,6 +96,10 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			continue
 		}
 		if isXSDElement(ce, elemAttribute) {
+			if c.version == Version11 && anyAttributeSeen {
+				reportAfterWildcard(ce)
+				continue
+			}
 			// A use="prohibited" attribute declared directly inside an
 			// <xs:attributeGroup> is pointless: it cannot remove a use the group
 			// itself declares, and propagating it as a blocking use would wrongly
@@ -103,6 +117,19 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			attrs = append(attrs, au)
 			continue
 		}
+		// XSD 1.1: capture an xs:anyAttribute wildcard declared in the group so a
+		// referencing type can intersect it into its effective attribute wildcard.
+		// It must be the final child and unique.
+		if c.version == Version11 && isXSDElement(ce, elemAnyAttribute) {
+			if anyAttributeSeen {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
+					fmt.Sprintf("An attribute group definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName())))
+				continue
+			}
+			anyAttributeSeen = true
+			c.attrGroupWildcards[qn] = c.parseAnyAttribute(ctx, ce)
+			continue
+		}
 		// Record nested xs:attributeGroup ref children so checkAttrGroupDuplicates
 		// can flatten the transitively-referenced groups and detect a duplicate
 		// attribute use introduced through a reference (ag-props-correct.2).
@@ -115,6 +142,10 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// reaches this point is genuinely circular and is reported and dropped (the
 		// reference is cut to avoid further confusion, matching libxml2).
 		if isXSDElement(ce, elemAttributeGroup) {
+			if c.version == Version11 && anyAttributeSeen {
+				reportAfterWildcard(ce)
+				continue
+			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				refQN := c.resolveQName(ctx, ce, ref)
 				if refQN == qn {
@@ -217,6 +248,20 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				}
 				continue
 			}
+			// XSD 1.1: an INLINE <xs:all> directly inside another <xs:all> is still
+			// forbidden by cos-all-limited — only a <xs:group ref> resolving to an
+			// all group (occurrence 1/1) is the relaxed allowed nesting. Reject and
+			// SKIP so the invalid inline nested all is never built into the model
+			// (where the matcher/subsumption flatteners would otherwise treat it as
+			// the allowed group-ref case and silently accept it). Gated on Version11
+			// so the XSD 1.0 path stays byte-identical.
+			if compositor == CompositorAll && c.version == Version11 {
+				if c.filename != "" {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), elemAll,
+						"The content is not valid. Expected is (annotation?, (element | any | group)*)."))
+				}
+				continue
+			}
 			sub, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return nil, err
@@ -245,11 +290,12 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				// model group (xs:sequence/xs:choice/xs:all), so a resolved 'all'
 				// model group is forbidden here.
 				c.groupRefSources[placeholder] = groupRefSource{
-					line:         ce.Line(),
-					local:        ce.LocalName(),
-					nested:       true,
-					maxOccursRaw: getAttr(ce, attrMaxOccurs),
-					source:       c.diagSource(),
+					line:             ce.Line(),
+					local:            ce.LocalName(),
+					nested:           true,
+					parentCompositor: compositor,
+					maxOccursRaw:     getAttr(ce, attrMaxOccurs),
+					source:           c.diagSource(),
 				}
 				mg.Particles = append(mg.Particles, &Particle{
 					MinOccurs: placeholder.MinOccurs,

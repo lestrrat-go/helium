@@ -237,6 +237,15 @@ func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 // two atoms; a genuine atomization error (e.g. FOTY0013 for a map/function item
 // encountered before the cap) still propagates.
 func atomizeSingletonOperand(seq Sequence) ([]AtomicValue, error) {
+	// Fast path: a single ALREADY-ATOMIC item atomizes to itself, with no streaming
+	// machinery — preserving perf on hot numeric paths (arithmetic, range). Arrays
+	// (flattened) and schema list/union-typed nodes (expanded) fall through to
+	// atomizeStream so their multi-atom typed value is seen.
+	if seqLen(seq) == 1 {
+		if av, ok := seq.Get(0).(AtomicValue); ok {
+			return []AtomicValue{av}, nil
+		}
+	}
 	atoms := make([]AtomicValue, 0, 2)
 	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
 		atoms = append(atoms, av)
@@ -323,7 +332,7 @@ func generalCompareWithCollation(ctx context.Context, op TokenType, left, right 
 			if !ok {
 				break
 			}
-			pa, pb, err := promoteForGeneralComparison(la, ra, ec)
+			pa, pb, err := promoteForGeneralComparison(ctx, la, ra, ec)
 			if err != nil {
 				return false, err
 			}
@@ -384,21 +393,28 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				tokens := strings.Fields(s)
+				tokens := xsdListFields(s)
 				listSeq := make(ItemSlice, len(tokens))
 				for i, tok := range tokens {
-					cast, err := CastFromString(tok, listItem)
+					cast, err := atomizeListTokenAt(i, tok, listItem, ni)
 					if err != nil {
-						if strings.HasPrefix(listItem, "Q{") {
-							cast = AtomicValue{TypeName: listItem, Value: tok}
-						} else {
-							return AtomicValue{}, false, err
-						}
+						return AtomicValue{}, false, err
 					}
 					listSeq[i] = cast
 				}
 				it.stack = append(it.stack, atomicSeqFrame{seq: listSeq})
 				continue
+			}
+			// Union whose ACTIVE member is a list: expand value-dependently.
+			if ni.ActiveUnionMember != nil {
+				if atoms, handled := atomizeUnionItems(ni); handled {
+					listSeq := make(ItemSlice, len(atoms))
+					for i, av := range atoms {
+						listSeq[i] = av
+					}
+					it.stack = append(it.stack, atomicSeqFrame{seq: listSeq})
+					continue
+				}
 			}
 		}
 
@@ -545,7 +561,7 @@ func promoteForValueComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {
 
 // promoteForGeneralComparison applies type promotion rules for general comparison (= != < > <= >=).
 // Per XPath 3.1 Section 3.7.1 — untypedAtomic is cast to the type of the other operand.
-func promoteForGeneralComparison(a, b AtomicValue, ec *evalContext) (AtomicValue, AtomicValue, error) {
+func promoteForGeneralComparison(ctx context.Context, a, b AtomicValue, ec *evalContext) (AtomicValue, AtomicValue, error) {
 	// untypedAtomic vs untypedAtomic → compare as string
 	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeUntypedAtomic {
 		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
@@ -553,14 +569,14 @@ func promoteForGeneralComparison(a, b AtomicValue, ec *evalContext) (AtomicValue
 	}
 	// untypedAtomic vs typed → cast untypedAtomic to the other's type
 	if a.TypeName == TypeUntypedAtomic {
-		castA, err := castUntypedToType(a, b.TypeName, ec)
+		castA, err := castUntypedToType(ctx, a, b.TypeName, ec)
 		if err != nil {
 			return AtomicValue{}, AtomicValue{}, err
 		}
 		return castA, b, nil
 	}
 	if b.TypeName == TypeUntypedAtomic {
-		castB, err := castUntypedToType(b, a.TypeName, ec)
+		castB, err := castUntypedToType(ctx, b, a.TypeName, ec)
 		if err != nil {
 			return AtomicValue{}, AtomicValue{}, err
 		}
@@ -571,7 +587,7 @@ func promoteForGeneralComparison(a, b AtomicValue, ec *evalContext) (AtomicValue
 
 // castUntypedToType casts an untypedAtomic value to the given target type.
 // For general comparison, cast failures are errors (not silently ignored).
-func castUntypedToType(untyped AtomicValue, targetType string, ec *evalContext) (AtomicValue, error) {
+func castUntypedToType(ctx context.Context, untyped AtomicValue, targetType string, ec *evalContext) (AtomicValue, error) {
 	// QName requires namespace context for prefix resolution
 	if targetType == TypeQName {
 		return castToQName(untyped, ec)
@@ -583,6 +599,9 @@ func castUntypedToType(untyped AtomicValue, targetType string, ec *evalContext) 
 	// String-derived types: cast to string for comparison
 	if isStringDerived(targetType) {
 		targetType = TypeString
+	}
+	if ec != nil && ec.schemaDeclarations != nil {
+		return schemaAwareCast(ctx, ec, untyped, targetType)
 	}
 	return CastFromString(stringFromAtomic(untyped), targetType)
 }

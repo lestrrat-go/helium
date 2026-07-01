@@ -207,17 +207,20 @@ func (vc *validationContext) idcHostDecl(elem *helium.Element) *ElementDecl {
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
 func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, edecl *ElementDecl, idc *IDConstraint) (*idcTable, error) {
 	schema := vc.schema
-	// Evaluate selector XPath using pre-compiled expression when available.
+	// Evaluate selector XPath using pre-compiled expression when available. The
+	// selector's resolved @xpathDefaultNamespace (XSD 1.1) governs unprefixed
+	// element name tests; attributes are never affected.
+	selEv := ev.DefaultElementNamespace(idc.SelectorDefaultNS)
 	var selectorResult *xpath1.Result
 	var err error
 	if idc.SelectorExpr != nil {
-		selectorResult, err = ev.Evaluate(ctx, idc.SelectorExpr, elem)
+		selectorResult, err = selEv.Evaluate(ctx, idc.SelectorExpr, elem)
 	} else {
 		compiled, compErr := xpath1.Compile(idc.Selector)
 		if compErr != nil {
 			return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", compErr)
 		}
-		selectorResult, err = ev.Evaluate(ctx, compiled, elem)
+		selectorResult, err = selEv.Evaluate(ctx, compiled, elem)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", err)
@@ -229,6 +232,14 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 	table := &idcTable{idc: idc}
 
 	for _, node := range selectorResult.NodeSet {
+		// XSD 1.1: a selector must not pick an element inside a
+		// processContents="skip" wildcard-matched subtree — such content is not
+		// schema-assessed, so it carries no PSVI contribution and cannot
+		// participate in a key/unique/keyref. (1.0 keeps selecting it: the set is
+		// empty outside 1.1, so this is byte-identical there.)
+		if _, skip := vc.skipContentNodes[node]; skip {
+			continue
+		}
 		entry := idcEntry{node: node}
 
 		// Resolve the element for this node.
@@ -243,9 +254,13 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 		allPresent := true
 		fieldErr := false
 		for i, fieldXPath := range idc.Fields {
+			fieldEv := ev
+			if i < len(idc.FieldDefaultNS) {
+				fieldEv = ev.DefaultElementNamespace(idc.FieldDefaultNS[i])
+			}
 			var fieldResult *xpath1.Result
 			if i < len(idc.FieldExprs) && idc.FieldExprs[i] != nil {
-				fieldResult, err = ev.Evaluate(ctx, idc.FieldExprs[i], node)
+				fieldResult, err = fieldEv.Evaluate(ctx, idc.FieldExprs[i], node)
 			} else {
 				compiled, compErr := xpath1.Compile(fieldXPath)
 				if compErr != nil {
@@ -255,7 +270,7 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					// dangling reference. Surface it like the selector path.
 					return nil, fmt.Errorf("xsd: IDC field XPath %q failed to compile: %w", fieldXPath, compErr)
 				}
-				fieldResult, err = ev.Evaluate(ctx, compiled, node)
+				fieldResult, err = fieldEv.Evaluate(ctx, compiled, node)
 			}
 			if err != nil {
 				// A field XPath that compiles but fails at evaluation (e.g. an
@@ -540,6 +555,11 @@ func unionActiveMember(ctx context.Context, raw string, fieldNode helium.Node, t
 // context so QName/NOTATION facets (e.g. enumerations of prefixed names) resolve
 // against the same bindings the instance value uses.
 func typeAcceptsValue(ctx context.Context, td *TypeDef, raw string, fieldNode helium.Node) bool {
+	// IDC field-type resolution has no version source here, so the throwaway
+	// context defaults to Version10 (strict). The field value is already validated
+	// under the schema's real version on the main path; the only Phase-1 gap is a
+	// 1.1-only lexical form (e.g. "+INF") in an IDC field whose type is a
+	// float/date union, which a later phase can tighten.
 	vc := &validationContext{
 		errorHandler:  helium.NilErrorHandler{},
 		suppressDepth: 1,
@@ -682,7 +702,7 @@ func hostType(host *helium.Element, hostDecl *ElementDecl, schema *Schema) *Type
 // content model (walking the base-type chain), resolving substitution-group
 // members through global declarations as a fallback.
 func childElemDecl(td *TypeDef, qn QName, schema *Schema) *ElementDecl {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if decl := findElemDeclInGroup(cur.ContentModel, qn); decl != nil {
 			return decl
 		}
@@ -717,7 +737,7 @@ func findElemDeclInGroup(mg *ModelGroup, qn QName) *ElementDecl {
 // attrUseType walks a complex type's base chain to find the declared type of an
 // attribute use matching the given QName.
 func attrUseType(td *TypeDef, aqn QName, schema *Schema) *TypeDef {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		for _, au := range cur.Attributes {
 			if au.Name != aqn {
 				continue

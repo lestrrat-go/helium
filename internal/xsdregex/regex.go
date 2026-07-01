@@ -299,6 +299,29 @@ func validateXPathCharClassStructure(class string) error {
 				Message: fmt.Sprintf("invalid character class: %s", class),
 			}
 		}
+		// An interior raw '-' denotes a range operator whose endpoints must be
+		// single characters, never another '-'. A '-' is literal (not a range
+		// operator) at the start of the class (i == first) or immediately
+		// before the closing ']' (runes[i+1] == ']'); a '-' immediately before
+		// '[' is the operator of a '-[' character-class subtraction (validated
+		// separately by validateXPathCharClassSubtraction), not a range. An
+		// interior, non-subtraction '-' whose immediately-preceding or
+		// immediately-following raw char is itself a literal '-' uses a '-' as
+		// a range endpoint, which the XSD/XPath regex grammar forbids — except
+		// when that adjacent '-' is itself the operator of a '-[' subtraction
+		// (its own following char is '['), which is a literal dash abutting the
+		// subtraction operator (e.g. the valid base group of '[a--[b]]'), not a
+		// range endpoint.
+		if runes[i] == '-' && i != first && runes[i+1] != ']' && runes[i+1] != '[' {
+			precededByHyphen := prevRaw == '-'
+			followedByHyphen := runes[i+1] == '-' && (i+2 >= len(runes) || runes[i+2] != '[')
+			if precededByHyphen || followedByHyphen {
+				return &regexError{
+					Code:    errCodeFORX0002,
+					Message: fmt.Sprintf("invalid character class: %s", class),
+				}
+			}
+		}
 		prevRaw = runes[i]
 		i++
 	}

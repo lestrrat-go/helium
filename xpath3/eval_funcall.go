@@ -21,7 +21,7 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		if err != nil {
 			return nil, err
 		}
-		args[i] = enrichNodeItems(ec, a)
+		args[i] = enrichNodeItems(ctx, ec, a)
 	}
 
 	// Partial application: if any args are placeholders, return FunctionItem
@@ -103,7 +103,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 		if err != nil {
 			return nil, err
 		}
-		args[i] = enrichNodeItems(ec, a)
+		args[i] = enrichNodeItems(ctx, ec, a)
 	}
 
 	if hasPlaceholders {

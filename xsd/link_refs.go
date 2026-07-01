@@ -28,6 +28,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				edecl.Type = ge.Type
 				if edecl.Default == nil {
 					edecl.Default = ge.Default
+					edecl.DefaultNS = ge.DefaultNS
 				}
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
@@ -40,8 +41,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// nilled-empty checks would be silently skipped for a direct
 				// ref="member". The member's own Nillable (copied below) still
 				// governs the nilled-element check.
-				if edecl.SubstitutionGroup == (QName{}) {
-					edecl.SubstitutionGroup = ge.SubstitutionGroup
+				if len(edecl.substitutionGroupHeads()) == 0 {
+					edecl.setSubstitutionGroupHeads(ge.substitutionGroupHeads())
 				}
 				edecl.Nillable = ge.Nillable
 				edecl.Abstract = ge.Abstract
@@ -57,7 +58,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			// For ref elements, report unresolved element declaration error.
 			if edecl.IsRef {
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, elemElement, attrRef, msg))
 				}
@@ -77,7 +78,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// that should exist or a missing user-defined type — before
 				// installing a recovery placeholder, so an invalid schema cannot
 				// silently compile and validate as if the type existed.
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, attrType, msg))
 				}
@@ -87,6 +88,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			edecl.Type = td
 		}
 	}
+
+	// Resolve XSD 1.1 conditional-type-assignment alternative @type references.
+	c.resolveAltTypeRefs(ctx)
 
 	// Resolve base type references.
 	for td, qn := range c.typeRefs {
@@ -191,6 +195,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// appear as the entire content model of a complex type (never nested in
 		// another model group), and its {max occurs} must be 1.
 		if grp.Compositor != CompositorAll {
+			// XSD 1.1: a group reference nested directly inside an xs:all must resolve
+			// to an 'all' model group; a referenced sequence/choice group is invalid.
+			if c.version == Version11 {
+				if src := c.groupRefSources[placeholder]; src.nested && src.parentCompositor == CompositorAll {
+					file := c.diagSourceOrRecorded(src.source)
+					c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
+						"A reference within an 'all' model group must resolve to an 'all' model group."))
+				}
+			}
 			continue
 		}
 		c.checkAllGroupRef(ctx, placeholder)
@@ -212,6 +225,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// removes the duplicate use from the group so a referencing type does not
 	// re-report the same collision (xmllint reports it once, at the group).
 	c.checkAttrGroupDuplicates(ctx)
+	c.checkSchemaDefaultAttributes(ctx)
 
 	// Resolve attribute group references.
 	//
@@ -233,8 +247,30 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// checkDuplicateAttrUses below (ct-props-correct.4), preserving the prior
 	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
-		for _, qn := range qns {
-			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
+		srcs := c.attrGroupRefUseSources[td]
+		for i, qn := range qns {
+			if _, ok := c.schema.attrGroups[qn]; !ok {
+				continue
+			}
+			uses := c.expandAttrGroupUses(qn, map[QName]struct{}{})
+			if i < len(srcs) && srcs[i].attr == attrDefaultAttributes {
+				c.markDefaultAttrUses(td, uses)
+			}
+			td.Attributes = append(td.Attributes, uses...)
+			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
+			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
+			// "complete wildcard"). Gated on Version11 so 1.0 (which drops group
+			// wildcards) is unchanged.
+			if c.version != Version11 {
+				continue
+			}
+			if gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{}); gw != nil {
+				if td.AnyAttribute == nil {
+					td.AnyAttribute = gw
+				} else {
+					td.AnyAttribute = intersectWildcards(td.AnyAttribute, gw)
+				}
+			}
 		}
 	}
 
@@ -264,6 +300,22 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for au, qn := range c.attrRefs {
 		ga, ok := c.schema.globalAttrs[qn]
 		if !ok {
+			// XSD 1.1: a ref to one of the four xsi: processor attributes resolves to
+			// no user-declared global attribute, but the attribute has a FIXED
+			// built-in type. Associate that built-in type (xsi:type→xs:QName,
+			// xsi:nil→xs:boolean, xsi:noNamespaceSchemaLocation→xs:anyURI) so a
+			// fixed/default constraint is validated for validity at compile time
+			// (checkAttrUseConstraints) and compared in VALUE space at runtime
+			// (fixedValueMatches) — instead of falling back to raw string equality
+			// against a nil type. xsi:schemaLocation (a list of xs:anyURI) has no
+			// scalar built-in, so its even-pair value validity stays with
+			// validateDeclaredXsiAttrValue.
+			if c.version == Version11 && qn.NS == lexicon.NamespaceXSI &&
+				au.Type == nil && au.TypeName == (QName{}) {
+				if bt, found := xsiProcessorAttrBuiltinType(qn.Local); found {
+					au.TypeName = bt
+				}
+			}
 			continue
 		}
 		// A use="prohibited" ref corresponds to NO attribute-use component (XSD 1.0
@@ -297,6 +349,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// 'fixed' constraint (au-props-correct.2 / derivation-ok-restriction).
 		if au.Default == nil && au.Fixed == nil {
 			au.Default = ga.Default
+			au.DefaultNS = ga.DefaultNS
 			au.Fixed = ga.Fixed
 			au.FixedNS = ga.FixedNS
 		}
@@ -305,6 +358,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		if au.Type == nil {
 			au.Type = ga.Type
+		}
+		// XSD 1.1 {inheritable}: a ref use without an explicit inheritable adopts
+		// the referenced global declaration's value; an explicit one already won.
+		if !au.InheritableSet {
+			au.Inheritable = ga.Inheritable
+			au.InheritableSet = ga.InheritableSet
 		}
 	}
 	// Sort key mirrors checkAttrRefFixedConflict's own source resolution (recorded
@@ -334,6 +393,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// xs:integer attribute) is a schema error; catching it here avoids
 	// injecting an invalid value into the instance during validation.
 	c.checkAttrUseConstraints(ctx)
+
+	// XSD 1.1: validate element-declaration default/fixed constraint values against
+	// the element's simple (content) type now that all type refs are resolved. Gated
+	// to 1.1 (sources are only recorded in 1.1 mode), so 1.0 stays byte-identical.
+	c.checkElementDeclConstraints(ctx)
 
 	// Topologically order extension types so each base type is merged before
 	// the types that derive from it (the merge reads the base's finalized
@@ -383,24 +447,36 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Merge content models for extension types. extensionTypes is already
 	// filtered to extension types with a base, so no per-item guard is needed.
 	for _, td := range extensionTypes {
+		// XSD 1.1 open-content inheritance/merge across extension (and its mode-
+		// tightening validity) is handled centrally by resolveOpenContent, AFTER the
+		// content models are merged and the effective content type (incl. the per-
+		// document <xs:defaultOpenContent>) is known.
 		if td.ContentType == ContentTypeSimple {
 			// simpleContent extension — check for base-vs-derived duplicate
-			// attributes BEFORE inheriting the base attributes, then merge.
-			c.checkExtensionAttrDuplicates(ctx, td)
-			if td.BaseType.Attributes != nil {
-				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
-			}
-			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = td.BaseType.AnyAttribute
-			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
+			// attributes BEFORE inheriting the base attributes, then merge. In XSD
+			// 1.1 attribute inheritance is deferred to finalizeEffectiveAttrs, which
+			// is topological across BOTH extension and restriction derivations so an
+			// extension of a restriction reads a FINALIZED base attribute set.
+			if c.version != Version11 {
+				c.checkExtensionAttrDuplicates(ctx, td)
+				if td.BaseType.Attributes != nil {
+					td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+				}
+				if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
+					td.AnyAttribute = td.BaseType.AnyAttribute
+				} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
+					td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
+				}
 			}
 			continue
 		}
 		// cos-ct-extends-1-1: complexContent extension requires the base type
 		// to also have complex content (mixed or element-only), not simple content.
-		// Only check when the derived type has element content (not empty/attribute-only).
-		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed) {
+		// (simpleContent extensions already continued above, so any type reaching
+		// here is a complexContent derivation.) XSD 1.0 only flagged this when the
+		// derived type had element content; XSD 1.1 flags the empty/attribute-only
+		// case too (a complexContent extension of a simple base is always invalid).
+		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed || c.version == Version11) {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
 				component := componentLocalComplexType
 				if !src.isLocal {
@@ -411,6 +487,28 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			continue
 		}
+		// XSD 1.1 §3.4.6.2 (Derivation Valid (Extension), 1.4.3.2.2.1): when both the
+		// base and the derived type have complex content (element-only or mixed), they
+		// must agree on mixedness — both mixed or both element-only. (An empty base or
+		// derived particle is exempt: the extension may introduce content of either
+		// flavor.) Gated to 1.1 so XSD 1.0 stays byte-identical.
+		if c.version == Version11 {
+			baseHasContent := td.BaseType.ContentType == ContentTypeElementOnly || td.BaseType.ContentType == ContentTypeMixed
+			derivedHasContent := td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed
+			baseMixed := td.BaseType.ContentType == ContentTypeMixed
+			derivedMixed := td.ContentType == ContentTypeMixed
+			if baseHasContent && derivedHasContent && baseMixed != derivedMixed {
+				if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
+					component := componentLocalComplexType
+					if !src.isLocal {
+						component = "complex type '" + td.Name.Local + "'"
+					}
+					c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+						"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."))
+				}
+				continue
+			}
+		}
 		baseMG := td.BaseType.ContentModel
 		derivedMG := td.ContentModel
 		// cos-all-limited.1.2 / §3.8.2: an 'all' model group may only constitute
@@ -420,7 +518,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// CONTAINING an 'all' group, which is forbidden. The base-as-sole-content
 		// and direct-group-ref paths are checked elsewhere; this catches the
 		// extension-merge path, which they miss. libxml2 rejects this.
-		if baseMG != nil && derivedMG != nil && derivedMG.MaxOccurs != 0 && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG) {
+		allExtErr := func() {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
 				component := componentLocalComplexType
 				if !src.isLocal {
@@ -429,11 +527,50 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
 					"The 'all' model group needs to be the only child of the model group."))
 			}
-			continue
 		}
-		if baseMG != nil && derivedMG != nil {
+		switch {
+		case c.version == Version11 && baseMG != nil && derivedMG != nil &&
+			(baseMG.Compositor == CompositorAll || derivedMG.Compositor == CompositorAll):
+			// XSD 1.1 relaxes cos-all-limited: an xs:all may be extended by another
+			// xs:all, merging into a SINGLE all group whose members are the union of
+			// the base's and extension's. Both content models must be all groups (an
+			// xs:sequence/xs:choice extending an all, or an all extending a
+			// sequence/choice, remains invalid) with the SAME minOccurs (§3.4.2.2).
+			if baseMG.Compositor != CompositorAll || derivedMG.Compositor != CompositorAll ||
+				derivedMG.MaxOccurs == 0 || baseMG.MinOccurs != derivedMG.MinOccurs {
+				allExtErr()
+				continue
+			}
+			// bug 6202 (RESOLVED WONTFIX 2008-11-21): extending an empty *mixed*
+			// base 'all' with another 'all' is invalid. A mixed base has a
+			// non-absent content type even when its 'all' is empty, so §3.4.2.2
+			// sequences the base and derived particles — producing an 'all' nested
+			// in a sequence, which All Group Limited (§3.8.6.2) forbids. An empty
+			// *non-mixed* base is genuinely empty content, so its extension by an
+			// 'all' stays valid (the non-orthogonality the WG declined to fix).
+			if !modelGroupHasContent(baseMG) && td.BaseType.ContentType == ContentTypeMixed {
+				allExtErr()
+				continue
+			}
+			merged := make([]*Particle, 0, len(baseMG.Particles)+len(derivedMG.Particles))
+			merged = append(merged, baseMG.Particles...)
+			merged = append(merged, derivedMG.Particles...)
+			td.ContentModel = &ModelGroup{
+				Compositor: CompositorAll,
+				MinOccurs:  baseMG.MinOccurs,
+				MaxOccurs:  1,
+				Particles:  merged,
+			}
+		case baseMG != nil && derivedMG != nil && derivedMG.MaxOccurs != 0 && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG):
+			// cos-all-limited.1.2 / §3.8.2 (XSD 1.0, or 1.1 extension of a non-all
+			// base): an 'all' model group may only constitute the WHOLE content of a
+			// type. Appending an 'all' onto a non-empty base would build a sequence
+			// CONTAINING an 'all' group, which is forbidden.
+			allExtErr()
+			continue
+		case baseMG != nil && derivedMG != nil:
 			// Merge: create a sequence of base content + derived content.
-			merged := &ModelGroup{
+			td.ContentModel = &ModelGroup{
 				Compositor: CompositorSequence,
 				MinOccurs:  1,
 				MaxOccurs:  1,
@@ -442,26 +579,34 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 					{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG},
 				},
 			}
-			td.ContentModel = merged
-		} else if baseMG != nil {
+		case baseMG != nil:
 			td.ContentModel = baseMG
 		}
 		// Inherit content type from base if not already set.
 		if td.ContentType == ContentTypeEmpty && td.BaseType.ContentType != ContentTypeEmpty {
 			td.ContentType = td.BaseType.ContentType
 		}
-		// Check for duplicate attributes before merging base type attributes.
-		c.checkExtensionAttrDuplicates(ctx, td)
-		// Inherit attributes from base.
-		if td.BaseType.Attributes != nil {
-			td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+		// Check for duplicate attributes before merging base type attributes, then
+		// inherit. XSD 1.1 defers both to finalizeEffectiveAttrs (topological).
+		if c.version != Version11 {
+			c.checkExtensionAttrDuplicates(ctx, td)
+			if td.BaseType.Attributes != nil {
+				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+			}
+			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
+				td.AnyAttribute = td.BaseType.AnyAttribute
+			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
+				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
+			}
 		}
-		// Inherit/union anyAttribute wildcards.
-		if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
-			td.AnyAttribute = td.BaseType.AnyAttribute
-		} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-			td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute)
-		}
+	}
+
+	// XSD 1.1: resolve ##definedSibling on element wildcards now that content
+	// models (including expanded group refs) are fully built — BEFORE the
+	// restriction-derivation checks below, which compare base/derived wildcards'
+	// resolved SiblingNames.
+	if c.version == Version11 {
+		c.resolveDefinedSiblings()
 	}
 
 	// Check restriction attribute compatibility.
@@ -479,9 +624,47 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		return si.line < sj.line
 	})
 	for _, td := range restrictionTypes {
-		c.checkRestrictionAttrs(ctx, td)
+		// In XSD 1.1 checkRestrictionAttrs is run inside finalizeEffectiveAttrs,
+		// once the base's effective attributes are finalized; here only the content
+		// model restriction check runs (it is independent of attribute finalization).
+		if c.version != Version11 {
+			c.checkRestrictionAttrs(ctx, td)
+		}
 		c.checkRestrictionParticles(ctx, td)
 	}
+
+	// XSD 1.1: finalize each derived complex type's effective {attribute uses}
+	// TOPOLOGICALLY across BOTH extension and restriction derivations. A derivation
+	// inherits each base attribute use it does not redeclare (§3.4.2); a required
+	// base attribute that is not redeclared must stay required, so the merge — not
+	// the relaxed checkRestrictionAttrs — is what keeps it enforced. The merge must
+	// read a FINALIZED base attribute set, so an extension of a restriction (or vice
+	// versa) inherits correctly regardless of source order; the extension and
+	// restriction passes above DEFER all attribute work to here in 1.1. Gated to
+	// 1.1 so XSD 1.0 stays byte-identical.
+	if c.version == Version11 {
+		derived := make([]*TypeDef, 0, len(extensionTypes)+len(restrictionTypes))
+		derived = append(derived, extensionTypes...)
+		derived = append(derived, restrictionTypes...)
+		sort.SliceStable(derived, func(i, j int) bool {
+			si, sj := c.typeDefSources[derived[i]], c.typeDefSources[derived[j]]
+			if si.line != sj.line {
+				return si.line < sj.line
+			}
+			return si.ordinal < sj.ordinal
+		})
+		merged := make(map[*TypeDef]bool)
+		visiting := make(map[*TypeDef]bool)
+		for _, td := range derived {
+			c.finalizeEffectiveAttrs(ctx, td, merged, visiting)
+		}
+	}
+
+	// XSD 1.1: resolve each complex type's effective {open content} — fold in the
+	// per-document <xs:defaultOpenContent>, inherit/merge across extension, and
+	// check restriction-derivation validity. Runs after content models and content
+	// types are finalized so the appliesToEmpty/empty-content decisions are correct.
+	c.resolveOpenContent(ctx)
 
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.
 	// Only run UPA if there are no prior schema errors (libxml2 skips UPA when
@@ -540,6 +723,85 @@ func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*
 	return uses
 }
 
+func (c *compiler) markDefaultAttrUses(td *TypeDef, uses []*AttrUse) {
+	if td == nil || len(uses) == 0 {
+		return
+	}
+	attrs := c.defaultAttrUses[td]
+	if attrs == nil {
+		attrs = make(map[QName]*AttrUse)
+		c.defaultAttrUses[td] = attrs
+	}
+	for _, au := range uses {
+		if au.Prohibited {
+			continue
+		}
+		attrs[au.Name] = au
+	}
+}
+
+func (c *compiler) defaultAttrUse(td *TypeDef, name QName) *AttrUse {
+	if td == nil {
+		return nil
+	}
+	return c.defaultAttrUses[td][name]
+}
+
+func (c *compiler) defaultAttrUseMatches(a, b *TypeDef, name QName) bool {
+	au := c.defaultAttrUse(a, name)
+	return au != nil && au == c.defaultAttrUse(b, name)
+}
+
+func (c *compiler) markDefaultAttrUse(td *TypeDef, au *AttrUse) {
+	if td == nil || au == nil || au.Prohibited {
+		return
+	}
+	attrs := c.defaultAttrUses[td]
+	if attrs == nil {
+		attrs = make(map[QName]*AttrUse)
+		c.defaultAttrUses[td] = attrs
+	}
+	attrs[au.Name] = au
+}
+
+// attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
+// attribute group: its OWN xs:anyAttribute (if any) INTERSECTED with the
+// complete wildcards of every nested xs:attributeGroup ref child. visited guards
+// against reference cycles. Returns nil if neither the group nor any referenced
+// group declares a wildcard.
+func (c *compiler) attrGroupCompleteWildcard(qn QName, visited map[QName]struct{}) *Wildcard {
+	if _, seen := visited[qn]; seen {
+		return nil
+	}
+	visited[qn] = struct{}{}
+
+	result := c.attrGroupWildcards[qn]
+	for _, refQN := range c.attrGroupRefChildren[qn] {
+		nested := c.attrGroupCompleteWildcard(refQN, visited)
+		if nested == nil {
+			continue
+		}
+		if result == nil {
+			result = nested
+			continue
+		}
+		result = intersectWildcards(result, nested)
+	}
+	return result
+}
+
+// combineGroupWildcards intersects two possibly-nil attribute-group wildcards,
+// returning nil when both are nil and the non-nil one when only one is present.
+func combineGroupWildcards(a, b *Wildcard) *Wildcard {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	return intersectWildcards(a, b)
+}
+
 // appendAttrUses merges the attribute uses in extra into dst applying
 // attribute-group override semantics: a use already present in dst (by expanded
 // QName) is kept and the incoming inherited use is discarded (closer wins). A
@@ -586,6 +848,9 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 			continue
 		}
 		if !baseAttrNames[au.Name] {
+			continue
+		}
+		if c.defaultAttrUseMatches(td, td.BaseType, au.Name) {
 			continue
 		}
 		src, ok := c.typeDefSources[td]
@@ -962,6 +1227,19 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	// time this deferred check runs, so the recorded source is used.
 	file := c.diagSourceOrRecorded(src.source)
 	if src.nested {
+		// XSD 1.1 relaxes cos-all-limited: a reference to an 'all' model group may
+		// be nested directly inside another xs:all (it is flattened into the parent
+		// by matchAll), but it must occur exactly once (minOccurs = maxOccurs = 1).
+		// A reference nested in an xs:sequence/xs:choice is still forbidden, as is
+		// any nested all-group reference in XSD 1.0.
+		if c.version == Version11 && src.parentCompositor == CompositorAll {
+			if placeholder.MinOccurs == 1 && placeholder.MaxOccurs == 1 {
+				return
+			}
+			c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
+				"A reference to an 'all' model group nested in an 'all' model group must have minOccurs = maxOccurs = 1."))
+			return
+		}
 		c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
 			"A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."))
 		return
@@ -1026,6 +1304,9 @@ func modelGroupHasContent(mg *ModelGroup) bool {
 // placeholder only after this records the error, so an invalid schema cannot
 // silently compile and validate documents as if the missing type existed.
 func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, qn QName) {
+	if c.deprecatedDatatypeQName(qn) {
+		return
+	}
 	if c.filename == "" {
 		return
 	}
@@ -1046,11 +1327,36 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 		if elemKind == elemComplexType {
 			component = componentLocalComplexType
 		} else {
-			component = "local simple type"
+			component = componentLocalSimpleType
 		}
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg))
+}
+
+func (c *compiler) checkSchemaDefaultAttributes(ctx context.Context) {
+	for _, ref := range c.schemaDefaultAttrRefs {
+		if _, ok := c.schema.attrGroups[ref.qn]; ok {
+			continue
+		}
+		c.reportUnresolvedAttrGroupRef(ctx, ref.qn, ref.src)
+	}
+}
+
+func (c *compiler) reportUnresolvedAttrGroupRef(ctx context.Context, qn QName, src attrGroupRefUseSource) {
+	if c.filename == "" {
+		return
+	}
+	elemLocal := src.elemLocal
+	if elemLocal == "" {
+		elemLocal = elemAttributeGroup
+	}
+	attr := src.attr
+	if attr == "" {
+		attr = attrRef
+	}
+	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) attribute group definition.", qn.NS, qn.Local)
+	c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, elemLocal, elemLocal, attr, msg))
 }
 
 // checkAttrUseConstraints validates each attribute use's default/fixed value
@@ -1083,13 +1389,99 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		if val == nil {
 			continue
 		}
+		// A declared xsi:schemaLocation use has no scalar built-in type, so its
+		// fixed/default LITERAL is validated against the list-of-xs:anyURI value
+		// space directly (non-empty even pairs, each a valid xs:anyURI).
+		if isDeclaredXsiSchemaLocationUse(it.au, c.version) {
+			if err := validateXsiSchemaLocationValue(*val, c.version); err != nil {
+				msg := fmt.Sprintf("The value '%s' is not a valid value of the xsi:schemaLocation type (a non-empty even list of xs:anyURI).", *val)
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
+			}
+			continue
+		}
 		td := attrUseTypeDef(it.au, c.schema)
 		if td == nil || td.ContentType != ContentTypeSimple {
 			continue
 		}
-		if err := td.Validate(ctx, *val, it.src.nsMap); err != nil {
+		// Validate through the version-aware path so a 1.1 schema accepts 1.1-only
+		// lexical forms (e.g. "+INF") in attribute default/fixed constraints. The
+		// version-less (*TypeDef).Validate would build a Version10 context. schema is
+		// supplied because validateValue may evaluate an xs:assertion facet whose
+		// schema-aware cast (`castable as t:T`) needs the schema declarations — a nil
+		// schema would make that cast fail closed and reject a valid default/fixed.
+		vc := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, version: c.version}
+		if err := validateValue(ctx, *val, it.src.nsMap, td, "", "", 0, vc); err != nil {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
+		}
+	}
+}
+
+// checkElementDeclConstraints validates each element declaration's explicit
+// default/fixed value against its declared simple (content) type (XSD 1.1
+// "Schema Component Constraint: Element Default Valid (Immediate)"). It mirrors
+// checkAttrUseConstraints: an invalid value (e.g. a list/union default that does
+// not satisfy the type) is a schema error caught at compile time rather than
+// silently injected into the instance. Sources are recorded only in Version11, so
+// 1.0 never reaches this check.
+//
+// The type checked is the element's EFFECTIVE declared type (effectiveDeclType),
+// so a no-type substitution-group member is validated against its inherited head
+// type. Only an element whose type is a simple type, or a complex type with simple
+// content, has a type-validated default; an element-only/mixed complex content
+// default is character data not validated against a simple type, so it is skipped.
+// A simpleContent default is validated against its FULL content chain (effective
+// content type plus inherited base-content facets) via the shared
+// validateSimpleContentValue, identical to the instance-value path.
+func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	type pending struct {
+		decl *ElementDecl
+		src  attrConstraintSource
+	}
+	items := make([]pending, 0, len(c.elemDeclConstraintSources))
+	for decl, src := range c.elemDeclConstraintSources {
+		items = append(items, pending{decl: decl, src: src})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].src.line != items[j].src.line {
+			return items[i].src.line < items[j].src.line
+		}
+		return items[i].src.local < items[j].src.local
+	})
+
+	for _, it := range items {
+		val := it.decl.Default
+		if val == nil {
+			val = it.decl.Fixed
+		}
+		if val == nil {
+			continue
+		}
+		// Resolve the EFFECTIVE declared type: a no-type substitution-group member
+		// inherits its head's type, so validating it.decl.Type directly would skip the
+		// member (nil type) and miss an invalid inherited-type default/fixed.
+		std := effectiveDeclType(it.decl, c.schema)
+		if std == nil {
+			continue
+		}
+		// An element-only/mixed complex content default is character data, not validated
+		// against a simple type — skip it. A plain simpleType and a simpleContent complex
+		// type are both type-validated (the latter through its content chain).
+		if std.IsComplex && !std.IsSimpleContent {
+			continue
+		}
+		// Validate through the SAME shared simpleContent path the instance value uses
+		// (validateSimpleContentValue: effective content type PLUS inherited base
+		// content facets), version-/schema-aware so a 1.1 lexical form or an assertion
+		// facet is handled exactly as for an attribute default/fixed. A plain simpleType
+		// passes through that path unchanged (the nested-base walk is a no-op).
+		vc := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, version: c.version}
+		if err := vc.validateSimpleContentValue(ctx, *val, it.src.nsMap, std, it.src.local, it.src.line); err != nil {
+			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(effectiveContentSimpleType(std)))
+			c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
 		}
 	}
 }
@@ -1108,7 +1500,7 @@ func (c *compiler) checkAttrRefFixedConflict(ctx context.Context, au, ga *AttrUs
 	// report. A local default (au.Fixed == nil) always conflicts.
 	if au.Fixed != nil {
 		gaTD := attrUseTypeDef(ga, c.schema)
-		if fixedConstraintRestricts(ctx, *au.Fixed, *ga.Fixed, gaTD, gaTD, au.FixedNS, ga.FixedNS) {
+		if fixedConstraintRestricts(ctx, *au.Fixed, *ga.Fixed, gaTD, gaTD, au.FixedNS, ga.FixedNS, c.schema, c.version) {
 			return
 		}
 	}
@@ -1365,9 +1757,9 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 // derived "01" still matches base "1" for xs:integer, and a nil type falls back
 // to raw lexical equality); a cross-type pair is compared in its shared
 // primitive value space via crossMemberValueEqual.
-func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed string, derivedTD, baseTD *TypeDef, derivedNS, baseNS map[string]string) bool {
+func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed string, derivedTD, baseTD *TypeDef, derivedNS, baseNS map[string]string, schema *Schema, version Version) bool {
 	if derivedTD == nil || baseTD == nil || derivedTD == baseTD {
-		return fixedValueMatches(ctx, derivedFixed, baseFixed, derivedTD, derivedNS, baseNS)
+		return fixedValueMatches(ctx, derivedFixed, baseFixed, derivedTD, derivedNS, baseNS, schema, version)
 	}
 	// xs:anySimpleType — the simple ur-type — has NO primitive value-space family,
 	// so crossMemberValueEqual (which needs a shared primitive family) can never
@@ -1381,7 +1773,7 @@ func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed strin
 	if isUrSimpleType(derivedTD) || isUrSimpleType(baseTD) {
 		return derivedFixed == baseFixed
 	}
-	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS)
+	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS, schema, version)
 }
 
 // isUrSimpleType reports whether td is xs:anySimpleType, the simple ur-type. It
@@ -1409,7 +1801,8 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 
 	// Attribute the diagnostic to the schema that DECLARES this type: src.line is
 	// the line within that schema, so the filename must come from src.source
-	// (which may be an included/imported file), not the top-level c.filename.
+	// (an included/imported/redefined file), not the top-level c.filename. Mirrors
+	// the restriction-particle check (checkRestrictionParticles).
 	source := c.diagSourceOrRecorded(src.source)
 
 	baseTypeName := td.BaseType.Name.Local
@@ -1436,6 +1829,13 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
+					component+", attribute use '"+au.Name.Local+"'", msg))
+			}
+			// XSD 1.1 derivation-ok-restriction: a restricting attribute use must
+			// keep the base use's {inheritable} (true→false and false→true both fail).
+			if c.version == Version11 && au.Inheritable != baseAU.Inheritable {
+				msg := fmt.Sprintf("The 'inheritable' property of the attribute use '%s' is inconsistent with the corresponding attribute use of the base complex type definition %s.", au.Name.Local, baseQualified)
 				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
@@ -1467,15 +1867,17 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// same-type fast path (so base "1" accepts derived "01" for xs:integer)
 			// and falls back to the cross-type value-equality helper otherwise.
 			if baseAU.Fixed != nil {
-				if au.Fixed == nil || !fixedConstraintRestricts(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, baseTD, au.FixedNS, baseAU.FixedNS) {
+				if au.Fixed == nil || !fixedConstraintRestricts(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, baseTD, au.FixedNS, baseAU.FixedNS, c.schema, c.version) {
 					msg := fmt.Sprintf("The effective value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the corresponding attribute use of the base complex type definition %s.", baseQualified)
 					c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 						component+", attribute use '"+au.Name.Local+"'", msg))
 				}
 			}
-		} else if td.BaseType.AnyAttribute == nil || !wildcardMatches(td.BaseType.AnyAttribute, au.Name.NS) {
-			// No matching attribute, and no base wildcard whose namespace
-			// constraint admits this derived attribute's namespace.
+		} else if td.BaseType.AnyAttribute == nil || !wildcardAllowsExpandedName(td.BaseType.AnyAttribute, au.Name.Local, au.Name.NS, c.schema, true) {
+			// No matching attribute, and no base wildcard that ADMITS this derived
+			// attribute's expanded name — the full test honors the base wildcard's
+			// notNamespace/notQName/##defined, not just its namespace constraint, so
+			// a derived attribute the base wildcard excludes by name is rejected.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
 			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))
@@ -1492,6 +1894,18 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			continue
 		}
 		derived, found := derivedAttrs[baseAU.Name]
+		// XSD restriction inherits a base attribute use that the derived type does
+		// not redeclare (§3.4.2.2): an absent derived declaration is not "missing",
+		// it carries the base use forward. In XSD 1.1 mode that inheritance is
+		// honored, so only an explicit prohibition of a required base attribute is
+		// an error. XSD 1.0 mode keeps its historical behavior byte-identical.
+		if c.version == Version11 {
+			if found && derived.Prohibited {
+				msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
+			}
+			continue
+		}
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
 			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
@@ -1506,7 +1920,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
-			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
+			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute, c.schema, true) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 			}
@@ -1518,9 +1932,9 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				errFile := source
 				if baseSrc, ok := c.typeDefSources[td.BaseType]; ok {
 					errLine = baseSrc.line
-					// The line now comes from the BASE type's schema, so the
-					// filename must follow it (the base may live in an
-					// included/imported file).
+					// This error is attributed to the BASE type's location, so cite the
+					// base type's declaring file too (it may live in a different
+					// included/imported document than the derived type).
 					errFile = c.diagSourceOrRecorded(baseSrc.source)
 					if !baseSrc.isLocal {
 						errComponent = "complex type '" + td.BaseType.Name.Local + "'"
@@ -1530,6 +1944,77 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				c.schemaError(ctx, schemaComponentError(errFile, errLine, "complexType", errComponent, msg))
 			}
 		}
+	}
+}
+
+// finalizeEffectiveAttrs computes the effective {attribute uses} of a derived
+// complex type (XSD 1.1) TOPOLOGICALLY across BOTH extension and restriction
+// derivations: the base is finalized FIRST (recursively, regardless of its
+// derivation kind), then the derivation attribute check runs against td's OWN
+// declarations and the now-finalized base, then td inherits every base use it
+// does not redeclare. This makes the result independent of source order and, in
+// particular, lets an extension of a restriction (or a restriction of an
+// extension, at any depth) read a complete base attribute set — the round-3 merge
+// only recursed through restriction bases and so dropped attributes that a base
+// restriction had itself inherited.
+//
+// A derived declaration (including use="prohibited") overrides the base use of
+// the same expanded QName; validation handles prohibited uses (rejecting a
+// present instance attribute), so they are kept in the merged set. An attribute
+// wildcard is inherited when the derived type declares none; an extension also
+// UNIONS its own wildcard with the base's. merged memoizes completed types (each
+// finalizes once); visiting guards a cyclic base chain (an invalid schema
+// reported by the circular-type check) from infinite recursion.
+func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merged, visiting map[*TypeDef]bool) {
+	if td == nil || merged[td] {
+		return
+	}
+	if visiting[td] {
+		return // cyclic base chain; the circular-type check reports the error
+	}
+	visiting[td] = true
+	base := td.BaseType
+	if base != nil && base.Derivation != DerivationNone {
+		c.finalizeEffectiveAttrs(ctx, base, merged, visiting)
+	}
+	delete(visiting, td)
+	merged[td] = true
+
+	if base == nil || td.Derivation == DerivationNone {
+		return
+	}
+
+	// The base now carries its FINAL effective attribute set. Run the derivation
+	// attribute check with td's OWN declarations against that finalized base BEFORE
+	// inheriting (so the check sees the real derived-vs-base comparison and the
+	// extension duplicate detection sees inherited base attrs), then merge.
+	switch td.Derivation {
+	case DerivationRestriction:
+		c.checkRestrictionAttrs(ctx, td)
+	case DerivationExtension:
+		c.checkExtensionAttrDuplicates(ctx, td)
+	}
+
+	if len(base.Attributes) > 0 {
+		derivedByName := make(map[QName]struct{}, len(td.Attributes))
+		for _, au := range td.Attributes {
+			derivedByName[au.Name] = struct{}{}
+		}
+		for _, bau := range base.Attributes {
+			if _, redeclared := derivedByName[bau.Name]; redeclared {
+				continue
+			}
+			td.Attributes = append(td.Attributes, bau)
+			c.markDefaultAttrUse(td, c.defaultAttrUse(base, bau.Name))
+		}
+	}
+	// anyAttribute: a restriction inherits the base wildcard when it declares none;
+	// an extension additionally unions its own wildcard with the base's.
+	switch {
+	case td.AnyAttribute == nil:
+		td.AnyAttribute = base.AnyAttribute
+	case td.Derivation == DerivationExtension && base.AnyAttribute != nil:
+		td.AnyAttribute = wildcardUnion(base.AnyAttribute, td.AnyAttribute, c.version)
 	}
 }
 
@@ -1570,7 +2055,20 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 //   - "not(ns)"   → ##other: matches everything except ns and absent
 //   - "not(absent)" → matches everything except absent (empty namespace)
 //   - "set"       → finite set of namespace URIs (empty string = absent)
-func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
+func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
+	// Route to the general constraint algebra for EVERY XSD 1.1 union, not just
+	// those whose operands carry a notNamespace/notQName field. The 1.0 case
+	// analysis below keys processContents on w1 and APPROXIMATES some namespace
+	// unions (e.g. ##other|##local as ##any), both wrong for 1.1: the extension
+	// union must take the DERIVED (w2) processContents (XSD 3.4.2), and an xs:all
+	// restriction's base-wildcard union must compute the EXACT namespace set so a
+	// target-namespace element is not falsely admitted. The 1.0 path is kept
+	// STRICTLY for Version10 so existing goldens stay byte-identical; the
+	// 1.1-field guard remains as a defensive fallback.
+	if version == Version11 || wildcardHas11Fields(w1) || wildcardHas11Fields(w2) {
+		return unionWildcards11(w1, w2)
+	}
+
 	pc := w1.ProcessContents
 	tns := w1.TargetNS
 
@@ -1694,32 +2192,48 @@ func processContentsStrength(pc ProcessContentsKind) int {
 // leads back to itself. Only reports an error if the element itself is part
 // of the cycle (not if it just points to a cyclic element).
 func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDecl) {
+	// DFS over ALL heads (XSD 1.1 multiple-head substitution): a cycle may close
+	// through any one of an element's heads, so following only the first head
+	// would miss cycles that run through a later head.
 	visited := map[QName]bool{}
-	current := edecl.SubstitutionGroup
-	for current != (QName{}) {
-		if current == edecl.Name {
+	for _, current := range edecl.substitutionGroupHeads() {
+		if c.substGroupChainContains(edecl.Name, current, visited) {
 			// Cycle leads back to this element.
 			// libxml2 reports this error twice.
 			if src, ok := c.globalElemSources[edecl]; ok {
 				msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
-					edecl.Name.Local, current.Local)
+					edecl.Name.Local, edecl.Name.Local)
 				errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
 				c.schemaError(ctx, errStr)
 				c.schemaError(ctx, errStr)
 			}
 			return
 		}
-		if visited[current] {
-			// Hit a cycle that doesn't include this element.
-			return
-		}
-		visited[current] = true
-		head, ok := c.schema.elements[current]
-		if !ok {
-			return
-		}
-		current = head.SubstitutionGroup
 	}
+}
+
+func (c *compiler) substGroupChainContains(target, current QName, visited map[QName]bool) bool {
+	if current == (QName{}) {
+		return false
+	}
+	if current == target {
+		return true
+	}
+	if visited[current] {
+		// Hit a cycle that doesn't include this element.
+		return false
+	}
+	visited[current] = true
+	head, ok := c.schema.elements[current]
+	if !ok {
+		return false
+	}
+	for _, next := range head.substitutionGroupHeads() {
+		if c.substGroupChainContains(target, next, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkFinalOnTypes checks that no type derivation violates the base type's final constraint.
@@ -1776,14 +2290,16 @@ func (c *compiler) checkFinalOnSubstGroups(ctx context.Context) {
 		if head.Final == 0 {
 			continue
 		}
+		headType := c.resolveDeclaredType(head)
 		for _, member := range members {
-			if head.Final&FinalExtension != 0 && derivationUsesMethod(member.Type, head.Type, DerivationExtension) {
+			memberType := c.resolveDeclaredType(member)
+			if head.Final&FinalExtension != 0 && derivationUsesMethod(memberType, headType, DerivationExtension) {
 				if src, ok := c.globalElemSources[member]; ok {
 					c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."))
 				}
 			}
-			if head.Final&FinalRestriction != 0 && derivationUsesMethod(member.Type, head.Type, DerivationRestriction) {
+			if head.Final&FinalRestriction != 0 && derivationUsesMethod(memberType, headType, DerivationRestriction) {
 				if src, ok := c.globalElemSources[member]; ok {
 					c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."))
@@ -1793,8 +2309,30 @@ func (c *compiler) checkFinalOnSubstGroups(ctx context.Context) {
 	}
 }
 
-// derivationUsesMethod walks the BaseType chain from derived to base and
-// returns true if any step in the chain uses the given derivation method.
+func (c *compiler) checkSubstGroupAffiliations(ctx context.Context) {
+	for headQN, members := range c.schema.substGroups {
+		head, ok := c.schema.elements[headQN]
+		if !ok {
+			continue
+		}
+		headType := c.resolveDeclaredType(head)
+		for _, member := range members {
+			memberType := c.resolveDeclaredType(member)
+			if isXsiTypeDerivedFromDeclared(memberType, headType) {
+				continue
+			}
+			if src, ok := c.globalElemSources[member]; ok {
+				msg := fmt.Sprintf("The substitution group affiliation to '%s' is not validly substitutable for the head element's type definition.", head.Name.Local)
+				c.schemaError(ctx, schemaElemDeclError(c.filename, src.line, member.Name.Local, msg))
+			}
+		}
+	}
+}
+
+// derivationUsesMethod reports whether derived reaches base through the given
+// derivation method. It follows explicit BaseType links and the extra simple-type
+// derivation paths that are not pointer-linked: built-in narrowing and an
+// unfaceted union head substitutable through one of its members.
 func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 	if derived == nil || base == nil {
 		return false
@@ -1805,6 +2343,22 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 			return true
 		}
 		td = td.BaseType
+	}
+	if td == base {
+		return false
+	}
+	if method == DerivationRestriction && resolveVariety(base) == TypeVarietyUnion {
+		for _, member := range resolveUnionMembers(base) {
+			if isXsiTypeDerivedFromDeclared(derived, member) {
+				return true
+			}
+		}
+	}
+	if method == DerivationRestriction && isBuiltinSimpleType(base) {
+		db := builtinBaseLocal(derived)
+		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
+			return true
+		}
 	}
 	return false
 }
@@ -1863,6 +2417,7 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 			if ns == "" && prefix != "" {
 				c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
 			}
+			c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns)
 			return QName{Local: local, NS: ns}
 		}
 	}
@@ -1875,7 +2430,24 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 		ns = defNS
 	}
 
+	c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns)
 	return QName{Local: local, NS: ns}
+}
+
+// rejectDeprecatedDatatypeNamespace reports the XSD 1.1 rule that schema QName
+// references must not use the old XML Schema datatypes namespace.
+func (c *compiler) rejectDeprecatedDatatypeNamespace(ctx context.Context, elem *helium.Element, ref, ns string) bool {
+	if c.version != Version11 || ns != lexicon.NamespaceXSDDatatypes {
+		return false
+	}
+	msg := fmt.Sprintf("The namespace '%s' used by QName value '%s' has been deprecated; use '%s' for XML Schema built-in datatypes.", ns, ref, lexicon.NamespaceXSD)
+	c.schemaError(ctx,
+		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
+	return true
+}
+
+func (c *compiler) deprecatedDatatypeQName(qn QName) bool {
+	return c.version == Version11 && qn.NS == lexicon.NamespaceXSDDatatypes
 }
 
 // reportUnboundQNamePrefix emits a fatal schema-compilation error for a prefixed
@@ -1886,6 +2458,20 @@ func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.El
 		return
 	}
 	msg := fmt.Sprintf("The QName value '%s' uses the namespace prefix '%s', which is not bound to a namespace.", ref, prefix)
+	c.schemaError(ctx,
+		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
+}
+
+// reportInvalidQNameValue emits a fatal schema-compilation error for a
+// QName-valued attribute whose value is not a lexically valid xs:QName (e.g. a
+// leading colon like ":u"). Without this such a value would slip past the
+// prefix-resolution path (strings.Cut yields an empty prefix that bypasses the
+// unbound-prefix check) and resolve as an unprefixed reference.
+func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, ref string) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("The QName value '%s' is not a valid QName.", ref)
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 }

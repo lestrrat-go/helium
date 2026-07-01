@@ -6,6 +6,7 @@ import (
 )
 
 const componentLocalComplexType = "local complex type"
+const componentLocalSimpleType = "local simple type"
 
 // checkUPA checks that a content model is deterministic (Unique Particle Attribution).
 // A non-deterministic model means that when an element arrives, there's ambiguity
@@ -270,17 +271,27 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 	switch t := term.(type) {
 	case *ElementDecl:
 		// An element leaf and each of its substitution-group members is its own
-		// position; any of them can match where the element is expected.
+		// position; any of them can match where the element is expected. ABSTRACT
+		// members are NOT skipped here: XSD 1.1 (§3.8.6.4 / cos-nonambig) bases the
+		// actual substitution group on DECLARATION membership, so an abstract member
+		// still COMPETES for unique particle attribution even though it can never
+		// appear in an instance — e.g. element `e` + a local `e1` plus an abstract
+		// `e1 substitutionGroup="e"` IS a UPA violation in 1.1 (W3C wgData/sg/upa.xsd,
+		// bug 4337). (Instance MATCHING, by contrast, does skip abstract members via
+		// elemMatchesDeclOrSubst — that is a different question.)
 		var info posInfo
 		ids := []int{a.newPos(firstSetEntry{qname: t.Name})}
-		for _, member := range a.schema.substGroups[t.Name] {
+		// TRANSITIVE declaration-membership closure (abstract members included) — a
+		// direct substGroups lookup misses a multi-level chain h<-m1<-m2 and would
+		// miss a transitive UPA conflict.
+		for _, member := range substitutableMembersFor(t, a.schema) {
 			ids = append(ids, a.newPos(firstSetEntry{qname: member.Name}))
 		}
 		info.first = ids
 		info.last = slices.Clone(ids)
 		return info
 	case *Wildcard:
-		id := a.newPos(firstSetEntry{isWildcard: true, wildcard: t.Namespace, targetNS: t.TargetNS})
+		id := a.newPos(firstSetEntry{isWildcard: true, wildcard: t.Namespace, targetNS: t.TargetNS, wc: t})
 		return posInfo{first: []int{id}, last: []int{id}}
 	case *ModelGroup:
 		return a.walkModelGroup(t)
@@ -428,7 +439,11 @@ func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
 			if pi == pj {
 				continue
 			}
-			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry) {
+			version := Version10
+			if a.schema != nil {
+				version = a.schema.version
+			}
+			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry, version) {
 				return false
 			}
 		}
@@ -444,24 +459,46 @@ func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
 // the empty string to also mean "this is an element" would mis-treat such a
 // wildcard as an element and false-reject deterministic models.
 type firstSetEntry struct {
-	qname      QName  // for elements
-	isWildcard bool   // true iff this entry is a wildcard position
-	wildcard   string // for wildcards (namespace constraint)
-	targetNS   string // for wildcards
+	qname      QName     // for elements
+	isWildcard bool      // true iff this entry is a wildcard position
+	wildcard   string    // for wildcards (namespace constraint)
+	targetNS   string    // for wildcards
+	wc         *Wildcard // for wildcards: the full term (carries XSD 1.1 notNamespace/notQName)
 }
 
 // entriesOverlap checks if two first-set entries can match the same element.
-func entriesOverlap(a, b firstSetEntry) bool {
+//
+// In XSD 1.1 wildcards are "weak": when an element particle and a wildcard
+// compete for the same element name, the element declaration wins, so the pair
+// is NOT a UPA (cos-nonambig) violation. In XSD 1.0 such a pair IS ambiguous.
+// Element-vs-element and wildcard-vs-wildcard overlap are unchanged across
+// versions.
+//
+// Note: this relaxation is the compile-time half of XSD 1.1 weak wildcards.
+// The validation half — element-over-wildcard precedence — is enforced for the
+// CHOICE case by matchChoice/tryMatchChoice (validate_elem.go), so a wildcard
+// no longer steals a child attributable to a competing element declaration
+// regardless of declaration order. The remaining gap is the SEQUENCE case (a
+// minOccurs=0 wildcard preceding an element in a sequence), which the
+// position-based sequence matcher does not yet override.
+func entriesOverlap(a, b firstSetEntry, version Version) bool {
 	// Two elements overlap if they have the same QName.
 	if !a.isWildcard && !b.isWildcard {
 		return a.qname == b.qname
 	}
-	// Element vs wildcard: check if the wildcard's namespace matches the element's namespace.
+	// Element vs wildcard: in 1.1 the element wins (no conflict); in 1.0 they
+	// overlap when the wildcard's namespace admits the element's namespace.
 	if !a.isWildcard && b.isWildcard {
-		return wildcardMatchesNS(b.wildcard, b.targetNS, a.qname.NS)
+		if version == Version11 {
+			return false
+		}
+		return entryWildcardMatchesNS(b, a.qname.NS)
 	}
 	if a.isWildcard && !b.isWildcard {
-		return wildcardMatchesNS(a.wildcard, a.targetNS, b.qname.NS)
+		if version == Version11 {
+			return false
+		}
+		return entryWildcardMatchesNS(a, b.qname.NS)
 	}
 	// Two wildcards: check if their namespace constraints can both match the same namespace.
 	return wildcardsOverlap(a, b)
@@ -481,6 +518,12 @@ func entriesOverlap(a, b firstSetEntry) bool {
 // set/negation combination so a negation (open-ended) constraint no longer
 // falls through to a blanket "always overlaps".
 func wildcardsOverlap(a, b firstSetEntry) bool {
+	// XSD 1.1: when either wildcard carries a notNamespace/notQName constraint
+	// the string-based set/negation analysis below cannot represent it; decide
+	// namespace intersection via the general constraint algebra.
+	if (a.wc != nil && wildcardHas11Fields(a.wc)) || (b.wc != nil && wildcardHas11Fields(b.wc)) {
+		return constraintsIntersect(wildcardConstraint(a.wc), wildcardConstraint(b.wc))
+	}
 	aSet := upaWildcardNSSet(a.wildcard, a.targetNS)
 	bSet := upaWildcardNSSet(b.wildcard, b.targetNS)
 
@@ -542,6 +585,17 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 		}
 		return result
 	}
+}
+
+// entryWildcardMatchesNS reports whether a wildcard first-set entry admits a
+// namespace, honoring an XSD 1.1 notNamespace constraint when the full *Wildcard
+// is available (it always is for entries built by this package) and falling back
+// to the string form otherwise.
+func entryWildcardMatchesNS(e firstSetEntry, ns string) bool {
+	if e.wc != nil {
+		return wildcardMatches(e.wc, ns)
+	}
+	return wildcardMatchesNS(e.wildcard, e.targetNS, ns)
 }
 
 // wildcardMatchesNS checks if a wildcard namespace constraint matches a given namespace.

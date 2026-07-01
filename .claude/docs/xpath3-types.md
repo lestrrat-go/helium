@@ -28,14 +28,34 @@ type Sequence []Item
 
 ```go
 type NodeItem struct {
-    Node           helium.Node
-    TypeAnnotation string
-    AtomizedType   string
+    Node             helium.Node
+    TypeAnnotation   string
+    AtomizedType     string
+    ListItemType     string
+    ListItemAtomized string
+    UnionMemberTypes []string
+    ActiveUnionMember *NodeItemUnionMember
+    ListItemLeaves   []*NodeItemUnionMember
+    QNameNoDefaultNS bool
+}
+
+type NodeItemUnionMember struct {
+    TypeName     string // member type annotation name
+    Atomized     string // built-in base of an atomic member
+    ListItem     string // non-empty if the member is itself a list
+    ListItemAtom string // built-in base of the list item
+    ListItemLeaves []*NodeItemUnionMember // per-token leaves when ListItem is a union
 }
 ```
 
 - `TypeAnnotation` → schema-aware node type annotation (`xs:*` or `Q{ns}local`)
 - `AtomizedType` → built-in base type used when atomizing schema-derived node types
+- `ListItemType` → item type name for a list-typed node; `ListItemAtomized` → that item type's built-in base (e.g. `xs:QName` for a QName-derived list item), so list-token atomization (`atomizeListToken`) can resolve QName/NOTATION items namespace-aware; `UnionMemberTypes` → member type names for a union-typed node
+- `ActiveUnionMember` → the value-dependent ACTIVE LEAF member of a union node (the first direct member the value FULLY validates against — lexical/value cast AND facets/list-length via `SchemaDeclarations.ValidateCastWithNS`; when that member is itself a union, resolution descends recursively to the nested leaf, matching the `$value` selection), or nil. A list leaf expands to per-item atoms; an atomic leaf yields a single atom typed as that member. The `NodeItemUnionMember` it points at is immutable (shared across clones)
+- `ListItemLeaves` → populated only when a list node's ITEM type is a UNION: the per-token ACTIVE union leaf (resolved value-dependently in `nodeItemFor` via `resolveActiveUnionLeafForValue`, one entry per token in document order). `atomizeListTokenAt(i, …)` atomizes token `i` through `ListItemLeaves[i]` when present, so `xs:list itemType="<union>"` atomizes each token by its own active member (agreeing with `$value`) instead of forcing every token through one static base; nil/short slice falls back to `atomizeListToken` on the declared item type
+- `QNameNoDefaultNS` → set from `Evaluator.QNameValueNoDefaultNamespace()`; when true an UNPREFIXED QName/NOTATION value atomizes to no namespace (XSD value-space semantics) instead of the node's default namespace
+
+`resolveQNameFromNode` predeclares the `xml` prefix (→ the XML namespace) without requiring a binding on any node, matching `xsd.resolveLexicalQName`, so an xs:QName value such as `xml:lang`/`xml:space` atomizes correctly. List-typed node atomization splits on XSD whitespace ONLY (`xsdListFields`: space/tab/CR/LF — NOT NBSP/other Unicode whitespace, matching XSD list tokenization and the validation/`$value` paths) and atomizes each token via `atomizeListToken` (used by both `atomizeStream` and the value-comparison atom iterator). When the item type's built-in base is `xs:QName`/`xs:NOTATION` it resolves each token against the node's in-scope namespaces (preserving the user/list-item type name and its built-in base); a NON-QName USER item type (a `Q{...}` name `CastFromString` can't resolve) is cast through its `ListItemAtomized` built-in base and typed as the user type with that base, so a list whose item type derives from xs:int yields numeric atoms usable by `sum()`. A UNION-typed node is atomized through its precomputed ACTIVE LEAF member (`ActiveUnionMember`, resolved by `resolveActiveUnionLeaf` in `nodeItemFor` with FULL schema-aware validation — cast validity AND facets/list-length/assertions via `SchemaDeclarations.ValidateCastWithNS`, the ctx threaded through `nodeItemFor`): `atomizeUnionItems` (used by both the stream and comparison paths) expands a LIST leaf to per-item atoms (via `atomizeListTokenAt`, so when the leaf's list item type is ITSELF a UNION the per-token active leaves carried on `NodeItemUnionMember.ListItemLeaves` — precomputed in `resolveActiveUnionLeafRec` — type each token by its own active member, matching `$value`) and yields an ATOMIC leaf as a single atom typed as that member. Resolution descends recursively through NESTED unions to the leaf (mirroring `fixedUnionActiveMember`), so `data()` and `$value` agree for `Outer=union(Inner,…)` / `Inner=union(IntList,…)`. Because selection is full validation, a member that casts but fails its own facets (e.g. an xs:list with `xs:length=2` against `"1 2 3"`) is correctly skipped — matching the `$value` path. All of this only activates when `ActiveUnionMember`/`ListItemType` are populated (schema-aware atomization), so non-schema-aware xpath3/xslt3 behavior is unchanged.
 
 ## AtomicValue
 

@@ -1,4 +1,25 @@
-// Package xsd implements XML Schema (XSD) 1.0 compilation and validation.
+// Package xsd implements XML Schema (XSD) compilation and validation.
+//
+// # Version
+//
+// The compiler targets XSD 1.0 by default. XSD 1.1 is opt-in via
+// [Compiler.Version]:
+//
+//	schema, err := xsd.NewCompiler().
+//	    Version(xsd.Version11).
+//	    Compile(ctx, doc)
+//
+// When the version is not set explicitly, a vc:minVersion="1.1" attribute on the
+// root <xs:schema> auto-selects 1.1. In 1.1 mode the 1.1-only lexical forms (e.g.
+// "+INF" for xs:double/xs:float, year "0000" on the date types) and the 1.1
+// built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration,
+// xs:anyAtomicType, xs:error) are recognized. XSD 1.1 support includes
+// assertions and assertion facets, conditional type assignment, open content
+// (including schema-level xs:defaultOpenContent), schema default attributes,
+// broader xs:all support, xs:override, temporal datatype facets such as
+// explicitTimezone, relaxed wildcard/UPA behavior, document-wide
+// xs:ID/xs:IDREF/xs:ENTITY value-space validation, identity-constraint scoping,
+// and compile-time validation of element default/fixed constraints.
 //
 // # Compilation
 //
