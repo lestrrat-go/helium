@@ -65,12 +65,14 @@ func TestComplexContentGrammar(t *testing.T) {
 		require.Error(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates a stray child after the derivation", func(t *testing.T) {
+	t.Run("XSD 1.0 also rejects a stray child after the derivation", func(t *testing.T) {
 		t.Parallel()
+		// The (annotation?, (restriction|extension)) wrapper grammar is version-
+		// independent, so 1.0 rejects the trailing stray sequence just like 1.1.
 		schema := wrap(derivation + `
     <xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence>`)
 		_, v10err := compileV10(t, schema)
-		require.NoError(t, v10err, "1.0 keeps its lenient early-return behavior (byte-identity)")
+		require.Error(t, v10err, "1.0 enforces the wrapper grammar")
 		_, _, v11err := compileV11(t, schema)
 		require.Error(t, v11err, "1.1 rejects the stray")
 	})
@@ -131,12 +133,15 @@ func TestSimpleContentGrammar(t *testing.T) {
 		require.Error(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates a stray child under simpleContent", func(t *testing.T) {
+	t.Run("XSD 1.0 also rejects a stray child under simpleContent", func(t *testing.T) {
 		t.Parallel()
+		// The simpleContent wrapper grammar is version-independent: a trailing
+		// openContent (not a restriction/extension) is a stray child rejected in 1.0
+		// too (openContent is not a 1.0 construct, so it is genuinely invalid there).
 		schema := wrap(derivation + `
     <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>`)
 		_, v10err := compileV10(t, schema)
-		require.NoError(t, v10err, "1.0 keeps its lenient behavior (byte-identity)")
+		require.Error(t, v10err, "1.0 enforces the wrapper grammar")
 		_, _, v11err := compileV11(t, schema)
 		require.Error(t, v11err)
 	})
@@ -239,8 +244,8 @@ func TestComplexTypeDirectStrayChild(t *testing.T) {
 }
 
 // TestComplexTypeDirectAnnotationCardinality covers F2: the direct complexType
-// grammar is (annotation?, ...), so at most ONE xs:annotation is allowed in 1.1
-// (position stays deliberately tolerant). 1.0 tolerates a second annotation.
+// grammar is (annotation?, ...), so at most ONE xs:annotation is allowed, and it
+// must be the first child. This is version-independent (enforced in 1.0 and 1.1).
 func TestComplexTypeDirectAnnotationCardinality(t *testing.T) {
 	t.Parallel()
 
@@ -268,13 +273,21 @@ func TestComplexTypeDirectAnnotationCardinality(t *testing.T) {
 		require.Error(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates two annotations", func(t *testing.T) {
+	t.Run("XSD 1.0 also rejects two annotations", func(t *testing.T) {
 		t.Parallel()
 		schema := wrap(`    <xs:annotation><xs:documentation>one</xs:documentation></xs:annotation>
     <xs:annotation><xs:documentation>two</xs:documentation></xs:annotation>
     <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`)
 		_, v10err := compileV10(t, schema)
-		require.NoError(t, v10err)
+		require.Error(t, v10err, "the annotation cardinality rule is version-independent")
+	})
+
+	t.Run("XSD 1.0 also rejects an annotation after content", func(t *testing.T) {
+		t.Parallel()
+		schema := wrap(`    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    <xs:annotation><xs:documentation>too late</xs:documentation></xs:annotation>`)
+		_, v10err := compileV10(t, schema)
+		require.Error(t, v10err, "the annotation must be the first child (version-independent)")
 	})
 }
 

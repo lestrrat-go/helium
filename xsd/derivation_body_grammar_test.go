@@ -85,13 +85,16 @@ func TestComplexContentBodyGrammar(t *testing.T) {
 		require.Error(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates a trailing child after assert position", func(t *testing.T) {
+	t.Run("XSD 1.0 rejects xs:assert as a stray body child", func(t *testing.T) {
 		t.Parallel()
+		// The complexContent derivation-body grammar is version-independent. xs:assert
+		// is not a 1.0 construct, so it is a stray child of the restriction/extension
+		// body and is rejected in 1.0 (as it is in 1.1 when out of order).
 		schema := ext(`    <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
     <xs:assert test="true()"/>
     <xs:attribute name="x" type="xs:string"/>`)
 		_, v10err := compileV10(t, schema)
-		require.NoError(t, v10err, "1.0 ignores xs:assert and keeps lenient body parsing")
+		require.Error(t, v10err, "1.0 rejects the stray xs:assert in the body")
 	})
 }
 
@@ -205,11 +208,13 @@ func TestSimpleContentBodyGrammar(t *testing.T) {
 		require.Error(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates a mis-ordered simpleContent extension body", func(t *testing.T) {
+	t.Run("XSD 1.0 also rejects a mis-ordered simpleContent extension body", func(t *testing.T) {
 		t.Parallel()
+		// The simpleContent extension body grammar is version-independent: a facet is
+		// not allowed in an extension, so 1.0 rejects it just like 1.1.
 		schema := ext(`    <xs:attribute name="x" type="xs:string"/>
     <xs:maxLength value="10"/>`)
 		_, v10err := compileV10(t, schema)
-		require.NoError(t, v10err, "1.0 ignores the stray facet and keeps lenient body parsing")
+		require.Error(t, v10err, "1.0 rejects the facet in a simpleContent extension")
 	})
 }

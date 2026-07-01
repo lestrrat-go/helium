@@ -7,6 +7,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
@@ -14,6 +15,19 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named complexType missing name")
+	}
+
+	// The @name of a global complexType is an xs:NCName (XSD Structures §3.4.2). A
+	// value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g. "1foo")
+	// is a schema error; the type is dropped so it does not enter the target-namespace
+	// symbol space under a bogus name. Version-independent XSD rule.
+	if !xmlchar.IsValidNCName(name) {
+		if c.filename != "" {
+			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
+				elem.LocalName(), componentLocalComplexType,
+				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+		}
+		return nil
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -126,7 +140,8 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	var anyAttributeSeen bool      // whether an anyAttribute wildcard has been seen; it must be the optional final child
 	var assertSeen bool            // whether an xs:assert (trailing region) has been seen; openContent must precede it
 	var openContentSeen bool       // whether an xs:openContent has been seen; it is a sibling of the wrapper-free CHOICE branch
-	var annotationSeen bool        // whether an xs:annotation has been seen (cardinality: at most one; POSITION is deliberately tolerant)
+	var annotationSeen bool        // whether an xs:annotation has been seen (cardinality: at most one)
+	var sawNonAnnotation bool      // whether a non-annotation child has been seen (the annotation must be first)
 
 	reportExtraContent := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -143,6 +158,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
+		}
+
+		if !isXSDElement(ce, elemAnnotation) {
+			sawNonAnnotation = true
 		}
 
 		// Guard model-group particles: at most one, before any attribute
@@ -378,11 +397,14 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			td.openContentExplicit = true
 			td.OpenContent = c.parseOpenContent(ctx, ce)
 		case isXSDElement(ce, elemAnnotation):
-			// annotation is permitted (collected elsewhere). The grammar is
-			// (annotation?), so at most one — a SECOND is a schema error (1.1 only).
-			// POSITION stays deliberately tolerant (annotation may appear anywhere).
-			if c.version == Version11 && annotationSeen {
+			// annotation is permitted (collected elsewhere). The direct complexType
+			// grammar is (annotation?, ...), so at most one AND it must be the FIRST
+			// child — a SECOND annotation or one AFTER any content is a schema error.
+			// This is a version-INDEPENDENT XSD rule (enforced in both 1.0 and 1.1).
+			if annotationSeen {
 				reportExtraContent(ce, "A complex type definition must not have more than one 'annotation'.")
+			} else if sawNonAnnotation {
+				reportExtraContent(ce, "An 'annotation' must be the first child of a 'complexType'.")
 			}
 			annotationSeen = true
 		default:
@@ -422,8 +444,9 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 	// complexContent mixed="false"). At entry td.ContentType==Mixed iff the enclosing
 	// complexType set mixed="true". Set mixedness BEFORE parsing the derivation so the
 	// model-group handlers (which set ElementOnly only when not already Mixed) keep it.
-	// Gated to 1.1 so XSD 1.0 stays byte-identical (it never honored this attribute).
-	if c.version == Version11 && hasAttr(elem, "mixed") {
+	// <xs:complexContent>/@mixed is a version-INDEPENDENT part of the XSD data model
+	// (§3.4.2), so it is honored in both 1.0 and 1.1.
+	if hasAttr(elem, "mixed") {
 		ccMixed := c.readBooleanAttr(ctx, elem, "mixed")
 		ctMixed := td.ContentType == ContentTypeMixed
 		if ctMixed && !ccMixed && c.filename != "" {
@@ -436,29 +459,11 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		}
 	}
 	// XSD 3.4.2: the <xs:complexContent> content model is (annotation?, (restriction
-	// | extension)). The NEW strict enforcement (exactly one derivation; annotation
-	// only before it; reject zero/second/stray/trailing children) is Version11-only;
-	// XSD 1.0 keeps its original lenient behavior — dispatch the FIRST
-	// restriction/extension and ignore everything else — so goldens stay
-	// byte-identical to origin.
-	if c.version != Version11 {
-		for child := range helium.Children(elem) {
-			if child.Type() != helium.ElementNode {
-				continue
-			}
-			ce, ok := helium.AsNode[*helium.Element](child)
-			if !ok {
-				continue
-			}
-			switch {
-			case isXSDElement(ce, elemRestriction):
-				return c.parseRestriction(ctx, ce, td)
-			case isXSDElement(ce, elemExtension):
-				return c.parseExtension(ctx, ce, td)
-			}
-		}
-		return nil
-	}
+	// | extension)). This grammar is version-INDEPENDENT — exactly one derivation,
+	// an annotation only before it, nothing else — so parseDerivationWrapper enforces
+	// it in both XSD 1.0 and 1.1. For a VALID wrapper (one derivation) the dispatch
+	// is identical to the old lenient loop; only zero/second/stray/trailing children
+	// (all invalid per the spec) are now rejected instead of silently tolerated.
 	return c.parseDerivationWrapper(ctx, elem, func(ce *helium.Element, kind DerivationKind) error {
 		if kind == DerivationRestriction {
 			return c.parseRestriction(ctx, ce, td)
@@ -472,11 +477,11 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 // <xs:simpleContent>: an optional leading annotation, then EXACTLY ONE restriction
 // or extension, and nothing else. A second derivation, a missing derivation, an
 // annotation AFTER the derivation, or any other stray child is a schema error. The
-// single derivation is handed to dispatch (with its kind). This is Version11 ONLY —
-// the 1.0 callers keep their own historical lenient loops (which differ:
-// complexContent processed only the FIRST derivation, simpleContent processed ALL),
-// so factoring them here would change 1.0 behavior. Centralizing the 1.1 grammar in
-// one helper keeps the two wrappers from diverging again.
+// single derivation is handed to dispatch (with its kind). This grammar is
+// version-INDEPENDENT (§3.4.2), so BOTH XSD 1.0 and 1.1 route through this helper;
+// for a valid wrapper (one derivation) the dispatch is identical to the old lenient
+// loops, so only the invalid forms are newly rejected in 1.0. Centralizing it keeps
+// the complexContent and simpleContent wrappers from diverging.
 func (c *compiler) parseDerivationWrapper(ctx context.Context, wrapper *helium.Element, dispatch func(ce *helium.Element, kind DerivationKind) error) error {
 	report := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -558,13 +563,15 @@ func (c *compiler) recordDerivationBaseRef(ctx context.Context, elem *helium.Ele
 // the restriction-vs-extension behavior (an extension warns+skips a pointless
 // use="prohibited" attribute). The XSD 3.4.2 body content model is
 // (annotation?, openContent?, (group|all|choice|sequence)?,
-// ((attribute|attributeGroup)*, anyAttribute?), assert*). The EXISTING ordering
-// checks (single model group, model group before attributes, attribute before
-// anyAttribute, single anyAttribute) run in every version; the NEW strict checks
-// (annotation first/at-most-one, nothing after the trailing assert*, reject stray
-// children) are Version11-only so XSD 1.0 stays byte-identical.
+// ((attribute|attributeGroup)*, anyAttribute?), assert*). This body grammar is
+// version-INDEPENDENT, so the ordering/cardinality checks (single model group,
+// model group before attributes, attribute before anyAttribute, single
+// anyAttribute, annotation first/at-most-one, nothing after the trailing assert*,
+// reject stray children) run in BOTH XSD 1.0 and 1.1. openContent/assert are 1.1
+// constructs (their cases stay Version11-gated) so a 1.0 schema carrying one is a
+// stray child, which is genuinely invalid in 1.0.
 func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *helium.Element, td *TypeDef, kind DerivationKind) error {
-	strict := c.version == Version11
+	strict := true
 	var contentModelChild string
 	var directAttrChild string
 	var anyAttributeSeen bool
@@ -761,30 +768,11 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 	td.ContentType = ContentTypeSimple
 	td.IsSimpleContent = true
 	// XSD 3.4.2: the <xs:simpleContent> content model is (annotation?, (restriction
-	// | extension)). The NEW strict enforcement (exactly one derivation; annotation
-	// only before it; reject zero/second/stray/trailing children, e.g. a direct
-	// trailing <xs:openContent>) is Version11-only — it shares parseDerivationWrapper
-	// with complexContent so the two cannot diverge. XSD 1.0 keeps its original
-	// lenient behavior — dispatch EVERY restriction/extension child, no rejection —
-	// so goldens stay byte-identical to origin.
-	if c.version != Version11 {
-		for child := range helium.Children(elem) {
-			if child.Type() != helium.ElementNode {
-				continue
-			}
-			ce, ok := helium.AsNode[*helium.Element](child)
-			if !ok {
-				continue
-			}
-			switch {
-			case isXSDElement(ce, elemExtension):
-				c.dispatchSimpleContentDerivation(ctx, ce, td, DerivationExtension)
-			case isXSDElement(ce, elemRestriction):
-				c.dispatchSimpleContentDerivation(ctx, ce, td, DerivationRestriction)
-			}
-		}
-		return
-	}
+	// | extension)). This grammar is version-INDEPENDENT and shares parseDerivationWrapper
+	// with complexContent so the two cannot diverge — exactly one derivation, an
+	// annotation only before it, nothing else (e.g. a direct trailing <xs:openContent>
+	// is rejected). For a VALID wrapper (one derivation) the dispatch is identical to
+	// the old lenient loop; only zero/second/stray/trailing children are now rejected.
 	_ = c.parseDerivationWrapper(ctx, elem, func(ce *helium.Element, kind DerivationKind) error {
 		c.dispatchSimpleContentDerivation(ctx, ce, td, kind)
 		return nil
@@ -840,13 +828,14 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 	//                 anyAttribute?, assert*)
 	//   extension:   (annotation?, (attribute|attributeGroup)*, anyAttribute?, assert*)
 	// The simpleType/facets themselves are parsed below (parseSimpleContentRestriction
-	// Type / parseFacets); here we only enforce ORDER and CARDINALITY. The EXISTING
-	// attribute-before-anyAttribute / single-anyAttribute checks run in every version;
-	// the NEW strict checks (annotation first/at-most-one, simpleType at-most-one and
+	// Type / parseFacets); here we only enforce ORDER and CARDINALITY. This body
+	// grammar is version-INDEPENDENT, so the checks (attribute-before-anyAttribute,
+	// single-anyAttribute, annotation first/at-most-one, simpleType at-most-one and
 	// before facets, facets/simpleType only in restriction, attributes after facets,
-	// nothing after the trailing assert*, reject strays) are Version11-only so XSD 1.0
-	// stays byte-identical.
-	strict := c.version == Version11
+	// nothing after the trailing assert*, reject strays) run in BOTH XSD 1.0 and 1.1.
+	// assert is a 1.1 construct (its case stays Version11-gated), so in 1.0 it is a
+	// stray child — genuinely invalid.
+	strict := true
 	isRestriction := kind == DerivationRestriction
 	var anyAttributeSeen bool
 	var assertSeen bool
