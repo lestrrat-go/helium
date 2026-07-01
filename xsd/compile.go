@@ -731,6 +731,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.checkSchemaComponentIDs(ctx, root)
 	c.checkIDConstraintPlacement(ctx, root)
 	c.checkNotations(ctx, root)
+	c.checkAnnotations(ctx, root)
 
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {

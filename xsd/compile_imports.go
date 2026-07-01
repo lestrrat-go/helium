@@ -486,6 +486,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	c.checkSchemaComponentIDs(ctx, incRoot)
 	c.checkIDConstraintPlacement(ctx, incRoot)
 	c.checkNotations(ctx, incRoot)
+	c.checkAnnotations(ctx, incRoot)
 
 	// Parse the included schema's declarations into the current compiler.
 	// (Conditional inclusion already ran above, before the TNS check.)
@@ -760,6 +761,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	c.checkSchemaComponentIDs(ctx, incRoot)
 	c.checkIDConstraintPlacement(ctx, incRoot)
 	c.checkNotations(ctx, incRoot)
+	c.checkAnnotations(ctx, incRoot)
 
 	// Parse the included schema's declarations into the current compiler.
 	// (Conditional inclusion already ran above, before the TNS check.)
@@ -1391,6 +1393,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	impC.checkSchemaComponentIDs(ctx, impRoot)
 	impC.checkIDConstraintPlacement(ctx, impRoot)
 	impC.checkNotations(ctx, impRoot)
+	impC.checkAnnotations(ctx, impRoot)
 
 	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err

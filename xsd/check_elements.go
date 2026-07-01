@@ -2,7 +2,6 @@ package xsd
 
 import (
 	"context"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -773,110 +772,4 @@ func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context,
 func isContentDerivationRestriction(elem *helium.Element) bool {
 	parent, ok := helium.AsNode[*helium.Element](elem.Parent())
 	return ok && (isXSDElement(parent, elemSimpleContent) || isXSDElement(parent, elemComplexContent))
-}
-
-// checkAnnotation validates an xs:annotation element and its children.
-func (c *compiler) checkAnnotation(ctx context.Context, elem *helium.Element) {
-	if c.filename == "" {
-		return
-	}
-	line := elem.Line()
-	local := elem.LocalName()
-
-	// Check for disallowed attributes on annotation (only id is allowed).
-	for _, attr := range elem.Attributes() {
-		name := attr.LocalName()
-		if attr.Prefix() != "" {
-			continue // namespaced attributes are allowed
-		}
-		if name == "id" {
-			continue
-		}
-		c.schemaError(ctx, schemaParserError(c.filename, line, local, "annotation",
-			"The attribute '"+name+"' is not allowed."))
-	}
-
-	// Check for invalid content (non-element children like text nodes).
-	hasInvalidContent := false
-	for child := range helium.Children(elem) {
-		if child.Type() == helium.TextNode {
-			text := strings.TrimSpace(string(child.Content()))
-			if text != "" {
-				hasInvalidContent = true
-				break
-			}
-		}
-	}
-	if hasInvalidContent {
-		c.schemaError(ctx, schemaParserError(c.filename, line, local, "annotation",
-			"The content is not valid. Expected is (appinfo | documentation)*."))
-	}
-
-	// Check children (appinfo, documentation).
-	for child := range helium.Children(elem) {
-		if child.Type() != helium.ElementNode {
-			continue
-		}
-		ce, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
-		if isXSDElement(ce, elemAppinfo) {
-			c.checkAppinfo(ctx, ce)
-		} else if isXSDElement(ce, elemDocumentation) {
-			c.checkDocumentation(ctx, ce)
-		}
-	}
-}
-
-// checkAppinfo validates an xs:appinfo element.
-func (c *compiler) checkAppinfo(ctx context.Context, elem *helium.Element) {
-	line := elem.Line()
-	local := elem.LocalName()
-
-	// Only "source" is allowed (no id).
-	for _, attr := range elem.Attributes() {
-		name := attr.LocalName()
-		if attr.Prefix() != "" {
-			continue
-		}
-		if name == attrSource {
-			continue
-		}
-		c.schemaError(ctx, schemaParserError(c.filename, line, local, "appinfo",
-			"The attribute '"+name+"' is not allowed."))
-	}
-}
-
-// checkDocumentation validates an xs:documentation element.
-func (c *compiler) checkDocumentation(ctx context.Context, elem *helium.Element) {
-	line := elem.Line()
-	local := elem.LocalName()
-
-	// Only "source" and "xml:lang" are allowed (no id).
-	// Check disallowed attributes first, then validate xml:lang value.
-	var langValue string
-	for _, attr := range elem.Attributes() {
-		name := attr.LocalName()
-		prefix := attr.Prefix()
-		if prefix != "" && prefix != lexicon.PrefixXML {
-			continue // other namespaced attributes are allowed
-		}
-		if prefix == lexicon.PrefixXML && name == lexicon.AttrLang {
-			langValue = string(attr.Content())
-			continue
-		}
-		if name == attrSource {
-			continue
-		}
-		c.schemaError(ctx, schemaParserError(c.filename, line, local, "documentation",
-			"The attribute '"+name+"' is not allowed."))
-	}
-
-	// Validate xml:lang value after attribute checks.
-	if langValue != "" && !languageRegex.MatchString(langValue) {
-		c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "documentation",
-			helium.ClarkName(lexicon.NamespaceXML, lexicon.AttrLang),
-			"'"+langValue+"' is not a valid value of the atomic type 'xs:language'."))
-	}
 }
