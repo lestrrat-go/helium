@@ -1432,7 +1432,24 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 		// is tolerated as a skipped special attribute (a required use of it is instead
 		// left unsatisfied at instance validation). Exempt the whole namespace so
 		// neither form is reported as an unresolvable ref.
-		if qn.NS == lexicon.NamespaceXSI {
+		// The XSI namespace is reserved to the four processor attributes and the XML
+		// namespace provides the built-in xml:lang/base/space/id attributes, which are
+		// always implicitly available and never declared: a ref into either resolves to
+		// no user-declared global attribute by design, so neither is reported.
+		if qn.NS == lexicon.NamespaceXSI || qn.NS == lexicon.NamespaceXML {
+			continue
+		}
+		// A ref that resolves to an EXISTING component of the WRONG symbol space (a
+		// named type, a global element, or an attribute group) is always a src-resolve
+		// error. A ref that resolves to NOTHING is an error only when it is a
+		// self-reference — its namespace is the schema's own target namespace (or the
+		// absent namespace) — where the attribute genuinely should have been declared.
+		// A dangling reference into a FOREIGN namespace is left lenient: that namespace
+		// may be one whose <xs:import> could not be loaded (its declarations unknown),
+		// so flagging it would over-reject valid schemas, matching libxml2 and the
+		// pre-existing tolerant behavior.
+		selfRef := qn.NS == c.schema.targetNamespace || qn.NS == ""
+		if !c.qnameNamesNonAttribute(qn) && !selfRef {
 			continue
 		}
 		src := c.attrRefSources[au]
@@ -1458,6 +1475,26 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 	for _, is := range issues {
 		c.schemaError(ctx, schemaParserErrorAttr(is.source, is.line, elemAttribute, elemAttribute, is.local, is.msg))
 	}
+}
+
+// qnameNamesNonAttribute reports whether qn names an existing schema component
+// that is NOT a global attribute — a named type, a global element, or an
+// attribute group. It is used by the @ref resolution check to distinguish a
+// wrong-symbol-space reference (a src-resolve error) from one that resolves to
+// nothing (left lenient). Only the exact {ns}local lookup is consulted (no
+// chameleon empty-namespace fallback), so a reference that dangles into an
+// unloaded namespace is never treated as wrong-kind.
+func (c *compiler) qnameNamesNonAttribute(qn QName) bool {
+	if _, ok := c.schema.types[qn]; ok {
+		return true
+	}
+	if _, ok := c.schema.elements[qn]; ok {
+		return true
+	}
+	if _, ok := c.schema.attrGroups[qn]; ok {
+		return true
+	}
+	return false
 }
 
 // resolveNamedType resolves a named type reference to its definition, mirroring
