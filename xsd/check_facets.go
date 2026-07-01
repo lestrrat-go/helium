@@ -1474,8 +1474,8 @@ func (c *compiler) checkBuiltinFixedFacetRestriction(ctx context.Context, td *Ty
 	// is version-independent; the fixed facet holds identically in XSD 1.0 and 1.1.
 	if fs.FractionDigits != nil && *fs.FractionDigits != 0 && value.IsIntegerFamily(builtinLocal) {
 		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The value '%d' of the facet 'fractionDigits' does not match the fixed value '0' of the base type 'xs:%s'.",
-				*fs.FractionDigits, builtinLocal)))
+			fmt.Sprintf("The value '%d' of the facet 'fractionDigits' does not match the fixed value '0' of the base type '%s'.",
+				*fs.FractionDigits, typeDisplayName(td.BaseType))))
 	}
 
 	if fs.WhiteSpace != nil {
