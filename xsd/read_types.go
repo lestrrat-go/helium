@@ -797,13 +797,18 @@ func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *heli
 // isSimpleTypeFacetElement reports whether localName names an XSD constraining
 // facet (valid inside an <xs:restriction> of a simple type / simpleContent). The
 // facet VALUES themselves are parsed by parseFacets; this drives only the
-// simpleContent restriction-body child-order/cardinality grammar check.
-func isSimpleTypeFacetElement(localName string) bool {
+// simpleType / simpleContent restriction-body child-order/cardinality grammar
+// check. v11 selects XSD 1.1: xs:assertion and xs:explicitTimezone are 1.1-only
+// facets (parseFacets silently ignores them under 1.0), so in 1.0 they are NOT
+// recognized as facets and fall through to the stray-XSD-child rejection.
+func isSimpleTypeFacetElement(localName string, v11 bool) bool {
 	switch localName {
 	case facetMinExclusive, facetMinInclusive, facetMaxExclusive, facetMaxInclusive,
 		"totalDigits", "fractionDigits", "length", "minLength", "maxLength",
-		"enumeration", "whiteSpace", "pattern", elemAssertion, elemExplicitTimezone:
+		"enumeration", "whiteSpace", "pattern":
 		return true
+	case elemAssertion, elemExplicitTimezone:
+		return v11
 	}
 	return false
 }
@@ -887,7 +892,7 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 				}
 			}
 			simpleTypeSeen = true
-		case ae.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ae.LocalName()):
+		case ae.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ae.LocalName(), c.version == Version11):
 			// Parsed by parseFacets below; only enforce order.
 			if strict {
 				switch {
@@ -1300,7 +1305,7 @@ func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, der
 			continue
 		}
 
-		if isRestriction && ce.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ce.LocalName()) {
+		if isRestriction && ce.URI() == lexicon.NamespaceXSD && isSimpleTypeFacetElement(ce.LocalName(), c.version == Version11) {
 			sawNonAnnotation = true
 			facetSeen = true
 			continue

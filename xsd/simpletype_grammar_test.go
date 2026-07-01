@@ -1,8 +1,11 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,4 +77,58 @@ func TestSimpleTypeGrammar(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestSimpleTypeGrammarVersionGatedFacets exercises the version-dependent edge of
+// the simpleType restriction-body grammar: xs:assertion and xs:explicitTimezone
+// are XSD 1.1-only constraining facets. In 1.1 they are valid facet children of a
+// restriction; in 1.0 they are unrecognized XSD-namespace elements, so the
+// schema-representation grammar rejects them as stray children (rather than
+// letting parseFacets silently ignore them and false-accept the schema).
+func TestSimpleTypeGrammarVersionGatedFacets(t *testing.T) {
+	t.Parallel()
+
+	const head = `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">`
+	const tail = `</xsd:schema>`
+
+	for _, tc := range []struct {
+		name   string
+		schema string
+	}{
+		{"assertion", `<xsd:simpleType name="t"><xsd:restriction base="xsd:string"><xsd:assertion test="true()"/></xsd:restriction></xsd:simpleType>`},
+		{"explicitTimezone", `<xsd:simpleType name="t"><xsd:restriction base="xsd:dateTime"><xsd:explicitTimezone value="required"/></xsd:restriction></xsd:simpleType>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema := head + tc.schema + tail
+			require.NotEmpty(t, compileSchemaErrorsVersion(t, schema, false),
+				"expected %s to be rejected in XSD 1.0", tc.name)
+			require.Empty(t, compileSchemaErrorsVersion(t, schema, true),
+				"expected %s to compile cleanly in XSD 1.1", tc.name)
+		})
+	}
+}
+
+// compileSchemaErrorsVersion is compileSchemaErrors with a selectable XSD version:
+// v11=true opts into XSD 1.1, otherwise the default (XSD 1.0) semantics apply.
+func compileSchemaErrorsVersion(t *testing.T, schemaXML string, v11 bool) string {
+	t.Helper()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	c := xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector)
+	if v11 {
+		c = c.Version(xsd.Version11)
+	}
+	_, _ = c.Compile(t.Context(), doc)
+	_ = collector.Close()
+
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+		b.WriteString("\n")
+	}
+	return b.String()
 }
