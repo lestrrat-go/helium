@@ -651,6 +651,28 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 				"The value '"+name+"' is not a valid 'NCName'."))
 		}
 
+		// Schema Representation Constraint on the `form` attribute of
+		// <xs:attribute> (version-INDEPENDENT — enforced in BOTH XSD 1.0 and 1.1).
+		// The schema for schemas gives a top-level (global) attribute declaration
+		// the `topLevelAttribute` type, which omits `form`, so `form` on a global
+		// attribute is a schema error. On a local attribute declaration `form` must
+		// be one of the {qualified, unqualified} `formChoice` enumeration; any other
+		// value (including the empty string) is a schema error.
+		if hasAttr(elem, attrForm) {
+			switch {
+			case isGlobalAttributeDecl(elem):
+				c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
+					"The attribute 'form' is not allowed."))
+			default:
+				switch getAttr(elem, attrForm) {
+				case attrValQualified, attrValUnqualified:
+				default:
+					c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", attrForm,
+						"The value must be one of 'qualified' or 'unqualified'."))
+				}
+			}
+		}
+
 		c.checkLocalAttributeTargetNamespace(ctx, elem)
 
 		// Qualified attribute must not be in the XSI namespace.

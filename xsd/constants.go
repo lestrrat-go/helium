@@ -140,4 +140,5 @@ const (
 	attrValSubstitution = "substitution"
 	attrValUnbounded    = "unbounded"
 	attrValUnion        = "union"
+	attrValUnqualified  = "unqualified"
 )

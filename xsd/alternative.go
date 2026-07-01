@@ -305,7 +305,7 @@ func (c *compiler) parseInlineAlternativeType(ctx context.Context, elem *helium.
 			td, err := c.parseComplexType(ctx, ce)
 			return td, true, err
 		case isXSDElement(ce, elemSimpleType):
-			td, err := c.parseSimpleType(ctx, ce)
+			td, err := c.parseSimpleType(ctx, ce, true)
 			return td, true, err
 		}
 	}

@@ -68,6 +68,19 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		return fmt.Errorf("xsd: named simpleType missing name")
 	}
 
+	// The @name of a global simpleType is an xs:NCName (XSD Structures §3.14.2). A
+	// value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g. "1foo")
+	// is a schema error; the type is dropped so it does not enter the target-namespace
+	// symbol space under a bogus name. Version-independent XSD rule.
+	if !xmlchar.IsValidNCName(name) {
+		if c.filename != "" {
+			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
+				elem.LocalName(), componentLocalSimpleType,
+				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+		}
+		return nil
+	}
+
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
 
 	// Check for a duplicate global type BEFORE parsing the body, so a rejected
@@ -79,7 +92,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		return nil
 	}
 
-	td, err := c.parseSimpleType(ctx, elem)
+	td, err := c.parseSimpleType(ctx, elem, false)
 	if err != nil {
 		return err
 	}
@@ -1017,7 +1030,7 @@ func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, deriva
 			continue
 		}
 		if isXSDElement(ce, elemSimpleType) {
-			st, err := c.parseSimpleType(ctx, ce)
+			st, err := c.parseSimpleType(ctx, ce, true)
 			if err == nil {
 				inline = st
 			}
@@ -1059,7 +1072,7 @@ func (c *compiler) parseSimpleContentRestrictionType(ctx context.Context, deriva
 	}
 }
 
-func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
+func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, local bool) (*TypeDef, error) {
 	td := &TypeDef{
 		ContentType: ContentTypeSimple,
 	}
@@ -1070,6 +1083,17 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 	// fire for unresolved base/itemType/memberTypes references inside inline
 	// simpleTypes, not just top-level named ones.
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
+
+	// A LOCAL (anonymous/inline) xs:simpleType — one whose parent is a
+	// restriction/list/union, an element, an attribute, or an xs:alternative —
+	// must NOT carry a @name (XSD Structures §3.14.2: {name} is absent). Only a
+	// top-level simpleType (child of xs:schema/xs:redefine/xs:override) is named.
+	// Version-independent XSD rule; report-and-continue so the body still parses.
+	if local && hasAttr(elem, attrName) && c.filename != "" {
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
+			elem.LocalName(), componentLocalSimpleType,
+			"A local simpleType definition must not have a 'name' attribute."))
+	}
 
 	// XSD Structures §3.14.2: the content of an xs:simpleType is
 	//   (annotation?, (restriction | list | union)).
@@ -1143,7 +1167,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 						continue
 					}
 					if isXSDElement(gce, elemSimpleType) {
-						baseTD, err := c.parseSimpleType(ctx, gce)
+						baseTD, err := c.parseSimpleType(ctx, gce, true)
 						if err != nil {
 							return nil, err
 						}
@@ -1173,7 +1197,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 						continue
 					}
 					if isXSDElement(gce, elemSimpleType) {
-						itemTD, err := c.parseSimpleType(ctx, gce)
+						itemTD, err := c.parseSimpleType(ctx, gce, true)
 						if err != nil {
 							return nil, err
 						}
@@ -1206,7 +1230,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 					continue
 				}
 				if isXSDElement(gce, elemSimpleType) {
-					memberTD, err := c.parseSimpleType(ctx, gce)
+					memberTD, err := c.parseSimpleType(ctx, gce, true)
 					if err != nil {
 						return nil, err
 					}
