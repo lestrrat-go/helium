@@ -556,7 +556,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 			}
 			decl.Type = td
 		case isXSDElement(ce, elemSimpleType):
-			td, err := c.parseSimpleType(ctx, ce)
+			td, err := c.parseSimpleType(ctx, ce, true)
 			if err != nil {
 				return err
 			}
@@ -614,7 +614,7 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 			if !isXSDElement(ce, elemSimpleType) {
 				continue
 			}
-			td, err := c.parseSimpleType(ctx, ce)
+			td, err := c.parseSimpleType(ctx, ce, true)
 			if err != nil {
 				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(),
 					ce.LocalName(), "attribute", err.Error()))
