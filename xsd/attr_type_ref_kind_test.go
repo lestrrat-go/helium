@@ -57,6 +57,9 @@ func TestAttribute_TypeRefKindResolution(t *testing.T) {
 		// A dangling ref in the schema's OWN target namespace is a self-reference that
 		// genuinely should resolve — still an error.
 		{"ref-undeclared-selfns", localShell, `<xs:attribute ref="a:nope"/>`, notAttr},
+		// A ref into a FOREIGN namespace that was never imported is illegal — a
+		// component of a non-imported namespace cannot be referenced (schZ011_c).
+		{"ref-unimported-namespace", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:a" xmlns:d="urn:d" targetNamespace="urn:a"><xs:complexType name="host"><xs:sequence/>%s</xs:complexType></xs:schema>`, `<xs:attribute ref="d:d"/>`, notAttr},
 	}
 	for _, tc := range invalid {
 		t.Run("invalid/"+tc.name, func(t *testing.T) {

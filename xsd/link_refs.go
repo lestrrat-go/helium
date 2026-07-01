@@ -1442,15 +1442,15 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 		}
 		// A ref that resolves to an EXISTING component of the WRONG symbol space (a
 		// named type, a global element, or an attribute group) is always a src-resolve
-		// error. A ref that resolves to NOTHING is an error only when it is a
-		// self-reference — its namespace is the schema's own target namespace (or the
-		// absent namespace) — where the attribute genuinely should have been declared.
-		// A dangling reference into a FOREIGN namespace is left lenient: that namespace
-		// may be one whose <xs:import> could not be loaded (its declarations unknown),
-		// so flagging it would over-reject valid schemas, matching libxml2 and the
-		// pre-existing tolerant behavior.
-		selfRef := qn.NS == c.schema.targetNamespace || qn.NS == ""
-		if !c.qnameNamesNonAttribute(qn) && !selfRef {
+		// error. A ref that resolves to NOTHING is left lenient ONLY when its namespace
+		// was actually imported (`<xs:import namespace="...">`) but its schema document
+		// could not be loaded — the namespace's declarations are then genuinely unknown,
+		// so flagging the ref would over-reject valid schemas (matching libxml2). A ref
+		// into a namespace that was NEVER imported — including the schema's own target
+		// namespace and the absent namespace — is an error: referencing a component of a
+		// non-imported namespace is illegal (src-resolve), and a self-reference should
+		// have been declared. The built-in XML namespace is exempted above.
+		if _, imported := c.importDeclaredNS[qn.NS]; imported && !c.qnameNamesNonAttribute(qn) {
 			continue
 		}
 		src := c.attrRefSources[au]

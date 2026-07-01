@@ -171,6 +171,13 @@ type compiler struct {
 	includeFile  string // currently-included file path (for duplicate element errors)
 	// importedNS tracks which namespaces have been imported and their schema locations.
 	importedNS map[string]string // namespace → schema location
+	// importDeclaredNS records every namespace named by an <xs:import>, regardless of
+	// whether a schema document was actually loaded for it (a location-less import, or
+	// one whose schemaLocation could not be loaded, still counts). Unlike importedNS
+	// (successful loads only), this is the set of namespaces a reference is ALLOWED to
+	// target even when their declarations are unknown, so a dangling ref into an
+	// imported-but-unloadable namespace is not over-rejected.
+	importDeclaredNS map[string]struct{}
 	// importDepth and maxImportDepth bound xs:import recursion. Each sub-compiler
 	// created by loadImport inherits maxImportDepth and stores its own
 	// importDepth = parent.importDepth + 1. A sub-compiler whose depth would
@@ -624,6 +631,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrUseSources:            make(map[*AttrUse]attrConstraintSource),
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
 		importedNS:                make(map[string]string),
+		importDeclaredNS:          make(map[string]struct{}),
 		maxImportDepth:            defaultMaxImportDepth,
 		importActive:              make(map[string]string),
 		includeVisited:            make(map[string]struct{}),
