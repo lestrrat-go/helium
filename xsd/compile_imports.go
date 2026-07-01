@@ -357,6 +357,16 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
+		// The read attempt failed, but the loaded-set marker was added above
+		// (before the read, so a self-referential include cannot recurse).
+		// Roll it back: a genuinely-missing target is demoted to a warning by
+		// the caller, and a LATER xs:include/xs:redefine of the SAME location
+		// must be retried and warned about again rather than treated as
+		// "already loaded" and silently skipped (which, for xs:redefine, would
+		// otherwise run its overrides against an empty Phase-A set and report a
+		// spurious duplicate-redefine error). A fatal read error aborts
+		// compilation regardless, so the rollback is harmless there.
+		delete(c.includeVisited, path)
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
@@ -618,6 +628,12 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
+		// Roll back the loaded-set marker added above (see loadInclude): a
+		// missing redefine target demoted to a warning must not leave the path
+		// marked, or a later xs:redefine of the same location would hit the
+		// "seen" branch and run its overrides against a nil/empty Phase-A set,
+		// reporting a spurious duplicate-redefine error instead of warning.
+		delete(c.includeVisited, path)
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
