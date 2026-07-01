@@ -72,7 +72,7 @@ func (e *regexError) Error() string { return e.Message }
 //   - false → XPath/XQuery fn:matches/tokenize/replace. The pattern is NOT
 //     implicitly anchored and '^'/'$' keep their RE2 anchor meaning (start/end,
 //     multiline with the 'm' flag).
-func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern bool) (string, error) {
+func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern, xsd11 bool) (string, error) {
 	isDotAll := dotAll
 	var b strings.Builder
 	runes := []rune(pattern)
@@ -93,7 +93,7 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern bool) (s
 						return "", fmt.Errorf("unterminated \\%c{ at position %d", next, i)
 					}
 					propName := string(runes[i+3 : end])
-					replacement, err := translateUnicodeProperty(propName, neg)
+					replacement, err := translateUnicodeProperty(propName, neg, xsd11)
 					if err != nil {
 						return "", err
 					}
@@ -118,11 +118,19 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern bool) (s
 				i += 2
 				continue
 			case 'c':
-				b.WriteString(xpathRegexNameCharClass)
+				if xsd11 {
+					b.WriteString(xpathRegexNameCharClass11)
+				} else {
+					b.WriteString(xpathRegexNameCharClass)
+				}
 				i += 2
 				continue
 			case 'C':
-				b.WriteString(xpathRegexNameCharClassNeg)
+				if xsd11 {
+					b.WriteString(xpathRegexNameCharClassNeg11)
+				} else {
+					b.WriteString(xpathRegexNameCharClassNeg)
+				}
 				i += 2
 				continue
 			case 'd':
@@ -159,7 +167,7 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern bool) (s
 
 		// Handle character class subtraction: [base-[subtract]]
 		if r == '[' {
-			cls, consumed, err := translateCharClass(runes, i)
+			cls, consumed, err := translateCharClass(runes, i, xsd11)
 			if err != nil {
 				return "", err
 			}
@@ -214,7 +222,7 @@ func findClosingBrace(runes []rune, start int) int {
 
 // translateCharClass translates a character class, handling subtraction.
 // Returns the translated class and the number of runes consumed.
-func translateCharClass(runes []rune, start int) (string, int, error) {
+func translateCharClass(runes []rune, start int, xsd11 bool) (string, int, error) {
 	// Find the matching close bracket, handling nesting
 	depth := 0
 	i := start
@@ -227,7 +235,7 @@ func translateCharClass(runes []rune, start int) (string, int, error) {
 			if depth == 0 {
 				// We have the full character class from start to i (inclusive)
 				content := runes[start : i+1]
-				result, err := processCharClass(content)
+				result, err := processCharClass(content, xsd11)
 				if err != nil {
 					return "", 0, err
 				}
@@ -244,7 +252,7 @@ func translateCharClass(runes []rune, start int) (string, int, error) {
 
 // processCharClass processes a character class, expanding subtraction and
 // translating embedded \p{} and \i/\c escapes.
-func processCharClass(runes []rune) (string, error) {
+func processCharClass(runes []rune, xsd11 bool) (string, error) {
 	s := string(runes)
 	if err := validateXPathCharClassStructure(s); err != nil {
 		return "", err
@@ -255,7 +263,7 @@ func processCharClass(runes []rune) (string, error) {
 	// Character class subtraction [base-[subtract]] is not supported by Go's RE2.
 	// Pass through as-is — Go will interpret it differently but many tests still
 	// pass because Go's (incorrect) interpretation gives the expected result.
-	return translateClassContent(s)
+	return translateClassContent(s, xsd11)
 }
 
 func validateXPathCharClassStructure(class string) error {
@@ -358,7 +366,7 @@ func validateXPathCharClassSubtraction(class string) error {
 }
 
 // translateClassContent translates \p{}, \i, \c escapes inside a character class.
-func translateClassContent(s string) (string, error) {
+func translateClassContent(s string, xsd11 bool) (string, error) {
 	var b strings.Builder
 	runes := []rune(s)
 	for i := 0; i < len(runes); i++ {
@@ -377,7 +385,7 @@ func translateClassContent(s string) (string, error) {
 					}
 					if end >= 0 {
 						propName := string(runes[i+3 : end])
-						replacement, err := translateUnicodePropertyInCharClass(propName, next == 'P')
+						replacement, err := translateUnicodePropertyInCharClass(propName, next == 'P', xsd11)
 						if err != nil {
 							return "", err
 						}
@@ -395,11 +403,19 @@ func translateClassContent(s string) (string, error) {
 				i++
 				continue
 			case 'c':
-				b.WriteString(xpathRegexNameCharRange)
+				if xsd11 {
+					b.WriteString(xmlNameCharRange)
+				} else {
+					b.WriteString(xpathRegexNameCharRange)
+				}
 				i++
 				continue
 			case 'C':
-				b.WriteString(xpathRegexNameCharRangeNeg)
+				if xsd11 {
+					b.WriteString(xpathRegexNameCharRangeNeg11)
+				} else {
+					b.WriteString(xpathRegexNameCharRangeNeg)
+				}
 				i++
 				continue
 			case 'd':
@@ -426,7 +442,7 @@ func translateClassContent(s string) (string, error) {
 }
 
 // translateUnicodeProperty translates a Unicode property name to a Go regexp equivalent.
-func translateUnicodeProperty(name string, neg bool) (string, error) {
+func translateUnicodeProperty(name string, neg, xsd11 bool) (string, error) {
 	prefix := `\p`
 	if neg {
 		prefix = `\P`
@@ -441,6 +457,14 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 			}
 			return "[" + rng + "]", nil
 		}
+		if xsd11 {
+			// XSD 1.1 (test bug 13670): an unrecognized block name is valid and
+			// matches every character; its complement then matches none.
+			if neg {
+				return "[^" + matchAnyCharRange + "]", nil
+			}
+			return "[" + matchAnyCharRange + "]", nil
+		}
 		return "", &regexError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode block: Is%s", blockName)}
 	}
 
@@ -452,11 +476,19 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 	return "", &regexError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode property: %s", name)}
 }
 
-func translateUnicodePropertyInCharClass(name string, neg bool) (string, error) {
+func translateUnicodePropertyInCharClass(name string, neg, xsd11 bool) (string, error) {
 	if strings.HasPrefix(name, "Is") {
 		blockName := name[2:]
 		rng, ok := lookupUnicodeBlockRange(blockName)
 		if !ok {
+			if xsd11 {
+				// XSD 1.1: an unrecognized block name matches every character;
+				// its complement contributes no characters to the class.
+				if neg {
+					return "", nil
+				}
+				return matchAnyCharRange, nil
+			}
 			return "", &regexError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode block: Is%s", blockName)}
 		}
 		if !neg {
@@ -469,7 +501,7 @@ func translateUnicodePropertyInCharClass(name string, neg bool) (string, error) 
 		return complementUnicodeRange(low, high), nil
 	}
 
-	return translateUnicodeProperty(name, neg)
+	return translateUnicodeProperty(name, neg, xsd11)
 }
 
 func lookupUnicodeBlockRange(blockName string) (string, bool) {
@@ -689,13 +721,25 @@ var xmlNameStartCharRangeNeg = mustComplementClassRanges(xmlNameStartCharRange)
 
 const xmlNameCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}`
 
-// XPath/XSD regex \c does not admit U+0346 in the W3C regex-syntax-xslt20 suite.
-// Keep that translation isolated from Name/NCName constructor validation.
+// XSD 1.0 / XPath 2.0 \c carves U+0346 out of the combining range (W3C
+// regex-syntax-xslt20 suite); XSD 1.1 uses the full range (see the *11 variants
+// below). Keep this isolated from Name/NCName constructor validation.
 const xpathRegexNameCharClass = `[a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{345}\x{347}-\x{36F}\x{203F}-\x{2040}]`
 const xpathRegexNameCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{345}\x{347}-\x{36F}\x{203F}-\x{2040}`
 
 var xpathRegexNameCharClassNeg = `[^` + xpathRegexNameCharRange + `]`
 var xpathRegexNameCharRangeNeg = mustComplementClassRanges(xpathRegexNameCharRange)
+
+// XSD 1.1 (XML 1.1 / XML 1.0 5th edition) \c admits the full combining range
+// U+0300–U+036F, including U+0346, matching xmlNameCharRange. The 1.0/XPath 2.0
+// forms above carve U+0346 out; these variants are selected in XSD 1.1 mode.
+var xpathRegexNameCharClass11 = `[` + xmlNameCharRange + `]`
+var xpathRegexNameCharClassNeg11 = `[^` + xmlNameCharRange + `]`
+var xpathRegexNameCharRangeNeg11 = mustComplementClassRanges(xmlNameCharRange)
+
+// matchAnyCharRange covers every character (for use inside a [...] class). XSD
+// 1.1 treats an unrecognized \p{Is...} block name as matching every character.
+const matchAnyCharRange = `\x{0}-\x{10FFFF}`
 
 func mustComplementClassRanges(spec string) string {
 	complement, err := complementClassRanges(spec)
@@ -842,7 +886,7 @@ var unicodeBlocks = map[string]string{
 // validateXPathRegex checks for patterns that Go's regexp accepts but
 // the XPath/XML Schema regex spec forbids. This must be called before
 // regexp.Compile to reject invalid patterns with FORX0002.
-func validateXPathRegex(pattern string, allowBackrefs bool) error {
+func validateXPathRegex(pattern string, allowBackrefs, xsd11 bool) error {
 	runes := []rune(pattern)
 	inCharClass := 0
 	inQuantifier := false // true when inside a valid {n,m} quantifier
@@ -891,7 +935,7 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 						}
 					}
 					propName := string(runes[i+3 : end])
-					if _, err := translateUnicodeProperty(propName, neg); err != nil {
+					if _, err := translateUnicodeProperty(propName, neg, xsd11); err != nil {
 						return err
 					}
 					i = end
@@ -1220,7 +1264,7 @@ func rejectPerlSpecific(pattern string) error {
 // is not implicitly anchored; use Compile for XSD xs:pattern facets, where
 // '^'/'$' are literals and the whole value must match.
 func Translate(pattern string, dotAll, ignoreCase bool) (string, error) {
-	return translateXPathRegex(pattern, dotAll, ignoreCase, false)
+	return translateXPathRegex(pattern, dotAll, ignoreCase, false, false)
 }
 
 // Regexp is a compiled XML Schema pattern-facet regular expression. It matches
@@ -1253,6 +1297,15 @@ func (r *Regexp) MatchString(s string) bool {
 // expressions, so callers can report a schema error rather than silently
 // ignoring the facet.
 func Compile(pattern string) (*Regexp, error) {
+	return CompileVersion(pattern, false)
+}
+
+// CompileVersion is Compile with an XSD 1.1 toggle. In XSD 1.1 mode an
+// unrecognized \p{Is...} block name is accepted (matching every character) per
+// XSD 1.1 test bug 13670, and \c/\C admit the full XML 1.1 / XML 1.0 5th edition
+// NameChar combining range (U+0300–U+036F, including U+0346). With xsd11=false
+// the XSD 1.0 / XPath 2.0 behavior is byte-identical to Compile's original.
+func CompileVersion(pattern string, xsd11 bool) (*Regexp, error) {
 	// Enforce the XSD/XPath regex grammar up front, independent of which engine
 	// compiles the pattern. RE2 happens to reject some non-XSD constructs (e.g.
 	// \1 back-references) but accepts others (e.g. \b word boundaries), and the
@@ -1262,14 +1315,14 @@ func Compile(pattern string) (*Regexp, error) {
 	if err := rejectPerlSpecific(pattern); err != nil {
 		return nil, err
 	}
-	if err := validateXPathRegex(pattern, false); err != nil {
+	if err := validateXPathRegex(pattern, false, xsd11); err != nil {
 		return nil, err
 	}
 
 	// Compile handles XSD xs:pattern facets: '^'/'$' are literal characters and
 	// the pattern is implicitly anchored to the whole value (the \A(?:...)\z
 	// wrap below). Pass xsdPattern=true so the translator escapes '^'/'$'.
-	translated, err := translateXPathRegex(pattern, false, false, true)
+	translated, err := translateXPathRegex(pattern, false, false, true, xsd11)
 	if err != nil {
 		return nil, err
 	}
@@ -1299,7 +1352,7 @@ func Compile(pattern string) (*Regexp, error) {
 
 // Validate rejects patterns Go's regexp accepts but the XPath/XSD regex spec forbids.
 func Validate(pattern string, allowBackrefs bool) error {
-	return validateXPathRegex(pattern, allowBackrefs)
+	return validateXPathRegex(pattern, allowBackrefs, false)
 }
 
 // HasBackrefs reports whether the pattern contains a back-reference.
