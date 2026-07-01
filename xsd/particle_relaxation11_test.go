@@ -155,9 +155,32 @@ func TestVersion11ParticleLanguageSubset(t *testing.T) {
   </xs:complexType>
 </xs:schema>`
 
+	// derived makes a REQUIRED base element optional (min-widening): the empty
+	// instance is valid against derived but invalid against base, so the derived
+	// language is NOT a subset. The automaton must model `{0,1}` as optional (not
+	// mandatory) or it false-accepts this. Invalid in BOTH 1.0 and 1.1.
+	minWidening := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
 	t.Run("element restricts choice valid in 1.1", func(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compileParticleVer(t, xsd.Version11, elemRestrictsChoice))
+	})
+	t.Run("required-to-optional min-widening rejected in 1.1", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileParticleVer(t, xsd.Version11, minWidening), xsd.ErrCompilationFailed)
+	})
+	t.Run("required-to-optional min-widening rejected in 1.0", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileParticleVer(t, xsd.Version10, minWidening), xsd.ErrCompilationFailed)
 	})
 	t.Run("element restricts choice rejected in 1.0", func(t *testing.T) {
 		t.Parallel()

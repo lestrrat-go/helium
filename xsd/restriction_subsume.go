@@ -237,7 +237,12 @@ func (b *cmBuilder) applyOcc(body reNode, minOccurs, maxOccurs int) reNode {
 	if maxOccurs == 0 {
 		return reEmpty{}
 	}
-	if minOccurs <= 1 && maxOccurs == 1 {
+	// Only {1,1} is the identity. {0,1} must NOT take this fast-path — it would
+	// model an optional leaf as mandatory, DROPPING the empty-string case and
+	// UNDER-modeling the derived language (unsound: false-accepts a required→
+	// optional min-widening restriction). {0,1} falls through to the reOpt path
+	// below (min=0, max=1 → one reOpt(body)), which models the empty case.
+	if minOccurs == 1 && maxOccurs == 1 {
 		return body
 	}
 	if minOccurs > subsumeUnrollCap {
