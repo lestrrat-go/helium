@@ -180,7 +180,18 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	sort.Slice(groupRefPlaceholders, func(i, j int) bool {
 		return c.groupRefSources[groupRefPlaceholders[i]].line < c.groupRefSources[groupRefPlaceholders[j]].line
 	})
+	// Detect and CUT circular model-group references (a named xs:group that
+	// references itself, directly or transitively) BEFORE the resolution below
+	// shares group content slices — a self-referential group would otherwise make
+	// the resolved content-model tree cyclic and overflow the stack in the
+	// downstream walks (UPA, element-consistency, open content). The back-edge
+	// placeholder is left empty so the tree stays acyclic; the schema is reported
+	// invalid (circular groups are forbidden in both XSD 1.0 and 1.1).
+	cutGroupRefs := c.checkCircularGroupRefs(ctx)
 	for _, placeholder := range groupRefPlaceholders {
+		if _, isCut := cutGroupRefs[placeholder]; isCut {
+			continue
+		}
 		qn := c.groupRefs[placeholder]
 		grp, ok := c.schema.groups[qn]
 		if !ok {
@@ -1276,6 +1287,124 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	}
 	c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
 		"The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group."))
+}
+
+// checkCircularGroupRefs detects circular references among named model group
+// definitions (an xs:group that references itself, directly or transitively) and
+// returns the set of back-edge group-ref placeholders to CUT — leave unresolved,
+// so the resolved content-model tree stays acyclic. A circular group reference is
+// forbidden in both XSD 1.0 and XSD 1.1 (a model group must not contain itself),
+// so the cycle is reported as a schema error in both versions. The cut must
+// happen before the group-ref resolution shares group content slices, otherwise a
+// self-referential group makes the tree cyclic and the downstream Glushkov (UPA),
+// element-consistency, and open-content walks overflow the stack.
+//
+// The reference graph is built by walking each named group's UNRESOLVED
+// definition, treating a group-ref placeholder (a *ModelGroup registered in
+// c.groupRefs) as a leaf edge to its target and recursing into inline
+// sub-model-groups. A DFS then reports and cuts each back-edge, mirroring
+// checkCircularAttrGroupRefs.
+func (c *compiler) checkCircularGroupRefs(ctx context.Context) map[*ModelGroup]struct{} {
+	cut := make(map[*ModelGroup]struct{})
+	if c.filename == "" {
+		return cut
+	}
+
+	// edge records a group-ref placeholder inside a named group's definition.
+	type groupRefEdge struct {
+		target      QName
+		placeholder *ModelGroup
+	}
+	edges := make(map[QName][]groupRefEdge)
+
+	var collect func(owner QName, mg *ModelGroup, seen map[*ModelGroup]struct{})
+	collect = func(owner QName, mg *ModelGroup, seen map[*ModelGroup]struct{}) {
+		if mg == nil {
+			return
+		}
+		for _, p := range mg.Particles {
+			sub, ok := p.Term.(*ModelGroup)
+			if !ok {
+				continue
+			}
+			if target, isRef := c.groupRefs[sub]; isRef {
+				edges[owner] = append(edges[owner], groupRefEdge{target: target, placeholder: sub})
+				continue
+			}
+			// Inline sub-model-group: recurse. The seen set guards against a shared
+			// sub-tree being re-walked (group content slices are shared once resolved,
+			// but this runs before resolution — the guard is defensive).
+			if _, dup := seen[sub]; dup {
+				continue
+			}
+			seen[sub] = struct{}{}
+			collect(owner, sub, seen)
+		}
+	}
+
+	roots := make([]QName, 0, len(c.schema.groups))
+	for qn, mg := range c.schema.groups {
+		roots = append(roots, qn)
+		collect(qn, mg, map[*ModelGroup]struct{}{})
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].NS != roots[j].NS {
+			return roots[i].NS < roots[j].NS
+		}
+		return roots[i].Local < roots[j].Local
+	})
+
+	// onStack is the current DFS recursion stack; done marks fully-explored groups
+	// so a group reachable from two roots is not re-walked.
+	onStack := make(map[QName]bool)
+	done := make(map[QName]bool)
+	var visit func(qn QName)
+	visit = func(qn QName) {
+		onStack[qn] = true
+		for _, e := range edges[qn] {
+			if onStack[e.target] {
+				// Back-edge qn -> target closes a cycle through target. Cut this edge's
+				// placeholder (leave it an empty model group) so resolution stays
+				// acyclic, and report the circular reference once per back-edge.
+				if _, already := cut[e.placeholder]; already {
+					continue
+				}
+				cut[e.placeholder] = struct{}{}
+				c.reportCircularGroupRef(ctx, e.target, e.placeholder)
+				continue
+			}
+			if done[e.target] {
+				continue
+			}
+			visit(e.target)
+		}
+		onStack[qn] = false
+		done[qn] = true
+	}
+	for _, qn := range roots {
+		if done[qn] {
+			continue
+		}
+		visit(qn)
+	}
+	return cut
+}
+
+// reportCircularGroupRef emits the circular-model-group-reference diagnostic,
+// attributed to the back-edge placeholder's recorded xs:group ref source (the ref
+// that closed the cycle), naming the group being circularly referenced.
+func (c *compiler) reportCircularGroupRef(ctx context.Context, targetQN QName, placeholder *ModelGroup) {
+	if c.filename == "" {
+		return
+	}
+	src := c.groupRefSources[placeholder]
+	file := c.diagSourceOrRecorded(src.source)
+	local := src.local
+	if local == "" {
+		local = elemGroup
+	}
+	msg := fmt.Sprintf("Circular reference to the model group definition '%s' defined.", formatAttrQName(targetQN))
+	c.schemaError(ctx, schemaParserError(file, src.line, local, elemGroup, msg))
 }
 
 // modelGroupHasContent reports whether mg carries any actual content particle
