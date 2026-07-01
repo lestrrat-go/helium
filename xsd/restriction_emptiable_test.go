@@ -57,3 +57,66 @@ func TestRestriction_EmptiableBaseChoiceMinOccurs(t *testing.T) {
 	_, cerr10 := compileV10(t, schemaXML)
 	require.ErrorIs(t, cerr10, xsd.ErrCompilationFailed, "1.0: derived minOccurs 0 below base minOccurs 1 is invalid")
 }
+
+// The same emptiable-base occurrence relaxation applies to an xs:all restricting
+// an xs:all: a base all{1,1} whose members are all optional is emptiable, so a
+// derived all{0,1} narrowing the group's minOccurs below the base's declared 1
+// is a valid restriction in XSD 1.1 (§3.9.6) but rejected under XSD 1.0's strict
+// rMin >= bMin rule. A base whose member is REQUIRED is NOT emptiable, so the
+// same narrowing stays invalid in both versions.
+func TestRestriction_EmptiableBaseAllMinOccurs(t *testing.T) {
+	t.Parallel()
+
+	// Base all is emptiable (both members optional) → derived all{0,1} is valid @1.1.
+	const validXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:s" xmlns:s="urn:s" elementFormDefault="qualified">
+  <xs:complexType name="Base">
+    <xs:all minOccurs="1" maxOccurs="1">
+      <xs:element name="a" type="xs:string" minOccurs="0"/>
+      <xs:element name="b" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="s:Base">
+        <xs:all minOccurs="0" maxOccurs="1">
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="s:Derived"/>
+</xs:schema>`
+
+	schema11, _, cerr := compileV11(t, validXML)
+	require.NoError(t, cerr, "1.1: an emptiable base all may be narrowed to minOccurs=0")
+	require.NotNil(t, schema11)
+
+	_, cerr10 := compileV10(t, validXML)
+	require.ErrorIs(t, cerr10, xsd.ErrCompilationFailed, "1.0: derived all minOccurs 0 below base minOccurs 1 is invalid")
+
+	// Base all is NOT emptiable (member a is required) → the same narrowing is
+	// invalid in 1.1 too (the base does not accept the empty sequence).
+	const invalidXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:s" xmlns:s="urn:s" elementFormDefault="qualified">
+  <xs:complexType name="Base">
+    <xs:all minOccurs="1" maxOccurs="1">
+      <xs:element name="a" type="xs:string" minOccurs="1"/>
+      <xs:element name="b" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="s:Base">
+        <xs:all minOccurs="0" maxOccurs="1">
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="s:Derived"/>
+</xs:schema>`
+
+	_, _, cerrInvalid := compileV11(t, invalidXML)
+	require.ErrorIs(t, cerrInvalid, xsd.ErrCompilationFailed, "1.1: a non-emptiable base all may not be narrowed below its declared minOccurs")
+}
