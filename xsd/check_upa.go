@@ -59,6 +59,18 @@ type positionAutomaton struct {
 	schema    *Schema
 	positions []upaPosition
 	followpos map[int][]int
+	// walking is the set of model groups currently on the recursion stack. A
+	// cyclic group reference (a named xs:group that transitively references
+	// itself) produces a self-referential ModelGroup tree; such schemas are
+	// rejected as circular before UPA runs (checkCircularGroupRefs), but this
+	// guard defends the Glushkov walk so a cycle that ever slips through
+	// terminates instead of overflowing the goroutine stack (an uncatchable
+	// crash). Because an acyclic content model never has one ModelGroup as its
+	// own ancestor, a pointer is on the stack twice ONLY for a true cycle, so the
+	// guard never fires on a valid schema (byte-identical). Occurrence-copy
+	// re-walks are sequential (applyOccurs calls body() one after another), not
+	// nested, so they do not trip it.
+	walking map[*ModelGroup]struct{}
 	// nextOrigin assigns each position an ORIGIN tag identifying its source leaf's
 	// textual site in the model tree. applyOccurs RESETS this counter before each
 	// occurrence copy it walks, so all occurrence-copies of ONE textual leaf (at
@@ -341,6 +353,17 @@ func (a *positionAutomaton) walkModelGroup(mg *ModelGroup) posInfo {
 	if mg.MaxOccurs == 0 {
 		return posInfo{nullable: true}
 	}
+	// Defensive cycle guard (see positionAutomaton.walking): a self-referential
+	// model-group tree from a circular group reference terminates here rather
+	// than recursing into a stack overflow.
+	if a.walking == nil {
+		a.walking = make(map[*ModelGroup]struct{})
+	}
+	if _, on := a.walking[mg]; on {
+		return posInfo{nullable: true}
+	}
+	a.walking[mg] = struct{}{}
+	defer delete(a.walking, mg)
 	switch mg.Compositor {
 	case CompositorChoice, CompositorSequence, CompositorAll:
 		return a.applyOccurs(mg.MinOccurs, mg.MaxOccurs, func() posInfo {
