@@ -66,39 +66,6 @@ License / notice:
   repository as an authoritative W3C test suite or as a basis for public W3C
   conformance claims.
 
-## W3C XSLT 3.0 Test Suite
-
-Upstream project:
-- `https://github.com/w3c/xslt30-test`
-
-Local paths:
-- `testdata/xslt30/fetch.sh`
-- `testdata/xslt30/source/` after running the fetch script
-- `testdata/xslt30/testdata/`
-- `tools/xslt3gen/`
-- `xslt3/w3c_*_gen_test.go`
-
-How it is used:
-- `testdata/xslt30/fetch.sh` clones the upstream XSLT 3.0 test repository into
-  `testdata/xslt30/source/`.
-- `tools/xslt3gen` reads the upstream catalog and copies required stylesheet,
-  source, and support assets into the committed `testdata/xslt30/testdata/`
-  tree.
-- `tools/xslt3gen` also generates the committed `xslt3/w3c_*_gen_test.go`
-  files from the upstream XSLT 3.0 catalog and test definitions.
-
-License / notice:
-- W3C publishes its test suites under both the W3C test suite license and the
-  W3C 3-clause BSD test suite license.
-- W3C describes the 3-clause BSD test suite license as the path for software
-  development, bug tracking, and other uses that do not make public
-  performance or conformance claims with modified tests.
-- helium uses copied and generated XSLT 3.0 test materials in that
-  development-oriented way.
-- Do not present modified or subsetted XSLT 3.0-derived materials in this
-  repository as an authoritative W3C test suite or as a basis for public W3C
-  conformance claims.
-
 ## Saxon-HE
 
 Upstream project:

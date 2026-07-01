@@ -15,8 +15,8 @@ import (
 
 var (
 	smallXML  []byte // ~109 KB
-	mediumXML []byte // ~196 KB
-	largeXML  []byte // ~3.3 MB
+	mediumXML []byte // ~233 KB
+	largeXML  []byte // ~608 KB
 	loadOnce  sync.Once
 	repoRoot  string
 )
@@ -30,11 +30,11 @@ func loadCorpus(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		mediumXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/xslt30/testdata/tests/insn/merge/cities-SE.xml"))
+		mediumXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/qt3ts/testdata/fsx.xml"))
 		if err != nil {
 			b.Fatal(err)
 		}
-		largeXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/xslt30/testdata/tests/strm/docs/ot.xml"))
+		largeXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/libxml2-compat/relaxng/test/comps_0.xml"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -46,8 +46,8 @@ var corpus = []struct {
 	data *[]byte
 }{
 	{"109KB", &smallXML},
-	{"196KB", &mediumXML},
-	{"3MB", &largeXML},
+	{"233KB", &mediumXML},
+	{"608KB", &largeXML},
 }
 
 func BenchmarkHeliumParse(b *testing.B) {
