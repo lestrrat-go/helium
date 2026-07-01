@@ -1041,6 +1041,16 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	var fieldLines []int
 	var selectorSeen bool
 
+	// selectorNS / fieldNS capture the in-scope namespace context of the
+	// <selector>/<field> element ITSELF (not the enclosing constraint element),
+	// so the restricted-subset prefix-binding check resolves a name-test prefix
+	// against the selector/field's own namespaces (XSD Structures 3.11.6.1) —
+	// including an xmlns:* declared directly on <xs:selector>/<xs:field>. The
+	// constraint-scoped idc.Namespaces (used by runtime IDC evaluation) is
+	// intentionally left unchanged. fieldNS is parallel to idc.Fields.
+	var selectorNS map[string]string
+	var fieldNS []map[string]string
+
 	// The identity-constraint content model is (annotation?, (selector, field+))
 	// (XSD Structures 3.11.1 / src-identity-constraint). Enforce ORDER and
 	// CARDINALITY with an ordered scan: an OPTIONAL leading <annotation>, then
@@ -1075,6 +1085,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			selectorSeen = true
 			idc.SelectorDefaultNS = c.resolveXPathDefaultNS(ce)
 			selectorLine = ce.Line()
+			selectorNS = collectNSContext(ce)
 			idc.Selector = c.idcXPathAttr(ctx, ce, elemSelector)
 		case isXSDElement(ce, elemField):
 			// fields follow the selector.
@@ -1083,6 +1094,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			}
 			idc.FieldDefaultNS = append(idc.FieldDefaultNS, c.resolveXPathDefaultNS(ce))
 			fieldLines = append(fieldLines, ce.Line())
+			fieldNS = append(fieldNS, collectNSContext(ce))
 			idc.Fields = append(idc.Fields, c.idcXPathAttr(ctx, ce, elemField))
 		default:
 			// Any other element child is not in the content model. The
@@ -1119,7 +1131,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// run), so an invalid schema must fail to compile rather than validate
 	// documents as if no constraint were present.
 	if idc.Selector != "" {
-		compiled, err := compileIDCXPath(idc.Selector, false, idc.Namespaces)
+		compiled, err := compileIDCXPath(idc.Selector, false, selectorNS)
 		if err != nil {
 			c.reportIDCXPathError(ctx, elemSelector, selectorLine, idc.Selector, err)
 		} else {
@@ -1138,7 +1150,11 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			// also emit a redundant "not a valid field expression" diagnostic.
 			continue
 		}
-		compiled, err := compileIDCXPath(f, true, idc.Namespaces)
+		nsCtx := idc.Namespaces
+		if i < len(fieldNS) {
+			nsCtx = fieldNS[i]
+		}
+		compiled, err := compileIDCXPath(f, true, nsCtx)
 		if err != nil {
 			line := 0
 			if i < len(fieldLines) {

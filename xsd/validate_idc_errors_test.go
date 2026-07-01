@@ -233,6 +233,53 @@ func TestIDCXPathSubset(t *testing.T) {
 			require.Empty(t, errs, "a bound-prefix name test must compile clean")
 		})
 	})
+
+	t.Run("prefix declared on selector/field element", func(t *testing.T) {
+		t.Parallel()
+		// Per XSD Structures 3.11.6.1 a selector/field @xpath resolves prefixes
+		// against the SELECTOR/FIELD element's OWN in-scope namespaces, so an
+		// xmlns:* declared directly on <xs:selector>/<xs:field> is in scope and a
+		// name test using it must compile clean. A prefix declared on neither the
+		// selector/field nor an ancestor stays unbound and is still rejected.
+		localNS := func(selectorAttrs, selector, fieldAttrs, field string) string {
+			return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector ` + selectorAttrs + ` xpath="` + selector + `"/>
+      <xs:field ` + fieldAttrs + ` xpath="` + field + `"/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+		}
+		t.Run("selector prefix", func(t *testing.T) {
+			t.Parallel()
+			// xmlns:p is declared on <xs:selector> itself.
+			_, errs := compileXSD(t, localNS(`xmlns:p="urn:p"`, "p:item | item", "", okField))
+			require.Empty(t, errs, "a prefix declared on the selector element must be in scope")
+		})
+		t.Run("field prefix", func(t *testing.T) {
+			t.Parallel()
+			// xmlns:p is declared on <xs:field> itself.
+			_, errs := compileXSD(t, localNS("", okSelector, `xmlns:p="urn:p"`, "p:id"))
+			require.Empty(t, errs, "a prefix declared on the field element must be in scope")
+		})
+		t.Run("selector-local prefix not in scope for field", func(t *testing.T) {
+			t.Parallel()
+			// A prefix declared only on the selector is NOT in scope for the field,
+			// so it stays unbound there and is rejected.
+			_, errs := compileXSD(t, localNS(`xmlns:p="urn:p"`, "p:item", "", "p:id"))
+			require.Contains(t, errs, "is not a valid field")
+		})
+	})
 }
 
 // TestIDCKeyRefUnresolvedRefer covers an xs:keyref whose @refer names a
