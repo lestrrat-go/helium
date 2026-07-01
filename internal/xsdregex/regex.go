@@ -1280,6 +1280,117 @@ func rejectPerlSpecific(pattern string) error {
 	return nil
 }
 
+// rejectNonXSDConstructs rejects regular-expression constructs that are valid
+// in the XPath/XQuery (F&O) regex flavor but NOT in the XML Schema (XSD)
+// xs:pattern flavor. It runs ONLY on the XSD Compile path (CompileVersion), not
+// on the shared Translate/Validate used by xpath3, because the XPath flavor
+// those callers use DOES permit reluctant quantifiers and '(?:...)'. The
+// rejected constructs are:
+//
+//   - reluctant (non-greedy) quantifiers: a quantifier ('?', '*', '+', or a
+//     '{n,m}' block) immediately followed by '?'. XSD's grammar (XML Schema
+//     Part 2 Appendix F) allows exactly one quantifier per atom.
+//   - group extensions '(?...)' — including non-capturing groups '(?:...)' and
+//     inline-flag groups. XSD's atom grammar has only '(' regExp ')'.
+//   - unbalanced parentheses: a ')' with no matching '(', or an unclosed '('.
+//
+// A '{' that is not a valid quantifier brace, and '^'/'$' (literal in XSD), are
+// left to the other validators; this pass only concerns the three classes above.
+func rejectNonXSDConstructs(pattern string) error {
+	runes := []rune(pattern)
+	inCharClass := 0
+	parenDepth := 0
+	// lastWasQuantifier is true immediately after a quantifier metacharacter
+	// ('*', '+', '?') or a valid '{n,m}' block; a '?' seen while it is true is a
+	// reluctant quantifier.
+	lastWasQuantifier := false
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+
+		if r == '\\' {
+			// An escape is a single atom. \p{...}/\P{...} carry a brace group
+			// that must be skipped whole so its '{' is not read as a quantifier.
+			if i+2 < len(runes) && (runes[i+1] == 'p' || runes[i+1] == 'P') && runes[i+2] == '{' {
+				end := findClosingBrace(runes, i+3)
+				if end < 0 {
+					i = len(runes) // unterminated; other validators diagnose it
+				} else {
+					i = end
+				}
+			} else {
+				i++ // skip the escaped character
+			}
+			lastWasQuantifier = false
+			continue
+		}
+
+		if r == '[' {
+			inCharClass++
+			lastWasQuantifier = false
+			continue
+		}
+		if r == ']' {
+			if inCharClass > 0 {
+				inCharClass--
+			}
+			lastWasQuantifier = false
+			continue
+		}
+		if inCharClass > 0 {
+			continue // metacharacters are literal inside a character class
+		}
+
+		switch r {
+		case '(':
+			if i+1 < len(runes) && runes[i+1] == '?' {
+				return &regexError{
+					Code:    errCodeFORX0002,
+					Message: "group extensions '(?...)' are not allowed in XML Schema regular expressions",
+				}
+			}
+			parenDepth++
+			lastWasQuantifier = false
+		case ')':
+			if parenDepth == 0 {
+				return &regexError{
+					Code:    errCodeFORX0002,
+					Message: "unbalanced ')' in XML Schema regular expression",
+				}
+			}
+			parenDepth--
+			lastWasQuantifier = false
+		case '*', '+':
+			lastWasQuantifier = true
+		case '?':
+			if lastWasQuantifier {
+				return &regexError{
+					Code:    errCodeFORX0002,
+					Message: "reluctant quantifiers are not allowed in XML Schema regular expressions",
+				}
+			}
+			lastWasQuantifier = true
+		case '{':
+			if isValidQuantifierBrace(runes, i) {
+				if end := findClosingBrace(runes, i+1); end >= 0 {
+					i = end // skip the whole quantifier body; loop ++ passes '}'
+				}
+				lastWasQuantifier = true
+				continue
+			}
+			lastWasQuantifier = false
+		default:
+			lastWasQuantifier = false
+		}
+	}
+	if parenDepth > 0 {
+		return &regexError{
+			Code:    errCodeFORX0002,
+			Message: "unbalanced '(' in XML Schema regular expression",
+		}
+	}
+	return nil
+}
+
 // Translate converts an XPath/XQuery regex pattern (fn:matches/tokenize/replace)
 // into a Go RE2 pattern. In this flavor '^' and '$' are anchors and the pattern
 // is not implicitly anchored; use Compile for XSD xs:pattern facets, where
@@ -1337,6 +1448,14 @@ func CompileVersion(pattern string, xsd11 bool) (*Regexp, error) {
 		return nil, err
 	}
 	if err := validateXPathRegex(pattern, false, xsd11); err != nil {
+		return nil, err
+	}
+	// The XSD xs:pattern grammar is stricter than the shared XPath flavor: it
+	// forbids reluctant quantifiers, '(?...)' group extensions, and unbalanced
+	// parentheses. Enforce them here (Compile/CompileVersion path only) so
+	// xpath3's Translate/Validate keep the XPath semantics. relaxng compiles
+	// via Compile, so it is intentionally subject to this rejection too.
+	if err := rejectNonXSDConstructs(pattern); err != nil {
 		return nil, err
 	}
 
