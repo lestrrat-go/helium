@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -256,6 +257,43 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 		MaxOccurs:  maxOccurs,
 	}
 
+	// The XML representation of an inline model group has the content model
+	// (annotation?, particle*) per XSD Structures §3.8.2: an xs:sequence/xs:choice
+	// admits (element | group | choice | sequence | any) particles, while an
+	// xs:all admits only (element) in XSD 1.0 — 1.1 additionally admits (any |
+	// group). In all three compositors at most one annotation is permitted and it
+	// must PRECEDE every particle, and no non-particle element (e.g. xs:simpleType,
+	// xs:complexType, xs:attribute) may appear. An inline model group also carries
+	// no @name attribute. These are schema-representation rules; the version split
+	// is confined to the xs:all particle-kind set so the sequence/choice grammar
+	// and the XSD 1.0 output stay byte-identical for valid model groups.
+	compElem := elemSequence
+	switch compositor {
+	case CompositorChoice:
+		compElem = elemChoice
+	case CompositorAll:
+		compElem = elemAll
+	}
+	expectedContent := "(annotation?, (element | group | choice | sequence | any)*)"
+	if compositor == CompositorAll {
+		expectedContent = "(annotation?, element*)"
+		if c.version == Version11 {
+			expectedContent = "(annotation?, (element | any | group)*)"
+		}
+	}
+	reportGrammar := func(ce *helium.Element, msg string) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), compElem, msg))
+	}
+	reportStray := func(ce *helium.Element) {
+		reportGrammar(ce, fmt.Sprintf("The content is not valid. Expected is %s.", expectedContent))
+	}
+	// An inline model group must not carry a @name attribute.
+	if hasAttr(elem, attrName) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), compElem, attrName,
+			"Attribute 'name' is not allowed on an inline model group."))
+	}
+	var annotSeen, particleSeen bool
+
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -264,6 +302,18 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 		if !ok {
 			continue
 		}
+		// annotation? — at most one, and it must precede every particle.
+		if isXSDElement(ce, elemAnnotation) {
+			switch {
+			case annotSeen:
+				reportGrammar(ce, "A model group must not have more than one annotation.")
+			case particleSeen:
+				reportGrammar(ce, "The annotation must appear before the particles of a model group.")
+			}
+			annotSeen = true
+			continue
+		}
+		particleSeen = true
 		switch {
 		case isXSDElement(ce, elemElement):
 			p, err := c.parseLocalElement(ctx, ce)
@@ -279,6 +329,11 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 			}
 			mg.Particles = append(mg.Particles, p)
 		case isXSDElement(ce, elemSequence):
+			// xs:all admits no nested sequence in either version.
+			if compositor == CompositorAll {
+				reportStray(ce)
+				continue
+			}
 			sub, err := c.parseModelGroup(ctx, ce, CompositorSequence)
 			if err != nil {
 				return nil, err
@@ -289,6 +344,11 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				Term:      sub,
 			})
 		case isXSDElement(ce, elemChoice):
+			// xs:all admits no nested choice in either version.
+			if compositor == CompositorAll {
+				reportStray(ce)
+				continue
+			}
 			sub, err := c.parseModelGroup(ctx, ce, CompositorChoice)
 			if err != nil {
 				return nil, err
@@ -342,6 +402,14 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 			p := c.parseWildcard(ctx, ce)
 			mg.Particles = append(mg.Particles, p)
 		case isXSDElement(ce, elemGroup):
+			// XSD 1.0 xs:all content is (annotation?, element*): a group reference
+			// is not admitted. The 1.1 relaxation (a <xs:group ref> resolving to an
+			// all group, occurrence 1/1) is handled by the ref path below and gated
+			// downstream in checkAllGroupRef.
+			if compositor == CompositorAll && c.version != Version11 {
+				reportStray(ce)
+				continue
+			}
 			ref := getAttr(ce, attrRef)
 			if ref != "" {
 				c.validateOccursAttrs(ctx, ce)
@@ -369,6 +437,14 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 					MaxOccurs: placeholder.MaxOccurs,
 					Term:      placeholder,
 				})
+			}
+		default:
+			// Any other XSD-namespace child (e.g. xs:simpleType, xs:complexType,
+			// xs:attribute) is not a particle and is not admitted by a model group's
+			// (annotation?, particle*) content model. Foreign-namespace children are
+			// left untouched to avoid over-rejecting extension content.
+			if ce.URI() == lexicon.NamespaceXSD {
+				reportStray(ce)
 			}
 		}
 	}
