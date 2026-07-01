@@ -523,6 +523,18 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 	line := elem.Line()
 	local := elem.LocalName()
 
+	// XSD 1.1 Schema Representation Constraint (Attribute Declaration
+	// Representation OK): a prohibited attribute use must not carry a value
+	// constraint. A prohibited attribute can never appear, so a fixed value is
+	// meaningless. XSD 1.0 tolerates this (the schemas are valid there), so the
+	// check is gated on Version11 to keep 1.0 byte-identical. A `default` on a
+	// prohibited use is already rejected in both versions by the "default requires
+	// use=optional" check below, so only `fixed` needs handling here.
+	if c.version == Version11 && getAttr(elem, attrUse) == attrValProhibited && hasAttr(elem, attrFixed) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
+			"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
+	}
+
 	if ref != "" {
 		// ref and name are mutually exclusive.
 		if getAttr(elem, attrName) != "" {
