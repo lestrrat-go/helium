@@ -12,9 +12,10 @@ root `<xs:schema>` when the version is not set explicitly). XSD 1.1 support
 includes assertions, conditional type assignment, open content, wildcard
 `notNamespace`/`notQName`, `xs:all` relaxations, `xs:override`, document-wide
 xs:ID/xs:IDREF/xs:ENTITY value-space validation, and identity-constraint
-scoping. It passes the IBM and Saxon XSD 1.1 test sets of the W3C XML Schema
-Test Suite (967 test groups, 0 failures); the suite's XSD 1.0-era collections
-(Microsoft, NIST, Sun) are not part of that run.
+scoping. It passes the XSD-1.1-tagged test groups of the W3C XML Schema Test
+Suite — 967 groups from the IBM, Saxon, Oracle, and W3C-WG collections, 0
+failures. The suite's XSD 1.0-era collections (Microsoft, NIST, Sun, Boeing)
+contribute no 1.1 tests and are not part of that run.
 
 <!-- INCLUDE(examples/xsd_validate_example_test.go) -->
 ```go
