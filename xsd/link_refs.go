@@ -197,13 +197,41 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// placeholder is left empty so the tree stays acyclic; the schema is reported
 	// invalid (circular groups are forbidden in both XSD 1.0 and 1.1).
 	cutGroupRefs := c.checkCircularGroupRefs(ctx)
+	// Collect every <xs:group ref="..."> that does NOT resolve to a globally
+	// declared model group (a ref naming a component in the wrong symbol space —
+	// a complexType or attributeGroup of the same name — or a name declared
+	// nowhere). Reported after the loop, sorted for deterministic output, so the
+	// invalid schema is rejected instead of silently compiling with empty content.
+	type danglingGroupRef struct {
+		source string
+		line   int
+		local  string
+		qn     QName
+	}
+	var danglingGroups []danglingGroupRef
 	for _, placeholder := range groupRefPlaceholders {
 		if _, isCut := cutGroupRefs[placeholder]; isCut {
 			continue
 		}
 		qn := c.groupRefs[placeholder]
 		grp, ok := c.schema.groups[qn]
+		if !ok && qn.NS != "" {
+			// An unprefixed ref resolves to the schema's targetNamespace, but the
+			// group may come from a chameleon / no-namespace imported schema. Mirror
+			// the empty-namespace fallback used for element/type/attribute-group
+			// references so such a valid reference is not flagged dangling.
+			grp, ok = c.schema.groups[QName{Local: qn.Local}]
+		}
 		if !ok {
+			if c.filename != "" {
+				src := c.groupRefSources[placeholder]
+				danglingGroups = append(danglingGroups, danglingGroupRef{
+					source: c.diagSourceOrRecorded(src.source),
+					line:   src.line,
+					local:  src.local,
+					qn:     qn,
+				})
+			}
 			continue
 		}
 		// Copy the group's content into the placeholder.
@@ -227,6 +255,27 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			continue
 		}
 		c.checkAllGroupRef(ctx, placeholder)
+	}
+
+	// Report unresolved model-group references (src-resolve / Model Group
+	// Reference Representation OK): a ref to a component in the wrong symbol space
+	// (a complexType or attributeGroup of the same name) or a name declared
+	// nowhere. Version-independent — the resolution rule holds in both XSD 1.0 and
+	// 1.1 (a permitted 1.1 circular ref still resolves to an existing group, so it
+	// never reaches here). Sorted by (source, line, local) so the output is
+	// independent of Go map iteration order.
+	sort.Slice(danglingGroups, func(i, j int) bool {
+		if danglingGroups[i].source != danglingGroups[j].source {
+			return danglingGroups[i].source < danglingGroups[j].source
+		}
+		if danglingGroups[i].line != danglingGroups[j].line {
+			return danglingGroups[i].line < danglingGroups[j].line
+		}
+		return danglingGroups[i].local < danglingGroups[j].local
+	})
+	for _, d := range danglingGroups {
+		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) model group definition.", d.qn.NS, d.qn.Local)
+		c.schemaError(ctx, schemaParserErrorAttr(d.source, d.line, d.local, elemGroup, attrRef, msg))
 	}
 
 	// Reject an xs:attributeGroup ref that does not resolve to a globally-declared
