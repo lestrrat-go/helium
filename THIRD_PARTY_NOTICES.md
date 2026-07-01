@@ -33,39 +33,6 @@ License / notice:
   data and expected outputs. Preserve upstream libxml2 copyright and license
   notices when refreshing that data.
 
-## W3C QT3 Test Suite
-
-Upstream project:
-- `https://github.com/w3c/qt3tests`
-
-Local paths:
-- `testdata/qt3ts/fetch.sh`
-- `testdata/qt3ts/source/` after running the fetch script
-- `testdata/qt3ts/testdata/`
-- `tools/qt3gen/`
-- `xpath3/qt3_*_gen_test.go`
-
-How it is used:
-- `testdata/qt3ts/fetch.sh` clones the upstream QT3 repository into
-  `testdata/qt3ts/source/`.
-- `tools/qt3gen` reads the upstream catalog and copies required context
-  documents and resource files into the committed `testdata/qt3ts/testdata/`
-  tree.
-- `tools/qt3gen` also generates the committed `xpath3/qt3_*_gen_test.go`
-  files from the upstream QT3 catalog and test definitions.
-
-License / notice:
-- W3C publishes its test suites under both the W3C test suite license and the
-  W3C 3-clause BSD test suite license.
-- W3C describes the 3-clause BSD test suite license as the path for software
-  development, bug tracking, and other uses that do not make public
-  performance or conformance claims with modified tests.
-- helium uses copied and generated QT3-derived materials in that
-  development-oriented way.
-- Do not present modified or subsetted QT3-derived materials in this
-  repository as an authoritative W3C test suite or as a basis for public W3C
-  conformance claims.
-
 ## Saxon-HE
 
 Upstream project:

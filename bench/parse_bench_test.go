@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	smallXML  []byte // ~109 KB
-	mediumXML []byte // ~233 KB
+	smallXML  []byte // ~118 KB
+	mediumXML []byte // ~287 KB
 	largeXML  []byte // ~608 KB
 	loadOnce  sync.Once
 	repoRoot  string
@@ -26,11 +26,11 @@ func loadCorpus(b *testing.B) {
 	loadOnce.Do(func() {
 		repoRoot = heliumtest.RepoRoot()
 		var err error
-		smallXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/qt3ts/testdata/fsx_NS.xml"))
+		smallXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/libxml2-compat/relaxng/test/spec_0.xml"))
 		if err != nil {
 			b.Fatal(err)
 		}
-		mediumXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/qt3ts/testdata/fsx.xml"))
+		mediumXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/libxml2-compat/schemas/test/nvdcve_0.xml"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -45,8 +45,8 @@ var corpus = []struct {
 	name string
 	data *[]byte
 }{
-	{"109KB", &smallXML},
-	{"233KB", &mediumXML},
+	{"118KB", &smallXML},
+	{"287KB", &mediumXML},
 	{"608KB", &largeXML},
 }
 
