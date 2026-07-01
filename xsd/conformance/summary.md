@@ -5,11 +5,11 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-01
 - Upstream suite: https://github.com/w3c/xsdtests @ `7bc3365c652a322f3d762021b3879eb92dae7e30`
-- helium: `089c62b9`
+- helium: `6e953c17`
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 967 |
+| Pass | 1049 |
 | Skip | 0 |
 | Fail | 0 |
-| **Total** | **967** |
+| **Total** | **1049** |
