@@ -132,8 +132,14 @@ func TestIDCXPathSubset(t *testing.T) {
 	t.Run("selector rejected", func(t *testing.T) {
 		t.Parallel()
 		// String/number literals, function calls, predicates, the attribute
-		// axis, absolute paths and operators are all outside the subset.
-		for _, sel := range []string{"'literal'", "42", "foo()", "item[@id='x']", "@id", "/item", "item + 1"} {
+		// axis, absolute paths and operators are all outside the subset. The
+		// spelled-out 'self::node()' and a repeated/mid-path './/' normalize to
+		// the same AST as the permitted '.' / leading './/' steps, so they are
+		// caught lexically over the raw expression.
+		for _, sel := range []string{
+			"'literal'", "42", "foo()", "item[@id='x']", "@id", "/item", "item + 1",
+			"self::node()", ".//.//item", ".//item/.//item",
+		} {
 			t.Run(sel, func(t *testing.T) {
 				t.Parallel()
 				_, errs := compileXSD(t, schema(sel, okField))
@@ -146,7 +152,10 @@ func TestIDCXPathSubset(t *testing.T) {
 	t.Run("field rejected", func(t *testing.T) {
 		t.Parallel()
 		// Like selectors, plus a non-final attribute step is out of subset.
-		for _, f := range []string{"'literal'", "string(@id)", "$x", "@id[1]", "@id/item"} {
+		for _, f := range []string{
+			"'literal'", "string(@id)", "$x", "@id[1]", "@id/item",
+			"self::node()", ".//id/.//id",
+		} {
 			t.Run(f, func(t *testing.T) {
 				t.Parallel()
 				_, errs := compileXSD(t, schema(okSelector, f))
@@ -161,13 +170,20 @@ func TestIDCXPathSubset(t *testing.T) {
 		for name, tc := range map[string]struct {
 			selector, field string
 		}{
-			"child name test":    {okSelector, okField},
-			"self step":          {".", okField},
-			"descendant-or-self": {".//item", okField},
-			"wildcard name test": {"*", okField},
-			"union of paths":     {".//item | item", okField},
-			"field self":         {okSelector, "."},
-			"multi-step child":   {"item/item", okField},
+			"child name test":     {okSelector, okField},
+			"self step":           {".", okField},
+			"descendant-or-self":  {".//item", okField},
+			"descendant then dot": {".//.", okField},
+			// XPath permits insignificant whitespace, so '. //.' / '.// .' are
+			// the same leading './/' step as './/.'.
+			"whitespace descendant":       {". //.", okField},
+			"trailing-space descendant":   {".// .", okField},
+			"wildcard name test":          {"*", okField},
+			"union of paths":              {".//item | item", okField},
+			"explicit child axis":         {"child::item", okField},
+			"explicit attribute in field": {okSelector, "attribute::id"},
+			"field self":                  {okSelector, "."},
+			"multi-step child":            {"item/item", okField},
 		} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
@@ -175,6 +191,94 @@ func TestIDCXPathSubset(t *testing.T) {
 				require.Empty(t, errs, "valid subset XPath must compile clean")
 			})
 		}
+	})
+
+	t.Run("unbound prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		// A QName name test whose prefix is not bound in the constraint's in-scope
+		// namespaces cannot be resolved (XSD Structures 3.11.6.1), so it is a
+		// schema error; a bound prefix (p → urn:p) compiles clean.
+		prefixed := func(selector, field string) string {
+			return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="` + selector + `"/>
+      <xs:field xpath="` + field + `"/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+		}
+		t.Run("selector", func(t *testing.T) {
+			t.Parallel()
+			_, errs := compileXSD(t, prefixed("q:item", okField))
+			require.Contains(t, errs, "is not a valid selector")
+		})
+		t.Run("field", func(t *testing.T) {
+			t.Parallel()
+			_, errs := compileXSD(t, prefixed(okSelector, "q:id"))
+			require.Contains(t, errs, "is not a valid field")
+		})
+		t.Run("bound prefix accepted", func(t *testing.T) {
+			t.Parallel()
+			_, errs := compileXSD(t, prefixed("p:item | item", okField))
+			require.Empty(t, errs, "a bound-prefix name test must compile clean")
+		})
+	})
+
+	t.Run("prefix declared on selector/field element", func(t *testing.T) {
+		t.Parallel()
+		// Per XSD Structures 3.11.6.1 a selector/field @xpath resolves prefixes
+		// against the SELECTOR/FIELD element's OWN in-scope namespaces, so an
+		// xmlns:* declared directly on <xs:selector>/<xs:field> is in scope and a
+		// name test using it must compile clean. A prefix declared on neither the
+		// selector/field nor an ancestor stays unbound and is still rejected.
+		localNS := func(selectorAttrs, selector, fieldAttrs, field string) string {
+			return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector ` + selectorAttrs + ` xpath="` + selector + `"/>
+      <xs:field ` + fieldAttrs + ` xpath="` + field + `"/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+		}
+		t.Run("selector prefix", func(t *testing.T) {
+			t.Parallel()
+			// xmlns:p is declared on <xs:selector> itself.
+			_, errs := compileXSD(t, localNS(`xmlns:p="urn:p"`, "p:item | item", "", okField))
+			require.Empty(t, errs, "a prefix declared on the selector element must be in scope")
+		})
+		t.Run("field prefix", func(t *testing.T) {
+			t.Parallel()
+			// xmlns:p is declared on <xs:field> itself.
+			_, errs := compileXSD(t, localNS("", okSelector, `xmlns:p="urn:p"`, "p:id"))
+			require.Empty(t, errs, "a prefix declared on the field element must be in scope")
+		})
+		t.Run("selector-local prefix not in scope for field", func(t *testing.T) {
+			t.Parallel()
+			// A prefix declared only on the selector is NOT in scope for the field,
+			// so it stays unbound there and is rejected.
+			_, errs := compileXSD(t, localNS(`xmlns:p="urn:p"`, "p:item", "", "p:id"))
+			require.Contains(t, errs, "is not a valid field")
+		})
 	})
 }
 
