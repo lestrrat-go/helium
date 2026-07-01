@@ -685,6 +685,15 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 				continue
 			}
 			if kind == DerivationExtension && getAttr(ce, attrUse) == attrValProhibited {
+				// XSD 1.1 Attribute Declaration Representation OK: a prohibited
+				// attribute use must not carry a 'fixed' value constraint. The
+				// prohibited use is otherwise warned+skipped below, so this check
+				// (mirroring checkAttributeUse) is what enforces the constraint on
+				// the extension path. Gated on Version11 so XSD 1.0 stays byte-identical.
+				if c.version == Version11 && hasAttr(ce, attrFixed) {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attribute",
+						"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
+				}
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, ce.Line(), ce.LocalName(), "attribute",
 						"Skipping attribute use prohibition, since it is pointless when extending a type."), helium.ErrorLevelWarning))
@@ -913,6 +922,15 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 				directAttrChild = ae.LocalName()
 			}
 			if kind == DerivationExtension && getAttr(ae, attrUse) == attrValProhibited {
+				// XSD 1.1 Attribute Declaration Representation OK: a prohibited
+				// attribute use must not carry a 'fixed' value constraint. The
+				// prohibited use is otherwise warned+skipped below, so this check
+				// (mirroring checkAttributeUse) is what enforces the constraint on
+				// the extension path. Gated on Version11 so XSD 1.0 stays byte-identical.
+				if c.version == Version11 && hasAttr(ae, attrFixed) {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), ae.Line(), ae.LocalName(), "attribute",
+						"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
+				}
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, ae.Line(), ae.LocalName(), "attribute",
 						"Skipping attribute use prohibition, since it is pointless when extending a type."), helium.ErrorLevelWarning))
