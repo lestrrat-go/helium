@@ -277,6 +277,12 @@ Regenerate: `go run ./tools/xslt3gen/`
 
 Test runner for W3C XSLT 3.0 conformance: compiles stylesheet, transforms input, compares output against expected results.
 
+### 6. W3C XML Schema Test Suite (XSTS) — moved out of this module
+
+The heavyweight W3C XML Schema (XSD 1.1) conformance suite lives in the **sibling `github.com/lestrrat-go/helium-w3c-tests` module**, not here. That module owns the generated tests, the on-demand-fetched fixtures, and the skip/expectation metadata (`expectations/xsd11.json`); it `replace`s `helium => ../helium` and uses a local `go.work` to test against an in-progress branch. Run it from there: `go run ./cmd/w3cgen fetch xsd11 && go run ./cmd/w3cgen generate xsd11 && go test ./...`.
+
+Helium keeps only the **unit regression** `xsd/union_cycle_overflow_test.go` (cyclic simpleType must error, not stack-overflow), guarding the in-tree fix (`baseChain` in `simplevalue_core.go`, `checkCircularSimpleTypes` in `check_facets.go`).
+
 ## Skip Maps
 
 Tests are skipped via in-code maps with reasons:

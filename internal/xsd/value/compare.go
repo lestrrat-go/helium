@@ -76,8 +76,10 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareFloat(a, b, true)
 	case lexicon.TypeDouble:
 		return compareFloat(a, b, false)
-	case "dateTime":
-		return compareDateTime(a, b, builtinLocal)
+	case "dateTime", lexicon.TypeDateTimeStamp:
+		// xs:dateTimeStamp is a subtype of xs:dateTime; compare in the dateTime
+		// value space.
+		return compareDateTime(a, b, "dateTime")
 	case "date":
 		return compareDate(a, b, builtinLocal)
 	case builtinTime:
@@ -92,7 +94,9 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareGDay(a, b, builtinLocal)
 	case "gMonthDay":
 		return compareGMonthDay(a, b, builtinLocal)
-	case "duration":
+	case "duration", lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration:
+		// xs:dayTimeDuration and xs:yearMonthDuration are subtypes of xs:duration;
+		// compare in the duration value space.
 		return compareDuration(a, b)
 	case "hexBinary":
 		return compareHexBinary(a, b)
@@ -122,11 +126,18 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 
 // validBuiltinOperands reports whether both lexicals pass the strict lexical
 // space (ValidateBuiltin) for builtinLocal, after trimming XSD whitespace only.
+//
+// Comparison and canonicalization run on values the caller has already validated
+// under the schema's actual XSD version, so the lexical guards here use Version11
+// (the most permissive space). A value that is invalid under XSD 1.0 (e.g.
+// "+INF") never reaches this path in 1.0 mode, so the permissive check cannot
+// admit anything the version-specific validation already rejected. All the other
+// ValidateBuiltin guards in this file pass Version11 for the same reason.
 func validBuiltinOperands(a, b, builtinLocal string) bool {
-	if ValidateBuiltin(trimXSDSpace(a), builtinLocal) != nil {
+	if ValidateBuiltin(trimXSDSpace(a), builtinLocal, Version11) != nil {
 		return false
 	}
-	return ValidateBuiltin(trimXSDSpace(b), builtinLocal) == nil
+	return ValidateBuiltin(trimXSDSpace(b), builtinLocal, Version11) == nil
 }
 
 // CanonicalKey maps a lexical value to a value-space canonical string for the
@@ -138,7 +149,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 	switch builtinLocal {
 	case "boolean":
 		trimmed := trimXSDSpace(s)
-		if ValidateBuiltin(trimmed, "boolean") != nil {
+		if ValidateBuiltin(trimmed, "boolean", Version11) != nil {
 			return trimmed, false
 		}
 		if trimmed == "true" || trimmed == "1" {
@@ -151,9 +162,12 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		return canonicalFloatKey(s, 64)
 	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
 		return canonicalDateTimeKey(trimXSDSpace(s), builtinLocal)
+	case lexicon.TypeDateTimeStamp:
+		// xs:dateTimeStamp canonicalizes in the xs:dateTime value space.
+		return canonicalDateTimeKey(trimXSDSpace(s), "dateTime")
 	case "hexBinary":
 		trimmed := trimXSDSpace(s)
-		if ValidateBuiltin(trimmed, "hexBinary") != nil {
+		if ValidateBuiltin(trimmed, "hexBinary", Version11) != nil {
 			return trimmed, false
 		}
 		decoded, err := hex.DecodeString(trimmed)
@@ -164,7 +178,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		return hex.EncodeToString(decoded), true
 	case "base64Binary":
 		trimmed := trimXSDSpace(s)
-		if ValidateBuiltin(trimmed, "base64Binary") != nil {
+		if ValidateBuiltin(trimmed, "base64Binary", Version11) != nil {
 			return trimmed, false
 		}
 		decoded, ok := decodeBase64Binary(trimmed)
@@ -174,12 +188,14 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// Stable byte key so whitespace-distinct forms ("YWJj"/"YW Jj")
 		// canonicalize equal; hex of the decoded octets is a canonical encoding.
 		return hex.EncodeToString(decoded), true
-	case "duration":
+	case "duration", lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration:
+		// xs:dayTimeDuration / xs:yearMonthDuration canonicalize in the xs:duration
+		// value space (they are valid xs:duration lexicals).
 		trimmed := trimXSDSpace(s)
 		// Validate against the strict xs:duration lexical space before the lenient
 		// parseXSDDurationValue below, so CanonicalKey never canonicalizes a value
 		// the validator rejects.
-		if ValidateBuiltin(trimmed, "duration") != nil {
+		if ValidateBuiltin(trimmed, "duration", Version11) != nil {
 			return trimmed, false
 		}
 		d, ok := parseXSDDurationValue(trimmed)
@@ -204,7 +220,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// Validate strictly (lexical space + range for bounded subtypes) before
 		// canonicalizing, so e.g. "1.0"/integer, "2147483648"/int and "1/2"/
 		// decimal yield ok=false rather than a spurious canonical key.
-		if ValidateBuiltin(trimmed, builtinLocal) != nil {
+		if ValidateBuiltin(trimmed, builtinLocal, Version11) != nil {
 			return trimmed, false
 		}
 		r, ok := new(big.Rat).SetString(trimmed)
@@ -241,7 +257,7 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	// Validate against the strict xs:float/xs:double lexical space first: the
 	// lenient parseXSDFloat (and Go's strconv.ParseFloat) accept spellings such
 	// as "Inf" that are not valid XSD lexical forms.
-	if ValidateBuiltin(trimmed, lexicon.TypeDouble) != nil {
+	if ValidateBuiltin(trimmed, lexicon.TypeDouble, Version11) != nil {
 		return trimmed, false
 	}
 	f, ok := parseXSDFloat(trimmed)
@@ -356,10 +372,10 @@ func Normalize(s, builtinLocal string) string {
 // junk), so the compareX functions call this first to guarantee Compare never
 // accepts a value the validation path rejects.
 func validDateTimeOperands(a, b, builtinLocal string) bool {
-	if ValidateBuiltin(a, builtinLocal) != nil {
+	if ValidateBuiltin(a, builtinLocal, Version11) != nil {
 		return false
 	}
-	return ValidateBuiltin(b, builtinLocal) == nil
+	return ValidateBuiltin(b, builtinLocal, Version11) == nil
 }
 
 func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
@@ -367,7 +383,7 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	// parseXSD* parsing below, so CanonicalKey never canonicalizes a date/time
 	// value that ValidateBuiltin would reject (bad timezone, out-of-range
 	// month/day, leap-day, trailing junk).
-	if ValidateBuiltin(s, builtinLocal) != nil {
+	if ValidateBuiltin(s, builtinLocal, Version11) != nil {
 		return s, false
 	}
 	var dt xsdDateTime
@@ -1154,10 +1170,10 @@ func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
 	// wrong result (e.g. gYear "2020" rolling back to 2019), so those types stay
 	// indeterminate, as they were before this rule existed. (xs:time is not in
 	// this set: compareTime assigns a reference date before comparing, so it has
-	// a full calendar date and flows through the determinate path correctly. The
-	// only loss is a literal year-0000 dateTime, an XSD 1.1 edge case, which
-	// falls back to indeterminate rather than wrong.)
-	if a.yearVal().Sign() == 0 || b.yearVal().Sign() == 0 || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
+	// a full calendar date and flows through the determinate path correctly. A
+	// present year equal to 0000 is a full XSD 1.1 calendar year, so only a nil
+	// year means "missing year component" here.
+	if a.year == nil || b.year == nil || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
 		return 0, false
 	}
 
@@ -1459,30 +1475,122 @@ func compareDuration(a, b string) (int, bool) {
 		return 0, false
 	}
 
-	// Apply sign.
-	am, as := da.monVal(), da.secVal()
-	if da.negative {
-		am, as = new(big.Int).Neg(am), new(big.Rat).Neg(as)
-	}
-	bm, bs := db.monVal(), db.secVal()
-	if db.negative {
-		bm, bs = new(big.Int).Neg(bm), new(big.Rat).Neg(bs)
-	}
+	am, as := signedDurationComponents(da)
+	bm, bs := signedDurationComponents(db)
+	return compareDurationComponents(am, as, bm, bs)
+}
 
-	// Compare month and seconds components independently.
-	monthCmp := am.Cmp(bm)
-	secCmp := as.Cmp(bs)
+type durationReferenceDate struct {
+	year       int64
+	month, day int
+}
 
-	if monthCmp == secCmp {
-		return monthCmp, true
+var durationReferenceDates = [...]durationReferenceDate{
+	{1696, 9, 1},
+	{1697, 2, 1},
+	{1903, 3, 1},
+	{1903, 7, 1},
+}
+
+type durationTimelinePoint struct {
+	day *big.Int
+	sec *big.Rat
+}
+
+func signedDurationComponents(d xsdDuration) (*big.Int, *big.Rat) {
+	months := new(big.Int).Set(d.monVal())
+	seconds := new(big.Rat).Set(d.secVal())
+	if d.negative {
+		months.Neg(months)
+		seconds.Neg(seconds)
 	}
-	// One is zero, the other determines.
-	if monthCmp == 0 {
-		return secCmp, true
+	return months, seconds
+}
+
+func compareDurationComponents(am *big.Int, as *big.Rat, bm *big.Int, bs *big.Rat) (int, bool) {
+	result := 0
+	for i, ref := range durationReferenceDates {
+		ap := durationPointAtReference(ref, am, as)
+		bp := durationPointAtReference(ref, bm, bs)
+		cmp := compareDurationTimelinePoint(ap, bp)
+		if i == 0 {
+			result = cmp
+			continue
+		}
+		if cmp != result {
+			return 0, false
+		}
 	}
-	if secCmp == 0 {
-		return monthCmp, true
+	return result, true
+}
+
+func durationPointAtReference(ref durationReferenceDate, months *big.Int, seconds *big.Rat) durationTimelinePoint {
+	year, month, day := addMonthsToDate(big.NewInt(ref.year), ref.month, ref.day, months)
+	ordinal := daysBeforeDate(year, month, day)
+	dayOffset, secondOfDay := splitSecondsInDay(seconds)
+	ordinal.Add(ordinal, dayOffset)
+	return durationTimelinePoint{day: ordinal, sec: secondOfDay}
+}
+
+func compareDurationTimelinePoint(a, b durationTimelinePoint) int {
+	if cmp := a.day.Cmp(b.day); cmp != 0 {
+		return cmp
 	}
-	// Components disagree — indeterminate.
-	return 0, false
+	return a.sec.Cmp(b.sec)
+}
+
+func addMonthsToDate(year *big.Int, month, day int, delta *big.Int) (*big.Int, int, int) {
+	totalMonths := new(big.Int).Mul(year, big.NewInt(12))
+	totalMonths.Add(totalMonths, big.NewInt(int64(month-1)))
+	totalMonths.Add(totalMonths, delta)
+
+	newYear, monthRemainder := new(big.Int), new(big.Int)
+	newYear.DivMod(totalMonths, big.NewInt(12), monthRemainder)
+	newMonth := int(monthRemainder.Int64()) + 1
+	if maxDay := daysInMonth(newYear, newMonth); day > maxDay {
+		day = maxDay
+	}
+	return newYear, newMonth, day
+}
+
+func daysBeforeDate(year *big.Int, month, day int) *big.Int {
+	days := daysBeforeYear(year)
+	days.Add(days, big.NewInt(int64(daysBeforeMonth(year, month)+day-1)))
+	return days
+}
+
+func daysBeforeYear(year *big.Int) *big.Int {
+	days := new(big.Int).Mul(year, big.NewInt(365))
+	days.Add(days, floorDivInt(new(big.Int).Add(year, big.NewInt(3)), 4))
+	days.Sub(days, floorDivInt(new(big.Int).Add(year, big.NewInt(99)), 100))
+	days.Add(days, floorDivInt(new(big.Int).Add(year, big.NewInt(399)), 400))
+	return days
+}
+
+func daysBeforeMonth(year *big.Int, month int) int {
+	common := [...]int{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}
+	leap := [...]int{0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335}
+	if month < 1 {
+		return 0
+	}
+	if month > 12 {
+		month = 12
+	}
+	if isLeapYearBig(year) {
+		return leap[month-1]
+	}
+	return common[month-1]
+}
+
+func floorDivInt(n *big.Int, d int64) *big.Int {
+	return new(big.Int).Div(n, big.NewInt(d))
+}
+
+func splitSecondsInDay(seconds *big.Rat) (*big.Int, *big.Rat) {
+	numerator := seconds.Num()
+	divisor := new(big.Int).Mul(seconds.Denom(), big.NewInt(86400))
+	dayOffset, remainder := new(big.Int), new(big.Int)
+	dayOffset.DivMod(numerator, divisor, remainder)
+	secondOfDay := new(big.Rat).SetFrac(remainder, seconds.Denom())
+	return dayOffset, secondOfDay
 }

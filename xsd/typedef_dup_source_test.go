@@ -29,14 +29,14 @@ func TestTypeDefDiagnosticSource(t *testing.T) {
 
 	// assert compiles main.xsd (which include/imports the file holding the bad
 	// type) and checks the diagnostic is attributed to declFile, not mainXSD.
-	assert := func(t *testing.T, fsys fstest.MapFS, declFile, want string) {
+	assertWithCompiler := func(t *testing.T, fsys fstest.MapFS, declFile, want string, compiler xsd.Compiler) {
 		t.Helper()
 		data, err := fsys.ReadFile(mainXSD)
 		require.NoError(t, err)
 		doc, err := helium.NewParser().Parse(t.Context(), data)
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = xsd.NewCompiler().Label(mainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		_, err = compiler.Label(mainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
 		requireCompileResultErr(t, err)
 		require.NoError(t, collector.Close())
 		_, errStr := partitionCompileErrors(collector.Errors())
@@ -46,6 +46,14 @@ func TestTypeDefDiagnosticSource(t *testing.T) {
 			"diagnostic must be attributed to the declaring file; got: %q", errStr)
 		require.False(t, strings.Contains(errStr, mainXSD+":"),
 			"diagnostic must not cite the top-level schema label; got: %q", errStr)
+	}
+	assert := func(t *testing.T, fsys fstest.MapFS, declFile, want string) {
+		t.Helper()
+		assertWithCompiler(t, fsys, declFile, want, xsd.NewCompiler())
+	}
+	assertV11 := func(t *testing.T, fsys fstest.MapFS, declFile, want string) {
+		t.Helper()
+		assertWithCompiler(t, fsys, declFile, want, xsd.NewCompiler().Version(xsd.Version11))
 	}
 
 	// includeMain wraps a body that lives entirely in inc.xsd (no namespace).
@@ -95,6 +103,20 @@ func TestTypeDefDiagnosticSource(t *testing.T) {
           <xs:element name="b" type="xs:string"/>
         </xs:all>
       </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>`
+
+	// XSD 1.1 derivation-ok-restriction: explicitly prohibiting a required base
+	// attribute is rejected. The diagnostic is generated after source tracking has
+	// already selected the derived type's declaring file.
+	const requiredAttrProhibitionBody = `  <xs:complexType name="base">
+    <xs:attribute name="req" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="ct">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:attribute name="req" use="prohibited"/>
+      </xs:restriction>
     </xs:complexContent>
   </xs:complexType>`
 
@@ -156,6 +178,20 @@ func TestTypeDefDiagnosticSource(t *testing.T) {
 			// imp.xsd has a targetNamespace, so reference base with its t: prefix.
 			body := strings.ReplaceAll(allExtBody, `base="base"`, `base="t:base"`)
 			assert(t, importMain(body), impXSD, want)
+		})
+	})
+
+	t.Run("required base attribute prohibition", func(t *testing.T) {
+		t.Parallel()
+		const want = "A matching attribute use for the 'required' attribute use 'req'"
+		t.Run("included file", func(t *testing.T) {
+			t.Parallel()
+			assertV11(t, includeMain(requiredAttrProhibitionBody), incXSD, want)
+		})
+		t.Run("imported file", func(t *testing.T) {
+			t.Parallel()
+			body := strings.ReplaceAll(requiredAttrProhibitionBody, `base="base"`, `base="t:base"`)
+			assertV11(t, importMain(body), impXSD, want)
 		})
 	})
 }

@@ -512,6 +512,44 @@ func TestCopyDoc(t *testing.T) {
 		require.Equal(t, "hello", string(dstRoot.Content()))
 	})
 
+	t.Run("line numbers preserved on elements and attributes", func(t *testing.T) {
+		// A faithful deep copy must carry source line numbers onto every copied
+		// node — including ATTRIBUTES — so diagnostics emitted against a copied tree
+		// (e.g. xsd's conditional-inclusion clone) keep their source locations.
+		src := helium.NewDefaultDocument()
+		root := src.CreateElement("root")
+		require.NoError(t, src.AddChild(root))
+		root.SetLine(7)
+
+		_, err := root.SetAttribute("a", "v")
+		require.NoError(t, err)
+		plainAttr, ok := root.FindAttribute(helium.NSPredicate{Local: "a", NamespaceURI: ""})
+		require.True(t, ok)
+		plainAttr.SetLine(42)
+
+		ns, err := src.CreateNamespace("p", "urn:p")
+		require.NoError(t, err)
+		_, err = root.SetAttributeNS("b", "w", ns)
+		require.NoError(t, err)
+		nsAttr, ok := root.FindAttribute(helium.NSPredicate{Local: "b", NamespaceURI: "urn:p"})
+		require.True(t, ok)
+		nsAttr.SetLine(99)
+
+		dst, err := helium.CopyDoc(src)
+		require.NoError(t, err)
+		dstRoot := dst.DocumentElement()
+		require.NotNil(t, dstRoot)
+		require.Equal(t, 7, dstRoot.Line())
+
+		dstPlain, ok := dstRoot.FindAttribute(helium.NSPredicate{Local: "a", NamespaceURI: ""})
+		require.True(t, ok)
+		require.Equal(t, 42, dstPlain.Line())
+
+		dstNS, ok := dstRoot.FindAttribute(helium.NSPredicate{Local: "b", NamespaceURI: "urn:p"})
+		require.True(t, ok)
+		require.Equal(t, 99, dstNS.Line())
+	})
+
 	t.Run("document with DTD", func(t *testing.T) {
 		src := helium.NewDefaultDocument()
 		_, err := src.CreateInternalSubset("root", "", "root.dtd")

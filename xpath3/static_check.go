@@ -212,9 +212,9 @@ func appendExprLocalPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 	case NamedFunctionRef:
 		addPrefixCheck(plan, n.Prefix)
 	case CastExpr:
-		addPrefixCheck(plan, n.Type.Prefix)
+		addCastTypePrefixCheck(plan, n.Type)
 	case CastableExpr:
-		addPrefixCheck(plan, n.Type.Prefix)
+		addCastTypePrefixCheck(plan, n.Type)
 	case InstanceOfExpr:
 		appendSequenceTypePrefixChecks(plan, n.Type)
 	case TreatAsExpr:
@@ -398,7 +398,23 @@ func addCatchCodePrefixCheck(plan *prefixPlanBuilder, code string) {
 	}
 }
 
+// addCastTypePrefixCheck validates the prefix of a cast/castable target type. The
+// parser splits a braced-URI Q{uri}local target on its first colon, so reconstruct
+// the lexical form and route through addQNameStringPrefixCheck, which skips Q{}
+// names (their namespace is literal and needs no binding) and validates an ordinary
+// prefix.
+func addCastTypePrefixCheck(plan *prefixPlanBuilder, t AtomicTypeName) {
+	addQNameStringPrefixCheck(plan, joinQName(t.Prefix, t.Name))
+}
+
 func addAtomicOrUnionTypeCheck(plan *prefixPlanBuilder, t AtomicOrUnionType) {
+	// A braced-URI type name (Q{uri}local) carries its namespace literally and needs
+	// no prefix binding — like the variable/function/catch-code paths, skip the
+	// prefix check. The parser splits the single Q{uri}local token on its first colon,
+	// so reconstruct the lexical form before testing for the Q{ marker.
+	if strings.HasPrefix(joinQName(t.Prefix, t.Name), "Q{") {
+		return
+	}
 	req := atomicTypeRequirement{prefix: t.Prefix, name: t.Name}
 	if plan.seenAtomicTypes == nil {
 		plan.seenAtomicTypes = make(map[atomicTypeRequirement]struct{}, 4)

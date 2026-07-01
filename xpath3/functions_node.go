@@ -100,7 +100,7 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 		if fc.contextItem != nil {
 			args = []Sequence{ItemSlice{fc.contextItem}}
 		} else if fc.node != nil {
-			args = []Sequence{ItemSlice{nodeItemFor(fc, fc.node)}}
+			args = []Sequence{ItemSlice{nodeItemFor(ctx, fc, fc.node)}}
 		} else {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
@@ -1182,7 +1182,7 @@ func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequ
 
 	result := make(ItemSlice, 0, len(deduped))
 	for _, node := range deduped {
-		result = append(result, nodeItemFor(fc, node))
+		result = append(result, nodeItemFor(ctx, fc, node))
 	}
 	return result, nil
 }

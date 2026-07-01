@@ -249,7 +249,7 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 			// an out-of-space bound (negative, fractional, non-digit, NBSP-padded)
 			// is a fatal compile error rather than being parsed leniently at
 			// validation time and turning the facet into a no-op or reject-all.
-			if value.ValidateBuiltin(value.Normalize(p.value, "nonNegativeInteger"), "nonNegativeInteger") != nil {
+			if value.ValidateBuiltin(value.Normalize(p.value, "nonNegativeInteger"), "nonNegativeInteger", value.Version10) != nil {
 				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid 'nonNegativeInteger'", p.value, p.name))
 			}
 		case "minInclusive", "maxInclusive", "minExclusive", "maxExclusive":
@@ -257,7 +257,7 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the non-ordered datatype '%s'", p.name, typeName))
 				continue
 			}
-			if value.ValidateBuiltin(value.Normalize(p.value, typeName), typeName) != nil {
+			if value.ValidateBuiltin(value.Normalize(p.value, typeName), typeName, value.Version10) != nil {
 				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid '%s'", p.value, p.name, typeName))
 			}
 		case "totalDigits", "fractionDigits":
@@ -274,7 +274,7 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 			if p.name == "fractionDigits" {
 				boundType = "nonNegativeInteger"
 			}
-			if value.ValidateBuiltin(value.Normalize(p.value, boundType), boundType) != nil {
+			if value.ValidateBuiltin(value.Normalize(p.value, boundType), boundType, value.Version10) != nil {
 				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid '%s'", p.value, p.name, boundType))
 			}
 		}

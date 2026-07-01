@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 	"github.com/lestrrat-go/helium/xpath1"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // QName represents a namespace-qualified name.
@@ -37,11 +38,18 @@ const (
 // Schema represents a compiled XML Schema.
 // (libxml2: xmlSchema)
 type Schema struct {
+	// version is the effective XSD specification version resolved at compile
+	// time (explicit Compiler.Version() or a vc:minVersion hint). The Validator
+	// reads it to apply the same version-specific semantics as compilation.
+	version           Version
 	targetNamespace   string
 	elemFormQualified bool // elementFormDefault="qualified"
 	attrFormQualified bool // attributeFormDefault="qualified"
 	blockDefault      BlockFlags
 	finalDefault      FinalFlags
+	defaultAttributes QName
+	defaultAttrsSet   bool
+	defaultAttrsSrc   attrGroupRefUseSource
 	elements          map[QName]*ElementDecl
 	types             map[QName]*TypeDef
 	groups            map[QName]*ModelGroup
@@ -62,10 +70,15 @@ func (s *Schema) LookupType(local, ns string) (*TypeDef, bool) {
 	return t, ok
 }
 
-// SubstGroupMembers returns the element declarations in the substitution group
-// of the given head element.
+// SubstGroupMembers returns the element declarations substitutable for the
+// given head element, including eligible transitive members after block and
+// derivation filtering.
 func (s *Schema) SubstGroupMembers(head QName) []*ElementDecl {
-	return s.substGroups[head]
+	headDecl, ok := s.LookupElement(head.Local, head.NS)
+	if !ok {
+		return nil
+	}
+	return slices.Clone(substitutableMembersFor(headDecl, s))
 }
 
 // LookupAttribute returns the global attribute declaration for the given name.
@@ -132,25 +145,72 @@ const Unbounded = -1
 
 // ElementDecl is a schema element declaration.
 type ElementDecl struct {
-	Name              QName
-	Type              *TypeDef
-	MinOccurs         int
-	MaxOccurs         int // -1 = unbounded
-	Abstract          bool
-	Nillable          bool  // true if the element may carry xsi:nil="true"
-	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
-	IsRef             bool  // true if this was created from a ref="..." attribute
-	IDCs              []*IDConstraint
-	Default           *string // nil = not set
-	Fixed             *string // nil = not set
+	Name               QName
+	Type               *TypeDef
+	MinOccurs          int
+	MaxOccurs          int // -1 = unbounded
+	Abstract           bool
+	Nillable           bool    // true if the element may carry xsi:nil="true"
+	SubstitutionGroup  QName   // first substitution-group head QName (zero value if none)
+	SubstitutionGroups []QName // all substitution-group head QNames (XSD 1.1 permits a list)
+	IsRef              bool    // true if this was created from a ref="..." attribute
+	IDCs               []*IDConstraint
+	Default            *string // nil = not set
+	Fixed              *string // nil = not set
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document. It is used to resolve
 	// a QName/NOTATION fixed value's prefix when comparing in value space.
-	FixedNS  map[string]string
-	Block    BlockFlags
-	BlockSet bool // true if block was explicitly set (even to empty)
-	Final    FinalFlags
-	FinalSet bool // true if final was explicitly set (even to empty)
+	FixedNS map[string]string
+	// DefaultNS mirrors FixedNS for the Default value: a QName/NOTATION default
+	// substituted into an empty element resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's.
+	DefaultNS map[string]string
+	Block     BlockFlags
+	BlockSet  bool // true if block was explicitly set (even to empty)
+	Final     FinalFlags
+	FinalSet  bool // true if final was explicitly set (even to empty)
+	// Alternatives is the XSD 1.1 conditional-type-assignment {type table}: the
+	// ordered xs:alternative children. At validation (when no xsi:type is present)
+	// the governing type is the one selected by the first alternative whose @test
+	// is true, or a testless default; empty when the declaration has none.
+	Alternatives []*TypeAlternative
+}
+
+func (e *ElementDecl) substitutionGroupHeads() []QName {
+	if e == nil {
+		return nil
+	}
+	if len(e.SubstitutionGroups) > 0 {
+		return e.SubstitutionGroups
+	}
+	if e.SubstitutionGroup == (QName{}) {
+		return nil
+	}
+	return []QName{e.SubstitutionGroup}
+}
+
+func (e *ElementDecl) setSubstitutionGroupHeads(heads []QName) {
+	e.SubstitutionGroups = slices.Clone(heads)
+	if len(e.SubstitutionGroups) == 0 {
+		e.SubstitutionGroup = QName{}
+		return
+	}
+	e.SubstitutionGroup = e.SubstitutionGroups[0]
+}
+
+// TypeAlternative is one XSD 1.1 <xs:alternative> in an element declaration's
+// conditional type assignment. Test is the XPath 3.1 condition (empty for the
+// final, testless default alternative); Type is the governing type selected when
+// the test holds. It mirrors Assertion's capture pattern.
+type TypeAlternative struct {
+	Test       string
+	Namespaces map[string]string  // prefix → URI from the schema document
+	Line       int                // source line of the xs:alternative element
+	Source     string             // source filename of the declaring schema document
+	BaseURI    string             // schema document URI, exposed as the XPath static base URI
+	TypeName   QName              // the @type reference (resolved into Type during resolveRefs)
+	Type       *TypeDef           // resolved governing type
+	compiled   *xpath3.Expression // pre-compiled @test; nil for a testless default (or compile failure)
 }
 
 // IDCKind describes the kind of identity constraint.
@@ -179,7 +239,37 @@ type IDConstraint struct {
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)
 
-	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	// SelectorDefaultNS / FieldDefaultNS hold the resolved default element
+	// namespace URI (XSD 1.1 @xpathDefaultNamespace) for the selector and each
+	// field XPath. Empty means no default (XPath 1.0 unprefixed = no-namespace).
+	// FieldDefaultNS is parallel to Fields.
+	SelectorDefaultNS string
+	FieldDefaultNS    []string
+
+	// IsConstraintRef marks an XSD 1.1 identity-constraint that uses @ref to point
+	// at another constraint instead of declaring its own name/selector/field. At
+	// compile time the referenced constraint's selector/fields (and, for keyref,
+	// its refer) are copied in, so validation treats it like any other constraint.
+	IsConstraintRef    bool
+	ConstraintRef      string // lexical @ref QName as written
+	ConstraintRefQName QName  // resolved {ns}local of the referenced constraint
+
+	referUnbound         bool // for keyref: @refer used a prefix not bound in scope (already reported)
+	constraintRefUnbound bool // for @ref: the ref prefix was not bound in scope (already reported)
+}
+
+// Assertion is an XSD 1.1 xs:assert constraint on a complex type: an XPath 3.1
+// expression (the @test) evaluated against the element being validated. The
+// element is valid against the assertion only if the test's effective boolean
+// value is true. It mirrors IDConstraint's capture pattern: the lexical test,
+// the in-scope namespace bindings from the schema document, source line/file for
+// diagnostics, and the pre-compiled expression.
+type Assertion struct {
+	Test       string
+	Namespaces map[string]string  // prefix → URI from the schema document
+	Line       int                // source line of the xs:assert element
+	Source     string             // source filename of the declaring schema document
+	compiled   *xpath3.Expression // pre-compiled @test; nil if the expression failed to compile
 }
 
 // DerivationKind describes how a type is derived from its base.
@@ -204,7 +294,13 @@ const (
 
 // TypeDef is a schema type definition.
 type TypeDef struct {
-	Name         QName
+	Name QName
+	// IsComplex distinguishes a complex type DEFINITION from a simple one. It is a
+	// reliable discriminator independent of ContentType, because a complex type with
+	// <xs:simpleContent> also carries ContentType == ContentTypeSimple. Set true by
+	// parseComplexType (and for the built-in xs:anyType); a simple type definition
+	// (parseSimpleType, simple built-ins, recovery placeholders) leaves it false.
+	IsComplex    bool
 	ContentType  ContentTypeKind
 	ContentModel *ModelGroup
 	BaseType     *TypeDef
@@ -217,17 +313,74 @@ type TypeDef struct {
 	MemberTypes  []*TypeDef // for union types: the member type definitions
 	Abstract     bool
 	Final        FinalFlags
-	FinalSet     bool // true if final was explicitly set (even to empty)
+	FinalSet     bool         // true if final was explicitly set (even to empty)
+	Assertions   []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
+	OpenContent  *OpenContent // XSD 1.1 xs:openContent (nil = none)
+	// ContentSimpleType is the effective simple type that constrains the text
+	// content of a complexType with simpleContent derived by RESTRICTION (XSD 1.1):
+	// either the nested <xs:simpleType> or a synthesized restriction of the base
+	// content type carrying the restriction's direct facets. nil means the content
+	// is validated against this type's own base chain (extensions, and restrictions
+	// with no content-narrowing facets). Used by validateSimpleContent so a
+	// restricted simpleContent value is actually checked against its narrowed type.
+	ContentSimpleType *TypeDef
+	// IsSimpleContent marks a COMPLEX type whose content is simple content (an
+	// <xs:simpleContent> extension/restriction), distinguishing it from a plain
+	// <xs:simpleType> (both carry ContentType == ContentTypeSimple). The effective
+	// content-type walk (effectiveContentSimpleType) recurses through simpleContent
+	// complex types and stops at the underlying simpleType/builtin, so a base
+	// type's facets/assertions are not skipped and a narrowed content type is
+	// inherited through derived simpleContent types.
+	IsSimpleContent bool
+
+	// openContentExplicit records that an <xs:openContent> child (of ANY mode,
+	// including mode="none") was present on this complex type's definition. It
+	// distinguishes an explicit mode="none" (OpenContent nil, default suppressed)
+	// from an absent <xs:openContent> (OpenContent nil, schema-level
+	// <xs:defaultOpenContent> may still apply). Set at parse time (read_types).
+	openContentExplicit bool
+	// pendingDefaultOpenContent is the schema-level <xs:defaultOpenContent> active
+	// in THIS type's own schema document at parse time, captured only when the type
+	// has no explicit <xs:openContent>. Default open content is per-document
+	// (§3.4.2.1) and does not cross include/import boundaries, so it is captured at
+	// parse time rather than read globally in resolveRefs. resolveOpenContent
+	// applies it (subject to appliesToEmpty and the effective content type).
+	pendingDefaultOpenContent *OpenContent
+}
+
+// OpenContentMode is the XSD 1.1 xs:openContent mode.
+type OpenContentMode int
+
+// OpenContentMode values.
+const (
+	OpenContentInterleave OpenContentMode = iota // open wildcard elements may be interleaved with the declared content (default)
+	OpenContentSuffix                            // open wildcard elements may appear only after the declared content
+)
+
+// OpenContent is an XSD 1.1 xs:openContent: an element wildcard that admits extra
+// child elements beyond the declared content model, either interleaved among it
+// or as a suffix. mode="none" is represented by a nil *OpenContent on the type.
+type OpenContent struct {
+	Mode     OpenContentMode
+	Wildcard *Wildcard // the xs:any wildcard governing the open content
+	// AppliesToEmpty is meaningful only for a schema-level
+	// <xs:defaultOpenContent>: when false (the default), the default open content
+	// is NOT applied to a complex type whose effective content type is empty.
+	AppliesToEmpty bool
 }
 
 // FacetSet holds facet constraints for a simple type restriction.
 type FacetSet struct {
-	Enumeration   []string
-	EnumerationNS []map[string]string
-	MinInclusive  *string
-	MaxInclusive  *string
-	MinExclusive  *string
-	MaxExclusive  *string
+	Enumeration       []string
+	EnumerationNS     []map[string]string
+	MinInclusive      *string
+	MaxInclusive      *string
+	MinExclusive      *string
+	MaxExclusive      *string
+	MinInclusiveFixed bool
+	MaxInclusiveFixed bool
+	MinExclusiveFixed bool
+	MaxExclusiveFixed bool
 	// MinInclusiveNS/MaxInclusiveNS/MinExclusiveNS/MaxExclusiveNS hold the
 	// in-scope namespace bindings (prefix → URI) captured at the point each
 	// individual range-facet bound was declared in the schema document. Each
@@ -238,15 +391,17 @@ type FacetSet struct {
 	// union) needs this context to resolve a prefixed bound value like
 	// <xs:minInclusive value="p:a"/>. A nil map means no extra bindings were in
 	// scope at that facet (the facet was absent or carried no namespace context).
-	MinInclusiveNS map[string]string
-	MaxInclusiveNS map[string]string
-	MinExclusiveNS map[string]string
-	MaxExclusiveNS map[string]string
-	TotalDigits    *int
-	FractionDigits *int
-	Length         *int
-	MinLength      *int
-	MaxLength      *int
+	MinInclusiveNS        map[string]string
+	MaxInclusiveNS        map[string]string
+	MinExclusiveNS        map[string]string
+	MaxExclusiveNS        map[string]string
+	TotalDigits           *int
+	FractionDigits        *int
+	Length                *int
+	MinLength             *int
+	MaxLength             *int
+	ExplicitTimezone      *string
+	ExplicitTimezoneFixed bool
 	// Patterns holds the <xs:pattern> facets from a single restriction step.
 	// Per XSD, patterns in the same step are ORed (a value is valid if it
 	// matches any of them); patterns from different derivation steps are ANDed,
@@ -257,6 +412,12 @@ type FacetSet struct {
 	// pattern failed to compile and is skipped during validation.
 	compiledPatterns []*xsdregex.Regexp
 	WhiteSpace       *string
+	// Assertions holds the XSD 1.1 <xs:assertion> facets from a single
+	// simpleType restriction step. Each is evaluated against the value being
+	// validated with $value bound to its typed atomic value (a sequence for a
+	// list type). Assertions from different derivation steps are all enforced
+	// (ANDed), handled by validateValue walking the base-type chain.
+	Assertions []*Assertion
 }
 
 // AttrUse represents an attribute use in a complex type definition.
@@ -267,12 +428,23 @@ type AttrUse struct {
 	Type       *TypeDef // anonymous inline <xs:simpleType>, if any
 	Required   bool
 	Prohibited bool
-	Default    *string // nil = not set
-	Fixed      *string // nil = not set
+	// Inheritable is the XSD 1.1 {inheritable} property: when true, an instance of
+	// this attribute is contributed to the inherited-attribute set of every
+	// descendant element (consulted by conditional type assignment / assertions).
+	// InheritableSet records whether inheritable was given explicitly on the use,
+	// so a ref use's explicit value wins over the referenced declaration's.
+	Inheritable    bool
+	InheritableSet bool
+	Default        *string // nil = not set
+	Fixed          *string // nil = not set
 	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
 	// the Fixed value was declared in the schema document, used to resolve a
 	// QName/NOTATION fixed value's prefix when comparing in value space.
 	FixedNS map[string]string
+	// DefaultNS mirrors FixedNS for the Default value: a QName/NOTATION default
+	// materialized onto an absent attribute resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's.
+	DefaultNS map[string]string
 }
 
 // ModelGroup is a content model compositor (sequence, choice, all).
@@ -318,6 +490,12 @@ const (
 	WildcardNSNotAbsent       = "##not-absent"
 )
 
+// XSD 1.1 wildcard notQName keyword tokens (xs:any/@notQName, xs:anyAttribute/@notQName).
+const (
+	WildcardQNameDefined        = "##defined"
+	WildcardQNameDefinedSibling = "##definedSibling"
+)
+
 // Wildcard represents an xs:any or xs:anyAttribute wildcard.
 type Wildcard struct {
 	// Namespace constraint: "##any", "##other", "##local",
@@ -325,4 +503,26 @@ type Wildcard struct {
 	Namespace       string
 	ProcessContents ProcessContentsKind
 	TargetNS        string // schema's target namespace, for resolving ##other/##targetNamespace
+
+	// XSD 1.1 additions (xsd.Version11 only; nil/false in 1.0).
+	//
+	// NotNamespace is the resolved set of namespace URIs the wildcard EXCLUDES
+	// (from @notNamespace). "" represents the absent namespace (##local). When
+	// non-nil the wildcard's positive namespace variety is "not these" — it
+	// matches any namespace not in the list. @namespace and @notNamespace are
+	// mutually exclusive, so when this is set Namespace defaults to ##any.
+	NotNamespace []string
+	// NotQName is the resolved set of element/attribute QNames the wildcard
+	// EXCLUDES (the QName members of @notQName).
+	NotQName []QName
+	// NotQNameDefined is true when @notQName contains ##defined: the wildcard
+	// excludes any name with a global element (xs:any) or attribute
+	// (xs:anyAttribute) declaration.
+	NotQNameDefined bool
+	// NotQNameDefinedSibling is true when @notQName contains ##definedSibling
+	// (xs:any only): the wildcard excludes the names of element declarations
+	// that are siblings in the same content model. SiblingNames holds those
+	// names, resolved after the content model is built.
+	NotQNameDefinedSibling bool
+	SiblingNames           []QName
 }

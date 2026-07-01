@@ -99,7 +99,7 @@ func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node h
 		if ec.node == nil {
 			return Result{}, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		}
-		state.oneItem[0] = nodeItemFor(ec, ec.node)
+		state.oneItem[0] = nodeItemFor(ctx, ec, ec.node)
 		return Result{seq: ItemSlice(state.oneItem[:])}, nil
 	}
 

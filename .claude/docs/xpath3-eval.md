@@ -170,6 +170,9 @@ Compare node identity or document order.
 - untypedAtomic vs string → compare as string
 - untypedAtomic vs numeric → cast untypedAtomic to double
 - untypedAtomic vs untypedAtomic → compare as string
+- untypedAtomic vs schema USER type → cast through the schema-aware cast helper
+  (`SchemaDeclarations` builtin-base/facet/union path), preserving the user type's
+  builtin `BaseType` for the subsequent value comparison
 - Numeric promotion: integer → decimal → float → double
 
 ```go
@@ -185,7 +188,71 @@ func CastAtomic(src AtomicValue, targetType string) (AtomicValue, error)
 func CastFromString(s, targetType string) (AtomicValue, error)
 ```
 
-Supported casts per XPath 3.1 Section 18. All atomic types in `xpath3-types.md`. QName casts require namespace context from evalContext.
+Supported casts per XPath 3.1 Section 18. All atomic types are listed in `xpath3-types.md`.
+QName casts require namespace context from evalContext.
+
+`CastAtomic` normalizes a source whose `TypeName` is a schema-derived USER type
+(e.g. `Q{ns}MyInt`, stamped onto an atom by `AtomizeItem` for `data()` or by the
+xsd `$value` binding) to its recorded builtin `BaseType` before dispatching to
+the per-target cast helpers, which key on builtin `TypeName` and would otherwise
+reject the opaque user type with XPTY0004. A user-typed atom therefore casts
+exactly like its base, keeping `data()` and `$value` cast/castable behavior
+consistent. The guard requires `BaseType` to be a known XSD builtin
+(`IsKnownXSDType(v.BaseType)`), so an arbitrary custom non-XSD `BaseType` on a
+public atom does not change dispatch; it stays opaque and falls through to the
+normal XPTY0004 path. Built-in atoms are unaffected. The identity re-check after
+normalization preserves the `castable as <ownType>` fast path and re-runs
+`validateDateTimeStampSource`, so a user type whose base surfaces
+`xs:dateTimeStamp` still enforces the mandatory-timezone FORG0001 invariant on
+the identity return.
+
+`evalCastExpr`/`evalCastableExpr` atomize their operand through the typed-value
+stream via `atomizeSingletonOperand` and apply the singleton-or-empty cardinality
+to the atomized result. A single schema-typed node whose typed value is a
+list/union expands consistently with `data()`; a more-than-one-atom operand
+raises cast XPTY0004 or makes `castable` false. Function-call args are handled
+separately by signature coercion (`coerceToSequenceTypeE`, which also atomizes
+via `atomizeStream`).
+
+For a USER-defined target type, when context-free `CastAtomic` fails and
+`evalContext.schemaDeclarations` is set, `evalCastExpr`/`evalCastableExpr` use a
+shared schema-aware cast helper. The helper resolves the target's builtin base:
+a QName/NOTATION-derived base validates via
+`SchemaDeclarations.ValidateCastWithNS` and, for `cast`, returns the
+namespace-resolved `QNameValue` carrying the user type annotation; other bases
+cast through the builtin for the returned atomic value. String and untypedAtomic
+sources validate facets with `ValidateCastWithNS` against the original source
+lexical string so lexical facets such as patterns still see `"05"` rather than a
+canonicalized numeric value; already-typed sources validate the builtin cast
+result's lexical form so a cross-cast such as `xs:dateTime(...) cast as MyDate`
+checks the `xs:date` value actually being returned. The helper then returns the
+user type annotation with `BaseType` set to that builtin base. Union targets from
+`SchemaDeclarations.UnionMemberTypes` are tried recursively through that same
+schema-aware path for both `cast` and `castable`, so a union member that is
+itself a user-defined type still resolves its builtin base and facets. After a
+member accepts, the helper validates the target union too, so facets/assertions
+on the union restriction itself can still reject the cast: string/untypedAtomic
+sources use the original lexical value, while already-typed sources use the
+accepted member-cast result's lexical form. `cast` returns the atomic value for
+the matching member.
+
+When the cast source is itself an already-resolved `QNameValue` (e.g. `data(@q)`
+where the prefix is declared only on the instance node, absent from the
+assertion's static namespace map), `qnameCastLexical` re-validates using the
+value's own namespace URI. It binds the lexical prefix to that URI in a copy of
+the static map, minting a synthetic prefix for an unprefixed value and keeping a
+bare local for a no-namespace value, so the cast succeeds instead of failing to
+re-resolve `prefix:local` against a map that lacks the prefix. The `(local, ns)`
+used for schema lookup is derived from the already-resolved target type
+(`Q{ns}local`, via `schemaAnnotationParts`). This schema-aware path is additive:
+with no `schemaDeclarations`, the cast behaves exactly as before.
+
+Casting a string/untypedAtomic to `xs:QName`/`xs:NOTATION` applies the in-scope
+default element namespace to an unprefixed value (`castToQName`), except when
+`evalContext.qnameValueNoDefaultNS` is set (the opt-in
+`Evaluator.QNameValueNoDefaultNamespace()`, XSD value-space semantics), where an
+unprefixed QName/NOTATION value has no namespace. A prefixed value still resolves
+and the default xpath3 behavior is unchanged.
 
 ## State Management
 

@@ -372,9 +372,9 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 	if strings.HasPrefix(uri, "#") {
 		id := uri[1:]
 		// Walk the tree once and collect every candidate. We accept matches
-		// from any of: DTD-declared ID, xml:id, or the common "Id"/"ID"
-		// attribute conventions used by XMLDSig/SAML. We refuse to resolve
-		// the reference if more than one element matches.
+		// from any of: a DTD/schema-declared ID-typed attribute, xml:id, or
+		// the "id" attribute token in the casings "Id", "ID", or "id". We
+		// refuse to resolve the reference if more than one element matches.
 		matches := findElementsByID(doc, id)
 		switch len(matches) {
 		case 0:
@@ -389,13 +389,24 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 }
 
 // findElementsByID walks the entire document tree and returns every element
-// whose ID (xml:id, an "Id"/"ID" attribute, or a DTD-declared ID-typed
-// attribute) matches the given value. The walk is exhaustive — it never
+// whose ID matches the given value. The walk is exhaustive — it never
 // short-circuits — so that duplicate IDs are surfaced to the caller rather
 // than silently masked. We do NOT consult Document.GetElementByID: its
 // underlying ID table is keyed by ID value and Document.RegisterID
 // overwrites on collision, which would hide the duplicate-xml:id case that
 // XSW hardening relies on.
+//
+// An attribute is treated as an ID when it is any of:
+//   - declared ID-typed by a DTD or schema (AType == enum.AttrID);
+//   - xml:id (ID-typed by the W3C xml:id Recommendation);
+//   - the "id" attribute token in the casings "Id", "ID", or "id".
+//
+// This name set is FROZEN: it recognizes the "id" identifier token in the
+// three casings above plus xml:id, and MUST NOT grow to distinct convention
+// tokens such as "wsu:Id" or "AssertionID". Those are not universal ID names
+// — they are ID-typed only by their own schemas — so a document that relies
+// on them must declare that typing (DTD/schema, or by marking the attribute
+// AType == enum.AttrID) rather than have this heuristic guess.
 func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 	var matches []*helium.Element
 	var walk func(helium.Node)
@@ -406,7 +417,7 @@ func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 		}
 		for _, attr := range elem.Attributes() {
 			name := attr.Name()
-			isIDAttr := name == "Id" || name == "ID" || name == "xml:id" || attr.AType() == enum.AttrID
+			isIDAttr := name == "Id" || name == "ID" || name == "id" || name == "xml:id" || attr.AType() == enum.AttrID
 			if !isIDAttr {
 				continue
 			}

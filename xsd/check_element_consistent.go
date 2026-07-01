@@ -72,6 +72,11 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 			source = c.filename
 		}
 		c.checkContentModelConsistent(ctx, ct.td.ContentModel, source, ct.src.line, c.complexTypeComponent(ct.td, ct.src))
+		// The type's EFFECTIVE open-content wildcard can also resolve a same-named
+		// declared local element to a global (interleave moves an extra occurrence to
+		// the open partition; suffix matches a trailing one), so it participates in the
+		// type-table EDC exactly like a content-model wildcard.
+		c.checkWildcardElementConsistent(ctx, ct.td.ContentModel, ct.td.OpenContent, source, ct.src.line, "complexType", c.complexTypeComponent(ct.td, ct.src))
 	}
 
 	// Run the same consistency check over standalone named model group
@@ -110,7 +115,144 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 	for _, g := range groups {
 		component := "model group '" + g.qn.Local + "'"
 		c.checkNamedGroupConsistent(ctx, g.mg, g.src, component)
+		// A named group has no open content (it is a complexType-level construct).
+		c.checkWildcardElementConsistent(ctx, g.mg, nil, g.src.source, g.src.line, "group", component)
 	}
+}
+
+// checkWildcardElementConsistent enforces the XSD 1.1 addition to "Element
+// Declarations Consistent" (cos-element-consistent) that governs the interaction
+// between a wildcard particle and a same-named GLOBAL element declaration: if a
+// content model contains an element declaration particle E with expanded name N
+// AND a wildcard particle W whose namespace constraint ·allows· N, and there is a
+// top-level (global) element declaration G with expanded name N that the wildcard
+// could resolve to (lax/strict), then E's {type table} must be the same as G's
+// {type table}. A strict/lax wildcard match of <N> resolves to G, so if E and G
+// have inconsistent conditional-type-assignment tables the same element could be
+// governed by different type tables depending on which particle matched.
+//
+// Only the {type table} (xs:alternative list) is compared, NOT the {type
+// definition}: a wildcard intentionally admits elements of differing types, so a
+// type-definition difference between E and G is permitted (e.g. a local element
+// of one simple type plus a wildcard matching a differently-typed global of the
+// same name is valid). The comparison is deliberately under-strict: a mismatch is
+// flagged only when EXACTLY ONE of E/G carries a non-empty type table (the
+// observed conformance violations), so two distinct-but-present type tables are
+// not false-rejected.
+//
+// The type's EFFECTIVE open-content wildcard (oc) is folded into the wildcard set:
+// interleave open content can move an extra same-name declared child into the open
+// partition, and suffix can match a trailing one, where validateWildcardChild governs
+// it via the GLOBAL declaration's CTA type table — so an inconsistent type table is
+// reachable through it exactly as through a content-model wildcard. A skip
+// open-content wildcard imposes no constraint (anyWildcardAllows skips it), like a
+// content-model skip wildcard. oc is nil for a named group (no open content).
+//
+// Gated on XSD 1.1: a wildcard never resolves to a same-named global in 1.0 mode
+// for this constraint, and 1.0 stays byte-identical.
+func (c *compiler) checkWildcardElementConsistent(ctx context.Context, mg *ModelGroup, oc *OpenContent, source string, line int, kind, component string) {
+	if c.version != Version11 || mg == nil {
+		return
+	}
+	elems, wildcards := c.collectModelGroupParticles(mg)
+	if oc != nil && oc.Wildcard != nil {
+		wildcards = append(wildcards, oc.Wildcard)
+	}
+	if len(wildcards) == 0 || len(elems) == 0 {
+		return
+	}
+	for _, qn := range sortedNames(elems) {
+		global, ok := c.schema.elements[qn]
+		if !ok {
+			continue
+		}
+		for _, decl := range elems[qn] {
+			// A reference to the global declaration itself (or the global decl) is
+			// the same component as G — no inconsistency is possible.
+			if decl == global || decl.IsRef {
+				continue
+			}
+			if typeTablesConsistent(decl, global) {
+				continue
+			}
+			if !c.anyWildcardAllows(wildcards, qn) {
+				continue
+			}
+			msg := fmt.Sprintf("The wildcard matches the global element declaration '%s', whose type table is inconsistent with the like-named local element declaration's type table.", qn.Local)
+			c.schemaError(ctx, schemaComponentError(source, line, kind, component, msg))
+			break
+		}
+	}
+}
+
+// anyWildcardAllows reports whether any of the wildcards admits the expanded name
+// via a lax/strict match (skip wildcards never resolve to a global declaration,
+// so they impose no EDC type-table constraint).
+func (c *compiler) anyWildcardAllows(wildcards []*Wildcard, qn QName) bool {
+	for _, wc := range wildcards {
+		if wc.ProcessContents == ProcessSkip {
+			continue
+		}
+		if wildcardAllowsExpandedName(wc, qn.Local, qn.NS, c.schema, false) {
+			return true
+		}
+	}
+	return false
+}
+
+// typeTablesConsistent reports whether two element declarations have consistent
+// {type table}s for the wildcard EDC check. Two tables are consistent when both
+// are absent OR both present AND EQUIVALENT; the asymmetric case (exactly one
+// present) and two present-but-NON-equivalent tables are inconsistent — matching
+// the same-name EDC (typeTablesEquivalent), so the same element cannot get
+// different governing type tables depending on whether it is reached via the local
+// particle or via a lax wildcard to the global declaration. Differing type
+// DEFINITIONS remain permitted (#886); only the TYPE TABLE is compared here.
+func typeTablesConsistent(a, b *ElementDecl) bool {
+	aHas := len(a.Alternatives) > 0
+	bHas := len(b.Alternatives) > 0
+	if aHas != bHas {
+		return false
+	}
+	if !aHas {
+		return true
+	}
+	return typeTablesEquivalent(a.Alternatives, b.Alternatives)
+}
+
+// collectModelGroupParticles walks a content model and returns its LOCAL element
+// declaration particles keyed by expanded name (no substitution-group folding;
+// raw particle declarations) together with every wildcard particle reachable in
+// the model. Prohibited particles (maxOccurs=0) are excluded.
+func (c *compiler) collectModelGroupParticles(mg *ModelGroup) (map[QName][]*ElementDecl, []*Wildcard) {
+	elems := make(map[QName][]*ElementDecl)
+	var wildcards []*Wildcard
+	visited := make(map[*ModelGroup]struct{})
+	var walk func(*ModelGroup)
+	walk = func(g *ModelGroup) {
+		if g == nil || g.MaxOccurs == 0 {
+			return
+		}
+		if _, seen := visited[g]; seen {
+			return
+		}
+		visited[g] = struct{}{}
+		for _, p := range g.Particles {
+			if p.MaxOccurs == 0 {
+				continue
+			}
+			switch term := p.Term.(type) {
+			case *ElementDecl:
+				elems[term.Name] = append(elems[term.Name], term)
+			case *Wildcard:
+				wildcards = append(wildcards, term)
+			case *ModelGroup:
+				walk(term)
+			}
+		}
+	}
+	walk(mg)
+	return elems, wildcards
 }
 
 // complexTypeComponent returns the diagnostic component label for a complex
@@ -175,8 +317,24 @@ func (c *compiler) declsConsistent(decls []*ElementDecl) bool {
 		if !elementTypesConsistent(firstType, c.resolveDeclaredType(other)) {
 			return false
 		}
+		// XSD 1.1 extends cos-element-consistent to require the same {type table}
+		// (conditional type assignment) on same-named element declarations, so a
+		// content model with two same-named elements carrying DIFFERENT type tables
+		// (or one with a table and one without) is inconsistent (cta9009err/cta9010err).
+		if c.version == Version11 && !c.typeTablesEDCConsistent(decls[0], other) {
+			return false
+		}
 	}
 	return true
+}
+
+// typeTablesEDCConsistent reports whether two same-named element declarations have
+// equivalent {type table}s for the XSD 1.1 Element Declarations Consistent
+// constraint (both must be absent or equivalent). It resolves each declaration's
+// effective alternatives (own or, for a ref, the global's) and defers the
+// structural comparison to the shared typeTablesEquivalent.
+func (c *compiler) typeTablesEDCConsistent(a, b *ElementDecl) bool {
+	return typeTablesEquivalent(elementAlternatives(a, c.schema), elementAlternatives(b, c.schema))
 }
 
 // sortedNames returns the keys of byName in a deterministic (namespace, local)
@@ -307,24 +465,17 @@ func (c *compiler) foldSubstitutionMembers(head *ElementDecl, byName map[QName][
 // here before comparing. The seen set bounds malformed cyclic substitution
 // groups (rejected elsewhere) so this never loops.
 func (c *compiler) resolveDeclaredType(decl *ElementDecl) *TypeDef {
-	seen := make(map[QName]struct{})
-	for decl != nil {
-		if decl.Type != nil {
-			return decl.Type
-		}
-		head := decl.SubstitutionGroup
-		if head == (QName{}) {
-			break
-		}
-		if _, ok := seen[head]; ok {
-			break
-		}
-		seen[head] = struct{}{}
-		next, ok := c.schema.elements[head]
-		if !ok {
-			break
-		}
-		decl = next
+	if decl == nil {
+		return c.schema.types[QName{Local: typeAnyType, NS: lexicon.NamespaceXSD}]
+	}
+	if decl.Type != nil {
+		return decl.Type
+	}
+	if td := inheritedTypeFromFirstSubstitutionHead(decl, func(qn QName) (*ElementDecl, bool) {
+		next, ok := c.schema.elements[qn]
+		return next, ok
+	}); td != nil {
+		return td
 	}
 	// No explicit type and no resolvable substitution-group head type: the
 	// declaration's {type definition} defaults to xs:anyType.

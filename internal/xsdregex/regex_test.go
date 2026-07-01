@@ -91,6 +91,61 @@ func TestNegatedCharClassUnaffected(t *testing.T) {
 	require.False(t, re.MatchString("a"))
 }
 
+func TestCharClassHyphenRangeEndpoint(t *testing.T) {
+	// In the XSD/XPath regex grammar a '-' is a literal only at the start of a
+	// character class or immediately before the closing ']'. An interior '-'
+	// is a range operator, and its endpoints must be single characters — never
+	// another '-'. Go's RE2 happily accepts '[--z]' (range '-'..'z') and
+	// '[!--]' (range '!'..'-'), so the translator must reject these explicitly.
+	t.Run("reject hyphen as range endpoint", func(t *testing.T) {
+		for _, pat := range []string{`[--z]`, `[!--]`, `[^--z]`, `[a--z]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.Error(t, err, "pattern %q must be rejected", pat)
+				require.Contains(t, err.Error(), "invalid character class")
+			})
+		}
+	})
+
+	t.Run("accept valid hyphen neighbors", func(t *testing.T) {
+		for _, pat := range []string{`[+-]`, `[-+]`, `[a-z-+]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.NoError(t, err, "pattern %q must be accepted", pat)
+			})
+		}
+	})
+
+	// A literal '-' immediately abutting a '-[' character-class subtraction
+	// operator is part of the base positive group, not a range endpoint, so the
+	// range-endpoint rule must NOT fire on it. '[--[a]]' (base {-} minus {a})
+	// and '[^--[a]]' (negated base {-} minus {a}) are valid and compile.
+	t.Run("accept hyphen abutting subtraction operator", func(t *testing.T) {
+		for _, pat := range []string{`[--[a]]`, `[^--[a]]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.NoError(t, err, "pattern %q must be accepted", pat)
+			})
+		}
+	})
+
+	// '[a--[b]]' (base {a,-} minus {b}) is also a valid XSD subtraction, but the
+	// regexp2/RE2 subtraction path passes the class through unexpanded, so the
+	// engine misreads 'a--' as a reverse-order range and rejects it — a
+	// pre-existing limitation, unchanged by this fix. The structural
+	// char-class validator must still NOT be the thing that rejects it: any
+	// error must come from the engine, never an "invalid character class"
+	// FORX0002, proving the range-endpoint rule does not fire on the literal
+	// dash abutting the '-[' operator.
+	t.Run("range-endpoint rule does not fire on subtraction base dash", func(t *testing.T) {
+		_, err := xsdregex.Compile(`[a--[b]]*`)
+		if err != nil {
+			require.NotContains(t, err.Error(), "invalid character class",
+				"structural validator must not reject the subtraction base dash")
+		}
+	})
+}
+
 func TestDefaultMatchTimeoutAccessors(t *testing.T) {
 	orig := xsdregex.DefaultMatchTimeout()
 	t.Cleanup(func() { xsdregex.SetDefaultMatchTimeout(orig) })

@@ -101,6 +101,8 @@ var enumValueSpaceTypes = map[string]struct{}{
 	// Date/time/duration.
 	"dateTime": {}, "date": {}, "time": {}, "duration": {},
 	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+	// XSD 1.1 date/time/duration subtypes (compared in their primitive value space).
+	lexicon.TypeDateTimeStamp: {}, lexicon.TypeDayTimeDuration: {}, lexicon.TypeYearMonthDuration: {},
 	// Binary (compared by decoded octets, not lexical text).
 	"hexBinary": {}, "base64Binary": {},
 }
@@ -259,6 +261,24 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 		}
 	}
 
+	if fs.ExplicitTimezone != nil {
+		hasTimezone := hasExplicitTimezone(val)
+		switch *fs.ExplicitTimezone {
+		case attrValRequired:
+			if !hasTimezone {
+				msg := fmt.Sprintf("[facet 'explicitTimezone'] The value '%s' must have an explicit timezone.", val)
+				vc.reportValidityError(ctx, filename, line, elemName, msg)
+				anyErr = fmt.Errorf("explicitTimezone")
+			}
+		case attrValProhibited:
+			if hasTimezone {
+				msg := fmt.Sprintf("[facet 'explicitTimezone'] The value '%s' must not have an explicit timezone.", val)
+				vc.reportValidityError(ctx, filename, line, elemName, msg)
+				anyErr = fmt.Errorf("explicitTimezone")
+			}
+		}
+	}
+
 	// Pattern: multiple <xs:pattern> facets in the same restriction step are
 	// ORed — the value is valid if it matches any of them. Regexes are compiled
 	// once at schema compile time (FacetSet.compiledPatterns); a nil entry means
@@ -289,6 +309,25 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 	}
 
 	return anyErr
+}
+
+func hasExplicitTimezone(value string) bool {
+	if strings.HasSuffix(value, "Z") {
+		return true
+	}
+	n := len(value)
+	if n < len("+00:00") {
+		return false
+	}
+	sign := value[n-6]
+	if sign != '+' && sign != '-' {
+		return false
+	}
+	return value[n-3] == ':' &&
+		value[n-5] >= '0' && value[n-5] <= '9' &&
+		value[n-4] >= '0' && value[n-4] <= '9' &&
+		value[n-2] >= '0' && value[n-2] <= '9' &&
+		value[n-1] >= '0' && value[n-1] <= '9'
 }
 
 func resolveLexicalQName(value string, ns map[string]string) (QName, error) {

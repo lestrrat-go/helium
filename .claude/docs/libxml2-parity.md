@@ -63,12 +63,27 @@ Test data: `testdata/libxml2-compat/` (golden files generated from libxml2's xml
 | unsupported spec: XSLT10 | 1 |
 | xsd compiler rejects schema-for-xslt20.xsd attribute-wildcard derivation-by-restriction | 1 |
 
+### W3C XSD 1.1 tests
+
+The heavyweight XSD 1.1 conformance harness lives in the sibling module
+`../helium-w3c-tests` on branch `migrate-xsd11`; run it against this module with
+a local `go.work` pointing at the Helium worktree. Treat checked-in counts as
+current-state only: regenerate them from the current `migrate-xsd11` branch and
+the Helium branch under test. Do not preserve old branch/SHA counts in this
+section unless the heading explicitly marks them as historical. Persistent skips
+are tracked in `helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance
+gaps.
+
+Current state (snapshot, regenerate to confirm): the `xsd11.json` skip list is
+**empty** — the Basic XSD 1.1 W3C suite passes **967 / 0 failures / 0 skipped**
+against `feat-xsd11` with `helium-w3c-tests` `migrate-xsd11`.
+
 ## Parser Limitations
 
 Cross-element redundant namespace redeclarations and entity references in
-single-quoted attributes (formerly the cause of all 10 C14N skips) now parse
-correctly; the C14N suite runs with no skips. Same-element duplicate namespace
-declarations remain a well-formedness error, as in libxml2.
+single-quoted attributes parse correctly, and the C14N suite runs with no skips.
+Same-element duplicate namespace declarations are a well-formedness error, as in
+libxml2.
 
 1. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**: `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`. The `relaxng.Compiler` mirrors this default: its `include`/`externalRef` fetch `FS` is deny-all by default (opt into host access with `Compiler.FS(helium.PermissiveFS())`), and each target is read under a per-resource byte cap (`relaxng.Compiler.MaxResourceBytes`, 10 MiB default).
 
@@ -103,7 +118,7 @@ declarations remain a well-formedness error, as in libxml2.
 |---------|-----------|-----|
 | HTML parsing | SAX + DOM, auto-close, void elements, entities, encoding | Structural element nesting not enforced, areBlanks heuristic simpler, attribute deduplication missing |
 | encoding/xml shim | Marshal, Unmarshal, Encoder, Decoder, Token, struct tags | Strict-only, xmlns before regular attrs, InputOffset approximate, undeclared prefixes rejected |
-| XSD numeric comparison | decimal/integer via big.Rat | No float/double/date/time/duration comparison |
+| XSD range comparison | decimal/integer via big.Rat; float/double; date/time/g-types; duration partial order | Non-ordered primitives rejected for range facets; NaN ordinary value comparison remains indeterminate |
 | XSD validation mode | DOM-only | No SAX/streaming validation, no subtree validation |
 | Push parser | Incremental parsing in background goroutine from blocking push stream | Blocking on chunk boundaries; semantics differ from libxml2 push APIs |
 
@@ -138,7 +153,7 @@ declarations remain a well-formedness error, as in libxml2.
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
 | XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
 | FixBaseURIs(bool) | XML_PARSE_NOBASEFIX | ✅ | Inverted: false → skip fixup |
-| MaxNameLength(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max name length (0=default 50000, <0=unlimited). Replaced RelaxLimits |
+| MaxNameLength(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max name length (0=default 50000, <0=unlimited) |
 | MaxEntityAmplification(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max entity-amplification ratio (0=default 5, <0=ratio check off; 1 GiB hard ceiling always applies) |
 | MaxContentModelDepth(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max DTD content-model depth (0=default 128, <0=unlimited) |
 | MaxNodeContentSize(int) | XML_MAX_TEXT_LENGTH (intent) | ✅ | Per-limit knob: max bytes of a single CDATA/comment/PI/char-data run or attribute value, AND of a single contiguous XML-whitespace (blank-skip) run (0=default `DefaultMaxNodeContentSize` 10 MiB, <0=unlimited — disables BOTH the node-content and the blank-run cap). Fires during accumulation; over-cap → `ErrNodeContentTooLarge`. Streaming SAX (`CharBufferSize>0`) char data is exempt (already chunked) |

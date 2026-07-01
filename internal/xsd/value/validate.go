@@ -12,8 +12,24 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
+// Version selects the XSD specification version for the version-sensitive
+// lexical rules. The zero value is Version10 (strict XSD 1.0), so callers that
+// have no version concept default to 1.0 behavior.
+type Version int
+
+const (
+	// Version10 targets XML Schema 1.0 lexical rules: "+INF" is NOT a valid
+	// xs:float/xs:double form and year "0000" is NOT a valid date year.
+	Version10 Version = iota
+	// Version11 targets XML Schema 1.1 lexical rules: "+INF" is a valid
+	// xs:float/xs:double form and year "0000" is a valid date year.
+	Version11
+)
+
 // ValidateBuiltin validates a value against a builtin XSD type's lexical space.
-func ValidateBuiltin(value, builtinLocal string) error {
+// version selects the 1.0-vs-1.1 lexical rules for the version-sensitive types
+// (xs:float/xs:double "+INF", and year "0000" on the date types).
+func ValidateBuiltin(value, builtinLocal string, version Version) error {
 	switch builtinLocal {
 	case "decimal":
 		return validateDecimal(value)
@@ -27,23 +43,36 @@ func ValidateBuiltin(value, builtinLocal string) error {
 	case "hexBinary":
 		return validateHexBinary(value)
 	case "date":
-		return validateDate(value)
+		return validateDate(value, version)
 	case "boolean":
 		return validateBoolean(value)
 	case "language":
 		return validateLanguage(value)
 	case lexicon.TypeFloat, lexicon.TypeDouble:
-		return validateFloat(value)
+		return validateFloat(value, version)
 	case "dateTime":
-		return validateDateTime(value)
+		return validateDateTime(value, version)
+	case lexicon.TypeDateTimeStamp:
+		return validateDateTimeStamp(value, version)
 	case "time":
 		return validateTime(value)
 	case "duration":
 		return validateDuration(value)
+	case lexicon.TypeDayTimeDuration:
+		return validateDayTimeDuration(value)
+	case lexicon.TypeYearMonthDuration:
+		return validateYearMonthDuration(value)
+	case lexicon.TypeAnyAtomicType:
+		// xs:anyAtomicType is abstract: it has no direct lexical constraints (its
+		// abstractness is enforced where types are used, not here).
+		return nil
+	case lexicon.TypeError:
+		// xs:error has an empty value space: no literal is ever valid.
+		return fmt.Errorf("xs:error has an empty value space")
 	case "gYear":
-		return validateGYear(value)
+		return validateGYear(value, version)
 	case "gYearMonth":
-		return validateGYearMonth(value)
+		return validateGYearMonth(value, version)
 	case "gMonth":
 		return validateGMonth(value)
 	case "gDay":
@@ -158,10 +187,15 @@ func validateHexBinary(value string) error {
 // XSD permits only the uppercase 'Z' designator, never lowercase 'z'.
 const tzSuffix = `(Z|[+-]\d{2}:\d{2})?`
 
-// dateRegex is a basic match for xs:date: YYYY-MM-DD with optional timezone.
-var dateRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}` + tzSuffix + `$`)
+// yearFrag matches the calendar-year fragment used by xs:date, xs:dateTime,
+// xs:gYear, and xs:gYearMonth. Expanded years have more than four digits and
+// must not have leading zeroes; year zero itself is written as exactly 0000.
+const yearFrag = `-?(?:\d{4}|[1-9]\d{4,})`
 
-func validateDate(value string) error {
+// dateRegex is a basic match for xs:date: YYYY-MM-DD with optional timezone.
+var dateRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}-\d{2}` + tzSuffix + `$`)
+
+func validateDate(value string, version Version) error {
 	if !dateRegex.MatchString(value) {
 		return fmt.Errorf("invalid date")
 	}
@@ -170,7 +204,7 @@ func validateDate(value string) error {
 			return err
 		}
 	}
-	return validateDateComponents(value)
+	return validateDateComponents(value, version)
 }
 
 // languageRegex matches the lexical space of xs:language (RFC 3066).
@@ -191,26 +225,36 @@ func validateBoolean(value string) error {
 	return fmt.Errorf("invalid boolean")
 }
 
-// floatRegex matches xs:float and xs:double. The optional sign applies to the
-// numeric forms and INF, but NaN must be bare: per XSD the valid special
+// floatRegex matches xs:float and xs:double under XSD 1.1. The optional sign
+// applies to the numeric forms and INF, but NaN must be bare: the valid special
 // lexical forms are INF, +INF, -INF and NaN — +NaN and -NaN are not valid.
 var floatRegex = regexp.MustCompile(`^([+-]?((\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|INF)|NaN)$`)
 
-func validateFloat(value string) error {
-	if !floatRegex.MatchString(value) {
+// floatRegex10 matches xs:float and xs:double under XSD 1.0, which differs from
+// 1.1 only in the infinity forms: 1.0 allows INF and -INF but NOT +INF. The
+// sign on the numeric forms is unchanged; only the INF alternative drops the
+// leading '+'.
+var floatRegex10 = regexp.MustCompile(`^(([+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?)|(-?INF)|NaN)$`)
+
+func validateFloat(value string, version Version) error {
+	re := floatRegex
+	if version == Version10 {
+		re = floatRegex10
+	}
+	if !re.MatchString(value) {
 		return fmt.Errorf("invalid float")
 	}
 	return nil
 }
 
 // dateTimeRegex matches xs:dateTime.
-var dateTimeRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`)
+var dateTimeRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`)
 
-func validateDateTime(value string) error {
+func validateDateTime(value string, version Version) error {
 	if !dateTimeRegex.MatchString(value) {
 		return fmt.Errorf("invalid dateTime")
 	}
-	if err := validateDateComponents(value); err != nil {
+	if err := validateDateComponents(value, version); err != nil {
 		return err
 	}
 	// The time portion follows the 'T' separator.
@@ -348,7 +392,14 @@ func validateTimezone(tz string) error {
 // validateDateComponents parses YYYY-MM-DD from a date/dateTime string and
 // checks month (1-12) and day (1-maxDay) ranges. The value must already have
 // passed the regex check.
-func validateDateComponents(value string) error {
+// yearForbiddenInXSD10 reports whether yearStr (the digits-only year field, sign
+// already stripped) is the year "0000". XSD 1.0 has no year zero; XSD 1.1 adds
+// it. yearStr is assumed to have passed its lexical regex (all digits).
+func yearForbiddenInXSD10(yearStr string) bool {
+	return strings.Trim(yearStr, "0") == ""
+}
+
+func validateDateComponents(value string, version Version) error {
 	s := value
 	// Skip optional leading '-' for negative years.
 	if len(s) > 0 && s[0] == '-' {
@@ -359,6 +410,9 @@ func validateDateComponents(value string) error {
 	yearStr, rest, found := strings.Cut(s, "-")
 	if !found {
 		return fmt.Errorf("invalid date")
+	}
+	if version == Version10 && yearForbiddenInXSD10(yearStr) {
+		return fmt.Errorf("invalid date: year 0000 is not valid in XSD 1.0")
 	}
 	monthStr, dayStr, found := strings.Cut(rest, "-")
 	if !found {
@@ -446,15 +500,63 @@ func validateDuration(value string) error {
 	return nil
 }
 
-// gYearRegex matches xs:gYear.
-var gYearRegex = regexp.MustCompile(`^-?\d{4,}` + tzSuffix + `$`)
+// dateTimeStampRegex matches xs:dateTimeStamp (XSD 1.1): an xs:dateTime whose
+// explicitTimezone is "required", i.e. the timezone designator is mandatory
+// (the tzSuffix group is not optional).
+var dateTimeStampRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
 
-func validateGYear(value string) error {
+// validateDateTimeStamp validates xs:dateTimeStamp: an xs:dateTime value that
+// must carry a timezone. Year-0000 gating follows the dateTime rules.
+func validateDateTimeStamp(value string, version Version) error {
+	if !dateTimeStampRegex.MatchString(value) {
+		return fmt.Errorf("invalid dateTimeStamp")
+	}
+	return validateDateTime(value, version)
+}
+
+// dayTimeDurationRegex matches xs:dayTimeDuration (XSD 1.1): a duration with
+// only day and time components (no year or month). At least one component must
+// be present.
+var dayTimeDurationRegex = regexp.MustCompile(`^-?P(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$`)
+
+func validateDayTimeDuration(value string) error {
+	if !dayTimeDurationRegex.MatchString(value) {
+		return fmt.Errorf("invalid dayTimeDuration")
+	}
+	// Reuse the shared duration body checks (at least one component, no dangling
+	// 'T'); they additionally reject "P"/"PT".
+	return validateDuration(value)
+}
+
+// yearMonthDurationRegex matches xs:yearMonthDuration (XSD 1.1): a duration with
+// only year and month components (no day or time). At least one component must
+// be present.
+var yearMonthDurationRegex = regexp.MustCompile(`^-?P(\d+Y)?(\d+M)?$`)
+
+func validateYearMonthDuration(value string) error {
+	if !yearMonthDurationRegex.MatchString(value) {
+		return fmt.Errorf("invalid yearMonthDuration")
+	}
+	// "P" with no component is invalid.
+	if value == "P" || value == "-P" {
+		return fmt.Errorf("invalid yearMonthDuration")
+	}
+	return validateDuration(value)
+}
+
+// gYearRegex matches xs:gYear.
+var gYearRegex = regexp.MustCompile(`^` + yearFrag + tzSuffix + `$`)
+
+func validateGYear(value string, version Version) error {
 	if !gYearRegex.MatchString(value) {
 		return fmt.Errorf("invalid gYear")
 	}
-	if _, err := stripAndCheckTimezone(value); err != nil {
+	body, err := stripAndCheckTimezone(value)
+	if err != nil {
 		return err
+	}
+	if version == Version10 && yearForbiddenInXSD10(strings.TrimPrefix(body, "-")) {
+		return fmt.Errorf("invalid gYear: year 0000 is not valid in XSD 1.0")
 	}
 	return nil
 }
@@ -498,9 +600,9 @@ func gDayRange(s, typeName string) error {
 }
 
 // gYearMonthRegex matches xs:gYearMonth.
-var gYearMonthRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}` + tzSuffix + `$`)
+var gYearMonthRegex = regexp.MustCompile(`^` + yearFrag + `-\d{2}` + tzSuffix + `$`)
 
-func validateGYearMonth(value string) error {
+func validateGYearMonth(value string, version Version) error {
 	if !gYearMonthRegex.MatchString(value) {
 		return fmt.Errorf("invalid gYearMonth")
 	}
@@ -508,7 +610,14 @@ func validateGYearMonth(value string) error {
 	if err != nil {
 		return err
 	}
-	// body is "[-]YYYY...-MM": the month is the last two characters.
+	// body is "[-]YYYY...-MM": the year is everything before the final "-MM".
+	if version == Version10 {
+		yearStr, _, _ := strings.Cut(strings.TrimPrefix(body, "-"), "-")
+		if yearForbiddenInXSD10(yearStr) {
+			return fmt.Errorf("invalid gYearMonth: year 0000 is not valid in XSD 1.0")
+		}
+	}
+	// the month is the last two characters.
 	return gMonthRange(body[len(body)-2:], "gYearMonth")
 }
 

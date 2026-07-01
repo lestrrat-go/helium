@@ -20,17 +20,18 @@ const (
 
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
-	node        helium.Node
-	position    int
-	size        int
-	namespaces  map[string]string
-	variables   map[string]any
-	functions   map[string]Function
-	functionsNS map[QualifiedName]Function
-	depth       int
-	opCount     *int // shared across the entire evaluation tree
-	opLimit     int  // 0 = unlimited
-	docOrder    *ixpath.DocOrderCache
+	node          helium.Node
+	position      int
+	size          int
+	namespaces    map[string]string
+	defaultElemNS string
+	variables     map[string]any
+	functions     map[string]Function
+	functionsNS   map[QualifiedName]Function
+	depth         int
+	opCount       *int // shared across the entire evaluation tree
+	opLimit       int  // 0 = unlimited
+	docOrder      *ixpath.DocOrderCache
 }
 
 func newEvalContextWithConfig(node helium.Node, cfg *evalConfig) *evalContext {
@@ -44,6 +45,7 @@ func newEvalContextWithConfig(node helium.Node, cfg *evalConfig) *evalContext {
 	}
 	if cfg != nil {
 		ectx.namespaces = cfg.namespaces
+		ectx.defaultElemNS = cfg.defaultElemNS
 		ectx.variables = cfg.variables
 		ectx.opLimit = cfg.opLimit
 		ectx.functions = cfg.functions
@@ -54,17 +56,18 @@ func newEvalContextWithConfig(node helium.Node, cfg *evalConfig) *evalContext {
 
 func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 	return &evalContext{
-		node:        n,
-		position:    pos,
-		size:        size,
-		namespaces:  ec.namespaces,
-		variables:   ec.variables,
-		functions:   ec.functions,
-		functionsNS: ec.functionsNS,
-		depth:       ec.depth,
-		opCount:     ec.opCount,
-		opLimit:     ec.opLimit,
-		docOrder:    ec.docOrder,
+		node:          n,
+		position:      pos,
+		size:          size,
+		namespaces:    ec.namespaces,
+		defaultElemNS: ec.defaultElemNS,
+		variables:     ec.variables,
+		functions:     ec.functions,
+		functionsNS:   ec.functionsNS,
+		depth:         ec.depth,
+		opCount:       ec.opCount,
+		opLimit:       ec.opLimit,
+		docOrder:      ec.docOrder,
 	}
 }
 
@@ -323,8 +326,15 @@ func matchNameTestByLocalAndPrefix(test NameTest, n helium.Node, ec *evalContext
 	}
 
 	// XPath 1.0 has no default element namespace: an unprefixed name test
-	// matches only nodes with no namespace URI.
-	return ixpath.NodeNamespaceURI(n) == ""
+	// matches only nodes with no namespace URI. When a default element namespace
+	// is configured (XSD 1.1 @xpathDefaultNamespace), an unprefixed ELEMENT name
+	// test matches that URI instead; attributes are never affected (they have no
+	// default namespace).
+	want := ""
+	if ec != nil && ec.defaultElemNS != "" && n.Type() == helium.ElementNode {
+		want = ec.defaultElemNS
+	}
+	return ixpath.NodeNamespaceURI(n) == want
 }
 
 func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {

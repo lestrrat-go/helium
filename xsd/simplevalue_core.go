@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"iter"
 	"regexp"
 	"strings"
 
@@ -10,14 +11,54 @@ import (
 	valuepkg "github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
-// validateBuiltinValue validates a value against a builtin XSD type's lexical space.
-func validateBuiltinValue(v, builtinLocal string) error {
-	return valuepkg.ValidateBuiltin(v, builtinLocal)
+// baseChain yields td and then each type up its BaseType chain. The walk is
+// cycle-safe (Floyd's tortoise/hare): a cyclic BaseType chain — an invalid
+// schema that checkCircularSimpleTypes reports as ErrCompilationFailed —
+// terminates the iteration instead of looping forever. Every base-chain walker
+// in the package goes through this helper so none can hang on a cyclic type
+// regardless of when it runs relative to the circular-type check. The generator
+// does not escape its range statement, so it allocates nothing on the heap.
+func baseChain(td *TypeDef) iter.Seq[*TypeDef] {
+	return func(yield func(*TypeDef) bool) {
+		slow := td
+		for fast := td; fast != nil; {
+			if !yield(fast) {
+				return
+			}
+			fast = fast.BaseType
+			if fast == nil {
+				return
+			}
+			if !yield(fast) {
+				return
+			}
+			fast = fast.BaseType
+			slow = slow.BaseType
+			if fast == slow {
+				return
+			}
+		}
+	}
 }
 
-// validateQName validates a QName value.
+// valueVersion maps the xsd package's Version to the internal value package's
+// equivalent, so the lexical validators apply the matching 1.0-vs-1.1 rules.
+func valueVersion(v Version) valuepkg.Version {
+	if v == Version11 {
+		return valuepkg.Version11
+	}
+	return valuepkg.Version10
+}
+
+// validateBuiltinValue validates a value against a builtin XSD type's lexical space.
+func validateBuiltinValue(v, builtinLocal string, version Version) error {
+	return valuepkg.ValidateBuiltin(v, builtinLocal, valueVersion(version))
+}
+
+// validateQName validates a QName value. xs:QName has no version-sensitive
+// lexical rules, so the version is immaterial here.
 func validateQName(v string) error {
-	return valuepkg.ValidateBuiltin(v, "QName")
+	return valuepkg.ValidateBuiltin(v, "QName", valuepkg.Version10)
 }
 
 // languageRegex matches the lexical space of xs:language (RFC 3066).
@@ -27,7 +68,7 @@ var languageRegex = regexp.MustCompile(`^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$`)
 // walking the base type chain. Returns "collapse" as default per XSD spec
 // (most derived types default to collapse).
 func resolveWhiteSpace(td *TypeDef) string {
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if cur.Facets != nil && cur.Facets.WhiteSpace != nil {
 			return *cur.Facets.WhiteSpace
 		}
@@ -96,6 +137,22 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	// Apply whitespace normalization per the type's whiteSpace facet.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 
+	if err := validateValueByVariety(ctx, value, trimmed, valueNS, td, elemName, filename, line, vc); err != nil {
+		return err
+	}
+
+	// XSD 1.1 <xs:assertion> simple-type facet: evaluated only after the value is
+	// known lexically and facet valid, with $value bound to the typed value.
+	if vc.version == Version11 {
+		return checkSimpleTypeAssertions(ctx, trimmed, valueNS, td, elemName, filename, line, vc)
+	}
+	return nil
+}
+
+// validateValueByVariety validates a value's lexical space and facets per td's
+// variety, excluding the XSD 1.1 assertion facet (handled by validateValue once
+// the value is otherwise valid).
+func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	// Check if this is a list type.
 	if resolveVariety(td) == TypeVarietyList {
 		return validateListValue(ctx, trimmed, valueNS, td, elemName, filename, line, vc)
@@ -110,7 +167,7 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	builtinLocal := builtinBaseLocal(td)
 
 	// Validate against the builtin type's lexical space.
-	if err := validateBuiltinValue(trimmed, builtinLocal); err != nil {
+	if err := validateBuiltinValue(trimmed, builtinLocal, vc.version); err != nil {
 		typeName := typeDisplayName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
 		vc.reportValidityError(ctx, filename, line, elemName, msg)
@@ -133,14 +190,13 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 }
 
-// resolveUnionMembers walks up the base type chain to find the union's member types.
+// resolveUnionMembers walks up the base type chain to find the union's member
+// types. baseChain keeps the walk finite on a cyclic BaseType chain.
 func resolveUnionMembers(td *TypeDef) []*TypeDef {
-	cur := td
-	for cur != nil {
+	for cur := range baseChain(td) {
 		if len(cur.MemberTypes) > 0 {
 			return cur.MemberTypes
 		}
-		cur = cur.BaseType
 	}
 	return nil
 }
@@ -170,7 +226,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 	// must still honor the base union's facets, so the enumeration and the
 	// non-enumeration facets are checked for every step that carries a FacetSet,
 	// each resolved in that step's own union member context.
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if cur.Facets == nil {
 			continue
 		}
@@ -194,7 +250,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		// fallback on a string leaf.
 		memberLocal := ""
 		memberWS := resolveWhiteSpace(cur)
-		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur)); active != nil {
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), nil, vc.version); active != nil {
 			memberLocal = builtinBaseLocal(active)
 			memberWS = resolveWhiteSpace(active)
 		}
@@ -251,7 +307,7 @@ func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string
 		if i < len(td.Facets.EnumerationNS) {
 			enumNS = td.Facets.EnumerationNS[i]
 		}
-		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS) {
+		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.schema, vc.version) {
 			return nil
 		}
 	}
@@ -274,12 +330,10 @@ func unionTypeDisplayName(td *TypeDef) string {
 // resolveVariety returns the effective variety of a type, walking through
 // restriction derivations to find the underlying variety.
 func resolveVariety(td *TypeDef) TypeVariety {
-	cur := td
-	for cur != nil {
+	for cur := range baseChain(td) {
 		if cur.Variety != TypeVarietyAtomic {
 			return cur.Variety
 		}
-		cur = cur.BaseType
 	}
 	return TypeVarietyAtomic
 }
@@ -299,8 +353,7 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 
 	// Check length facets using item count.
 	var facetErr error
-	cur := td
-	for cur != nil {
+	for cur := range baseChain(td) {
 		if cur.Facets != nil {
 			if cur.Facets.Length != nil && itemCount != *cur.Facets.Length {
 				msg := fmt.Sprintf("[facet 'length'] The value has a length of '%d'; this differs from the allowed length of '%d'.", itemCount, *cur.Facets.Length)
@@ -318,7 +371,6 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 				facetErr = fmt.Errorf("maxLength")
 			}
 		}
-		cur = cur.BaseType
 	}
 
 	// Apply the value-level facets — enumeration and pattern — to the
@@ -327,7 +379,7 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 	// instead measure character length, so enumeration and pattern are applied
 	// here on their own rather than via the generic checkFacets path.
 	itemType := resolveItemType(td)
-	for cur := td; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td) {
 		if cur.Facets == nil {
 			continue
 		}
@@ -362,24 +414,20 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 
 // resolveItemType walks the type chain to find the item type for a list type.
 func resolveItemType(td *TypeDef) *TypeDef {
-	cur := td
-	for cur != nil {
+	for cur := range baseChain(td) {
 		if cur.ItemType != nil {
 			return cur.ItemType
 		}
-		cur = cur.BaseType
 	}
 	return nil
 }
 
 // builtinBaseLocal returns the local name of the builtin XSD base type.
 func builtinBaseLocal(td *TypeDef) string {
-	cur := td
-	for cur != nil {
+	for cur := range baseChain(td) {
 		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
 			return cur.Name.Local
 		}
-		cur = cur.BaseType
 	}
 	return ""
 }
@@ -431,7 +479,7 @@ func checkListEnumeration(ctx context.Context, value string, valueNS map[string]
 		if i < len(fs.EnumerationNS) {
 			enumNS = fs.EnumerationNS[i]
 		}
-		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS) {
+		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.schema, vc.version) {
 			return nil
 		}
 	}
@@ -477,14 +525,12 @@ func validateFacets(ctx context.Context, value string, valueNS map[string]string
 	// Collect all facets along the type chain (most derived first).
 	var anyErr error
 	ws := resolveWhiteSpace(td)
-	cur := td
-	for cur != nil {
+	for cur := range baseChain(td) {
 		if cur.Facets != nil {
 			if err := checkFacets(ctx, value, valueNS, cur.Facets, builtinLocal, ws, elemName, filename, line, vc); err != nil {
 				anyErr = err
 			}
 		}
-		cur = cur.BaseType
 	}
 	return anyErr
 }

@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -46,9 +47,22 @@ const msgAbstractType = "The type definition is abstract."
 // value and the schema fixed value respectively; they are only consulted for
 // QName/NOTATION types. When td is nil the comparison falls back to raw string
 // equality.
-func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	if td == nil {
 		return instance == fixed
+	}
+
+	// XSD 1.1: a simpleContent complex type's fixed value lives in its NARROWED
+	// content simple type, not the outer complex type's own base chain — compare in
+	// the effective content type so e.g. a content type restricted to xs:QName uses
+	// QName VALUE-space equality (a different prefix bound to the same URI matches).
+	// effectiveContentSimpleType returns a non-simpleContent type unchanged, so the
+	// simple (attribute / element / list-item / union-member) callers are
+	// unaffected. Centralized here so EVERY caller — runtime element/attribute fixed
+	// checks AND the compile-time content-model restriction check
+	// (restriction_particle.go) — is consistent. XSD 1.0 keeps the raw declared type.
+	if version == Version11 {
+		td = effectiveContentSimpleType(td)
 	}
 
 	// Branch on variety *before* normalizing with the type's own whiteSpace
@@ -59,7 +73,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// each member normalize with its own facet. List and atomic types keep their
 	// type-level normalization.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS)
+		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version)
 	}
 
 	ws := resolveWhiteSpace(td)
@@ -67,7 +81,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	nf := normalizeWhiteSpace(fixed, ws)
 
 	if resolveVariety(td) == TypeVarietyList {
-		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS)
+		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, schema, version)
 	}
 	return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
 }
@@ -77,7 +91,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 // variety-aware comparator on the actual item type, so a list whose item type is
 // a union (or itself a list) is compared in the correct value space rather than
 // raw lexical text.
-func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	ii := value.XSDFields(instance)
 	fi := value.XSDFields(fixed)
 	if len(ii) != len(fi) {
@@ -85,7 +99,7 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 	}
 	itemType := resolveItemType(td)
 	for i := range ii {
-		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS) {
+		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, schema, version) {
 			return false
 		}
 	}
@@ -127,14 +141,14 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 // same per-member validateValue path the normal (non-fixed) validation uses, so
 // the fixed-comparison and ordinary-validation notions of "active member" stay
 // consistent.
-func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
 	members := resolveUnionMembers(td)
 
-	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members)
+	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, schema, version)
 	if fixedMember == nil {
 		return false
 	}
-	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members)
+	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, schema, version)
 	if instanceMember == nil {
 		return false
 	}
@@ -143,7 +157,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 		// Same active member: compare in that member's value space. A union has no
 		// whiteSpace facet of its own, so the raw values are forwarded and the
 		// member normalizes both with its own facet inside fixedValueMatches.
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
 	}
 
 	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
@@ -154,7 +168,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// atomic members reduce to their primitive value-space family. Cross-variety
 	// pairs (a list member vs an atomic member) have no shared value space and
 	// remain unequal.
-	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS)
+	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, schema, version)
 }
 
 // crossMemberValueComparisonMaxDepth bounds the recursion of
@@ -192,11 +206,11 @@ const crossMemberValueComparisonMaxDepth = 64
 //     normalized-lexical for the string family).
 //   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
 //     no shared value space → unequal.
-func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string) bool {
-	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0)
+func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
+	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, schema, version)
 }
 
-func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int) bool {
+func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, schema *Schema, version Version) bool {
 	if depth > crossMemberValueComparisonMaxDepth {
 		return false
 	}
@@ -212,18 +226,18 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// a union nested directly inside another union, and any deeper combination, so
 	// the recursion always descends to a non-union variety before comparing.
 	if instanceVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember))
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), schema, version)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, schema, version)
 	}
 	if fixedVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember))
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), schema, version)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, schema, version)
 	}
 
 	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
@@ -240,7 +254,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 			return false
 		}
 		for i := range ii {
-			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1) {
+			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, schema, version) {
 				return false
 			}
 		}
@@ -256,7 +270,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
 	// no-shared-family rule.
 	if instanceMember == fixedMember {
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
 	}
 
 	fixedLocal := builtinBaseLocal(fixedMember)
@@ -343,6 +357,12 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 		// String value space equals the whitespace-processed lexical space; not
 		// value-comparable via value.Compare, so the caller compares lexically.
 		return lexicon.TypeString, false, true
+	case lexicon.TypeDateTimeStamp:
+		// XSD 1.1 subtype of xs:dateTime; compares in the dateTime value space.
+		return "dateTime", true, true
+	case lexicon.TypeDayTimeDuration, lexicon.TypeYearMonthDuration:
+		// XSD 1.1 subtypes of xs:duration; compare in the duration value space.
+		return "duration", true, true
 	default:
 		// Remaining comparable primitives (boolean, float, double, date/time
 		// family, binary) are gated on the same allowlist the enumeration path uses.
@@ -367,11 +387,27 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // (e.g. xs:integer), not the union TypeDef, so valueSpaceFamily can reduce it to
 // the comparable family (decimal) and compare it against a sibling decimal
 // member's value.
-func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
+//
+// version is the schema's effective XSD version, threaded from the caller so the
+// throwaway validation context applies the same version-sensitive lexical rules
+// the main validation path uses — e.g. a 1.1-only lexical form ("+INF" for
+// xs:double) appearing INSIDE a union fixed-value or enumeration literal is
+// accepted in 1.1 mode rather than rejected under a defaulted Version10.
+// fixedUnionActiveMember returns the union member that accepts value. The schema
+// argument (nil when none is available) is threaded onto the throwaway
+// validation context so a member whose own xs:assertion needs schema-aware
+// resolution (e.g. `castable as t:T`) validates the same way as the real path;
+// the per-validation cast guard flows through ctx. Most callers pass nil
+// (schema-awareness is immaterial for plain fixed/enumeration comparisons); the
+// assertion $value path passes the real schema so union member typing is
+// consistent with validation.
+func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, schema *Schema, version Version) *TypeDef {
 	for _, member := range members {
 		vc := &validationContext{
+			schema:        schema,
 			errorHandler:  helium.NilErrorHandler{},
 			suppressDepth: 1,
+			version:       version,
 		}
 		if validateValue(ctx, value, valueNS, member, "", "", 0, vc) != nil {
 			continue
@@ -380,7 +416,7 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 		// the active basic member within it; the validateValue success above
 		// guarantees at least one nested member accepts the value.
 		if resolveVariety(member) == TypeVarietyUnion {
-			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member)); basic != nil {
+			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), schema, version); basic != nil {
 				return basic
 			}
 		}
@@ -422,10 +458,26 @@ func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedN
 
 type validationContext struct {
 	schema        *Schema
+	version       Version // XSD spec version governing version-sensitive lexical rules
 	cfg           *validateConfig
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
+	// edcType is the complex type whose content model is currently being matched.
+	// It is set (and restored) by validateContentByType, so the wildcard
+	// Element-Declarations-Consistent check (validateWildcardElementConsistent) can
+	// consult the type's BASE chain for a same-named local element declaration: a
+	// derived type's wildcard may match an element the base type declared locally
+	// with a different type, which the dynamic EDC check must reject even when the
+	// derived content model itself no longer declares it. XSD 1.1 only.
+	edcType *TypeDef
+	// skipContentNodes records every element node inside a processContents="skip"
+	// wildcard-matched subtree (and the matched elements themselves). Such content
+	// is NOT schema-assessed, so a pass-2 identity-constraint selector must not
+	// pick it: an xs:key/xs:unique selecting an unassessed skip-content element
+	// would impose key/uniqueness on a node that carries no PSVI contribution.
+	// Populated by annotateSkipChildren; consulted by evaluateIDC. XSD 1.1 only.
+	skipContentNodes map[helium.Node]struct{}
 	// actualElemType records the ACTUAL *TypeDef determined for each element
 	// during pass-1 content validation, including any xsi:type override. Pass-2
 	// identity-constraint field resolution consults this before falling back to
@@ -433,14 +485,91 @@ type validationContext struct {
 	// contributed by xsi:type is canonicalized in the correct value space.
 	actualElemType map[*helium.Element]*TypeDef
 	// actualElemDecl records the resolved *ElementDecl matched for each element
-	// instance during pass-1 content validation, including LOCAL declarations
-	// buried inside content models (which lookupElemDecl, finding only GLOBAL
-	// declarations, cannot recover). Pass-2 identity-constraint evaluation
-	// consults this map BEFORE falling back to lookupElemDecl, so xs:key/
-	// xs:unique/xs:keyref declared on a local element are evaluated rather than
-	// silently skipped.
+	// instance during pass-1, including LOCAL declarations buried inside content
+	// models (which lookupElemDecl, finding only GLOBAL declarations, cannot
+	// recover). It is written AS SOON AS a child MATCHES a particle (recordElemDecl)
+	// — BEFORE the child's content is validated/assessed — so a partially-satisfied
+	// occurrence (e.g. an unsatisfied minOccurs) still records the matched decl.
+	// Pass-2 identity-constraint evaluation consults this map (for the host decl and
+	// its IDCs / default / fixed / nillable metadata) BEFORE falling back to
+	// lookupElemDecl, so xs:key/xs:unique/xs:keyref declared on a local element are
+	// evaluated rather than silently skipped. Because it is written pre-assessment,
+	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
+	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
+	// assertAnnotations maps assessed element and attribute nodes to their XSD
+	// type name (the xpath3 annotation form, e.g. "xs:integer"). It is populated
+	// during validation in XSD 1.1 mode (nil otherwise) so xs:assert tests
+	// evaluate against a PSVI-typed tree: a typed attribute like @length atomizes
+	// to xs:nonNegativeInteger rather than xs:untypedAtomic (which a value
+	// comparison would cast to xs:string), and "instance of" tests see the
+	// declared type. Unassessed skip/lax-no-declaration content is deliberately
+	// excluded even when actualElemType records an xsi:type for IDC canonicalization.
+	assertAnnotations TypeAnnotations
+	// assertAnonTypes / assertAnonNames register INLINE ANONYMOUS list/union simple
+	// types under stable synthetic annotation names (Q{assertAnonNS}N). An anonymous
+	// type has no schema-table name, so xsdTypeName collapses it to a named ancestor
+	// (or xs:anyType) and its list-item / union-member metadata would be lost to
+	// xs:assert node atomization. Recording the actual *TypeDef lets schemaDecls
+	// recover that metadata. assertAnonNames dedups by *TypeDef so one inline type
+	// gets one stable name across all nodes that use it.
+	assertAnonTypes map[string]*TypeDef
+	assertAnonNames map[*TypeDef]string
+	// assertEffectiveValues records, per EMPTY element node that has a schema
+	// default/fixed value, the effective (schema-normalized) value and the namespace
+	// context to resolve a QName/NOTATION default's prefix (the DECLARATION's
+	// context). isolatedAssertTree materializes these onto the isolated copy so
+	// data(c) on a DEFAULTED descendant atomizes the default rather than "" —
+	// matching the asserted element's own $value (which already substitutes it).
+	assertEffectiveValues map[helium.Node]assertEffectiveValue
+	// attrInheritable records, for XSD 1.1, the instance attribute nodes matched to
+	// an AttrUse whose {inheritable} is true. The top-down validation walk populates
+	// it for every ancestor before a descendant's conditional type assignment runs,
+	// so inheritedAttributes can resolve a CTA/assertion @test against inherited
+	// ancestor attributes.
+	attrInheritable map[*helium.Attribute]struct{}
+	// assessedElemType records the ACTUAL *TypeDef of each element that was truly
+	// SCHEMA-ASSESSED during pass-1 — the validation root, a content-model particle
+	// match whose content was actually validated, or an xs:anyType/lax child WITH a
+	// matching global declaration (all post-xsi:type). It is the element-side
+	// counterpart of actualAttrType. It is deliberately NOT populated by
+	// annotateSkipChildren or the lax-no-declaration branch (which write
+	// actualElemType purely for pass-2 IDC canonicalization), NOR at the
+	// recordElemDecl match site (which fires before assessment), so an element
+	// admitted through a processContents="skip" wildcard — even one carrying
+	// xsi:type="xs:ID" — and a matched-but-unassessed child (e.g. an unsatisfied
+	// minOccurs) are both absent here. The XSD 1.1 ID/IDREF pass uses ONLY this map
+	// for element typing (never actualElemType and never actualElemDecl), so neither
+	// skip content nor matched-but-failed children are mistaken for an xs:ID/xs:IDREF.
+	assessedElemType map[*helium.Element]*TypeDef
+	// actualAttrType records the declared *TypeDef of each attribute that was
+	// actually SCHEMA-ASSESSED during pass-1 — matched by an explicit attribute
+	// use, or admitted by a strict/lax xs:anyAttribute wildcard with a matching
+	// global declaration, or inserted as a default/fixed value. An attribute
+	// admitted by a processContents="skip" wildcard is NOT assessed and is
+	// therefore absent here. The XSD 1.1 ID/IDREF pass consults ONLY this map so a
+	// skip-admitted attribute is never mistaken for an xs:ID/xs:IDREF via a global
+	// fallback (which would false-reject duplicate skipped IDs).
+	actualAttrType map[*helium.Attribute]*TypeDef
 }
+
+// assertEffectiveValue is a recorded element default/fixed effective value plus the
+// namespace context used to resolve a QName/NOTATION value's prefix.
+type assertEffectiveValue struct {
+	value string
+	ns    map[string]string
+	td    *TypeDef
+	// qname is true when the effective value's active type carries xs:QName or
+	// xs:NOTATION values, including list item types and active union members. The
+	// isolated assert tree then materializes every QName/NOTATION token's prefix
+	// against ns; a non-QName value that happens to contain a colon is appended
+	// verbatim with no prefix rewrite.
+	qname bool
+}
+
+// assertAnonNS is the synthetic namespace for inline anonymous list/union type
+// annotation names recorded for xs:assert node atomization (see assertAnonTypes).
+const assertAnonNS = "urn:x-helium:assert-anon"
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
 // key/unique tables built for the SAME host-element occurrence (XSD
@@ -452,14 +581,30 @@ type pendingKeyRef struct {
 }
 
 func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
-	return &validationContext{
-		schema:         schema,
-		cfg:            cfg,
-		filename:       filename,
-		errorHandler:   handler,
-		actualElemType: make(map[*helium.Element]*TypeDef),
-		actualElemDecl: make(map[*helium.Element]*ElementDecl),
+	var version Version
+	if schema != nil {
+		version = schema.version
 	}
+	vc := &validationContext{
+		schema:           schema,
+		version:          version,
+		cfg:              cfg,
+		filename:         filename,
+		errorHandler:     handler,
+		actualElemType:   make(map[*helium.Element]*TypeDef),
+		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
+		attrInheritable:  make(map[*helium.Attribute]struct{}),
+		assessedElemType: make(map[*helium.Element]*TypeDef),
+		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
+	}
+	if version == Version11 {
+		vc.assertAnnotations = make(TypeAnnotations)
+		vc.assertAnonTypes = make(map[string]*TypeDef)
+		vc.assertAnonNames = make(map[*TypeDef]string)
+		vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
+		vc.skipContentNodes = make(map[helium.Node]struct{})
+	}
+	return vc
 }
 
 // validationErrors is a synchronous ErrorHandler that accumulates error
@@ -510,6 +655,8 @@ func (td *TypeDef) Validate(ctx context.Context, value string, nsMap map[string]
 	if td.ContentType != ContentTypeSimple {
 		return fmt.Errorf("type %q is not a simple type", typeQualifiedName(td))
 	}
+	// Standalone simple-type validation has no schema context, so it applies the
+	// default (Version10) lexical rules.
 	vc := &validationContext{
 		errorHandler: helium.NilErrorHandler{},
 	}
@@ -608,6 +755,24 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return nil
 	}))
 
+	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
+	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these
+	// datatype constraints in 1.0, and the libxml2-compat goldens depend on that).
+	if vc.version == Version11 {
+		if !vc.validateIDIDREF(ctx, doc) {
+			valid = false
+		}
+	}
+
+	// Fourth walk: XSD 1.1 document-wide xs:ENTITY / xs:ENTITIES value-space
+	// validation (cvc-id / §3.3.11). Gated to 1.1 so XSD 1.0 stays byte-identical
+	// (helium validates these datatypes only lexically in 1.0).
+	if vc.version == Version11 {
+		if !vc.validateEntities(ctx, doc) {
+			valid = false
+		}
+	}
+
 	return valid
 }
 
@@ -646,15 +811,24 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		return nil
 	}
 
-	td, err := vc.resolveXsiType(ctx, elem, declType)
+	// XSD 1.1 conditional type assignment: the alternatives may select a
+	// different governing type. xsi:type (resolved next) still takes precedence.
+	declType = vc.applyTypeAlternatives(ctx, elem, edecl, declType)
+
+	td, err := vc.resolveXsiType(ctx, elem, declType, vc.hasTypeTable(edecl))
 	if err != nil {
 		return err
 	}
-	// Check block flags against xsi:type derivation.
+	// Check block flags against xsi:type derivation. A blocked xsi:type is a
+	// validity error (cvc-elt.4.3): fail rather than silently fall back to the
+	// declared type — otherwise a blocked narrowing whose value is also valid under
+	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
+	// block="restriction") would be wrongly accepted. This mirrors the per-child
+	// match sites, which already treat a blocked xsi:type as a content error.
 	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-		td = declType // fall back to declared type
+		return fmt.Errorf("blocked xsi:type")
 	}
 	if td != nil && td.Abstract {
 		msg := msgAbstractType
@@ -663,7 +837,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	}
 
 	// Annotate root element with its type and record its declaration.
-	vc.annotateElement(ctx, elem, td)
+	vc.annotateElement(ctx, elem, td, true)
 	vc.recordElemDecl(elem, edecl)
 
 	nilled, err := vc.checkXsiNil(ctx, elem)
@@ -678,37 +852,124 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 }
 
 func (vc *validationContext) validateElementContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	// XSD 1.1: a governing type of xs:error (selected by conditional type
+	// assignment, or referenced directly) has an empty value space, so any element
+	// it governs is invalid. This is the single choke point for every type-selection
+	// site (root and the per-child content-model matches).
+	if vc.version == Version11 && isErrorType(td) {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+			"The element is not valid: the conditional type assignment selected the type xs:error.")
+		return fmt.Errorf("xs:error type selected")
+	}
+
 	// Validate attributes and annotate them.
 	if err := vc.validateAttributes(ctx, elem, td); err != nil {
 		return err
 	}
 
+	if err := vc.validateContentByType(ctx, elem, edecl, td); err != nil {
+		return err
+	}
+
+	// XSD 1.1: xs:assert constraints are evaluated against the element once its
+	// attributes and content have been validated. edecl carries the element's
+	// default/fixed value so $value reflects the effective simple value for an
+	// empty element.
+	if vc.version == Version11 {
+		return vc.checkAssertions(ctx, elem, edecl, td)
+	}
+	return nil
+}
+
+// rejectNonWhitespaceText reports a validity error and returns a non-nil error
+// if elem has any non-whitespace text or CDATA child. It is used for element-only
+// content types (including the XSD 1.1 synthesized empty+openContent type), where
+// character content other than whitespace is not allowed.
+func (vc *validationContext) rejectNonWhitespaceText(ctx context.Context, elem *helium.Element) error {
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.TextNode && child.Type() != helium.CDATASectionNode {
+			continue
+		}
+		// Use XSD/XML whitespace (space, tab, CR, LF) only: characters like
+		// NBSP (U+00A0) are NOT ignorable in element-only content, so
+		// strings.TrimSpace (which strips all Unicode space) must not be used.
+		if !xmlchar.IsAllSpace(child.Content()) {
+			msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			return fmt.Errorf("text content in element-only type")
+		}
+	}
+	return nil
+}
+
+// validateContentByType validates an element's content against its type's
+// content-type (empty/simple/element-only/mixed). Attribute validation and the
+// XSD 1.1 assertion check are handled by the caller (validateElementContent).
+func (vc *validationContext) validateContentByType(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	// Record the type whose content model is about to be matched so a wildcard
+	// match inside it can consult this type's base chain for a same-named local
+	// element declaration (dynamic EDC). Restored on exit so a nested element's
+	// own content validation does not leak its type to the parent's match.
+	prevEDC := vc.edcType
+	vc.edcType = td
+	defer func() { vc.edcType = prevEDC }()
+
 	switch td.ContentType {
 	case ContentTypeEmpty:
-		return vc.validateEmptyContent(ctx, elem)
+		// XSD 1.1 §3.4.2.3.3: an empty explicit content type plus effective open
+		// content (mode != none) becomes element-only with an empty particle plus
+		// the open content, so extra wildcard-matched children are admitted.
+		if vc.version == Version11 && td.OpenContent != nil {
+			// The synthesized type is element-only, so non-whitespace character
+			// content is not allowed even though extra wildcard-matched children are.
+			if err := vc.rejectNonWhitespaceText(ctx, elem); err != nil {
+				return err
+			}
+			mg := td.ContentModel
+			if mg == nil {
+				mg = &ModelGroup{Compositor: CompositorSequence, MinOccurs: 1, MaxOccurs: 1}
+			}
+			return vc.validateContentModelOpen(ctx, elem, mg, td.OpenContent)
+		}
+		return vc.validateEmptyContent(ctx, elem, false)
 	case ContentTypeSimple:
 		return vc.validateSimpleContent(ctx, elem, edecl, td)
 	case ContentTypeElementOnly, ContentTypeMixed:
+		// XSD 1.1: a genuinely-EMPTY element-only content type — an empty
+		// <xs:sequence/>, an empty model group, or no model group at all — with no
+		// effective open content has an "empty" content type per §3.4.2, so it must
+		// reject ALL character content INCLUDING whitespace (cvc-complex-type.2.1),
+		// not merely non-whitespace text. read_types.go classifies an empty
+		// compositor as element-only with a non-nil empty model group, so the
+		// emptiness is detected via modelGroupHasContent here rather than at
+		// classification time. XSD 1.0 keeps the historical whitespace tolerance
+		// (rejectNonWhitespaceText below), byte-identical.
+		if td.ContentType == ContentTypeElementOnly && vc.version == Version11 && td.OpenContent == nil &&
+			(td.ContentModel == nil || !modelGroupHasContent(td.ContentModel)) {
+			return vc.validateEmptyContent(ctx, elem, true)
+		}
 		// For element-only content, non-whitespace text children are not allowed.
 		if td.ContentType == ContentTypeElementOnly {
-			for child := range helium.Children(elem) {
-				if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
-					// Use XSD/XML whitespace (space, tab, CR, LF) only: characters
-					// like NBSP (U+00A0) are NOT ignorable in element-only content,
-					// so strings.TrimSpace (which strips all Unicode space) must not
-					// be used here.
-					if !xmlchar.IsAllSpace(child.Content()) {
-						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
-						vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-						return fmt.Errorf("text content in element-only type")
-					}
-				}
+			if err := vc.rejectNonWhitespaceText(ctx, elem); err != nil {
+				return err
 			}
 		}
 		if td.ContentModel == nil {
-			// No content model means anything goes (for mixed) or empty (for element-only).
+			// XSD 1.1: effective open content on a type with NO declared model group
+			// (e.g. a mixed or appliesToEmpty type that picked up a
+			// <xs:defaultOpenContent>) turns the empty declared content into an empty
+			// model plus the open content, so every child element must match the open
+			// wildcard — it does NOT admit arbitrary children. Element-only text was
+			// already rejected above; mixed text stays allowed (the open-content
+			// matcher inspects child elements only).
+			if vc.version == Version11 && td.OpenContent != nil {
+				mg := &ModelGroup{Compositor: CompositorSequence, MinOccurs: 1, MaxOccurs: 1}
+				return vc.validateContentModelOpen(ctx, elem, mg, td.OpenContent)
+			}
+			// No content model and no open content means anything goes (for mixed) or
+			// empty (for element-only).
 			if td.ContentType == ContentTypeElementOnly {
-				return vc.validateEmptyContent(ctx, elem)
+				return vc.validateEmptyContent(ctx, elem, false)
 			}
 			// Mixed content with no model group (xs:anyType and similar lax/open
 			// content) admits arbitrary child elements. Pass 2 IDC evaluation can
@@ -718,9 +979,47 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 			// misses xsi:type overrides on descendants.
 			return vc.annotateAnyTypeChildren(ctx, elem)
 		}
+		// XSD 1.1 open content admits extra wildcard-matched children beyond the
+		// declared model (interleaved or as a suffix).
+		if vc.version == Version11 && td.OpenContent != nil {
+			return vc.validateContentModelOpen(ctx, elem, td.ContentModel, td.OpenContent)
+		}
 		return vc.validateContentModel(ctx, elem, td.ContentModel)
 	}
 	return nil
+}
+
+// assessLaxElement performs XSD lax assessment of an element that matched a
+// processContents="lax" wildcard (or is a child of an xs:anyType element) and has
+// NO element declaration. Per XSD lax: if a governing type can be found — here via
+// xsi:type — the element must be ·valid· against it and IS schema-assessed, so it
+// is validated against that type and recorded with assessed=true (its
+// xs:ID/xs:IDREF content then participates in the document-wide ID/IDREF pass).
+// With no resolvable xsi:type the element is not assessed; only its subtree is
+// walked to annotate deeper descendants for pass-2 IDC canonicalization.
+//
+// An undeclared element has no nillable declaration, so xsi:nil cannot make it
+// nil: its content is ALWAYS validated against the governing type (a nilled
+// element with non-empty content, or empty content the type forbids such as
+// xs:int, is rejected; empty content a type permits stays valid). checkXsiNil
+// still runs to surface a malformed xsi:nil boolean.
+func (vc *validationContext) assessLaxElement(ctx context.Context, ce *helium.Element) error {
+	actual, hasType := vc.resolveXsiTypeQuiet(ce)
+	if !hasType {
+		return vc.annotateAnyTypeChildren(ctx, ce)
+	}
+	if actual != nil && actual.Abstract {
+		vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, ce, actual, true)
+	if actual == nil {
+		return nil
+	}
+	if _, nilErr := vc.checkXsiNil(ctx, ce); nilErr != nil {
+		return nilErr
+	}
+	return vc.validateElementContent(ctx, ce, nil, actual)
 }
 
 // annotateAnyTypeChildren lax-validates the child elements of an xs:anyType (or
@@ -743,23 +1042,29 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		}
 		edecl := lookupElemDecl(ce, vc.schema)
 		if edecl == nil {
-			// Lax: no global declaration, so the child (and its subtree) is not
-			// schema-assessed. Still record its own xsi:type ACTUAL type — a parent
-			// IDC selecting this element directly must canonicalize an
-			// xsi:type-introduced field in that type's value space — then recurse so
-			// any deeper anyType descendant with a resolvable global declaration gets
-			// annotated.
-			if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-				vc.annotateElement(ctx, ce, actual)
-			}
-			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+			// Lax with no global declaration: assess the child against its xsi:type
+			// (if resolvable), else recurse to annotate deeper descendants.
+			if err := vc.assessLaxElement(ctx, ce); err != nil {
 				contentErr = err
 			}
 			continue
 		}
-		td, xsiErr := vc.resolveXsiType(ctx, ce, effectiveDeclType(edecl, vc.schema))
+		// XSD 1.1 conditional type assignment applies to a global element reached
+		// through xs:anyType too: select the alternative type BEFORE resolving
+		// xsi:type (xsi:type still wins), mirroring the established order at the
+		// explicit-particle/wildcard match sites.
+		declType := vc.applyTypeAlternatives(ctx, ce, edecl, effectiveDeclType(edecl, vc.schema))
+		td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
+			continue
+		}
+		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+		// for a global element assessed through xs:anyType too.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
+				"The xsi:type definition is blocked by the element declaration.")
+			contentErr = fmt.Errorf("blocked xsi:type")
 			continue
 		}
 		if td != nil && td.Abstract {
@@ -768,7 +1073,7 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		vc.annotateElement(ctx, ce, td)
+		vc.annotateElement(ctx, ce, td, true)
 		if td == nil {
 			continue
 		}
@@ -805,8 +1110,16 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 // xsi:type-introduced field (e.g. an inline xs:integer attribute) is canonicalized
 // in the actual type's value space rather than compared lexically.
 func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	// Record this element as un-assessed skip content so a pass-2 IDC selector
+	// does not pick it (an xs:key/xs:unique must not constrain unassessed nodes).
+	if vc.skipContentNodes != nil {
+		vc.skipContentNodes[elem] = struct{}{}
+	}
+	// Skipped content is NOT schema-assessed: annotate for pass-2 IDC
+	// canonicalization only (assessed=false), so a skipped element carrying
+	// xsi:type="xs:ID"/"xs:IDREF" is never picked up by the ID/IDREF pass.
 	if actual, ok := vc.resolveXsiTypeQuiet(elem); ok {
-		vc.annotateElement(ctx, elem, actual)
+		vc.annotateElement(ctx, elem, actual, false)
 	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -819,9 +1132,10 @@ func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *hel
 		// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
 		// an unresolvable or non-derived xsi:type must not raise a validity error.
 		// Only an xsi:type override contributes an actual type distinct from what
-		// pass-2 can already derive from the content model, so record only that.
+		// pass-2 can already derive from the content model, so record only that
+		// (assessed=false — skipped content is not schema-assessed).
 		if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-			vc.annotateElement(ctx, ce, actual)
+			vc.annotateElement(ctx, ce, actual, false)
 		}
 		vc.annotateSkipChildren(ctx, ce)
 	}
@@ -850,6 +1164,21 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 	}
 
+	// Record the effective default/fixed value of an EMPTY element so an xs:assert on
+	// an ANCESTOR atomizes data(thisElement) as the schema-normalized default rather
+	// than "" (isolatedAssertTree materializes it onto the copy). A QName/NOTATION
+	// default's prefix resolves in the DECLARATION's namespace context (effectiveValueNS).
+	if isEmpty && effectiveValue != "" && vc.assertEffectiveValues != nil {
+		ns := effectiveValueNS(elem, edecl, true)
+		contentTD := effectiveContentSimpleType(td)
+		vc.assertEffectiveValues[elem] = assertEffectiveValue{
+			value: effectiveValue,
+			ns:    ns,
+			td:    contentTD,
+			qname: vc.valueHasQNameNotationCarrier(ctx, contentTD, effectiveValue, ns),
+		}
+	}
+
 	// Fixed value mismatch check (only when element has actual content).
 	// Compare in the *declared* type's value space (applying its whitespace
 	// facet) rather than an unconditional TrimSpace, so value-equal lexical
@@ -864,22 +1193,181 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		if fixedType == nil {
 			fixedType = td
 		}
-		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS) {
+		// In XSD 1.1 fixedValueMatches itself narrows a simpleContent type to its
+		// effective content simple type, so the raw declared type is passed here.
+		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
 		}
 	}
 
-	// Validate the text value against the type.
-	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
+	// XSD 1.1: validate the text against the EFFECTIVE content simple type, composed
+	// across the whole simpleContent derivation chain (effectiveContentSimpleType):
+	// a base type's facets/assertions are enforced (e.g. an extension of a named
+	// faceted type), and a narrowed content type is inherited through derived
+	// simpleContent types (e.g. a restriction's enumeration survives a further
+	// restriction or extension). A QName/NOTATION value substituted from the
+	// declaration's fixed/default (empty element) resolves its prefix against the
+	// DECLARATION's namespace context, not the instance's. XSD 1.0 keeps the original
+	// gating and instance-context resolution, byte-identical.
+	if vc.version == Version11 {
+		valueNS := effectiveValueNS(elem, edecl, isEmpty)
+		return vc.validateSimpleContentValue(ctx, effectiveValue, valueNS, td, elemDisplayName(elem), elem.Line())
+	}
+
+	// XSD 1.0: validate the text value against the type with the historical gating.
+	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != lexicon.TypeAnySimpleType) {
 		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 	}
 
 	return nil
 }
 
-func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *helium.Element) error {
+// validateSimpleContentValue validates a value against a simpleContent (or plain
+// simple) type's FULL effective constraint set: the composed effective content
+// simple type (effectiveContentSimpleType) PLUS every inherited base content type
+// reached through a nested <xs:simpleType> restriction (validateNestedSimpleContentBases).
+// It is the single source of truth shared by the runtime simpleContent check
+// (validateSimpleContent) and the compile-time element default/fixed check
+// (checkElementDeclConstraints), so a default validated at compile time enforces
+// exactly the same constraints the instance value does. displayName/line are used
+// only for diagnostics (the schema error is emitted by the caller, so a suppressed
+// validationContext drops the inner reports).
+func (vc *validationContext) validateSimpleContentValue(ctx context.Context, value string, ns map[string]string, td *TypeDef, displayName string, line int) error {
+	effTD := effectiveContentSimpleType(td)
+	if simpleContentNeedsValidation(effTD) {
+		if err := validateValue(ctx, value, ns, effTD, displayName, vc.filename, line, vc); err != nil {
+			return err
+		}
+	}
+	return vc.validateNestedSimpleContentBases(ctx, value, ns, td, effTD, displayName, line)
+}
+
+func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Context, value string, ns map[string]string, td, effTD *TypeDef, displayName string, line int) error {
+	visited := make(map[*TypeDef]struct{})
+	for cur := td; cur != nil && cur.IsSimpleContent; cur = cur.BaseType {
+		if _, seen := visited[cur]; seen {
+			return nil
+		}
+		visited[cur] = struct{}{}
+		// A nested <xs:simpleType> restriction (or a nested type narrowed further by
+		// sibling facets) restricts the base content type per XSD §3.4.2.2; it does
+		// not REPLACE it. effectiveContentSimpleType returns such an inline type with
+		// its own declared base chain, so any ancestor complex type's inherited content
+		// facets would otherwise be bypassed after a further derivation hop. Validate
+		// each such ancestor base content type as well so both sets apply. The
+		// facet-only synthetic case (ContentSimpleType.BaseType == cur) is already
+		// re-based onto the effective base content by effectiveContentSimpleType, so
+		// it is excluded here to avoid redundant work.
+		if cur.ContentSimpleType == nil || cur.ContentSimpleType.BaseType == cur {
+			continue
+		}
+		baseContent := effectiveContentSimpleType(cur.BaseType)
+		if baseContent == effTD || !simpleContentNeedsValidation(baseContent) {
+			continue
+		}
+		if err := validateValue(ctx, value, ns, baseContent, displayName, vc.filename, line, vc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// effectiveValueNS returns the namespace context for resolving a QName/NOTATION
+// in a simpleContent element's effective value. A non-empty element's content is
+// the instance's own text, resolved against the instance's in-scope namespaces.
+// An EMPTY element's value is substituted from the declaration's fixed/default,
+// which was authored in the schema, so its prefixes resolve against the
+// DECLARATION's namespace context (FixedNS/DefaultNS).
+func effectiveValueNS(elem *helium.Element, edecl *ElementDecl, isEmpty bool) map[string]string {
+	if isEmpty && edecl != nil {
+		if edecl.Fixed != nil && edecl.FixedNS != nil {
+			return edecl.FixedNS
+		}
+		if edecl.Default != nil && edecl.DefaultNS != nil {
+			return edecl.DefaultNS
+		}
+	}
+	return collectNSContext(elem)
+}
+
+// effectiveContentSimpleType returns the simple type that constrains the text
+// content of a simpleContent complex type, composed across the WHOLE simpleContent
+// derivation chain. It recurses through simpleContent complex types (IsSimpleContent)
+// and stops at the underlying simpleType/builtin, which IS its own content type:
+//
+//   - extension / restriction with no own narrowing: content = base content;
+//   - restriction with a nested <xs:simpleType>: that simpleType (carries its base
+//     and facets);
+//   - restriction with direct facets (a synthetic type whose BaseType is the owning
+//     complex type): a fresh restriction of the base's EFFECTIVE content type with
+//     those facets, so an ancestor's facets compose with the derived ones.
+//
+// A visited set guards against a cyclic base chain (an invalid schema reported by
+// the circular-type check) without bounding the depth, so EVERY finite acyclic
+// chain — however deep — is walked fully and a narrowing facet far down the chain
+// is never silently skipped.
+func effectiveContentSimpleType(td *TypeDef) *TypeDef {
+	return effectiveContentSimpleTypeRec(td, make(map[*TypeDef]struct{}))
+}
+
+func effectiveContentSimpleTypeRec(td *TypeDef, visited map[*TypeDef]struct{}) *TypeDef {
+	if td == nil || !td.IsSimpleContent {
+		return td
+	}
+	if _, seen := visited[td]; seen {
+		return td // cyclic base chain; the circular-type check reports the error
+	}
+	visited[td] = struct{}{}
+	base := effectiveContentSimpleTypeRec(td.BaseType, visited)
+	cst := td.ContentSimpleType
+	if cst == nil {
+		return base
+	}
+	if cst.BaseType == td {
+		// Synthetic facet-only restriction: re-base on the effective base content
+		// type so the ancestor's facets are still applied alongside these.
+		return &TypeDef{
+			ContentType: ContentTypeSimple,
+			Derivation:  DerivationRestriction,
+			Facets:      cst.Facets,
+			BaseType:    base,
+		}
+	}
+	// Nested <xs:simpleType>: it already carries its own base and facets.
+	return cst
+}
+
+// simpleContentNeedsValidation reports whether the effective content simple type
+// constrains its value (so validateValue must run): a list/union variety, a
+// non-string builtin base, or any facet/assertion anywhere along its base chain.
+func simpleContentNeedsValidation(td *TypeDef) bool {
+	if td == nil {
+		return false
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList, TypeVarietyUnion:
+		return true
+	}
+	if bl := builtinBaseLocal(td); bl != "" && bl != "string" && bl != lexicon.TypeAnySimpleType {
+		return true
+	}
+	for cur := range baseChain(td) {
+		if cur.Facets != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// validateEmptyContent validates an element whose content type permits no child
+// elements. When strict is true (an XSD 1.1 "empty" content type, e.g. a
+// genuinely-empty <xs:sequence/> with no effective open content), ALL character
+// content is rejected including whitespace (cvc-complex-type.2.1). When strict
+// is false (a simple/empty content type, or the historical XSD 1.0 behavior),
+// whitespace-only character content is tolerated.
+func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *helium.Element, strict bool) error {
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
@@ -890,6 +1378,10 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), ce.LocalName(), "This element is not expected.")
 			return fmt.Errorf("not expected")
 		case helium.TextNode, helium.CDATASectionNode:
+			if strict {
+				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the content type is empty.")
+				return fmt.Errorf("not expected")
+			}
 			if !xmlchar.IsAllSpace(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
 				return fmt.Errorf("not expected")
@@ -925,16 +1417,22 @@ func collectChildElements(elem *helium.Element) []childElem {
 	return children
 }
 
-func isSpecialAttr(a *helium.Attribute) bool {
+// isSpecialAttr reports whether an attribute is always permitted regardless of
+// the type's attribute declarations. In XSD 1.1 the XML-namespace
+// attributes (xml:lang/space/base/id) are NOT implicitly allowed: they are
+// subject to ordinary attribute-use and wildcard matching, so a wildcard's
+// @notQName can legitimately exclude e.g. xml:space. Only xmlns and the xsi:
+// processor attributes remain unconditionally special. In 1.0 the historical
+// lenient behavior (XML namespace always allowed) is preserved.
+func (vc *validationContext) isSpecialAttr(a *helium.Attribute) bool {
 	p := a.Prefix()
 	if p == "xmlns" || (p == "" && a.LocalName() == "xmlns") {
 		return true
 	}
-	uri := a.URI()
-	if uri == lexicon.NamespaceXSI {
+	if a.URI() == lexicon.NamespaceXSI {
 		return true
 	}
-	if uri == lexicon.NamespaceXML {
+	if vc.version != Version11 && a.URI() == lexicon.NamespaceXML {
 		return true
 	}
 	return false
@@ -955,6 +1453,115 @@ func attrDisplayName(a *helium.Attribute) string {
 	return a.LocalName()
 }
 
+// isKnownXsiProcessorAttr reports whether local is one of the FOUR processor
+// attributes that actually exist in the XSI namespace (xsi:type, xsi:nil,
+// xsi:schemaLocation, xsi:noNamespaceSchemaLocation). The XSI namespace is
+// reserved to exactly these; any other xsi:-namespace local name (e.g.
+// xsi:foo) is not a real attribute and must NOT receive the declared-xsi
+// special handling.
+func isKnownXsiProcessorAttr(local string) bool {
+	switch local {
+	case attrType, attrNil, attrSchemaLocation, attrNoNSSchemaLocation:
+		return true
+	}
+	return false
+}
+
+// xsiProcessorAttrBuiltinType returns the built-in SCALAR type a declared xsi:
+// processor-attribute reference is associated with, so its fixed/default value
+// is validated against (and compared in) that type's value space (xsi:type→
+// xs:QName, xsi:nil→xs:boolean, xsi:noNamespaceSchemaLocation→xs:anyURI). It
+// returns ("", false) for xsi:schemaLocation, whose type is a LIST of xs:anyURI
+// with no scalar built-in equivalent — its value/even-pair validity is handled
+// directly by validateDeclaredXsiAttrValue instead.
+func xsiProcessorAttrBuiltinType(local string) (QName, bool) {
+	switch local {
+	case attrType:
+		return QName{Local: lexicon.TypeQName, NS: lexicon.NamespaceXSD}, true
+	case attrNil:
+		return QName{Local: lexicon.TypeBoolean, NS: lexicon.NamespaceXSD}, true
+	case attrNoNSSchemaLocation:
+		return QName{Local: lexicon.TypeAnyURI, NS: lexicon.NamespaceXSD}, true
+	}
+	return QName{}, false
+}
+
+// xsiSchemaLocationTokens collapses a value in XSD whitespace and splits it on
+// XSD list whitespace ONLY (space/tab/CR/LF via value.XSDFields — NBSP and
+// other Unicode whitespace are NOT separators), yielding the
+// xsi:schemaLocation token list (its value space is a list of xs:anyURI).
+func xsiSchemaLocationTokens(val string) []string {
+	return value.XSDFields(normalizeWhiteSpace(val, "collapse"))
+}
+
+// validateXsiSchemaLocationValue validates a value against xsi:schemaLocation's
+// value space: a NON-empty, EVEN-length list of (namespace, location)
+// xs:anyURI pairs. An odd count, an empty value, or a non-anyURI token is an
+// error. Used for both a present instance value and a fixed/default LITERAL.
+func validateXsiSchemaLocationValue(val string, version Version) error {
+	toks := xsiSchemaLocationTokens(val)
+	if len(toks) == 0 || len(toks)%2 != 0 {
+		return fmt.Errorf("xsi:schemaLocation must be a non-empty list of anyURI pairs")
+	}
+	for _, t := range toks {
+		if err := validateBuiltinValue(t, lexicon.TypeAnyURI, version); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// xsiSchemaLocationValueEqual reports whether two xsi:schemaLocation values are
+// equal in VALUE space — equal token lists after XSD whitespace collapse and
+// XSD-whitespace tokenization — so leading/trailing/internal run-length
+// whitespace differences (e.g. " urn:a   loc.xsd " vs "urn:a loc.xsd") do not
+// matter, while raw string equality would false-reject.
+func xsiSchemaLocationValueEqual(a, b string) bool {
+	return slices.Equal(xsiSchemaLocationTokens(a), xsiSchemaLocationTokens(b))
+}
+
+// isDeclaredXsiSchemaLocationUse reports whether au is a declared xsi:schemaLocation
+// attribute use (the only one of the four xsi: processor attributes whose
+// value space is a list with no scalar built-in type, so its fixed/default is
+// handled by the list helpers above rather than a built-in TypeDef).
+func isDeclaredXsiSchemaLocationUse(au *AttrUse, version Version) bool {
+	return version == Version11 && au.Name.NS == lexicon.NamespaceXSI && au.Name.Local == attrSchemaLocation
+}
+
+// validateDeclaredXsiAttrValue validates a PRESENT xsi: processor attribute
+// whose use is EXPLICITLY declared (XSD 1.1 `ref="xsi:*"`) against the fixed
+// built-in type that attribute is defined with. `ref="xsi:type"` does not
+// resolve to a typed global attribute use, so the ordinary attribute-use value
+// check sees no type; this supplies each xsi attribute's built-in type so an
+// empty/malformed value — xsi:type="" or a malformed/unbound QName, a
+// non-boolean xsi:nil, a non-anyURI location — is a validation error rather
+// than a silently-satisfied (present) use. Only the four real xsi: processor
+// attributes are recognized (the caller gates on isKnownXsiProcessorAttr).
+// Returns nil when the value is valid.
+func (vc *validationContext) validateDeclaredXsiAttrValue(a *helium.Attribute, elem *helium.Element) error {
+	val := a.Value()
+	switch a.LocalName() {
+	case attrType:
+		// xs:QName (whiteSpace=collapse): lexically valid and, when prefixed, the
+		// prefix must be bound in scope (a non-empty, namespace-resolvable QName).
+		q := normalizeWhiteSpace(val, "collapse")
+		if err := validateQName(q); err != nil {
+			return err
+		}
+		if prefix, _, ok := strings.Cut(q, ":"); ok && lookupNS(elem, prefix) == "" {
+			return fmt.Errorf("unbound xsi:type QName prefix %q", prefix)
+		}
+		return nil
+	case attrNil:
+		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeBoolean, vc.version)
+	case attrSchemaLocation:
+		return validateXsiSchemaLocationValue(val, vc.version)
+	case attrNoNSSchemaLocation:
+		return validateBuiltinValue(normalizeWhiteSpace(val, "collapse"), lexicon.TypeAnyURI, vc.version)
+	}
+	return nil
+}
+
 func (vc *validationContext) validateAttributes(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	var hasErr bool
 
@@ -962,7 +1569,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		// No attribute declarations — check that instance has no attributes
 		// (except xsi: namespace attributes and xmlns which are always allowed).
 		for _, a := range elem.Attributes() {
-			if isSpecialAttr(a) {
+			if vc.isSpecialAttr(a) {
 				continue
 			}
 			ad := attrDisplayName(a)
@@ -1004,26 +1611,83 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
-		if isSpecialAttr(a) {
-			continue
-		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
+		// True for a present, non-prohibited DECLARED xsi: processor-attribute use
+		// whose value was already validated by validateDeclaredXsiAttrValue below —
+		// so the generic type-based value check is skipped (no double validation);
+		// the fixed-value comparison still runs (against the built-in type).
+		declaredXsiValueChecked := false
+		if vc.isSpecialAttr(a) {
+			// XSD 1.1: the xsi: processor attributes (xsi:type, xsi:nil,
+			// xsi:schemaLocation, xsi:noNamespaceSchemaLocation) may be
+			// referenced explicitly as attribute uses (e.g. to make xsi:type
+			// mandatory, or to PROHIBIT it). When a type's declaration explicitly
+			// declares such an xsi: attribute — with ANY use (optional/required/
+			// prohibited) — the instance attribute participates in ordinary
+			// attribute-use validation (so a required xsi: use is satisfied and a
+			// prohibited one rejects a present xsi: attribute); otherwise xsi:
+			// (and xmlns) attributes remain unconditionally special. A prohibited
+			// use is excluded from `allowed`, so the declaration is detected via
+			// both maps. 1.0 keeps the historical skip (byte-identical).
+			_, allowedXSI := allowed[aqn]
+			_, prohibitedXSI := prohibited[aqn]
+			declaredXSI := allowedXSI || prohibitedXSI
+			// Only the four real xsi: processor attributes participate; a declared
+			// ref to any other xsi: local name (e.g. xsi:foo) is not specially
+			// accepted — it stays skipped as special, so a required use of it is
+			// never satisfied (the instance is rejected as missing).
+			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI || !isKnownXsiProcessorAttr(a.LocalName()) {
+				continue
+			}
+			// A NON-prohibited declared xsi: use must validate its value against the
+			// attribute's built-in type (ref="xsi:*" carries no resolvable type). An
+			// invalid value (e.g. xsi:type="") is a validity error and does NOT
+			// satisfy the use — it is not recorded as present, so a required use also
+			// reports missing. A prohibited use needs no value check: its mere
+			// presence is rejected below.
+			if allowedXSI {
+				if err := vc.validateDeclaredXsiAttrValue(a, elem); err != nil {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
+					continue
+				}
+				declaredXsiValueChecked = true
+			}
+		}
 		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
 			// Resolve the declared type up front so the fixed-value check can
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS) {
-				ad := attrDisplayName(a)
-				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
-				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
-				hasErr = true
+			if au.Fixed != nil {
+				// xsi:schemaLocation has no scalar built-in type, so its fixed value
+				// is compared in VALUE space as a list of xs:anyURI (collapse + XSD
+				// tokenize + token-list equality); every other use compares via
+				// fixedValueMatches against its (built-in or declared) type.
+				fixedMatches := false
+				switch {
+				case isDeclaredXsiSchemaLocationUse(au, vc.version):
+					fixedMatches = xsiSchemaLocationValueEqual(a.Value(), *au.Fixed)
+				default:
+					fixedMatches = fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version)
+				}
+				if !fixedMatches {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
+				}
 			}
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).
-			if tdOK && attrTD.ContentType == ContentTypeSimple {
-				if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
+			// A declared xsi: use was already value-validated above (its built-in
+			// type is associated only for the fixed-value comparison just done), so
+			// skip the generic check to avoid validating the same value twice.
+			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
+				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -1032,6 +1696,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			// Annotate the attribute with its declared type.
 			vc.annotateAttrUse(ctx, a, au)
+			// XSD 1.1: record an inheritable attribute so descendants' conditional
+			// type assignment / assertions can see it as an inherited attribute.
+			if vc.version == Version11 && au.Inheritable {
+				vc.attrInheritable[a] = struct{}{}
+			}
 			continue
 		}
 		// An explicitly prohibited attribute use is rejected outright and must
@@ -1044,7 +1713,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
-		if td.AnyAttribute != nil && wildcardMatchesAttr(td.AnyAttribute, a.URI()) {
+		if td.AnyAttribute != nil && wildcardAllowsExpandedName(td.AnyAttribute, a.LocalName(), a.URI(), vc.schema, true) {
 			if err := vc.validateWildcardAttr(ctx, a, elem, td.AnyAttribute); err != nil {
 				hasErr = true
 			}
@@ -1090,6 +1759,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if _, ok := present[au.Name]; ok {
 			continue
 		}
+		// XSD 1.1: a QName/NOTATION default/fixed value was authored in the schema, so
+		// its lexical prefix denotes the schema's namespace. Once materialized on the
+		// instance, an xs:assert / IDC that atomizes the attribute resolves the
+		// prefix against the INSTANCE's in-scope namespaces — so ensure that prefix
+		// is bound to the declaration's URI on the element (rewriting to a fresh
+		// prefix if the instance already binds it to a different URI). Gated to 1.1
+		// so XSD 1.0 inserts the value exactly as authored (byte-identical
+		// serialization — no namespace-declaration rewrite).
+		if vc.version == Version11 {
+			declNS := au.FixedNS
+			if au.Default != nil {
+				declNS = au.DefaultNS
+			}
+			defVal = vc.materializeQNameAttrValue(ctx, elem, au, defVal, declNS)
+		}
 		// Insert the default/fixed value as an attribute on the element. A
 		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
 		// "qualified") must be inserted with its namespace so later consumers
@@ -1103,10 +1787,15 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		} else {
 			_, _ = elem.SetAttribute(au.Name.Local, defVal)
 		}
-		// Annotate the newly inserted attribute.
+		// Annotate the newly inserted attribute and, for XSD 1.1, record it as
+		// inheritable when its use is — a defaulted/fixed attribute is part of the
+		// inherited-attribute set just like an explicitly-present one.
 		for _, a := range elem.Attributes() {
 			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
 				vc.annotateAttrUse(ctx, a, au)
+				if vc.version == Version11 && au.Inheritable {
+					vc.attrInheritable[a] = struct{}{}
+				}
 				break
 			}
 		}
@@ -1116,6 +1805,177 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		return fmt.Errorf("attribute validation failed")
 	}
 	return nil
+}
+
+// materializeQNameAttrValue prepares a default/fixed attribute value for insertion
+// so QName/NOTATION lexical values keep their SCHEMA-intended namespace once on the
+// instance. The value is authored with the declaration's prefix bindings (declNS);
+// an instance consumer (xs:assert, IDC) resolves prefixes against the element's
+// in-scope namespaces instead, so this binds each QName/NOTATION token's prefix to
+// the declaration URI on the element. If the instance already binds that prefix to
+// a DIFFERENT URI, the token is rewritten to a fresh, non-colliding prefix. The
+// type walk is value-dependent for unions and recursive through list item types.
+func (vc *validationContext) materializeQNameAttrValue(ctx context.Context, elem *helium.Element, au *AttrUse, value string, declNS map[string]string) string {
+	if declNS == nil {
+		return value
+	}
+	td, ok := vc.attrUseType(au)
+	if !ok {
+		return value
+	}
+	materialized, _ := vc.materializeQNameValue(ctx, elem, td, value, declNS)
+	return materialized
+}
+
+func (vc *validationContext) materializeQNameValue(ctx context.Context, elem *helium.Element, td *TypeDef, value string, declNS map[string]string) (string, bool) {
+	if td == nil || declNS == nil {
+		return value, false
+	}
+	return vc.materializeQNameValueVisit(ctx, elem, td, value, declNS, map[*TypeDef]struct{}{}, make(map[string]string))
+}
+
+func (vc *validationContext) materializeQNameValueVisit(ctx context.Context, elem *helium.Element, td *TypeDef, raw string, declNS map[string]string, seen map[*TypeDef]struct{}, rewrites map[string]string) (string, bool) {
+	if td == nil {
+		return raw, false
+	}
+	if _, ok := seen[td]; ok {
+		return raw, false
+	}
+	seen[td] = struct{}{}
+	defer delete(seen, td)
+
+	switch resolveVariety(td) {
+	case TypeVarietyUnion:
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		if activeTD == nil {
+			return raw, false
+		}
+		return vc.materializeQNameValueVisit(ctx, elem, activeTD, raw, declNS, seen, rewrites)
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return raw, false
+		}
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		tokens := value.XSDFields(collapsed)
+		if len(tokens) == 0 {
+			return raw, false
+		}
+		out := make([]string, len(tokens))
+		hasCarrier := false
+		rewrote := false
+		for i, token := range tokens {
+			next, carrier := vc.materializeQNameValueVisit(ctx, elem, itemType, token, declNS, seen, rewrites)
+			out[i] = next
+			if carrier {
+				hasCarrier = true
+			}
+			if next != token {
+				rewrote = true
+			}
+		}
+		if !hasCarrier {
+			return raw, false
+		}
+		if rewrote {
+			return strings.Join(out, " "), true
+		}
+		return raw, true
+	default:
+		switch builtinBaseLocal(td) {
+		case lexicon.TypeQName, lexicon.TypeNotation:
+			collapsed := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
+			if rewritten, ok := materializeQNameToken(elem, collapsed, declNS, rewrites); ok {
+				return rewritten, true
+			}
+			return raw, true
+		default:
+			return raw, false
+		}
+	}
+}
+
+func (vc *validationContext) valueHasQNameNotationCarrier(ctx context.Context, td *TypeDef, value string, declNS map[string]string) bool {
+	return vc.valueHasQNameNotationCarrierVisit(ctx, td, value, declNS, map[*TypeDef]struct{}{})
+}
+
+func (vc *validationContext) valueHasQNameNotationCarrierVisit(ctx context.Context, td *TypeDef, raw string, declNS map[string]string, seen map[*TypeDef]struct{}) bool {
+	if td == nil {
+		return false
+	}
+	if _, ok := seen[td]; ok {
+		return false
+	}
+	seen[td] = struct{}{}
+	defer delete(seen, td)
+
+	switch resolveVariety(td) {
+	case TypeVarietyUnion:
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		return vc.valueHasQNameNotationCarrierVisit(ctx, activeTD, collapsed, declNS, seen)
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return false
+		}
+		collapsed := normalizeWhiteSpace(raw, "collapse")
+		for _, token := range value.XSDFields(collapsed) {
+			if vc.valueHasQNameNotationCarrierVisit(ctx, itemType, token, declNS, seen) {
+				return true
+			}
+		}
+		return false
+	default:
+		switch builtinBaseLocal(td) {
+		case lexicon.TypeQName, lexicon.TypeNotation:
+			return true
+		default:
+			return false
+		}
+	}
+}
+
+func materializeQNameToken(elem *helium.Element, token string, declNS map[string]string, rewrites map[string]string) (string, bool) {
+	prefix, local, found := strings.Cut(token, ":")
+	if !found || prefix == "" {
+		return token, false // no prefix → no-namespace QName; nothing to bind
+	}
+	uri, ok := declNS[prefix]
+	if !ok || uri == "" {
+		return token, false // prefix not bound in the declaration; leave as authored
+	}
+	if elem == nil {
+		return token, false
+	}
+	inScope := collectNSContext(elem)
+	cur, bound := inScope[prefix]
+	if bound && cur == uri {
+		return token, false // already resolves to the intended URI
+	}
+	if !bound {
+		elem.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		return token, false
+	}
+	key := prefix + "\x00" + uri
+	if np, ok := rewrites[key]; ok {
+		return np + ":" + local, true
+	}
+	np := freshNSPrefix(inScope, prefix)
+	rewrites[key] = np
+	elem.AddNamespaceDecl(helium.NewNamespace(np, uri))
+	return np + ":" + local, true
+}
+
+// freshNSPrefix returns a prefix not present in inScope, derived from base.
+func freshNSPrefix(inScope map[string]string, base string) string {
+	for i := 0; ; i++ {
+		candidate := fmt.Sprintf("%s_gen%d", base, i)
+		if _, taken := inScope[candidate]; !taken {
+			return candidate
+		}
+	}
 }
 
 // validateWildcardAttr validates an attribute matched by a wildcard according
@@ -1146,10 +2006,17 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
 
+	// This wildcard-admitted attribute IS schema-assessed (strict/lax with a
+	// matching global declaration — skip already returned above), so record its
+	// type for the XSD 1.1 ID/IDREF pass.
+	if ok && vc.actualAttrType != nil {
+		vc.actualAttrType[a] = attrTD
+	}
+
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
-	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS) {
+	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.schema, vc.version) {
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
 		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -1158,7 +2025,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := attrTD.Validate(ctx, value, collectNSContext(elem)); err != nil {
+		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)
@@ -1167,12 +2034,15 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		}
 	}
 
+	// A wildcard-matched global attribute participates in type annotation and (XSD
+	// 1.1) inheritance exactly like an explicitly-declared attribute use, so a
+	// descendant's conditional type assignment can see an inheritable ancestor
+	// attribute admitted through xs:anyAttribute.
+	vc.annotateAttrUse(ctx, a, globalAttr)
+	if vc.version == Version11 && globalAttr.Inheritable {
+		vc.attrInheritable[a] = struct{}{}
+	}
 	return nil
-}
-
-// wildcardMatchesAttr checks if an attribute namespace matches an anyAttribute wildcard.
-func wildcardMatchesAttr(wc *Wildcard, attrNS string) bool {
-	return wildcardMatches(wc, attrNS)
 }
 
 // lookupElemDecl finds the global element declaration for an instance element.
@@ -1231,6 +2101,14 @@ func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Eleme
 func (vc *validationContext) validateNilledElement(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	dn := elemDisplayName(elem)
 
+	// XSD 1.1: a governing type of xs:error has an empty value space, so the element
+	// is invalid regardless of xsi:nil — the nilled path must NOT let it through.
+	if vc.version == Version11 && isErrorType(td) {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
+			"The element is not valid: the conditional type assignment selected the type xs:error.")
+		return fmt.Errorf("xs:error type selected")
+	}
+
 	if !edecl.Nillable {
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
 			"Element is not nillable.")
@@ -1261,7 +2139,10 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 				"This element is not expected, because the element '"+dn+"' is nilled.")
 			return fmt.Errorf("content in nilled element")
 		case helium.TextNode, helium.CDATASectionNode:
-			if !xmlchar.IsAllSpace(child.Content()) {
+			// cvc-elt.3.2.1: a nilled element must have NO character content. XSD 1.0
+			// tolerates insignificant whitespace (matching libxml2); XSD 1.1 rejects
+			// any character content, including whitespace-only.
+			if vc.version == Version11 || !xmlchar.IsAllSpace(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
 					"Character content is not allowed, because the element is nilled.")
 				return fmt.Errorf("content in nilled element")
@@ -1282,7 +2163,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 	if base.Name.Local == typeAnyType && base.Name.NS == lexicon.NamespaceXSD {
 		return true
 	}
-	for cur := derived.BaseType; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(derived.BaseType) {
 		if cur == base {
 			return true
 		}
@@ -1294,15 +2175,32 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 // resolves it to a type definition in the schema. Returns the resolved type
 // or the original declaredType if no xsi:type is present. Returns an error
 // if the xsi:type value doesn't resolve or is not derived from the declared type.
-func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef) (*TypeDef, error) {
+// ctaActive must be true when conditional type assignment is in effect for elem
+// (Version11 and the element declaration has a {type table}). It scopes the
+// empty-xsi:type handling: only then does a present-but-empty xsi:type hard-error,
+// so it cannot suppress a CTA-selected type (e.g. xs:error). Everywhere else an
+// empty xsi:type falls back to the declared type, byte-identical to pre-CTA
+// behavior (XSD 1.0 and no-alternative 1.1).
+func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef, ctaActive bool) (*TypeDef, error) {
 	var xsiTypeVal string
+	var present bool
 	for _, a := range elem.Attributes() {
 		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
 			xsiTypeVal = a.Value()
+			present = true
 			break
 		}
 	}
-	if xsiTypeVal == "" {
+	// An ABSENT xsi:type always falls back to the declared type (under CTA this is
+	// the already-selected type, so it must not error).
+	if !present {
+		return declaredType, nil
+	}
+	// A present-but-empty xsi:type historically also falls back to the declared
+	// type. Preserve that EXCEPT when CTA is active, where it must instead report the
+	// invalid-QName validity error so it cannot bypass a CTA-selected type (e.g.
+	// xs:error). A non-empty value always proceeds to QName resolution below.
+	if xsiTypeVal == "" && !ctaActive {
 		return declaredType, nil
 	}
 
@@ -1338,8 +2236,13 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 		return nil, fmt.Errorf("xsi:type not found")
 	}
 
-	// Check derivation: xsi:type must be the same as or derived from the declared type.
-	if declaredType != nil && !isDerivedFrom(td, declaredType) {
+	// Check derivation: xsi:type must be the same as or validly substitutable for
+	// the declared type. Use the built-in-aware predicate plus the union-member
+	// rule so a narrowing to a built-in subtype (e.g. xsi:type="xs:int" over a
+	// declared xs:integer) and a member of a declared union are accepted. The
+	// predicate is STRICT (no permissive simple-vs-simple fallback), so an unrelated
+	// xsi:type (e.g. xs:string over xs:integer) is still rejected.
+	if declaredType != nil && !isXsiTypeDerivedFromDeclared(td, declaredType) {
 		msg := fmt.Sprintf("The type definition '%s' is not validly derived from the type definition '%s'.",
 			typeDisplayName(td), typeDisplayName(declaredType))
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
@@ -1411,7 +2314,7 @@ func xsdTypeName(td *TypeDef) string {
 		return "Q{}" + td.Name.Local
 	}
 	// Anonymous type: walk up the base type chain to find a named type.
-	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
+	for cur := range baseChain(td.BaseType) {
 		if cur.Name.NS == lexicon.NamespaceXSD {
 			return "xs:" + cur.Name.Local
 		}
@@ -1430,12 +2333,96 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
-// annotateElement records a type annotation for an element node.
-func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
-	// Always record the actual *TypeDef (post-xsi:type) for pass-2 IDC field
-	// type resolution, independent of the optional user-facing annotations map.
-	if vc.actualElemType != nil && td != nil {
-		vc.actualElemType[elem] = td
+// assertAnnotationName returns the PSVI annotation name recorded for a NODE in the
+// xs:assert evaluation tree. For an INLINE ANONYMOUS list/union simple type (whose
+// list-item / union-member metadata would be lost once xsdTypeName collapses it to a
+// named ancestor) it mints a stable synthetic name and registers the actual
+// *TypeDef so schemaDecls can recover the metadata; otherwise it is xsdTypeName. In
+// either case the anonymous list-item / union-member types reachable from a list/
+// union are registered too (assertRegisterAnonChildren) — INCLUDING anonymous ATOMIC
+// (faceted) members — so active-member selection validates the actual faceted member
+// rather than a collapsed builtin ancestor. Used ONLY for the assert annotations map;
+// the user-facing annotations map keeps xsdTypeName, byte-identical. A standalone
+// anonymous ATOMIC node type keeps xsdTypeName so node annotations are not broadly
+// changed.
+func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
+	if td == nil || vc.assertAnonNames == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.assertAnonNames[td]; ok {
+		return name
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList, TypeVarietyUnion:
+		// Register anonymous members/items (recursively) regardless of whether the
+		// list/union itself is named, so a NAMED union with inline anonymous members
+		// still resolves each member's facets.
+		vc.assertRegisterAnonChildren(td)
+		if td.Name.Local == "" && td.Name.NS == "" {
+			return vc.assertRegisterAnon(td)
+		}
+	}
+	return xsdTypeName(td)
+}
+
+// assertRegisterAnon registers an ANONYMOUS TypeDef of ANY variety (atomic
+// restriction, list, or union) under a stable synthetic annotation name and returns
+// it, recursing into its anonymous item/member types; a NAMED type is left unchanged
+// (returns xsdTypeName) but its anonymous descendants are still registered. This lets
+// an inline anonymous union member — even a plain faceted atomic restriction (e.g.
+// xs:int with maxInclusive) — round-trip to its actual *TypeDef so ValidateCastWithNS
+// validates its facets during active-member selection.
+func (vc *validationContext) assertRegisterAnon(td *TypeDef) string {
+	if td == nil || vc.assertAnonNames == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.assertAnonNames[td]; ok {
+		return name
+	}
+	name := xsdTypeName(td)
+	if td.Name.Local == "" && td.Name.NS == "" {
+		name = fmt.Sprintf("Q{%s}%d", assertAnonNS, len(vc.assertAnonTypes)+1)
+		vc.assertAnonTypes[name] = td
+		vc.assertAnonNames[td] = name
+	}
+	vc.assertRegisterAnonChildren(td)
+	return name
+}
+
+// assertRegisterAnonChildren registers the anonymous list-item / union-member
+// types reachable from td and its bases. A restriction wrapper can inherit its
+// effective list/union variety from an anonymous base type, so the child
+// metadata must be registered across the full base chain.
+func (vc *validationContext) assertRegisterAnonChildren(td *TypeDef) {
+	for cur := range baseChain(td) {
+		if cur.ItemType != nil {
+			vc.assertRegisterAnon(cur.ItemType)
+		}
+		for _, m := range cur.MemberTypes {
+			vc.assertRegisterAnon(m)
+		}
+	}
+}
+
+// annotateElement records a type annotation for an element node. assessed reports
+// whether the element was actually SCHEMA-ASSESSED (vs annotated purely for pass-2
+// IDC canonicalization, as for skip/lax-no-declaration content): only an assessed
+// element is recorded in assessedElemType, which the XSD 1.1 ID/IDREF pass
+// consults. actualElemType is always recorded (post-xsi:type) for pass-2 IDC field
+// canonicalization, independent of assessment. The assert annotations map (1.1)
+// is populated only for assessed elements so xs:assert/xs:assertion tests atomize
+// the PSVI-typed tree without typing processContents="skip" subtrees.
+func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef, assessed bool) {
+	if td != nil {
+		if vc.actualElemType != nil {
+			vc.actualElemType[elem] = td
+		}
+		if assessed && vc.assessedElemType != nil {
+			vc.assessedElemType[elem] = td
+		}
+	}
+	if assessed && vc.assertAnnotations != nil {
+		vc.assertAnnotations[elem] = vc.assertAnnotationName(td)
 	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
@@ -1469,11 +2456,21 @@ func (vc *validationContext) attrUseType(au *AttrUse) (*TypeDef, bool) {
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
 func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
-	if vc.cfg == nil || vc.cfg.annotations == nil {
-		return
-	}
 	td, ok := vc.attrUseType(au)
 	if !ok {
+		return
+	}
+	// Record the assessed attribute's type for the XSD 1.1 ID/IDREF pass,
+	// independent of the optional user-facing annotations map.
+	if vc.actualAttrType != nil {
+		vc.actualAttrType[a] = td
+	}
+	// Record the assert annotation (1.1) so an xs:assert/xs:assertion atomizes this
+	// attribute in its schema value space.
+	if vc.assertAnnotations != nil {
+		vc.assertAnnotations[a] = vc.assertAnnotationName(td)
+	}
+	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
 	(*vc.cfg.annotations)[a] = xsdTypeName(td)
