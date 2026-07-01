@@ -504,6 +504,17 @@ func pointlessReduce(p *Particle) (*Particle, bool) {
 		// A group{0,1} over a member with minOccurs >= 2 emits {0} ∪ [mmin, mmax]
 		// (a hole at 1..mmin-1) yet folds to [0, mmax], so it is NOT pointless and
 		// does not reduce (the caller then rejects, matching strict §3.9.6).
+		//
+		// A PROHIBITED (maxOccurs==0) group or member never reaches this guard, so
+		// widening it to "reject only when BOTH sides can repeat" would only
+		// re-admit the group{0,1}×member{2,2} hole above — it must stay STRICT.
+		// A prohibited SINGLE member cannot be `only`: it emits nothing, so the
+		// loop above skips it via particleEmitsNothing (like reduceSingletonGroup),
+		// hence only.MaxOccurs >= 1 always. A prohibited derived GROUP emits nothing
+		// too, and every caller (recurseOrdered/recurseChoiceUnordered/recurseAll,
+		// the sequence:choice map-and-sum, and the top-level ModelGroup base) drops
+		// a non-emitting derived particle BEFORE particleValidRestriction, so a
+		// prohibited group is filtered out before it could fold here.
 		safe := only.MaxOccurs == 1 ||
 			(p.MaxOccurs == 1 && (p.MinOccurs == p.MaxOccurs || only.MinOccurs <= 1))
 		if !safe {
