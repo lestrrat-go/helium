@@ -268,7 +268,12 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		if particleEmitsNothing(r) {
 			return particleEmptiable(b)
 		}
-		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+		// An EMPTIABLE base all particle already accepts the empty sequence, so a
+		// derived particle whose minOccurs falls below the base all's declared
+		// minOccurs (e.g. base all{1,1} of optional members narrowed to all{0,1})
+		// never admits content the base rejects — occurrenceEmptiableRestriction
+		// lowers the base's effective minOccurs to 0. Gated on Version11.
+		if !occurrenceEmptiableRestriction(r, b, version) {
 			return false
 		}
 		return allRestrictsByCounting(ctx, r, bg, schema, version)
@@ -280,7 +285,7 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		}
 		return recurseOrdered(ctx, rg.Particles, bg.Particles, schema, version)
 	case rg.Compositor == CompositorAll && bg.Compositor == CompositorAll:
-		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+		if !occurrenceEmptiableRestriction(r, b, version) {
 			return false
 		}
 		// XSD 1.1: an xs:all may contain element wildcards. recurseAll maps each
