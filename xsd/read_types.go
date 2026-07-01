@@ -1322,7 +1322,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			// A pattern that is not a valid XSD regex is a schema error rather
 			// than silently ignored; its compiledPatterns entry stays nil.
 			fs.Patterns = append(fs.Patterns, val)
-			re, rerr := xsdregex.Compile(val)
+			re, rerr := xsdregex.CompileVersion(val, c.version == Version11)
 			if rerr != nil {
 				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(),
 					ce.LocalName(), "pattern",
