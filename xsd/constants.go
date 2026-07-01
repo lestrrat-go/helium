@@ -98,6 +98,8 @@ const (
 	attrNillable             = "nillable"
 	attrNil                  = "nil"
 	attrProcessContents      = "processContents"
+	attrPublic               = "public" // xs:notation public identifier
+	attrSystem               = "system" // xs:notation system identifier
 	attrRefer                = "refer"
 	attrRef                  = "ref"
 	attrSchemaLocation       = "schemaLocation"
