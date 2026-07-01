@@ -1135,7 +1135,14 @@ func (c *compiler) checkCircularAttrGroupRefs(ctx context.Context) {
 				// then cut the edge so the flatten/expand walks below terminate
 				// without a diagnostic-less truncation.
 				edgeSrc := c.attrGroupRefSourceAt(qn, i)
-				c.reportCircularAttrGroupRefQName(ctx, child, edgeSrc)
+				// XSD 1.1 permits circular attribute group definitions (W3C bug
+				// 15795 / attgD015): the cycle back-edge is still CUT so the
+				// downstream flatten/expand walks terminate, but no diagnostic is
+				// reported. XSD 1.0 rejects it (src-attribute_group.3),
+				// byte-identical.
+				if c.version != Version11 {
+					c.reportCircularAttrGroupRefQName(ctx, child, edgeSrc)
+				}
 				children := c.attrGroupRefChildren[qn]
 				c.attrGroupRefChildren[qn] = append(children[:i], children[i+1:]...)
 				if srcs := c.attrGroupRefSources[qn]; i < len(srcs) {

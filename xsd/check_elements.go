@@ -214,16 +214,24 @@ func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) 
 		}
 	}
 
-	// maxOccurs must parse to exactly 1; "1"/"01" are accepted, everything else
-	// (including "unbounded" and lexically invalid forms) is reported with the
-	// all-specific "Expected is '1'." wording. allowMax is true so "unbounded"
-	// parses successfully and is then rejected for being != 1, matching libxml2.
+	// maxOccurs must parse to exactly 1 in XSD 1.0; "1"/"01" are accepted,
+	// everything else (including "unbounded" and lexically invalid forms) is
+	// reported with the all-specific "Expected is '1'." wording. allowMax is true
+	// so "unbounded" parses successfully and is then rejected for being != 1,
+	// matching libxml2. XSD 1.1 relaxes cos-all-limited to allow the all group's
+	// own maxOccurs to be 0 or 1 (mgO001/mgO018), so 0 is also accepted there.
 	if hasAttr(elem, attrMaxOccurs) {
 		v := getAttr(elem, attrMaxOccurs)
 		n, ok := parseNonNegativeOccurs(v, true)
-		if !ok || n != 1 {
+		valid := ok && n == 1
+		expected := "1"
+		if c.version == Version11 {
+			valid = ok && (n == 0 || n == 1)
+			expected = "(0 | 1)"
+		}
+		if !valid {
 			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, elemAll, attrMaxOccurs,
-				"The value '"+v+"' is not valid. Expected is '1'."))
+				"The value '"+v+"' is not valid. Expected is '"+expected+"'."))
 		}
 	}
 }

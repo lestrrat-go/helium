@@ -162,7 +162,14 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			if ref := getAttr(ce, attrRef); ref != "" {
 				refQN := c.resolveQName(ctx, ce, ref)
 				if refQN == qn {
-					c.reportCircularAttrGroupRef(ctx, ce, qn)
+					// XSD 1.1 permits circular attribute group definitions (W3C bug
+					// 15795 / attgC010-C031): a direct self-reference contributes
+					// nothing new (the group's own attribute uses are already
+					// collected), so it is silently dropped without a diagnostic.
+					// XSD 1.0 rejects it (src-attribute_group.3), byte-identical.
+					if c.version != Version11 {
+						c.reportCircularAttrGroupRef(ctx, ce, qn)
+					}
 					continue
 				}
 				c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
