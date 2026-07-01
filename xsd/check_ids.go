@@ -34,13 +34,19 @@ func (c *compiler) walkComponentIDs(ctx context.Context, elem *helium.Element, s
 	if elem.URI() == lexicon.NamespaceXSD {
 		if a, ok := elem.FindAttribute(helium.NSPredicate{Local: "id", NamespaceURI: ""}); ok {
 			id := normalizeWhiteSpace(a.Value(), "collapse")
+			// Attribute the diagnostic to the document that actually declares this
+			// component: for an xs:include/xs:redefine/xs:override the walked root is
+			// the nested document (whose line numbers elem.Line() carries), so
+			// c.filename (the including schema) would mis-cite the file. c.diagSource()
+			// returns c.includeFile when a nested document is active, else c.filename.
+			file := c.diagSource()
 			switch {
 			case !xmlchar.IsValidNCName(id):
-				c.schemaError(ctx, schemaParserErrorAttr(c.filename, elem.Line(), elem.LocalName(), elem.LocalName(), "id",
+				c.schemaError(ctx, schemaParserErrorAttr(file, elem.Line(), elem.LocalName(), elem.LocalName(), "id",
 					"The value '"+a.Value()+"' of attribute 'id' is not a valid 'xs:ID'."))
 			default:
 				if _, dup := seen[id]; dup {
-					c.schemaError(ctx, schemaParserErrorAttr(c.filename, elem.Line(), elem.LocalName(), elem.LocalName(), "id",
+					c.schemaError(ctx, schemaParserErrorAttr(file, elem.Line(), elem.LocalName(), elem.LocalName(), "id",
 						"The value '"+id+"' of attribute 'id' is not unique within the schema document."))
 				} else {
 					seen[id] = struct{}{}
