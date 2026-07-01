@@ -114,3 +114,80 @@ func TestNamedGroupContentModelVersion11(t *testing.T) {
 	_, errs := partitionCompileErrors(collector.Errors())
 	require.Contains(t, errs, "}group'")
 }
+
+// TestNamedGroupDefinitionOccursRejected verifies the schema-representation rule
+// (§3.7.2) that a named model group DEFINITION must not carry minOccurs/maxOccurs
+// — those attributes belong to the group REFERENCE (particle) form (§3.8.2). It is
+// a version-independent XSD rule. Mirrors W3C msMeta/Group groupD001-groupD004.
+// A group reference legitimately carrying the occurrence attributes stays valid.
+func TestNamedGroupDefinitionOccursRejected(t *testing.T) {
+	t.Parallel()
+
+	const head = `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">`
+	const tail = `</xsd:schema>`
+	const body = `<xsd:sequence><xsd:element name="a1"/></xsd:sequence>`
+
+	for _, tc := range []struct {
+		name    string
+		schema  string
+		wantErr bool
+	}{
+		{
+			name:    "minOccurs on definition (D001)",
+			schema:  `<xsd:group name="A" minOccurs="1">` + body + `</xsd:group>`,
+			wantErr: true,
+		},
+		{
+			name:    "maxOccurs on definition (D003)",
+			schema:  `<xsd:group name="A" maxOccurs="1">` + body + `</xsd:group>`,
+			wantErr: true,
+		},
+		{
+			name:    "both occurs on definition",
+			schema:  `<xsd:group name="A" minOccurs="0" maxOccurs="2">` + body + `</xsd:group>`,
+			wantErr: true,
+		},
+		{
+			name:   "definition without occurs is valid",
+			schema: `<xsd:group name="A">` + body + `</xsd:group>`,
+		},
+		{
+			name: "reference with occurs is valid",
+			schema: `<xsd:group name="A">` + body + `</xsd:group>` +
+				`<xsd:complexType name="T"><xsd:sequence>` +
+				`<xsd:group ref="A" minOccurs="0" maxOccurs="unbounded"/>` +
+				`</xsd:sequence></xsd:complexType>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, errs := compileWithErrors(t, head+tc.schema+tail)
+			if tc.wantErr {
+				require.NotEmpty(t, errs, "expected a schema error rejecting the group definition")
+				require.Contains(t, errs, "}group'")
+				return
+			}
+			require.Empty(t, errs, "unexpected schema error for a valid group")
+		})
+	}
+}
+
+// TestNamedGroupDefinitionOccursRejectedVersion11 confirms the rule is enforced
+// under the XSD 1.1 opt-in too (version-independent).
+func TestNamedGroupDefinitionOccursRejectedVersion11(t *testing.T) {
+	t.Parallel()
+
+	schema := `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">` +
+		`<xsd:group name="A" maxOccurs="1"><xsd:sequence><xsd:element name="a1"/></xsd:sequence></xsd:group>` +
+		`</xsd:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, cerr := xsd.NewCompiler().Version(xsd.Version11).Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+	requireCompileResultErr(t, cerr)
+	require.Error(t, cerr, "maxOccurs on a group definition must be rejected under Version11")
+	require.NoError(t, collector.Close())
+	_, errs := partitionCompileErrors(collector.Errors())
+	require.Contains(t, errs, "}group'")
+}

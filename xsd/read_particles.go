@@ -28,6 +28,21 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		return nil
 	}
 
+	// A named model group DEFINITION (§3.7.2) has only the id and name attributes;
+	// minOccurs/maxOccurs belong exclusively to the model group REFERENCE (particle)
+	// form (§3.8.2). A definition carrying either is a schema-representation error.
+	// This is a version-INDEPENDENT XSD rule and does not affect a group reference,
+	// which is parsed elsewhere and legitimately admits the occurrence attributes.
+	if c.filename != "" {
+		for _, occ := range []string{attrMinOccurs, attrMaxOccurs} {
+			if hasAttr(elem, occ) {
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+					elem.LocalName(), "group", occ,
+					"Attribute '"+occ+"' is not allowed on a model group definition."))
+			}
+		}
+	}
+
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
 
 	// Check for a duplicate model group BEFORE parsing the compositor body, so a
