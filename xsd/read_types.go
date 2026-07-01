@@ -335,8 +335,8 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			if directAttrChild == "" {
 				directAttrChild = ce.LocalName()
 			}
-			if ref := getAttr(ce, attrRef); ref != "" {
-				qn := c.resolveQName(ctx, ce, ref)
+			if hasAttr(ce, attrRef) {
+				qn := c.resolveQName(ctx, ce, getAttr(ce, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ce.Line(),
 					elemLocal: ce.LocalName(),
@@ -718,8 +718,8 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 				reportOrder(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the assertion 'assert'.", ce.LocalName()))
 				continue
 			}
-			if ref := getAttr(ce, attrRef); ref != "" {
-				qn := c.resolveQName(ctx, ce, ref)
+			if hasAttr(ce, attrRef) {
+				qn := c.resolveQName(ctx, ce, getAttr(ce, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ce.Line(),
 					elemLocal: ce.LocalName(),
@@ -945,8 +945,8 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			if directAttrChild == "" {
 				directAttrChild = ae.LocalName()
 			}
-			if ref := getAttr(ae, attrRef); ref != "" {
-				qn := c.resolveQName(ctx, ae, ref)
+			if hasAttr(ae, attrRef) {
+				qn := c.resolveQName(ctx, ae, getAttr(ae, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ae.Line(),
 					elemLocal: ae.LocalName(),

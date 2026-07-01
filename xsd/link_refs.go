@@ -220,6 +220,17 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		c.checkAllGroupRef(ctx, placeholder)
 	}
 
+	// Reject an xs:attributeGroup ref that does not resolve to a globally-declared
+	// attribute group (src-resolve / Attribute Group Definition Representation OK
+	// 3): a ref naming a component in the wrong symbol space (a complexType or a
+	// global attribute of the same name), a name that is declared nowhere, or an
+	// empty/absent ref value. Reporting it here — before the flatten/expand walks,
+	// which silently contribute nothing for a missing group — stops such an invalid
+	// schema from compiling. Version-independent: the resolution rule holds in both
+	// XSD 1.0 and 1.1 (a CIRCULAR ref, permitted in 1.1, still resolves to an
+	// EXISTING group and so is unaffected).
+	c.checkAttrGroupRefsResolve(ctx)
+
 	// Detect and cut INDIRECT xs:attributeGroup reference cycles (e.g. h -> i,
 	// i -> h) BEFORE any flattening or expansion. A circular attribute-group
 	// reference is disallowed outside <redefine> (XSD §3.6.2 src-attribute_group.3),
@@ -1093,6 +1104,103 @@ func (c *compiler) reportCircularAttrGroupRef(ctx context.Context, ce *helium.El
 	}
 	msg := fmt.Sprintf("Circular reference to the attribute group '%s' defined.", formatAttrQName(groupQN))
 	c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", msg))
+}
+
+// checkAttrGroupRefsResolve reports every <xs:attributeGroup ref="..."> — whether
+// a nested child of a global attribute group (c.attrGroupRefChildren) or a member
+// of a complex type / derivation body (c.attrGroupRefs) — whose ref does NOT
+// resolve to a globally-declared attribute group (src-resolve). This covers a ref
+// naming a component in a different symbol space (a complexType or a global
+// attribute of the same name), a name declared nowhere, and an empty/absent ref
+// value. Every valid reference (including a permitted 1.1 circular one, which
+// resolves to an existing group) is left untouched.
+//
+// Diagnostics are collected and sorted by (source, line, local) so the output is
+// independent of Go map iteration order.
+func (c *compiler) checkAttrGroupRefsResolve(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	type danglingRef struct {
+		source    string
+		line      int
+		elemLocal string
+		qn        QName
+	}
+	var dangling []danglingRef
+
+	report := func(src, elemLocal string, line int, qn QName) {
+		if _, ok := c.schema.attrGroups[qn]; ok {
+			return
+		}
+		// An unprefixed ref resolves to the schema's targetNamespace, but the group
+		// may come from an imported schema that has NO targetNamespace (a chameleon /
+		// no-namespace import). Mirror the empty-namespace fallback used for element
+		// and type references so such a valid reference is not flagged dangling.
+		if qn.NS != "" {
+			if _, ok := c.schema.attrGroups[QName{Local: qn.Local}]; ok {
+				return
+			}
+		}
+		dangling = append(dangling, danglingRef{
+			source:    c.diagSourceOrRecorded(src),
+			line:      line,
+			elemLocal: elemLocal,
+			qn:        qn,
+		})
+	}
+
+	// Nested refs inside a global attribute group definition.
+	for ownerQN, children := range c.attrGroupRefChildren {
+		srcs := c.attrGroupRefSources[ownerQN]
+		for i, refQN := range children {
+			src := ""
+			line := 0
+			if i < len(srcs) {
+				src = srcs[i].source
+				line = srcs[i].line
+			}
+			report(src, elemAttributeGroup, line, refQN)
+		}
+	}
+
+	// Refs on a complex type / derivation body. The implicit XSD 1.1
+	// @defaultAttributes ref is resolved separately (checkSchemaDefaultAttributes),
+	// so skip it here.
+	for td, qns := range c.attrGroupRefs {
+		srcs := c.attrGroupRefUseSources[td]
+		for i, refQN := range qns {
+			if i < len(srcs) && srcs[i].attr == attrDefaultAttributes {
+				continue
+			}
+			src := ""
+			line := 0
+			elemLocal := elemAttributeGroup
+			if i < len(srcs) {
+				src = srcs[i].source
+				line = srcs[i].line
+				if srcs[i].elemLocal != "" {
+					elemLocal = srcs[i].elemLocal
+				}
+			}
+			report(src, elemLocal, line, refQN)
+		}
+	}
+
+	sort.Slice(dangling, func(i, j int) bool {
+		if dangling[i].source != dangling[j].source {
+			return dangling[i].source < dangling[j].source
+		}
+		if dangling[i].line != dangling[j].line {
+			return dangling[i].line < dangling[j].line
+		}
+		return dangling[i].elemLocal < dangling[j].elemLocal
+	})
+	for _, d := range dangling {
+		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) attribute group definition.", d.qn.NS, d.qn.Local)
+		c.schemaError(ctx, schemaParserErrorAttr(d.source, d.line, d.elemLocal, elemAttributeGroup, attrRef, msg))
+	}
 }
 
 // checkCircularAttrGroupRefs detects INDIRECT xs:attributeGroup reference cycles
