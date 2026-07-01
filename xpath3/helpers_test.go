@@ -10,13 +10,6 @@ import (
 
 // Test-fixture-only literals (no lexicon equivalent).
 const (
-	// QT3 / fixture paths.
-	docPathWorks    = "docs/works.xml"
-	docPathStaff    = "docs/staff.xml"
-	docNameWorks    = "works"
-	docNameStaff    = "staff"
-	qtFotsCatalogNS = "http://www.w3.org/2010/09/qt-fots-catalog/"
-
 	// Frequently reused literal values in test tables.
 	testHello    = "hello"
 	testFoo      = "foo"
