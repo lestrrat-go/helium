@@ -373,7 +373,7 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 		id := uri[1:]
 		// Walk the tree once and collect every candidate. We accept matches
 		// from any of: a DTD/schema-declared ID-typed attribute, xml:id, or
-		// the "id" attribute token in any ASCII casing ("Id"/"ID"/"id"). We
+		// the "id" attribute token in the casings "Id", "ID", or "id". We
 		// refuse to resolve the reference if more than one element matches.
 		matches := findElementsByID(doc, id)
 		switch len(matches) {
@@ -399,10 +399,10 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 // An attribute is treated as an ID when it is any of:
 //   - declared ID-typed by a DTD or schema (AType == enum.AttrID);
 //   - xml:id (ID-typed by the W3C xml:id Recommendation);
-//   - the "id" attribute token in any ASCII casing: "Id", "ID", or "id".
+//   - the "id" attribute token in the casings "Id", "ID", or "id".
 //
-// This name set is FROZEN: it recognizes the single identifier token "id"
-// (in its casings) plus xml:id, and MUST NOT grow to distinct convention
+// This name set is FROZEN: it recognizes the "id" identifier token in the
+// three casings above plus xml:id, and MUST NOT grow to distinct convention
 // tokens such as "wsu:Id" or "AssertionID". Those are not universal ID names
 // — they are ID-typed only by their own schemas — so a document that relies
 // on them must declare that typing (DTD/schema, or by marking the attribute

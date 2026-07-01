@@ -179,7 +179,7 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 //
 //   - declared ID-typed by a DTD or schema the document was parsed with;
 //   - xml:id (ID-typed by the W3C xml:id Recommendation);
-//   - the "id" attribute token in any ASCII casing: "Id", "ID", or "id".
+//   - the "id" attribute token in the casings "Id", "ID", or "id".
 //
 // This name set is deliberately limited to the "id" token. Other conventions
 // (for example "wsu:Id" or SAML "AssertionID") are ID-typed only by their own

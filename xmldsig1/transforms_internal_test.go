@@ -473,8 +473,8 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 }
 
 func TestFindElementsByID(t *testing.T) {
-	// findElementsByID recognizes the "id" attribute token in any ASCII casing
-	// (Id/ID/id) plus xml:id and DTD/schema-declared ID typing. Distinct
+	// findElementsByID recognizes the "id" attribute token in the casings
+	// Id/ID/id plus xml:id and DTD/schema-declared ID typing. Distinct
 	// convention tokens (e.g. wsu:Id) are NOT recognized by name.
 	const wantID = "foo"
 	testcases := []struct {
