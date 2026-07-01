@@ -1,7 +1,6 @@
 package xsd_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -10,12 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// xsd:import cycles between distinct namespaces must not recurse without
-// bound. The per-compiler `importedNS` map only catches reimports of the
-// same namespace; a chain like A(urn:a) → B(urn:b) → C(urn:c) → A(urn:a)
-// is invisible to that map because each step is a fresh namespace at the
-// site of the import. A depth ceiling closes the loop.
-func TestCompile_ImportCycle_BoundedByDepth(t *testing.T) {
+// A mutual xs:import cycle between distinct namespaces is legal XSD and must
+// TERMINATE cleanly rather than recurse without bound. A chain like
+// A(urn:a) → B(urn:b) → C(urn:c) → A(urn:a) is invisible to the per-compiler
+// `importedNS` map (each step is a fresh namespace at its import site); the
+// shared active-import-ancestry set short-circuits the back-edge to a document
+// already mid-load, so the closed loop compiles without spinning or tripping
+// the depth ceiling (which remains a defensive net for genuinely deep chains).
+func TestCompile_ImportCycle_Terminates(t *testing.T) {
 	const (
 		nsA = "urn:a"
 		nsB = "urn:b"
@@ -29,8 +30,8 @@ func TestCompile_ImportCycle_BoundedByDepth(t *testing.T) {
 </xs:schema>`
 	}
 
-	// A → B → C → A (and back). With max import depth enforced, compilation
-	// must terminate with an error rather than spinning indefinitely.
+	// A → B → C → A (and back). The cycle must resolve to a single set of
+	// constituent documents and compile cleanly.
 	fsys := fstest.MapFS{
 		"a.xsd": &fstest.MapFile{Data: []byte(mkSchema(nsA, nsB, "b.xsd"))},
 		"b.xsd": &fstest.MapFile{Data: []byte(mkSchema(nsB, nsC, "c.xsd"))},
@@ -42,8 +43,7 @@ func TestCompile_ImportCycle_BoundedByDepth(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), data)
 	require.NoError(t, err)
 
-	_, err = xsd.NewCompiler().FS(fsys).Compile(t.Context(), doc)
-	require.Error(t, err, "compilation must reject unbounded import cycle across distinct namespaces")
-	require.True(t, strings.Contains(err.Error(), "max import depth"),
-		"error must mention the depth limit; got: %v", err)
+	schema, err := xsd.NewCompiler().FS(fsys).Compile(t.Context(), doc)
+	require.NoError(t, err, "a mutual import cycle across distinct namespaces must compile cleanly")
+	require.NotNil(t, schema)
 }

@@ -1263,6 +1263,17 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 		return
 	}
 
+	// Direct reference: cos-all-limited requires the referencing particle's {min
+	// occurs} to be 0 or 1 (and {max occurs} to be 1). A minOccurs > 1 (e.g.
+	// group ref minOccurs="2" to an all group) is a violation independent of
+	// maxOccurs — with the default maxOccurs=1 it is also a min>max form the
+	// generic occurrence validator does not flag for group refs.
+	if placeholder.MinOccurs > 1 {
+		c.schemaError(ctx, schemaParserError(file, src.line, src.local, elemGroup,
+			"The particle's {min occurs} must be (0 | 1), since the reference resolves to an 'all' model group."))
+		return
+	}
+
 	// Direct reference: {max occurs} must be 1. An absent maxOccurs defaults to
 	// 1 and is fine; otherwise the lexical value must parse to exactly 1.
 	if src.maxOccursRaw == "" {

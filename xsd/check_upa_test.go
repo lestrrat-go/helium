@@ -226,6 +226,46 @@ func TestUPADeterminism(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// `sequence maxOccurs="100"(a maxOccurs="unbounded"), b,
+				// sequence maxOccurs="100"(a maxOccurs="unbounded")`: the two `a`
+				// occurrence-copies collide by NAME but are copies of the SAME textual
+				// leaf (same origin), so the model `a+ b a+` is deterministic. The 1.0
+				// path must use the origin tag, not a pure-name comparison (W3C
+				// particlesZ034_a).
+				name: "repeating group with same-named leaf around a separator",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="fooType">
+    <xs:sequence>
+      <xs:sequence maxOccurs="100">
+        <xs:element name="a"/>
+      </xs:sequence>
+      <xs:element name="b"/>
+      <xs:sequence maxOccurs="100">
+        <xs:element name="a"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc" type="fooType"/>
+</xs:schema>`,
+			},
+			{
+				// `choice(sequence maxOccurs="100"(a maxOccurs="unbounded"), b)`: a
+				// single `a` leaf whose occurrence-copies (from the repeating sequence)
+				// share an origin — deterministic (W3C particlesZ036_a).
+				name: "choice of a repeating same-named group and a distinct element",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="fooType">
+    <xs:choice>
+      <xs:sequence maxOccurs="100">
+        <xs:element name="a" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:element name="b"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="doc" type="fooType"/>
+</xs:schema>`,
+			},
+			{
 				// A simple ordered sequence of distinct elements is trivially
 				// deterministic.
 				name: "ordered distinct elements",

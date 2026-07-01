@@ -536,21 +536,26 @@ type firstSetEntry struct {
 // position-based sequence matcher does not yet override.
 func entriesOverlap(a, b firstSetEntry, version Version) bool {
 	// Two element positions overlap (are ambiguous) when they can match the same
-	// element name AND belong to DIFFERENT particles. In XSD 1.1 two positions
-	// with the same origin are occurrence-copies of ONE element declaration (the
-	// same particle), so they are never ambiguous — e.g. `e1{1,2}` nested in a
-	// repeating group, whose unrolled copies would otherwise collide by name.
-	// Distinct origins with the same name are two competing declarations and DO
-	// overlap. XSD 1.0 keeps the pure name comparison (byte-identical): the origin
-	// tag is ignored, so its position numbering is irrelevant there.
+	// element name AND belong to DIFFERENT particles. Two positions with the same
+	// origin are occurrence-copies of ONE element declaration (the same particle),
+	// so they are never ambiguous — e.g. `e1{1,2}` nested in a repeating group,
+	// whose unrolled copies would otherwise collide by name. Distinct origins with
+	// the same name are two competing declarations and DO overlap. This origin
+	// comparison is VERSION-INDEPENDENT (both XSD 1.0 and 1.1) — see the detailed
+	// note below.
 	if !a.isWildcard && !b.isWildcard {
 		if a.qname != b.qname {
 			return false
 		}
-		if version == Version11 {
-			return a.origin != b.origin
-		}
-		return true
+		// Element-vs-element ambiguity (cos-nonambig) is VERSION-INDEPENDENT: two
+		// element positions compete only when they are DISTINCT particles. Occurrence
+		// copies of ONE textual leaf (same origin) are the same particle repeated —
+		// e.g. `sequence maxOccurs="100"(a maxOccurs="unbounded")`, whose expansion
+		// produces several same-named `a` positions reachable from one state — and are
+		// never a UPA violation, while two same-named DISTINCT leaves (distinct origins,
+		// e.g. choice(a,a)) do overlap. This applies in both 1.0 and 1.1; only the
+		// element-vs-wildcard weak-wildcard rule below is version-specific.
+		return a.origin != b.origin
 	}
 	// Element vs wildcard: in 1.1 the element wins (no conflict); in 1.0 they
 	// overlap when the wildcard's namespace admits the element's namespace.

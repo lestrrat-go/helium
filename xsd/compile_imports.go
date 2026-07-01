@@ -1133,6 +1133,33 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
+	// Circular-import guard: if this document is already on the active import
+	// ancestry it is mid-parse in an ancestor loader, so a mutual (A ↔ B) or self
+	// import would recurse forever and can contribute no new components. Short-
+	// circuit the RELOAD — the ancestor provides the document's components and
+	// cross-namespace references resolve at the top level after all sub-compilers
+	// merge up. Pushed before descending and popped on unwind (via the shared map)
+	// so a diamond import of the same document on two disjoint branches still loads
+	// independently. src-import validity is NOT skipped: the back-edge's requested
+	// namespace must still match the namespace recorded for the mid-parse target (the
+	// target's targetNamespace, validated on its first non-cycle load), else it is a
+	// genuine src-import mismatch — including the namespace-absent case (ns=""), which
+	// must import a no-targetNamespace schema — that the acyclic path would report.
+	if expectedNS, active := c.importActive[path]; active {
+		if ns != expectedNS {
+			displayLoc := location
+			if c.filename != "" {
+				displayLoc = schemaDisplayLoc(c.filename, location)
+			}
+			c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
+				importElem.LocalName(), elemImport,
+				"The namespace '"+expectedNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
+		}
+		return nil
+	}
+	c.importActive[path] = ns
+	defer delete(c.importActive, path)
+
 	data, err := c.readNestedSchema(path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
@@ -1196,10 +1223,14 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		importedNS:                make(map[string]string),
 		importDepth:               c.importDepth + 1,
 		maxImportDepth:            c.maxImportDepth,
-		includeVisited:            make(map[string]struct{}),
-		maxIncludeDepth:           c.maxIncludeDepth,
-		loadedRedefinable:         make(map[string]*redefinableSet),
-		notations:                 make(map[QName]struct{}),
+		// Share the active import-ancestry set by pointer so the whole import tree
+		// sees a consistent load stack and any cycle (through this sub-compiler's own
+		// nested imports/includes) is detected and cut.
+		importActive:      c.importActive,
+		includeVisited:    make(map[string]struct{}),
+		maxIncludeDepth:   c.maxIncludeDepth,
+		loadedRedefinable: make(map[string]*redefinableSet),
+		notations:         make(map[QName]struct{}),
 	}
 
 	// Seed the imported sub-compiler's circular-include guard with the imported

@@ -168,6 +168,22 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// importActive maps the resolved fs path of each schema document currently on
+	// the active xs:import ancestry (the load stack) to the namespace expected for
+	// it — the requested namespace validated against the target's targetNamespace on
+	// its first (non-cycle) load (the root's own targetNamespace for the seeded top
+	// level). SHARED by pointer across every sub-compiler in one import tree. A
+	// re-import of a document already on this stack is a cycle (mutual A ↔ B, self
+	// import): the document is mid-parse above, so re-loading it would recurse
+	// forever and can add no new components. loadImport short-circuits such a
+	// re-import (the ancestor loader provides the components; cross-namespace refs
+	// resolve at the top level after all merges), but still diagnoses a back-edge
+	// whose requested namespace disagrees with the recorded one (a src-import
+	// mismatch the acyclic path would catch). Entries are pushed before descending
+	// into an import and popped on unwind, so a diamond (two disjoint branches
+	// importing the same document) is NOT cut — each branch loads it independently,
+	// deduped by the "if not exists" merge guards.
+	importActive map[string]string
 	// includeVisited records the resolved fs paths of schema documents already
 	// pulled in via xs:include/xs:redefine on this compiler, so a transitive or
 	// diamond chain loads each included document at most once. It is the cycle
@@ -596,6 +612,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
 		importedNS:                make(map[string]string),
 		maxImportDepth:            defaultMaxImportDepth,
+		importActive:              make(map[string]string),
 		includeVisited:            make(map[string]struct{}),
 		maxIncludeDepth:           defaultMaxIncludeDepth,
 		loadedRedefinable:         make(map[string]*redefinableSet),
@@ -609,6 +626,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		// re-parsing it and emitting spurious duplicate-component errors.
 		if cfg.rootKey != "" {
 			c.includeVisited[cfg.rootKey] = struct{}{}
+			// Also mark the root as on the active import ancestry, so a descendant
+			// that imports back to the top-level document's own path is cut as a cycle.
+			// Record the root's own targetNamespace as the expected namespace, so a
+			// back-edge importing the root with a mismatched namespace is still
+			// diagnosed (src-import) before the cycle short-circuit.
+			c.importActive[cfg.rootKey] = getAttr(root, attrTargetNamespace)
 			c.rootKey = cfg.rootKey
 		}
 		c.filename = cfg.label
