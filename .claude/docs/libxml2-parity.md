@@ -74,6 +74,13 @@ section unless the heading explicitly marks them as historical. Persistent skips
 are tracked in `helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance
 gaps.
 
+Current state (snapshot, regenerate to confirm): the `xsd11.json` skip list is
+**empty** — the Basic XSD 1.1 W3C suite passes **967 / 0 failures / 0 skipped**
+against `feat-xsd11` with `helium-w3c-tests` `migrate-xsd11`. Two of the closed
+gaps were harness/fixture bugs fixed in `helium-w3c-tests` (a UTF-16 schema whose
+`schemaLocation` an ASCII regex missed; a multi-document `schemaTest` where only
+the first document was compiled), not `xsd` changes.
+
 ## Parser Limitations
 
 Cross-element redundant namespace redeclarations and entity references in
