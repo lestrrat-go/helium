@@ -54,7 +54,9 @@ func TestAttribute_TypeRefKindResolution(t *testing.T) {
 		{"ref-attributegroup", localShell, `<xs:attribute ref="a:ag"/>`, notAttr},
 		{"ref-complextype", localShell, `<xs:attribute ref="a:ct"/>`, notAttr},
 		{"ref-element", localShell, `<xs:attribute ref="a:el"/>`, notAttr},
-		{"ref-undeclared", localShell, `<xs:attribute ref="a:nope"/>`, notAttr},
+		// A dangling ref in the schema's OWN target namespace is a self-reference that
+		// genuinely should resolve — still an error.
+		{"ref-undeclared-selfns", localShell, `<xs:attribute ref="a:nope"/>`, notAttr},
 	}
 	for _, tc := range invalid {
 		t.Run("invalid/"+tc.name, func(t *testing.T) {
@@ -79,6 +81,12 @@ func TestAttribute_TypeRefKindResolution(t *testing.T) {
 		{"type-anysimpletype", localShell, `<xs:attribute name="x" type="xs:anySimpleType"/>`},
 		{"type-inline-simple", localShell, `<xs:attribute name="x"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
 		{"ref-global-attr", localShell, `<xs:attribute ref="a:ga"/>`},
+		// A ref to a built-in XML-namespace attribute (always implicitly available,
+		// never declared) resolves to no global attribute but must not be rejected.
+		{"ref-xml-builtin", localShell, `<xs:attribute ref="xml:lang"/>`},
+		// A dangling ref into a FOREIGN namespace (e.g. one whose xs:import could not
+		// be loaded) is left lenient rather than over-rejected.
+		{"ref-foreign-namespace", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:a" xmlns:x="urn:unloaded" targetNamespace="urn:a"><xs:import namespace="urn:unloaded"/><xs:complexType name="host"><xs:sequence/>%s</xs:complexType></xs:schema>`, `<xs:attribute ref="x:nope"/>`},
 	}
 	for _, tc := range valid {
 		t.Run("valid/"+tc.name, func(t *testing.T) {
