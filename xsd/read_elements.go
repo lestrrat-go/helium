@@ -877,6 +877,13 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 			}
 		}
 		c.attrRefs[au] = qn
+		// Record the source of every ref use so checkAttributeResolution can cite a
+		// line when the ref does not resolve to a global attribute declaration.
+		c.attrRefSources[au] = attrConstraintSource{
+			line:   elem.Line(),
+			local:  qn.Local,
+			source: c.includeFile,
+		}
 		return au
 	}
 
