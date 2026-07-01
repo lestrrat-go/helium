@@ -74,10 +74,13 @@ func (c *compiler) checkNotationDecl(ctx context.Context, elem *helium.Element, 
 	}
 	line := elem.Line()
 
-	// Placement: xs:notation is a top-level schema declaration only.
-	if parentLocal != elemSchema {
+	// Placement: xs:notation is a top-level schema declaration, valid as a child
+	// of xs:schema or (XSD 1.1) xs:override — the latter's content model admits
+	// notation as a wholesale-replacement component. xs:redefine's content model
+	// does NOT admit notation, so a notation there stays a schema error.
+	if parentLocal != elemSchema && parentLocal != elemOverride {
 		c.schemaError(ctx, schemaParserError(src, line, elemNotation, elemNotation,
-			"A notation declaration is only allowed as a child of xs:schema."))
+			"A notation declaration is only allowed as a child of xs:schema or xs:override."))
 		return
 	}
 

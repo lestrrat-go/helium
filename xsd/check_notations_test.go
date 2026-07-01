@@ -2,6 +2,7 @@ package xsd_test
 
 import (
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -163,4 +164,84 @@ func TestNotationStructuralRules(t *testing.T) {
 			require.NoError(t, err, "valid notation schema must compile")
 		})
 	}
+}
+
+// TestNotationUnderOverride verifies that xs:override's content model admits
+// <xs:notation> (XSD 1.1, a wholesale-replacement component): a valid notation
+// inside xs:override COMPILES, an INVALID one (missing both public and system)
+// is still REJECTED (the non-placement checks still run under override), and a
+// notation inside xs:redefine — whose content model does NOT admit notation —
+// stays a schema error.
+func TestNotationUnderOverride(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mainXSD   = "main.xsd"
+		targetXSD = "target.xsd"
+	)
+
+	target := &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:notation name="jpeg" public="old/type"/>
+</xs:schema>`)}
+
+	compile := func(t *testing.T, main string) (string, error) {
+		t.Helper()
+		fsys := fstest.MapFS{
+			mainXSD:   &fstest.MapFile{Data: []byte(main)},
+			targetXSD: target,
+		}
+		data, err := fsys.ReadFile(mainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, cerr := xsd.NewCompiler().
+			Label(mainXSD).
+			Version(xsd.Version11).
+			ErrorHandler(collector).
+			FS(fsys).
+			Compile(t.Context(), doc)
+		require.NoError(t, collector.Close())
+		var b []byte
+		for _, e := range collector.Errors() {
+			b = append(b, e.Error()...)
+			b = append(b, '\n')
+		}
+		return string(b), cerr
+	}
+
+	t.Run("valid notation under override compiles", func(t *testing.T) {
+		t.Parallel()
+		errs, cerr := compile(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:override schemaLocation="target.xsd">
+    <xs:notation name="jpeg" public="image/jpeg" system="viewer.exe"/>
+  </xs:override>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`)
+		require.NoError(t, cerr, "a valid notation inside xs:override must compile; got errors: %q", errs)
+		require.Empty(t, errs)
+	})
+
+	t.Run("invalid notation under override still rejected", func(t *testing.T) {
+		t.Parallel()
+		// Missing both @public and @system: the non-placement checks still run.
+		errs, _ := compile(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:override schemaLocation="target.xsd">
+    <xs:notation name="jpeg"/>
+  </xs:override>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`)
+		require.Contains(t, errs, "public")
+	})
+
+	t.Run("notation under redefine still rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, _ := compile(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="target.xsd">
+    <xs:notation name="jpeg" public="image/jpeg" system="viewer.exe"/>
+  </xs:redefine>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`)
+		require.Contains(t, errs, "only allowed as a child of xs:schema or xs:override")
+	})
 }
