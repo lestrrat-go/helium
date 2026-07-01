@@ -42,6 +42,8 @@ jobs:
           set -o pipefail
           # Merge (push) runs get a short budget for a prompt post-merge signal;
           # the weekly schedule runs deep; manual dispatch uses its input.
+          # (github.event.inputs.fuzz-time is valid dot-access — GitHub Actions
+          # allows hyphens in property dereference; it is NOT parsed as subtraction.)
           FUZZTIME="${{ github.event.inputs.fuzz-time || (github.event_name == 'push' && '60s') || '5m' }}"
           mkdir -p /tmp/fuzz-output
           for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
