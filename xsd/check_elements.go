@@ -631,7 +631,7 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			// Structures §3.2.2; xsd:attribute/@name is of type xs:NCName). A
 			// value that is empty, starts with a non-name character, or contains
 			// a colon (a QName, not an NCName) is a schema-representation error.
-			c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", "name",
 				"The value '"+name+"' is not a valid 'NCName'."))
 		}
 
