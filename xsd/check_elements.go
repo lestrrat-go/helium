@@ -100,6 +100,14 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	if name == "" {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."))
+	} else if !xmlchar.IsValidNCName(name) {
+		// The {name} of an element declaration must be an NCName (XSD
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName). A value
+		// that is empty-after-trim, starts with a non-name character, or
+		// contains a colon (a QName, not an NCName) is a schema-representation
+		// error.
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
+			"The value '"+name+"' is not a valid 'NCName'."))
 	}
 
 	// ref is not allowed at global level.
@@ -393,6 +401,14 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Matches libxml2 ordering: maxOccurs, not-allowed attrs,
 		// block/final value checks, default+fixed, type/content children.
 
+		// The {name} of a local element declaration must be an NCName (XSD
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName), exactly as
+		// for global declarations.
+		if !xmlchar.IsValidNCName(name) {
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
+				"The value '"+name+"' is not a valid 'NCName'."))
+		}
+
 		// maxOccurs must be a non-negative integer (or "unbounded"). A maxOccurs of
 		// 0 is a legal prohibited particle when the effective minOccurs is also 0;
 		// libxml2 only rejects maxOccurs<1 when the effective minOccurs is >= 1
@@ -633,6 +649,28 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			// a colon (a QName, not an NCName) is a schema-representation error.
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", "name",
 				"The value '"+name+"' is not a valid 'NCName'."))
+		}
+
+		// Schema Representation Constraint on the `form` attribute of
+		// <xs:attribute> (version-INDEPENDENT — enforced in BOTH XSD 1.0 and 1.1).
+		// The schema for schemas gives a top-level (global) attribute declaration
+		// the `topLevelAttribute` type, which omits `form`, so `form` on a global
+		// attribute is a schema error. On a local attribute declaration `form` must
+		// be one of the {qualified, unqualified} `formChoice` enumeration; any other
+		// value (including the empty string) is a schema error.
+		if hasAttr(elem, attrForm) {
+			switch {
+			case isGlobalAttributeDecl(elem):
+				c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
+					"The attribute 'form' is not allowed."))
+			default:
+				switch getAttr(elem, attrForm) {
+				case attrValQualified, attrValUnqualified:
+				default:
+					c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", attrForm,
+						"The value must be one of 'qualified' or 'unqualified'."))
+				}
+			}
 		}
 
 		c.checkLocalAttributeTargetNamespace(ctx, elem)
