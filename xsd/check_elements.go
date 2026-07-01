@@ -6,6 +6,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // hasAttr checks whether an unqualified (no-namespace) schema attribute is
@@ -625,6 +626,13 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		if getAttr(elem, attrName) == lexicon.PrefixXMLNS {
 			c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
 				"The value of the attribute must not match 'xmlns'."))
+		} else if name := getAttr(elem, attrName); hasAttr(elem, attrName) && !xmlchar.IsValidNCName(name) {
+			// The {name} of an attribute declaration must be an NCName (XSD
+			// Structures §3.2.2; xsd:attribute/@name is of type xs:NCName). A
+			// value that is empty, starts with a non-name character, or contains
+			// a colon (a QName, not an NCName) is a schema-representation error.
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", "name",
+				"The value '"+name+"' is not a valid 'NCName'."))
 		}
 
 		c.checkLocalAttributeTargetNamespace(ctx, elem)
