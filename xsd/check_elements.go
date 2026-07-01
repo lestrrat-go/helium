@@ -700,7 +700,15 @@ func (c *compiler) checkLocalAttributeTargetNamespace(ctx context.Context, elem 
 
 func isGlobalAttributeDecl(elem *helium.Element) bool {
 	parent, ok := helium.AsNode[*helium.Element](elem.Parent())
-	return ok && isXSDElement(parent, elemSchema)
+	if !ok {
+		return false
+	}
+	// A top-level <xs:attribute> is a child of <xs:schema>, OR — in XSD 1.1 — a
+	// child of <xs:override>, which registers it (via parseGlobalAttribute) as a
+	// wholesale replacement for a top-level attribute declaration. Both are GLOBAL
+	// declarations typed by the schema-for-schemas topLevelAttribute (no `use`).
+	// xs:override is 1.1-only, so this does not affect XSD 1.0.
+	return isXSDElement(parent, elemSchema) || isXSDElement(parent, elemOverride)
 }
 
 func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context, elem *helium.Element) bool {
