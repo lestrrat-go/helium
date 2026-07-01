@@ -41,7 +41,7 @@ func TestNotationStructuralRules(t *testing.T) {
 </xs:schema>`,
 		},
 		{
-			name: "name starting with digit is not an NCName",
+			name: "name starting with hyphen is not an NCName",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="-2.5foo" public="image/jpeg"/>
 </xs:schema>`,
