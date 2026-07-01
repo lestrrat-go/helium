@@ -969,6 +969,85 @@ func (c *compiler) checkAnyAtomicTypeUsage(ctx context.Context) {
 	}
 }
 
+// isAnySimpleTypeDef reports whether td is the built-in xs:anySimpleType.
+func isAnySimpleTypeDef(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == lexicon.TypeAnySimpleType
+}
+
+// checkAnySimpleTypeUsage (XSD 1.1) rejects user derivations that restrict the
+// simple ur-type xs:anySimpleType. Per the note in XML Schema Part 2 §2.4.1 (and
+// the resolution of W3C bug 14559) the simple ur-type must not be named as the
+// {base type definition} of a restriction, the {item type definition} of a list,
+// or a {member type definition} of a union — nor may a complexType with simple
+// content restrict a base whose content type is xs:anySimpleType (which would
+// derive a content simple type that restricts the ur-type). It stays valid as an
+// element/attribute/xsi:type type and as the base of a simpleContent EXTENSION
+// (e.g. the head of a substitution group). It walks every parsed type, including
+// inline anonymous ones (typeDefSources).
+func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	type entry struct {
+		td  *TypeDef
+		src typeDefSource
+	}
+	var entries []entry
+	for td, src := range c.typeDefSources {
+		if td.Name.NS == lexicon.NamespaceXSD {
+			continue
+		}
+		entries = append(entries, entry{td: td, src: src})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].src.line != entries[j].src.line {
+			return entries[i].src.line < entries[j].src.line
+		}
+		if entries[i].td.Name.Local != entries[j].td.Name.Local {
+			return entries[i].td.Name.Local < entries[j].td.Name.Local
+		}
+		return entries[i].src.ordinal < entries[j].src.ordinal
+	})
+
+	for _, e := range entries {
+		td := e.td
+		elemKind := e.src.elemKind
+		if elemKind == "" {
+			elemKind = elemSimpleType
+		}
+		component := td.Name.Local
+		if component == "" || e.src.isLocal {
+			component = componentLocalSimpleType
+			if td.IsComplex {
+				component = componentLocalComplexType
+			}
+		}
+		report := func(role string) {
+			c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, elemKind, component,
+				"The "+role+" must not be the built-in 'anySimpleType'."))
+		}
+
+		// A complexType with simple content whose restriction leaves (or produces)
+		// xs:anySimpleType as the content simple type is restricting the ur-type.
+		if td.IsSimpleContent {
+			if td.Derivation == DerivationRestriction && isAnySimpleTypeDef(effectiveContentSimpleType(td)) {
+				report("base type")
+			}
+			continue
+		}
+
+		switch {
+		case td.Derivation == DerivationRestriction && isAnySimpleTypeDef(td.BaseType):
+			report("base type")
+		case isAnySimpleTypeDef(td.ItemType):
+			report("item type")
+		case slices.ContainsFunc(td.MemberTypes, isAnySimpleTypeDef):
+			report("member type")
+		}
+	}
+}
+
 // checkFacetMutualExclusion checks that mutually exclusive facets are not
 // both specified on the same type definition.
 func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, line int, component string) {
