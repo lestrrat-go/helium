@@ -1,7 +1,7 @@
 name: Fuzz
 on:
   push:
-    branches: [main] # short fuzz on every merge to main (non-gating; PRs run no fuzz)
+    branches: [main] # short fuzz on every push to main (in practice, each PR merge); non-gating, PRs run no fuzz
   schedule:
     - cron: '0 3 * * 3' # Weekly deep fuzz on Wednesday at 03:00 UTC
   workflow_dispatch:

@@ -157,7 +157,7 @@ Run specific test subsets via env vars:
 
 - Pull requests run NO fuzzing — `ci.yml` is normal test/build/lint/vuln verification only, so PR turnaround stays fast and deterministic (live fuzzing is nondeterministic and cannot gate a PR without flaking).
 - `fuzz.yml` runs fuzzing OFF the PR path, always non-gating:
-  - on every `push` to `main` (i.e. each merge) → short `60s` per target, for a prompt post-merge signal attributed to the merge commit.
+  - on every `push` to `main` (in practice, each PR merge) → short `60s` per target, for a prompt signal attributed to the pushed commit.
   - on the weekly `schedule` → deep `5m` per target.
   - on manual `workflow_dispatch` → its `fuzz-time` input (default `5m`).
 - Fuzz targets are discovered per package via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`; a failing run uploads the crashing corpus as an artifact (it is not committed).
