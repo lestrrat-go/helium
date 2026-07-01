@@ -543,6 +543,28 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
 	}
 
+	// Schema Representation Constraint on the `use` attribute of <xs:attribute>
+	// (version-INDEPENDENT — enforced in BOTH XSD 1.0 and 1.1). The schema for
+	// schemas gives a top-level (global) attribute declaration the `topLevelAttribute`
+	// type, which does NOT permit `use` (nor `form`/`ref`), so `use` on a global
+	// attribute is a schema error. On a local attribute use `use` must be one of
+	// the {optional, prohibited, required} enumeration; any other value (including
+	// the empty string) is a schema error.
+	if hasAttr(elem, attrUse) {
+		switch {
+		case isGlobalAttributeDecl(elem):
+			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
+				"The attribute 'use' is not allowed."))
+		default:
+			switch getAttr(elem, attrUse) {
+			case attrValOptional, attrValProhibited, attrValRequired:
+			default:
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", attrUse,
+					"The value must be one of 'optional', 'prohibited', or 'required'."))
+			}
+		}
+	}
+
 	if ref != "" {
 		// ref and name are mutually exclusive.
 		if getAttr(elem, attrName) != "" {
@@ -678,7 +700,15 @@ func (c *compiler) checkLocalAttributeTargetNamespace(ctx context.Context, elem 
 
 func isGlobalAttributeDecl(elem *helium.Element) bool {
 	parent, ok := helium.AsNode[*helium.Element](elem.Parent())
-	return ok && isXSDElement(parent, elemSchema)
+	if !ok {
+		return false
+	}
+	// A top-level <xs:attribute> is a child of <xs:schema>, OR — in XSD 1.1 — a
+	// child of <xs:override>, which registers it (via parseGlobalAttribute) as a
+	// wholesale replacement for a top-level attribute declaration. Both are GLOBAL
+	// declarations typed by the schema-for-schemas topLevelAttribute (no `use`).
+	// xs:override is 1.1-only, so this does not affect XSD 1.0.
+	return isXSDElement(parent, elemSchema) || isXSDElement(parent, elemOverride)
 }
 
 func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context, elem *helium.Element) bool {
