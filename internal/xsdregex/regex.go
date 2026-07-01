@@ -1391,6 +1391,148 @@ func rejectNonXSDConstructs(pattern string) error {
 	return nil
 }
 
+// rejectXSD10CharClassRanges rejects a character-class range operator '-' that
+// has no available left endpoint because the immediately-preceding atom was
+// already consumed as the END of a preceding range — e.g. '[a-d-b-c]' (a-d is a
+// range, so the following '-' is a range operator whose left operand 'd' is
+// taken) or '[a-a-x-x]'. The XSD 1.0 charRange grammar (XML Schema Part 2,
+// Appendix F, productions 15/16) treats a mid-group '-' as a range operator and
+// requires a fresh single-character left endpoint, so these patterns are invalid
+// in XSD 1.0. XSD 1.1 rewrote the grammar to admit a mid-group '-' as a literal
+// singleChar, making them valid — so this check runs ONLY on the XSD 1.0 Compile
+// path (xsd11=false in CompileVersion). It does NOT run on xpath3's
+// Translate/Validate (which use the permissive XPath flavor).
+//
+// A '-' is LITERAL (not a range operator) at the start of the group content,
+// immediately before the closing ']', or as the '-[' subtraction operator; only
+// a genuine range-operator '-' following a completed range is rejected.
+func rejectXSD10CharClassRanges(pattern string) error {
+	runes := []rune(pattern)
+	for i := 0; i < len(runes); {
+		r := runes[i]
+		if r == '\\' {
+			i = skipRegexEsc(runes, i)
+			continue
+		}
+		if r == '[' {
+			end := matchCharClassEnd(runes, i)
+			if end < 0 {
+				return nil // unterminated; other validators diagnose it
+			}
+			if err := checkXSD10ClassRanges(runes, i, end); err != nil {
+				return err
+			}
+			i = end + 1
+			continue
+		}
+		i++
+	}
+	return nil
+}
+
+// matchCharClassEnd returns the index of the ']' closing the character class that
+// opens at start ('['), honoring escapes and nested '[...]' subtraction operands,
+// or -1 if unterminated.
+func matchCharClassEnd(runes []rune, start int) int {
+	depth := 0
+	for i := start; i < len(runes); i++ {
+		switch runes[i] {
+		case '\\':
+			i++ // skip the escaped character
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// skipRegexEsc returns the index just past the escape atom that begins at i
+// (runes[i] == '\\'), skipping a whole '\p{...}'/'\P{...}' brace group so its '{'
+// is not misread.
+func skipRegexEsc(runes []rune, i int) int {
+	if i+1 >= len(runes) {
+		return i + 1
+	}
+	if (runes[i+1] == 'p' || runes[i+1] == 'P') && i+2 < len(runes) && runes[i+2] == '{' {
+		if end := findClosingBrace(runes, i+3); end >= 0 {
+			return end + 1
+		}
+		return len(runes)
+	}
+	return i + 2
+}
+
+// checkXSD10ClassRanges scans the content of the character class runes[start:end+1]
+// (runes[start]=='[', runes[end]==']') and rejects a range-operator '-' that
+// follows an already-completed range. It recurses into a '-[...]' subtraction
+// operand.
+func checkXSD10ClassRanges(runes []rune, start, end int) error {
+	i := start + 1
+	if i < end && runes[i] == '^' {
+		i++
+	}
+	contentStart := i
+	prevRangeEnd := false
+	for i < end {
+		c := runes[i]
+		if c == '\\' {
+			i = skipRegexEsc(runes, i)
+			prevRangeEnd = false
+			continue
+		}
+		if c == '[' {
+			ne := matchCharClassEnd(runes, i)
+			if ne < 0 || ne > end {
+				return nil
+			}
+			if err := checkXSD10ClassRanges(runes, i, ne); err != nil {
+				return err
+			}
+			i = ne + 1
+			prevRangeEnd = false
+			continue
+		}
+		if c == '-' {
+			// A '-' is literal at the group start, immediately before the
+			// closing ']' (i+1 == end), or as the '-[' subtraction operator.
+			if i == contentStart || i+1 >= end || runes[i+1] == '[' {
+				prevRangeEnd = false
+				i++
+				continue
+			}
+			// Range operator: its left endpoint must not already be a range end.
+			if prevRangeEnd {
+				return &regexError{
+					Code:    errCodeFORX0002,
+					Message: fmt.Sprintf("invalid character range in XML Schema 1.0 regular expression: %s", string(runes[start:end+1])),
+				}
+			}
+			// Consume the right endpoint atom.
+			i++
+			if i < end {
+				switch runes[i] {
+				case '\\':
+					i = skipRegexEsc(runes, i)
+				case '[':
+					return nil // malformed; other validators diagnose it
+				default:
+					i++
+				}
+			}
+			prevRangeEnd = true
+			continue
+		}
+		i++
+		prevRangeEnd = false
+	}
+	return nil
+}
+
 // Translate converts an XPath/XQuery regex pattern (fn:matches/tokenize/replace)
 // into a Go RE2 pattern. In this flavor '^' and '$' are anchors and the pattern
 // is not implicitly anchored; use Compile for XSD xs:pattern facets, where
@@ -1457,6 +1599,16 @@ func CompileVersion(pattern string, xsd11 bool) (*Regexp, error) {
 	// via Compile, so it is intentionally subject to this rejection too.
 	if err := rejectNonXSDConstructs(pattern); err != nil {
 		return nil, err
+	}
+	// The XSD 1.0 charRange grammar (Part 2, Appendix F) forbids a mid-group
+	// range-operator '-' whose left endpoint was already consumed as the end of a
+	// preceding range ('[a-d-b-c]'). XSD 1.1 relaxed this, so gate the rejection
+	// to 1.0 mode. xpath3's Translate/Validate never reach here, so they stay
+	// permissive.
+	if !xsd11 {
+		if err := rejectXSD10CharClassRanges(pattern); err != nil {
+			return nil, err
+		}
 	}
 
 	// Compile handles XSD xs:pattern facets: '^'/'$' are literal characters and
