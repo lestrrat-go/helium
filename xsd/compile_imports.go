@@ -860,7 +860,7 @@ func (c *compiler) checkRedefineSelfDerivation(ctx context.Context, elem *helium
 	if kind == elemSimpleType {
 		deriv = "restriction"
 	}
-	c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elemRedefine, elemRedefine,
+	c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), kind,
 		fmt.Sprintf("src-redefine.5: The %s '%s' redefined inside <redefine> must have a %s whose 'base' names itself ('%s').", kind, qn.Local, deriv, qn.Local)))
 	return false
 }
