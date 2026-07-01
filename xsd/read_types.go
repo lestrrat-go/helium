@@ -1259,46 +1259,61 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if duplicateSingletonFacet(ce, "totalDigits") {
 				continue
 			}
+			if !c.validateNumericFacetValue(ctx, ce, val, lexicon.TypePositiveInteger) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(val, 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
 			fs.TotalDigits = &n
 		case "length":
 			if duplicateSingletonFacet(ce, "length") {
 				continue
 			}
+			if !c.validateNumericFacetValue(ctx, ce, val, lexicon.TypeNonNegativeInteger) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(val, 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
 			fs.Length = &n
 		case "minLength":
 			if duplicateSingletonFacet(ce, "minLength") {
 				continue
 			}
+			if !c.validateNumericFacetValue(ctx, ce, val, lexicon.TypeNonNegativeInteger) {
+				continue
+			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(val, 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
 			fs.MinLength = &n
 		case "maxLength":
 			if duplicateSingletonFacet(ce, "maxLength") {
 				continue
 			}
-			if fs == nil {
-				fs = &FacetSet{}
-			}
-			n := parseOccurs(val, 0)
-			fs.MaxLength = &n
-		case "fractionDigits":
-			if duplicateSingletonFacet(ce, "fractionDigits") {
+			if !c.validateNumericFacetValue(ctx, ce, val, lexicon.TypeNonNegativeInteger) {
 				continue
 			}
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(val, 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
+			fs.MaxLength = &n
+		case "fractionDigits":
+			if duplicateSingletonFacet(ce, "fractionDigits") {
+				continue
+			}
+			if !c.validateNumericFacetValue(ctx, ce, val, lexicon.TypeNonNegativeInteger) {
+				continue
+			}
+			if fs == nil {
+				fs = &FacetSet{}
+			}
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
 			fs.FractionDigits = &n
 		case "whiteSpace":
 			if duplicateSingletonFacet(ce, "whiteSpace") {
@@ -1363,6 +1378,25 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 	}
 
 	return fs
+}
+
+// validateNumericFacetValue reports whether a length-family or digit facet's
+// @value is a valid instance of its required built-in integer type: per XSD
+// §3.16 (and the schema-for-schemas) the {value} of length/minLength/maxLength
+// and fractionDigits is an xs:nonNegativeInteger and that of totalDigits is an
+// xs:positiveInteger. A lexically invalid value — "1e2", "-1", "a", "" or
+// totalDigits="0" — puts the schema in error (parseOccurs would otherwise
+// silently collapse it to a bogus 0, turning the constraint into a no-op). The
+// value is whitespace-collapsed first (these types have whiteSpace="collapse").
+// On failure it reports a schema error and returns false so the caller skips
+// recording the facet; this XSD 1.0 rule runs in both 1.0 and 1.1 mode.
+func (c *compiler) validateNumericFacetValue(ctx context.Context, ce *helium.Element, raw, builtinLocal string) bool {
+	if validateBuiltinValue(normalizeWhiteSpace(raw, "collapse"), builtinLocal, c.version) == nil {
+		return true
+	}
+	c.schemaError(ctx, schemaParserError(c.filename, ce.Line(), ce.LocalName(), ce.LocalName(),
+		fmt.Sprintf("The value '%s' is not a valid value of the type 'xs:%s'.", raw, builtinLocal)))
+	return false
 }
 
 func (c *compiler) readFacetFixed(ctx context.Context, elem *helium.Element) bool {
