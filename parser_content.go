@@ -215,7 +215,10 @@ func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
 		return "", pctx.error(ctx, err)
 	}
 
-	if name == lexicon.PrefixXML {
+	// The name "xml" is reserved for the XML declaration in any case (XML 1.0
+	// §2.6), so reject it case-insensitively — matching xmlchar.IsValidPITarget,
+	// which the serializer applies, so parse and reparse stay consistent.
+	if strings.EqualFold(name, lexicon.PrefixXML) {
 		return "", errors.New("XML declaration allowed only at the start of the document")
 	}
 
