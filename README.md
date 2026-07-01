@@ -85,7 +85,7 @@ an embedded example.
 | [`xpath1`](xpath1/README.md) | XPath 1.0 compilation and evaluation. | Includes convenience helpers like `Find` and `Evaluate`. |
 | [`xpath3`](xpath3/README.md) | XPath 3.1 compilation and evaluation. | Includes a compiler, evaluator, maps, arrays, and HOFs. |
 | [`xpointer`](xpointer/README.md) | XPointer evaluation. | Supports shorthand, `element()`, and XPath-backed schemes. |
-| [`xsd`](xsd/README.md) | XML Schema compilation and validation. | XSD 1.0 compiler plus validator APIs. |
+| [`xsd`](xsd/README.md) | XML Schema compilation and validation. | XSD 1.0 (default) and opt-in XSD 1.1 compiler plus validator APIs. |
 | [`xslt3`](xslt3/README.md) | XSLT 3.0 stylesheet compilation and execution. | Targets Basic XSLT 3.0 conformance. |
 
 # `helium` CLI
@@ -235,7 +235,7 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 
 * Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
 * Experimental: W3C XML Digital Signatures 1.1 (`xmldsig1`) and XML Encryption 1.1 (`xmlenc1`). These APIs may change and may move to a separate repository.
-* W3C conformance suites: ~22,250 / 22,744 QT3 tests pass for XPath 3.1; ~11,780 / 13,129 W3C tests pass for XSLT 3.0 (skips are XSLT 1.0/2.0 backwards compatibility and other out-of-scope features).
+* W3C conformance suites: ~22,250 / 22,744 QT3 tests pass for XPath 3.1; ~11,780 / 13,129 W3C tests pass for XSLT 3.0 (skips are XSLT 1.0/2.0 backwards compatibility and other out-of-scope features); XSD 1.1 passes the XSD-1.1-tagged test groups of the W3C XML Schema Test Suite — 967 groups from the IBM, Saxon, Oracle, and W3C-WG collections, 0 failures.
 * libxml2-compat golden tests: core XML parsing 100%, XSD 99.6%, RELAX NG 100%, Schematron 100%, C14N 100%, HTML 100%.
 * XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards compatibility modes for XSLT 1.0/2.0 are not part of the target feature set.
 * A `helium` CLI provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
