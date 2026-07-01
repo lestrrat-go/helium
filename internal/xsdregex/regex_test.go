@@ -157,7 +157,9 @@ func TestCharClassHyphenRangeEndpoint(t *testing.T) {
 	})
 
 	t.Run("accept valid hyphen neighbors", func(t *testing.T) {
-		for _, pat := range []string{`[+-]`, `[-+]`, `[a-z-+]`} {
+		// '[+-]' is '+' plus a trailing literal '-'; '[-+]' is a leading literal
+		// '-' plus '+'. Both keep the '-' in a literal position.
+		for _, pat := range []string{`[+-]`, `[-+]`} {
 			t.Run(pat, func(t *testing.T) {
 				_, err := xsdregex.Compile(pat + "*")
 				require.NoError(t, err, "pattern %q must be accepted", pat)
@@ -191,6 +193,42 @@ func TestCharClassHyphenRangeEndpoint(t *testing.T) {
 		if err != nil {
 			require.NotContains(t, err.Error(), "invalid character class",
 				"structural validator must not reject the subtraction base dash")
+		}
+	})
+}
+
+func TestXSD10CharClassRangeAfterRange(t *testing.T) {
+	// The XSD 1.0 charRange grammar (Part 2, Appendix F, productions 15/16)
+	// treats a mid-group '-' as a range operator; when its left endpoint was
+	// already consumed as the END of a preceding range there is no valid left
+	// operand, so the pattern is invalid. W3C ms Regex_w3c reF20-23/reG26-33/
+	// reH19-21 expect these invalid in XSD 1.0 and VALID in XSD 1.1 (whose
+	// rewritten grammar admits a mid-group '-' as a literal singleChar).
+	t.Run("xsd10 rejects range operator after a completed range", func(t *testing.T) {
+		for _, pat := range []string{`[^a-d-b-c]`, `[a-c-1-4x-z-7-9]`, `[a-a-x-x]`, `[a-z-+]`, `[a-z-9]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.Error(t, err, "pattern %q must be rejected in XSD 1.0", pat)
+				require.Contains(t, err.Error(), "invalid character range")
+			})
+		}
+	})
+
+	t.Run("xsd11 accepts them", func(t *testing.T) {
+		for _, pat := range []string{`[^a-d-b-c]`, `[a-c-1-4x-z-7-9]`, `[a-a-x-x]`, `[a-z-+]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.CompileVersion(pat+"*", true)
+				require.NoError(t, err, "pattern %q must be accepted in XSD 1.1", pat)
+			})
+		}
+	})
+
+	t.Run("xsd10 still accepts ordinary multi-range classes", func(t *testing.T) {
+		for _, pat := range []string{`[a-z0-9]`, `[a-z-]`, `[-a-z]`, `[a-c-[b]]`, `[abc-]`, `[+-/]`, `[!-~-]`, `[0-9a-fA-F]`} {
+			t.Run(pat, func(t *testing.T) {
+				_, err := xsdregex.Compile(pat + "*")
+				require.NoError(t, err, "pattern %q must still compile in XSD 1.0", pat)
+			})
 		}
 	})
 }

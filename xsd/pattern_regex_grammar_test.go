@@ -67,6 +67,27 @@ func TestPatternRegexGrammarRejectsNonXSDConstructs(t *testing.T) {
 	}
 }
 
+// TestPatternRegexGrammarRejectsRangeAfterRange verifies that a character-class
+// range operator '-' whose left endpoint was already consumed as the END of a
+// preceding range is rejected at compile time in the default (XSD 1.0) mode.
+// The XSD 1.0 charRange grammar (Part 2, Appendix F, productions 15/16) treats a
+// mid-group '-' as a range operator needing a fresh single-character left
+// endpoint; W3C ms Regex_w3c reF20-23/reG26-33/reH19-21 expect these invalid in
+// XSD 1.0 (and valid in XSD 1.1).
+func TestPatternRegexGrammarRejectsRangeAfterRange(t *testing.T) {
+	t.Parallel()
+
+	for _, pattern := range []string{`[^a-d-b-c]`, `[a-c-1-4x-z-7-9]`, `[a-a-x-x]`} {
+		t.Run(pattern, func(t *testing.T) {
+			errs := compileSchemaErrors(t, patternSchema(pattern))
+			require.NotEmpty(t, errs,
+				"pattern %q is not a valid XSD 1.0 regex and must be rejected at compile time", pattern)
+			require.Contains(t, errs, "not a valid regular expression",
+				"rejection should be reported as an invalid-regex schema error")
+		})
+	}
+}
+
 // TestPatternRegexGrammarAcceptsValidPatterns guards against over-rejection: a
 // set of patterns that ARE valid XML Schema regular expressions must still
 // compile without error in the default (XSD 1.0) mode.
