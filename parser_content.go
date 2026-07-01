@@ -96,6 +96,12 @@ func (pctx *parserCtx) parseMisc(ctx context.Context) error {
 			}
 		} else if isBlankByte(cur.Peek()) {
 			pctx.skipBlanks(ctx)
+			// An over-cap whitespace run (e.g. infinite blanks before the
+			// root) is a memory-amplification DoS; surface it instead of
+			// looping forever over the still-blank cursor.
+			if pctx.blankRunErr != nil {
+				return pctx.error(ctx, pctx.blankRunErr)
+			}
 		} else {
 			break
 		}

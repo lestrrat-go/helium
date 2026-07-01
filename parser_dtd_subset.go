@@ -203,7 +203,18 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		return err
 	}
 
+	// skipBlanks records an over-cap whitespace run in pctx.blankRunErr but only
+	// returns a bool, so a guard tripped while skipping conditional-section HEADER
+	// whitespace (after "<![", after a "%pe;", after INCLUDE/IGNORE) must be
+	// surfaced here. Otherwise this function would proceed and return a generic
+	// conditional-section sentinel (ErrConditionalSectionKeyword /
+	// ErrConditionalSectionNotFinished) which the top-level external-subset loop
+	// TOLERATES — downgrading a resource-limit violation to "stop parsing the
+	// subset" instead of failing closed at the source.
 	pctx.skipBlanks(ctx)
+	if pctx.blankRunErr != nil {
+		return pctx.blankRunErr
+	}
 
 	cur = pctx.getCursor()
 	if cur != nil && cur.Peek() == '%' {
@@ -211,6 +222,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 		pctx.skipBlanks(ctx)
+		if pctx.blankRunErr != nil {
+			return pctx.blankRunErr
+		}
 	}
 
 	cur = pctx.getCursor()
@@ -223,6 +237,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 		pctx.skipBlanks(ctx)
+		if pctx.blankRunErr != nil {
+			return pctx.blankRunErr
+		}
 		cur = pctx.getCursor()
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
@@ -257,14 +274,13 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 					return ErrConditionalSectionNotFinished
 				}
 
-				n := 0
-				for b := sec.PeekAt(n); isBlankByte(b) && !sec.Done(); b = sec.PeekAt(n) {
-					n++
-				}
-				if n > 0 {
-					if err := sec.Advance(n); err != nil {
-						return err
-					}
+				// Bounded blank skip (NOT skipBlanks, which would consume a
+				// "%pe;" reference without expanding it). skipBlankRun only
+				// advances over whitespace, so it is safe here and caps an
+				// oversized blank run inside the section with
+				// ErrNodeContentTooLarge.
+				if _, err := pctx.skipBlankRun(ctx, sec); err != nil {
+					return err
 				}
 
 				if sec.Done() {
@@ -297,6 +313,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 		pctx.skipBlanks(ctx)
+		if pctx.blankRunErr != nil {
+			return pctx.blankRunErr
+		}
 		cur = pctx.getCursor()
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
@@ -404,16 +423,13 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	}
 
 	// Blank-only skip (see method doc): advance over whitespace, leaving "%" for
-	// parsePEReference. Do NOT route through skipBlanks here.
+	// parsePEReference. Do NOT route through skipBlanks here (it would consume a
+	// "%pe;" reference without expanding it). skipBlankRun only advances over
+	// whitespace, so it is safe here and caps an oversized blank run with
+	// ErrNodeContentTooLarge instead of buffering it unbounded.
 	if c := pctx.getCursor(); c != nil {
-		n := 0
-		for b := c.PeekAt(n); isBlankByte(b) && !c.Done(); b = c.PeekAt(n) {
-			n++
-		}
-		if n > 0 {
-			if err := c.Advance(n); err != nil {
-				return false, err
-			}
+		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
+			return false, err
 		}
 	}
 
@@ -461,6 +477,13 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 			// declaration parse error from within an INCLUDE body (e.g. a
 			// malformed "<!BOGUS" or a bad entity-value PE) must propagate.
 			if tolerateCondError && (errors.Is(err, ErrConditionalSectionNotFinished) || errors.Is(err, ErrConditionalSectionKeyword)) {
+				// A resource-limit violation (over-cap whitespace) recorded while
+				// the conditional section was being parsed must NEVER be masked by
+				// the conditional-section tolerance: propagate it as a real fatal
+				// error instead of stopping the loop silently.
+				if pctx.blankRunErr != nil {
+					return false, pctx.blankRunErr
+				}
 				return true, nil
 			}
 			return false, err

@@ -284,6 +284,19 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	c.checkDuplicateAttrUses(ctx)
 
 	// Resolve attribute references: copy Default/Fixed/TypeName from global attr.
+	//
+	// au-props-correct.3 conflict diagnostics are collected here and emitted AFTER
+	// the loop in a deterministic order. The copy steps below are per-use and
+	// order-independent, but reporting inline while iterating the randomized
+	// c.attrRefs map would surface multiple conflicting refs in nondeterministic
+	// order; collect first, then sort by recorded source line/local (matching
+	// checkAttrUseConstraints) before reporting.
+	type attrRefConflict struct {
+		au *AttrUse
+		ga *AttrUse
+		qn QName
+	}
+	var conflicts []attrRefConflict
 	for au, qn := range c.attrRefs {
 		ga, ok := c.schema.globalAttrs[qn]
 		if !ok {
@@ -305,11 +318,38 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			continue
 		}
-		if au.Default == nil {
+		// A use="prohibited" ref corresponds to NO attribute-use component (XSD 1.0
+		// §3.2.2): the attribute is REMOVED, so its (harmless) local fixed/default is
+		// never compared with the referenced global's 'fixed' (au-props-correct.3
+		// does not apply) and it inherits no value constraint. A prohibited ref needs
+		// only its QName as an internal blocker — to forbid the attribute — so skip
+		// it here. (The distinct compile-time rule that 'default' requires
+		// use="optional" is enforced separately in checkAttributeUse and still
+		// rejects a prohibited ref carrying a default.)
+		if au.Prohibited {
+			continue
+		}
+		// au-props-correct.3: if the referenced global declaration carries a
+		// 'fixed' value constraint and this use declares its OWN value constraint,
+		// the use's constraint must ALSO be 'fixed' and value-equal to the
+		// declaration's. A local 'default', or a 'fixed' with a different value,
+		// would let the use admit values the declaration pins, so it is rejected.
+		// Enforced for EVERY referencing use (not only inside a restriction), so a
+		// plain complexType with <xs:attribute ref="t:a" default="2"/> against a
+		// fixed t:a is caught — the derivation-ok-restriction check only covers the
+		// derived-vs-base relationship.
+		if ga.Fixed != nil && (au.Default != nil || au.Fixed != nil) {
+			conflicts = append(conflicts, attrRefConflict{au: au, ga: ga, qn: qn})
+		}
+		// A use inherits the declaration's value constraint ONLY when it has no
+		// LOCAL value constraint of its own. A local 'default' must not be
+		// overwritten by — nor silently absorb — the declaration's 'fixed': the
+		// use's effective constraint stays its local 'default', so a derived use
+		// like <xs:attribute ref="t:a" default="2"/> does NOT satisfy a base
+		// 'fixed' constraint (au-props-correct.2 / derivation-ok-restriction).
+		if au.Default == nil && au.Fixed == nil {
 			au.Default = ga.Default
 			au.DefaultNS = ga.DefaultNS
-		}
-		if au.Fixed == nil {
 			au.Fixed = ga.Fixed
 			au.FixedNS = ga.FixedNS
 		}
@@ -325,6 +365,26 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			au.Inheritable = ga.Inheritable
 			au.InheritableSet = ga.InheritableSet
 		}
+	}
+	// Sort key mirrors checkAttrRefFixedConflict's own source resolution (recorded
+	// line/local, falling back to qn.Local), so diagnostics report in stable
+	// document order regardless of map iteration order.
+	conflictSortKey := func(au *AttrUse, qn QName) (int, string) {
+		if src, ok := c.attrUseConstraintSources[au]; ok {
+			return src.line, src.local
+		}
+		return 0, qn.Local
+	}
+	sort.Slice(conflicts, func(i, j int) bool {
+		li, loci := conflictSortKey(conflicts[i].au, conflicts[i].qn)
+		lj, locj := conflictSortKey(conflicts[j].au, conflicts[j].qn)
+		if li != lj {
+			return li < lj
+		}
+		return loci < locj
+	})
+	for _, cf := range conflicts {
+		c.checkAttrRefFixedConflict(ctx, cf.au, cf.ga, cf.qn)
 	}
 
 	// Validate attribute default/fixed constraint values against the
@@ -1426,6 +1486,303 @@ func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
 	}
 }
 
+// checkAttrRefFixedConflict enforces au-props-correct.3 for an <xs:attribute
+// ref> use whose referenced global declaration has a 'fixed' value constraint:
+// the use's own value constraint must also be 'fixed' and value-equal. A local
+// 'default' (no fixed) or a 'fixed' carrying a different value is rejected. Both
+// constraint lexicals are typed by the global declaration's simple type, so the
+// value comparison runs under that single type.
+func (c *compiler) checkAttrRefFixedConflict(ctx context.Context, au, ga *AttrUse, qn QName) {
+	if c.filename == "" {
+		return
+	}
+	// A local fixed value-equal to the declaration's fixed is valid; nothing to
+	// report. A local default (au.Fixed == nil) always conflicts.
+	if au.Fixed != nil {
+		gaTD := attrUseTypeDef(ga, c.schema)
+		if fixedConstraintRestricts(ctx, *au.Fixed, *ga.Fixed, gaTD, gaTD, au.FixedNS, ga.FixedNS, c.schema, c.version) {
+			return
+		}
+	}
+	line := 0
+	source := c.diagSource()
+	local := qn.Local
+	if src, ok := c.attrUseConstraintSources[au]; ok {
+		line = src.line
+		source = c.diagSourceOrRecorded(src.source)
+		local = src.local
+	}
+	msg := fmt.Sprintf("The value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the referenced attribute declaration '{%s}%s'.", qn.NS, qn.Local)
+	c.schemaError(ctx, schemaParserErrorAttr(source, line, local, "attribute", local, msg))
+}
+
+// builtinRestrictionParent maps each XSD builtin atomic type's local name to
+// the local name of the builtin it is derived (by restriction) from, per the
+// W3C XML Schema Part 2 type hierarchy. It is used to decide builtin-to-builtin
+// restriction validity (e.g. xs:int restricts xs:integer), which the *TypeDef
+// pointer chain cannot express because builtin types carry no BaseType links.
+// Every atomic primitive (string, decimal, boolean, float, double, the
+// date/time/g* family, duration, the binary types, anyURI, QName, NOTATION)
+// is rooted at anySimpleType, which terminates the chain — so a cross-family
+// pair is decided ("known") and REJECTED rather than treated as "unknown" and
+// silently accepted. Only atomic types are listed here; the list builtins
+// (IDREFS/ENTITIES/NMTOKENS) are handled separately by builtinDerivesFrom via
+// builtinListItem so an atomic-vs-list pair is also decided rather than
+// silently accepted.
+var builtinRestrictionParent = map[string]string{
+	// string family
+	lexicon.TypeString:           typeAnySimpleType,
+	lexicon.TypeNormalizedString: lexicon.TypeString,
+	lexicon.TypeToken:            lexicon.TypeNormalizedString,
+	typeLanguage:                 lexicon.TypeToken,
+	typeName:                     lexicon.TypeToken,
+	typeNMToken:                  lexicon.TypeToken,
+	typeNCName:                   typeName,
+	typeID:                       typeNCName,
+	lexicon.TypeIDREF:            typeNCName,
+	typeEntity:                   typeNCName,
+	// decimal / integer family
+	lexicon.TypeDecimal:            typeAnySimpleType,
+	lexicon.TypeInteger:            lexicon.TypeDecimal,
+	lexicon.TypeNonPositiveInteger: lexicon.TypeInteger,
+	lexicon.TypeNegativeInteger:    lexicon.TypeNonPositiveInteger,
+	lexicon.TypeLong:               lexicon.TypeInteger,
+	lexicon.TypeInt:                lexicon.TypeLong,
+	lexicon.TypeShort:              lexicon.TypeInt,
+	lexicon.TypeByte:               lexicon.TypeShort,
+	lexicon.TypeNonNegativeInteger: lexicon.TypeInteger,
+	lexicon.TypeUnsignedLong:       lexicon.TypeNonNegativeInteger,
+	lexicon.TypeUnsignedInt:        lexicon.TypeUnsignedLong,
+	lexicon.TypeUnsignedShort:      lexicon.TypeUnsignedInt,
+	lexicon.TypeUnsignedByte:       lexicon.TypeUnsignedShort,
+	lexicon.TypePositiveInteger:    lexicon.TypeNonNegativeInteger,
+	// remaining atomic primitives — each parented directly to anySimpleType.
+	// Listing them (rather than leaving them "unknown") lets builtinDerivesFrom
+	// REJECT an invalid builtin redeclaration whose derived type lives outside
+	// the string/decimal families (e.g. base xs:int restricted by derived
+	// xs:boolean), instead of returning "unknown" and silently accepting it.
+	lexicon.TypeBoolean:    typeAnySimpleType,
+	lexicon.TypeFloat:      typeAnySimpleType,
+	lexicon.TypeDouble:     typeAnySimpleType,
+	lexicon.TypeDuration:   typeAnySimpleType,
+	lexicon.TypeDateTime:   typeAnySimpleType,
+	lexicon.TypeTime:       typeAnySimpleType,
+	lexicon.TypeDate:       typeAnySimpleType,
+	lexicon.TypeGYearMonth: typeAnySimpleType,
+	lexicon.TypeGYear:      typeAnySimpleType,
+	lexicon.TypeGMonthDay:  typeAnySimpleType,
+	lexicon.TypeGDay:       typeAnySimpleType,
+	lexicon.TypeGMonth:     typeAnySimpleType,
+	typeHexBinary:          typeAnySimpleType,
+	typeBase64Binary:       typeAnySimpleType,
+	lexicon.TypeAnyURI:     typeAnySimpleType,
+	lexicon.TypeQName:      typeAnySimpleType,
+	lexicon.TypeNotation:   typeAnySimpleType,
+}
+
+// builtinListItem maps each XSD builtin LIST type's local name to the local name
+// of its item type, per XML Schema Part 2. These three list builtins carry no
+// BaseType links (they are registered as bare names), so builtinDerivesFrom
+// recognizes them explicitly to decide atomic-vs-list and list-vs-list
+// derivation rather than treating them as "unknown".
+var builtinListItem = map[string]string{
+	typeIDRefs:   lexicon.TypeIDREF,
+	typeEntities: typeEntity,
+	typeNMTokens: typeNMToken,
+}
+
+// isBuiltinListName reports whether local is one of the XSD builtin list types.
+func isBuiltinListName(local string) bool {
+	_, ok := builtinListItem[local]
+	return ok
+}
+
+// builtinDerivesFrom reports whether the builtin type named derived is the same
+// as, or derived by restriction from, the builtin named base. The second bool
+// is false ("unknown") when either name is not a recognized builtin (atomic or
+// list), so callers can stay conservative on cases the table cannot decide.
+func builtinDerivesFrom(derived, base string) (bool, bool) {
+	// List builtins (IDREFS/ENTITIES/NMTOKENS) participate in derivation
+	// decisions even though they carry no parent links: a list type is the same
+	// as itself, validly derives from xs:anySimpleType (cos-st-derived-ok 2.2.3),
+	// and is otherwise UNRELATED to every atomic type and to the other two list
+	// types. Deciding these (rather than returning "unknown") rejects an invalid
+	// widening such as xs:IDREFS "restricted" by xs:string.
+	if isBuiltinListName(derived) || isBuiltinListName(base) {
+		if derived == base {
+			return true, true
+		}
+		if isBuiltinListName(derived) && base == typeAnySimpleType {
+			return true, true
+		}
+		return false, true
+	}
+	if !isAtomicBuiltinName(derived) || !isAtomicBuiltinName(base) {
+		return false, false
+	}
+	for cur := derived; ; {
+		if cur == base {
+			return true, true
+		}
+		parent, ok := builtinRestrictionParent[cur]
+		if !ok {
+			// Reached the anySimpleType root without matching base.
+			return false, true
+		}
+		cur = parent
+	}
+}
+
+// isAtomicBuiltinName reports whether local is a recognized atomic builtin in
+// the restriction hierarchy (a map key, or the anySimpleType root).
+func isAtomicBuiltinName(local string) bool {
+	if local == typeAnySimpleType {
+		return true
+	}
+	_, ok := builtinRestrictionParent[local]
+	return ok
+}
+
+// simpleTypeValidlyRestricts reports whether the derived simple type is a valid
+// restriction of (same as, or derived by restriction from) the base simple
+// type. It first consults the *TypeDef pointer chain (isDerivedFrom). When that
+// fails it falls back to the builtin restriction hierarchy, but ONLY when the
+// BASE is an actual XSD builtin — a user simple type that restricts a builtin
+// must be derived from through the pointer chain, because widening it back to
+// its builtin ancestor would drop the user-added facets. It is CONSERVATIVE: it
+// returns true (valid) whenever derivation cannot be decided (unresolved types,
+// list/union carriers, or a builtin pair the table does not cover), so it only
+// ever rejects a clearly invalid restriction and never false-rejects a
+// legitimate one.
+func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
+	if derived == nil || base == nil {
+		return true
+	}
+	if isDerivedFrom(derived, base) {
+		return true
+	}
+	// cos-st-derived-ok.2.2.4: a base that is a UNION admits a derived type that
+	// is validly derived from (at least) ONE of its {member type definitions}.
+	// This MUST be handled BEFORE the builtin-base early return below, because
+	// builtinBaseLocal(base) is empty for a union (a union is not an atomic
+	// builtin) and the early return would otherwise accept ANY derived type
+	// unconditionally — wrongly accepting e.g. base union(xs:int xs:boolean)
+	// redeclared as xs:date (date derives from NEITHER member, so the loop
+	// rejects it). Members are walked transitively via the recursive call (a
+	// member that is itself a union re-enters this branch, so an intervening
+	// faceted member-union is rejected by its own facet gate below).
+	//
+	// XSD 1.0 SCOPE: cos-st-derived-ok (§3.14.6, Type Derivation OK Simple) has NO
+	// "facets empty" condition on a union base — a type validly derived from any
+	// member type is a valid restriction of the union, regardless of facets the
+	// union carries. The "facets empty" gate is an XSD 1.1-only condition (§3.16.6.3
+	// Type Derivation OK Simple), and this package targets XSD 1.0 (libxml2 parity),
+	// so it is intentionally NOT enforced here.
+	if resolveVariety(base) == TypeVarietyUnion {
+		for _, member := range resolveUnionMembers(base) {
+			if simpleTypeValidlyRestricts(derived, member) {
+				return true
+			}
+		}
+		return false
+	}
+	// cos-st-derived-ok.2.2: a base that is a LIST variety. isDerivedFrom already
+	// failed above, so the derived type does NOT appear in the base list's
+	// restriction chain (a real <xs:restriction base="theList"> sets the BaseType
+	// pointer, which isDerivedFrom follows). A type that did not pass the pointer
+	// chain is therefore NOT a valid restriction of the list: an unrelated list,
+	// or a list with a different item type, admits values the base does not, and
+	// xs:anySimpleType is the simple ur-type — a SUPERTYPE — so deriving the list
+	// "down to" it would WIDEN to accept non-list values. A restriction can never
+	// validly produce a supertype, so REJECT everything here.
+	if resolveVariety(base) == TypeVarietyList {
+		return false
+	}
+	// cos-st-derived-ok.2.2: the builtin LIST types (xs:IDREFS, xs:ENTITIES,
+	// xs:NMTOKENS) are registered as bare atomic-variety names with no BaseType
+	// link and no list marker, so resolveVariety reports Atomic and the list
+	// branch above does not catch them. isDerivedFrom already failed, so the
+	// derived type is not in the base list's restriction chain (a real
+	// <xs:restriction base="xs:IDREFS"> sets the BaseType pointer). Decide here
+	// rather than fall through to the db/bb shortcut, which returns "valid"
+	// whenever the derived side has no builtin base name (db == "") — that is the
+	// gap that let an unrelated user list (xs:list itemType="xs:string") stand in
+	// for an xs:IDREFS base. An unrelated list or atomic is not a valid
+	// restriction of a builtin list base, so REJECT.
+	if base.Name.NS == lexicon.NamespaceXSD && isBuiltinListName(base.Name.Local) {
+		return false
+	}
+	// A CONSTRUCTED derived list or union (resolveVariety List/Union) reaching this
+	// point has already FAILED both the pointer-chain derivation (isDerivedFrom) and
+	// the valid-union-base member shortcut above. A constructed list/union can only
+	// be validly derived from xs:anySimpleType (the simple ur-type) or through a real
+	// base-type chain — there is no other source. So accept ONLY when the base is the
+	// actual xs:anySimpleType; otherwise REJECT. Without this, the db=="" "unknown =>
+	// valid" fallback below would wrongly accept e.g. an atomic base xs:string
+	// redeclared as a user xs:union or xs:list.
+	if v := resolveVariety(derived); v == TypeVarietyList || v == TypeVarietyUnion {
+		return base.Name.NS == lexicon.NamespaceXSD && base.Name.Local == typeAnySimpleType
+	}
+	db := builtinBaseLocal(derived)
+	bb := builtinBaseLocal(base)
+	if db == "" || bb == "" {
+		return true
+	}
+	// The builtin restriction hierarchy may stand in for the missing builtin
+	// BaseType links ONLY when the BASE type is an ACTUAL XSD builtin. Walking
+	// the DERIVED side to its builtin ancestor is sound (a user restriction only
+	// narrows), but treating a user simple type that RESTRICTS a builtin (e.g.
+	// xs:int with maxInclusive="10") as that builtin would WIDEN the base back to
+	// its ancestor and wrongly accept a derived type that drops the user-added
+	// facets. When the base is a user-restricted (non-union) type, the only valid
+	// derivation is through the pointer chain (isDerivedFrom, already checked
+	// above) — so reject.
+	if base.Name.NS != lexicon.NamespaceXSD {
+		return false
+	}
+	ok, known := builtinDerivesFrom(db, bb)
+	if !known {
+		return true
+	}
+	return ok
+}
+
+// fixedConstraintRestricts reports whether a derived attribute use's 'fixed'
+// value is value-equal to the base attribute use's 'fixed' value
+// (derivation-ok-restriction.2.1.3). The two lexicals may be typed DIFFERENTLY
+// when the restriction validly narrows the type (base xs:decimal fixed="1.0",
+// derived xs:int fixed="1": equal values, but "1.0" is not a valid xs:int
+// lexical), so each lexical must be compared under ITS OWN simple type. A
+// same-type (or unresolved) fast path uses fixedValueMatches directly (so
+// derived "01" still matches base "1" for xs:integer, and a nil type falls back
+// to raw lexical equality); a cross-type pair is compared in its shared
+// primitive value space via crossMemberValueEqual.
+func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed string, derivedTD, baseTD *TypeDef, derivedNS, baseNS map[string]string, schema *Schema, version Version) bool {
+	if derivedTD == nil || baseTD == nil || derivedTD == baseTD {
+		return fixedValueMatches(ctx, derivedFixed, baseFixed, derivedTD, derivedNS, baseNS, schema, version)
+	}
+	// xs:anySimpleType — the simple ur-type — has NO primitive value-space family,
+	// so crossMemberValueEqual (which needs a shared primitive family) can never
+	// match against it and would false-reject. This arises when an untyped
+	// attribute (whose effective type defaults to xs:anySimpleType) carries a
+	// 'fixed' value and the other side narrows it to a real type. Per XSD 1.0 any
+	// simple type validly derives from the ur-type, and a base 'fixed' value is
+	// preserved iff the derived 'fixed' LITERAL is identical — there is no
+	// narrower value space to compare in. So when either side's effective type is
+	// the ur-type, accept on exact lexical equality.
+	if isUrSimpleType(derivedTD) || isUrSimpleType(baseTD) {
+		return derivedFixed == baseFixed
+	}
+	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS, schema, version)
+}
+
+// isUrSimpleType reports whether td is xs:anySimpleType, the simple ur-type. It
+// has no primitive value-space family, so cross-member value comparison cannot
+// route through it; callers fall back to lexical equality for the ur-type.
+func isUrSimpleType(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == typeAnySimpleType
+}
+
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
 // are compatible with the base type's attribute uses.
 func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
@@ -1442,11 +1799,11 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		component = "complex type '" + td.Name.Local + "'"
 	}
 
-	// Attribute the diagnostics to the file that actually declared this derived
-	// type: for an included/imported/redefined type, src.line refers to the nested
-	// schema, so c.filename (the parent) would mis-cite the location. Mirror the
-	// restriction-particle check (checkRestrictionParticles).
-	file := c.diagSourceOrRecorded(src.source)
+	// Attribute the diagnostic to the schema that DECLARES this type: src.line is
+	// the line within that schema, so the filename must come from src.source
+	// (an included/imported/redefined file), not the top-level c.filename. Mirrors
+	// the restriction-particle check (checkRestrictionParticles).
+	source := c.diagSourceOrRecorded(src.source)
 
 	baseTypeName := td.BaseType.Name.Local
 	baseTypeNS := td.BaseType.Name.NS
@@ -1472,15 +1829,49 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
-				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType",
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
 			// XSD 1.1 derivation-ok-restriction: a restricting attribute use must
 			// keep the base use's {inheritable} (true→false and false→true both fail).
 			if c.version == Version11 && au.Inheritable != baseAU.Inheritable {
 				msg := fmt.Sprintf("The 'inheritable' property of the attribute use '%s' is inconsistent with the corresponding attribute use of the base complex type definition %s.", au.Name.Local, baseQualified)
-				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType",
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
+			}
+
+			// derivation-ok-restriction.2.1.2: the derived attribute's type must
+			// be the same as, or derived by restriction from, the base
+			// attribute's type. Attribute types are simple types, so any
+			// derivation is by restriction; isDerivedFrom captures the chain.
+			// When either type is unresolved, accept conservatively (mirrors the
+			// element-to-element restriction check). An ABSENT attribute type is
+			// xs:anySimpleType (XSD §3.2.2.1), so attrUseEffectiveTypeDef defaults
+			// to the ur-type: an untyped derived attribute restricting a narrower
+			// base (e.g. xs:int) is the ur-type widening the base and is rejected.
+			derivedTD := attrUseEffectiveTypeDef(au, c.schema)
+			baseTD := attrUseEffectiveTypeDef(baseAU, c.schema)
+			if derivedTD != nil && baseTD != nil && !simpleTypeValidlyRestricts(derivedTD, baseTD) {
+				msg := fmt.Sprintf("The type definition of the attribute use is not a valid restriction of the corresponding attribute use's type definition of the base complex type definition %s.", baseQualified)
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
+					component+", attribute use '"+au.Name.Local+"'", msg))
+			}
+
+			// derivation-ok-restriction.2.1.3: a base 'fixed' value constraint
+			// forces the derived attribute to carry a value-space-equal 'fixed'
+			// value (a default, or no constraint, would admit values the base
+			// pins). Each lexical is compared under ITS OWN type so a valid
+			// narrowing across types is not false-rejected (base xs:decimal
+			// fixed="1.0" narrowed by derived xs:int fixed="1": equal values, but
+			// "1.0" is not a valid xs:int lexical). fixedConstraintRestricts uses a
+			// same-type fast path (so base "1" accepts derived "01" for xs:integer)
+			// and falls back to the cross-type value-equality helper otherwise.
+			if baseAU.Fixed != nil {
+				if au.Fixed == nil || !fixedConstraintRestricts(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, baseTD, au.FixedNS, baseAU.FixedNS, c.schema, c.version) {
+					msg := fmt.Sprintf("The effective value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the corresponding attribute use of the base complex type definition %s.", baseQualified)
+					c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
+						component+", attribute use '"+au.Name.Local+"'", msg))
+				}
 			}
 		} else if td.BaseType.AnyAttribute == nil || !wildcardAllowsExpandedName(td.BaseType.AnyAttribute, au.Name.Local, au.Name.NS, c.schema, true) {
 			// No matching attribute, and no base wildcard that ADMITS this derived
@@ -1488,7 +1879,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// notNamespace/notQName/##defined, not just its namespace constraint, so
 			// a derived attribute the base wildcard excludes by name is rejected.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
-			c.schemaError(ctx, schemaComponentError(file, src.line, "complexType",
+			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))
 		}
 	}
@@ -1511,13 +1902,13 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		if c.version == Version11 {
 			if found && derived.Prohibited {
 				msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 			}
 			continue
 		}
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-			c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
+			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		}
 	}
 
@@ -1526,19 +1917,19 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		// 4.1: Base must also have a wildcard.
 		if td.BaseType.AnyAttribute == nil {
 			msg := fmt.Sprintf("The complex type definition has an attribute wildcard, but the base complex type definition %s does not have one.", baseQualified)
-			c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
+			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
 			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute, c.schema, true) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
-				c.schemaError(ctx, schemaComponentError(file, src.line, "complexType", component, msg))
+				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 			}
 			// 4.3: Derived processContents must be >= base strength (strict > lax > skip).
 			// libxml2 attributes this error to the base type's source location.
 			if processContentsStrength(td.AnyAttribute.ProcessContents) < processContentsStrength(td.BaseType.AnyAttribute.ProcessContents) {
 				errLine := src.line
 				errComponent := component
-				errFile := file
+				errFile := source
 				if baseSrc, ok := c.typeDefSources[td.BaseType]; ok {
 					errLine = baseSrc.line
 					// This error is attributed to the BASE type's location, so cite the

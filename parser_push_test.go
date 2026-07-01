@@ -281,6 +281,52 @@ func TestPushParser(t *testing.T) {
 		}
 	})
 
+	t.Run("context cancel while reading xml-declaration whitespace", func(t *testing.T) {
+		t.Parallel()
+
+		// Push only "<?xml " (the declaration hint plus a single space) and never
+		// push the rest. The background parser consumes "<?xml", skips the one
+		// buffered space, then blocks in the stream's Read scanning for more
+		// whitespace after "<?xml". Cancelling unblocks that Read with
+		// context.Canceled, which the cursor records as a sticky Err() while
+		// PeekAt reports 0. The blank scanner must surface that read error so the
+		// cancellation propagates as context.Canceled rather than the parser
+		// synthesizing a syntax error ("blank needed after '<?xml'") that would
+		// mask it.
+		ctx, cancel := context.WithCancel(t.Context())
+
+		p := helium.NewParser()
+		pp := p.NewPushParser(ctx)
+		require.NoError(t, pp.Push([]byte("<?xml ")))
+
+		// Give the background parser time to consume "<?xml ", advance over the
+		// buffered space, and block in the whitespace Read before cancelling so
+		// the cancellation lands squarely in the declaration whitespace scan.
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+
+		done := make(chan struct {
+			doc *helium.Document
+			err error
+		}, 1)
+		go func() {
+			doc, err := pp.Close()
+			done <- struct {
+				doc *helium.Document
+				err error
+			}{doc, err}
+		}()
+
+		select {
+		case res := <-done:
+			require.ErrorIs(t, res.err, context.Canceled,
+				"cancellation in xml-declaration whitespace must surface as context.Canceled")
+			require.Nil(t, res.doc, "a cancelled parse must not return a partial document")
+		case <-time.After(10 * time.Second):
+			t.Fatal("push parser did not abort promptly after context cancellation")
+		}
+	})
+
 	t.Run("real file", func(t *testing.T) {
 		t.Parallel()
 		const path = "testdata/libxml2/source/example/gjobs.xml"

@@ -159,7 +159,7 @@ declarations remain a well-formedness error, as in libxml2.
 | MaxNameLength(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max name length (0=default 50000, <0=unlimited). Replaced RelaxLimits |
 | MaxEntityAmplification(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max entity-amplification ratio (0=default 5, <0=ratio check off; 1 GiB hard ceiling always applies) |
 | MaxContentModelDepth(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max DTD content-model depth (0=default 128, <0=unlimited) |
-| MaxNodeContentSize(int) | XML_MAX_TEXT_LENGTH (intent) | ✅ | Per-limit knob: max bytes of a single CDATA/comment/PI/char-data run or attribute value (0=default `DefaultMaxNodeContentSize` 10 MiB, <0=unlimited). Fires during accumulation; over-cap → `ErrNodeContentTooLarge`. Streaming SAX (`CharBufferSize>0`) char data is exempt (already chunked) |
+| MaxNodeContentSize(int) | XML_MAX_TEXT_LENGTH (intent) | ✅ | Per-limit knob: max bytes of a single CDATA/comment/PI/char-data run or attribute value, AND of a single contiguous XML-whitespace (blank-skip) run (0=default `DefaultMaxNodeContentSize` 10 MiB, <0=unlimited — disables BOTH the node-content and the blank-run cap). Fires during accumulation; over-cap → `ErrNodeContentTooLarge`. Streaming SAX (`CharBufferSize>0`) char data is exempt (already chunked) |
 | IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
 | BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks. **Default true** (NOXXE set by NewParser; libxml2 defaults off) |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |

@@ -6,6 +6,10 @@ XML toolkit for Go covering XML parsing, SAX2-style streaming, XPath 3.1,
 XInclude, XSD, Relax NG, and Schematron. Started as a libxml2-style port to
 Go and grew broader native Go APIs and features along the way.
 
+## XSD — Version
+
+The xsd package targets **XSD 1.0** (libxml2 parity). XSD 1.1-only constructs (xs:dateTimeStamp, explicitTimezone, assertions, the §3.16.6.3 union-facets-empty restriction condition) are out of scope; xpath3 is the only XSD 1.1 surface.
+
 ## XPath 3.1 — XSD Version
 
 The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexical form for xs:double and xs:float, and xs:dateTimeStamp is a recognized type. QT3 tests with `dependency type="xsd-version" value="1.0"` are skipped.

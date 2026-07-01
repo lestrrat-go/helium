@@ -448,81 +448,150 @@ func evalComparison(ctx context.Context, ec *evalContext, e BinaryExpr) (*Result
 	if err != nil {
 		return nil, err
 	}
-	b := compareResults(e.Op, left, right)
+	b, err := compareResults(ctx, ec, e.Op, left, right)
+	if err != nil {
+		return nil, err
+	}
 	return &Result{Type: BooleanResult, Bool: b}, nil
 }
 
-// compareResults implements XPath comparison semantics including node-set comparisons.
-func compareResults(op TokenType, left, right *Result) bool {
+// compareResults implements XPath comparison semantics including node-set
+// comparisons. Node-set comparisons iterate over (possibly large) node-sets, so
+// they charge the operation counter and honor context cancellation just like
+// the axis-iteration loops; a cancelled context or an exceeded op limit aborts
+// promptly with the same error the rest of the evaluator returns.
+func compareResults(ctx context.Context, ec *evalContext, op TokenType, left, right *Result) (bool, error) {
 	if left.Type == NodeSetResult {
-		return compareNodeSet(op, left.NodeSet, right)
+		return compareNodeSet(ctx, ec, op, left.NodeSet, right)
 	}
 	if right.Type == NodeSetResult {
-		return compareNodeSetRight(op, left, right.NodeSet)
+		return compareNodeSetRight(ctx, ec, op, left, right.NodeSet)
 	}
-	return compareScalars(op, left, right)
+	return compareScalars(op, left, right), nil
 }
 
 // compareNodeSet handles comparisons where the left operand is a node-set.
-func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
+func compareNodeSet(ctx context.Context, ec *evalContext, op TokenType, leftNodes []helium.Node, right *Result) (bool, error) {
 	if right.Type == NodeSetResult {
-		// Pre-compute string values for the right-hand node-set to
-		// avoid recomputing them for every left-hand node.
-		rightVals := make([]string, len(right.NodeSet))
-		for i, rn := range right.NodeSet {
-			rightVals[i] = ixpath.StringValue(rn)
+		// A node-set vs node-set general comparison is always false when
+		// either side is empty: there is no pair of nodes to compare. Return
+		// before doing any per-node string-value work (which would otherwise
+		// be O(n) or O(m) with a zero op charge, escaping the op-limit and
+		// cancellation bound).
+		if len(leftNodes) == 0 || len(right.NodeSet) == 0 {
+			return false, nil
 		}
+		// Honor a context cancelled before the comparison begins so no
+		// string-value work runs after cancellation, even when the first pair
+		// would otherwise match and return before the periodic re-check below.
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		// Charge an op (and periodically honor cancellation) BEFORE materializing
+		// EITHER side's string value, so the bound is complete: if the operand
+		// evaluation already spent the budget, the first per-pair charge fails
+		// before any string-value walk or large allocation runs.
+		//
+		// The right-hand string values are cached LAZILY in a sparse map, grown
+		// only for the indices actually reached. A dense len(right)-sized cache
+		// would do O(m) allocation up front — escaping the op-limit/cancellation
+		// bound for a huge right-hand node-set (e.g. one returned by a custom
+		// function) even when the budget is already exhausted.
+		rightVals := make(map[int]string)
+		// Hoist the cancellation channel once so the per-pair check below is a
+		// cheap non-blocking channel receive (cancelCtx.Err() takes a mutex; a
+		// receive on this hoisted channel does not). A nil channel is fine: the
+		// select's default branch always wins, matching the rest of the evaluator's
+		// nil-context tolerance.
+		done := ctx.Done()
 		for _, ln := range leftNodes {
-			lv := ixpath.StringValue(ln)
-			for _, rv := range rightVals {
+			// lv is materialized lazily, only AFTER the first successful op
+			// charge for this left node, so a pre-exhausted budget aborts before
+			// walking/copying a potentially large left subtree.
+			var lv string
+			lvComputed := false
+			for i, rn := range right.NodeSet {
+				if err := ec.countOps(1); err != nil {
+					return false, err
+				}
+				// Honor cancellation on EVERY pair, before either side's
+				// string-value walk runs, so a context cancelled mid-loop aborts
+				// promptly even for comparisons far smaller than any periodic
+				// re-check window.
+				select {
+				case <-done:
+					return false, ctx.Err()
+				default:
+				}
+				if !lvComputed {
+					lv = ixpath.StringValue(ln)
+					lvComputed = true
+				}
+				rv, ok := rightVals[i]
+				if !ok {
+					rv = ixpath.StringValue(rn)
+					rightVals[i] = rv
+				}
 				if compareStrings(op, lv, rv) {
-					return true
+					return true, nil
 				}
 			}
 		}
-		return false
+		return false, nil
 	}
 	// Per XPath 1.0 REC 3.4, comparing a node-set with a boolean converts the
 	// whole node-set to a boolean (true iff non-empty), then compares booleans.
 	if right.Type == BooleanResult {
 		nsBool := len(leftNodes) > 0
 		if op == TokenEquals {
-			return nsBool == right.Bool
+			return nsBool == right.Bool, nil
 		}
 		if op == TokenNotEquals {
-			return nsBool != right.Bool
+			return nsBool != right.Bool, nil
 		}
-		return compareNumbers(op, boolToNumber(nsBool), boolToNumber(right.Bool))
+		return compareNumbers(op, boolToNumber(nsBool), boolToNumber(right.Bool)), nil
 	}
 	for _, ln := range leftNodes {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if err := ec.countOps(1); err != nil {
+			return false, err
+		}
 		if compareWithScalar(op, ixpath.StringValue(ln), right) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // compareNodeSetRight handles comparisons where only the right operand is a node-set.
-func compareNodeSetRight(op TokenType, left *Result, rightNodes []helium.Node) bool {
+func compareNodeSetRight(ctx context.Context, ec *evalContext, op TokenType, left *Result, rightNodes []helium.Node) (bool, error) {
 	// Per XPath 1.0 REC 3.4, comparing a boolean with a node-set converts the
 	// whole node-set to a boolean (true iff non-empty), then compares booleans.
 	if left.Type == BooleanResult {
 		nsBool := len(rightNodes) > 0
 		if op == TokenEquals {
-			return left.Bool == nsBool
+			return left.Bool == nsBool, nil
 		}
 		if op == TokenNotEquals {
-			return left.Bool != nsBool
+			return left.Bool != nsBool, nil
 		}
-		return compareNumbers(op, boolToNumber(left.Bool), boolToNumber(nsBool))
+		return compareNumbers(op, boolToNumber(left.Bool), boolToNumber(nsBool)), nil
 	}
 	rev := reverseOp(op)
 	for _, rn := range rightNodes {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if err := ec.countOps(1); err != nil {
+			return false, err
+		}
 		if compareWithScalar(rev, ixpath.StringValue(rn), left) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // boolToNumber converts a boolean to its XPath number value (true=1, false=0).

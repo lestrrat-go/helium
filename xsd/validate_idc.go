@@ -761,6 +761,21 @@ func attrUseTypeDef(au *AttrUse, schema *Schema) *TypeDef {
 	return nil
 }
 
+// attrUseEffectiveTypeDef resolves an attribute use's effective simple type,
+// defaulting an ABSENT type to the registered xs:anySimpleType. Per XSD §3.2.2.1
+// an attribute declaration with no <xs:simpleType> and no @type has {type
+// definition} = xs:anySimpleType (the simple ur-type). Unlike attrUseTypeDef
+// (which returns nil so the IDC canonical-key path can fall back to raw-string
+// comparison), this never returns nil, so the restriction-derivation check treats
+// an untyped derived attribute as the ur-type — a SUPERTYPE — and correctly
+// rejects it as a WIDENING of a narrower base attribute type.
+func attrUseEffectiveTypeDef(au *AttrUse, schema *Schema) *TypeDef {
+	if td := attrUseTypeDef(au, schema); td != nil {
+		return td
+	}
+	return schema.types[QName{Local: typeAnySimpleType, NS: lexicon.NamespaceXSD}]
+}
+
 // formatKeySequence creates a unique string key from a sequence of values (for map lookups).
 func formatKeySequence(values []string) string {
 	return strings.Join(values, "\x00")

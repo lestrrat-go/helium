@@ -7,15 +7,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 // validator holds state during document validation.
@@ -2152,15 +2151,22 @@ func validateXSDType(typeName, text string, params []*param) int {
 // The parameter is named text (not value) so the internal/xsd/value package
 // stays reachable for the ordering-facet comparisons below.
 //
-// The length facets (length/minLength/maxLength) are measured via facetLength;
+// The length facets (length/minLength/maxLength) are measured via facetLength on
+// every applicable type — including xs:QName and xs:NOTATION, where they are
+// CONSTRAINING (XSD 1.0 / libxml2 parity, matching the xsd package's facetLength)
+// rather than a no-op, so RELAX NG rejects an out-of-length QName/NOTATION exactly
+// as the shared xsd validator does;
 // the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated through
 // the shared XSD value engine (value.Compare) so RELAX NG and XSD agree on the
 // value space (e.g. xs:integer "5" really is less than "10"); and the digit
 // facets (totalDigits, fractionDigits) are measured via value.CountTotalDigits/
-// CountFractionDigits on the xs:decimal family. Facet applicability — an ordering
-// facet on a non-ordered type, a digit facet on a non-decimal type, and bound
-// validity — is enforced at compile time (checkDataFacets), so the grammar is
-// already unmatchable when an inapplicable facet is present. Any other param name
+// CountFractionDigits on the xs:decimal family; and the pattern facet is matched
+// through the shared XSD-regex engine (xsdregex) so XSD-only constructs (\i, \c,
+// \p{...}, …) are honoured. Facet applicability — an ordering facet on a
+// non-ordered type, a digit facet on a non-decimal type, a length facet on a
+// non-string-derived type, and bound/pattern validity — is enforced at compile
+// time (checkDataFacets), so the grammar is already unmatchable when an
+// inapplicable or invalid facet is present. Any other param name
 // — enumeration, whiteSpace, or an unknown facet — is unsupported and fails
 // closed: it cannot be silently accepted, which would let a <data> match values
 // the facet was meant to reject.
@@ -2168,35 +2174,49 @@ func validateWithParams(text, typeName string, params []*param) int {
 	for _, p := range params {
 		switch p.name {
 		case "pattern":
-			matched, err := regexp.MatchString("^(?:"+p.value+")$", text)
-			if err != nil || !matched {
+			// The pattern facet is an XSD/XPath regular expression, anchored to the
+			// whole value. Use the compilation cached at compile time (checkDataFacets);
+			// fall back to compiling here for robustness if it was not pre-compiled. A
+			// pattern that cannot compile fails closed.
+			re := p.compiledPattern
+			if re == nil {
+				compiled, err := xsdregex.Compile(p.value)
+				if err != nil {
+					return -1
+				}
+				re = compiled
+			}
+			if !re.MatchString(text) {
 				return -1
 			}
 		case "length":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			// The bound is compile-time validated as an xs:nonNegativeInteger and
+			// parsed width-safely (big.Int) so a huge-but-valid bound is compared
+			// faithfully rather than overflowing int into a reject-all.
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
 			length, ok := facetLength(text, typeName)
-			if !ok || length != n {
+			if !ok || big.NewInt(int64(length)).Cmp(n) != 0 {
 				return -1
 			}
 		case "minLength":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
 			length, ok := facetLength(text, typeName)
-			if !ok || length < n {
+			if !ok || big.NewInt(int64(length)).Cmp(n) < 0 {
 				return -1
 			}
 		case "maxLength":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil {
+			n, ok := parseNonNegFacetBound(p.value)
+			if !ok {
 				return -1
 			}
 			length, ok := facetLength(text, typeName)
-			if !ok || length > n {
+			if !ok || big.NewInt(int64(length)).Cmp(n) > 0 {
 				return -1
 			}
 		case "minInclusive":
@@ -2222,7 +2242,7 @@ func validateWithParams(text, typeName string, params []*param) int {
 			// validation, so count its significant digits and reject when they exceed
 			// the bound. The bound is parsed with big.Int so an arbitrarily large
 			// xs:positiveInteger does not overflow into a reject-all.
-			n, ok := parseDigitFacetBound(p.value)
+			n, ok := parseNonNegFacetBound(p.value)
 			if !ok || !value.IsDecimalFamily(typeName) {
 				return -1
 			}
@@ -2230,7 +2250,7 @@ func validateWithParams(text, typeName string, params []*param) int {
 				return -1
 			}
 		case "fractionDigits":
-			n, ok := parseDigitFacetBound(p.value)
+			n, ok := parseNonNegFacetBound(p.value)
 			if !ok || !value.IsDecimalFamily(typeName) {
 				return -1
 			}
@@ -2296,15 +2316,16 @@ func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) b
 	return accept(cmp)
 }
 
-// parseDigitFacetBound parses a totalDigits/fractionDigits facet bound into a
+// parseNonNegFacetBound parses an integer facet bound — totalDigits,
+// fractionDigits, or the length family (length/minLength/maxLength) — into a
 // big.Int. The bound is compile-time validated (checkDataFacets) as a valid
-// xs:positiveInteger (totalDigits) or xs:nonNegativeInteger (fractionDigits),
-// so by the time validation runs it is a well-formed integer lexical with only
-// XSD whitespace; it is normalized (XSD collapse — NOT Go's unicode-space
-// trimming, which would accept NBSP) before parsing. A big.Int is used rather
-// than strconv.Atoi so an arbitrarily large bound is compared faithfully instead
-// of overflowing int and collapsing into a reject-all.
-func parseDigitFacetBound(s string) (*big.Int, bool) {
+// xs:positiveInteger (totalDigits) or xs:nonNegativeInteger (fractionDigits and
+// the length facets), so by the time validation runs it is a well-formed integer
+// lexical with only XSD whitespace; it is normalized (XSD collapse — NOT Go's
+// unicode-space trimming, which would accept NBSP) before parsing. A big.Int is
+// used rather than strconv.Atoi so an arbitrarily large bound is compared
+// faithfully instead of overflowing int and collapsing into a reject-all.
+func parseNonNegFacetBound(s string) (*big.Int, bool) {
 	n, ok := new(big.Int).SetString(value.Normalize(s, "nonNegativeInteger"), 10)
 	return n, ok
 }

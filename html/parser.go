@@ -998,6 +998,13 @@ func (p *parser) parseStartTag(ctx context.Context) {
 	_ = p.cur.Advance(1) // skip '<'
 
 	name := p.parseName()
+	// An over-cap tag name is an unrecoverable hard-cap failure, not a merely
+	// invalid name: parseName set fatalErr and returned "". Return BEFORE the
+	// name == "" text fallback so we never publish a stray '<' text node ahead of
+	// the fatal. The main loop surfaces fatalErr.
+	if p.fatalErr != nil {
+		return
+	}
 	if name == "" {
 		// Not a valid tag, emit '<' as text
 		_ = p.emitCharacters([]byte("<"))
@@ -1064,6 +1071,12 @@ func (p *parser) parseEndTag() {
 	_ = p.cur.Advance(2) // skip '</'
 
 	name := p.parseName()
+	// An over-cap end-tag name set fatalErr. Return IMMEDIATELY, before the
+	// "skip to '>'" loop below, so an unterminated abusive stream is not drained
+	// (read/work bound) before the main loop surfaces the fatal.
+	if p.fatalErr != nil {
+		return
+	}
 	name = strings.ToLower(name)
 
 	// Detect malformed end tag: characters like '<' after the tag name
@@ -1076,6 +1089,19 @@ func (p *parser) parseEndTag() {
 			malformed = true
 			junkChar = ch
 		}
+	}
+
+	// Bound the post-name intra-tag whitespace with the same HARD-capped
+	// skipWhitespace the rest of the tag lexer uses, BEFORE the unbounded
+	// "skip to '>'" drain loop below. Otherwise `</p` + an over-cap whitespace
+	// run + `>` would be drained byte-by-byte without limit (an unbounded-scan
+	// DoS), contradicting the documented intra-tag-whitespace hard cap. An
+	// over-cap run sets fatalErr; check it and return PROMPTLY so an abusive
+	// unterminated stream is not drained before the main loop surfaces the fatal
+	// (mirrors the parseStartTag / parseDoctype fatal-check pattern).
+	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
 	}
 
 	// Skip to closing '>'
@@ -1284,11 +1310,27 @@ func (p *parser) parsePI(ctx context.Context) {
 func (p *parser) parseDoctype() {
 	// Skip <!DOCTYPE
 	_ = p.cur.Advance(9)
+
+	// Each scanner below — skipWhitespace, parseName, parseQuotedString — can set
+	// fatalErr on a hard-cap overflow (over-cap intra-tag whitespace, root name, or
+	// PUBLIC/SYSTEM literal). Check fatalErr IMMEDIATELY after each one and return
+	// before any further cursor read: on a streaming reader stalled right at the
+	// over-cap boundary, the next scanner's PeekAt would issue another (blocking)
+	// Read instead of promptly surfacing the fatal. The main loop surfaces fatalErr.
 	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
 
 	// Parse root element name
 	name := p.parseName()
+	if p.fatalErr != nil {
+		return
+	}
 	p.skipWhitespace()
+	if p.fatalErr != nil {
+		return
+	}
 
 	externalID := ""
 	systemID := ""
@@ -1297,13 +1339,39 @@ func (p *parser) parseDoctype() {
 	if p.hasPrefixFold("PUBLIC") {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		externalID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		systemID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
 	} else if p.hasPrefixFold("SYSTEM") {
 		_ = p.cur.Advance(6)
 		p.skipWhitespace()
+		if p.fatalErr != nil {
+			return
+		}
 		systemID = p.parseQuotedString()
+		if p.fatalErr != nil {
+			return
+		}
+	}
+
+	// Final gate before the "skip to '>'" drain loop and the InternalSubset SAX
+	// emit (redundant given the per-scanner checks above, kept defensively): an
+	// over-cap literal/name/whitespace must not drain an unterminated abusive
+	// DOCTYPE or publish a partial subset.
+	if p.fatalErr != nil {
+		return
 	}
 
 	// Skip to '>'
@@ -2580,11 +2648,21 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 
 // parseName parses an HTML tag name (letters, digits, colons, hyphens).
 func (p *parser) parseName() string {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || !isNameChar(b) {
 			break
+		}
+		// A tag name is part of an indivisible start/end-tag event and cannot be
+		// chunked, so bound the unbounded PeekAt scan as a HARD cap (see
+		// scanTokenLimit): a gigantic (e.g. unterminated) name must not grow the
+		// cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("tag name exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2650,11 +2728,19 @@ func (p *parser) parseAttributes() []Attribute {
 // Uses negative-logic terminators: any character that is not a terminator
 // is accepted, matching HTML's liberal attribute name rules.
 func (p *parser) parseAttrName() string {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b == 0 || isWhitespaceByte(b) || b == '>' || b == '/' || b == '=' || b == '"' || b == '\'' || b == '<' {
 			break
+		}
+		// An attribute name is part of an indivisible start-tag event and cannot
+		// be chunked, so bound the unbounded PeekAt scan as a HARD cap (see
+		// scanTokenLimit). Exactly limit bytes are accepted; the limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("attribute name exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2790,11 +2876,26 @@ func (p *parser) parseQuotedString() string {
 	}
 	quote := p.cur.Peek()
 	_ = p.cur.Advance(1)
+	limit := p.cfg.scanTokenLimit()
 	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 || b == quote {
+	// HasByteAt in the loop condition distinguishes EOF from a real NUL byte:
+	// PeekAt returns 0 for both, so a NUL inside the literal must NOT be mistaken
+	// for end-of-input — doing so would exit the scan early WITHOUT setting
+	// fatalErr and bypass the hard cap (letting parseDoctype drain an unterminated
+	// abusive literal and emit a partial subset). A NUL counts as content, like
+	// the comment/PI scanners.
+	for p.cur.HasByteAt(n) {
+		if p.cur.PeekAt(n) == quote {
 			break
+		}
+		// A DOCTYPE PUBLIC/SYSTEM literal maps to a single InternalSubset SAX
+		// argument and cannot be chunked, so bound the unbounded PeekAt scan as a
+		// HARD cap (see scanTokenLimit): an unterminated huge literal must not grow
+		// the cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails. parseDoctype checks fatalErr and stops.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("doctype literal exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		n++
 	}
@@ -2856,10 +2957,20 @@ func (p *parser) parseWhileMaxErr(pred func(byte) bool, limit int) (string, erro
 
 // skipWhitespace skips whitespace characters.
 func (p *parser) skipWhitespace() {
+	limit := p.cfg.scanTokenLimit()
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
 		if b != ' ' && b != '\t' && b != '\n' && b != '\r' && b != '\f' {
+			break
+		}
+		// skipWhitespace runs only in tag context (between attributes / around the
+		// tag close), so a multi-megabyte whitespace run is pathological. Bound the
+		// unbounded PeekAt scan as a HARD cap (see scanTokenLimit) so it cannot grow
+		// the cursor buffer without limit. Exactly limit bytes are accepted; the
+		// limit+1-th fails.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("whitespace run exceeds %d bytes: %w", limit, ErrContentSizeExceeded)
 			break
 		}
 		n++

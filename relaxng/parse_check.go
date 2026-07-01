@@ -6,6 +6,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 // ruleFlags tracks ancestor context for forbidden-pattern-nesting checks.
@@ -216,6 +217,41 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 	}
 	for _, p := range pat.params {
 		switch p.name {
+		case "pattern":
+			// The pattern facet is an XSD/XPath regular expression. Compile it once
+			// with the shared XSD-regex engine (xsdregex) so XSD-only constructs (\i,
+			// \c, \p{...}, character-class subtraction, …) are honoured and an invalid
+			// pattern is a fatal schema error rather than a silent runtime no-op or a
+			// false rejection. The compilation is cached on the param for validation.
+			if p.patternChecked {
+				continue
+			}
+			p.patternChecked = true
+			re, err := xsdregex.Compile(p.value)
+			if err != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet 'pattern' is not a valid regular expression", p.value))
+				continue
+			}
+			p.compiledPattern = re
+		case "length", "minLength", "maxLength":
+			// Length facets apply only to string-derived, binary, anyURI, QName and
+			// NOTATION datatypes (value.LengthApplicable). Applying one to a numeric,
+			// boolean or date/time datatype is a schema error, mirroring XSD's
+			// facet-applicability rules so RELAX NG and XSD agree.
+			if !value.LengthApplicable(typeName) {
+				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the datatype '%s'", p.name, typeName))
+				continue
+			}
+			// The bound must itself be a valid xs:nonNegativeInteger. Validate here
+			// with XSD whitespace/lexical rules (value.Normalize collapses only XSD
+			// whitespace — NOT Go's TrimSpace, which would accept NBSP — and
+			// value.ValidateBuiltin enforces the digit lexical and the >=0 range), so
+			// an out-of-space bound (negative, fractional, non-digit, NBSP-padded)
+			// is a fatal compile error rather than being parsed leniently at
+			// validation time and turning the facet into a no-op or reject-all.
+			if value.ValidateBuiltin(value.Normalize(p.value, "nonNegativeInteger"), "nonNegativeInteger", value.Version10) != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid 'nonNegativeInteger'", p.value, p.name))
+			}
 		case "minInclusive", "maxInclusive", "minExclusive", "maxExclusive":
 			if !value.Orderable(typeName) {
 				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the non-ordered datatype '%s'", p.name, typeName))

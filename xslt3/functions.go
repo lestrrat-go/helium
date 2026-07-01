@@ -691,10 +691,20 @@ func splitURIFragment(uri string) (string, string) {
 // sibling "doc.xml" wrongly resolves to "mem:/pkg/doc.xml" instead of
 // "mem://pkg/doc.xml".
 //
-// For a genuine local filesystem base, the containing directory is taken with
-// forward-slash (path.Dir) semantics so the result uses '/' on every OS; on
-// Windows filepath.Dir would emit '\' here and corrupt the later slash-based
-// join.
+// For a genuine local filesystem base the containing directory is derived with
+// path.Dir over the forward-slash-normalized base ([uripath.ToSlash]) — the
+// SAME derivation compile-time module resolution uses for a local baseURI (see
+// resolveModuleHref in compile_imports.go), so a relative reference resolves to
+// the same directory whether the surrounding expression is compiled statically
+// or evaluated dynamically. A Compiler.BaseURI / stylesheet FILE base such as
+// "/styles/main" is treated as a file path: its last segment is dropped
+// ("/styles"), so doc("data.xml") lands at "/styles/data.xml". A genuine
+// directory-form base (a trailing-slash path such as "…/tests/fn/", as an
+// xml:base=".." override resolves to) is still handled correctly: path.Dir
+// collapses the trailing slash and keeps the directory ("…/tests/fn/" ->
+// "…/tests/fn"). Forward-slash semantics keep the result '/'-separated on every
+// OS (on Windows filepath.Dir would emit '\' and corrupt the later slash-based
+// join).
 func documentBaseDir(base string) string {
 	if base == "" {
 		return ""

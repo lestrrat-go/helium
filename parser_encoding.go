@@ -18,6 +18,23 @@ const (
 	encUTF8     = "utf8"
 	encUTF16LE  = "utf16le"
 	encUTF16BE  = "utf16be"
+
+	// ebcdicEncodingSniffMax bounds the EBCDIC prefix buffered on the streaming
+	// reader path before parsing. ExtractEBCDICEncoding only scans the first 200
+	// bytes for the XML declaration's encoding name; 256 gives a small margin
+	// while keeping the pre-parse buffer bounded so the remainder can stream.
+	ebcdicEncodingSniffMax = 256
+
+	// maxSniffZeroProgressReads bounds how many CONSECUTIVE (0, nil) reads the
+	// EBCDIC sniff loops tolerate before giving up with io.ErrNoProgress. A single
+	// zero-progress read is legitimate (a slow producer may return no data and no
+	// error while it waits for more input), so a transient empty read must NOT
+	// truncate the sniff prefix — otherwise ExtractEBCDICEncoding sees too few
+	// bytes, the encoding name is lost, and the parser wrongly defaults to
+	// IBM-037, never re-switching to the declared (e.g. CP1141) EBCDIC variant.
+	// The bound mirrors the cursor fill loops' maxZeroProgressReads guard so a
+	// pathological (0, nil)-forever reader fails fast instead of hanging.
+	maxSniffZeroProgressReads = 100
 )
 
 var (

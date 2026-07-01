@@ -360,7 +360,7 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	// Compute effective static base URI from xml:base on the stylesheet element.
 	// This is set generically so that static-base-uri() returns the correct
 	// value for any XSLT instruction or LRE that carries xml:base.
-	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
+	if effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot); effectiveBase != c.baseURI {
 		if si, ok := inst.(interface{ getStaticBaseURI() string }); ok {
 			// Only set if not already set by a specific compile function
 			if si.getStaticBaseURI() == "" {
@@ -822,7 +822,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			} else {
 				// Static parameter-document: load at compile time
 				outDef := &OutputDef{}
-				baseURI := stylesheetBaseURI(elem, c.baseURI)
+				baseURI := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 				_, presence, err := c.loadParameterDocument(ctx, outDef, baseURI, pd, false)
 				if err != nil {
 					return nil, err
@@ -1081,7 +1081,7 @@ func (c *compiler) compileLocalVariable(ctx context.Context, elem *helium.Elemen
 	}
 
 	// Capture xml:base for static base URI override during body/select evaluation.
-	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 	if effectiveBase != c.baseURI {
 		inst.StaticBaseURI = effectiveBase
 	}

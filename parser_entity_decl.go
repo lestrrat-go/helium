@@ -47,37 +47,11 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (
 	if cur == nil {
 		return "", pctx.error(ctx, errNoCursor)
 	}
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
-	off := 0
-	for {
-		b := cur.PeekAt(off)
-		if b == 0 || b == qch {
-			break
-		}
-		if b < 0x80 {
-			if !isChar(rune(b)) {
-				break
-			}
-			buf.WriteByte(b)
-			off++
-			continue
-		}
-		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isCharWidth(r, w) {
-			break
-		}
-		buf.WriteRune(r)
-		off += w
-	}
-	if off > 0 {
-		if err := cur.Advance(off); err != nil {
-			return "", pctx.error(ctx, err)
-		}
-		return buf.String(), nil
-	}
-	return "", nil
+	// The entity value is an indivisible content run; scanQuotedLiteral bounds it
+	// by the node-content cap and advances in chunks so an unbounded literal (e.g.
+	// over an EBCDIC ParseReader stream) fails closed with ErrNodeContentTooLarge
+	// instead of growing memory before any per-node cap fires.
+	return pctx.scanQuotedLiteral(ctx, cur, qch, false)
 }
 
 func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what SubstitutionType) (ret string, err error) {
@@ -548,7 +522,10 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 			// EntityDecl in that order.
 			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
-				return pctx.error(ctx, ErrValueRequired)
+				// Preserve a resource-limit (ErrNodeContentTooLarge) or
+				// parse-abort error verbatim; only an empty/missing literal
+				// falls back to the generic ErrValueRequired.
+				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -585,7 +562,10 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		} else {
 			literal, uri, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
-				return pctx.error(ctx, ErrValueRequired)
+				// Preserve a resource-limit (ErrNodeContentTooLarge) or
+				// parse-abort error verbatim; only an empty/missing literal
+				// falls back to the generic ErrValueRequired.
+				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -678,10 +658,20 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 // elemDepth, so element nesting that crosses an entity-expansion boundary keeps
 // accumulating against the same limit rather than restarting at 0.
 //
-// It does NOT touch newctx.doc, newctx.external, or the amplification counters
-// (sizeentcopy/inputSize/maxAmpl); those are handled by the caller because their
-// lifecycle (document swap, external flag, write-back on return) differs between
-// the two paths.
+// It does NOT touch newctx.doc, newctx.external, or the per-context amplification
+// counters (sizeentcopy/inputSize/maxAmpl); those are handled by the caller
+// because their lifecycle (document swap, external flag, write-back on return)
+// differs between the two paths.
+//
+// It DOES carry the ebcdicConsumed pointer, because that is a SHARED live
+// byte-counter over the underlying EBCDIC stream (not a per-context value): on
+// the EBCDIC ParseReader path inputSize was seeded only from the bounded sniff
+// prefix, so entityCheckLimits compares the amplification budget against this
+// live consumed-byte count instead. A nested entity sub-parse must see the same
+// pointer or an internal entity referenced from entity replacement text would be
+// falsely rejected as amplification (its newctx.inputSize is the parent's prefix
+// size while the real document bytes were already consumed at the top level). It
+// is nil on every non-EBCDIC path.
 func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.sax = pctx.sax
 	newctx.treeBuilder = pctx.treeBuilder
@@ -707,6 +697,11 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	// crosses the entity boundary keeps counting toward MaxDepth.
 	newctx.maxElemDepth = pctx.maxElemDepth
 	newctx.elemDepth = pctx.elemDepth
+	// Carry the shared live EBCDIC consumed-byte counter so the amplification
+	// guard inside a nested entity sub-parse compares against the real document
+	// size, not the bounded sniff prefix that seeded newctx.inputSize. nil except
+	// on the EBCDIC ParseReader path.
+	newctx.ebcdicConsumed = pctx.ebcdicConsumed
 	// Inherit the parent's security/resolution policy so any external reference
 	// reached while expanding this replacement text honors the same FS sandbox,
 	// catalog, and base URI as the top-level parse rather than falling back to

@@ -7,8 +7,113 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
 )
+
+// literalScanChunk bounds how many bytes a single quoted-literal scan peeks
+// ahead before advancing the cursor, mirroring blankScanChunk. Peeking an
+// ever-growing offset (the old behavior) forces the cursor to buffer the whole
+// literal up front, so an attacker-controlled unbounded entity-value or
+// SYSTEM/PUBLIC literal — all reachable from an internal DTD, which parses by
+// default — would grow the cursor buffer without bound before any per-node cap
+// fires, including on an EBCDIC ParseReader stream that streams through the
+// normal cursor pipeline. Scanning in fixed-size chunks and advancing as we go
+// keeps the cursor buffer bounded to this size.
+const literalScanChunk = 4096
+
+// scanQuotedLiteral scans a quoted literal value (entity value, SYSTEM literal,
+// or PUBLIC/pubid literal) up to but not including the closing quote qch and
+// returns the decoded value. It advances the cursor in bounded chunks, checks
+// the context between chunks, and enforces the node-content cap
+// (pctx.maxNodeContent, the same cap CDATA/comment/PI/char-data/attribute runs
+// use) so neither the output buffer nor the cursor's internal PeekAt buffer
+// grows past the cap. An over-cap literal fails closed with
+// ErrNodeContentTooLarge. A byte that is not a permitted literal character ends
+// the scan WITHOUT error (the caller validates the closing quote), matching the
+// prior unbounded scanners. When pubid is true only the ASCII PubidChar subset
+// is accepted; otherwise the full XML Char production is accepted (multi-byte
+// runes decoded via decodeRuneAt). HasByteAt distinguishes a real end-of-input
+// (a clean unterminated literal, returned to the caller for the quote check)
+// from a cursor read error such as a push-stream Read returning context.Canceled
+// (PeekAt also reports 0 there), which is surfaced rather than swallowed.
+func (pctx *parserCtx) scanQuotedLiteral(ctx context.Context, cur strcursor.Cursor, qch byte, pubid bool) (string, error) {
+	buf := bufferPool.Get()
+	defer releaseBuffer(buf)
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", pctx.error(ctx, err)
+		}
+
+		off := 0
+		stop := false
+		for off < literalScanChunk {
+			b := cur.PeekAt(off)
+			if b == 0 || b == qch {
+				// End of literal: the closing quote, a genuine terminator/NUL, or an
+				// exhausted buffer. When the buffer is exhausted (no byte present)
+				// distinguish a clean end-of-input from a read failure (e.g. a
+				// push-stream Read returning context.Canceled) so cancellation is
+				// surfaced rather than treated as an unterminated literal.
+				if b == 0 && !cur.HasByteAt(off) {
+					if err := cur.Err(); err != nil {
+						return "", pctx.error(ctx, err)
+					}
+					if err := ctx.Err(); err != nil {
+						return "", pctx.error(ctx, err)
+					}
+				}
+				stop = true
+				break
+			}
+			if pubid {
+				if !isPubidChar(rune(b)) {
+					stop = true
+					break
+				}
+				buf.WriteByte(b)
+				off++
+				continue
+			}
+			if b < 0x80 {
+				if !isChar(rune(b)) {
+					stop = true
+					break
+				}
+				buf.WriteByte(b)
+				off++
+				continue
+			}
+			r, w, ok := decodeRuneAt(cur, off)
+			if !ok || !isCharWidth(r, w) {
+				stop = true
+				break
+			}
+			buf.WriteRune(r)
+			off += w
+		}
+
+		if off > 0 {
+			if err := cur.Advance(off); err != nil {
+				return "", pctx.error(ctx, err)
+			}
+		}
+		// Enforce the node-content cap after each chunk: a run that fits a single
+		// chunk is still bounded, and a multi-chunk run is bounded chunk-by-chunk
+		// (peak buffered output stays within the cap plus at most one chunk).
+		if pctx.nodeContentTooLong(buf.Len()) {
+			return "", pctx.error(ctx, ErrNodeContentTooLarge)
+		}
+		if stop {
+			break
+		}
+		// A full chunk was consumed without reaching the literal's end; loop to
+		// scan and advance the next chunk so the cursor buffer stays bounded.
+	}
+
+	return buf.String(), nil
+}
 
 func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, error) {
 	cur := pctx.getCursor()
@@ -494,36 +599,7 @@ func (pctx *parserCtx) parseSystemLiteral(ctx context.Context, qch byte) (string
 	if cur == nil {
 		return "", pctx.error(ctx, errNoCursor)
 	}
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
-	off := 0
-	for {
-		b := cur.PeekAt(off)
-		if b == 0 || b == qch {
-			break
-		}
-		if b < 0x80 {
-			if !isChar(rune(b)) {
-				break
-			}
-			buf.WriteByte(b)
-			off++
-			continue
-		}
-		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isCharWidth(r, w) {
-			break
-		}
-		buf.WriteRune(r)
-		off += w
-	}
-	if off > 0 {
-		if err := cur.Advance(off); err != nil {
-			return "", pctx.error(ctx, err)
-		}
-	}
-	return buf.String(), nil
+	return pctx.scanQuotedLiteral(ctx, cur, qch, false)
 }
 
 func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch byte) (string, error) {
@@ -531,30 +607,10 @@ func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch byte) (string,
 	if cur == nil {
 		return "", pctx.error(ctx, errNoCursor)
 	}
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
-	off := 0
-	for {
-		b := cur.PeekAt(off)
-		if b == 0 || b == qch {
-			break
-		}
-		// PubidChar is restricted to a subset of ASCII, so any byte >= 0x80
-		// (the lead byte of a multi-byte sequence, including a real U+FFFD)
-		// is not a valid pubid character.
-		if !isPubidChar(rune(b)) {
-			break
-		}
-		buf.WriteByte(b)
-		off++
-	}
-	if off > 0 {
-		if err := cur.Advance(off); err != nil {
-			return "", pctx.error(ctx, err)
-		}
-	}
-	return buf.String(), nil
+	// PubidChar is restricted to a subset of ASCII, so any byte >= 0x80 (the lead
+	// byte of a multi-byte sequence, including a real U+FFFD) is not a valid pubid
+	// character; the pubid scan rejects it (ends the literal).
+	return pctx.scanQuotedLiteral(ctx, cur, qch, true)
 }
 
 // isPubidChar reports whether r is a member of the XML PubidChar production:
@@ -575,6 +631,32 @@ func isPubidChar(r rune) bool {
 		return true
 	}
 	return false
+}
+
+// externalIDLiteralError maps a SYSTEM/PUBLIC literal scan error to the
+// caller-facing parse error. A genuine syntax failure (e.g. an unterminated
+// literal surfacing as "string not closed") is reported with the domain-specific
+// fallback message. But a resource-limit failure (ErrNodeContentTooLarge) or a
+// parse-abort (context cancellation / deadline / StopParser) must propagate
+// verbatim so errors.Is keeps matching and a cancelled parse is not disguised as
+// a malformed external ID.
+func (pctx *parserCtx) externalIDLiteralError(ctx context.Context, err error, fallback string) error {
+	return pctx.preserveLimitOrAbort(ctx, err, errors.New(fallback))
+}
+
+// preserveLimitOrAbort returns err verbatim when it is a resource-limit failure
+// (ErrNodeContentTooLarge) or a parse-abort (context cancellation / deadline /
+// StopParser) so errors.Is keeps matching and a cancelled parse is not disguised
+// as a generic decl error; otherwise it substitutes fallback (a domain-specific
+// "value/ID required" sentinel for a genuine missing/empty literal). Used both by
+// parseExternalID's own literal-scan call sites and by parseEntityDecl, which
+// must not REPLACE an over-cap external SYSTEM/PUBLIC literal error from
+// parseExternalID with a generic ErrValueRequired.
+func (pctx *parserCtx) preserveLimitOrAbort(ctx context.Context, err, fallback error) error {
+	if errors.Is(err, ErrNodeContentTooLarge) || isParseAbort(err) {
+		return pctx.error(ctx, err)
+	}
+	return pctx.error(ctx, fallback)
 }
 
 // parseExternalID parses an ExternalID [75] or, when strict is false, a
@@ -601,7 +683,7 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.error(ctx, errors.New("system URI required"))
+			return "", "", pctx.externalIDLiteralError(ctx, err, "system URI required")
 		}
 		return uri, "", nil
 	} else if cur.HasPrefixString("PUBLIC") {
@@ -616,7 +698,7 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 			return pctx.parsePubidLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.error(ctx, errors.New("public ID required"))
+			return "", "", pctx.externalIDLiteralError(ctx, err, "public ID required")
 		}
 		if strict {
 			// ExternalID [75]: "S SystemLiteral" is mandatory after the
@@ -640,7 +722,7 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.error(ctx, errors.New("system URI required"))
+			return "", "", pctx.externalIDLiteralError(ctx, err, "system URI required")
 		}
 		return uri, publicID, nil
 	}

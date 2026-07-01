@@ -762,6 +762,14 @@ func (ctx *parserCtx) entityCheckLimits() error {
 
 	if ctx.sizeentcopy > entityAllowedExpansion {
 		consumed := ctx.inputSize
+		// On the EBCDIC streaming path inputSize was seeded from the bounded
+		// sniff prefix (all rawInput holds there), not the real document size.
+		// Use the larger live consumed-byte count so a legitimate large EBCDIC
+		// document is not falsely rejected; the count never exceeds the source's
+		// true length.
+		if ctx.ebcdicConsumed != nil && ctx.ebcdicConsumed.n > consumed {
+			consumed = ctx.ebcdicConsumed.n
+		}
 		if consumed == 0 {
 			consumed = 1
 		}

@@ -26,6 +26,17 @@ type Cursor interface {
 	Consume([]byte) bool
 	ConsumeString(string) bool
 	Done() bool
+	// Err returns a sticky non-EOF read/decode error encountered while filling
+	// the buffer, or nil if the stream ended cleanly. It lets callers tell a
+	// genuine end-of-input (PeekAt returns 0) apart from a read failure such as a
+	// push-stream Read that returned context.Canceled on cancellation.
+	Err() error
+	// HasByteAt reports whether a byte is available at the given offset from the
+	// current position. Unlike PeekAt (0 for both a genuine NUL and a position
+	// past the buffered input), this distinguishes a present byte from an
+	// exhausted buffer, so a caller can tell a scan that stopped on real input
+	// from one that ran out of buffered data because a read failed.
+	HasByteAt(int) bool
 	HasPrefix([]byte) bool
 	HasPrefixString(string) bool
 	Line() string
@@ -750,6 +761,25 @@ func (c *ByteCursor) PeekAt(offset int) byte {
 		}
 	}
 	return c.buf[pos]
+}
+
+// HasByteAt reports whether a byte is available at offset bytes from the
+// current position. Unlike PeekAt (which returns 0 both for a genuine NUL byte
+// and for a position past the buffered input), this lets callers tell a real
+// U+0000 / present byte apart from an exhausted buffer — e.g. to decide whether
+// a short scan stopped on real input or because a read failed.
+func (c *ByteCursor) HasByteAt(offset int) bool {
+	pos := c.bufpos + offset
+	if pos >= c.buflen {
+		if c.fillBuffer(offset+1) != nil {
+			return false
+		}
+		pos = c.bufpos + offset
+		if pos >= c.buflen {
+			return false
+		}
+	}
+	return true
 }
 
 // PeekRune decodes and returns the rune at the current position.

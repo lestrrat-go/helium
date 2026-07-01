@@ -682,10 +682,10 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 		Visibility: getAttr(elem, "visibility"),
 	}
 
-	// Capture xml:base for static base URI override during body evaluation.
-	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
-		p.StaticBaseURI = effectiveBase
-	}
+	// Capture the declaration-site static base URI (the module base, plus any
+	// xml:base override) so that body evaluation resolves resources against the
+	// declaration site, never the currently-executing template's base URI.
+	p.StaticBaseURI = stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
@@ -763,10 +763,10 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 		v.OwnerPackage = c.stylesheet
 	}
 
-	// Capture xml:base for static base URI override during body evaluation.
-	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
-		v.StaticBaseURI = effectiveBase
-	}
+	// Capture the declaration-site static base URI (the module base, plus any
+	// xml:base override) so that body evaluation resolves resources against the
+	// declaration site, never the currently-executing template's base URI.
+	v.StaticBaseURI = stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 
 	// For static variables, use the pre-computed value from compile-time
 	// evaluation instead of the runtime select expression. This ensures

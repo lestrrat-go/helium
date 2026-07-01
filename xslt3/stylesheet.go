@@ -287,7 +287,7 @@ type variable struct {
 	ImportPrec     int             // import precedence for XTSE0630 duplicate detection
 	StaticValue    xpath3.Sequence // pre-computed value for static="yes" variables
 	XPathDefaultNS string          // xpath-default-namespace in scope at definition site
-	StaticBaseURI  string          // effective static base URI from xml:base (non-empty when overridden)
+	StaticBaseURI  string          // declaration-site static base URI (module base + any xml:base override)
 }
 
 // param is a compiled xsl:param.
@@ -300,7 +300,7 @@ type param struct {
 	Tunnel        bool
 	Visibility    string // "public", "private", "final", "abstract" (for global params)
 	ImportPrec    int    // import precedence for XTSE0630 duplicate detection
-	StaticBaseURI string // effective static base URI from xml:base (non-empty when overridden)
+	StaticBaseURI string // declaration-site static base URI (module base + any xml:base override)
 }
 
 // keyDef is a compiled xsl:key.

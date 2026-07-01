@@ -45,6 +45,16 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // parsing successfully. Default-mode whitespace with a fixed insertion target and
 // no StripBlanks stays a soft-cap stream and never hits this case.
 //
+// It is also returned for an over-cap indivisible STRUCTURAL token scan: a
+// tag name, an end-tag name, an attribute name, a PUBLIC/SYSTEM DOCTYPE literal,
+// or an intra-tag whitespace run. These are part of a single indivisible
+// start/end-tag or DOCTYPE event and cannot be chunked, so each is a HARD cap.
+// Their bound is the structural scan cap, which is NOT [Parser.MaxContentSize]
+// (a content-chunking knob callers legitimately set very small): it is floored
+// at the 16 MiB default so ordinary names like "script" always parse, and grows
+// only when MaxContentSize is raised above that floor. An over-cap structural
+// run fails the parse and emits no partial token.
+//
 // Lastly, [Parser.ParseReader] returns it for an UNDECLARED-charset stream whose
 // bytes stay valid UTF-8 past the configured [Parser.MaxContentSize] (16 MiB by
 // default) without ever revealing their encoding. Such a stream cannot be

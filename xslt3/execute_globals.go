@@ -337,16 +337,21 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 			"abstract variable $%s was invoked without being overridden", v.Name)
 	}
 
-	// Always reset static base URI override for global variable evaluation
-	// so that the variable body is not affected by the caller's xml:base
-	// override (e.g. when evaluated lazily from within an LRE with xml:base).
+	// Pin the static base URI to the variable's declaration site so that the
+	// body (including any xsl:evaluate / unparsed-text within it) resolves
+	// resources against the global's module base, never the caller's template
+	// base — even when this global is first referenced lazily from a template
+	// that carries its own xml:base. The override holds the declaration base
+	// (module base + any xml:base override); the pinned flag prevents a fall-
+	// through to currentTemplate when that base is empty.
 	savedBaseOverride := ec.staticBaseURIOverride
-	if v.StaticBaseURI != "" {
-		ec.staticBaseURIOverride = v.StaticBaseURI
-	} else {
-		ec.staticBaseURIOverride = ""
-	}
-	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+	savedBasePinned := ec.staticBaseURIPinned
+	ec.staticBaseURIOverride = v.StaticBaseURI
+	ec.staticBaseURIPinned = true
+	defer func() {
+		ec.staticBaseURIOverride = savedBaseOverride
+		ec.staticBaseURIPinned = savedBasePinned
+	}()
 
 	// Static variables use their pre-computed compile-time value.
 	if v.StaticValue != nil {
@@ -434,15 +439,20 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 	ec.currentMode = ec.stylesheet.defaultMode
 	defer func() { ec.currentMode = savedMode }()
 
-	// Restore the declaration-site static base URI so that
-	// static-base-uri() inside the param resolves correctly.
+	// Pin the static base URI to the param's declaration site so that
+	// static-base-uri() (and any xsl:evaluate / unparsed-text in the body)
+	// resolves against the param's module base, never the caller's template
+	// base. The override holds the declaration base (module base + any xml:base
+	// override); the pinned flag prevents a fall-through to currentTemplate when
+	// that base is empty.
 	savedBaseOverride := ec.staticBaseURIOverride
-	if p.StaticBaseURI != "" {
-		ec.staticBaseURIOverride = p.StaticBaseURI
-	} else {
-		ec.staticBaseURIOverride = ""
-	}
-	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+	savedBasePinned := ec.staticBaseURIPinned
+	ec.staticBaseURIOverride = p.StaticBaseURI
+	ec.staticBaseURIPinned = true
+	defer func() {
+		ec.staticBaseURIOverride = savedBaseOverride
+		ec.staticBaseURIPinned = savedBasePinned
+	}()
 
 	// XTDE0050: required stylesheet parameter not supplied by the caller.
 	// If we reach here (not set in initGlobalVars), no external value was given.
@@ -655,6 +665,18 @@ func ensureFileURI(path string) string {
 // and the stylesheet base URI.
 func (ec *execContext) effectiveStaticBaseURI() string {
 	if ec.staticBaseURIOverride != "" {
+		return ec.staticBaseURIOverride
+	}
+	if ec.staticBaseURIPinned {
+		// Evaluating a global variable/param body: the static base URI is
+		// pinned to the declaration site (its module base) and must never fall
+		// through to the currently-executing template's base URI NOR the using
+		// stylesheet's base URI. The override already carries the declaration
+		// base whenever it is known; an empty pinned base is authoritative (e.g.
+		// a used package whose PackageResolver returns an empty base), so we
+		// return "" rather than falling back to ec.stylesheet.baseURI — falling
+		// back would resolve the global's xsl:evaluate / unparsed-text against
+		// the USING stylesheet, the very bug this pinning prevents.
 		return ec.staticBaseURIOverride
 	}
 	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {

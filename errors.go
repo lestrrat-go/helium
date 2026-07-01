@@ -52,8 +52,13 @@ var (
 	// (set via Parser.MaxNodeContentSize), or DefaultMaxNodeContentSize when no
 	// cap is configured. These constructs map to a single SAX event / DOM node
 	// (or attribute) and cannot be chunked, so an oversized one is a
-	// memory-amplification vector on untrusted input. The cap fires during
-	// accumulation, before the whole run is buffered; match with errors.Is.
+	// memory-amplification vector on untrusted input. The same cap also bounds a
+	// single contiguous run of XML whitespace (a blank skip): an
+	// attacker-controlled unbounded whitespace run would otherwise grow the
+	// cursor buffer without limit, so a blank run over the cap fails with this
+	// error too. MaxNodeContentSize(-1) disables both the node-content and the
+	// blank-run cap. The cap fires during accumulation, before the whole run is
+	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
 	errParserStopped       = errors.New("parser stopped")
 	errNoCursor            = errors.New("parser has no input")

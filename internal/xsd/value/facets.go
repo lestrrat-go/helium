@@ -52,6 +52,36 @@ func Orderable(builtinLocal string) bool {
 	return ok
 }
 
+// lengthApplicableTypes is the set of builtin locals on whose atomic value space
+// the length facets (length, minLength, maxLength) are applicable. Per XSD §3.16
+// length measures characters (string family), octets (the binary types) or
+// characters of the lexical/canonical form for anyURI, QName and NOTATION. It is
+// INAPPLICABLE to the numeric/decimal family, boolean, float, double and the
+// date/time/duration family. The string-derived family is enumerated explicitly
+// so the gate does not depend on primitive collapsing.
+var lengthApplicableTypes = map[string]struct{}{
+	lexicon.TypeString: {}, lexicon.TypeNormalizedString: {}, lexicon.TypeToken: {}, "language": {},
+	"Name": {}, "NCName": {}, "ID": {}, lexicon.TypeIDREF: {}, "IDREFS": {},
+	"ENTITY": {}, "ENTITIES": {}, "NMTOKEN": {}, "NMTOKENS": {},
+	lexicon.TypeAnyURI: {}, lexicon.TypeQName: {}, lexicon.TypeNotation: {},
+	"hexBinary": {}, "base64Binary": {},
+}
+
+// LengthApplicable reports whether the length facets (length, minLength,
+// maxLength) are applicable to builtinLocal's atomic value space. Callers gating
+// on this keep the length facets off the numeric/decimal family, boolean, float,
+// double and the date/time/duration family, where XSD declares them inapplicable.
+//
+// On the applicable types — including xs:QName and xs:NOTATION — the length
+// facets are CONSTRAINING (XSD 1.0 / libxml2 parity): a value whose length (rune
+// count for the string family / QName / NOTATION / anyURI, octet count for the
+// binary types) violates the bound is rejected, the same way the xsd package
+// enforces it (see xsd's facetLength). This keeps relaxng and xsd consistent.
+func LengthApplicable(builtinLocal string) bool {
+	_, ok := lengthApplicableTypes[builtinLocal]
+	return ok
+}
+
 // IsDecimalFamily reports whether builtinLocal is in the xs:decimal family
 // (xs:decimal and its integer derivations). These are the ONLY types on which the
 // digit facets (totalDigits, fractionDigits) are applicable; the facets are

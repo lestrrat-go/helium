@@ -947,6 +947,33 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		Variables(vars).
 		Functions(evalFns, ec.xsltEvaluateFunctionsNS())
 
+	// Forward the same runtime evaluator configuration that ordinary XPath
+	// evaluation uses (see buildBaseXPathEvaluator), so a dynamically-evaluated
+	// XPath honors the configured resource resolvers, resource caps, stable
+	// clock, trace sink, and shared document-order cache instead of silently
+	// dropping them. Without this, fn:unparsed-text / fn:json-doc / fn:collection
+	// inside xsl:evaluate behave differently from the same call made statically.
+	eval = eval.
+		CurrentTime(ec.currentTime).
+		ImplicitTimezone(ec.currentTime.Location()).
+		AllowXML11Chars().
+		TraceWriter(ec.traceWriter)
+	if resolver := ec.collectionResolver(); resolver != nil {
+		eval = eval.CollectionResolver(resolver)
+	}
+	if ec.transformConfig != nil {
+		if r := ec.transformConfig.uriResolver; r != nil {
+			eval = eval.URIResolver(r)
+		}
+		if c := ec.transformConfig.httpClient; c != nil {
+			eval = eval.HTTPClient(c)
+		}
+		eval = eval.MaxResourceBytes(resolveResourceLimit(ec.resourceLimit()))
+	}
+	if ec.docOrderCache != nil {
+		eval = eval.DocOrderCache(ec.docOrderCache)
+	}
+
 	// Forward the injected base parser so fn:doc / fn:parse-xml inside the
 	// dynamically-evaluated XPath uses the same parse policy as the engine.
 	if p := ec.injectedParser(); p != nil {
@@ -975,9 +1002,20 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		}
 		if baseURI != "" {
 			eval = eval.BaseURI(ensureFileURI(baseURI))
+			// The base-uri attribute governs not only the native xpath3
+			// functions (fn:unparsed-text, fn:collection — they read the
+			// evaluator BaseURI above) but also the XSLT-aware functions
+			// fn:doc / fn:document / fn:stream-available, which resolve relative
+			// URIs through ec.baseDir() / effectiveStaticBaseURI(). Install the
+			// declared base as a static-base override for the duration of the
+			// dynamic evaluation so those functions resolve against the SAME
+			// base instead of the using template's static base.
+			savedOverride := ec.staticBaseURIOverride
+			ec.staticBaseURIOverride = baseURI
+			defer func() { ec.staticBaseURIOverride = savedOverride }()
 		}
-	} else if ec.stylesheet.baseURI != "" {
-		eval = eval.BaseURI(ensureFileURI(ec.stylesheet.baseURI))
+	} else if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
+		eval = eval.BaseURI(ensureFileURI(baseURI))
 	}
 
 	// Default collation

@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -228,7 +229,7 @@ func isValidXML11Codepoint(cp int) bool {
 	return false
 }
 
-func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) {
+func fnStringToCodepoints(ctx context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -236,10 +237,21 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 	if s == "" {
 		return validNilSequence, nil
 	}
-	runes := []rune(s)
-	result := make(ItemSlice, len(runes))
-	for i, r := range runes {
-		result[i] = AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))}
+	// Build the codepoint sequence one item per character, charging the op-limit
+	// and honoring context cancellation before each append (and capping the
+	// length at maxNodes). A huge input string would otherwise materialize an
+	// unbounded item sequence in one shot, ignoring both budgets.
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	var result ItemSlice
+	for _, r := range s {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		if len(result) >= maxNodes {
+			return nil, ErrNodeSetLimit
+		}
+		result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))})
 	}
 	return result, nil
 }
@@ -943,7 +955,7 @@ func matchesXPathEmptyLine(s string) bool {
 	return s == "" || strings.HasPrefix(s, "\n") || strings.Contains(s, "\n\n")
 }
 
-func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
+func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -983,21 +995,44 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 	}
 
-	pos := 0
-	matches, err := re.FindAllStringSubmatchIndex(s, -1)
-	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	// Stream the matches one at a time instead of materializing every match up
+	// front. An input with a huge number of matches would otherwise allocate the
+	// full match slice (an O(matches) up-front cost) and build the whole result
+	// tree before the op budget or a cancellation could intervene. When an op
+	// budget is in force, cap the enumeration at remaining+1 matches so the
+	// callback observes the one match that exhausts the budget and rejects
+	// without producing the rest; an unbounded budget streams uncapped.
+	ec := getFnContext(ctx)
+	findLimit := -1
+	if remaining, bounded := fnRemainingOps(ec); bounded {
+		if n := remaining + 1; n > 0 {
+			findLimit = n
+		}
 	}
-	for _, m := range matches {
+	pos := 0
+	var buildErr error
+	buildFail := func(err error) bool {
+		buildErr = &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		return false
+	}
+	iterErr := re.eachStringSubmatchIndex(s, findLimit, func(m []int) bool {
+		// Charge the op-limit and honor context cancellation BEFORE building any
+		// result nodes for this match: an over-budget or cancelled run stops here
+		// instead of emitting an element first, and the full match slice is never
+		// materialized up front.
+		if err := fnCountOp(ctx, ec); err != nil {
+			buildErr = err
+			return false
+		}
 		start, end := m[0], m[1]
 		if start > pos {
 			if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:start]); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				return buildFail(err)
 			}
 		}
 		matchElem, err := createAnalyzeStringElement(doc, "match")
 		if err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			return buildFail(err)
 		}
 		// Check for groups
 		if len(m) > 2 {
@@ -1009,36 +1044,50 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 				}
 				if gs > groupPos {
 					if err := matchElem.AppendText([]byte(s[groupPos:gs])); err != nil {
-						return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+						return buildFail(err)
 					}
 				}
 				groupElem, err := createAnalyzeStringElement(doc, "group")
 				if err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 				_ = groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", g))
 				if err := groupElem.AppendText([]byte(s[gs:ge])); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 				if err := matchElem.AddChild(groupElem); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 				groupPos = ge
 			}
 			if groupPos < end {
 				if err := matchElem.AppendText([]byte(s[groupPos:end])); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					return buildFail(err)
 				}
 			}
 		} else {
 			if err := matchElem.AppendText([]byte(s[start:end])); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				return buildFail(err)
 			}
 		}
 		if err := root.AddChild(matchElem); err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			return buildFail(err)
 		}
 		pos = end
+		return true
+	})
+	if buildErr != nil {
+		return nil, buildErr
+	}
+	if iterErr != nil {
+		// A leading-context pattern that cannot stream is bounded to xpath3's
+		// full-context allocation ceiling; surface that resource condition as-is
+		// so errors.Is(err, ErrRegexMatchLimit) keeps working. Any other engine
+		// error maps to FORX0002 like the former FindAllStringSubmatchIndex path.
+		if errors.Is(iterErr, ErrRegexMatchLimit) {
+			return nil, iterErr
+		}
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", iterErr)}
 	}
 	if pos < len(s) {
 		if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:]); err != nil {

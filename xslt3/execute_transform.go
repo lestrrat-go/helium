@@ -303,7 +303,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		defaultCollation:    ss.defaultCollation,
 		docOrderCache:       xpath3.NewDocOrderCache(),
 	}
-	ec.setCurrentTemplate(nil) // initialize currentTemplateBaseDir from stylesheet
+	ec.setCurrentTemplate(nil) // start with no current template; baseDir() falls back to the stylesheet base
 	// Set the principal output method so that isItemOutputMethod() returns
 	// true when the default xsl:output method is json or adaptive.  Without
 	// this, maps/arrays/functions produced during the principal result tree

@@ -11,6 +11,23 @@ const (
 // type.
 const typeAnyType = "anyType"
 
+// Builtin simple-type local names that lack a constant in internal/lexicon,
+// used by the builtin restriction-derivation hierarchy in link_refs.go.
+const (
+	typeAnySimpleType = "anySimpleType"
+	typeLanguage      = "language"
+	typeName          = "Name"
+	typeNCName        = "NCName"
+	typeNMToken       = "NMTOKEN"
+	typeID            = "ID"
+	typeEntity        = "ENTITY"
+	typeHexBinary     = "hexBinary"
+	typeBase64Binary  = "base64Binary"
+	typeIDRefs        = "IDREFS"
+	typeEntities      = "ENTITIES"
+	typeNMTokens      = "NMTOKENS"
+)
+
 const (
 	elemAll          = "all"
 	elemAlternative  = "alternative" // XSD 1.1: xs:alternative (conditional type assignment)
