@@ -1756,6 +1756,17 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		if td == nil || td.ContentType != ContentTypeSimple {
 			continue
 		}
+		// XSD 1.0 "Attribute Declaration Properties Correct" clause 3 (§3.2.6): if the
+		// attribute's {type definition} is or is derived from xs:ID there must NOT be a
+		// {value constraint} (default or fixed). builtinBaseLocal returns the first
+		// XSD-namespace ancestor's local name, which is "ID" for xs:ID and any type
+		// restricting it. XSD 1.1 removed this restriction (W3C bug 4077), so the check
+		// is gated to Version10 and the 1.1 path stays byte-identical.
+		if c.version == Version10 && builtinBaseLocal(td) == typeID {
+			msg := "The attribute declaration is or is derived from ID and there must not be a value constraint."
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg))
+			continue
+		}
 		// Validate through the version-aware path so a 1.1 schema accepts 1.1-only
 		// lexical forms (e.g. "+INF") in attribute default/fixed constraints. The
 		// version-less (*TypeDef).Validate would build a Version10 context. schema is
