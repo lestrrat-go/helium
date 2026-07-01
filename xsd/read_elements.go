@@ -1119,7 +1119,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// run), so an invalid schema must fail to compile rather than validate
 	// documents as if no constraint were present.
 	if idc.Selector != "" {
-		compiled, err := compileIDCXPath(idc.Selector, false)
+		compiled, err := compileIDCXPath(idc.Selector, false, idc.Namespaces)
 		if err != nil {
 			c.reportIDCXPathError(ctx, elemSelector, selectorLine, idc.Selector, err)
 		} else {
@@ -1138,7 +1138,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			// also emit a redundant "not a valid field expression" diagnostic.
 			continue
 		}
-		compiled, err := compileIDCXPath(f, true)
+		compiled, err := compileIDCXPath(f, true, idc.Namespaces)
 		if err != nil {
 			line := 0
 			if i < len(fieldLines) {
@@ -1383,10 +1383,21 @@ func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line in
 // steps, function calls, variable references, operators, or predicates that the
 // subset forbids. allowAttribute is true for <field> (which may end in an
 // attribute step) and false for <selector> (where the attribute axis is not
-// permitted).
-func compileIDCXPath(expr string, allowAttribute bool) (*xpath1.Expression, error) {
+// permitted). namespaces is the in-scope namespace context of the identity
+// constraint (prefix → URI); every prefix used in a name test must be bound in
+// it, or the QName has no namespace and the constraint is invalid.
+func compileIDCXPath(expr string, allowAttribute bool, namespaces map[string]string) (*xpath1.Expression, error) {
 	compiled, err := xpath1.Compile(expr)
 	if err != nil {
+		return nil, err
+	}
+	// The AST normalizes the abbreviated syntax ('.' → self::node(), './/' →
+	// self::node()/descendant-or-self::node()/…), which loses the syntactic
+	// distinction the restricted subset grammar draws — an explicit
+	// 'self::node()' or a mid-path './/' looks identical to the permitted '.' /
+	// leading './/'. A lexical check over the raw expression enforces those
+	// syntactic constraints that the AST cannot see.
+	if err := validateIDCXPathLexical(expr); err != nil {
 		return nil, err
 	}
 	// Re-parse to inspect the AST; the expression already compiled, so this
@@ -1395,10 +1406,49 @@ func compileIDCXPath(expr string, allowAttribute bool) (*xpath1.Expression, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := validateIDCXPathSubset(ast, allowAttribute); err != nil {
+	if err := validateIDCXPathSubset(ast, allowAttribute, namespaces); err != nil {
 		return nil, err
 	}
 	return compiled, nil
+}
+
+// validateIDCXPathLexical enforces the syntactic constraints of the restricted
+// identity-constraint XPath subset (XSD Structures 3.11.6) that are lost once the
+// expression is normalized into an AST. The subset uses ONLY the abbreviated
+// syntax for the self and descendant-or-self axes — the literal steps '.' and the
+// leading './/' — never a spelled-out node-type test, and the descendant-or-self
+// step './/' may appear ONLY as the prefix of a path, never mid-path or repeated.
+//
+//   - A '(' can only introduce a node-type test (node()/text()/…) or a function
+//     call; neither is in the subset (the subset's name tests never bear
+//     parentheses), so its presence means the expression escaped the grammar —
+//     notably 'self::node()', which normalizes identically to the permitted '.'.
+//   - The '//' (descendant-or-self) token is permitted only as the leading './/'
+//     of each union path; any other occurrence ('.//.//…', 'a/.//b', a mid-path
+//     '//') is outside the grammar. Only the FIRST '//' may appear, and only
+//     after an optional leading '.' step (XPath permits insignificant whitespace,
+//     so '. //.' and '.// .' are the same leading './/' as './/.').
+func validateIDCXPathLexical(expr string) error {
+	if strings.ContainsRune(expr, '(') {
+		return errors.New("node type tests and function calls are not permitted")
+	}
+	for path := range strings.SplitSeq(expr, "|") {
+		before, after, found := strings.Cut(path, "//")
+		if !found {
+			continue
+		}
+		// Everything before the (leading) '//' may be only whitespace and an
+		// optional single '.' self step; anything else means the '//' is not the
+		// path-leading descendant-or-self step.
+		if prefix := strings.TrimSpace(before); prefix != "" && prefix != "." {
+			return errors.New("the './/' descendant-or-self step is only permitted at the start of a path")
+		}
+		// A second '//' (e.g. './/.//x') is never permitted.
+		if strings.Contains(after, "//") {
+			return errors.New("the './/' descendant-or-self step is only permitted at the start of a path")
+		}
+	}
+	return nil
 }
 
 // validateIDCXPathSubset reports an error if expr falls outside the XSD
@@ -1408,24 +1458,24 @@ func compileIDCXPath(expr string, allowAttribute bool) (*xpath1.Expression, erro
 // prefix, and — for fields only — a trailing attribute step. Anything else
 // (literals, function calls, variables, arithmetic/boolean operators, filter
 // expressions, predicates, absolute paths) is rejected.
-func validateIDCXPathSubset(expr xpath1.Expr, allowAttribute bool) error {
+func validateIDCXPathSubset(expr xpath1.Expr, allowAttribute bool, namespaces map[string]string) error {
 	switch e := expr.(type) {
 	case xpath1.UnionExpr:
-		if err := validateIDCXPathSubset(e.Left, allowAttribute); err != nil {
+		if err := validateIDCXPathSubset(e.Left, allowAttribute, namespaces); err != nil {
 			return err
 		}
-		return validateIDCXPathSubset(e.Right, allowAttribute)
+		return validateIDCXPathSubset(e.Right, allowAttribute, namespaces)
 	case *xpath1.LocationPath:
-		return validateIDCLocationPath(e, allowAttribute)
+		return validateIDCLocationPath(e, allowAttribute, namespaces)
 	case xpath1.LocationPath:
-		return validateIDCLocationPath(&e, allowAttribute)
+		return validateIDCLocationPath(&e, allowAttribute, namespaces)
 	default:
 		return errors.New("the expression is outside the identity-constraint XPath subset")
 	}
 }
 
 // validateIDCLocationPath checks a single location path against the IDC subset.
-func validateIDCLocationPath(lp *xpath1.LocationPath, allowAttribute bool) error {
+func validateIDCLocationPath(lp *xpath1.LocationPath, allowAttribute bool, namespaces map[string]string) error {
 	if lp.Absolute {
 		return errors.New("absolute location paths are not permitted")
 	}
@@ -1443,8 +1493,12 @@ func validateIDCLocationPath(lp *xpath1.LocationPath, allowAttribute bool) error
 				return fmt.Errorf("the %s axis is only permitted as the abbreviated '.' or './/' step", step.Axis)
 			}
 		case xpath1.AxisChild:
-			if _, ok := step.NodeTest.(xpath1.NameTest); !ok {
+			nt, ok := step.NodeTest.(xpath1.NameTest)
+			if !ok {
 				return errors.New("only name tests are permitted on the child axis")
+			}
+			if err := checkIDCNameTestPrefix(nt, namespaces); err != nil {
+				return err
 			}
 		case xpath1.AxisAttribute:
 			if !allowAttribute {
@@ -1453,12 +1507,31 @@ func validateIDCLocationPath(lp *xpath1.LocationPath, allowAttribute bool) error
 			if i != last {
 				return errors.New("the attribute axis is only permitted in the final step")
 			}
-			if _, ok := step.NodeTest.(xpath1.NameTest); !ok {
+			nt, ok := step.NodeTest.(xpath1.NameTest)
+			if !ok {
 				return errors.New("only name tests are permitted on the attribute axis")
+			}
+			if err := checkIDCNameTestPrefix(nt, namespaces); err != nil {
+				return err
 			}
 		default:
 			return fmt.Errorf("the %s axis is not permitted", step.Axis)
 		}
+	}
+	return nil
+}
+
+// checkIDCNameTestPrefix rejects a name test whose namespace prefix is not bound
+// in the identity constraint's in-scope namespace context. A QName in a
+// selector/field XPath is resolved against those namespaces (XSD Structures
+// 3.11.6.1), so an unbound prefix leaves the name unresolvable and the constraint
+// invalid. The reserved 'xml' prefix is always bound.
+func checkIDCNameTestPrefix(nt xpath1.NameTest, namespaces map[string]string) error {
+	if nt.Prefix == "" || nt.Prefix == lexicon.PrefixXML {
+		return nil
+	}
+	if _, ok := namespaces[nt.Prefix]; !ok {
+		return fmt.Errorf("the prefix '%s' is not bound to a namespace", nt.Prefix)
 	}
 	return nil
 }
