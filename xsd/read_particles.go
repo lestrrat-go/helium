@@ -24,7 +24,15 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		return nil
 	}
 
-	// A named group has exactly one child compositor (sequence, choice, or all).
+	// A named model group definition has the content model (annotation?, (all |
+	// choice | sequence)) per XSD Structures §3.7.2: exactly one model group child
+	// (sequence, choice, or all), at most one annotation which must PRECEDE the
+	// model group, and no other element children. This is a version-INDEPENDENT
+	// schema-representation rule, enforced in both XSD 1.0 and 1.1.
+	reportGrammar := func(ce *helium.Element, msg string) {
+		c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "group", msg))
+	}
+	var mgSeen, annotSeen, hadGrammarError bool
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -41,9 +49,28 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 			compositor = CompositorChoice
 		case isXSDElement(ce, elemAll):
 			compositor = CompositorAll
+		case isXSDElement(ce, elemAnnotation):
+			switch {
+			case annotSeen:
+				reportGrammar(ce, "A model group definition must not have more than one annotation.")
+				hadGrammarError = true
+			case mgSeen:
+				reportGrammar(ce, "The annotation must appear before the model group ('all', 'choice' or 'sequence').")
+				hadGrammarError = true
+			}
+			annotSeen = true
+			continue
 		default:
+			reportGrammar(ce, fmt.Sprintf("The content of a model group definition is restricted to (annotation?, (all | choice | sequence)); '%s' is not allowed.", ce.LocalName()))
+			hadGrammarError = true
 			continue
 		}
+		if mgSeen {
+			reportGrammar(ce, "A model group definition must contain exactly one model group ('all', 'choice' or 'sequence').")
+			hadGrammarError = true
+			continue
+		}
+		mgSeen = true
 		mg, err := c.parseModelGroup(ctx, ce, compositor)
 		if err != nil {
 			return err
@@ -58,7 +85,12 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 			source = c.includeFile
 		}
 		c.groupSources[qn] = groupSource{line: elem.Line(), source: source}
-		return nil
+	}
+	// The model group child is REQUIRED. A group carrying only an annotation (or
+	// only stray children) is invalid; suppress the duplicate diagnostic when a
+	// stray/misplaced child already produced a grammar error on this group.
+	if !mgSeen && !hadGrammarError {
+		reportGrammar(elem, "A model group definition must contain exactly one model group ('all', 'choice' or 'sequence').")
 	}
 	return nil
 }
