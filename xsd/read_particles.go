@@ -157,6 +157,11 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	// rejected. Gated on Version11 (1.0 ignores group wildcards entirely, so its
 	// grammar handling stays byte-identical).
 	var anyAttributeSeen bool
+	// sawContent tracks whether any content particle (attribute, attributeGroup
+	// ref, or anyAttribute wildcard) has been seen, so a later <xs:annotation> can
+	// be flagged: the content model is (annotation?, ...), i.e. the annotation must
+	// PRECEDE the attribute uses. Version-INDEPENDENT XSD rule (§3.6.2).
+	var sawContent bool
 	reportAfterWildcard := func(ce *helium.Element) {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
 			fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName())))
@@ -169,7 +174,19 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		if !ok {
 			continue
 		}
+		// annotation? — at most one (checkAnnotations), and it must precede the
+		// attribute uses. An annotation appearing AFTER any content particle
+		// violates the (annotation?, ((attribute | attributeGroup)*, anyAttribute?))
+		// content model. Version-INDEPENDENT XSD rule (§3.6.2).
+		if isXSDElement(ce, elemAnnotation) {
+			if c.filename != "" && sawContent {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
+					"The annotation must appear before the attribute declarations of an attribute group definition."))
+			}
+			continue
+		}
 		if isXSDElement(ce, elemAttribute) {
+			sawContent = true
 			if c.version == Version11 && anyAttributeSeen {
 				reportAfterWildcard(ce)
 				continue
@@ -208,6 +225,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// referencing type can intersect it into its effective attribute wildcard.
 		// It must be the final child and unique.
 		if c.version == Version11 && isXSDElement(ce, elemAnyAttribute) {
+			sawContent = true
 			if anyAttributeSeen {
 				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
 					fmt.Sprintf("An attribute group definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName())))
@@ -229,6 +247,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// reaches this point is genuinely circular and is reported and dropped (the
 		// reference is cut to avoid further confusion, matching libxml2).
 		if isXSDElement(ce, elemAttributeGroup) {
+			sawContent = true
 			c.checkAttrGroupRef(ctx, ce)
 			if c.version == Version11 && anyAttributeSeen {
 				reportAfterWildcard(ce)
