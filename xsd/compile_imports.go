@@ -178,6 +178,14 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 		}
 		switch {
 		case isXSDElement(elem, elemInclude):
+			// src-include.1 (§4.2.3 / the schema-for-schemas): @schemaLocation is
+			// REQUIRED on xs:include. Its ABSENCE is a schema-representation error
+			// (reject the schema), distinct from a present-but-unresolvable
+			// schemaLocation hint (a warning, handled below). Version-independent.
+			if !hasAttr(elem, attrSchemaLocation) {
+				c.reportMissingSchemaLocation(ctx, elem, elemInclude)
+				continue
+			}
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
@@ -193,6 +201,12 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				return err
 			}
 		case isXSDElement(elem, elemRedefine):
+			// src-redefine.1 (§4.2.5 / the schema-for-schemas): @schemaLocation is
+			// REQUIRED on xs:redefine — same representation rule as xs:include above.
+			if !hasAttr(elem, attrSchemaLocation) {
+				c.reportMissingSchemaLocation(ctx, elem, elemRedefine)
+				continue
+			}
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
@@ -239,6 +253,18 @@ func (c *compiler) nestedLoadFailureFatal(err error) bool {
 	}
 	_, denyAll := c.fsys.(iofs.DenyAll)
 	return denyAll
+}
+
+// reportMissingSchemaLocation reports the schema-representation error for an
+// xs:include/xs:redefine that omits the REQUIRED @schemaLocation attribute
+// (src-include.1 / src-redefine.1). Unlike a schemaLocation that is present but
+// fails to resolve (a warning, so the composition element is skipped), a MISSING
+// schemaLocation makes the schema invalid, so this is a fatal schema error.
+// Version-independent. elemKind is the XSD element local name (include/redefine).
+func (c *compiler) reportMissingSchemaLocation(ctx context.Context, elem *helium.Element, elemKind string) {
+	c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+		elem.LocalName(), elemKind, attrSchemaLocation,
+		"The attribute 'schemaLocation' is required but missing."))
 }
 
 // reportSchemaLoadWarning demotes a non-fatal xs:include/xs:import/xs:redefine
