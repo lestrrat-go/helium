@@ -404,8 +404,11 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 
 // compileOverrideVariable compiles a variable inside xsl:override.
 func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*variable, error) {
-	// A static="yes" variable is a version-independent compile-time value.
-	if !xsdBoolTrue(getAttr(elem, "static")) {
+	// A static="yes" variable is a version-independent compile-time value (forced
+	// non-compat even in a < 2.0 module); otherwise honor its version attribute.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushStaticVersion()()
+	} else {
 		defer c.pushElementVersion(elem)()
 	}
 	name := getAttr(elem, "name")

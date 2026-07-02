@@ -565,6 +565,17 @@ func (c *compiler) pushElementVersion(elem *helium.Element) func() {
 	return func() { c.effectiveVersion = saved }
 }
 
+// pushStaticVersion forces a non-backwards-compatible effective version for the
+// duration of a compile-time static-context evaluation (a static="yes" variable
+// or parameter). The static context is NOT subject to backwards-compatible
+// processing — consistent with use-when — so its select must not be compat-marked
+// even inside a version < 2.0 module. Returns a restore function to defer.
+func (c *compiler) pushStaticVersion() func() {
+	saved := c.effectiveVersion
+	c.effectiveVersion = lexicon.XSLTVersion30
+	return func() { c.effectiveVersion = saved }
+}
+
 // elementXSLTVersion returns the XSLT version declared on an element: the
 // unqualified version attribute on an XSLT-namespace element, or the xsl:version
 // attribute on a literal result element. On an LRE an unqualified version is an

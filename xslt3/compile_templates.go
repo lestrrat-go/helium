@@ -589,8 +589,11 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 
 func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*param, error) {
 	// A static="yes" parameter is a compile-time static-context value and is
-	// version-independent; a non-static param honors its own version attribute.
-	if !xsdBoolTrue(getAttr(elem, "static")) {
+	// version-independent (forced non-compat even inside a version < 2.0 module);
+	// a non-static param honors its own version attribute.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushStaticVersion()()
+	} else {
 		defer c.pushElementVersion(elem)()
 	}
 	savedNS := c.pushElementNamespaces(ctx, elem)
@@ -720,8 +723,10 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 	// its select/body (XSLT 3.0 §3.10), so a version="1.0" variable evaluates its
 	// select in backwards-compatible / XPath 1.0 compatibility mode even when the
 	// stylesheet module is 2.0/3.0. A static="yes" variable is exempt: it is a
-	// compile-time static-context value, which is version-independent.
-	if !xsdBoolTrue(getAttr(elem, "static")) {
+	// compile-time static-context value, version-independent even in a < 2.0 module.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushStaticVersion()()
+	} else {
 		defer c.pushElementVersion(elem)()
 	}
 
