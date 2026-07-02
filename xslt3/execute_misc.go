@@ -1043,6 +1043,14 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		eval = eval.Position(1).Size(1)
 	}
 
+	// The dynamically-compiled expression inherits backwards-compatible processing
+	// from the xsl:evaluate instruction: when the static xpath attribute is
+	// compat-marked (an effective version < 2.0), evaluate the dynamic expression
+	// in XPath 1.0 compatibility mode too.
+	if ec.isCompatExpr(inst.XPath) {
+		eval = eval.XPath10Compat()
+	}
+
 	// 7. Evaluate the dynamic expression.
 	var evalNode helium.Node
 	if dynContextNode != nil {

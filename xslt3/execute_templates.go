@@ -298,8 +298,13 @@ func (ec *execContext) matchAtomicPattern(ctx context.Context, p *pattern, item 
 				continue
 			}
 		}
-		// Evaluate the pattern as a boolean predicate with the item as context
-		result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), compiled, nil)
+		// Evaluate the pattern as a boolean predicate with the item as context.
+		// A backwards-compatible pattern evaluates in XPath 1.0 compatibility mode.
+		peval := ec.xpathEvaluator(ctx).ContextItem(item)
+		if p.compat {
+			peval = peval.XPath10Compat()
+		}
+		result, err := peval.Evaluate(ec.xpathContext(ctx), compiled, nil)
 		if err != nil {
 			continue
 		}

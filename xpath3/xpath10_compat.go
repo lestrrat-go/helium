@@ -35,15 +35,6 @@ func atomToCompatDouble(a AtomicValue) AtomicValue {
 	return d
 }
 
-// xpath10CompatDoubleFromAtoms applies the arithmetic operand rule: discard all
-// atoms after the first, then convert to xs:double (empty → NaN).
-func xpath10CompatDoubleFromAtoms(atoms []AtomicValue) AtomicValue {
-	if len(atoms) == 0 {
-		return doubleNaNAtom()
-	}
-	return atomToCompatDouble(atoms[0])
-}
-
 // xpath10CompatStringItem implements the xs:string(?) function-conversion rule:
 // the value is replaced by fn:string applied to its first item (empty → "").
 func xpath10CompatStringItem(seq Sequence) (AtomicValue, error) {

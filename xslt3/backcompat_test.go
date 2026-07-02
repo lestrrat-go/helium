@@ -83,6 +83,29 @@ func TestBackCompatSortKeyInnerCompat(t *testing.T) {
 	require.Contains(t, out, "<out>123</out>")
 }
 
+// TestBackCompatPatternPredicate verifies that a match-pattern predicate in a
+// version="1.0" stylesheet evaluates in XPath 1.0 compatibility mode: the
+// relational predicate . > '2' compares numerically (matching 3 and 10), not as
+// strings (which would match only 3).
+func TestBackCompatPatternPredicate(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/i"/></out></xsl:template>
+  <xsl:template match="i[. > '2']">M</xsl:template>
+  <xsl:template match="i">-</xsl:template>
+</xsl:stylesheet>`
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+	require.NoError(t, err)
+	ssc, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc><i>1</i><i>2</i><i>3</i><i>10</i></doc>`))
+	require.NoError(t, err)
+	out, err := ssc.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>--MM</out>")
+}
+
 // TestBackCompatSupportsProperty verifies system-property reports support.
 func TestBackCompatSupportsProperty(t *testing.T) {
 	ss := `<?xml version="1.0"?>

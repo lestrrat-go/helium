@@ -19,6 +19,22 @@ func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if err != nil {
 		return nil, err
 	}
+	// XPath 1.0 compatibility mode: each operand becomes xs:double (fn:number of
+	// its FIRST item; empty or non-numeric → NaN), so division by zero yields ±INF
+	// and there is no XPTY0004 for a >1 operand. The first-item rule is applied
+	// BEFORE atomization, so a discarded later item that cannot be atomized does not
+	// error. Reached only under XSLT backwards-compatible processing.
+	if ec != nil && ec.xpath10Compat {
+		la, lerr := xpath10CompatNumberItem(left)
+		if lerr != nil {
+			return nil, lerr
+		}
+		ra, rerr := xpath10CompatNumberItem(right)
+		if rerr != nil {
+			return nil, rerr
+		}
+		return floatArith(e.Op, la, ra)
+	}
 	// Atomize THROUGH the stream (atomizeSingletonOperand) so a schema-typed node
 	// whose typed value is a list/union expands; the single-operand cardinality is
 	// then checked on the ATOMIZED result (a node atomizing to >1 value is an
@@ -30,13 +46,6 @@ func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	rAtoms, err := atomizeSingletonOperand(right)
 	if err != nil {
 		return nil, err
-	}
-	// XPath 1.0 compatibility mode: each operand becomes xs:double (fn:number of
-	// its first atom; empty or non-numeric → NaN), so division by zero yields ±INF
-	// and there is no XPTY0004 for a >1 operand. Reached only under XSLT
-	// backwards-compatible processing.
-	if ec != nil && ec.xpath10Compat {
-		return floatArith(e.Op, xpath10CompatDoubleFromAtoms(lAtoms), xpath10CompatDoubleFromAtoms(rAtoms))
 	}
 	if len(lAtoms) == 0 || len(rAtoms) == 0 {
 		return validNilSequence, nil // empty sequence
@@ -345,21 +354,24 @@ func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if err != nil {
 		return nil, err
 	}
+	// XPath 1.0 compatibility mode: the operand becomes xs:double (fn:number of its
+	// FIRST item; empty or non-numeric → NaN), the first-item rule applied before
+	// atomization. Reached only under XSLT backwards-compatible processing.
+	if ec != nil && ec.xpath10Compat {
+		d, derr := xpath10CompatNumberItem(r)
+		if derr != nil {
+			return nil, derr
+		}
+		if !e.Negate {
+			return SingleAtomic(d), nil
+		}
+		return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(-d.ToFloat64())}), nil
+	}
 	// Atomize through the stream so a schema-typed list/union node expands; the
 	// single-operand cardinality is checked on the atomized result.
 	rAtoms, err := atomizeSingletonOperand(r)
 	if err != nil {
 		return nil, err
-	}
-	// XPath 1.0 compatibility mode: the operand becomes xs:double (fn:number of its
-	// first atom; empty or non-numeric → NaN). Reached only under XSLT
-	// backwards-compatible processing.
-	if ec != nil && ec.xpath10Compat {
-		d := xpath10CompatDoubleFromAtoms(rAtoms)
-		if !e.Negate {
-			return SingleAtomic(d), nil
-		}
-		return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(-d.ToFloat64())}), nil
 	}
 	if len(rAtoms) == 0 {
 		return validNilSequence, nil

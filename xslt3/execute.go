@@ -103,6 +103,7 @@ type execContext struct {
 	patternNamespaces            map[string]string             // the matching pattern's lexical xmlns snapshot (prefix→URI) during pattern matching
 	patternMatchErr              error                         // non-nil if a fatal error occurred during pattern matching
 	inSortKeyEval                bool                          // true during sort key evaluation (current-output-uri() returns empty)
+	patternCompat                bool                          // true while matching a backwards-compatible pattern (predicate XPath in 1.0 compat mode)
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
 	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
@@ -1215,7 +1216,10 @@ func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 // evalXPath evaluates an XPath expression using the Evaluator-based path.
 func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
 	eval := ec.xpathEvaluator(ctx)
-	if ec.isCompatExpr(expr) {
+	// ec.patternCompat covers pattern-predicate expressions, which are compiled at
+	// runtime (not recorded in compatExprs); isCompatExpr covers stylesheet
+	// expressions compiled under a backwards-compatible subtree.
+	if ec.patternCompat || ec.isCompatExpr(expr) {
 		eval = eval.XPath10Compat()
 	}
 	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
