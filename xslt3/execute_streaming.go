@@ -915,9 +915,13 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 				return nil, err
 			}
 
+			items, err := ec.maybeSnapshotMergeItems(ctx, src, xpath3.ItemSlice(sequence.Materialize(selItems)))
+			if err != nil {
+				return nil, err
+			}
 			result = append(result, mergeSourceItems{
 				name:            src.Name,
-				items:           xpath3.ItemSlice(sequence.Materialize(selItems)),
+				items:           items,
 				sortBeforeMerge: src.SortBeforeMerge,
 			})
 		}
@@ -949,9 +953,13 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 			if err != nil {
 				return nil, err
 			}
+			items, err := ec.maybeSnapshotMergeItems(ctx, src, xpath3.ItemSlice(sequence.Materialize(mergeItems)))
+			if err != nil {
+				return nil, err
+			}
 			result = append(result, mergeSourceItems{
 				name:            src.Name,
-				items:           xpath3.ItemSlice(sequence.Materialize(mergeItems)),
+				items:           items,
 				sortBeforeMerge: src.SortBeforeMerge,
 			})
 		}
@@ -962,14 +970,45 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 			return nil, err
 		}
 
+		items, err := ec.maybeSnapshotMergeItems(ctx, src, xpath3.ItemSlice(sequence.Materialize(selResult.Sequence())))
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, mergeSourceItems{
 			name:            src.Name,
-			items:           xpath3.ItemSlice(sequence.Materialize(selResult.Sequence())),
+			items:           items,
 			sortBeforeMerge: src.SortBeforeMerge,
 		})
 	}
 
 	return result, nil
+}
+
+// maybeSnapshotMergeItems replaces each selected node item of a streamable
+// merge-source with its snapshot (XSLT 3.0 §18.2). A streaming merge only
+// exposes a snapshot of each merged item — a deep copy of the item plus
+// shallow copies of its ancestors — so a reverse-axis step (e.g.
+// ancestor::record) from a merged item reaches the snapshot's ancestor shell,
+// not the wider source tree. A non-streamable source keeps the live node so
+// full-tree navigation works. Atomic items pass through unchanged.
+func (ec *execContext) maybeSnapshotMergeItems(ctx context.Context, src *mergeSource, items xpath3.ItemSlice) (xpath3.ItemSlice, error) {
+	if !src.StreamableAttr || len(items) == 0 {
+		return items, nil
+	}
+	snapped := make(xpath3.ItemSlice, 0, len(items))
+	for _, item := range items {
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok {
+			snapped = append(snapped, item)
+			continue
+		}
+		node, err := ec.snapshotNode(ctx, ni.Node)
+		if err != nil {
+			return nil, err
+		}
+		snapped = append(snapped, xpath3.NodeItem{Node: node})
+	}
+	return snapped, nil
 }
 
 func cloneAccumulatorSequence(seq xpath3.Sequence) xpath3.Sequence {
