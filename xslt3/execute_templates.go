@@ -429,7 +429,14 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 	// so package-private functions are visible.
 	savedFnsNS := ec.cachedFnsNS
 	savedPackage := ec.currentPackage
-	if tmpl.OwnerPackage != nil && tmpl.OwnerPackage != ec.currentPackage {
+	// Override templates (OriginalTemplate != nil) run in the main stylesheet
+	// context so that strip-space and other package-scoped rules from the
+	// using package apply, not the used package's rules (mirrors
+	// execCallTemplate).
+	if tmpl.OriginalTemplate != nil {
+		ec.cachedFnsNS = nil
+		ec.currentPackage = nil
+	} else if tmpl.OwnerPackage != nil && tmpl.OwnerPackage != ec.currentPackage {
 		ec.cachedFnsNS = nil // force rebuild with new package scope
 		ec.currentPackage = tmpl.OwnerPackage
 	}
