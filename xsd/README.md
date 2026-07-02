@@ -7,7 +7,7 @@ Import path: `github.com/lestrrat-go/helium/xsd`
 ## Schema version
 
 The compiler targets **XSD 1.0** by default. In 1.0 mode it passes
-14,271 / 14,399 (99.1%) of the W3C XML Schema Test Suite's schema-validity
+14,082 / 14,399 (97.8%) of the W3C XML Schema Test Suite's schema-validity
 tests and 24,613 / 25,004 of its instance tests, across the full Microsoft,
 NIST, Sun, Boeing, IBM, Saxon, Oracle, and W3C-WG collections. **XSD 1.1** is
 opt-in via `Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"`
