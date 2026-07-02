@@ -625,6 +625,19 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return coerceArgToStringRequired(args[1])
 	}
+	// coerceFormatName coerces the optional decimal-format-name argument (xs:string).
+	// In XPath 1.0 compatibility mode it applies fn:string to the first item.
+	coerceFormatName := func() (string, error) {
+		if compat {
+			sv, err := xpath10CompatStringItem(args[2])
+			if err != nil {
+				return "", err
+			}
+			s, _ := sv.Value.(string)
+			return s, nil
+		}
+		return coerceArgToString(args[2])
+	}
 
 	if seqLen(args[0]) == 0 {
 		// Per F&O: empty sequence is treated as NaN for formatting, result is xs:string
@@ -635,7 +648,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		df := defaultDecimalFormat(ctx)
 		if len(args) > 2 && seqLen(args[2]) > 0 {
-			formatName, fErr := coerceArgToString(args[2])
+			formatName, fErr := coerceFormatName()
 			if fErr != nil {
 				return nil, fErr
 			}
@@ -687,7 +700,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	df := defaultDecimalFormat(ctx)
 	if len(args) > 2 && seqLen(args[2]) > 0 {
-		formatName, err := coerceArgToString(args[2])
+		formatName, err := coerceFormatName()
 		if err != nil {
 			return nil, err
 		}
