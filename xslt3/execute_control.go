@@ -53,7 +53,7 @@ func (ec *execContext) execChoose(ctx context.Context, inst *chooseInst) error {
 		var err error
 		// Override namespace bindings with per-clause bindings when present
 		if when.Namespaces != nil {
-			eval := ec.xpathEvaluator(ctx).Namespaces(when.Namespaces).StrictPrefixes()
+			eval := ec.withCompat(ec.xpathEvaluator(ctx).Namespaces(when.Namespaces).StrictPrefixes(), when.Test)
 			result, err = eval.Evaluate(ec.xpathContext(ctx), when.Test, ec.contextNode)
 		} else {
 			result, err = ec.evalXPath(ctx, when.Test, ec.contextNode)

@@ -1231,6 +1231,16 @@ func (ec *execContext) isCompatExpr(expr *xpath3.Expression) bool {
 	return ok
 }
 
+// withCompat applies XPath 1.0 compatibility mode to a custom-built evaluator
+// when expr is compat-marked. Used at the few evaluation sites that build their
+// own Evaluator instead of going through evalXPath.
+func (ec *execContext) withCompat(eval xpath3.Evaluator, expr *xpath3.Expression) xpath3.Evaluator {
+	if ec.isCompatExpr(expr) {
+		return eval.XPath10Compat()
+	}
+	return eval
+}
+
 func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Sequence {
 	// Eagerly evaluate all pending global vars/params, but only at the
 	// top level. Nested calls (from within evaluateGlobalVar/param →
