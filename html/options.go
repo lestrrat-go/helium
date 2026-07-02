@@ -121,6 +121,18 @@ func (w Writer) EscapeControlChars(v bool) Writer {
 	return w
 }
 
+// NullNamespaceHTMLOnly controls whether an element is recognized as an HTML
+// void element (serialized with no closing tag) only when it is in no
+// namespace. When true, an otherwise-void element (e.g. <meta>) in a non-null
+// namespace such as XHTML is serialized with an explicit end tag. This matches
+// HTML 4.01 serialization, where only no-namespace elements are HTML elements;
+// HTML5 (the default, v=false) recognizes HTML void elements by local name
+// regardless of namespace.
+func (w Writer) NullNamespaceHTMLOnly(v bool) Writer {
+	w.nullNamespaceHTMLOnly = v
+	return w
+}
+
 // dumpConfig holds configuration for HTML serialization.
 type dumpConfig struct {
 	noDefaultDTD          bool
@@ -128,4 +140,5 @@ type dumpConfig struct {
 	preserveCase          bool
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
+	nullNamespaceHTMLOnly bool
 }
