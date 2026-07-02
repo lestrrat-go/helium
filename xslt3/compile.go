@@ -528,6 +528,41 @@ func isForwardsCompatible(ver string) bool {
 	return f > 3.0
 }
 
+// isBackwardsCompatible reports whether an effective XSLT version selects
+// backwards-compatible processing — XSLT 1.0 behavior plus XPath 1.0
+// compatibility mode. Per XSLT 3.0 §3.10 this is any effective version below 2.0
+// (an effective version in [2.0, 3.0) behaves identically to 3.0).
+func isBackwardsCompatible(ver string) bool {
+	ver = strings.TrimSpace(ver)
+	if ver == "" {
+		return false
+	}
+	f, err := strconv.ParseFloat(ver, 64)
+	if err != nil {
+		return false
+	}
+	return f < 2.0
+}
+
+// backwardsCompatible reports whether the compiler's current effective version
+// selects backwards-compatible processing.
+func (c *compiler) backwardsCompatible() bool {
+	return isBackwardsCompatible(c.effectiveVersion)
+}
+
+// markCompatExpr records an expression that must evaluate in XPath 1.0
+// compatibility mode. Keyed by pointer identity; lazily allocates the set so a
+// stylesheet with no backwards-compatible subtree keeps a nil map.
+func (c *compiler) markCompatExpr(expr *xpath3.Expression) {
+	if expr == nil {
+		return
+	}
+	if c.stylesheet.compatExprs == nil {
+		c.stylesheet.compatExprs = make(map[*xpath3.Expression]struct{})
+	}
+	c.stylesheet.compatExprs[expr] = struct{}{}
+}
+
 // resolveQName resolves a QName (prefix:local or just local) to an expanded name.
 // If the QName has a prefix, it is resolved using the given namespace bindings
 // and the result is returned in Clark notation: {uri}local.
@@ -918,7 +953,7 @@ func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Ele
 		}
 		realName := name[1:]
 		avtStr := attr.Value()
-		avt, err := compileAVT(avtStr, c.nsBindings)
+		avt, err := c.compileAVT(avtStr, c.nsBindings)
 		if err != nil {
 			return staticError(errCodeXTSE0020,
 				"invalid AVT in shadow attribute _%s: %v", realName, err)
@@ -949,7 +984,7 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 	if !hasShadow {
 		return nil
 	}
-	avt, err := compileAVT(avtStr, c.nsBindings)
+	avt, err := c.compileAVT(avtStr, c.nsBindings)
 	if err != nil {
 		return staticError(errCodeXTSE0020,
 			"invalid AVT in shadow attribute _%s: %v", name, err)
@@ -1087,10 +1122,16 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	return eval
 }
 
-func compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
+func (c *compiler) compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		return nil, staticError(errCodeXTSE0165, "invalid XPath %q: %v", expr, err)
+	}
+	// XSLT backwards-compatible processing: an expression compiled under an
+	// effective version < 2.0 is evaluated in XPath 1.0 compatibility mode. Record
+	// it by pointer identity so evalXPath can select the compat evaluator.
+	if c.backwardsCompatible() {
+		c.markCompatExpr(compiled)
 	}
 	return compiled, nil
 }

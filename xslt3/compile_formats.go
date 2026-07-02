@@ -185,7 +185,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		return staticError(errCodeXTSE1205, "xsl:key must have either a use attribute or content")
 	}
 	if useAttr != "" {
-		useExpr, err := compileXPath(useAttr, c.nsBindings)
+		useExpr, err := c.compileXPath(useAttr, c.nsBindings)
 		if err != nil {
 			return err
 		}

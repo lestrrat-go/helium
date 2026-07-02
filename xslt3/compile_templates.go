@@ -498,7 +498,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 				sawContent = true
 				inst := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
-					avt, err := compileAVT(text, c.nsBindings)
+					avt, err := c.compileAVT(text, c.nsBindings)
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -512,7 +512,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 			text := string(v.Content())
 			inst := &literalTextInst{Value: text}
 			if c.expandText && strings.ContainsAny(text, "{}") {
-				avt, err := compileAVT(text, c.nsBindings)
+				avt, err := c.compileAVT(text, c.nsBindings)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -689,7 +689,7 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -785,7 +785,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 		if c.hasEffectiveContent(ctx, elem) {
 			return staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return err
 		}

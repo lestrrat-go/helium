@@ -38,7 +38,7 @@ func (a *avt) hasFunction(name string) bool {
 // compileAVT compiles an attribute value template string.
 // AVTs contain literal text interspersed with {expr} XPath expressions.
 // {{ and }} are escape sequences for literal { and }.
-func compileAVT(s string, nsBindings map[string]string) (*avt, error) {
+func (c *compiler) compileAVT(s string, nsBindings map[string]string) (*avt, error) {
 	var parts []avtPart
 	i := 0
 	for i < len(s) {
@@ -62,7 +62,7 @@ func compileAVT(s string, nsBindings map[string]string) (*avt, error) {
 			if trimmed == "" || isXPathCommentOnly(trimmed) {
 				parts = appendLiteral(parts, "")
 			} else {
-				expr, err := compileXPath(exprStr, nsBindings)
+				expr, err := c.compileXPath(exprStr, nsBindings)
 				if err != nil {
 					return nil, staticError(errCodeXTSE0580, "invalid XPath in AVT: %v", err)
 				}

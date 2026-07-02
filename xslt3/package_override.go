@@ -511,7 +511,7 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}

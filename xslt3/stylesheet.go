@@ -89,6 +89,11 @@ type funcKey struct {
 // Stylesheet is a compiled XSLT stylesheet ready for transformation.
 type Stylesheet struct {
 	version              string
+	// compatExprs holds every compiled XPath expression that must evaluate in
+	// XPath 1.0 compatibility mode (XSLT backwards-compatible processing, effective
+	// version < 2.0), keyed by pointer identity. nil when the stylesheet has no
+	// backwards-compatible subtree, so the common case costs a nil-map lookup.
+	compatExprs          map[*xpath3.Expression]struct{}
 	templates            []*template
 	namedTemplates       map[string]*template
 	modeTemplates        map[string][]*template // mode -> templates sorted by import-precedence then priority

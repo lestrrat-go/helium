@@ -238,7 +238,7 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 	case "supports-serialization":
 		return xpath3.SingleString(lexicon.ValueYes), nil
 	case "supports-backwards-compatibility":
-		return xpath3.SingleString(lexicon.ValueNo), nil
+		return xpath3.SingleString(lexicon.ValueYes), nil
 	case "supports-namespace-axis":
 		return xpath3.SingleString(lexicon.ValueYes), nil
 	case "supports-streaming":

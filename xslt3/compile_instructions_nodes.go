@@ -15,7 +15,7 @@ func (c *compiler) compileValueOf(ctx context.Context, elem *helium.Element) (*v
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -23,7 +23,7 @@ func (c *compiler) compileValueOf(ctx context.Context, elem *helium.Element) (*v
 	}
 
 	if sep, ok := elem.GetAttribute("separator"); ok {
-		avt, err := compileAVT(sep, c.nsBindings)
+		avt, err := c.compileAVT(sep, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (c *compiler) compileText(_ context.Context, elem *helium.Element) (*textIn
 	}
 
 	if c.expandText && strings.ContainsAny(text, "{}") {
-		avt, err := compileAVT(text, c.nsBindings)
+		avt, err := c.compileAVT(text, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +128,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 		return nil, staticError(errCodeXTSE0110, "xsl:element requires name attribute")
 	}
 
-	nameAVT, err := compileAVT(nameAttr, c.nsBindings)
+	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 	}
 
 	if nsAttr, hasNS := elem.GetAttribute("namespace"); hasNS {
-		nsAVT, err := compileAVT(nsAttr, c.nsBindings)
+		nsAVT, err := c.compileAVT(nsAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +201,7 @@ func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute requires name attribute")
 	}
 
-	nameAVT, err := compileAVT(nameAttr, c.nsBindings)
+	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (
 	}
 
 	if nsAttr, hasNS := elem.GetAttribute("namespace"); hasNS {
-		nsAVT, err := compileAVT(nsAttr, c.nsBindings)
+		nsAVT, err := c.compileAVT(nsAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +234,7 @@ func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (
 	}
 
 	if sep, hasSep := elem.GetAttribute("separator"); hasSep {
-		sepAVT, err := compileAVT(sep, c.nsBindings)
+		sepAVT, err := c.compileAVT(sep, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +247,7 @@ func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (
 		if hasNonEmptyContent(elem) {
 			return nil, staticError(errCodeXTSE0840, "xsl:attribute with select attribute must have empty content")
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -272,7 +272,7 @@ func (c *compiler) compileComment(ctx context.Context, elem *helium.Element) (*c
 		if err := c.validateEmptyElement(ctx, elem, "xsl:comment"); err != nil {
 			return nil, staticError(errCodeXTSE0940, "xsl:comment has both @select and content")
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -294,7 +294,7 @@ func (c *compiler) compilePI(ctx context.Context, elem *helium.Element) (*piInst
 		return nil, staticError(errCodeXTSE0110, "xsl:processing-instruction requires name attribute")
 	}
 
-	nameAVT, err := compileAVT(nameAttr, c.nsBindings)
+	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +307,7 @@ func (c *compiler) compilePI(ctx context.Context, elem *helium.Element) (*piInst
 		if err := c.validateEmptyElement(ctx, elem, "xsl:processing-instruction"); err != nil {
 			return nil, staticError(errCodeXTSE0940, "xsl:processing-instruction has both @select and content")
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -354,14 +354,14 @@ func (c *compiler) compileCopy(ctx context.Context, elem *helium.Element) (*copy
 
 	// Shadow attributes (_attr overrides attr via avt at runtime)
 	if scn := getAttr(elem, "_copy-namespaces"); scn != "" {
-		avt, err := compileAVT(scn, c.nsBindings)
+		avt, err := c.compileAVT(scn, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
 		inst.CopyNamespacesAVT = avt
 	}
 	if sin := getAttr(elem, "_inherit-namespaces"); sin != "" {
-		avt, err := compileAVT(sin, c.nsBindings)
+		avt, err := c.compileAVT(sin, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +379,7 @@ func (c *compiler) compileCopy(ctx context.Context, elem *helium.Element) (*copy
 	}
 
 	if selectAttr := getAttr(elem, "select"); selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -441,7 +441,7 @@ func (c *compiler) compileCopyOf(_ context.Context, elem *helium.Element) (*copy
 		return nil, staticError(errCodeXTSE0110, "xsl:copy-of requires select attribute")
 	}
 
-	expr, err := compileXPath(selectAttr, c.nsBindings)
+	expr, err := c.compileXPath(selectAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +457,7 @@ func (c *compiler) compileCopyOf(_ context.Context, elem *helium.Element) (*copy
 	}
 	// Shadow attribute _copy-namespaces overrides at runtime
 	if scn := getAttr(elem, "_copy-namespaces"); scn != "" {
-		avt, err := compileAVT(scn, c.nsBindings)
+		avt, err := c.compileAVT(scn, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -511,7 +511,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 			getAttr(elem, "from") != "" || hasLevel {
 			return nil, staticError(errCodeXTSE0975, "xsl:number: when @value is present, @select, @level, @count, and @from must be absent")
 		}
-		expr, err := compileXPath(valueAttr, c.nsBindings)
+		expr, err := c.compileXPath(valueAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -519,7 +519,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if fmtAttr := getAttr(elem, "format"); fmtAttr != "" {
-		avt, err := compileAVT(fmtAttr, c.nsBindings)
+		avt, err := c.compileAVT(fmtAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -527,7 +527,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if gs := getAttr(elem, "grouping-separator"); gs != "" {
-		avt, err := compileAVT(gs, c.nsBindings)
+		avt, err := c.compileAVT(gs, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -535,7 +535,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if gsz := getAttr(elem, "grouping-size"); gsz != "" {
-		avt, err := compileAVT(gsz, c.nsBindings)
+		avt, err := c.compileAVT(gsz, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -543,7 +543,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if ord := getAttr(elem, "ordinal"); ord != "" {
-		avt, err := compileAVT(ord, c.nsBindings)
+		avt, err := c.compileAVT(ord, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -551,7 +551,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if sa := getAttr(elem, "start-at"); sa != "" {
-		avt, err := compileAVT(sa, c.nsBindings)
+		avt, err := c.compileAVT(sa, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -567,7 +567,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if sel := getAttr(elem, "select"); sel != "" {
-		expr, err := compileXPath(sel, c.nsBindings)
+		expr, err := c.compileXPath(sel, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -575,7 +575,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if lang := getAttr(elem, "lang"); lang != "" {
-		avt, err := compileAVT(lang, c.nsBindings)
+		avt, err := c.compileAVT(lang, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -583,7 +583,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if lv := getAttr(elem, "letter-value"); lv != "" {
-		avt, err := compileAVT(lv, c.nsBindings)
+		avt, err := c.compileAVT(lv, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -600,7 +600,7 @@ func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (
 	}
 	// name="" is valid: it sets the default namespace
 
-	nameAVT, err := compileAVT(nameAttr, c.nsBindings)
+	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +617,7 @@ func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (
 		return nil, staticError(errCodeXTSE0910, "xsl:namespace must have either a select attribute or content")
 	}
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -664,7 +664,7 @@ func (c *compiler) compileSequence(ctx context.Context, elem *helium.Element) (i
 		if hasSignificantChildren(elem) {
 			return nil, staticError(errCodeXTSE3185, "xsl:sequence with @select must not have content other than xsl:fallback")
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -687,15 +687,16 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 	c.breakAllowed = false
 	defer func() { c.breakAllowed = savedBreak }()
 
-	// XTDE0160: xsl:version < 2.0 on a LRE when backwards compatibility
-	// is not supported
+	// XSLT backwards-compatible processing: an xsl:version on a literal result
+	// element sets the effective version for this element and its subtree, so its
+	// AVTs and descendant expressions evaluate in XPath 1.0 compatibility mode when
+	// that version is < 2.0. (An LRE carries the xsl:version-qualified attribute;
+	// the generic instruction path only reads the unprefixed "version".)
 	if ver, ok := elem.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
-		ver = strings.TrimSpace(ver)
-		if ver != "" {
-			if f, err := strconv.ParseFloat(ver, 64); err == nil && f < 2.0 {
-				return nil, dynamicError(errCodeXTDE0160,
-					"backwards-compatible behavior is not supported for XSLT version %s", ver)
-			}
+		if ver = strings.TrimSpace(ver); ver != "" {
+			savedVersion := c.effectiveVersion
+			c.effectiveVersion = ver
+			defer func() { c.effectiveVersion = savedVersion }()
 		}
 	}
 
@@ -861,7 +862,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 			}
 			continue
 		}
-		avt, err := compileAVT(attr.Value(), c.nsBindings)
+		avt, err := c.compileAVT(attr.Value(), c.nsBindings)
 		if err != nil {
 			return nil, err
 		}

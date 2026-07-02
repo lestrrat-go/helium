@@ -1214,7 +1214,21 @@ func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 
 // evalXPath evaluates an XPath expression using the Evaluator-based path.
 func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
-	return ec.xpathEvaluator(ctx).Evaluate(ec.xpathContext(ctx), expr, node)
+	eval := ec.xpathEvaluator(ctx)
+	if ec.isCompatExpr(expr) {
+		eval = eval.XPath10Compat()
+	}
+	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
+}
+
+// isCompatExpr reports whether expr was compiled under XSLT backwards-compatible
+// processing and must evaluate in XPath 1.0 compatibility mode.
+func (ec *execContext) isCompatExpr(expr *xpath3.Expression) bool {
+	if ec.stylesheet == nil || ec.stylesheet.compatExprs == nil {
+		return false
+	}
+	_, ok := ec.stylesheet.compatExprs[expr]
+	return ok
 }
 
 func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Sequence {

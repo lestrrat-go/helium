@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -421,14 +420,6 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 const maxRecursionDepth = 2000
 
 func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node helium.Node, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
-	// XTDE0160: backwards compatibility mode is not supported.
-	// Only XSLT 1.0 triggers backwards compatible behavior. Other versions
-	// (like 1.5) are forward-compatible and don't require BC support.
-	if strings.TrimSpace(tmpl.Version) == lexicon.OutputVersion10 {
-		return dynamicError(errCodeXTDE0160,
-			"backwards compatibility mode (version 1.0) is not supported")
-	}
-
 	// If the template belongs to a package, switch function scope
 	// so package-private functions are visible.
 	savedFnsNS := ec.cachedFnsNS
