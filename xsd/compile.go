@@ -796,6 +796,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		}
 	}
 
+	// A present targetNamespace must not be the empty string (§3.1 / Schema
+	// Representation): the absent-namespace case is expressed by OMITTING the
+	// attribute, so an explicit targetNamespace="" is a schema-representation error.
+	// Presence is detected with hasAttr so a genuinely absent targetNamespace stays
+	// valid. Version-independent.
+	if hasAttr(root, attrTargetNamespace) && getAttr(root, attrTargetNamespace) == "" && c.filename != "" {
+		c.schemaError(ctx, schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrTargetNamespace,
+			"The value '' is not valid; the targetNamespace of a schema must not be the empty string."))
+	}
+
 	// First pass: collect all named types and global elements.
 	if err := c.parseSchemaChildren(ctx, root); err != nil {
 		return nil, err
