@@ -1205,7 +1205,7 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if seqLen(args[0]) > 1 {
 		// XPath 1.0 compatibility mode uses the first node; otherwise a >1 node
 		// argument is a type error.
-		if fc := getFnContext(ctx); fc == nil || !fc.xpath10Compat {
+		if !getFnContext(ctx).xpath10CompatMode() {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single node, got sequence of length > 1"}
 		}
 	}

@@ -610,10 +610,7 @@ func roundHalfToEvenFloat(n float64, precision int) float64 {
 }
 
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
-	compat := false
-	if fc := getFnContext(ctx); fc != nil {
-		compat = fc.xpath10Compat
-	}
+	compat := getFnContext(ctx).xpath10CompatMode()
 	// coercePicture coerces the picture argument (xs:string). In XPath 1.0
 	// compatibility mode it applies fn:string to the first item; otherwise it
 	// requires a singleton string.

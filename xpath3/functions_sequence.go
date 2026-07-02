@@ -117,10 +117,7 @@ func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnSubsequence(ctx context.Context, args []Sequence) (Sequence, error) {
-	compat := false
-	if fc := getFnContext(ctx); fc != nil {
-		compat = fc.xpath10Compat
-	}
+	compat := getFnContext(ctx).xpath10CompatMode()
 	seq := args[0]
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}

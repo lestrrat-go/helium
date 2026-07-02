@@ -416,7 +416,7 @@ func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequ
 	// XPath 1.0 compatibility mode: apply the 1.0 function-conversion rules
 	// (first-item truncation; fn:string / fn:number coercion) before the ordinary
 	// path. Reached only under XSLT backwards-compatible processing.
-	if ec != nil && ec.xpath10Compat && !st.Void {
+	if ec.xpath10CompatMode() && !st.Void {
 		newSeq, done, err := coerceXPath10Compat(seq, st, ec)
 		if done {
 			return newSeq, err

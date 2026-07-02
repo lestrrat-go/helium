@@ -24,7 +24,7 @@ func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	// and there is no XPTY0004 for a >1 operand. The first-item rule is applied
 	// BEFORE atomization, so a discarded later item that cannot be atomized does not
 	// error. Reached only under XSLT backwards-compatible processing.
-	if ec != nil && ec.xpath10Compat {
+	if ec.xpath10CompatMode() {
 		la, lerr := xpath10CompatNumberItem(left)
 		if lerr != nil {
 			return nil, lerr
@@ -357,7 +357,7 @@ func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	// XPath 1.0 compatibility mode: the operand becomes xs:double (fn:number of its
 	// FIRST item; empty or non-numeric → NaN), the first-item rule applied before
 	// atomization. Reached only under XSLT backwards-compatible processing.
-	if ec != nil && ec.xpath10Compat {
+	if ec.xpath10CompatMode() {
 		d, derr := xpath10CompatNumberItem(r)
 		if derr != nil {
 			return nil, derr

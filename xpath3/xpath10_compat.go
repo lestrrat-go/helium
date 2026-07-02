@@ -19,6 +19,13 @@ import (
 //   - Arithmetic (§3.4): evalArithmetic / evalUnaryExpr
 //   - General comparisons (§3.5.2): evalGeneralComparison
 
+// xpath10CompatMode reports whether XPath 1.0 compatibility mode is in effect.
+// It is nil-safe, so it can be called directly on a getFnContext(ctx) result
+// (which may be nil) without a separate guard.
+func (ec *evalContext) xpath10CompatMode() bool {
+	return ec != nil && ec.xpath10Compat
+}
+
 // doubleNaNAtom returns an xs:double NaN, the fn:number result for an empty or
 // lexically-invalid value.
 func doubleNaNAtom() AtomicValue {

@@ -226,7 +226,7 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	}
 	// XPath 1.0 compatibility mode: a range bound keeps only its first atom rather
 	// than raising a cardinality error.
-	if ec != nil && ec.xpath10Compat {
+	if ec.xpath10CompatMode() {
 		sAtoms = sAtoms[:1]
 		eAtoms = eAtoms[:1]
 	}

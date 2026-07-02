@@ -21,7 +21,7 @@ func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCo
 	// The X = (M to N) range fast-path assumes ordinary comparison semantics; in
 	// XPath 1.0 compatibility mode the operands are converted (boolean/numeric/
 	// string rules), so route through the general path instead.
-	if ec == nil || !ec.xpath10Compat {
+	if !ec.xpath10CompatMode() {
 		if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ctx, ec, e); ok {
 			if err != nil {
 				return nil, err
@@ -38,7 +38,7 @@ func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCo
 		return nil, err
 	}
 	coll := ec.resolveDefaultCollation()
-	if ec != nil && ec.xpath10Compat {
+	if ec.xpath10CompatMode() {
 		result, err := generalCompareXPath10Compat(ctx, e.Op, left, right, coll, ec)
 		if err != nil {
 			return nil, err

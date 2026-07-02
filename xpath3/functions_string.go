@@ -306,7 +306,7 @@ func fnConcat(_ context.Context, args []Sequence) (Sequence, error) {
 func fnStringJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 	sep := ""
 	if len(args) > 1 {
-		if fc := getFnContext(ctx); fc != nil && fc.xpath10Compat {
+		if getFnContext(ctx).xpath10CompatMode() {
 			// The separator's expected type is xs:string, so XPath 1.0 compatibility
 			// mode converts it with fn:string applied to its first item.
 			sv, err := xpath10CompatStringItem(args[1])
