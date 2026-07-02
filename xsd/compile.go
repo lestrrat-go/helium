@@ -761,6 +761,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// identity-constraint components. Both are version-independent XSD rules, so
 	// they run in 1.0 and 1.1 alike.
 	c.checkSchemaComponentIDs(ctx, root)
+	c.checkSchemaNamespaceAttrs(ctx, root)
 	c.checkIDConstraintPlacement(ctx, root)
 	c.checkNotations(ctx, root)
 	c.checkAnnotations(ctx, root)

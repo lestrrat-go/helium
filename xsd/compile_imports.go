@@ -557,6 +557,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// recur across documents). Runs after conditional-inclusion pruning so
 	// vc-excluded components' @ids don't count.
 	c.checkSchemaComponentIDs(ctx, incRoot)
+	c.checkSchemaNamespaceAttrs(ctx, incRoot)
 	c.checkIDConstraintPlacement(ctx, incRoot)
 	c.checkNotations(ctx, incRoot)
 	c.checkAnnotations(ctx, incRoot)
@@ -832,6 +833,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// THIS redefined document (a fresh per-document scope). Runs after
 	// conditional-inclusion pruning.
 	c.checkSchemaComponentIDs(ctx, incRoot)
+	c.checkSchemaNamespaceAttrs(ctx, incRoot)
 	c.checkIDConstraintPlacement(ctx, incRoot)
 	c.checkNotations(ctx, incRoot)
 	c.checkAnnotations(ctx, incRoot)
@@ -1486,6 +1488,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// rules are version-independent, so enforce them on the imported document in
 	// 1.0 and 1.1 alike.
 	impC.checkSchemaComponentIDs(ctx, impRoot)
+	impC.checkSchemaNamespaceAttrs(ctx, impRoot)
 	impC.checkIDConstraintPlacement(ctx, impRoot)
 	impC.checkNotations(ctx, impRoot)
 	impC.checkAnnotations(ctx, impRoot)

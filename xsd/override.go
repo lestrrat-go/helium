@@ -431,6 +431,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	// conditional-inclusion pruning. xs:override is Version11-only.
 	if c.version == Version11 {
 		c.checkSchemaComponentIDs(ctx, incRoot)
+		c.checkSchemaNamespaceAttrs(ctx, incRoot)
 	}
 	c.checkIDConstraintPlacement(ctx, incRoot)
 	c.checkNotations(ctx, incRoot)
