@@ -360,6 +360,23 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 		c.hasXPathDefaultNS = savedHasXPathDefaultNS
 	}()
 
+	// The included module's version governs backwards-/forwards-compatible
+	// processing of its own declarations (XSLT 3.0 §3.10), independent of the
+	// including module's version. A _version shadow attribute takes precedence
+	// over the literal (§3.5.2), so resolve it first — mirroring the top-level
+	// root — so an included module whose computed version is < 2.0 enters
+	// backwards-compatible mode.
+	savedVersion := c.effectiveVersion
+	if _, hasShadow := root.GetAttribute("_version"); hasShadow {
+		if err := c.resolveSingleShadowAttribute(ctx, root, paramVersion); err != nil {
+			return err
+		}
+	}
+	if ver := getAttr(root, "version"); ver != "" {
+		c.effectiveVersion = ver
+	}
+	defer func() { c.effectiveVersion = savedVersion }()
+
 	// XTSE0265: conflicting input-type-annotations across included modules.
 	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
@@ -734,6 +751,12 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 			if err != nil {
 				return err
 			}
+			// Carry over the simplified module's backwards-compatible expression set
+			// so its expressions still evaluate in XPath 1.0 compatibility mode (the
+			// module's xsl:version < 2.0 marks them compat during compileSimplified).
+			for e := range simplified.compatExprs {
+				c.markCompatExpr(e)
+			}
 			// Merge the simplified stylesheet's templates into ours
 			for _, tmpl := range simplified.templates {
 				tmpl.ImportPrec = c.importPrec
@@ -810,8 +833,16 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	}
 	defer func() { c.expandText = savedExpandText }()
 
-	// Save/restore effective version for forwards-compatible processing.
+	// Save/restore effective version; a _version shadow attribute takes precedence
+	// over the literal (§3.5.2), so resolve it first — mirroring the top-level root
+	// and included modules — so an imported module whose computed version is < 2.0
+	// enters backwards-compatible mode.
 	savedVersion := c.effectiveVersion
+	if _, hasShadow := importedRoot.GetAttribute("_version"); hasShadow {
+		if err := c.resolveSingleShadowAttribute(ctx, importedRoot, paramVersion); err != nil {
+			return err
+		}
+	}
 	if ver := getAttr(importedRoot, "version"); ver != "" {
 		c.effectiveVersion = ver
 	}

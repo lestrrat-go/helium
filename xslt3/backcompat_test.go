@@ -1,0 +1,163 @@
+package xslt3_test
+
+import (
+	"testing"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xslt3"
+	"github.com/stretchr/testify/require"
+)
+
+// transformStr compiles the stylesheet and transforms <doc/>, returning the
+// serialized result.
+func transformStr(t *testing.T, xsltSrc string) (string, error) {
+	t.Helper()
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	if err != nil {
+		return "", err
+	}
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc/>`))
+	require.NoError(t, err)
+	return ss.Transform(src).Serialize(ctx)
+}
+
+// TestBackCompatXPathArithmetic verifies that a version="1.0" stylesheet both
+// compiles/runs (no XTDE0160) and evaluates XPath in 1.0 compatibility mode:
+// '3' + 4 becomes 7 rather than a type error.
+func TestBackCompatXPathArithmetic(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:value-of select="'3' + 4"/></out></xsl:template>
+</xsl:stylesheet>`
+	out, err := transformStr(t, ss)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>7</out>")
+}
+
+// TestBackCompatVersionGated verifies the same expression is a type error under
+// version="3.0" — compatibility mode is opt-in via the version attribute.
+func TestBackCompatVersionGated(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:value-of select="'3' + 4"/></out></xsl:template>
+</xsl:stylesheet>`
+	_, err := transformStr(t, ss)
+	require.Error(t, err)
+}
+
+// TestBackCompatPerSubtreeOverride verifies that an inner xsl:version on a
+// literal result element enables compatibility mode for that subtree only.
+func TestBackCompatPerSubtreeOverride(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out xsl:version="1.0"><xsl:value-of select="'3' + 4"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+	out, err := transformStr(t, ss)
+	require.NoError(t, err)
+	require.Contains(t, out, "7")
+}
+
+// TestBackCompatSortKeyInnerCompat verifies that a version="1.0" xsl:sort key
+// evaluates its inner expression in XPath 1.0 compatibility mode even on the
+// optimized (EvaluateReuse) sort path: string(.) + 0 coerces the string to a
+// number rather than raising XPTY0004.
+func TestBackCompatSortKeyInnerCompat(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:for-each select="doc/i"><xsl:sort select="string(.) + 0"/><xsl:value-of select="."/></xsl:for-each></out></xsl:template>
+</xsl:stylesheet>`
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+	require.NoError(t, err)
+	ssc, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc><i>3</i><i>1</i><i>2</i></doc>`))
+	require.NoError(t, err)
+	out, err := ssc.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>123</out>")
+}
+
+// TestBackCompatPatternPredicate verifies that a match-pattern predicate in a
+// version="1.0" stylesheet evaluates in XPath 1.0 compatibility mode: the
+// relational predicate . > '2' compares numerically (matching 3 and 10), not as
+// strings (which would match only 3).
+func TestBackCompatPatternPredicate(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/i"/></out></xsl:template>
+  <xsl:template match="i[. > '2']">M</xsl:template>
+  <xsl:template match="i">-</xsl:template>
+</xsl:stylesheet>`
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+	require.NoError(t, err)
+	ssc, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc><i>1</i><i>2</i><i>3</i><i>10</i></doc>`))
+	require.NoError(t, err)
+	out, err := ssc.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>--MM</out>")
+}
+
+// TestBackCompatTemplateVersionPattern verifies that a version="1.0" attribute on
+// a template (in a 3.0 module) makes its match-pattern predicate evaluate in
+// XPath 1.0 compatibility mode — the match pattern is compiled under the
+// template's own effective version.
+func TestBackCompatTemplateVersionPattern(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/i"/></out></xsl:template>
+  <xsl:template match="i[. > '2']" version="1.0">M</xsl:template>
+  <xsl:template match="i">-</xsl:template>
+</xsl:stylesheet>`
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+	require.NoError(t, err)
+	ssc, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc><i>1</i><i>2</i><i>3</i><i>10</i></doc>`))
+	require.NoError(t, err)
+	out, err := ssc.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>--MM</out>")
+}
+
+// TestBackCompatLREUnqualifiedVersionNotCompat verifies that an unqualified
+// version attribute on a literal result element is an ordinary result attribute
+// (copied to output), NOT the XSLT version — so it does NOT trigger
+// backwards-compatible processing. Here '3' + 4 stays a type error.
+func TestBackCompatLREUnqualifiedVersionNotCompat(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out version="1.0"><xsl:value-of select="'3' + 4"/></out></xsl:template>
+</xsl:stylesheet>`
+	_, err := transformStr(t, ss)
+	require.Error(t, err) // '3' + 4 is XPTY0004 in 3.0; would be 7 if compat leaked
+
+	// And the unqualified version is preserved as a literal result attribute.
+	ss2 := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out version="1.0">hi</out></xsl:template>
+</xsl:stylesheet>`
+	out, err := transformStr(t, ss2)
+	require.NoError(t, err)
+	require.Contains(t, out, `version="1.0"`)
+}
+
+// TestBackCompatSupportsProperty verifies system-property reports support.
+func TestBackCompatSupportsProperty(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:value-of select="system-property('xsl:supports-backwards-compatibility')"/></out></xsl:template>
+</xsl:stylesheet>`
+	out, err := transformStr(t, ss)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>yes</out>")
+}

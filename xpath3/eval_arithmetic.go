@@ -19,6 +19,22 @@ func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if err != nil {
 		return nil, err
 	}
+	// XPath 1.0 compatibility mode: each operand becomes xs:double (fn:number of
+	// its FIRST item; empty or non-numeric → NaN), so division by zero yields ±INF
+	// and there is no XPTY0004 for a >1 operand. The first-item rule is applied
+	// BEFORE atomization, so a discarded later item that cannot be atomized does not
+	// error. Reached only under XSLT backwards-compatible processing.
+	if ec.xpath10CompatMode() {
+		la, lerr := xpath10CompatNumberItem(left)
+		if lerr != nil {
+			return nil, lerr
+		}
+		ra, rerr := xpath10CompatNumberItem(right)
+		if rerr != nil {
+			return nil, rerr
+		}
+		return floatArith(e.Op, la, ra)
+	}
 	// Atomize THROUGH the stream (atomizeSingletonOperand) so a schema-typed node
 	// whose typed value is a list/union expands; the single-operand cardinality is
 	// then checked on the ATOMIZED result (a node atomizing to >1 value is an
@@ -337,6 +353,19 @@ func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	r, err := evalFn(ctx, ec, e.Operand)
 	if err != nil {
 		return nil, err
+	}
+	// XPath 1.0 compatibility mode: the operand becomes xs:double (fn:number of its
+	// FIRST item; empty or non-numeric → NaN), the first-item rule applied before
+	// atomization. Reached only under XSLT backwards-compatible processing.
+	if ec.xpath10CompatMode() {
+		d, derr := xpath10CompatNumberItem(r)
+		if derr != nil {
+			return nil, derr
+		}
+		if !e.Negate {
+			return SingleAtomic(d), nil
+		}
+		return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(-d.ToFloat64())}), nil
 	}
 	// Atomize through the stream so a schema-typed list/union node expands; the
 	// single-operand cardinality is checked on the atomized result.

@@ -70,6 +70,10 @@ type callTemplateInst struct {
 	sourceInfo
 	Name   string
 	Params []*withParam
+	// Compat is true when the xsl:call-template is processed with
+	// backwards-compatible behavior (effective version < 2.0), which permits a
+	// with-param that has no matching xsl:param in the target (§10.1.1).
+	Compat bool
 }
 
 func (*callTemplateInst) instructionTag() {}

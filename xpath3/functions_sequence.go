@@ -116,53 +116,75 @@ func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
+func fnSubsequence(ctx context.Context, args []Sequence) (Sequence, error) {
+	compat := getFnContext(ctx).xpath10CompatMode()
 	seq := args[0]
-	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}
-	}
-	if seqLen(args[1]) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be a single value"}
-	}
-	a, err := AtomizeItem(args[1].Get(0))
-	if err != nil {
-		return nil, err
-	}
-	// Cast untypedAtomic to double (per XPath function calling convention)
-	if a.TypeName == TypeUntypedAtomic {
-		a, err = CastAtomic(a, TypeDouble)
-		if err != nil {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
-		}
-	}
-	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
-	}
-	startF := math.Round(a.ToFloat64())
 
-	hasLength := len(args) > 2
-	if hasLength && seqLen(args[2]) == 0 {
-		hasLength = false // $length is xs:double? — empty means no bound
-	}
-	var lengthF float64
-	if hasLength {
-		if seqLen(args[2]) > 1 {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be a single value"}
-		}
-		la, err := AtomizeItem(args[2].Get(0))
+	var startF float64
+	if compat {
+		// The position argument is xs:double, so XPath 1.0 compatibility mode
+		// converts it with fn:number (first item; empty or non-numeric → NaN,
+		// which yields an empty result) rather than a cardinality/type error.
+		sv, err := xpath10CompatNumberItem(args[1])
 		if err != nil {
 			return nil, err
 		}
-		if la.TypeName == TypeUntypedAtomic {
-			la, err = CastAtomic(la, TypeDouble)
+		startF = math.Round(sv.ToFloat64())
+	} else {
+		if seqLen(args[1]) == 0 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}
+		}
+		if seqLen(args[1]) > 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be a single value"}
+		}
+		a, err := AtomizeItem(args[1].Get(0))
+		if err != nil {
+			return nil, err
+		}
+		// Cast untypedAtomic to double (per XPath function calling convention)
+		if a.TypeName == TypeUntypedAtomic {
+			a, err = CastAtomic(a, TypeDouble)
 			if err != nil {
-				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
 			}
 		}
-		if !isSubtypeOf(la.TypeName, TypeNumeric) {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
+		if !isSubtypeOf(a.TypeName, TypeNumeric) {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
 		}
-		lengthF = math.Round(la.ToFloat64())
+		startF = math.Round(a.ToFloat64())
+	}
+
+	hasLength := len(args) > 2
+	var lengthF float64
+	if hasLength {
+		switch {
+		case compat:
+			lv, err := xpath10CompatNumberItem(args[2])
+			if err != nil {
+				return nil, err
+			}
+			lengthF = math.Round(lv.ToFloat64())
+		case seqLen(args[2]) == 0:
+			hasLength = false // $length is xs:double? — empty means no bound
+		default:
+			if seqLen(args[2]) > 1 {
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be a single value"}
+			}
+			la, err := AtomizeItem(args[2].Get(0))
+			if err != nil {
+				return nil, err
+			}
+			if la.TypeName == TypeUntypedAtomic {
+				la, err = CastAtomic(la, TypeDouble)
+				if err != nil {
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
+				}
+			}
+			if !isSubtypeOf(la.TypeName, TypeNumeric) {
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
+			}
+			lengthF = math.Round(la.ToFloat64())
+		}
 	}
 
 	// Handle NaN start or NaN length

@@ -42,6 +42,10 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	if err := c.validateXSLTAttrs(ctx, elem, templateAllowedAttrs); err != nil {
 		return err
 	}
+	// A version attribute on the template governs its effective version — set it
+	// before compiling the match pattern and body so their expressions are
+	// backwards-compatible when it is < 2.0.
+	defer c.pushElementVersion(elem)()
 	// Collect namespace declarations and xpath-default-namespace before
 	// evaluating use-when so the expression has the correct namespace context.
 	c.collectNamespaces(ctx, elem)
@@ -97,7 +101,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
 		if err != nil {
 			return err
 		}
@@ -255,15 +259,11 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		c.preserveSpace = (xs == lexicon.SpacePreserve)
 	}
 
-	// Handle version on xsl:template for forwards-compatible processing
-	savedVersion := c.effectiveVersion
-	if ver := getAttr(elem, "version"); ver != "" {
-		c.effectiveVersion = ver
-	}
+	// The effective version (incl. an xsl:template/@version override) was pushed
+	// at the top of compileTemplate and covers the body compilation below.
 
 	// Compile template body: first xsl:param elements, then instructions
 	ctxDecl, body, params, err := c.compileTemplateBodyEx(ctx, elem, false)
-	c.effectiveVersion = savedVersion
 	c.expandText = savedExpandText
 	c.preserveSpace = savedPreserveSpace
 	c.localExcludes = savedExcludes
@@ -498,7 +498,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 				sawContent = true
 				inst := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
-					avt, err := compileAVT(text, c.nsBindings)
+					avt, err := c.compileAVT(text, c.nsBindings)
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -512,7 +512,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 			text := string(v.Content())
 			inst := &literalTextInst{Value: text}
 			if c.expandText && strings.ContainsAny(text, "{}") {
-				avt, err := compileAVT(text, c.nsBindings)
+				avt, err := c.compileAVT(text, c.nsBindings)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -588,6 +588,14 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 }
 
 func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*param, error) {
+	// A static="yes" parameter is a compile-time static-context value and is
+	// version-independent (forced non-compat even inside a version < 2.0 module);
+	// a non-static param honors its own version attribute.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushStaticVersion()()
+	} else {
+		defer c.pushElementVersion(elem)()
+	}
 	savedNS := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = savedNS }()
 
@@ -689,7 +697,7 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -710,6 +718,17 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Element) error {
 	savedNS := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = savedNS }()
+
+	// A version attribute on the declaration overrides the effective version for
+	// its select/body (XSLT 3.0 §3.10), so a version="1.0" variable evaluates its
+	// select in backwards-compatible / XPath 1.0 compatibility mode even when the
+	// stylesheet module is 2.0/3.0. A static="yes" variable is exempt: it is a
+	// compile-time static-context value, version-independent even in a < 2.0 module.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushStaticVersion()()
+	} else {
+		defer c.pushElementVersion(elem)()
+	}
 
 	// Handle expand-text inheritance for this element.
 	savedExpandText := c.expandText
@@ -785,7 +804,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 		if c.hasEffectiveContent(ctx, elem) {
 			return staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return err
 		}
@@ -822,6 +841,12 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 }
 
 func (c *compiler) compileGlobalParam(ctx context.Context, elem *helium.Element) error {
+	// A version attribute on the declaration overrides the effective version for
+	// its select/body (XSLT 3.0 §3.10). A static="yes" parameter is exempt: it is
+	// a compile-time static-context value, which is version-independent.
+	if !xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushElementVersion(elem)()
+	}
 	// XTSE0020: tunnel="yes" is not allowed on a stylesheet parameter
 	if getAttr(elem, "tunnel") == lexicon.ValueYes {
 		return staticError(errCodeXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")

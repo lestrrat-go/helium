@@ -297,6 +297,7 @@ func isReservedFunctionNS(uri string) bool {
 }
 
 func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		xslAttrName: {}, "as": {}, xslAttrVisibility: {}, "streamable": {},
 		"streamability":               {},

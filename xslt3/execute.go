@@ -103,6 +103,7 @@ type execContext struct {
 	patternNamespaces            map[string]string             // the matching pattern's lexical xmlns snapshot (prefix→URI) during pattern matching
 	patternMatchErr              error                         // non-nil if a fatal error occurred during pattern matching
 	inSortKeyEval                bool                          // true during sort key evaluation (current-output-uri() returns empty)
+	patternCompat                bool                          // true while matching a backwards-compatible pattern (predicate XPath in 1.0 compat mode)
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
 	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
@@ -1214,7 +1215,46 @@ func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 
 // evalXPath evaluates an XPath expression using the Evaluator-based path.
 func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
-	return ec.xpathEvaluator(ctx).Evaluate(ec.xpathContext(ctx), expr, node)
+	eval := ec.xpathEvaluator(ctx)
+	if ec.isCompatExpr(expr) {
+		eval = eval.XPath10Compat()
+	}
+	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
+}
+
+// evalPatternExpr evaluates a match-pattern (or predicate) expression, which is
+// compiled at runtime and so is not in compatExprs. A backwards-compatible
+// pattern evaluates in XPath 1.0 compatibility mode. Unlike a persistent
+// ec.patternCompat read inside evalXPath, this applies compat ONLY to the
+// pattern expression itself — a called xsl:function/template evaluates its own
+// body via evalXPath under its OWN version, so compat does not leak across the
+// component boundary.
+func (ec *execContext) evalPatternExpr(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
+	eval := ec.xpathEvaluator(ctx)
+	if ec.patternCompat {
+		eval = eval.XPath10Compat()
+	}
+	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
+}
+
+// isCompatExpr reports whether expr was compiled under XSLT backwards-compatible
+// processing and must evaluate in XPath 1.0 compatibility mode.
+func (ec *execContext) isCompatExpr(expr *xpath3.Expression) bool {
+	if ec.stylesheet == nil || ec.stylesheet.compatExprs == nil {
+		return false
+	}
+	_, ok := ec.stylesheet.compatExprs[expr]
+	return ok
+}
+
+// withCompat applies XPath 1.0 compatibility mode to a custom-built evaluator
+// when expr is compat-marked. Used at the few evaluation sites that build their
+// own Evaluator instead of going through evalXPath.
+func (ec *execContext) withCompat(eval xpath3.Evaluator, expr *xpath3.Expression) xpath3.Evaluator {
+	if ec.isCompatExpr(expr) {
+		return eval.XPath10Compat()
+	}
+	return eval
 }
 
 func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Sequence {

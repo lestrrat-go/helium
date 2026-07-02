@@ -1554,7 +1554,7 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 		// XPath 3.1: atomizing an array atomizes each member and concatenates
 		if v.Size() == 0 {
 			return AtomicValue{}, &XPathError{
-				Code:    "FOTY0013",
+				Code:    errCodeFOTY0013,
 				Message: "cannot atomize empty array to single atomic value",
 			}
 		}
@@ -1565,12 +1565,12 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 			}
 		}
 		return AtomicValue{}, &XPathError{
-			Code:    "FOTY0013",
+			Code:    errCodeFOTY0013,
 			Message: "cannot atomize array with multiple members to single atomic value",
 		}
 	default:
 		return AtomicValue{}, &XPathError{
-			Code:    "FOTY0013",
+			Code:    errCodeFOTY0013,
 			Message: fmt.Sprintf("cannot atomize %T", item),
 		}
 	}

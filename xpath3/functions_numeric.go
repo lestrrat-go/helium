@@ -609,61 +609,76 @@ func roundHalfToEvenFloat(n float64, precision int) float64 {
 	return f
 }
 
+// compatArgString applies the XPath 1.0 function-conversion rule for an
+// xs:string argument: fn:string of its first item. Used for format-number's
+// picture and decimal-format-name arguments under compatibility mode.
+func compatArgString(arg Sequence) (string, error) {
+	sv, err := xpath10CompatStringItem(arg)
+	if err != nil {
+		return "", err
+	}
+	s, _ := sv.Value.(string)
+	return s, nil
+}
+
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		// Per F&O: empty sequence is treated as NaN for formatting, result is xs:string
-		a := AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
-		picture, err := coerceArgToStringRequired(args[1])
-		if err != nil {
+	compat := getFnContext(ctx).xpath10CompatMode()
+
+	// Value argument (xs:double?). An empty value formats as NaN (F&O); compat
+	// mode converts a non-empty value with fn:number (first item, non-numeric →
+	// NaN) instead of requiring a singleton numeric.
+	var a AtomicValue
+	switch {
+	case seqLen(args[0]) == 0:
+		a = AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
+	case compat:
+		var err error
+		if a, err = xpath10CompatNumberItem(args[0]); err != nil {
 			return nil, err
 		}
-		df := defaultDecimalFormat(ctx)
-		if len(args) > 2 && seqLen(args[2]) > 0 {
-			formatName, fErr := coerceArgToString(args[2])
-			if fErr != nil {
-				return nil, fErr
-			}
-			df, err = resolveDecimalFormat(ctx, formatName)
-			if err != nil {
+	default:
+		if seqLen(args[0]) != 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
+		}
+		var err error
+		if a, err = AtomizeItem(args[0].Get(0)); err != nil {
+			return nil, err
+		}
+		if a.TypeName == TypeUntypedAtomic {
+			if a, err = CastAtomic(a, TypeDouble); err != nil {
 				return nil, err
 			}
 		}
-		s, err := formatNumber(a, picture, df)
-		if err != nil {
-			return nil, err
+		if !isSubtypeOf(a.TypeName, TypeNumeric) {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
 		}
-		return SingleString(s), nil
-	}
-	if seqLen(args[0]) != 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
-	}
-	a, err := AtomizeItem(args[0].Get(0))
-	if err != nil {
-		return nil, err
-	}
-	if a.TypeName == TypeUntypedAtomic {
-		a, err = CastAtomic(a, TypeDouble)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
 	}
 
-	picture, err := coerceArgToStringRequired(args[1])
+	// Picture argument (xs:string); compat mode applies fn:string to its first item.
+	var picture string
+	var err error
+	if compat {
+		picture, err = compatArgString(args[1])
+	} else {
+		picture, err = coerceArgToStringRequired(args[1])
+	}
 	if err != nil {
 		return nil, err
 	}
 
+	// Optional decimal-format-name argument (xs:string), coerced the same way.
 	df := defaultDecimalFormat(ctx)
 	if len(args) > 2 && seqLen(args[2]) > 0 {
-		formatName, err := coerceArgToString(args[2])
+		var formatName string
+		if compat {
+			formatName, err = compatArgString(args[2])
+		} else {
+			formatName, err = coerceArgToString(args[2])
+		}
 		if err != nil {
 			return nil, err
 		}
-		df, err = resolveDecimalFormat(ctx, formatName)
-		if err != nil {
+		if df, err = resolveDecimalFormat(ctx, formatName); err != nil {
 			return nil, err
 		}
 	}

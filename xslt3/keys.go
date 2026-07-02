@@ -34,8 +34,20 @@ type keyTable struct {
 	compositeEntry map[string][]compositeKeyEntry // compositeCanonical -> entries (composite)
 	collationKey   func(string) string            // collation key function (nil = codepoint)
 	collationCmp   func(string, string) int       // collation compare function (nil = codepoint)
+	compat         bool                           // any definition enables backwards-compatible processing
 	building       bool
 	built          bool
+}
+
+// keyCompatCast casts an atomized key value to xs:string for a
+// backwards-compatible key (§16.3): both the indexed use value and the key()
+// lookup value are compared as strings. A cast failure leaves the value
+// unchanged so it simply fails to match.
+func keyCompatCast(av xpath3.AtomicValue) xpath3.AtomicValue {
+	if s, err := xpath3.CastAtomic(av, xpath3.TypeString); err == nil {
+		return s
+	}
+	return av
 }
 
 // collationCanonicalKey produces a canonical key using the collation key
@@ -221,9 +233,20 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 
 	composite := len(defs) > 0 && defs[0].Composite
 
+	// Backwards-compatible processing applies to the whole key if ANY same-named
+	// definition enables it (§16.3): use and key() values are compared as strings.
+	compat := false
+	for _, kd := range defs {
+		if kd.Compat {
+			compat = true
+			break
+		}
+	}
+
 	kt := &keyTable{
 		defs:     defs,
 		entries:  make(map[string][]keyEntry),
+		compat:   compat,
 		building: true,
 	}
 
@@ -325,6 +348,9 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 					if err != nil {
 						continue
 					}
+					if compat {
+						av = keyCompatCast(av)
+					}
 					avs = append(avs, av)
 				}
 				if len(avs) == 0 {
@@ -343,6 +369,9 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 					av, err := xpath3.AtomizeItem(item)
 					if err != nil {
 						continue
+					}
+					if compat {
+						av = keyCompatCast(av)
 					}
 					// NaN values never match anything (NaN != NaN),
 					// so do not index them.
@@ -408,6 +437,11 @@ func (ec *execContext) lookupKey(ctx context.Context, name string, value xpath3.
 		return nil, err
 	}
 
+	// Backwards-compatible key: the lookup value is compared as a string.
+	if kt.compat {
+		value = keyCompatCast(value)
+	}
+
 	// NaN lookup never matches.
 	if value.IsNaN() {
 		return nil, nil
@@ -438,6 +472,15 @@ func (ec *execContext) lookupCompositeKey(ctx context.Context, name string, valu
 
 	if kt.compositeEntry == nil {
 		return nil, nil
+	}
+
+	// Backwards-compatible key: lookup values are compared as strings.
+	if kt.compat {
+		cast := make([]xpath3.AtomicValue, len(values))
+		for i, v := range values {
+			cast[i] = keyCompatCast(v)
+		}
+		values = cast
 	}
 
 	ck := compositeCanonicalKey(values, kt.collationKey)

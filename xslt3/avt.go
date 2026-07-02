@@ -38,7 +38,7 @@ func (a *avt) hasFunction(name string) bool {
 // compileAVT compiles an attribute value template string.
 // AVTs contain literal text interspersed with {expr} XPath expressions.
 // {{ and }} are escape sequences for literal { and }.
-func compileAVT(s string, nsBindings map[string]string) (*avt, error) {
+func (c *compiler) compileAVT(s string, nsBindings map[string]string) (*avt, error) {
 	var parts []avtPart
 	i := 0
 	for i < len(s) {
@@ -62,7 +62,7 @@ func compileAVT(s string, nsBindings map[string]string) (*avt, error) {
 			if trimmed == "" || isXPathCommentOnly(trimmed) {
 				parts = appendLiteral(parts, "")
 			} else {
-				expr, err := compileXPath(exprStr, nsBindings)
+				expr, err := c.compileXPath(exprStr, nsBindings)
 				if err != nil {
 					return nil, staticError(errCodeXTSE0580, "invalid XPath in AVT: %v", err)
 				}
@@ -213,7 +213,14 @@ func (a *avt) evaluate(ctx context.Context, node helium.Node) (string, error) {
 			if err != nil {
 				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}
-			sb.WriteString(stringifyResult(result))
+			// XSLT 1.0 behavior (backwards-compatible processing): when converting
+			// the AVT expression value to a string, all items after the first are
+			// discarded (§5.6.1).
+			if seq := result.Sequence(); ec != nil && seq != nil && sequence.Len(seq) > 1 && ec.isCompatExpr(p.expr) {
+				sb.WriteString(stringifyItem(seq.Get(0)))
+			} else {
+				sb.WriteString(stringifyResult(result))
+			}
 		} else {
 			sb.WriteString(p.literal)
 		}

@@ -61,6 +61,13 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 
 	c.stylesheet.usedPackages = append(c.stylesheet.usedPackages, pkgSS)
 
+	// Carry over the used package's backwards-compatible expression set: its
+	// component pointers are merged into this stylesheet, so isCompatExpr (which
+	// only consults c.stylesheet) must see the package's compat expressions too.
+	for e := range pkgSS.compatExprs {
+		c.markCompatExpr(e)
+	}
+
 	// Process xsl:override children (compile overrides, validate against package)
 	oset, err := c.processOverrides(ctx, elem, pkgSS)
 	if err != nil {

@@ -89,6 +89,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 }
 
 func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		xslAttrName: {}, "match": {}, "use": {}, "collation": {}, "composite": {},
 		xslAttrUseWhen: {}, "default-collation": {},
@@ -130,7 +131,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		hasXPathDefaultNS = true
 	}
 
-	matchPat, err := compilePattern(matchAttr, elem, xpathDefaultNS, hasXPathDefaultNS)
+	matchPat, err := compilePattern(matchAttr, elem, xpathDefaultNS, hasXPathDefaultNS, c.backwardsCompatible())
 	if err != nil {
 		return err
 	}
@@ -173,6 +174,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		Match:     matchPat,
 		Composite: composite,
 		Collation: collationURI,
+		Compat:    c.backwardsCompatible(),
 	}
 
 	useAttr := getAttr(elem, "use")
@@ -185,7 +187,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		return staticError(errCodeXTSE1205, "xsl:key must have either a use attribute or content")
 	}
 	if useAttr != "" {
-		useExpr, err := compileXPath(useAttr, c.nsBindings)
+		useExpr, err := c.compileXPath(useAttr, c.nsBindings)
 		if err != nil {
 			return err
 		}
@@ -768,6 +770,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 }
 
 func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		xslAttrName: {}, "use-attribute-sets": {}, xslAttrVisibility: {},
 		"streamable": {}, xslAttrUseWhen: {},

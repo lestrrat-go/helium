@@ -88,6 +88,12 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 				"non-XSLT element %q is not allowed inside xsl:override", elem.Name())
 		}
 
+		// Resolve shadow attributes (e.g. _version) so an override child's computed
+		// values govern its compilation, mirroring top-level elements.
+		if err := c.resolveShadowAttributes(ctx, elem); err != nil {
+			return err
+		}
+
 		switch elem.LocalName() {
 		case xslElemFunction:
 			fn, qn, err := c.compileOverrideFunction(ctx, elem, pkg)
@@ -147,6 +153,7 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 
 // compileOverrideFunction compiles a function inside xsl:override.
 func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*xslFunction, xpath3.QualifiedName, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0110, "xsl:function in xsl:override requires name attribute")
@@ -258,6 +265,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 
 // compileOverrideTemplate compiles a template inside xsl:override.
 func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*template, error) {
+	defer c.pushElementVersion(elem)()
 	tmpl := &template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,
@@ -280,7 +288,7 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
 		if err != nil {
 			return nil, err
 		}
@@ -396,6 +404,13 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 
 // compileOverrideVariable compiles a variable inside xsl:override.
 func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*variable, error) {
+	// A static="yes" variable is a version-independent compile-time value (forced
+	// non-compat even in a < 2.0 module); otherwise honor its version attribute.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushStaticVersion()()
+	} else {
+		defer c.pushElementVersion(elem)()
+	}
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable in xsl:override requires name attribute")
@@ -511,7 +526,7 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -529,6 +544,8 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 
 // compileOverrideParam compiles a param inside xsl:override.
 func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*param, error) {
+	// compileParamDef pushes the element version (exempting static="yes"), so no
+	// outer push here — that would compat-mark a static override param's select.
 	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
 		return nil, err
@@ -562,6 +579,7 @@ func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Elemen
 
 // compileOverrideAttributeSet compiles an attribute-set inside xsl:override.
 func (c *compiler) compileOverrideAttributeSet(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*attributeSetDef, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute-set in xsl:override requires name attribute")

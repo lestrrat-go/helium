@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -299,8 +298,13 @@ func (ec *execContext) matchAtomicPattern(ctx context.Context, p *pattern, item 
 				continue
 			}
 		}
-		// Evaluate the pattern as a boolean predicate with the item as context
-		result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), compiled, nil)
+		// Evaluate the pattern as a boolean predicate with the item as context.
+		// A backwards-compatible pattern evaluates in XPath 1.0 compatibility mode.
+		peval := ec.xpathEvaluator(ctx).ContextItem(item)
+		if p.compat {
+			peval = peval.XPath10Compat()
+		}
+		result, err := peval.Evaluate(ec.xpathContext(ctx), compiled, nil)
 		if err != nil {
 			continue
 		}
@@ -369,7 +373,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 			}
 
 			if p.Select != nil {
-				result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), p.Select, nil)
+				result, err := ec.withCompat(ec.xpathEvaluator(ctx).ContextItem(item), p.Select).Evaluate(ec.xpathContext(ctx), p.Select, nil)
 				if err != nil {
 					return err
 				}
@@ -421,14 +425,6 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 const maxRecursionDepth = 2000
 
 func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node helium.Node, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
-	// XTDE0160: backwards compatibility mode is not supported.
-	// Only XSLT 1.0 triggers backwards compatible behavior. Other versions
-	// (like 1.5) are forward-compatible and don't require BC support.
-	if strings.TrimSpace(tmpl.Version) == lexicon.OutputVersion10 {
-		return dynamicError(errCodeXTDE0160,
-			"backwards compatibility mode (version 1.0) is not supported")
-	}
-
 	// If the template belongs to a package, switch function scope
 	// so package-private functions are visible.
 	savedFnsNS := ec.cachedFnsNS

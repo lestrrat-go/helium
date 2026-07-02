@@ -47,7 +47,7 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 
 	selectAttr := getAttr(elem, xslAttrSelect)
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,7 @@ func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element
 		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
 	}
 
-	inst := &callTemplateInst{Name: resolveQName(name, c.nsBindings)}
+	inst := &callTemplateInst{Name: resolveQName(name, c.nsBindings), Compat: c.backwardsCompatible()}
 
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
@@ -147,7 +147,7 @@ func (c *compiler) compileIf(ctx context.Context, elem *helium.Element) (*ifInst
 		return nil, staticError(errCodeXTSE0110, "xsl:if requires test attribute")
 	}
 
-	expr, err := compileXPath(testAttr, c.nsBindings)
+	expr, err := c.compileXPath(testAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +193,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			savedNS := c.xpathDefaultNS
 			savedHasNS := c.hasXPathDefaultNS
 			savedET := c.expandText
+			restoreWhenVersion := c.pushElementVersion(childElem)
 			hasLocal := false
 			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
 				c.xpathDefaultNS = xdn
@@ -210,14 +211,16 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 				c.xpathDefaultNS = savedNS
 				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
+				restoreWhenVersion()
 				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
 			}
-			expr, err := compileXPath(testAttr, c.nsBindings)
+			expr, err := c.compileXPath(testAttr, c.nsBindings)
 			if err != nil {
 				c.nsBindings = savedBindings
 				c.xpathDefaultNS = savedNS
 				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
+				restoreWhenVersion()
 				return nil, err
 			}
 			// Capture per-clause namespace bindings for runtime resolution
@@ -235,6 +238,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			c.xpathDefaultNS = savedNS
 			c.hasXPathDefaultNS = savedHasNS
 			c.expandText = savedET
+			restoreWhenVersion()
 			if err != nil {
 				return nil, err
 			}
@@ -296,7 +300,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each requires select attribute")
 	}
 
-	expr, err := compileXPath(selectAttr, c.nsBindings)
+	expr, err := c.compileXPath(selectAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +379,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 			if !c.shouldStripText(ctx, text) {
 				lit := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
-					avt, err := compileAVT(text, c.nsBindings)
+					avt, err := c.compileAVT(text, c.nsBindings)
 					if err != nil {
 						return nil, err
 					}
@@ -387,7 +391,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 			text := string(v.Content())
 			lit := &literalTextInst{Value: text}
 			if c.expandText && strings.ContainsAny(text, "{}") {
-				avt, err := compileAVT(text, c.nsBindings)
+				avt, err := c.compileAVT(text, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -401,6 +405,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 }
 
 func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*sortKey, error) {
+	defer c.pushElementVersion(elem)()
 	// Evaluate use-when on xsl:sort before compiling the sort key.
 	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
@@ -431,7 +436,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 		return nil, staticError(errCodeXTSE1015, "xsl:sort with a select attribute must not have content")
 	}
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -444,7 +449,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 		if len(body) > 0 {
 			sk.Body = body
 		} else {
-			expr, err := compileXPath(".", c.nsBindings)
+			expr, err := c.compileXPath(".", c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -453,7 +458,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	}
 
 	if order := getAttr(elem, "order"); order != "" {
-		avt, err := compileAVT(order, c.nsBindings)
+		avt, err := c.compileAVT(order, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -461,7 +466,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	}
 
 	if dataType := getAttr(elem, "data-type"); dataType != "" {
-		avt, err := compileAVT(dataType, c.nsBindings)
+		avt, err := c.compileAVT(dataType, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -469,7 +474,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	}
 
 	if caseOrder := getAttr(elem, "case-order"); caseOrder != "" {
-		avt, err := compileAVT(caseOrder, c.nsBindings)
+		avt, err := c.compileAVT(caseOrder, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -477,7 +482,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	}
 
 	if lang := getAttr(elem, "lang"); lang != "" {
-		avt, err := compileAVT(lang, c.nsBindings)
+		avt, err := c.compileAVT(lang, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -485,7 +490,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	}
 
 	if col := getAttr(elem, "collation"); col != "" {
-		avt, err := compileAVT(col, c.nsBindings)
+		avt, err := c.compileAVT(col, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -493,7 +498,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	}
 
 	if stable := getAttr(elem, "stable"); stable != "" {
-		avt, err := compileAVT(stable, c.nsBindings)
+		avt, err := c.compileAVT(stable, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -504,6 +509,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 }
 
 func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (*withParam, error) {
+	defer c.pushElementVersion(elem)()
 	// Check use-when before compiling: skip this with-param if excluded.
 	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
@@ -555,7 +561,7 @@ func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (
 		if err := c.validateEmptyElement(ctx, elem, "xsl:with-param"); err != nil {
 			return nil, staticError(errCodeXTSE0620, "xsl:with-param %q has both @select and content", name)
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -576,7 +582,7 @@ func (c *compiler) compilePerformSort(ctx context.Context, elem *helium.Element)
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -701,7 +707,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 
 	// xsl:try select attribute
 	if sel := getAttr(elem, "select"); sel != "" {
-		expr, err := compileXPath(sel, c.nsBindings)
+		expr, err := c.compileXPath(sel, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -723,6 +729,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementCatch {
 			clause := &catchClause{}
+			restoreCatchVersion := c.pushElementVersion(childElem)
 
 			// Parse errors attribute (space-separated list of error codes).
 			// Namespace declarations on xsl:catch itself must be visible
@@ -745,7 +752,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 				if hasNonEmptyContent(childElem) {
 					return nil, staticError(errCodeXTSE3150, "xsl:catch with select attribute must have empty content")
 				}
-				expr, err := compileXPath(sel, c.nsBindings)
+				expr, err := c.compileXPath(sel, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -758,6 +765,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 				clause.Body = body
 			}
 			inst.Catches = append(inst.Catches, clause)
+			restoreCatchVersion()
 		} else if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementFallback {
 			// xsl:fallback inside xsl:try is silently ignored
 			continue
@@ -821,7 +829,7 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 		}
 	}
 
-	expr, err := compileXPath(selectAttr, c.nsBindings)
+	expr, err := c.compileXPath(selectAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -830,7 +838,7 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 
 	// Compile collation avt
 	if collAttr := getAttr(elem, "collation"); collAttr != "" {
-		collAVT, collErr := compileAVT(collAttr, c.nsBindings)
+		collAVT, collErr := c.compileAVT(collAttr, c.nsBindings)
 		if collErr != nil {
 			return nil, collErr
 		}
@@ -848,28 +856,28 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 	}
 
 	if gb := getAttr(elem, "group-by"); gb != "" {
-		gbExpr, gbErr := compileXPath(gb, c.nsBindings)
+		gbExpr, gbErr := c.compileXPath(gb, c.nsBindings)
 		if gbErr != nil {
 			return nil, gbErr
 		}
 		inst.GroupBy = gbExpr
 	}
 	if ga := getAttr(elem, "group-adjacent"); ga != "" {
-		gaExpr, gaErr := compileXPath(ga, c.nsBindings)
+		gaExpr, gaErr := c.compileXPath(ga, c.nsBindings)
 		if gaErr != nil {
 			return nil, gaErr
 		}
 		inst.GroupAdjacent = gaExpr
 	}
 	if gs := getAttr(elem, "group-starting-with"); gs != "" {
-		gsPat, gsErr := compilePattern(gs, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
+		gsPat, gsErr := compilePattern(gs, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
 		if gsErr != nil {
 			return nil, gsErr
 		}
 		inst.GroupStartingWith = gsPat
 	}
 	if ge := getAttr(elem, "group-ending-with"); ge != "" {
-		gePat, geErr := compilePattern(ge, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
+		gePat, geErr := compilePattern(ge, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
 		if geErr != nil {
 			return nil, geErr
 		}
@@ -911,7 +919,7 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 			if !c.shouldStripText(ctx, text) {
 				lit := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
-					avt, err := compileAVT(text, c.nsBindings)
+					avt, err := c.compileAVT(text, c.nsBindings)
 					if err != nil {
 						return nil, err
 					}
@@ -935,12 +943,12 @@ func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Elemen
 		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires regex attribute")
 	}
 
-	selectExpr, err := compileXPath(selectAttr, c.nsBindings)
+	selectExpr, err := c.compileXPath(selectAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
 
-	regexAVT, err := compileAVT(regexAttr, c.nsBindings)
+	regexAVT, err := c.compileAVT(regexAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -952,7 +960,7 @@ func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Elemen
 
 	flagsAttr := getAttr(elem, "flags")
 	if flagsAttr != "" {
-		flagsAVT, err := compileAVT(flagsAttr, c.nsBindings)
+		flagsAVT, err := c.compileAVT(flagsAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1020,7 +1028,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 	if xpathAttr == "" {
 		return nil, staticError(errCodeXTSE0010, "xsl:evaluate requires an xpath attribute")
 	}
-	expr, err := compileXPath(xpathAttr, c.nsBindings)
+	expr, err := c.compileXPath(xpathAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +1036,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 
 	// context-item (optional)
 	if ci := getAttr(elem, "context-item"); ci != "" {
-		ciExpr, err := compileXPath(ci, c.nsBindings)
+		ciExpr, err := c.compileXPath(ci, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1037,7 +1045,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 
 	// base-uri (optional avt)
 	if bu := getAttr(elem, "base-uri"); bu != "" {
-		avt, err := compileAVT(bu, c.nsBindings)
+		avt, err := c.compileAVT(bu, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1046,7 +1054,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 
 	// namespace-context (optional XPath expression producing a node)
 	if nc := getAttr(elem, "namespace-context"); nc != "" {
-		ncExpr, err := compileXPath(nc, c.nsBindings)
+		ncExpr, err := c.compileXPath(nc, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1055,7 +1063,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 
 	// with-params (optional map expression)
 	if wp := getAttr(elem, "with-params"); wp != "" {
-		wpExpr, err := compileXPath(wp, c.nsBindings)
+		wpExpr, err := c.compileXPath(wp, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1067,7 +1075,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 
 	// schema-aware (optional avt that evaluates to boolean)
 	if saStr, hasSA := elem.GetAttribute("schema-aware"); hasSA {
-		saAVT, err := compileAVT(saStr, c.nsBindings)
+		saAVT, err := c.compileAVT(saStr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}

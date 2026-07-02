@@ -18,7 +18,7 @@ func (c *compiler) compileSourceDocument(ctx context.Context, elem *helium.Eleme
 		return nil, staticError(errCodeXTSE0110, "xsl:source-document requires href attribute")
 	}
 
-	hrefAVT, err := compileAVT(hrefAttr, c.nsBindings)
+	hrefAVT, err := c.compileAVT(hrefAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 		return nil, staticError(errCodeXTSE0110, "xsl:iterate requires select attribute")
 	}
 
-	expr, err := compileXPath(selectAttr, c.nsBindings)
+	expr, err := c.compileXPath(selectAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,9 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 					return nil, staticError(errCodeXTSE3125, "xsl:on-completion must not have both select attribute and sequence constructor")
 				}
 				if selAttr != "" {
-					selExpr, selErr := compileXPath(selAttr, c.nsBindings)
+					restoreVersion := c.pushElementVersion(childElem)
+					selExpr, selErr := c.compileXPath(selAttr, c.nsBindings)
+					restoreVersion()
 					if selErr != nil {
 						return nil, selErr
 					}
@@ -185,7 +187,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 			// Text node
 			lit := &literalTextInst{Value: bc.text}
 			if c.expandText && strings.ContainsAny(bc.text, "{}") {
-				avt, err := compileAVT(bc.text, c.nsBindings)
+				avt, err := c.compileAVT(bc.text, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -294,6 +296,7 @@ func instructionChildren(inst instruction) [][]instruction {
 
 // compileIterateParam compiles an xsl:param inside xsl:iterate.
 func (c *compiler) compileIterateParam(ctx context.Context, elem *helium.Element) (*iterateParam, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
@@ -306,7 +309,7 @@ func (c *compiler) compileIterateParam(ctx context.Context, elem *helium.Element
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -348,11 +351,12 @@ func (c *compiler) compileFork(ctx context.Context, elem *helium.Element) (instr
 
 // compileForkBranch compiles one child of xsl:fork into a branch (slice of instructions).
 func (c *compiler) compileForkBranch(ctx context.Context, elem *helium.Element) ([]instruction, error) {
+	defer c.pushElementVersion(elem)()
 	// If the child is xsl:sequence, compile its children as the branch body.
 	if elem.URI() == lexicon.NamespaceXSLT && elem.LocalName() == lexicon.XSLTElementSequence {
 		selectAttr := getAttr(elem, "select")
 		if selectAttr != "" {
-			expr, err := compileXPath(selectAttr, c.nsBindings)
+			expr, err := c.compileXPath(selectAttr, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -410,7 +414,7 @@ func (c *compiler) compileBreak(ctx context.Context, elem *helium.Element) (inst
 	inst := &breakInst{}
 
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -468,6 +472,7 @@ func (c *compiler) compileNextIteration(ctx context.Context, elem *helium.Elemen
 
 // compileAccumulator compiles an xsl:accumulator top-level element.
 func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:accumulator requires name attribute")
@@ -487,7 +492,7 @@ func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element)
 	if iv == "" {
 		return staticError(errCodeXTSE0010, "xsl:accumulator %q requires initial-value attribute", expandedName)
 	}
-	initialExpr, err := compileXPath(iv, c.nsBindings)
+	initialExpr, err := c.compileXPath(iv, c.nsBindings)
 	if err != nil {
 		return err
 	}
@@ -544,6 +549,7 @@ func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element)
 
 // compileAccumulatorRule compiles an xsl:accumulator-rule element.
 func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulatorDef, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
 		return staticError(errCodeXTSE0110, "xsl:accumulator-rule requires match attribute")
@@ -555,7 +561,7 @@ func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulat
 		return staticError(errCodeXPST0008, "variable $value is not in scope in accumulator-rule match pattern")
 	}
 
-	matchPat, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
+	matchPat, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
 	if err != nil {
 		return err
 	}
@@ -573,7 +579,7 @@ func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulat
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return err
 		}
@@ -838,6 +844,7 @@ var mergeSourceAllowedAttrs = map[string]struct{}{
 
 // compileMergeSource compiles an xsl:merge-source element.
 func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element) (*mergeSource, error) {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, mergeSourceAllowedAttrs); err != nil {
 		return nil, err
 	}
@@ -872,7 +879,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 
 	// for-each-source: XPath expression evaluating to sequence of URI strings
 	if fes := getAttr(elem, "for-each-source"); fes != "" {
-		expr, err := compileXPath(fes, c.nsBindings)
+		expr, err := c.compileXPath(fes, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -881,7 +888,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 
 	// for-each-item: XPath expression evaluating to sequence of items (nodes)
 	if fei := getAttr(elem, "for-each-item"); fei != "" {
-		expr, err := compileXPath(fei, c.nsBindings)
+		expr, err := c.compileXPath(fei, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -890,7 +897,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 
 	// select: XPath expression for selecting items from each source
 	if sel := getAttr(elem, "select"); sel != "" {
-		expr, err := compileXPath(sel, c.nsBindings)
+		expr, err := c.compileXPath(sel, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -942,6 +949,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 
 // compileMergeKey compiles an xsl:merge-key element.
 func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*mergeKey, error) {
+	defer c.pushElementVersion(elem)()
 	// XTSE0090: validate permitted attributes on xsl:merge-key.
 	for _, attr := range elem.Attributes() {
 		if attr.URI() != "" {
@@ -972,7 +980,7 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 	// Compile the collation attribute as an AVT so that expressions like
 	// collation="{$collation}" are resolved at runtime.
 	if collation != "" {
-		collAVT, err := compileAVT(collation, c.nsBindings)
+		collAVT, err := c.compileAVT(collation, c.nsBindings)
 		if err == nil && collAVT != nil {
 			mk.CollationAVT = collAVT
 		}
@@ -999,7 +1007,7 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 	}
 
 	if selAttr != "" {
-		expr, err := compileXPath(selAttr, c.nsBindings)
+		expr, err := c.compileXPath(selAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1014,7 +1022,7 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 
 	if order := getAttr(elem, "order"); order != "" {
 		if strings.Contains(order, "{") {
-			avt, err := compileAVT(order, c.nsBindings)
+			avt, err := c.compileAVT(order, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -1026,7 +1034,7 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 
 	if dataType := getAttr(elem, "data-type"); dataType != "" {
 		if strings.Contains(dataType, "{") {
-			avt, err := compileAVT(dataType, c.nsBindings)
+			avt, err := c.compileAVT(dataType, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}

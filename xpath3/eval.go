@@ -71,6 +71,7 @@ type evalContext struct {
 	qnameValueNoDefaultNS  bool                   // XSD: an unprefixed QName/NOTATION VALUE atomizes to no namespace
 	schemaDeclarations     SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 	allowXML11Chars        bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
+	xpath10Compat          bool                   // XPath 1.0 compatibility mode (XSLT backwards-compatible processing)
 	traceWriter            io.Writer              // destination for fn:trace output (nil = os.Stderr)
 	parser                 *helium.Parser         // injected parser for fn:parse-xml, fn:parse-xml-fragment, fn:doc (nil = default helium.NewParser)
 }

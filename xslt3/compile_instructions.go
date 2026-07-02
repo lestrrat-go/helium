@@ -215,9 +215,11 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 		}
 	}
 
-	// Handle version inheritance for forwards-compatible processing
+	// Handle version inheritance. On an XSLT element this is the unqualified
+	// version attribute; on a literal result element it is xsl:version (an
+	// unqualified version there is a result attribute, not an XSLT version).
 	savedVersion := c.effectiveVersion
-	if ver := getAttr(elem, "version"); ver != "" {
+	if ver := elementXSLTVersion(elem); ver != "" {
 		c.effectiveVersion = ver
 	}
 	defer func() { c.effectiveVersion = savedVersion }()
@@ -554,7 +556,7 @@ func (c *compiler) useWhenSystemProperty(_ context.Context, args []xpath3.Sequen
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-serialization"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-backwards-compatibility"):
-		return xpath3.SingleString(lexicon.ValueNo), nil
+		return xpath3.SingleString(lexicon.ValueYes), nil
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-namespace-axis"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-streaming"):
@@ -698,7 +700,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 	case lexicon.XSLTElementResultDocument:
 		inst := &resultDocumentInst{}
 		if href := getAttr(elem, "href"); href != "" {
-			avt, err := compileAVT(href, c.nsBindings)
+			avt, err := c.compileAVT(href, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -737,7 +739,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		}
 		if fmtAttr := getAttr(elem, "format"); fmtAttr != "" {
 			if strings.ContainsAny(fmtAttr, "{}") {
-				avt, err := compileAVT(fmtAttr, c.nsBindings)
+				avt, err := c.compileAVT(fmtAttr, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -751,7 +753,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			inst.ItemSeparatorSet = true
 			// item-separator="#absent" means explicitly absent (use default, blocks format inheritance)
 			if is != "#absent" {
-				avt, err := compileAVT(is, c.nsBindings)
+				avt, err := c.compileAVT(is, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -797,7 +799,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			{paramBuildTree, &inst.BuildTree},
 		} {
 			if v := getAttr(elem, sp.attr); v != "" {
-				avt, err := compileAVT(v, c.nsBindings)
+				avt, err := c.compileAVT(v, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -806,7 +808,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		}
 		// method attribute as avt (complements the static Method field)
 		if v := getAttr(elem, paramMethod); v != "" {
-			avt, err := compileAVT(v, c.nsBindings)
+			avt, err := c.compileAVT(v, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -814,7 +816,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		}
 		if pd := getAttr(elem, paramParameterDocument); pd != "" {
 			if strings.ContainsAny(pd, "{}") {
-				avt, err := compileAVT(pd, c.nsBindings)
+				avt, err := c.compileAVT(pd, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
@@ -861,7 +863,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 	case lexicon.XSLTElementOnEmpty:
 		inst := &onEmptyInst{}
 		if sel := getAttr(elem, "select"); sel != "" {
-			expr, err := xpath3.NewCompiler().Compile(sel)
+			expr, err := c.compileXPath(sel, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -877,7 +879,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 	case lexicon.XSLTElementOnNonEmpty:
 		inst := &onNonEmptyInst{}
 		if sel := getAttr(elem, "select"); sel != "" {
-			expr, err := xpath3.NewCompiler().Compile(sel)
+			expr, err := c.compileXPath(sel, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -990,6 +992,13 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// The parent's own version governs its content (§3.10). For an instruction
+	// compiled via compileInstruction this is already in effect (redundant, same
+	// value); for a structural child compiled directly by its parent loop
+	// (xsl:otherwise, xsl:matching-substring, xsl:merge-action, xsl:fallback, …)
+	// this is where its version takes effect, so a local version < 2.0 makes its
+	// body backwards-compatible.
+	defer c.pushElementVersion(parent)()
 
 	var body []instruction
 	sawTerminator := false // true after xsl:break or xsl:next-iteration
@@ -1051,7 +1060,7 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 				}
 				inst := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
-					avt, err := compileAVT(text, c.nsBindings)
+					avt, err := c.compileAVT(text, c.nsBindings)
 					if err != nil {
 						return nil, err
 					}
@@ -1092,7 +1101,7 @@ func (c *compiler) compileLocalVariable(ctx context.Context, elem *helium.Elemen
 		if err := c.validateEmptyElement(ctx, elem, "xsl:variable"); err != nil {
 			return nil, staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1113,7 +1122,7 @@ func (c *compiler) compileMessage(ctx context.Context, elem *helium.Element) (*m
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1128,7 +1137,7 @@ func (c *compiler) compileMessage(ctx context.Context, elem *helium.Element) (*m
 
 	termAttr := getAttr(elem, "terminate")
 	if termAttr != "" {
-		avt, err := compileAVT(termAttr, c.nsBindings)
+		avt, err := c.compileAVT(termAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1143,7 +1152,7 @@ func (c *compiler) compileMessage(ctx context.Context, elem *helium.Element) (*m
 
 	errorCodeAttr := getAttr(elem, "error-code")
 	if errorCodeAttr != "" {
-		avt, err := compileAVT(errorCodeAttr, c.nsBindings)
+		avt, err := c.compileAVT(errorCodeAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1166,7 +1175,7 @@ func (c *compiler) compileMapEntry(ctx context.Context, elem *helium.Element) (*
 
 	keyAttr := getAttr(elem, "key")
 	if keyAttr != "" {
-		expr, err := compileXPath(keyAttr, c.nsBindings)
+		expr, err := c.compileXPath(keyAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1181,7 +1190,7 @@ func (c *compiler) compileMapEntry(ctx context.Context, elem *helium.Element) (*
 		return nil, staticError(errCodeXTSE3280, "xsl:map-entry must not have both a select attribute and a sequence constructor body")
 	}
 	if selectAttr != "" {
-		expr, err := compileXPath(selectAttr, c.nsBindings)
+		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
@@ -1207,7 +1216,7 @@ func (c *compiler) compileAssert(ctx context.Context, elem *helium.Element) (ins
 		return nil, staticError(errCodeXTSE0010, "xsl:assert requires a test attribute")
 	}
 
-	testExpr, err := compileXPath(testAttr, c.nsBindings)
+	testExpr, err := c.compileXPath(testAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -1230,7 +1239,7 @@ func (c *compiler) compileAssert(ctx context.Context, elem *helium.Element) (ins
 
 	// select attribute
 	if sel := getAttr(elem, "select"); sel != "" {
-		selExpr, err := compileXPath(sel, c.nsBindings)
+		selExpr, err := c.compileXPath(sel, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}

@@ -18,11 +18,16 @@ import (
 // Per XPath 3.1 Section 3.7.1: atomize both operands, then existentially
 // quantify — true if ANY pair satisfies the value comparison.
 func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ctx, ec, e); ok {
-		if err != nil {
-			return nil, err
+	// The X = (M to N) range fast-path assumes ordinary comparison semantics; in
+	// XPath 1.0 compatibility mode the operands are converted (boolean/numeric/
+	// string rules), so route through the general path instead.
+	if !ec.xpath10CompatMode() {
+		if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ctx, ec, e); ok {
+			if err != nil {
+				return nil, err
+			}
+			return SingleBoolean(result), nil
 		}
-		return SingleBoolean(result), nil
 	}
 	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
@@ -33,6 +38,13 @@ func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCo
 		return nil, err
 	}
 	coll := ec.resolveDefaultCollation()
+	if ec.xpath10CompatMode() {
+		result, err := generalCompareXPath10Compat(ctx, e.Op, left, right, coll, ec)
+		if err != nil {
+			return nil, err
+		}
+		return SingleBoolean(result), nil
+	}
 	result, err := generalCompareWithCollation(ctx, e.Op, left, right, coll, ec)
 	if err != nil {
 		return nil, err

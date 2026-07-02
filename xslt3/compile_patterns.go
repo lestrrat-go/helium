@@ -26,6 +26,10 @@ type pattern struct {
 	xpathDefaultNS    string
 	hasXPathDefaultNS bool
 	nsBindings        map[string]string // prefix→URI bindings from compile context
+	// compat is true when the pattern was compiled under backwards-compatible
+	// processing (effective version < 2.0); its predicate expressions then
+	// evaluate in XPath 1.0 compatibility mode (§3.10.1).
+	compat bool
 }
 
 // patternAlt is one alternative in a union pattern (separated by |).
@@ -75,10 +79,10 @@ func isNeverMatchingPattern(alt string) bool {
 // context, so both compile-time validation and runtime matching resolve prefixes
 // identically and the predeclared XPath namespaces (fn/math/map/...) apply as a
 // fallback only when a prefix is not lexically bound.
-func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool) (*pattern, error) {
+func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool, compat bool) (*pattern, error) {
 	nsBindings := inScopeNamespaces(elem)
 	alts := splitPatternUnion(s)
-	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, hasXPathDefaultNS: hasXPathDefaultNS, nsBindings: nsBindings}
+	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, hasXPathDefaultNS: hasXPathDefaultNS, nsBindings: nsBindings, compat: compat}
 	for _, alt := range alts {
 		alt = strings.TrimSpace(alt)
 		if alt == "" {
@@ -785,6 +789,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 	savedItem := ec.contextItem
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
+	savedPatternCompat := ec.patternCompat
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
@@ -793,6 +798,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 	ec.contextItem = nil
 	ec.inPatternMatch = true
 	ec.patternNamespaces = p.nsBindings
+	ec.patternCompat = p.compat
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
@@ -802,6 +808,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
 		ec.patternNamespaces = savedPatternNS
+		ec.patternCompat = savedPatternCompat
 	}()
 
 	for _, alt := range p.Alternatives {
@@ -839,12 +846,14 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 	savedItem := ec.contextItem
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
+	savedPatternCompat := ec.patternCompat
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
 	ec.contextItem = item
 	ec.inPatternMatch = true
 	ec.patternNamespaces = p.nsBindings
+	ec.patternCompat = p.compat
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
@@ -852,6 +861,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
 		ec.patternNamespaces = savedPatternNS
+		ec.patternCompat = savedPatternCompat
 	}()
 
 	for _, alt := range p.Alternatives {
@@ -881,7 +891,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		if compErr != nil {
 			continue
 		}
-		result, err := ec.evalXPath(ctx, compiled, nil)
+		result, err := ec.evalPatternExpr(ctx, compiled, nil)
 		if err != nil {
 			continue
 		}
@@ -925,6 +935,7 @@ func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execCo
 	savedItem := ec.contextItem
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
+	savedPatternCompat := ec.patternCompat
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
@@ -933,6 +944,7 @@ func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execCo
 	ec.contextItem = xpath3.NodeItem{Node: node}
 	ec.inPatternMatch = true
 	ec.patternNamespaces = p.nsBindings
+	ec.patternCompat = p.compat
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
@@ -942,6 +954,7 @@ func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execCo
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
 		ec.patternNamespaces = savedPatternNS
+		ec.patternCompat = savedPatternCompat
 	}()
 
 	for _, fe := range ctxAlts {
@@ -963,7 +976,7 @@ func (ec *execContext) matchContextItemPredicates(ctx context.Context, preds []x
 		if compErr != nil {
 			return false
 		}
-		result, err := ec.evalXPath(ctx, compiled, nil)
+		result, err := ec.evalPatternExpr(ctx, compiled, nil)
 		if err != nil {
 			return false
 		}
@@ -1910,6 +1923,9 @@ func evaluatePredicateWithPosition(ctx context.Context, ec *execContext, pred xp
 	eval := ec.xpathEvaluator(ctx).
 		Position(pos).
 		Size(size)
+	if ec.patternCompat {
+		eval = eval.XPath10Compat()
+	}
 	result, err := eval.Evaluate(ec.xpathContext(ctx), compiled, node)
 	if err != nil {
 		// Propagate fatal errors (like XTDE0640 circular key or
@@ -1949,7 +1965,7 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 
 	// Try evaluating with the node itself as context first.
 	// Needed for document-node patterns like (/)[doc].
-	result, err := ec.evalXPath(ctx, compiled, node)
+	result, err := ec.evalPatternExpr(ctx, compiled, node)
 	if err != nil {
 		// Propagate fatal errors (like XTDE0640 circular key) through
 		// the exec context so they can be raised after pattern matching.
@@ -1967,7 +1983,7 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 	}
 	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
-		result, err := ec.evalXPath(ctx, compiled, ancestor)
+		result, err := ec.evalPatternExpr(ctx, compiled, ancestor)
 		if err != nil {
 			if isXSLTError(err, errCodeXTDE0640) {
 				ec.patternMatchErr = err

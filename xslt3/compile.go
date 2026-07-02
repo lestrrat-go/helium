@@ -528,6 +528,80 @@ func isForwardsCompatible(ver string) bool {
 	return f > 3.0
 }
 
+// isBackwardsCompatible reports whether an effective XSLT version selects
+// backwards-compatible processing — XSLT 1.0 behavior plus XPath 1.0
+// compatibility mode. Per XSLT 3.0 §3.10 this is any effective version below 2.0
+// (an effective version in [2.0, 3.0) behaves identically to 3.0).
+func isBackwardsCompatible(ver string) bool {
+	ver = strings.TrimSpace(ver)
+	if ver == "" {
+		return false
+	}
+	f, err := strconv.ParseFloat(ver, 64)
+	if err != nil {
+		return false
+	}
+	return f < 2.0
+}
+
+// backwardsCompatible reports whether the compiler's current effective version
+// selects backwards-compatible processing.
+func (c *compiler) backwardsCompatible() bool {
+	return isBackwardsCompatible(c.effectiveVersion)
+}
+
+// pushElementVersion sets the effective version from a declaration element's own
+// version attribute (if present) for the duration of its compilation, returning
+// a restore function to defer. Top-level declaration compilers (template, key,
+// function, accumulator, attribute-set) must call this before compiling any
+// pattern or XPath expression so a local version < 2.0 makes those expressions
+// backwards-compatible (XSLT 3.0 §3.10) — the generic instruction path already
+// pushes the version, but these direct paths bypass it.
+func (c *compiler) pushElementVersion(elem *helium.Element) func() {
+	saved := c.effectiveVersion
+	if ver := elementXSLTVersion(elem); ver != "" {
+		c.effectiveVersion = ver
+	}
+	return func() { c.effectiveVersion = saved }
+}
+
+// pushStaticVersion forces a non-backwards-compatible effective version for the
+// duration of a compile-time static-context evaluation (a static="yes" variable
+// or parameter). The static context is NOT subject to backwards-compatible
+// processing — consistent with use-when — so its select must not be compat-marked
+// even inside a version < 2.0 module. Returns a restore function to defer.
+func (c *compiler) pushStaticVersion() func() {
+	saved := c.effectiveVersion
+	c.effectiveVersion = lexicon.XSLTVersion30
+	return func() { c.effectiveVersion = saved }
+}
+
+// elementXSLTVersion returns the XSLT version declared on an element: the
+// unqualified version attribute on an XSLT-namespace element, or the xsl:version
+// attribute on a literal result element. On an LRE an unqualified version is an
+// ordinary literal result attribute (copied to the output), NOT an XSLT version,
+// so it must not affect the effective version.
+func elementXSLTVersion(elem *helium.Element) string {
+	if elem.URI() == lexicon.NamespaceXSLT {
+		return getAttr(elem, "version")
+	}
+	ver, _ := elem.GetAttributeNS("version", lexicon.NamespaceXSLT)
+	return ver
+}
+
+// markCompatExpr records an expression that must evaluate in XPath 1.0
+// compatibility mode. Keyed by pointer identity; lazily allocates the set so a
+// stylesheet with no backwards-compatible subtree keeps a nil map.
+func (c *compiler) markCompatExpr(expr *xpath3.Expression) {
+	if expr == nil {
+		return
+	}
+	if c.stylesheet.compatExprs == nil {
+		c.stylesheet.compatExprs = make(map[*xpath3.Expression]struct{})
+	}
+	c.stylesheet.compatExprs[expr] = struct{}{}
+}
+
 // resolveQName resolves a QName (prefix:local or just local) to an expanded name.
 // If the QName has a prefix, it is resolved using the given namespace bindings
 // and the result is returned in Clark notation: {uri}local.
@@ -918,7 +992,7 @@ func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Ele
 		}
 		realName := name[1:]
 		avtStr := attr.Value()
-		avt, err := compileAVT(avtStr, c.nsBindings)
+		avt, err := c.compileAVT(avtStr, c.nsBindings)
 		if err != nil {
 			return staticError(errCodeXTSE0020,
 				"invalid AVT in shadow attribute _%s: %v", realName, err)
@@ -949,7 +1023,7 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 	if !hasShadow {
 		return nil
 	}
-	avt, err := compileAVT(avtStr, c.nsBindings)
+	avt, err := c.compileAVT(avtStr, c.nsBindings)
 	if err != nil {
 		return staticError(errCodeXTSE0020,
 			"invalid AVT in shadow attribute _%s: %v", name, err)
@@ -1087,10 +1161,16 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	return eval
 }
 
-func compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
+func (c *compiler) compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		return nil, staticError(errCodeXTSE0165, "invalid XPath %q: %v", expr, err)
+	}
+	// XSLT backwards-compatible processing: an expression compiled under an
+	// effective version < 2.0 is evaluated in XPath 1.0 compatibility mode. Record
+	// it by pointer identity so evalXPath can select the compat evaluator.
+	if c.backwardsCompatible() {
+		c.markCompatExpr(compiled)
 	}
 	return compiled, nil
 }
@@ -1243,8 +1323,18 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.defaultMode = resolved
 	}
 
+	// A _version shadow attribute takes precedence over a literal version
+	// attribute (XSLT 3.0 §3.5.2). Resolve it up front so the effective version —
+	// which governs whether backwards-compatible processing applies — reflects the
+	// computed value (e.g. _version="{system-property('xsl:version')}" yields 3.0,
+	// disabling BC even when version="1.0" is also present).
+	if _, hasShadow := root.GetAttribute("_version"); hasShadow {
+		if err := c.resolveSingleShadowAttribute(ctx, root, paramVersion); err != nil {
+			return nil, err
+		}
+	}
 	// Read version — required on xsl:stylesheet and xsl:transform (XTSE0010).
-	// Allow _version shadow attribute (resolved later) to satisfy the check.
+	// Allow _version shadow attribute (resolved above) to satisfy the check.
 	c.stylesheet.version = getAttr(root, paramVersion)
 	if c.stylesheet.version == "" {
 		if _, hasShadow := root.GetAttribute("_version"); !hasShadow {
@@ -1693,9 +1783,11 @@ func checkCallTemplateTunnelMismatch(ss *Stylesheet) error {
 									"xsl:call-template: non-tunnel parameter %q corresponds to tunnel parameter in target template",
 									wp.Name)
 							}
-						} else {
+						} else if !ct.Compat {
 							// XTSE0680: a non-tunnel with-param that has no matching
-							// xsl:param in the target template is a static error.
+							// xsl:param in the target template is a static error — except
+							// under backwards-compatible processing, where the surplus
+							// parameter is silently ignored (§10.1.1).
 							return staticError(errCodeXTSE0680,
 								"xsl:call-template: parameter %q not declared in target template %q",
 								wp.Name, ct.Name)

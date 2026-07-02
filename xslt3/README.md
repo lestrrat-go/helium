@@ -102,7 +102,7 @@ misinterpreted, and external resource access is default-deny.
 
 | Category | ~Count | Reason |
 |----------|-------:|--------|
-| XSLT 1.0/2.0-only tests and backwards-compatibility mode | ~1,265 | Optional 1.0/2.0 compatibility level — **intentionally not implemented** |
+| `spec="XSLT20"`-only tests | ~1,120 | 2.0-specific expected outputs; not a runnable bucket for a 3.0 processor |
 | Performance-gated (run with `HELIUM_SLOW_TESTS=1`) | ~605 | CI runtime only; not capability gaps |
 | Schema-awareness | ~55 | Optional level, in progress |
 | Tests requiring a feature to be *absent* (we support it) | ~35 | We exceed the test's requirement |
@@ -110,8 +110,13 @@ misinterpreted, and external resource access is default-deny.
 | External / non-interoperable (XQuery `load-xquery-module`, network, Saxon-specific URIs) | ~12 | Out of scope or noted non-interoperable by the W3C catalog |
 | Genuine edge defects | ~25 | Narrow, individually-tracked quirks (e.g. type-annotation propagation, `snapshot()/root()` namespace nodes) |
 
-Backwards-compatibility modes for XSLT 1.0/2.0 are **not** part of the target
-feature set and will not be implemented.
+Backwards-compatible processing (XSLT 1.0 behavior + XPath 1.0 compatibility
+mode, enabled per element when the effective `[xsl:]version` is below 2.0) **is**
+implemented; see the Backwards-Compatible Processing section in the repository
+`CLAUDE.md`. A few residual cases stay skipped with specific reasons (the 1.0-only
+default output method, a `base-uri()` fixture dependence, and XPath 1.0 *grammar*
+differences — compatibility mode changes semantics, not the grammar). XSLT 1.0/2.0
+*syntax* support and the `spec="XSLT20"`-only test bucket remain out of scope.
 
 ### Running the conformance tests
 

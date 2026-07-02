@@ -461,7 +461,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		// FOTY0013 (atomizing function items) must propagate per XPath 3.1 §2.7.2
 		var xpErr *XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
+		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
 			return nil, err
 		}
 		return SingleDouble(math.NaN()), nil
@@ -1203,7 +1203,11 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 		return nil, nil //nolint:nilnil
 	}
 	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single node, got sequence of length > 1"}
+		// XPath 1.0 compatibility mode uses the first node; otherwise a >1 node
+		// argument is a type error.
+		if !getFnContext(ctx).xpath10CompatMode() {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single node, got sequence of length > 1"}
+		}
 	}
 	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
