@@ -147,6 +147,7 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 
 // compileOverrideFunction compiles a function inside xsl:override.
 func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*xslFunction, xpath3.QualifiedName, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0110, "xsl:function in xsl:override requires name attribute")
@@ -397,6 +398,7 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 
 // compileOverrideVariable compiles a variable inside xsl:override.
 func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*variable, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable in xsl:override requires name attribute")
@@ -530,6 +532,7 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 
 // compileOverrideParam compiles a param inside xsl:override.
 func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*param, error) {
+	defer c.pushElementVersion(elem)()
 	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
 		return nil, err
@@ -563,6 +566,7 @@ func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Elemen
 
 // compileOverrideAttributeSet compiles an attribute-set inside xsl:override.
 func (c *compiler) compileOverrideAttributeSet(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*attributeSetDef, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute-set in xsl:override requires name attribute")

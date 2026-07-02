@@ -714,11 +714,10 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 	// A version attribute on the declaration overrides the effective version for
 	// its select/body (XSLT 3.0 §3.10), so a version="1.0" variable evaluates its
 	// select in backwards-compatible / XPath 1.0 compatibility mode even when the
-	// stylesheet module is 2.0/3.0.
-	if ver := getAttr(elem, "version"); ver != "" {
-		savedVersion := c.effectiveVersion
-		c.effectiveVersion = ver
-		defer func() { c.effectiveVersion = savedVersion }()
+	// stylesheet module is 2.0/3.0. A static="yes" variable is exempt: it is a
+	// compile-time static-context value, which is version-independent.
+	if !xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushElementVersion(elem)()
 	}
 
 	// Handle expand-text inheritance for this element.
@@ -833,11 +832,10 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 
 func (c *compiler) compileGlobalParam(ctx context.Context, elem *helium.Element) error {
 	// A version attribute on the declaration overrides the effective version for
-	// its select/body (XSLT 3.0 §3.10).
-	if ver := getAttr(elem, "version"); ver != "" {
-		savedVersion := c.effectiveVersion
-		c.effectiveVersion = ver
-		defer func() { c.effectiveVersion = savedVersion }()
+	// its select/body (XSLT 3.0 §3.10). A static="yes" parameter is exempt: it is
+	// a compile-time static-context value, which is version-independent.
+	if !xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushElementVersion(elem)()
 	}
 	// XTSE0020: tunnel="yes" is not allowed on a stylesheet parameter
 	if getAttr(elem, "tunnel") == lexicon.ValueYes {
