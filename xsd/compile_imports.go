@@ -940,6 +940,196 @@ func (c *compiler) checkRedefineSelfDerivation(ctx context.Context, elem *helium
 	return false
 }
 
+// checkRedefineGroupRestriction enforces the provably-sound core of
+// src-redefine.6.2 (§4.2.3): a redefining <group> with no self-reference must be
+// a ·valid restriction· of the original group (Particle Valid (Restriction),
+// §3.9.6). A restriction can never REQUIRE an element that the base group
+// EXPLICITLY forbids: if the original model declares element E with an effective
+// maximum occurrence of ZERO (so E can never appear) while the redefined model
+// GUARANTEES at least one occurrence of E, the redefinition resurrects a
+// declared-but-forbidden element and is not a valid restriction.
+//
+// The check is deliberately conservative. It fires only when (1) BOTH the
+// redefined and the original content models are fully analyzable as name-only
+// model groups — no wildcards, no unresolved group references, and no element
+// references / substitution groups — and (2) the offending name is DECLARED by
+// the original group (present as a particle) yet capped at zero occurrences. A
+// name the original omits entirely is left alone. Anything else returns without a
+// verdict, so the check can only ever add a rejection for a clear violation and
+// never over-rejects a valid restriction. Version-independent.
+func (c *compiler) checkRedefineGroupRestriction(ctx context.Context, elem *helium.Element, qn QName, origGroup *ModelGroup) {
+	redef := c.schema.groups[qn]
+	if redef == nil || origGroup == nil {
+		return
+	}
+	// Any group ref still pending resolution is a placeholder in c.groupRefs; a
+	// nested inline sequence/choice/all is not. Snapshot the ref placeholders so
+	// the walk can distinguish them and bail on an unresolved reference.
+	refSet := make(map[*ModelGroup]bool, len(c.groupRefs))
+	for mg := range c.groupRefs {
+		refSet[mg] = true
+	}
+	if !groupContentAnalyzable(redef, refSet) || !groupContentAnalyzable(origGroup, refSet) {
+		return
+	}
+	// Names the ORIGINAL group declares but caps at zero occurrences.
+	origNames := map[QName]struct{}{}
+	collectGroupElementNames(origGroup, origNames)
+	// For each element name the redefined model guarantees (min >= 1), reject when
+	// the original DECLARES that name yet can never contain it (max == 0).
+	redefNames := map[QName]struct{}{}
+	collectGroupElementNames(redef, redefNames)
+	for name := range redefNames {
+		if _, declared := origNames[name]; !declared {
+			continue
+		}
+		if groupMinCount(redef, name) >= 1 && groupMaxCount(origGroup, name) == 0 {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+				fmt.Sprintf("src-redefine.6.2: The redefinition of group '%s' is not a valid restriction of the original: it requires element '%s', which the original group forbids (maxOccurs=0).", qn.Local, name.Local)))
+			return
+		}
+	}
+}
+
+// groupContentAnalyzable reports whether a model group's content is composed
+// solely of local element declarations and nested inline model groups — i.e. no
+// wildcard, no element reference/substitution group, and no unresolved group
+// reference (a *ModelGroup present in refSet). It is the precondition for the
+// sound occurrence-counting used by checkRedefineGroupRestriction.
+func groupContentAnalyzable(mg *ModelGroup, refSet map[*ModelGroup]bool) bool {
+	for _, p := range mg.Particles {
+		switch t := p.Term.(type) {
+		case *ElementDecl:
+			if t.IsRef {
+				return false
+			}
+		case *ModelGroup:
+			if refSet[t] {
+				return false
+			}
+			if !groupContentAnalyzable(t, refSet) {
+				return false
+			}
+		default: // *Wildcard or anything unexpected
+			return false
+		}
+	}
+	return true
+}
+
+// collectGroupElementNames gathers every element declaration name reachable in a
+// name-only model group (precondition: groupContentAnalyzable).
+func collectGroupElementNames(mg *ModelGroup, out map[QName]struct{}) {
+	for _, p := range mg.Particles {
+		switch t := p.Term.(type) {
+		case *ElementDecl:
+			out[t.Name] = struct{}{}
+		case *ModelGroup:
+			collectGroupElementNames(t, out)
+		}
+	}
+}
+
+// occursSat is a saturating count used to fold occurrence products without
+// overflow; any value at or above it is treated as "many".
+const occursSat = 1 << 20
+
+// groupMaxCount returns the maximum number of times an element named `name` can
+// occur in one instance of the given name-only model group's content (its own
+// occurrence range excluded — the caller applies particle occurrences).
+func groupMaxCount(mg *ModelGroup, name QName) int {
+	total := 0
+	for _, p := range mg.Particles {
+		var per int
+		switch t := p.Term.(type) {
+		case *ElementDecl:
+			if t.Name == name {
+				per = 1
+			}
+		case *ModelGroup:
+			per = groupMaxCount(t, name)
+		}
+		if per == 0 {
+			continue
+		}
+		per = satMul(per, occursMaxBound(p.MaxOccurs))
+		if mg.Compositor == CompositorChoice {
+			if per > total {
+				total = per
+			}
+			continue
+		}
+		total = satAdd(total, per)
+	}
+	return total
+}
+
+// groupMinCount returns the minimum number of times an element named `name` is
+// GUARANTEED to occur in every instance of the given name-only model group's
+// content (its own occurrence range excluded).
+func groupMinCount(mg *ModelGroup, name QName) int {
+	if mg.Compositor == CompositorChoice {
+		// A choice guarantees only what EVERY branch guarantees.
+		minVal := -1
+		for _, p := range mg.Particles {
+			per := particleMinCount(p, name)
+			if minVal < 0 || per < minVal {
+				minVal = per
+			}
+		}
+		if minVal < 0 {
+			return 0
+		}
+		return minVal
+	}
+	total := 0
+	for _, p := range mg.Particles {
+		total = satAdd(total, particleMinCount(p, name))
+	}
+	return total
+}
+
+func particleMinCount(p *Particle, name QName) int {
+	var per int
+	switch t := p.Term.(type) {
+	case *ElementDecl:
+		if t.Name == name {
+			per = 1
+		}
+	case *ModelGroup:
+		per = groupMinCount(t, name)
+	}
+	if per == 0 || p.MinOccurs == 0 {
+		return 0
+	}
+	return satMul(per, p.MinOccurs)
+}
+
+func occursMaxBound(m int) int {
+	if m < 0 { // unbounded
+		return occursSat
+	}
+	return m
+}
+
+func satMul(a, b int) int {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	if a >= occursSat || b >= occursSat || a > occursSat/b {
+		return occursSat
+	}
+	return a * b
+}
+
+func satAdd(a, b int) int {
+	s := a + b
+	if s >= occursSat {
+		return occursSat
+	}
+	return s
+}
+
 // processRedefineOverrides applies the override children of an xs:redefine
 // element against phaseAKeys, the component set loaded from the redefined
 // document. consumed, when non-nil, is the cross-redefine consumption set shared
@@ -1096,6 +1286,13 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 					mg.Compositor = origGroup.Compositor
 					mg.Particles = origGroup.Particles
 					delete(c.groupRefs, mg)
+				}
+				// src-redefine.6.2 (§4.2.3): a redefining <group> with NO
+				// self-reference must be a ·valid restriction· of the original
+				// group (Particle Valid (Restriction) §3.9.6). Enforce the
+				// provably-sound core of that rule here.
+				if len(selfRefs) == 0 {
+					c.checkRedefineGroupRestriction(ctx, elem, qn, origGroup)
 				}
 			}
 		case isXSDElement(elem, elemAttributeGroup):
