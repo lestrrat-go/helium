@@ -128,6 +128,26 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	td := &TypeDef{IsComplex: true}
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 
+	// The @block and @final attributes on a complexType are both of type
+	// (#all | List of (extension | restriction)) (XSD Structures §3.4.2). Neither
+	// admits 'substitution' (that value belongs to element declarations only), nor
+	// 'list'/'union' (simpleType only), so any such token is a schema-representation
+	// error. isValidFinal encodes exactly the {extension, restriction} set. This is
+	// a version-independent XSD rule (enforced in both XSD 1.0 and 1.1). Presence is
+	// detected with hasAttr so an explicit empty value (a valid empty list) is not
+	// mistaken for a bad one.
+	if c.filename != "" {
+		for _, ba := range []string{attrBlock, attrFinal} {
+			if hasAttr(elem, ba) {
+				if v := getAttr(elem, ba); !isValidFinal(v) {
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						"The value '"+v+"' of attribute '"+ba+"' is not valid. Expected is '(#all | List of (extension | restriction))'."))
+				}
+			}
+		}
+	}
+
 	if c.readBooleanAttr(ctx, elem, "mixed") {
 		td.ContentType = ContentTypeMixed
 	}
