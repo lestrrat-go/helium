@@ -1284,8 +1284,18 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.defaultMode = resolved
 	}
 
+	// A _version shadow attribute takes precedence over a literal version
+	// attribute (XSLT 3.0 §3.5.2). Resolve it up front so the effective version —
+	// which governs whether backwards-compatible processing applies — reflects the
+	// computed value (e.g. _version="{system-property('xsl:version')}" yields 3.0,
+	// disabling BC even when version="1.0" is also present).
+	if _, hasShadow := root.GetAttribute("_version"); hasShadow {
+		if err := c.resolveSingleShadowAttribute(ctx, root, paramVersion); err != nil {
+			return nil, err
+		}
+	}
 	// Read version — required on xsl:stylesheet and xsl:transform (XTSE0010).
-	// Allow _version shadow attribute (resolved later) to satisfy the check.
+	// Allow _version shadow attribute (resolved above) to satisfy the check.
 	c.stylesheet.version = getAttr(root, paramVersion)
 	if c.stylesheet.version == "" {
 		if _, hasShadow := root.GetAttribute("_version"); !hasShadow {

@@ -634,21 +634,38 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleString(s), nil
 	}
-	if seqLen(args[0]) != 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
+	compat := false
+	if fc := getFnContext(ctx); fc != nil {
+		compat = fc.xpath10Compat
 	}
-	a, err := AtomizeItem(args[0].Get(0))
-	if err != nil {
-		return nil, err
-	}
-	if a.TypeName == TypeUntypedAtomic {
-		a, err = CastAtomic(a, TypeDouble)
+	var a AtomicValue
+	if compat {
+		// fn:format-number's value argument is xs:double?, so in XPath 1.0
+		// compatibility mode it is converted with fn:number (first item; a
+		// non-numeric or empty value → NaN) rather than being a type error.
+		var err error
+		a, err = xpath10CompatNumberItem(args[0])
 		if err != nil {
 			return nil, err
 		}
-	}
-	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
+	} else {
+		if seqLen(args[0]) != 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
+		}
+		var err error
+		a, err = AtomizeItem(args[0].Get(0))
+		if err != nil {
+			return nil, err
+		}
+		if a.TypeName == TypeUntypedAtomic {
+			a, err = CastAtomic(a, TypeDouble)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if !isSubtypeOf(a.TypeName, TypeNumeric) {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
+		}
 	}
 
 	picture, err := coerceArgToStringRequired(args[1])

@@ -47,6 +47,12 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *valueOfInst) error
 			return err
 		}
 		seq := result.Sequence()
+		// XSLT 1.0 behavior (backwards-compatible processing): with a select and no
+		// explicit separator, xsl:value-of outputs the string value of the FIRST
+		// item only; the rest are discarded after atomization (§3.10.1).
+		if inst.Separator == nil && seq != nil && sequence.Len(seq) > 1 && ec.isCompatExpr(inst.Select) {
+			seq = xpath3.ItemSlice{seq.Get(0)}
+		}
 		if seq == nil || sequence.Len(seq) == 0 {
 			emptySequence = true
 		}
