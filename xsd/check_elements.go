@@ -99,6 +99,9 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	// Closed attribute-vocabulary check (§3.3.2, version-INDEPENDENT).
 	c.checkElementAttrVocabulary(ctx, elem)
 
+	// Content-model ordering: annotation must be the first child (§3.3.2).
+	c.checkElementContentOrder(ctx, elem)
+
 	// name is required for global elements.
 	if name == "" {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
@@ -220,6 +223,46 @@ func (c *compiler) checkElementAttrVocabulary(ctx context.Context, elem *helium.
 		}
 		c.schemaError(ctx, schemaParserError(src, line, local, elemElement,
 			"The attribute '"+attr.LocalName()+"' is not allowed."))
+	}
+}
+
+// checkElementContentOrder enforces the §3.3.2 element content model ordering
+// constraint that an <xs:annotation> must be the FIRST child of an <xs:element>
+// declaration — it may not FOLLOW a recognized content child (<simpleType>,
+// <complexType>, <alternative>, <unique>, <key>, <keyref>). This is
+// version-INDEPENDENT: annotation is the leading term of the element content
+// model in every XSD version ((annotation?, ((simpleType | complexType)?,
+// alternative*, (unique | key | keyref)*))). Only recognized content children set
+// the "saw a non-annotation" state, so a stray/foreign child that helium
+// otherwise tolerates does not trigger the diagnostic. The at-most-one-annotation
+// rule and the annotation's own content model are enforced separately by
+// checkAnnotations.
+func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.Element) {
+	sawContentChild := false
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if ce.URI() != lexicon.NamespaceXSD {
+			continue
+		}
+		if isXSDElement(ce, elemAnnotation) {
+			if sawContentChild {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "element",
+					"The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*))."))
+			}
+			continue
+		}
+		switch {
+		case isXSDElement(ce, elemSimpleType), isXSDElement(ce, elemComplexType),
+			isXSDElement(ce, elemAlternative), isXSDElement(ce, elemUnique),
+			isXSDElement(ce, elemKey), isXSDElement(ce, elemKeyRef):
+			sawContentChild = true
+		}
 	}
 }
 
@@ -485,6 +528,9 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Named local element constraints.
 		// Matches libxml2 ordering: maxOccurs, not-allowed attrs,
 		// block/final value checks, default+fixed, type/content children.
+
+		// Content-model ordering: annotation must be the first child (§3.3.2).
+		c.checkElementContentOrder(ctx, elem)
 
 		// The {name} of a local element declaration must be an NCName (XSD
 		// Structures §3.3.2; xsd:element/@name is of type xs:NCName), exactly as
