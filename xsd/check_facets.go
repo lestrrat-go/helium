@@ -1254,6 +1254,7 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 // the base type's facets.
 func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	c.checkBuiltinFixedFacetRestriction(ctx, td, fs, line, component)
+	c.checkWhiteSpaceValidRestriction(ctx, td, fs, line, component)
 
 	base := baseFacets(td)
 	if base == nil {
@@ -1596,6 +1597,36 @@ func explicitTimezoneApplicable(builtinLocal string) bool {
 	default:
 		return false
 	}
+}
+
+// checkWhiteSpaceValidRestriction enforces the "whiteSpace valid restriction"
+// schema component constraint (XSD Part 2 §4.3.6): a simple type that restricts a
+// base whose effective whiteSpace facet is more restrictive may only tighten,
+// never loosen, that facet. The permitted ordering is preserve → replace →
+// collapse (a derived value may equal or move rightward, never leftward):
+//   - a base whiteSpace of 'collapse' admits only a derived 'collapse';
+//   - a base whiteSpace of 'replace' forbids a derived 'preserve'.
+//
+// This is a version-INDEPENDENT XSD rule (the constraint text is identical in
+// 1.0 and 1.1), so it runs in both. The builtin-fixed-collapse types
+// (xs:date and family) are already reported by checkBuiltinFixedFacetRestriction
+// with a fixed-value message, so they are skipped here to avoid a double report.
+func (c *compiler) checkWhiteSpaceValidRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	if fs.WhiteSpace == nil || td.BaseType == nil {
+		return
+	}
+	if _, fixed := fixedBuiltinWhiteSpace(builtinBaseLocal(td)); fixed {
+		return
+	}
+
+	baseWS := resolveWhiteSpace(td.BaseType)
+	derived := *fs.WhiteSpace
+	if whiteSpaceRestrictiveness(derived) >= whiteSpaceRestrictiveness(baseWS) {
+		return
+	}
+	c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+		fmt.Sprintf("The value '%s' of the facet 'whiteSpace' is not a valid restriction of the 'whiteSpace' value '%s' of the base type.",
+			derived, baseWS)))
 }
 
 func fixedBuiltinWhiteSpace(builtinLocal string) (string, bool) {
