@@ -96,9 +96,17 @@ The xslt3 package targets **Basic XSLT 3.0** conformance (W3C spec Section 27). 
 | Higher-Order Functions | Implemented | Via xpath3 |
 | XPath 3.1 | Implemented | Via xpath3 |
 | Dynamic Evaluation | Implemented | `xsl:evaluate` |
-| **Compatibility (1.0/2.0)** | **Not planned** | Optional per spec; 122 tests skipped legitimately |
+| Backwards-Compatible Processing | Implemented | XSLT 1.0 behavior + XPath 1.0 compatibility mode |
 
-Do NOT implement XSLT 1.0/2.0 backwards compatibility mode. Tests skipped with reason `"unsupported feature: backwards_compatibility"` or `"unsupported spec: XSLT20"` are intentionally out of scope.
+## XSLT — Backwards-Compatible Processing
+
+Backwards-compatible processing (XSLT 3.0 §3.10) is enabled per element when its **effective version < 2.0** — the nearest-in-scope `[xsl:]version` (on the element, an ancestor, an included/imported module root, a global variable/param, or a literal result element's `xsl:version`; a `_version` shadow attribute takes precedence over the literal). Effective version in `[2.0, 3.0)` is identical to 3.0, so there is no separate "XSLT 2.0 compatibility" behavior.
+
+The core is **XPath 1.0 compatibility mode**, a runtime flag on the xpath3 evaluator (`Evaluator.XPath10Compat()`, default off, so xsd/relaxng/schematron and ordinary xpath3/xslt3 are unchanged). xslt3 records every expression compiled under an effective version < 2.0 by pointer identity (`Stylesheet.compatExprs`, set in `compiler.compileXPath`) and evaluates it in compat mode (`execContext.evalXPath`/`withCompat`). XPath 1.0 mode (`internal xpath10_compat.go`): a single-item function parameter given >1 items keeps only the first; an `xs:string(?)` parameter coerces via `fn:string` and an `xs:double(?)`/`xs:numeric` parameter via `fn:number` (invalid/empty → NaN); arithmetic operands convert to `xs:double` (÷0 → ±INF); general comparisons apply the 1.0 boolean/numeric/string rules, and the relational operators (`<`,`<=`,`>`,`>=`) always convert both operands to number. Functions/operators that bypass signature coercion (`format-number`, `subsequence`, `string-join` separator, `fn:number`-family node args, the `to` range operator) consult the flag directly.
+
+XSLT-level 1.0 behaviors (keyed off the compat-marked expression or an instruction `Compat` flag): `xsl:value-of` and AVTs discard all but the first item; `xsl:number/@value` uses the first atom and outputs `"NaN"` for an empty or non-integer value (no XTDE0980); `xsl:sort` uses the first sort-key item; `xsl:call-template` silently ignores a surplus `with-param` (no XTSE0680); `xsl:key`/`key()` compare values as `xs:string`; `system-property('xsl:supports-backwards-compatibility')` is `"yes"`. Known gaps (skipped in `expectations/xslt30.json` with specific reasons): the 1.0-only default output method (xhtml→xml for an implicit 1.0 result tree); `base-uri()` fixture dependence; and XPath **1.0 grammar** differences (`div`/`mod` as a name after an operator, unprefixed `function` as a name test, empty function arguments) — compat mode changes semantics, not the grammar, so these stay out of scope.
+
+Do NOT implement XSLT 1.0/2.0 **syntax** support or the `spec="XSLT20"`-only test bucket; tests skipped with reason `"unsupported spec: XSLT20"` are intentionally out of scope.
 
 ## Generated Files
 
