@@ -360,6 +360,19 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 		c.hasXPathDefaultNS = savedHasXPathDefaultNS
 	}()
 
+	// The included module's version governs backwards-/forwards-compatible
+	// processing of its own declarations (XSLT 3.0 §3.10), independent of the
+	// including module's version. A _version shadow attribute (resolved
+	// separately) takes precedence over the literal, so the literal only governs
+	// when no shadow is present.
+	savedVersion := c.effectiveVersion
+	if _, hasShadow := root.GetAttribute("_version"); !hasShadow {
+		if ver := getAttr(root, "version"); ver != "" {
+			c.effectiveVersion = ver
+		}
+	}
+	defer func() { c.effectiveVersion = savedVersion }()
+
 	// XTSE0265: conflicting input-type-annotations across included modules.
 	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
