@@ -2045,10 +2045,27 @@ func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
 		if std == nil {
 			continue
 		}
-		// An element-only/mixed complex content default is character data, not validated
-		// against a simple type — skip it. A plain simpleType and a simpleContent complex
-		// type are both type-validated (the latter through its content chain).
+		// §3.3.6 "Element Default Valid (Immediate)" clause 2.1 (version-independent):
+		// when a value constraint (default/fixed) is present and the type is a complex
+		// type, its {content type} must be a simple type definition or mixed. An
+		// element-only or empty complex content type carries no character-data value for
+		// the constraint, so a default/fixed on such an element is a schema error rather
+		// than silently ignored. Simple content is type-validated below; mixed content is
+		// left to its own path (clause 2.2.2 emptiability is not checked here).
 		if std.IsComplex && !std.IsSimpleContent {
+			// A declaration carrying BOTH default and fixed is already a
+			// mutually-exclusive representation error; the value constraint is ill-formed,
+			// so do not additionally judge its type applicability (avoids a duplicate
+			// diagnostic on an already-invalid declaration).
+			bothConstraints := it.decl.Default != nil && it.decl.Fixed != nil
+			if !bothConstraints && (std.ContentType == ContentTypeElementOnly || std.ContentType == ContentTypeEmpty) {
+				kind := attrDefault
+				if it.decl.Default == nil {
+					kind = attrFixed
+				}
+				msg := fmt.Sprintf("The type of the element declaration must be a simple type or a complex type with mixed or simple content for a '%s' value constraint to be present.", kind)
+				c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
+			}
 			continue
 		}
 		// Validate through the SAME shared simpleContent path the instance value uses
