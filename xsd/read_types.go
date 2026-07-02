@@ -256,6 +256,9 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemGroup):
+			if !c.checkContentModelGroupRef(ctx, ce) {
+				continue
+			}
 			ref := getAttr(ce, attrRef)
 			if ref != "" {
 				c.validateOccursAttrs(ctx, ce)
@@ -694,6 +697,9 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemGroup):
+			if !c.checkContentModelGroupRef(ctx, ce) {
+				continue
+			}
 			ref := getAttr(ce, attrRef)
 			if ref != "" {
 				c.validateOccursAttrs(ctx, ce)

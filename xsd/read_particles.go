@@ -310,6 +310,54 @@ func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 	}
 }
 
+// checkContentModelGroupRef enforces the XML representation of a model group
+// REFERENCE (§3.8.2): a <xs:group> appearing as a particle inside a content
+// model — directly under an xs:complexType, inside an xs:extension/xs:restriction
+// derivation body, or nested in an xs:sequence/xs:choice/xs:all — is a reference,
+// whose only naming attribute is 'ref' and whose content model is (annotation?).
+// A '@name' — the DEFINITION form, valid only as a top-level xs:schema /
+// xs:redefine / xs:override child — is a schema-representation error, as is a
+// missing 'ref' or any non-annotation element child. It returns true when the
+// reference is well-formed (a non-empty 'ref', no 'name'), so the caller records
+// the group ref; false (having reported the error) otherwise. Version-INDEPENDENT
+// XSD rule.
+func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Element) bool {
+	ref := getAttr(ce, attrRef)
+	if c.filename == "" {
+		// Representation diagnostics need a source label; preserve the legacy
+		// behavior (record only a non-empty ref) when none is available.
+		return ref != ""
+	}
+	ok := true
+	if hasAttr(ce, attrName) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "group", attrName,
+			"The attribute 'name' is not allowed on a model group reference; use 'ref'."))
+		ok = false
+	}
+	if !hasAttr(ce, attrRef) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "group", attrRef,
+			"A model group reference must have a 'ref' attribute."))
+		ok = false
+	}
+	// content model (annotation?): no non-annotation element children.
+	for child := range helium.Children(ce) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		sub, isElem := helium.AsNode[*helium.Element](child)
+		if !isElem {
+			continue
+		}
+		if isXSDElement(sub, elemAnnotation) {
+			continue
+		}
+		c.schemaError(ctx, schemaParserError(c.diagSource(), sub.Line(), sub.LocalName(), "group",
+			fmt.Sprintf("The content of a model group reference is restricted to (annotation?); the element '%s' is not allowed.", sub.LocalName())))
+		ok = false
+	}
+	return ok && ref != ""
+}
+
 func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
 	// An xs:all compositor has special occurrence constraints (XSD Part 1
 	// §3.8.6 / cos-all-limited): its own minOccurs must be 0 or 1, its maxOccurs
@@ -481,6 +529,9 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 			// downstream in checkAllGroupRef.
 			if compositor == CompositorAll && c.version != Version11 {
 				reportStray(ce)
+				continue
+			}
+			if !c.checkContentModelGroupRef(ctx, ce) {
 				continue
 			}
 			ref := getAttr(ce, attrRef)
