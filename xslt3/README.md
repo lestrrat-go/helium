@@ -130,4 +130,15 @@ go run ./cmd/w3ctest xslt30           # run the suite, emit JUnit XML
 HELIUM_SLOW_TESTS=1 go test ./xslt3/ -run TestXSLT30W3C
 ```
 
-Helium itself keeps only the `xslt3` unit tests.
+Helium keeps only the `xslt3` unit tests plus committed, point-in-time evidence
+beside this package — a stamped `summary-xslt30.md` and JUnit
+`results-xslt30.xml`. Regenerate them from the sibling module:
+
+```sh
+# in ../helium-w3c-tests, after fetch + generate
+go run ./cmd/w3ctest -no-system-out \
+  -out ../helium/xslt3/results-xslt30.xml \
+  -summary ../helium/xslt3/summary-xslt30.md \
+  -helium-commit "$(git -C ../helium rev-parse --short HEAD)" \
+  xslt30
+```
