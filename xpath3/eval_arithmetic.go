@@ -31,6 +31,13 @@ func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if err != nil {
 		return nil, err
 	}
+	// XPath 1.0 compatibility mode: each operand becomes xs:double (fn:number of
+	// its first atom; empty or non-numeric → NaN), so division by zero yields ±INF
+	// and there is no XPTY0004 for a >1 operand. Reached only under XSLT
+	// backwards-compatible processing.
+	if ec != nil && ec.xpath10Compat {
+		return floatArith(e.Op, xpath10CompatDoubleFromAtoms(lAtoms), xpath10CompatDoubleFromAtoms(rAtoms))
+	}
 	if len(lAtoms) == 0 || len(rAtoms) == 0 {
 		return validNilSequence, nil // empty sequence
 	}
@@ -343,6 +350,16 @@ func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	rAtoms, err := atomizeSingletonOperand(r)
 	if err != nil {
 		return nil, err
+	}
+	// XPath 1.0 compatibility mode: the operand becomes xs:double (fn:number of its
+	// first atom; empty or non-numeric → NaN). Reached only under XSLT
+	// backwards-compatible processing.
+	if ec != nil && ec.xpath10Compat {
+		d := xpath10CompatDoubleFromAtoms(rAtoms)
+		if !e.Negate {
+			return SingleAtomic(d), nil
+		}
+		return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(-d.ToFloat64())}), nil
 	}
 	if len(rAtoms) == 0 {
 		return validNilSequence, nil

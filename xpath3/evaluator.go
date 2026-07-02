@@ -61,6 +61,7 @@ type evaluatorCfg struct {
 	qnameValueNoDefaultNS  bool
 	schemaDeclarations     SchemaDeclarations
 	allowXML11Chars        bool
+	xpath10Compat          bool // XPath 1.0 compatibility mode (XSLT backwards-compatible processing)
 	docOrder               *DocOrderCache
 	traceWriter            io.Writer
 	maxNodes               int   // 0 means use the package default (maxNodeSetLength)
@@ -345,6 +346,21 @@ func (e Evaluator) AllowXML11Chars() Evaluator {
 	return e
 }
 
+// XPath10Compat enables XPath 1.0 compatibility mode, the evaluation semantics
+// selected by XSLT backwards-compatible processing (an effective [xsl:]version
+// below 2.0). When on: a single-item function parameter supplied more than one
+// item keeps only the first; an xs:string(?) parameter coerces its value with
+// fn:string and an xs:double(?)/xs:numeric parameter with fn:number (lexically
+// invalid or empty → NaN); arithmetic operands are converted to xs:double
+// (division by zero yields ±INF, non-numeric operands NaN); and general
+// comparisons apply the 1.0 boolean/numeric/string conversion rules. Off by
+// default, so ordinary XPath 3.1 / XSLT 3.0 / XSD evaluation is unchanged.
+func (e Evaluator) XPath10Compat() Evaluator {
+	e = e.clone()
+	e.cfg.xpath10Compat = true
+	return e
+}
+
 // DocOrderCache attaches a shared document-order cache.
 func (e Evaluator) DocOrderCache(cache *DocOrderCache) Evaluator {
 	e = e.clone()
@@ -457,6 +473,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.strictPrefixes = cfg.strictPrefixes
 	ec.qnameValueNoDefaultNS = cfg.qnameValueNoDefaultNS
 	ec.allowXML11Chars = cfg.allowXML11Chars
+	ec.xpath10Compat = cfg.xpath10Compat
 
 	// dynamic focus overrides
 	if cfg.position > 0 {

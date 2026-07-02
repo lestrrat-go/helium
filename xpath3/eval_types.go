@@ -413,6 +413,16 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 // errors take precedence over cardinality rejection, matching the spec ordering
 // (atomization happens before the occurrence check).
 func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequence, error) {
+	// XPath 1.0 compatibility mode: apply the 1.0 function-conversion rules
+	// (first-item truncation; fn:string / fn:number coercion) before the ordinary
+	// path. Reached only under XSLT backwards-compatible processing.
+	if ec != nil && ec.xpath10Compat && !st.Void {
+		newSeq, done, err := coerceXPath10Compat(seq, st, ec)
+		if done {
+			return newSeq, err
+		}
+		seq = newSeq
+	}
 	// Fast path: an item() item type matches any item, so per-item coercion is a
 	// no-op. Only the cardinality (occurrence) constraint can reject. Check it
 	// using seqLen — which is O(1) for every Sequence implementation (slice and
