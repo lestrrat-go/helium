@@ -269,6 +269,36 @@ func (c *compiler) reportSchemaLoadWarning(ctx context.Context, elem *helium.Ele
 // same diagnostics as a top-level import.
 func (c *compiler) processImport(ctx context.Context, elem *helium.Element) error {
 	ns := getAttr(elem, attrNamespace)
+
+	// src-import (§4.2.6.1 Import Constraints and Semantics): the <xs:import>
+	// @namespace representation constraints, version-independent. A violation is a
+	// schema-representation error, so the invalid import declaration is reported and
+	// skipped (never loaded). Only enforced when a filename is available (the same
+	// gating the other schema-parser diagnostics use).
+	if c.filename != "" {
+		nsPresent := hasAttr(elem, attrNamespace)
+		switch {
+		case nsPresent && ns == "":
+			// An empty @namespace is not a namespace name: the ABSENT namespace is
+			// imported by OMITTING @namespace, never by namespace="".
+			c.schemaError(ctx, schemaParserErrorAttr(c.filename, elem.Line(), elem.LocalName(), elemImport, attrNamespace,
+				"The value '' is not valid; the namespace of an <import> must not be the empty string."))
+			return nil
+		case nsPresent && ns == c.schema.targetNamespace && c.schemaTargetNSSet:
+			// src-import.1.1: @namespace must not match the enclosing schema's own
+			// targetNamespace (a schema does not import its own namespace).
+			c.schemaError(ctx, schemaParserErrorAttr(c.filename, elem.Line(), elem.LocalName(), elemImport, attrNamespace,
+				"The namespace '"+ns+"' must not match the target namespace of the importing schema."))
+			return nil
+		case !nsPresent && !c.schemaTargetNSSet:
+			// src-import.1.2: an <import> without @namespace requires the enclosing
+			// schema to have a targetNamespace.
+			c.schemaError(ctx, schemaParserError(c.filename, elem.Line(), elem.LocalName(), elemImport,
+				"An <import> without a namespace attribute requires the enclosing schema to have a targetNamespace."))
+			return nil
+		}
+	}
+
 	// Record the namespace as import-declared BEFORE any early return, so a
 	// location-less import (and, below, one whose load fails) still marks the
 	// namespace referenceable — its declarations are simply unknown.
