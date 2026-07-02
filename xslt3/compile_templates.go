@@ -588,7 +588,11 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 }
 
 func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*param, error) {
-	defer c.pushElementVersion(elem)()
+	// A static="yes" parameter is a compile-time static-context value and is
+	// version-independent; a non-static param honors its own version attribute.
+	if !xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushElementVersion(elem)()
+	}
 	savedNS := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = savedNS }()
 

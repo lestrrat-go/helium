@@ -148,7 +148,9 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 					return nil, staticError(errCodeXTSE3125, "xsl:on-completion must not have both select attribute and sequence constructor")
 				}
 				if selAttr != "" {
+					restoreVersion := c.pushElementVersion(childElem)
 					selExpr, selErr := c.compileXPath(selAttr, c.nsBindings)
+					restoreVersion()
 					if selErr != nil {
 						return nil, selErr
 					}
@@ -294,6 +296,7 @@ func instructionChildren(inst instruction) [][]instruction {
 
 // compileIterateParam compiles an xsl:param inside xsl:iterate.
 func (c *compiler) compileIterateParam(ctx context.Context, elem *helium.Element) (*iterateParam, error) {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
@@ -348,6 +351,7 @@ func (c *compiler) compileFork(ctx context.Context, elem *helium.Element) (instr
 
 // compileForkBranch compiles one child of xsl:fork into a branch (slice of instructions).
 func (c *compiler) compileForkBranch(ctx context.Context, elem *helium.Element) ([]instruction, error) {
+	defer c.pushElementVersion(elem)()
 	// If the child is xsl:sequence, compile its children as the branch body.
 	if elem.URI() == lexicon.NamespaceXSLT && elem.LocalName() == lexicon.XSLTElementSequence {
 		selectAttr := getAttr(elem, "select")
@@ -840,6 +844,7 @@ var mergeSourceAllowedAttrs = map[string]struct{}{
 
 // compileMergeSource compiles an xsl:merge-source element.
 func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element) (*mergeSource, error) {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, mergeSourceAllowedAttrs); err != nil {
 		return nil, err
 	}

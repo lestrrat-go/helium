@@ -990,6 +990,13 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// The parent's own version governs its content (§3.10). For an instruction
+	// compiled via compileInstruction this is already in effect (redundant, same
+	// value); for a structural child compiled directly by its parent loop
+	// (xsl:otherwise, xsl:matching-substring, xsl:merge-action, xsl:fallback, …)
+	// this is where its version takes effect, so a local version < 2.0 makes its
+	// body backwards-compatible.
+	defer c.pushElementVersion(parent)()
 
 	var body []instruction
 	sawTerminator := false // true after xsl:break or xsl:next-iteration
