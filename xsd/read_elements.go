@@ -275,6 +275,8 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 }
 
 func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
+	c.checkWildcardAttrs(ctx, elem)
+
 	hasNS := hasAttr(elem, attrNamespace)
 	namespace := getAttr(elem, attrNamespace)
 	if !hasNS {
@@ -314,6 +316,52 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 		c.parseNotQName(ctx, elem, wc, getAttr(elem, attrNotQName), isXSDElement(elem, elemAnyAttribute))
 	}
 	return wc
+}
+
+// checkWildcardAttrs enforces the XML representation of an xs:any /
+// xs:anyAttribute wildcard's attributes (XSD §3.10.2). The permitted unqualified
+// attributes are {id, namespace, processContents} for both, PLUS {minOccurs,
+// maxOccurs} for the ELEMENT wildcard xs:any only — an attribute has no
+// occurrence constraint, so minOccurs/maxOccurs on xs:anyAttribute is a schema
+// error. Foreign-namespaced attributes are allowed; an XSD-namespaced attribute
+// or an unexpected unqualified attribute is a schema error.
+//
+// This rule is version-INDEPENDENT for the base attribute set. The 1.1 negated
+// constraints @notNamespace/@notQName are permitted-and-ignored in both versions
+// (in 1.0 they are unrecognized but leniently ignored, keeping the 1.0 path
+// byte-identical to origin). The stricter no-occurs grammar of an xs:openContent
+// wildcard is enforced separately by parseOpenContentWildcard.
+func (c *compiler) checkWildcardAttrs(ctx context.Context, elem *helium.Element) {
+	src := c.diagSource()
+	if src == "" {
+		return
+	}
+	local := elem.LocalName()
+	isAttr := isXSDElement(elem, elemAnyAttribute)
+	line := elem.Line()
+	for _, attr := range elem.Attributes() {
+		switch attr.URI() {
+		case "":
+			switch attr.LocalName() {
+			case "id", attrNamespace, attrProcessContents:
+			case attrMinOccurs, attrMaxOccurs:
+				if isAttr {
+					c.schemaError(ctx, schemaParserErrorAttr(src, line, local, local,
+						attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed on 'anyAttribute'."))
+				}
+			case attrNotNamespace, attrNotQName:
+				// XSD 1.1 negated constraints. In 1.0 they are unrecognized but
+				// leniently IGNORED (the 1.0 path is byte-identical to origin),
+				// so they are permitted-and-ignored in both versions here.
+			default:
+				c.schemaError(ctx, schemaParserErrorAttr(src, line, local, local,
+					attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed."))
+			}
+		case lexicon.NamespaceXSD:
+			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, local,
+				attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed."))
+		}
+	}
 }
 
 // parseNotNamespace parses an xs:any/xs:anyAttribute @notNamespace value (XSD
