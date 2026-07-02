@@ -96,6 +96,9 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	line := elem.Line()
 	local := elem.LocalName()
 
+	// Closed attribute-vocabulary check (§3.3.2, version-INDEPENDENT).
+	c.checkElementAttrVocabulary(ctx, elem)
+
 	// name is required for global elements.
 	if name == "" {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
@@ -175,6 +178,85 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 					"The attribute 'type' and the <simpleType> child are mutually exclusive."))
 			}
 		}
+	}
+}
+
+// elementAttrAllowed reports whether name is a recognized unqualified attribute
+// of an <xs:element> declaration in ANY of its forms — global (topLevelElement),
+// local (localElement), or element reference — across XSD 1.0 and 1.1. Per
+// §3.3.2 the schema-for-schemas gives xs:element a CLOSED attribute set with an
+// `##other` anyAttribute admitting foreign-namespaced attributes; an unqualified
+// attribute outside this vocabulary (e.g. `nullable`, a misspelling of
+// `nillable`, or a random `foo`) is a schema-representation error. Attributes
+// recognized but disallowed for the SPECIFIC form (ref/minOccurs/maxOccurs/form
+// on a global, abstract/substitutionGroup/final on a local, …) are reported by
+// the form-specific checks in checkGlobalElement/checkLocalElement, so this
+// vocabulary predicate is the UNION of every form to avoid double-diagnosing
+// those. targetNamespace and abstract/final/substitutionGroup are included even
+// though a given form/version forbids them, since the goal here is only to reject
+// attributes that belong to NO xs:element form at all.
+func elementAttrAllowed(name string) bool {
+	switch name {
+	case "id", attrName, attrRef, attrType, attrMinOccurs, attrMaxOccurs,
+		attrDefault, attrFixed, attrNillable, attrBlock, attrForm,
+		attrSubstitutionGroup, attrFinal, attrAbstract, attrTargetNamespace:
+		return true
+	}
+	return false
+}
+
+// checkElementAttrVocabulary reports every unqualified attribute on an
+// <xs:element> declaration that is outside the closed §3.3.2 vocabulary.
+// Foreign-namespaced attributes (vc:, xml:, any qualified name) are admitted by
+// the schema-for-schemas `##other` anyAttribute, so only no-namespace attributes
+// are checked. Version-INDEPENDENT.
+func (c *compiler) checkElementAttrVocabulary(ctx context.Context, elem *helium.Element) {
+	line := elem.Line()
+	local := elem.LocalName()
+	src := c.diagSource()
+	for _, attr := range elem.Attributes() {
+		if attr.URI() != "" || elementAttrAllowed(attr.LocalName()) {
+			continue
+		}
+		c.schemaError(ctx, schemaParserError(src, line, local, elemElement,
+			"The attribute '"+attr.LocalName()+"' is not allowed."))
+	}
+}
+
+// attributeAttrAllowed reports whether name is a recognized unqualified attribute
+// of an <xs:attribute> declaration in ANY of its forms — global
+// (topLevelAttribute), local attribute use, or attribute reference — across XSD
+// 1.0 and 1.1. Per §3.2.2 the schema-for-schemas gives xs:attribute a CLOSED
+// attribute set with an `##other` anyAttribute admitting foreign-namespaced
+// attributes; an unqualified attribute outside this vocabulary (e.g. a random
+// `value`) is a schema-representation error. Attributes recognized but disallowed
+// for the SPECIFIC form (use/form/ref on a global, …) are reported by the
+// form-specific checks in checkAttributeUse, so this predicate is the UNION of
+// every form. inheritable/targetNamespace are XSD 1.1 additions kept in the union
+// so 1.1 schemas are not over-rejected.
+func attributeAttrAllowed(name string) bool {
+	switch name {
+	case "id", attrName, attrRef, attrType, attrUse, attrDefault, attrFixed,
+		attrForm, attrTargetNamespace, attrInheritable:
+		return true
+	}
+	return false
+}
+
+// checkAttrVocabulary reports every unqualified attribute on an <xs:attribute>
+// declaration that is outside the closed §3.2.2 vocabulary. Foreign-namespaced
+// attributes are admitted by the schema-for-schemas `##other` anyAttribute, so
+// only no-namespace attributes are checked. Version-INDEPENDENT.
+func (c *compiler) checkAttrVocabulary(ctx context.Context, elem *helium.Element) {
+	line := elem.Line()
+	local := elem.LocalName()
+	src := c.diagSource()
+	for _, attr := range elem.Attributes() {
+		if attr.URI() != "" || attributeAttrAllowed(attr.LocalName()) {
+			continue
+		}
+		c.schemaError(ctx, schemaParserError(src, line, local, "attribute",
+			"The attribute '"+attr.LocalName()+"' is not allowed."))
 	}
 }
 
@@ -302,6 +384,9 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 	name := getAttr(elem, attrName)
 	line := elem.Line()
 	local := elem.LocalName()
+
+	// Closed attribute-vocabulary check (§3.3.2, version-INDEPENDENT).
+	c.checkElementAttrVocabulary(ctx, elem)
 
 	minOcc := getAttr(elem, attrMinOccurs)
 	maxOcc := getAttr(elem, attrMaxOccurs)
@@ -547,6 +632,9 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 	ref := getAttr(elem, attrRef)
 	line := elem.Line()
 	local := elem.LocalName()
+
+	// Closed attribute-vocabulary check (§3.2.2, version-INDEPENDENT).
+	c.checkAttrVocabulary(ctx, elem)
 
 	// XSD 1.1 Schema Representation Constraint (Attribute Declaration
 	// Representation OK): a prohibited attribute use must not carry a value
