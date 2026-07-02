@@ -428,7 +428,7 @@ func (c *compiler) resolveAltTypeRefs(ctx context.Context) {
 		if !ok {
 			if c.filename != "" && !c.deprecatedDatatypeQName(ref.qn) {
 				msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", ref.qn.NS, ref.qn.Local)
-				c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(ref.source), ref.line, ref.elemName, attrType, msg))
+				c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(ref.source), ref.line, ref.elemName, msg))
 			}
 			td = &TypeDef{Name: ref.qn, ContentType: ContentTypeSimple}
 		}
@@ -549,7 +549,7 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 			}
 			msg := fmt.Sprintf("The type alternative's type '{%s}%s' is not validly substitutable for the declared type '{%s}%s' of the element declaration.",
 				alt.Type.Name.NS, alt.Type.Name.Local, declType.Name.NS, declType.Name.Local)
-			c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(alt.Source), alt.Line, elemAlternative, attrType, msg))
+			c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(alt.Source), alt.Line, elemAlternative, msg))
 		}
 	}
 }

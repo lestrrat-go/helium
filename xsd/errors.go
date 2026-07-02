@@ -98,9 +98,11 @@ func schemaElemDeclError(file string, line int, declName, msg string) string {
 	return fmt.Sprintf("%s:%d: element element: Schemas parser error : element decl. '%s': %s\n", file, line, declName, msg)
 }
 
-// schemaElemDeclErrorAttr formats a schema compilation error for an element declaration attribute:
+// schemaElemDeclErrorAttr formats a schema compilation error for an element
+// declaration's @type attribute (the only element-declaration attribute this
+// diagnostic is emitted for):
 //
-//	{file}:{line}: element element: Schemas parser error : element decl. '{name}', attribute '{attr}': {msg}\n
-func schemaElemDeclErrorAttr(file string, line int, declName, attr, msg string) string {
-	return fmt.Sprintf("%s:%d: element element: Schemas parser error : element decl. '%s', attribute '%s': %s\n", file, line, declName, attr, msg)
+//	{file}:{line}: element element: Schemas parser error : element decl. '{name}', attribute 'type': {msg}\n
+func schemaElemDeclErrorAttr(file string, line int, declName, msg string) string {
+	return fmt.Sprintf("%s:%d: element element: Schemas parser error : element decl. '%s', attribute '%s': %s\n", file, line, declName, attrType, msg)
 }

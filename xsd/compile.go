@@ -178,6 +178,16 @@ type compiler struct {
 	// target even when their declarations are unknown, so a dangling ref into an
 	// imported-but-unloadable namespace is not over-rejected.
 	importDeclaredNS map[string]struct{}
+	// docImportedNS records, per DECLARING document filename, the set of namespaces
+	// that document imported DIRECTLY via its own <xs:import> elements (keyed by
+	// c.filename at the time the import was processed; xs:include shares the
+	// compiler but carries the included document's filename, so an include's import
+	// is attributed to the included document, not the including one). Unlike
+	// importDeclaredNS this is NOT unioned up from sub-compilers, so it distinguishes
+	// a namespace a document imported directly from one only reachable transitively.
+	// Used by the src-resolve check that rejects a reference into a namespace the
+	// referencing document did not directly import.
+	docImportedNS map[string]map[string]struct{}
 	// importDepth and maxImportDepth bound xs:import recursion. Each sub-compiler
 	// created by loadImport inherits maxImportDepth and stores its own
 	// importDepth = parent.importDepth + 1. A sub-compiler whose depth would
@@ -632,6 +642,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		elemDeclConstraintSources: make(map[*ElementDecl]attrConstraintSource),
 		importedNS:                make(map[string]string),
 		importDeclaredNS:          make(map[string]struct{}),
+		docImportedNS:             make(map[string]map[string]struct{}),
 		maxImportDepth:            defaultMaxImportDepth,
 		importActive:              make(map[string]string),
 		includeVisited:            make(map[string]struct{}),
