@@ -717,6 +717,32 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if c.version != Version11 {
 			c.checkRestrictionAttrs(ctx, td)
 		}
+		// §3.4.6.4 (Derivation Valid (Restriction, Complex), cos-ct-restricts clause
+		// 5.3.2): when both the base and the derived type have complex content, a
+		// mixed derived content type requires the base to be mixed too (clause 5.3.2.1),
+		// while an element-only derived type is always allowed (clause 5.3.2.2). Unlike
+		// the SYMMETRIC extension rule (cos-ct-extends), restriction is ASYMMETRIC: a
+		// mixed base MAY be restricted to element-only, but an element-only base may NOT
+		// be restricted to mixed. So the only forbidden mixedness transition is
+		// element-only base → mixed derived. Version-INDEPENDENT (§3.4.6.4 is not
+		// version-specific), enforced in both XSD 1.0 and 1.1.
+		{
+			baseHasContent := td.BaseType.ContentType == ContentTypeElementOnly || td.BaseType.ContentType == ContentTypeMixed
+			derivedHasContent := td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed
+			baseMixed := td.BaseType.ContentType == ContentTypeMixed
+			derivedMixed := td.ContentType == ContentTypeMixed
+			if baseHasContent && derivedHasContent && derivedMixed && !baseMixed {
+				if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
+					component := componentLocalComplexType
+					if !src.isLocal {
+						component = "complex type '" + td.Name.Local + "'"
+					}
+					c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+						"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."))
+				}
+				continue
+			}
+		}
 		c.checkRestrictionParticles(ctx, td)
 	}
 
