@@ -575,6 +575,15 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		if seq != nil {
 			seqLen = sequence.Len(seq)
 		}
+		strVal := result.StringValue()
+		// XSLT 1.0 behavior (backwards-compatible processing): the sort key uses
+		// the FIRST item; the rest are discarded rather than raising XTTE1020
+		// (§13.1.2).
+		if seqLen > 1 && ec.isCompatExpr(sk.Select) {
+			seq = xpath3.ItemSlice{seq.Get(0)}
+			strVal = stringifyItem(seq.Get(0))
+			seqLen = 1
+		}
 		if seqLen > 1 {
 			return sortValue{}, dynamicError(errCodeXTTE1020,
 				"sort key value is a sequence of %d items; a single value is required", seqLen)
@@ -584,11 +593,11 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		if *dtMode == dataTypeNumber {
 			// Explicit data-type=lexicon.TypeNumber: use number() semantics.
 			// Dates/times are not numeric → convert via string → NaN.
-			return extractNumericSortValue(seq, result.StringValue(), true, implicitTZ), nil
+			return extractNumericSortValue(seq, strVal, true, implicitTZ), nil
 		}
 		if *dtMode == dataTypeNumberAuto {
 			// Auto-detected numeric: preserve date/time ordering.
-			sv := extractNumericSortValue(seq, result.StringValue(), false, implicitTZ)
+			sv := extractNumericSortValue(seq, strVal, false, implicitTZ)
 			// Atomize ANY singleton item for the XTDE1030 gate — a NodeItem is
 			// atomizable too. A schema-typed date/duration NODE must ALSO supply
 			// its comparison value from the atomized typed value: extractNumeric-
@@ -602,7 +611,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 			return sv, nil
 		}
 
-		sv := sortValue{kind: sortValueText, str: result.StringValue()}
+		sv := sortValue{kind: sortValueText, str: strVal}
 		var keyAtom xpath3.AtomicValue
 		var haveAtom bool
 		if seqLen == 1 {

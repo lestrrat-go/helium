@@ -224,6 +224,12 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if len(sAtoms) == 0 || len(eAtoms) == 0 {
 		return validNilSequence, nil
 	}
+	// XPath 1.0 compatibility mode: a range bound keeps only its first atom rather
+	// than raising a cardinality error.
+	if ec != nil && ec.xpath10Compat {
+		sAtoms = sAtoms[:1]
+		eAtoms = eAtoms[:1]
+	}
 	if len(sAtoms) > 1 || len(eAtoms) > 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "to operator operands must each be xs:integer? (at most one item)"}
 	}
