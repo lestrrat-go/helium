@@ -113,7 +113,7 @@ func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element
 		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
 	}
 
-	inst := &callTemplateInst{Name: resolveQName(name, c.nsBindings)}
+	inst := &callTemplateInst{Name: resolveQName(name, c.nsBindings), Compat: c.backwardsCompatible()}
 
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)

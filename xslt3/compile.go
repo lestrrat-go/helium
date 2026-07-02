@@ -1744,9 +1744,11 @@ func checkCallTemplateTunnelMismatch(ss *Stylesheet) error {
 									"xsl:call-template: non-tunnel parameter %q corresponds to tunnel parameter in target template",
 									wp.Name)
 							}
-						} else {
+						} else if !ct.Compat {
 							// XTSE0680: a non-tunnel with-param that has no matching
-							// xsl:param in the target template is a static error.
+							// xsl:param in the target template is a static error — except
+							// under backwards-compatible processing, where the surplus
+							// parameter is silently ignored (§10.1.1).
 							return staticError(errCodeXTSE0680,
 								"xsl:call-template: parameter %q not declared in target template %q",
 								wp.Name, ct.Name)

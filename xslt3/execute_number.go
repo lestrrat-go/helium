@@ -64,18 +64,40 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 			return err
 		}
 		seq := result.Sequence()
-		for item := range sequence.Items(seq) {
-			av, err := xpath3.AtomizeItem(item)
-			if err != nil {
-				// XTDE0980: value is not numeric
-				return dynamicError(errCodeXTDE0980,
-					"xsl:number value is not numeric")
+		if ec.isCompatExpr(inst.Value) {
+			// XSLT 1.0 xsl:number/@value (§12.3): use the FIRST atomized item; an
+			// empty value, or one that cannot be converted to an integer (including
+			// NaN), outputs the literal string "NaN" and does not raise XTDE0980.
+			var first xpath3.AtomicValue
+			have := false
+			for item := range sequence.Items(seq) {
+				av, err := xpath3.AtomizeItem(item)
+				if err != nil {
+					return dynamicError(errCodeXTDE0980, "xsl:number value is not numeric")
+				}
+				first, have = av, true
+				break
 			}
-			bi, err := atomicToBigInt(av)
-			if err != nil {
-				return err
+			if bi, err := atomicToBigInt(first); have && err == nil {
+				bigNums = append(bigNums, bi)
+			} else {
+				text := ec.resultDoc.CreateText([]byte("NaN"))
+				return ec.addNode(text)
 			}
-			bigNums = append(bigNums, bi)
+		} else {
+			for item := range sequence.Items(seq) {
+				av, err := xpath3.AtomizeItem(item)
+				if err != nil {
+					// XTDE0980: value is not numeric
+					return dynamicError(errCodeXTDE0980,
+						"xsl:number value is not numeric")
+				}
+				bi, err := atomicToBigInt(av)
+				if err != nil {
+					return err
+				}
+				bigNums = append(bigNums, bi)
+			}
 		}
 	} else {
 		var nums []int
