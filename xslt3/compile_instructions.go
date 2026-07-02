@@ -215,9 +215,11 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 		}
 	}
 
-	// Handle version inheritance for forwards-compatible processing
+	// Handle version inheritance. On an XSLT element this is the unqualified
+	// version attribute; on a literal result element it is xsl:version (an
+	// unqualified version there is a result attribute, not an XSLT version).
 	savedVersion := c.effectiveVersion
-	if ver := getAttr(elem, "version"); ver != "" {
+	if ver := elementXSLTVersion(elem); ver != "" {
 		c.effectiveVersion = ver
 	}
 	defer func() { c.effectiveVersion = savedVersion }()

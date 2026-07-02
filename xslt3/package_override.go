@@ -404,7 +404,10 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 
 // compileOverrideVariable compiles a variable inside xsl:override.
 func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*variable, error) {
-	defer c.pushElementVersion(elem)()
+	// A static="yes" variable is a version-independent compile-time value.
+	if !xsdBoolTrue(getAttr(elem, "static")) {
+		defer c.pushElementVersion(elem)()
+	}
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable in xsl:override requires name attribute")
@@ -538,7 +541,8 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 
 // compileOverrideParam compiles a param inside xsl:override.
 func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*param, error) {
-	defer c.pushElementVersion(elem)()
+	// compileParamDef pushes the element version (exempting static="yes"), so no
+	// outer push here — that would compat-mark a static override param's select.
 	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
 		return nil, err

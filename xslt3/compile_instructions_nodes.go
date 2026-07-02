@@ -687,18 +687,13 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 	c.breakAllowed = false
 	defer func() { c.breakAllowed = savedBreak }()
 
-	// XSLT backwards-compatible processing: an xsl:version on a literal result
-	// element sets the effective version for this element and its subtree, so its
-	// AVTs and descendant expressions evaluate in XPath 1.0 compatibility mode when
-	// that version is < 2.0. (An LRE carries the xsl:version-qualified attribute;
-	// the generic instruction path only reads the unprefixed "version".)
-	if ver, ok := elem.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
-		if ver = strings.TrimSpace(ver); ver != "" {
-			savedVersion := c.effectiveVersion
-			c.effectiveVersion = ver
-			defer func() { c.effectiveVersion = savedVersion }()
-		}
-	}
+	// An xsl:version on a literal result element sets the effective version for
+	// this element and its subtree (its AVTs and descendants), so they evaluate in
+	// XPath 1.0 compatibility mode when that version is < 2.0. pushElementVersion
+	// reads xsl:version on an LRE (an unqualified version is a result attribute).
+	// This also covers an LRE compiled directly (a simplified stylesheet root),
+	// not via the generic instruction path.
+	defer c.pushElementVersion(elem)()
 
 	lre := &literalResultElement{
 		Name:              elem.Name(),

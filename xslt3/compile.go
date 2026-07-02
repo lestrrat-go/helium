@@ -559,10 +559,23 @@ func (c *compiler) backwardsCompatible() bool {
 // pushes the version, but these direct paths bypass it.
 func (c *compiler) pushElementVersion(elem *helium.Element) func() {
 	saved := c.effectiveVersion
-	if ver := getAttr(elem, "version"); ver != "" {
+	if ver := elementXSLTVersion(elem); ver != "" {
 		c.effectiveVersion = ver
 	}
 	return func() { c.effectiveVersion = saved }
+}
+
+// elementXSLTVersion returns the XSLT version declared on an element: the
+// unqualified version attribute on an XSLT-namespace element, or the xsl:version
+// attribute on a literal result element. On an LRE an unqualified version is an
+// ordinary literal result attribute (copied to the output), NOT an XSLT version,
+// so it must not affect the effective version.
+func elementXSLTVersion(elem *helium.Element) string {
+	if elem.URI() == lexicon.NamespaceXSLT {
+		return getAttr(elem, "version")
+	}
+	ver, _ := elem.GetAttributeNS("version", lexicon.NamespaceXSLT)
+	return ver
 }
 
 // markCompatExpr records an expression that must evaluate in XPath 1.0

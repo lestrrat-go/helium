@@ -129,6 +129,28 @@ func TestBackCompatTemplateVersionPattern(t *testing.T) {
 	require.Contains(t, out, "<out>--MM</out>")
 }
 
+// TestBackCompatLREUnqualifiedVersionNotCompat verifies that an unqualified
+// version attribute on a literal result element is an ordinary result attribute
+// (copied to output), NOT the XSLT version — so it does NOT trigger
+// backwards-compatible processing. Here '3' + 4 stays a type error.
+func TestBackCompatLREUnqualifiedVersionNotCompat(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out version="1.0"><xsl:value-of select="'3' + 4"/></out></xsl:template>
+</xsl:stylesheet>`
+	_, err := transformStr(t, ss)
+	require.Error(t, err) // '3' + 4 is XPTY0004 in 3.0; would be 7 if compat leaked
+
+	// And the unqualified version is preserved as a literal result attribute.
+	ss2 := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out version="1.0">hi</out></xsl:template>
+</xsl:stylesheet>`
+	out, err := transformStr(t, ss2)
+	require.NoError(t, err)
+	require.Contains(t, out, `version="1.0"`)
+}
+
 // TestBackCompatSupportsProperty verifies system-property reports support.
 func TestBackCompatSupportsProperty(t *testing.T) {
 	ss := `<?xml version="1.0"?>
