@@ -303,13 +303,23 @@ func fnConcat(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-func fnStringJoin(_ context.Context, args []Sequence) (Sequence, error) {
+func fnStringJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 	sep := ""
 	if len(args) > 1 {
-		var err error
-		sep, err = coerceArgToStringRequired(args[1])
-		if err != nil {
-			return nil, err
+		if fc := getFnContext(ctx); fc != nil && fc.xpath10Compat {
+			// The separator's expected type is xs:string, so XPath 1.0 compatibility
+			// mode converts it with fn:string applied to its first item.
+			sv, err := xpath10CompatStringItem(args[1])
+			if err != nil {
+				return nil, err
+			}
+			sep, _ = sv.Value.(string)
+		} else {
+			var err error
+			sep, err = coerceArgToStringRequired(args[1])
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	// Atomize the entire sequence (expands list types to multiple items).
