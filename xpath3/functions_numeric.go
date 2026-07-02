@@ -668,9 +668,21 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	picture, err := coerceArgToStringRequired(args[1])
-	if err != nil {
-		return nil, err
+	var picture string
+	if compat {
+		// The picture argument is xs:string, so XPath 1.0 compatibility mode
+		// converts it with fn:string applied to its first item.
+		pv, perr := xpath10CompatStringItem(args[1])
+		if perr != nil {
+			return nil, perr
+		}
+		picture, _ = pv.Value.(string)
+	} else {
+		p, perr := coerceArgToStringRequired(args[1])
+		if perr != nil {
+			return nil, perr
+		}
+		picture = p
 	}
 
 	df := defaultDecimalFormat(ctx)

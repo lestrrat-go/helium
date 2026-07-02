@@ -554,7 +554,7 @@ func (c *compiler) useWhenSystemProperty(_ context.Context, args []xpath3.Sequen
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-serialization"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-backwards-compatibility"):
-		return xpath3.SingleString(lexicon.ValueNo), nil
+		return xpath3.SingleString(lexicon.ValueYes), nil
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-namespace-axis"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
 	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-streaming"):
@@ -861,7 +861,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 	case lexicon.XSLTElementOnEmpty:
 		inst := &onEmptyInst{}
 		if sel := getAttr(elem, "select"); sel != "" {
-			expr, err := xpath3.NewCompiler().Compile(sel)
+			expr, err := c.compileXPath(sel, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}
@@ -877,7 +877,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 	case lexicon.XSLTElementOnNonEmpty:
 		inst := &onNonEmptyInst{}
 		if sel := getAttr(elem, "select"); sel != "" {
-			expr, err := xpath3.NewCompiler().Compile(sel)
+			expr, err := c.compileXPath(sel, c.nsBindings)
 			if err != nil {
 				return nil, err
 			}

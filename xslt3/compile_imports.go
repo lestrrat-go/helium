@@ -362,14 +362,18 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 
 	// The included module's version governs backwards-/forwards-compatible
 	// processing of its own declarations (XSLT 3.0 §3.10), independent of the
-	// including module's version. A _version shadow attribute (resolved
-	// separately) takes precedence over the literal, so the literal only governs
-	// when no shadow is present.
+	// including module's version. A _version shadow attribute takes precedence
+	// over the literal (§3.5.2), so resolve it first — mirroring the top-level
+	// root — so an included module whose computed version is < 2.0 enters
+	// backwards-compatible mode.
 	savedVersion := c.effectiveVersion
-	if _, hasShadow := root.GetAttribute("_version"); !hasShadow {
-		if ver := getAttr(root, "version"); ver != "" {
-			c.effectiveVersion = ver
+	if _, hasShadow := root.GetAttribute("_version"); hasShadow {
+		if err := c.resolveSingleShadowAttribute(ctx, root, paramVersion); err != nil {
+			return err
 		}
+	}
+	if ver := getAttr(root, "version"); ver != "" {
+		c.effectiveVersion = ver
 	}
 	defer func() { c.effectiveVersion = savedVersion }()
 

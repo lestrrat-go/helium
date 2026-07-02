@@ -551,7 +551,10 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 	if sk.Select != nil {
 		var result xpath3.Result
 		var err error
-		if evalState != nil {
+		// A backwards-compatible sort key must evaluate in XPath 1.0 compatibility
+		// mode; the reused EvalState carries no per-key compat bit, so route compat
+		// keys through ec.evalXPath (which applies withCompat) instead.
+		if evalState != nil && !ec.isCompatExpr(sk.Select) {
 			if ec.contextItem != nil {
 				evalState.SetContextItem(ec.contextItem)
 			}

@@ -150,9 +150,15 @@ func generalCompareXPath10Compat(ctx context.Context, op TokenType, left, right 
 		implTZ = ec.getImplicitTimezone()
 	}
 
+	// The relational operators (<, <=, >, >=) always convert both operands to
+	// xs:double in XPath 1.0; the boolean and numeric-else-string cascade applies
+	// only to the equality operators (=, !=). So a relational op with a boolean
+	// operand (e.g. true() < 5) compares as numbers, NOT as effective boolean values.
+	relational := op == TokenLess || op == TokenLessEq || op == TokenGreater || op == TokenGreaterEq
+
 	leftBool := len(la) == 1 && la[0].TypeName == TypeBoolean
 	rightBool := len(ra) == 1 && ra[0].TypeName == TypeBoolean
-	if leftBool || rightBool {
+	if !relational && (leftBool || rightBool) {
 		lb, err := EBV(left)
 		if err != nil {
 			return false, err
@@ -167,10 +173,6 @@ func generalCompareXPath10Compat(ctx context.Context, op TokenType, left, right 
 			implTZ, coll)
 	}
 
-	// The relational operators (<, <=, >, >=) always convert both operands to
-	// xs:double in XPath 1.0; only the equality operators (=, !=) use the
-	// numeric-else-string cascade.
-	relational := op == TokenLess || op == TokenLessEq || op == TokenGreater || op == TokenGreaterEq
 	for _, a := range la {
 		for _, b := range ra {
 			if err := fnCountOp(ctx, ec); err != nil {

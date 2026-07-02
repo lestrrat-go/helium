@@ -368,7 +368,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 			}
 
 			if p.Select != nil {
-				result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), p.Select, nil)
+				result, err := ec.withCompat(ec.xpathEvaluator(ctx).ContextItem(item), p.Select).Evaluate(ec.xpathContext(ctx), p.Select, nil)
 				if err != nil {
 					return err
 				}

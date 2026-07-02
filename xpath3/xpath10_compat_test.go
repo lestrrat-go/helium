@@ -82,6 +82,12 @@ func TestXPath10CompatGeneralComparison(t *testing.T) {
 	t.Run("string equality still works", func(t *testing.T) {
 		require.True(t, boolOf(t, "'abc' = 'abc'"))
 	})
+	t.Run("relational op with boolean operand compares as numbers, not EBV", func(t *testing.T) {
+		// XPath 1.0: relational operators always convert both operands to number,
+		// so true() < 5 is number(true())=1 < 5 = true (NOT EBV(true()) < EBV(5)).
+		require.True(t, boolOf(t, "true() < 5"))
+		require.False(t, boolOf(t, "true() > 5"))
+	})
 	t.Run("non-numeric string vs number is false", func(t *testing.T) {
 		// number('abc') = NaN, NaN = 5 -> false
 		require.False(t, boolOf(t, "'abc' = 5"))

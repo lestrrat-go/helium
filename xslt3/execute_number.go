@@ -65,9 +65,10 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		}
 		seq := result.Sequence()
 		if ec.isCompatExpr(inst.Value) {
-			// XSLT 1.0 xsl:number/@value (§12.3): use the FIRST atomized item; an
-			// empty value, or one that cannot be converted to an integer (including
-			// NaN), outputs the literal string "NaN" and does not raise XTDE0980.
+			// XSLT 1.0 xsl:number/@value (§12.3): use the FIRST atomized item,
+			// rounded to the nearest integer. A value that cannot yield a
+			// non-negative integer — empty, NaN, ±INF, or negative — outputs the
+			// literal string "NaN" and does not raise XTDE0980.
 			var first xpath3.AtomicValue
 			have := false
 			for item := range sequence.Items(seq) {

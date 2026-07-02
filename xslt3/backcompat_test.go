@@ -62,6 +62,27 @@ func TestBackCompatPerSubtreeOverride(t *testing.T) {
 	require.Contains(t, out, "7")
 }
 
+// TestBackCompatSortKeyInnerCompat verifies that a version="1.0" xsl:sort key
+// evaluates its inner expression in XPath 1.0 compatibility mode even on the
+// optimized (EvaluateReuse) sort path: string(.) + 0 coerces the string to a
+// number rather than raising XPTY0004.
+func TestBackCompatSortKeyInnerCompat(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:for-each select="doc/i"><xsl:sort select="string(.) + 0"/><xsl:value-of select="."/></xsl:for-each></out></xsl:template>
+</xsl:stylesheet>`
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+	require.NoError(t, err)
+	ssc, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc><i>3</i><i>1</i><i>2</i></doc>`))
+	require.NoError(t, err)
+	out, err := ssc.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>123</out>")
+}
+
 // TestBackCompatSupportsProperty verifies system-property reports support.
 func TestBackCompatSupportsProperty(t *testing.T) {
 	ss := `<?xml version="1.0"?>
