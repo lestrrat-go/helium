@@ -87,6 +87,21 @@ func resolveWhiteSpace(td *TypeDef) string {
 	return "collapse"
 }
 
+// whiteSpaceRestrictiveness ranks a whiteSpace facet value by how much it
+// normalizes: preserve (0) < replace (1) < collapse (2). A derived simple type
+// may only keep or increase the rank of its base's whiteSpace (XSD Part 2
+// §4.3.6); it may never decrease it.
+func whiteSpaceRestrictiveness(ws string) int {
+	switch ws {
+	case "preserve":
+		return 0
+	case "replace":
+		return 1
+	default: // collapse
+		return 2
+	}
+}
+
 // normalizeWhiteSpace applies XSD whitespace normalization to a value.
 //   - "preserve": no change
 //   - "replace": replace \t, \n, \r with space
