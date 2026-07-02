@@ -329,6 +329,18 @@ func (c *compiler) processImport(ctx context.Context, elem *helium.Element) erro
 	// location-less import (and, below, one whose load fails) still marks the
 	// namespace referenceable — its declarations are simply unknown.
 	c.importDeclaredNS[ns] = struct{}{}
+	// Record the import against the DECLARING document (keyed by its filename), so
+	// the non-imported-namespace reference check can tell a namespace a document
+	// imported DIRECTLY from one merely reachable transitively through another
+	// document's import. Includes share this compiler but carry the included
+	// document's c.filename here, so an include's import is not attributed to the
+	// including document.
+	if c.filename != "" {
+		if c.docImportedNS[c.filename] == nil {
+			c.docImportedNS[c.filename] = make(map[string]struct{})
+		}
+		c.docImportedNS[c.filename][ns] = struct{}{}
+	}
 
 	loc := getAttr(elem, attrSchemaLocation)
 	if loc == "" {
@@ -1330,6 +1342,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		filename:                  impFilename,
 		importedNS:                make(map[string]string),
 		importDeclaredNS:          make(map[string]struct{}),
+		docImportedNS:             make(map[string]map[string]struct{}),
 		importDepth:               c.importDepth + 1,
 		maxImportDepth:            c.maxImportDepth,
 		// Share the active import-ancestry set by pointer so the whole import tree

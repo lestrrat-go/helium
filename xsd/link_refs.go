@@ -15,6 +15,18 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Two passes: the first pass resolves type-name refs and may leave
 	// element-to-element refs with nil Type (because the target global element
 	// hasn't had its own type resolved yet). The second pass picks those up.
+	// Snapshot the REAL (loaded) element and type components before the loops
+	// below install any recovery placeholders for dangling refs, so the
+	// non-imported-namespace check can tell a reference that resolves to a
+	// genuine component from one that merely got a placeholder.
+	realElems := make(map[QName]struct{}, len(c.schema.elements))
+	for qn := range c.schema.elements {
+		realElems[qn] = struct{}{}
+	}
+	realTypes := make(map[QName]struct{}, len(c.schema.types))
+	for qn := range c.schema.types {
+		realTypes[qn] = struct{}{}
+	}
 	for range 2 {
 		for edecl, qn := range c.elemRefs {
 			if edecl.Type != nil {
@@ -80,7 +92,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// silently compile and validate as if the type existed.
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, attrType, msg))
+					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, msg))
 				}
 				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				c.schema.types[qn] = td
@@ -88,6 +100,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			edecl.Type = td
 		}
 	}
+
+	// Reject an entry-document element @type/@ref into a namespace the entry
+	// document did not directly import (src-resolve §3.3.2).
+	c.checkNonImportedNamespaceRefs(ctx, realElems, realTypes)
 
 	// Resolve XSD 1.1 conditional-type-assignment alternative @type references.
 	c.resolveAltTypeRefs(ctx)
@@ -1522,6 +1538,105 @@ func (c *compiler) qnameNamesNonAttribute(qn QName) bool {
 		return true
 	}
 	return false
+}
+
+// checkNonImportedNamespaceRefs enforces src-resolve §3.3.2: a reference to a
+// component of a namespace that the referencing schema document did not DIRECTLY
+// import is illegal, even when that namespace's components happen to be present
+// in the assembly because ANOTHER document imported it (transitive import does
+// not make a namespace referenceable — W3C Element_w3c/Schema_w3c elemZ006/Z007,
+// schZ004/Z005). The check is version-INDEPENDENT.
+//
+// It is deliberately CONSERVATIVE to avoid over-rejecting valid multi-file
+// schemas, and only fires for a reference that:
+//   - originates in the ENTRY document (its recorded source is c.filename) — a
+//     reference inside an imported/included sub-document is left alone (that
+//     document has its own import context we do not re-check here);
+//   - resolves to a REAL loaded component (in realElems/realTypes), not a
+//     placeholder installed for a dangling ref (those keep the existing
+//     "does not resolve" handling and its import-declared leniency);
+//   - targets a namespace that genuinely requires an import — not the absent
+//     namespace, not the XML/XSI built-in namespaces, and not the entry
+//     document's own targetNamespace;
+//   - targets a namespace that WAS import-declared somewhere in the assembly
+//     (importDeclaredNS) yet was NOT directly imported by the entry document
+//     (docImportedNS[c.filename]).
+//
+// From the entry document's perspective the QName does not resolve, so it
+// reuses the same "does not resolve to a(n) …" diagnostic as a truly-dangling
+// ref. Diagnostics are sorted by (source, line, local) for deterministic output.
+func (c *compiler) checkNonImportedNamespaceRefs(ctx context.Context, realElems, realTypes map[QName]struct{}) {
+	if c.filename == "" {
+		return
+	}
+
+	type issue struct {
+		line  int
+		local string
+		isRef bool
+		src   elemRefSource
+		qn    QName
+	}
+	var issues []issue
+
+	for edecl, qn := range c.elemRefs {
+		src, ok := c.elemRefSources[edecl]
+		if !ok {
+			continue
+		}
+		if c.diagSourceOrRecorded(src.source) != c.filename {
+			continue
+		}
+		if qn.NS == "" || qn.NS == lexicon.NamespaceXML || qn.NS == lexicon.NamespaceXSI {
+			continue
+		}
+		if qn.NS == c.schema.targetNamespace {
+			continue
+		}
+		// Only a namespace that was import-declared somewhere but not directly by
+		// this document is a violation; anything else is left to the existing
+		// resolution handling.
+		if _, declared := c.importDeclaredNS[qn.NS]; !declared {
+			continue
+		}
+		if directImports, ok := c.docImportedNS[c.filename]; ok {
+			if _, imported := directImports[qn.NS]; imported {
+				continue
+			}
+		}
+		var resolved bool
+		if edecl.IsRef {
+			_, resolved = realElems[qn]
+		} else {
+			_, resolved = realTypes[qn]
+		}
+		if !resolved {
+			continue
+		}
+		issues = append(issues, issue{line: src.line, local: src.elemName, isRef: edecl.IsRef, src: src, qn: qn})
+	}
+
+	sort.Slice(issues, func(i, j int) bool {
+		si := c.diagSourceOrRecorded(issues[i].src.source)
+		sj := c.diagSourceOrRecorded(issues[j].src.source)
+		if si != sj {
+			return si < sj
+		}
+		if issues[i].line != issues[j].line {
+			return issues[i].line < issues[j].line
+		}
+		return issues[i].local < issues[j].local
+	})
+	for _, is := range issues {
+		source := c.diagSourceOrRecorded(is.src.source)
+		if is.isRef {
+			msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", is.qn.NS, is.qn.Local)
+			c.schemaError(ctx, schemaParserErrorAttr(source, is.line, is.local, elemElement, attrRef, msg))
+			continue
+		}
+		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", is.qn.NS, is.qn.Local)
+		c.schemaError(ctx, schemaElemDeclErrorAttr(source, is.line, is.local, msg))
+	}
 }
 
 // resolveNamedType resolves a named type reference to its definition, mirroring
