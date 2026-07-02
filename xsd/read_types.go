@@ -41,7 +41,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		return nil
 	}
 
-	td, err := c.parseComplexType(ctx, elem)
+	td, err := c.parseComplexType(ctx, elem, false)
 	if err != nil {
 		return err
 	}
@@ -124,9 +124,20 @@ func (c *compiler) recordAttrGroupRef(td *TypeDef, qn QName, src attrGroupRefUse
 	c.attrGroupRefUseSources[td] = append(c.attrGroupRefUseSources[td], src)
 }
 
-func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
+func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, local bool) (*TypeDef, error) {
 	td := &TypeDef{IsComplex: true}
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
+
+	// A LOCAL (anonymous/inline) xs:complexType — one whose parent is an element
+	// or an xs:alternative — must NOT carry a @name (XSD Structures §3.4.2:
+	// localComplexType has no {name}). Only a top-level complexType (child of
+	// xs:schema/xs:redefine/xs:override) is named. Version-independent XSD rule;
+	// report-and-continue so the body still parses.
+	if local && hasAttr(elem, attrName) && c.filename != "" {
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
+			elem.LocalName(), componentLocalComplexType,
+			"A local complexType definition must not have a 'name' attribute."))
+	}
 
 	// The @block and @final attributes on a complexType are both of type
 	// (#all | List of (extension | restriction)) (XSD Structures §3.4.2). Neither
