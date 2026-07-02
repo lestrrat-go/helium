@@ -116,27 +116,37 @@ func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
+func fnSubsequence(ctx context.Context, args []Sequence) (Sequence, error) {
+	compat := false
+	if fc := getFnContext(ctx); fc != nil {
+		compat = fc.xpath10Compat
+	}
 	seq := args[0]
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}
 	}
-	if seqLen(args[1]) > 1 {
+	if seqLen(args[1]) > 1 && !compat {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be a single value"}
 	}
 	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
 	}
-	// Cast untypedAtomic to double (per XPath function calling convention)
-	if a.TypeName == TypeUntypedAtomic {
-		a, err = CastAtomic(a, TypeDouble)
-		if err != nil {
+	if compat {
+		// The position argument is xs:double, so XPath 1.0 compatibility mode
+		// converts it with fn:number (a non-numeric value → NaN → empty result).
+		a = atomToCompatDouble(a)
+	} else {
+		// Cast untypedAtomic to double (per XPath function calling convention)
+		if a.TypeName == TypeUntypedAtomic {
+			a, err = CastAtomic(a, TypeDouble)
+			if err != nil {
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
+			}
+		}
+		if !isSubtypeOf(a.TypeName, TypeNumeric) {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
 		}
-	}
-	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
 	}
 	startF := math.Round(a.ToFloat64())
 
@@ -146,21 +156,25 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	var lengthF float64
 	if hasLength {
-		if seqLen(args[2]) > 1 {
+		if seqLen(args[2]) > 1 && !compat {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be a single value"}
 		}
 		la, err := AtomizeItem(args[2].Get(0))
 		if err != nil {
 			return nil, err
 		}
-		if la.TypeName == TypeUntypedAtomic {
-			la, err = CastAtomic(la, TypeDouble)
-			if err != nil {
+		if compat {
+			la = atomToCompatDouble(la)
+		} else {
+			if la.TypeName == TypeUntypedAtomic {
+				la, err = CastAtomic(la, TypeDouble)
+				if err != nil {
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
+				}
+			}
+			if !isSubtypeOf(la.TypeName, TypeNumeric) {
 				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
 			}
-		}
-		if !isSubtypeOf(la.TypeName, TypeNumeric) {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
 		}
 		lengthF = math.Round(la.ToFloat64())
 	}
