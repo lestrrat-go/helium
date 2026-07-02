@@ -1126,11 +1126,14 @@ func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
 
 // checkFacetMutualExclusion checks that mutually exclusive facets are not
 // both specified on the same type definition.
+//
+// The min/maxInclusive-vs-min/maxExclusive pairs ARE mutually exclusive (a bound
+// cannot be both inclusive and exclusive). The length family, by contrast, is NOT
+// mutually exclusive: per XSD Part 2 §4.3.1/§4.3.2/§4.3.3 a `length` facet may
+// co-occur with `minLength`/`maxLength` as long as the values are consistent
+// (minLength ≤ length ≤ maxLength). That consistency — including inherited
+// min/maxLength bounds — is enforced by checkFacetSameTypeConsistency, not here.
 func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, line int, component string) {
-	if fs.Length != nil && (fs.MinLength != nil || fs.MaxLength != nil) {
-		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for both 'length' and either of 'minLength' or 'maxLength' to be specified on the same type definition."))
-	}
 	if fs.MaxInclusive != nil && fs.MaxExclusive != nil {
 		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for both 'maxInclusive' and 'maxExclusive' to be specified."))
@@ -1162,9 +1165,31 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// NOTATION). On any other type the length facets are inapplicable and already
 	// rejected as "not allowed", so this check must not run there.
 	lengthFacetsApplicable := variety == TypeVarietyList || (variety == TypeVarietyAtomic && lengthApplicable)
-	if lengthFacetsApplicable && fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
-		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."))
+	if lengthFacetsApplicable {
+		if fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."))
+		}
+
+		// length/minLength/maxLength co-occurrence is PERMITTED (XSD Part 2
+		// §4.3.1/§4.3.2/§4.3.3) as long as the values are consistent. A `length`
+		// facet is an error only if it falls outside the EFFECTIVE min/maxLength
+		// bounds — the tightest of the type's OWN min/maxLength and any inherited
+		// from the base chain (a derived `length` must lie within a base's
+		// min/maxLength). A genuinely conflicting length (< effective minLength or
+		// > effective maxLength) is rejected; a consistent one (e.g. length=5 with
+		// minLength=1) is accepted.
+		effMin, effMax := effectiveLengthBounds(td)
+		if length := effectiveLengthFacet(td); length != nil {
+			if effMin != nil && *length < *effMin {
+				c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+					"It is an error for the value of 'length' to be less than the value of 'minLength'."))
+			}
+			if effMax != nil && *length > *effMax {
+				c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+					"It is an error for the value of 'length' to be greater than the value of 'maxLength'."))
+			}
+		}
 	}
 
 	// Digit consistency (fractionDigits > totalDigits). The digit facets are
@@ -1248,6 +1273,41 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 				"It is an error for the value of 'minInclusive' to be greater than or equal to the value of 'maxExclusive'."))
 		}
 	}
+}
+
+// effectiveLengthFacet returns the effective `length` facet value for td: its own
+// `length` if present, otherwise the nearest inherited one from the base chain. A
+// derived `length` must equal a base `length` (enforced in checkFacetBaseRestriction),
+// so any value in the chain is equivalent for the consistency comparison.
+func effectiveLengthFacet(td *TypeDef) *int {
+	for cur := range baseChain(td) {
+		if cur == nil || cur.Facets == nil {
+			continue
+		}
+		if cur.Facets.Length != nil {
+			return cur.Facets.Length
+		}
+	}
+	return nil
+}
+
+// effectiveLengthBounds returns the effective (minLength, maxLength) for td: the
+// TIGHTEST of the type's own facets and every min/maxLength inherited from the base
+// chain (the largest minLength, the smallest maxLength). Either may be nil when no
+// such facet appears anywhere in the chain.
+func effectiveLengthBounds(td *TypeDef) (minLen, maxLen *int) {
+	for cur := range baseChain(td) {
+		if cur == nil || cur.Facets == nil {
+			continue
+		}
+		if cur.Facets.MinLength != nil && (minLen == nil || *cur.Facets.MinLength > *minLen) {
+			minLen = cur.Facets.MinLength
+		}
+		if cur.Facets.MaxLength != nil && (maxLen == nil || *cur.Facets.MaxLength < *maxLen) {
+			maxLen = cur.Facets.MaxLength
+		}
+	}
+	return minLen, maxLen
 }
 
 // checkFacetBaseRestriction checks that facet values properly narrow (not widen)

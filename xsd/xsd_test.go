@@ -1404,18 +1404,34 @@ func TestFacetConsistency(t *testing.T) {
 		require.Contains(t, errs, "'minLength' to be greater than the value of 'maxLength'")
 	})
 
-	t.Run("length_with_minLength", func(t *testing.T) {
+	t.Run("length_with_consistent_minLength_accepted", func(t *testing.T) {
 		t.Parallel()
+		// length=5 with minLength=3 is CONSISTENT (3 ≤ 5): the co-occurrence is
+		// permitted per XSD Part 2 §4.3.1, so no length/minLength error is raised.
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:simpleType name="badType">
+  <xs:simpleType name="goodType">
     <xs:restriction base="xs:string">
       <xs:length value="5"/>
       <xs:minLength value="3"/>
     </xs:restriction>
   </xs:simpleType>
 </xs:schema>`)
-		require.Contains(t, errs, "both 'length' and either of 'minLength' or 'maxLength'")
+		require.NotContains(t, errs, "'length'")
+	})
+
+	t.Run("length_less_than_minLength_rejected", func(t *testing.T) {
+		t.Parallel()
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:string">
+      <xs:length value="3"/>
+      <xs:minLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "'length' to be less than the value of 'minLength'")
 	})
 
 	t.Run("maxInclusive_with_maxExclusive", func(t *testing.T) {
