@@ -502,6 +502,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// and 1.1 (sources are recorded unconditionally).
 	c.checkElementDeclConstraints(ctx)
 
+	// XSD 1.0 e-props-correct.4 (§3.3.6): an element declaration whose type is or
+	// is derived from xs:ID must not carry a value constraint. Kept as a distinct
+	// pass from checkElementDeclConstraints (value-space validation) so the two
+	// concerns stay independent. XSD 1.1 removed the rule (W3C bug 4077).
+	c.checkElementIDValueConstraints(ctx)
+
 	// Topologically order extension types so each base type is merged before
 	// the types that derive from it (the merge reads the base's finalized
 	// content model and attributes).
@@ -2219,6 +2225,48 @@ func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(effectiveContentSimpleType(std)))
 			c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
 		}
+	}
+}
+
+// checkElementIDValueConstraints enforces XSD 1.0 e-props-correct.4 (§3.3.6): if
+// an element declaration's {type definition} is or is derived from xs:ID, there
+// must not be a {value constraint} (default or fixed). This mirrors the attribute
+// rule au-props-correct.3 (checkAttrUseConstraints). builtinBaseLocal returns the
+// first XSD-namespace ancestor's local name — "ID" for xs:ID and any simple type
+// restricting it. Gated to Version10; XSD 1.1 removed the rule (W3C bug 4077), so
+// the 1.1 path is byte-identical.
+func (c *compiler) checkElementIDValueConstraints(ctx context.Context) {
+	if c.filename == "" || c.version != Version10 {
+		return
+	}
+	type pending struct {
+		decl *ElementDecl
+		src  attrConstraintSource
+	}
+	items := make([]pending, 0, len(c.elemDeclConstraintSources))
+	for decl, src := range c.elemDeclConstraintSources {
+		items = append(items, pending{decl: decl, src: src})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].src.line != items[j].src.line {
+			return items[i].src.line < items[j].src.line
+		}
+		return items[i].src.local < items[j].src.local
+	})
+
+	for _, it := range items {
+		if it.decl.Default == nil && it.decl.Fixed == nil {
+			continue
+		}
+		std := effectiveDeclType(it.decl, c.schema)
+		if std == nil {
+			continue
+		}
+		if builtinBaseLocal(std) != typeID {
+			continue
+		}
+		msg := "The element declaration is or is derived from ID and there must not be a value constraint."
+		c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
 	}
 }
 
