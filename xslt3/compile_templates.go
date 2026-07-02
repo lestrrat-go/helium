@@ -588,6 +588,7 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 }
 
 func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*param, error) {
+	defer c.pushElementVersion(elem)()
 	savedNS := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = savedNS }()
 

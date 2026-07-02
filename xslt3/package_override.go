@@ -88,6 +88,12 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 				"non-XSLT element %q is not allowed inside xsl:override", elem.Name())
 		}
 
+		// Resolve shadow attributes (e.g. _version) so an override child's computed
+		// values govern its compilation, mirroring top-level elements.
+		if err := c.resolveShadowAttributes(ctx, elem); err != nil {
+			return err
+		}
+
 		switch elem.LocalName() {
 		case xslElemFunction:
 			fn, qn, err := c.compileOverrideFunction(ctx, elem, pkg)

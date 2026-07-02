@@ -193,6 +193,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			savedNS := c.xpathDefaultNS
 			savedHasNS := c.hasXPathDefaultNS
 			savedET := c.expandText
+			restoreWhenVersion := c.pushElementVersion(childElem)
 			hasLocal := false
 			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
 				c.xpathDefaultNS = xdn
@@ -210,6 +211,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 				c.xpathDefaultNS = savedNS
 				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
+				restoreWhenVersion()
 				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
 			}
 			expr, err := c.compileXPath(testAttr, c.nsBindings)
@@ -218,6 +220,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 				c.xpathDefaultNS = savedNS
 				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
+				restoreWhenVersion()
 				return nil, err
 			}
 			// Capture per-clause namespace bindings for runtime resolution
@@ -235,6 +238,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			c.xpathDefaultNS = savedNS
 			c.hasXPathDefaultNS = savedHasNS
 			c.expandText = savedET
+			restoreWhenVersion()
 			if err != nil {
 				return nil, err
 			}
@@ -401,6 +405,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 }
 
 func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*sortKey, error) {
+	defer c.pushElementVersion(elem)()
 	// Evaluate use-when on xsl:sort before compiling the sort key.
 	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
@@ -504,6 +509,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 }
 
 func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (*withParam, error) {
+	defer c.pushElementVersion(elem)()
 	// Check use-when before compiling: skip this with-param if excluded.
 	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
@@ -723,6 +729,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementCatch {
 			clause := &catchClause{}
+			restoreCatchVersion := c.pushElementVersion(childElem)
 
 			// Parse errors attribute (space-separated list of error codes).
 			// Namespace declarations on xsl:catch itself must be visible
@@ -758,6 +765,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 				clause.Body = body
 			}
 			inst.Catches = append(inst.Catches, clause)
+			restoreCatchVersion()
 		} else if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementFallback {
 			// xsl:fallback inside xsl:try is silently ignored
 			continue

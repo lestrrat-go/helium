@@ -1216,10 +1216,22 @@ func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 // evalXPath evaluates an XPath expression using the Evaluator-based path.
 func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
 	eval := ec.xpathEvaluator(ctx)
-	// ec.patternCompat covers pattern-predicate expressions, which are compiled at
-	// runtime (not recorded in compatExprs); isCompatExpr covers stylesheet
-	// expressions compiled under a backwards-compatible subtree.
-	if ec.patternCompat || ec.isCompatExpr(expr) {
+	if ec.isCompatExpr(expr) {
+		eval = eval.XPath10Compat()
+	}
+	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
+}
+
+// evalPatternExpr evaluates a match-pattern (or predicate) expression, which is
+// compiled at runtime and so is not in compatExprs. A backwards-compatible
+// pattern evaluates in XPath 1.0 compatibility mode. Unlike a persistent
+// ec.patternCompat read inside evalXPath, this applies compat ONLY to the
+// pattern expression itself — a called xsl:function/template evaluates its own
+// body via evalXPath under its OWN version, so compat does not leak across the
+// component boundary.
+func (ec *execContext) evalPatternExpr(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
+	eval := ec.xpathEvaluator(ctx)
+	if ec.patternCompat {
 		eval = eval.XPath10Compat()
 	}
 	return eval.Evaluate(ec.xpathContext(ctx), expr, node)

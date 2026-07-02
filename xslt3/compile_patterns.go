@@ -891,7 +891,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		if compErr != nil {
 			continue
 		}
-		result, err := ec.evalXPath(ctx, compiled, nil)
+		result, err := ec.evalPatternExpr(ctx, compiled, nil)
 		if err != nil {
 			continue
 		}
@@ -976,7 +976,7 @@ func (ec *execContext) matchContextItemPredicates(ctx context.Context, preds []x
 		if compErr != nil {
 			return false
 		}
-		result, err := ec.evalXPath(ctx, compiled, nil)
+		result, err := ec.evalPatternExpr(ctx, compiled, nil)
 		if err != nil {
 			return false
 		}
@@ -1965,7 +1965,7 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 
 	// Try evaluating with the node itself as context first.
 	// Needed for document-node patterns like (/)[doc].
-	result, err := ec.evalXPath(ctx, compiled, node)
+	result, err := ec.evalPatternExpr(ctx, compiled, node)
 	if err != nil {
 		// Propagate fatal errors (like XTDE0640 circular key) through
 		// the exec context so they can be raised after pattern matching.
@@ -1983,7 +1983,7 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 	}
 	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
-		result, err := ec.evalXPath(ctx, compiled, ancestor)
+		result, err := ec.evalPatternExpr(ctx, compiled, ancestor)
 		if err != nil {
 			if isXSLTError(err, errCodeXTDE0640) {
 				ec.patternMatchErr = err

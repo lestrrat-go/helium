@@ -545,6 +545,7 @@ func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element)
 
 // compileAccumulatorRule compiles an xsl:accumulator-rule element.
 func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulatorDef, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
 		return staticError(errCodeXTSE0110, "xsl:accumulator-rule requires match attribute")
@@ -943,6 +944,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 
 // compileMergeKey compiles an xsl:merge-key element.
 func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*mergeKey, error) {
+	defer c.pushElementVersion(elem)()
 	// XTSE0090: validate permitted attributes on xsl:merge-key.
 	for _, attr := range elem.Attributes() {
 		if attr.URI() != "" {
