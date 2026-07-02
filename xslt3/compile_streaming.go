@@ -468,6 +468,7 @@ func (c *compiler) compileNextIteration(ctx context.Context, elem *helium.Elemen
 
 // compileAccumulator compiles an xsl:accumulator top-level element.
 func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:accumulator requires name attribute")

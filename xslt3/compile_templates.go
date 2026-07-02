@@ -42,6 +42,10 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	if err := c.validateXSLTAttrs(ctx, elem, templateAllowedAttrs); err != nil {
 		return err
 	}
+	// A version attribute on the template governs its effective version — set it
+	// before compiling the match pattern and body so their expressions are
+	// backwards-compatible when it is < 2.0.
+	defer c.pushElementVersion(elem)()
 	// Collect namespace declarations and xpath-default-namespace before
 	// evaluating use-when so the expression has the correct namespace context.
 	c.collectNamespaces(ctx, elem)
@@ -255,15 +259,11 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		c.preserveSpace = (xs == lexicon.SpacePreserve)
 	}
 
-	// Handle version on xsl:template for forwards-compatible processing
-	savedVersion := c.effectiveVersion
-	if ver := getAttr(elem, "version"); ver != "" {
-		c.effectiveVersion = ver
-	}
+	// The effective version (incl. an xsl:template/@version override) was pushed
+	// at the top of compileTemplate and covers the body compilation below.
 
 	// Compile template body: first xsl:param elements, then instructions
 	ctxDecl, body, params, err := c.compileTemplateBodyEx(ctx, elem, false)
-	c.effectiveVersion = savedVersion
 	c.expandText = savedExpandText
 	c.preserveSpace = savedPreserveSpace
 	c.localExcludes = savedExcludes

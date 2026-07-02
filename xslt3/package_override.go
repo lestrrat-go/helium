@@ -258,6 +258,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 
 // compileOverrideTemplate compiles a template inside xsl:override.
 func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*template, error) {
+	defer c.pushElementVersion(elem)()
 	tmpl := &template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,

@@ -106,6 +106,29 @@ func TestBackCompatPatternPredicate(t *testing.T) {
 	require.Contains(t, out, "<out>--MM</out>")
 }
 
+// TestBackCompatTemplateVersionPattern verifies that a version="1.0" attribute on
+// a template (in a 3.0 module) makes its match-pattern predicate evaluate in
+// XPath 1.0 compatibility mode — the match pattern is compiled under the
+// template's own effective version.
+func TestBackCompatTemplateVersionPattern(t *testing.T) {
+	ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/i"/></out></xsl:template>
+  <xsl:template match="i[. > '2']" version="1.0">M</xsl:template>
+  <xsl:template match="i">-</xsl:template>
+</xsl:stylesheet>`
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+	require.NoError(t, err)
+	ssc, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<doc><i>1</i><i>2</i><i>3</i><i>10</i></doc>`))
+	require.NoError(t, err)
+	out, err := ssc.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>--MM</out>")
+}
+
 // TestBackCompatSupportsProperty verifies system-property reports support.
 func TestBackCompatSupportsProperty(t *testing.T) {
 	ss := `<?xml version="1.0"?>

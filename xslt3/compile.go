@@ -550,6 +550,21 @@ func (c *compiler) backwardsCompatible() bool {
 	return isBackwardsCompatible(c.effectiveVersion)
 }
 
+// pushElementVersion sets the effective version from a declaration element's own
+// version attribute (if present) for the duration of its compilation, returning
+// a restore function to defer. Top-level declaration compilers (template, key,
+// function, accumulator, attribute-set) must call this before compiling any
+// pattern or XPath expression so a local version < 2.0 makes those expressions
+// backwards-compatible (XSLT 3.0 §3.10) — the generic instruction path already
+// pushes the version, but these direct paths bypass it.
+func (c *compiler) pushElementVersion(elem *helium.Element) func() {
+	saved := c.effectiveVersion
+	if ver := getAttr(elem, "version"); ver != "" {
+		c.effectiveVersion = ver
+	}
+	return func() { c.effectiveVersion = saved }
+}
+
 // markCompatExpr records an expression that must evaluate in XPath 1.0
 // compatibility mode. Keyed by pointer identity; lazily allocates the set so a
 // stylesheet with no backwards-compatible subtree keeps a nil map.

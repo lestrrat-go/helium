@@ -89,6 +89,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 }
 
 func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		xslAttrName: {}, "match": {}, "use": {}, "collation": {}, "composite": {},
 		xslAttrUseWhen: {}, "default-collation": {},
@@ -769,6 +770,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 }
 
 func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element) error {
+	defer c.pushElementVersion(elem)()
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		xslAttrName: {}, "use-attribute-sets": {}, xslAttrVisibility: {},
 		"streamable": {}, xslAttrUseWhen: {},

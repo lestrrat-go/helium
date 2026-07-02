@@ -610,10 +610,29 @@ func roundHalfToEvenFloat(n float64, precision int) float64 {
 }
 
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
+	compat := false
+	if fc := getFnContext(ctx); fc != nil {
+		compat = fc.xpath10Compat
+	}
+	// coercePicture coerces the picture argument (xs:string). In XPath 1.0
+	// compatibility mode it applies fn:string to the first item; otherwise it
+	// requires a singleton string.
+	coercePicture := func() (string, error) {
+		if compat {
+			pv, perr := xpath10CompatStringItem(args[1])
+			if perr != nil {
+				return "", perr
+			}
+			s, _ := pv.Value.(string)
+			return s, nil
+		}
+		return coerceArgToStringRequired(args[1])
+	}
+
 	if seqLen(args[0]) == 0 {
 		// Per F&O: empty sequence is treated as NaN for formatting, result is xs:string
 		a := AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
-		picture, err := coerceArgToStringRequired(args[1])
+		picture, err := coercePicture()
 		if err != nil {
 			return nil, err
 		}
@@ -633,10 +652,6 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		return SingleString(s), nil
-	}
-	compat := false
-	if fc := getFnContext(ctx); fc != nil {
-		compat = fc.xpath10Compat
 	}
 	var a AtomicValue
 	if compat {
@@ -668,21 +683,9 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	var picture string
-	if compat {
-		// The picture argument is xs:string, so XPath 1.0 compatibility mode
-		// converts it with fn:string applied to its first item.
-		pv, perr := xpath10CompatStringItem(args[1])
-		if perr != nil {
-			return nil, perr
-		}
-		picture, _ = pv.Value.(string)
-	} else {
-		p, perr := coerceArgToStringRequired(args[1])
-		if perr != nil {
-			return nil, perr
-		}
-		picture = p
+	picture, err := coercePicture()
+	if err != nil {
+		return nil, err
 	}
 
 	df := defaultDecimalFormat(ctx)
