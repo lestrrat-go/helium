@@ -507,9 +507,13 @@ func TestSignatureGateKeepsItemStarLazy(t *testing.T) {
 // Finding 1 (round 7): count(1 to N) / exists(1 to N) over a huge lazy range must
 // return promptly without materializing the range — the item()* gate must not
 // force iteration.
+//
+// NOT parallel: the allocation assertion reads runtime.MemStats.TotalAlloc, which
+// is a PROCESS-WIDE cumulative counter. Under t.Parallel() other concurrently
+// running tests' allocations pollute the (m2-m1) delta, spuriously blowing the
+// budget (observed on Windows CI). Running in the sequential phase isolates the
+// measurement to this test's own work.
 func TestSignatureGateLargeRangeIsLazy(t *testing.T) {
-	t.Parallel()
-
 	for expr, check := range map[string]func(*xpath3.Result){
 		`count(1 to 9000000)`: func(r *xpath3.Result) {
 			n, ok := r.IsNumber()
