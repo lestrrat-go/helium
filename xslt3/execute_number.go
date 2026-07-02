@@ -78,12 +78,15 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 				first, have = av, true
 				break
 			}
-			if bi, err := atomicToBigInt(first); have && err == nil {
-				bigNums = append(bigNums, bi)
-			} else {
+			bi, convErr := big.NewInt(0), error(nil)
+			if have {
+				bi, convErr = atomicToBigInt(first)
+			}
+			if !have || convErr != nil {
 				text := ec.resultDoc.CreateText([]byte("NaN"))
 				return ec.addNode(text)
 			}
+			bigNums = append(bigNums, bi)
 		} else {
 			for item := range sequence.Items(seq) {
 				av, err := xpath3.AtomizeItem(item)

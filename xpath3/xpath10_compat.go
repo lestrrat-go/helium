@@ -166,12 +166,16 @@ func generalCompareXPath10Compat(ctx context.Context, op TokenType, left, right 
 			implTZ, coll)
 	}
 
+	// The relational operators (<, <=, >, >=) always convert both operands to
+	// xs:double in XPath 1.0; only the equality operators (=, !=) use the
+	// numeric-else-string cascade.
+	relational := op == TokenLess || op == TokenLessEq || op == TokenGreater || op == TokenGreaterEq
 	for _, a := range la {
 		for _, b := range ra {
 			if err := fnCountOp(ctx, ec); err != nil {
 				return false, err
 			}
-			pa, pb := promoteXPath10CompatPair(a, b)
+			pa, pb := promoteXPath10CompatPair(a, b, relational)
 			match, err := compareAtomicCollation(op, pa, pb, implTZ, coll)
 			if err != nil {
 				return false, err
@@ -184,12 +188,13 @@ func generalCompareXPath10Compat(ctx context.Context, op TokenType, left, right 
 	return false, nil
 }
 
-// promoteXPath10CompatPair promotes one atom pair for a 1.0 general comparison:
-// numeric-vs-anything compares as xs:double (fn:number), otherwise as xs:string.
-// (xs:untypedAtomic alone is NOT numeric, so node-vs-node stays a string compare,
-// matching XSLT 1.0 string-value comparison.)
-func promoteXPath10CompatPair(a, b AtomicValue) (AtomicValue, AtomicValue) {
-	if a.IsNumeric() || b.IsNumeric() {
+// promoteXPath10CompatPair promotes one atom pair for a 1.0 general comparison.
+// For a relational operator both operands become xs:double (fn:number). For an
+// equality operator, numeric-vs-anything compares as xs:double, otherwise both
+// compare as xs:string (xs:untypedAtomic alone is NOT numeric, so node-vs-node
+// stays a string compare, matching XSLT 1.0 string-value comparison).
+func promoteXPath10CompatPair(a, b AtomicValue, relational bool) (AtomicValue, AtomicValue) {
+	if relational || a.IsNumeric() || b.IsNumeric() {
 		return atomToCompatDouble(a), atomToCompatDouble(b)
 	}
 	return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},

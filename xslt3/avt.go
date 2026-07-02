@@ -213,7 +213,14 @@ func (a *avt) evaluate(ctx context.Context, node helium.Node) (string, error) {
 			if err != nil {
 				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}
-			sb.WriteString(stringifyResult(result))
+			// XSLT 1.0 behavior (backwards-compatible processing): when converting
+			// the AVT expression value to a string, all items after the first are
+			// discarded (§5.6.1).
+			if seq := result.Sequence(); ec != nil && seq != nil && sequence.Len(seq) > 1 && ec.isCompatExpr(p.expr) {
+				sb.WriteString(stringifySimpleContent(xpath3.ItemSlice{seq.Get(0)}, " "))
+			} else {
+				sb.WriteString(stringifyResult(result))
+			}
 		} else {
 			sb.WriteString(p.literal)
 		}
