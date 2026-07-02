@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -656,6 +657,12 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			}
 		}
 	} else {
+		// XSD Structures §3.2.2: the content of an <xs:attribute> that is NOT a
+		// reference is (annotation?, simpleType?) — at most one annotation which
+		// must be first, at most one simpleType, and no other element children.
+		// Version-INDEPENDENT schema-representation rule (enforced in 1.0 and 1.1).
+		c.checkAttributeChildren(ctx, elem)
+
 		// Attribute name must not be "xmlns".
 		if getAttr(elem, attrName) == lexicon.PrefixXMLNS {
 			c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
@@ -742,6 +749,59 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 					c.schemaError(ctx, schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 						"The attribute 'type' and the <simpleType> child are mutually exclusive."))
 				}
+			}
+		}
+	}
+}
+
+// checkAttributeChildren enforces the schema-representation content model of a
+// non-reference <xs:attribute> (XSD Structures §3.2.2): (annotation?, simpleType?).
+// It reports (does not abort) an annotation that is not first or is duplicated, a
+// second simpleType, and any other XSD-namespace element child (e.g. a nested
+// xs:attribute/xs:element/xs:complexType). Foreign-namespace children are ignored.
+// The type-vs-simpleType mutual-exclusion is enforced separately, so a simpleType
+// child is accepted here as content-model-valid. Version-INDEPENDENT.
+func (c *compiler) checkAttributeChildren(ctx context.Context, elem *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+	local := elem.LocalName()
+
+	var annotationSeen bool
+	var simpleTypeSeen bool
+	var sawNonAnnotation bool
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		switch {
+		case isXSDElement(ce, elemAnnotation):
+			switch {
+			case annotationSeen:
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), local, "attribute",
+					"An attribute declaration must not have more than one annotation."))
+			case sawNonAnnotation:
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), local, "attribute",
+					"The annotation must appear before the simpleType."))
+			default:
+				annotationSeen = true
+			}
+		case isXSDElement(ce, elemSimpleType):
+			sawNonAnnotation = true
+			if simpleTypeSeen {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), local, "attribute",
+					"An attribute declaration must not have more than one simpleType."))
+			}
+			simpleTypeSeen = true
+		default:
+			sawNonAnnotation = true
+			if ce.URI() == lexicon.NamespaceXSD {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), local, "attribute",
+					fmt.Sprintf("The element '%s' is not allowed as a child of an attribute declaration; expected one of annotation or simpleType.", ce.LocalName())))
 			}
 		}
 	}
