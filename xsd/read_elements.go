@@ -596,7 +596,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 		}
 		switch {
 		case isXSDElement(ce, elemComplexType):
-			td, err := c.parseComplexType(ctx, ce)
+			td, err := c.parseComplexType(ctx, ce, true)
 			if err != nil {
 				return err
 			}
