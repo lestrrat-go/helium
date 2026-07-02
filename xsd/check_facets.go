@@ -1555,10 +1555,26 @@ func (c *compiler) checkBuiltinFixedFacetRestriction(ctx context.Context, td *Ty
 	}
 
 	if fs.WhiteSpace != nil {
-		if fixed, ok := fixedBuiltinWhiteSpace(builtinLocal); ok && *fs.WhiteSpace != fixed {
-			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The value '%s' of the facet 'whiteSpace' does not match the fixed value '%s' of the base type '%s'.",
-					*fs.WhiteSpace, fixed, typeDisplayName(td.BaseType))))
+		if fixed, ok := fixedBuiltinWhiteSpace(builtinLocal); ok {
+			if *fs.WhiteSpace != fixed {
+				c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+					fmt.Sprintf("The value '%s' of the facet 'whiteSpace' does not match the fixed value '%s' of the base type '%s'.",
+						*fs.WhiteSpace, fixed, typeDisplayName(td.BaseType))))
+			}
+		} else if td.BaseType != nil {
+			// whiteSpace Valid Restriction (§4.3.6): the derived value must not be
+			// LESS restrictive than the base type's effective whiteSpace. The
+			// ordering is preserve < replace < collapse, so a restriction of a
+			// `replace` base (e.g. xs:normalizedString) to `preserve`, or of a
+			// `collapse` base (e.g. xs:token) to `preserve`/`replace`, is a schema
+			// error. Version-independent. (The fixed-builtin case above already
+			// covers the date/time family, which fixes whiteSpace=collapse.)
+			inherited := resolveWhiteSpace(td.BaseType)
+			if whiteSpaceRank(*fs.WhiteSpace) < whiteSpaceRank(inherited) {
+				c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+					fmt.Sprintf("The value '%s' of the facet 'whiteSpace' is less restrictive than the 'whiteSpace' value '%s' of the base type '%s'.",
+						*fs.WhiteSpace, inherited, typeDisplayName(td.BaseType))))
+			}
 		}
 	}
 
@@ -1595,6 +1611,21 @@ func explicitTimezoneApplicable(builtinLocal string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// whiteSpaceRank orders the three whiteSpace facet values by restrictiveness so a
+// derived value can be compared against the inherited base value (§4.3.6):
+// preserve (0) < replace (1) < collapse (2). An unrecognized value ranks as the
+// least restrictive so it never spuriously rejects a restriction.
+func whiteSpaceRank(v string) int {
+	switch v {
+	case "replace":
+		return 1
+	case "collapse":
+		return 2
+	default: // "preserve" and any unrecognized value
+		return 0
 	}
 }
 
