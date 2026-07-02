@@ -2186,6 +2186,18 @@ func (c *compiler) checkElementDeclConstraints(ctx context.Context) {
 		if std == nil {
 			continue
 		}
+		// XSD 1.0 §3.3.6 "Element Declaration Properties Correct" (the element analog of
+		// au-props-correct.3 §3.2.6): if the element's {type definition} is or is derived
+		// from xs:ID there must NOT be a {value constraint} (default or fixed).
+		// builtinBaseLocal returns the first XSD-namespace ancestor's local name, which is
+		// "ID" for xs:ID and any type restricting it. XSD 1.1 removed this restriction
+		// (W3C bug 4077), so the check is gated to Version10 and the 1.1 path stays
+		// byte-identical.
+		if c.version == Version10 && builtinBaseLocal(std) == typeID {
+			msg := "The element declaration is or is derived from ID and there must not be a value constraint."
+			c.schemaError(ctx, schemaElemDeclError(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, msg))
+			continue
+		}
 		// §3.3.6 "Element Default Valid (Immediate)" clause 2.1 (version-independent):
 		// when a value constraint (default/fixed) is present and the type is a complex
 		// type, its {content type} must be a simple type definition or mixed. An
