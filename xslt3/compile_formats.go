@@ -173,6 +173,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		Match:     matchPat,
 		Composite: composite,
 		Collation: collationURI,
+		Compat:    c.backwardsCompatible(),
 	}
 
 	useAttr := getAttr(elem, "use")

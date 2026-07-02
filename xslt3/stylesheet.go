@@ -316,6 +316,7 @@ type keyDef struct {
 	Body      []instruction // content constructor (when use attribute is absent)
 	Composite bool          // composite="yes" on xsl:key
 	Collation string        // collation URI (explicit or default; empty = codepoint)
+	Compat    bool          // backwards-compatible processing (effective version < 2.0)
 }
 
 // OutputDef is a compiled xsl:output. It carries the serialization parameters
