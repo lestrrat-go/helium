@@ -217,7 +217,7 @@ func (a *avt) evaluate(ctx context.Context, node helium.Node) (string, error) {
 			// the AVT expression value to a string, all items after the first are
 			// discarded (§5.6.1).
 			if seq := result.Sequence(); ec != nil && seq != nil && sequence.Len(seq) > 1 && ec.isCompatExpr(p.expr) {
-				sb.WriteString(stringifySimpleContent(xpath3.ItemSlice{seq.Get(0)}, " "))
+				sb.WriteString(stringifyItem(seq.Get(0)))
 			} else {
 				sb.WriteString(stringifyResult(result))
 			}

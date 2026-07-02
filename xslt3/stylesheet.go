@@ -88,7 +88,7 @@ type funcKey struct {
 
 // Stylesheet is a compiled XSLT stylesheet ready for transformation.
 type Stylesheet struct {
-	version              string
+	version string
 	// compatExprs holds every compiled XPath expression that must evaluate in
 	// XPath 1.0 compatibility mode (XSLT backwards-compatible processing, effective
 	// version < 2.0), keyed by pointer identity. nil when the stylesheet has no

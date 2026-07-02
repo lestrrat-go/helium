@@ -461,7 +461,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		// FOTY0013 (atomizing function items) must propagate per XPath 3.1 §2.7.2
 		var xpErr *XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
+		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
 			return nil, err
 		}
 		return SingleDouble(math.NaN()), nil

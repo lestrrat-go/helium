@@ -76,10 +76,10 @@ func xpath10CompatNumberItem(seq Sequence) (AtomicValue, error) {
 	if err != nil {
 		// FOTY0013 (atomizing function items) propagates per XPath 3.1 §2.7.2.
 		var xpErr *XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
+		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
 			return AtomicValue{}, err
 		}
-		return doubleNaNAtom(), nil //nolint:nilerr // fn:number returns NaN on failure
+		return doubleNaNAtom(), nil
 	}
 	return atomToCompatDouble(a), nil
 }
@@ -132,6 +132,7 @@ func coerceXPath10Compat(seq Sequence, st SequenceType, ec *evalContext) (Sequen
 //     effective boolean value and the two booleans are compared;
 //   - otherwise, if either operand is numeric, every pair is compared as xs:double;
 //   - otherwise every pair is compared as xs:string.
+//
 // The numeric/string cases stay existential (any satisfying pair wins), matching
 // the 1.0 node-set comparison semantics.
 func generalCompareXPath10Compat(ctx context.Context, op TokenType, left, right Sequence, coll *collationImpl, ec *evalContext) (bool, error) {
