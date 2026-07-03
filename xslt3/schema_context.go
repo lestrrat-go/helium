@@ -346,11 +346,26 @@ func (r *schemaRegistry) ValidateCastWithNS(ctx context.Context, value, typeName
 	return td.Validate(ctx, value, nsMap)
 }
 
+// atomizationTypeDef resolves the TypeDef whose variety/members/item type drive
+// ATOMIZATION of a node annotated with typeName. A simpleContent COMPLEX type
+// resolves to its EFFECTIVE content simple type (xsd.TypeDef.EffectiveContentSimpleType),
+// so a node typed as a simpleContent extension/restriction of a list/union — e.g.
+// a Date element typed DateType (simpleContent extension of a union) — atomizes
+// through the narrowed content type's members, matching the xsd data()/$value
+// path. A non-simpleContent type is returned unchanged.
+func (r *schemaRegistry) atomizationTypeDef(typeName string) (*xsd.TypeDef, bool) {
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found || td == nil {
+		return nil, false
+	}
+	return td.EffectiveContentSimpleType(), true
+}
+
 // ListItemType implements xpath3.SchemaDeclarations.
 // For list types, returns the item type name in annotation format.
 func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
-	td, _, found := r.LookupTypeDef(typeName)
-	if !found {
+	td, ok := r.atomizationTypeDef(typeName)
+	if !ok {
 		return "", false
 	}
 	// Walk up the type chain to find the list variety.
@@ -364,12 +379,18 @@ func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
 
 // UnionMemberTypes implements xpath3.SchemaDeclarations.
 func (r *schemaRegistry) UnionMemberTypes(typeName string) []string {
-	td, _, found := r.LookupTypeDef(typeName)
-	if !found || td == nil || td.Variety != xsd.TypeVarietyUnion {
+	td, ok := r.atomizationTypeDef(typeName)
+	if !ok || td == nil {
 		return nil
 	}
-	members := make([]string, 0, len(td.MemberTypes))
-	for _, member := range td.MemberTypes {
+	// Resolve the union members through the base chain (a facet-only restriction
+	// of a union carries the members on an ancestor).
+	memberDefs := td.ResolveUnionMembers()
+	if len(memberDefs) == 0 {
+		return nil
+	}
+	members := make([]string, 0, len(memberDefs))
+	for _, member := range memberDefs {
 		members = append(members, xsdTypeNameFromDef(member))
 	}
 	return members

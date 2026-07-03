@@ -12,6 +12,26 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// analyzeStringSelectTypeOK reports whether an atomized select value is usable as
+// the xs:string input of xsl:analyze-string: xs:string / xs:anyURI /
+// xs:untypedAtomic, or a schema-defined simple type derived from xs:string (whose
+// BaseType is xs:string, so its string-backed value substitutes for xs:string).
+func analyzeStringSelectTypeOK(av xpath3.AtomicValue) bool {
+	switch av.TypeName {
+	case xpath3.TypeString, xpath3.TypeUntypedAtomic, xpath3.TypeAnyURI:
+		return true
+	}
+	// A user-defined simple type carries its built-in base in BaseType; accept it
+	// when that base is (or derives from) xs:string.
+	if av.BaseType == xpath3.TypeString || av.BaseType == xpath3.TypeAnyURI {
+		return true
+	}
+	if av.BaseType != "" && xpath3.BuiltinIsSubtypeOf(av.BaseType, xpath3.TypeString) {
+		return true
+	}
+	return false
+}
+
 func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStringInst) error {
 	// Evaluate the select expression
 	result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
@@ -38,8 +58,12 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	if err != nil {
 		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string: %v", err)
 	}
-	// Reject non-string atomic types (xs:integer, etc.)
-	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic && av.TypeName != xpath3.TypeAnyURI {
+	// Accept xs:string, xs:anyURI, xs:untypedAtomic, and any schema type derived
+	// from xs:string (a user simple type such as StandardDate atomizes to a
+	// string-backed value whose BaseType is xs:string — subtype substitution makes
+	// it a valid xs:string for the analyze-string select). Reject genuinely
+	// non-string atomic types (xs:integer, etc.).
+	if !analyzeStringSelectTypeOK(av) {
 		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string, got %s", av.TypeName)
 	}
 	input, err := xpath3.AtomicToString(av)
