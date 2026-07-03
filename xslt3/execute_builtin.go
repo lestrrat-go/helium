@@ -338,6 +338,19 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 	if inheritedXMLSpace(elem) == lexicon.SpacePreserve {
 		return false
 	}
+	// A schema type annotation overrides xsl:strip-space / xsl:preserve-space per
+	// XSLT 3.0 §4.4.2: element-only content strips regardless of preserve-space;
+	// simple/mixed content (or an assertion-bearing ancestor) preserves regardless
+	// of strip-space. Only source trees validated by this transform carry
+	// annotations, so unvalidated fn:doc() trees fall straight through.
+	if ec.typeAnnotations != nil {
+		switch newSchemaWSClassifier(ec.typeAnnotations, ec.schemaRegistry).mode(elem) {
+		case schemaWSStrip:
+			return true
+		case schemaWSPreserve:
+			return false
+		}
+	}
 	if ec.isElementStripped(elem) {
 		return true
 	}

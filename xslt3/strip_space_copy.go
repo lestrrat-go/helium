@@ -38,7 +38,7 @@ import (
 // current package is always the principal stylesheet, so the effective rules are
 // exactly the stylesheet's own — matching what stripWhitespaceFromDoc would have
 // applied later.
-func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap bool) (*helium.Document, map[helium.Node]helium.Node, error) {
+func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap bool, schemaWS *schemaWSClassifier) (*helium.Document, map[helium.Node]helium.Node, error) {
 	// Use RawEncoding(), not Encoding(): the latter synthesizes "utf8" when the
 	// source XML declaration omitted an encoding, which would make the copy
 	// serialize a spurious encoding="utf8" the source never had. The copy must
@@ -90,7 +90,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// independent external subset while keeping ID resolution identical.
 	helium.CopyExtSubset(src, dst)
 
-	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve}
+	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve, schemaWS: schemaWS}
 	// When rebuilding the ID table, record source-element->copy-element so the
 	// source's ID entries can be translated onto the copy after the walk.
 	if rebuildIDs {
@@ -148,6 +148,11 @@ type stripCopier struct {
 	dst      *helium.Document
 	strip    []nameTest
 	preserve []nameTest
+	// schemaWS, when non-nil, applies the XSLT 3.0 §4.4.2 schema-aware whitespace
+	// verdicts (which override xsl:strip-space / xsl:preserve-space) using the type
+	// annotations gathered during source validation. It is keyed on the ORIGINAL
+	// source nodes, which is exactly what stripText's parent argument carries.
+	schemaWS *schemaWSClassifier
 	// nodeMap, when non-nil, records original->copy node correspondence (elements,
 	// text/comment/PI leaves, and element attributes) for initial-match-selection
 	// remapping. Omitted whitespace nodes have no entry.
@@ -321,10 +326,18 @@ func (sc *stripCopier) stripText(src helium.Node, parent *helium.Element) bool {
 	if parent == nil {
 		return false
 	}
-	for _, b := range src.Content() {
-		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
-			return false
-		}
+	if !isWhitespaceOnly(src.Content()) {
+		return false
+	}
+	// A schema type annotation overrides xsl:strip-space / xsl:preserve-space:
+	// element-only content strips regardless of preserve-space, while simple or
+	// mixed content (or an assertion-bearing ancestor) preserves regardless of
+	// strip-space (XSLT 3.0 §4.4.2).
+	switch sc.schemaWS.mode(parent) {
+	case schemaWSStrip:
+		return true
+	case schemaWSPreserve:
+		return false
 	}
 	if isElementStrippedBy(parent, sc.strip, sc.preserve) {
 		return true
