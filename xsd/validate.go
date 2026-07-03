@@ -1347,6 +1347,26 @@ func effectiveContentSimpleType(td *TypeDef) *TypeDef {
 	return effectiveContentSimpleTypeRec(td, make(map[*TypeDef]struct{}))
 }
 
+// EffectiveContentSimpleType returns the effective simple type that constrains
+// the text content of td. For a simpleContent COMPLEX type it walks through the
+// simpleContent derivation to the underlying simpleType/builtin (composing any
+// facet-only restriction), so a caller ATOMIZING a node typed with td sees the
+// narrowed content type — its list/union/QName variety — rather than the raw
+// complex type. A non-simpleContent type (a plain simple type or an element-only
+// complex type) is returned unchanged. It mirrors the internal atomization the
+// xsd assert/$value path uses, so an external adapter (xslt3's schema registry)
+// atomizes a simpleContent-over-union node through the same active member.
+func (td *TypeDef) EffectiveContentSimpleType() *TypeDef {
+	return effectiveContentSimpleType(td)
+}
+
+// ResolveUnionMembers returns the member type definitions of td's effective
+// union variety, walking the base chain (a facet-only restriction of a union
+// carries the members on an ancestor). It returns nil when td is not a union.
+func (td *TypeDef) ResolveUnionMembers() []*TypeDef {
+	return resolveUnionMembers(td)
+}
+
 func effectiveContentSimpleTypeRec(td *TypeDef, visited map[*TypeDef]struct{}) *TypeDef {
 	if td == nil || !td.IsSimpleContent {
 		return td

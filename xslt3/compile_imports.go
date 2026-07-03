@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -13,6 +14,79 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
+
+// enterModuleNamespaceScope establishes the compilation namespace scope for an
+// imported/included module root: it snapshots c.nsBindings and c.localExcludes,
+// seeds c.nsBindings with the module root's in-scope namespaces (so the module's
+// literal result elements see ITS declarations, not a sibling module's), and adds
+// the module root's exclude-result-prefixes / extension-element-prefixes to the
+// exclusion set (resolved to URIs against the module root's own namespaces, per
+// XSLT 3.0 §11.1.3). The returned function restores both maps. Without this, an
+// imported module's root namespaces would leak into later-compiled siblings and
+// its exclude-result-prefixes would be ignored, so literal result elements emit
+// spurious namespace declarations.
+func (c *compiler) enterModuleNamespaceScope(root *helium.Element) func() {
+	savedNS := c.nsBindings
+	savedExcludes := c.localExcludes
+
+	inScope := inScopeNamespaces(root)
+	newBindings := make(map[string]string, len(savedNS)+len(inScope))
+	maps.Copy(newBindings, savedNS)
+	// The module root's in-scope namespaces override any inherited binding.
+	maps.Copy(newBindings, inScope)
+	c.nsBindings = newBindings
+
+	newExcludes := c.moduleResultPrefixExcludes(root, inScope, savedExcludes)
+	if newExcludes != nil {
+		c.localExcludes = newExcludes
+	}
+
+	return func() {
+		c.nsBindings = savedNS
+		c.localExcludes = savedExcludes
+	}
+}
+
+// moduleResultPrefixExcludes resolves a module root's exclude-result-prefixes and
+// extension-element-prefixes to the set of namespace URIs to exclude from result
+// trees, unioned onto base. inScope is the module root's in-scope namespaces.
+// Returns nil when the module declares neither attribute (so the caller keeps the
+// existing exclusion map).
+func (c *compiler) moduleResultPrefixExcludes(root *helium.Element, inScope map[string]string, base map[string]struct{}) map[string]struct{} {
+	erp := getAttr(root, "exclude-result-prefixes")
+	eep := getAttr(root, "extension-element-prefixes")
+	if erp == "" && eep == "" {
+		return nil
+	}
+	out := make(map[string]struct{}, len(base)+4)
+	maps.Copy(out, base)
+	addPrefix := func(prefix string) {
+		if prefix == lexicon.ModeDefault {
+			if uri, ok := inScope[""]; ok && uri != "" {
+				out[uri] = struct{}{}
+			}
+			return
+		}
+		if uri, ok := inScope[prefix]; ok && uri != "" {
+			out[uri] = struct{}{}
+		}
+	}
+	if erp == lexicon.ModeAll {
+		for _, uri := range inScope {
+			if uri != "" {
+				out[uri] = struct{}{}
+			}
+		}
+	} else if erp != "" {
+		for prefix := range strings.FieldsSeq(erp) {
+			addPrefix(prefix)
+		}
+	}
+	for prefix := range strings.FieldsSeq(eep) {
+		addPrefix(prefix)
+	}
+	return out
+}
 
 func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
@@ -158,6 +232,13 @@ func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Eleme
 	c.moduleRoot = embeddedModuleRoot(root)
 	defer func() { c.moduleRoot = savedModuleRoot }()
 
+	// Seed the module root's namespaces into a SCOPED nsBindings so this phase's
+	// namespace-alias/nested-import processing resolves prefixes against the
+	// included module's own declarations, then restore on return so they do not
+	// leak into later-compiled sibling modules. collectNamespaces still populates
+	// c.stylesheet.namespaces (global, for XPath QName resolution).
+	restoreNS := c.enterModuleNamespaceScope(root)
+	defer restoreNS()
 	c.collectNamespaces(ctx, root)
 
 	// Process namespace-alias declarations from the included module.
@@ -339,6 +420,11 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 	savedModuleRoot := c.moduleRoot
 	c.moduleRoot = embeddedModuleRoot(root)
 	defer func() { c.moduleRoot = savedModuleRoot }()
+
+	// Establish the included module's namespace scope for its template phase: its
+	// root namespaces (so literal result elements declare ITS namespaces, not the
+	// including module's) and its exclude-result-prefixes / extension-element-prefixes.
+	defer c.enterModuleNamespaceScope(root)()
 
 	savedDefaultMode := c.defaultMode
 	if dm := getAttr(root, "default-mode"); dm != "" {
@@ -876,12 +962,15 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		c.minImportPrec = c.importPrec
 		savedInsideImport := c.insideImport
 		c.insideImport = true
+		restoreNS := c.enterModuleNamespaceScope(importedRoot)
 		c.collectNamespaces(ctx, importedRoot)
 		if err := c.compileTopLevel(ctx, importedRoot); err != nil {
+			restoreNS()
 			c.minImportPrec = savedMinImportPrec
 			c.insideImport = savedInsideImport
 			return err
 		}
+		restoreNS()
 		c.minImportPrec = savedMinImportPrec
 		c.insideImport = savedInsideImport
 		c.importPrec++
@@ -890,10 +979,13 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		// Inherit minImportPrec from the including module so that
 		// xsl:apply-imports in included templates searches the
 		// including module's full import tree.
+		restoreNS := c.enterModuleNamespaceScope(importedRoot)
 		c.collectNamespaces(ctx, importedRoot)
 		if err := c.compileTopLevel(ctx, importedRoot); err != nil {
+			restoreNS()
 			return err
 		}
+		restoreNS()
 	}
 	return nil
 }
