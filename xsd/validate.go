@@ -1046,7 +1046,7 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 // value as a string.
 func (vc *validationContext) validateMixedFixed(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
 	hasElem := hasChildElement(elem)
-	initial := elemTextContent(elem)
+	initial := mixedInitialValue(elem)
 	// Clause 5.1: neither element nor character children — the fixed value is
 	// assigned, so the element is valid.
 	if !hasElem && initial == "" {
@@ -2225,6 +2225,26 @@ func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 		return edecl
 	}
 	return nil
+}
+
+// mixedInitialValue returns the ·initial value· of a mixed-content element per
+// cvc-elt.5.2.2.2.2: the concatenation, in document order, of its direct
+// character-data content. That includes text and CDATA children AND the
+// replacement text of a direct entity reference (an EntityRefNode is character
+// content, not an element child, so its content contributes to the initial
+// value). Element descendants are excluded (they are handled by clause 5.2.2.1).
+func mixedInitialValue(elem *helium.Element) string {
+	if elem == nil {
+		return ""
+	}
+	var buf []byte
+	for child := range helium.Children(elem) {
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode, helium.EntityRefNode:
+			buf = append(buf, child.Content()...)
+		}
+	}
+	return string(buf)
 }
 
 // elemTextContent returns the concatenated text content of an element,

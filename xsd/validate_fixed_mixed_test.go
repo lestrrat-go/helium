@@ -47,6 +47,37 @@ func TestFixedValueMixedContent(t *testing.T) {
 	}
 }
 
+// TestFixedValueMixedEntityRef verifies the mixed-content fixed check treats a
+// direct internal entity reference as character content: its replacement text
+// contributes to the ·initial value·. With helium's default parser, an internal
+// entity reference reaches validation as a direct EntityRefNode (not expanded
+// into text), so the initial-value computation must include its content —
+// otherwise the element would be mistaken for clause-5.1 empty and wrongly
+// accepted against a non-matching fixed value.
+func TestFixedValueMixedEntityRef(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="abc"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	t.Run("entity ref expands to non-matching value", func(t *testing.T) {
+		t.Parallel()
+		const instance = `<!DOCTYPE root [ <!ENTITY e "def"> ]>
+<root>&e;</root>`
+		runFixedValueCase(t, schemaXML, instance, true)
+	})
+	t.Run("entity ref expands to matching value", func(t *testing.T) {
+		t.Parallel()
+		const instance = `<!DOCTYPE root [ <!ENTITY e "abc"> ]>
+<root>&e;</root>`
+		runFixedValueCase(t, schemaXML, instance, false)
+	})
+}
+
 // TestFixedValueMixedAnyType verifies the mixed-content fixed check also fires
 // when the governing type has no declared model group (an xs:anyType / empty
 // mixed complex type): the initial value must equal the fixed value.
