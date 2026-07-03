@@ -406,6 +406,8 @@ func removeRedundantNamespaces(root *helium.Element) {
 	for _, ns := range root.Namespaces() {
 		rootNS[ns.Prefix()] = ns.URI()
 	}
+	// The result tree is freshly built via guarded AddChild, so it is acyclic
+	// and Walk cannot return ErrWalkCycle here; the error is safely ignored.
 	_ = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n == root {
 			return nil
@@ -633,7 +635,7 @@ func isPubidChar(r rune) bool {
 // constraints (e.g., starts with a combining character).
 func checkFullyNormalized(doc *helium.Document) error {
 	var firstErr error
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	werr := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
 			content := string(n.Content())
 			if len(content) > 0 {
@@ -647,6 +649,10 @@ func checkFullyNormalized(doc *helium.Document) error {
 		}
 		return nil
 	}))
+	if firstErr == nil {
+		// Surfaces a tree cycle (ErrWalkCycle); nil in the normal case.
+		firstErr = werr
+	}
 	return firstErr
 }
 
@@ -654,7 +660,7 @@ func checkFullyNormalized(doc *helium.Document) error {
 // HTML text content (SERE0014).
 func checkHTMLInvalidChars(doc *helium.Document) error {
 	var firstErr error
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	werr := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
 			content := string(n.Content())
 			for _, r := range content {
@@ -667,13 +673,17 @@ func checkHTMLInvalidChars(doc *helium.Document) error {
 		}
 		return nil
 	}))
+	if firstErr == nil {
+		// Surfaces a tree cycle (ErrWalkCycle); nil in the normal case.
+		firstErr = werr
+	}
 	return firstErr
 }
 
 // checkHTMLPIContent checks that no PI in the result tree contains ">".
 func checkHTMLPIContent(doc *helium.Document) error {
 	var err error
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	werr := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.ProcessingInstructionNode {
 			content := string(n.Content())
 			if strings.Contains(content, ">") {
@@ -684,6 +694,10 @@ func checkHTMLPIContent(doc *helium.Document) error {
 		}
 		return nil
 	}))
+	if err == nil {
+		// Surfaces a tree cycle (ErrWalkCycle); nil in the normal case.
+		err = werr
+	}
 	return err
 }
 

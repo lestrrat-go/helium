@@ -960,7 +960,12 @@ func (d *Document) GetElementByID(id string) *Element {
 		return d.ids[id]
 	}
 
-	// Fallback: O(n) tree walk for documents not built via parser.
+	// Fallback: O(n) tree walk for documents not built via parser. The walk
+	// error is a best-effort signal only: the walker returns a sentinel error
+	// to stop early once the id is found, and a Walk-detected tree cycle
+	// (ErrWalkCycle) simply ends the search over the traversable portion — a
+	// lookup has no error channel, so it degrades to returning any match found
+	// before the cycle (nil if none), never spinning.
 	var found *Element
 	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
 		elem, ok := AsNode[*Element](n)
