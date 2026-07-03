@@ -919,27 +919,23 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		// (or a substitution group member — checked separately below).
 		nameMatch := ixpath.LocalNameOf(ni.Node) == local && ixpath.NodeNamespaceURI(ni.Node) == ns
 		if !nameMatch {
-			// Check substitution group membership.
-			if ec.schemaDeclarations == nil {
+			// The node's name is not the head's own name, so it matches only
+			// when the node's element is a member of the substitution group
+			// headed by (local, ns). This mirrors the step node-test path
+			// (eval_path.go): substitution-group membership already requires
+			// each member's declared type to derive from the head's type, so a
+			// validated (non-untyped) member satisfies the kind test, whereas a
+			// bare type-derivation check would wrongly admit an element whose
+			// type happens to derive from the head's type without being
+			// substitutable for it — keeping the two matchers consistent.
+			if !ec.schemaDeclarations.IsSubstitutionGroupMember(ixpath.LocalNameOf(ni.Node), ixpath.NodeNamespaceURI(ni.Node), local, ns) {
 				return false
 			}
-			headType, headFound := ec.schemaDeclarations.LookupSchemaElement(local, ns)
-			if !headFound {
-				return false
-			}
-			// The node's type must be a subtype of the head's type.
 			ann := nodeAnn
-			if ann == "" {
-				ann = TypeUntyped
-			}
-			// Untyped elements do NOT match schema-element().
-			if ann == TypeUntyped {
+			if ann == "" || ann == TypeUntyped {
 				return false
 			}
-			if isSubtypeOf(ann, headType) || ec.schemaDeclarations.IsSubtypeOf(ann, headType) {
-				return true
-			}
-			return false
+			return true
 		}
 		typeName, found := ec.schemaDeclarations.LookupSchemaElement(local, ns)
 		if !found {

@@ -44,6 +44,9 @@ func (idSubtypeDecls) ListItemType(typeName string) (string, bool) {
 func (idSubtypeDecls) UnionMemberTypes(typeName string) []string {
 	return nil
 }
+func (idSubtypeDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	return false
+}
 
 func TestFnIDUsesTypeAnnotationsForIDSubtype(t *testing.T) {
 	doc := mustParseXML(t, `<root id="alpha"/>`)
