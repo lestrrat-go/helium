@@ -79,7 +79,7 @@ func isNeverMatchingPattern(alt string) bool {
 // context, so both compile-time validation and runtime matching resolve prefixes
 // identically and the predeclared XPath namespaces (fn/math/map/...) apply as a
 // fallback only when a prefix is not lexically bound.
-func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool, compat bool) (*pattern, error) {
+func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool, compat bool, decls xpath3.SchemaDeclarations) (*pattern, error) {
 	nsBindings := inScopeNamespaces(elem)
 	alts := splitPatternUnion(s)
 	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, hasXPathDefaultNS: hasXPathDefaultNS, nsBindings: nsBindings, compat: compat}
@@ -99,7 +99,7 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXP
 		// namespace for unprefixed names unless xpath-default-namespace is set.
 		// This keeps compile-time and runtime prefix resolution symmetric.
 		validateNS := patternValidateNamespaces(nsBindings, xpathDefaultNS, hasXPathDefaultNS)
-		if valErr := compiled.Validate(validateNS); valErr != nil {
+		if valErr := compiled.ValidateWithSchema(validateNS, decls); valErr != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %v", alt, valErr)
 		}
 		ast := compiled.AST()

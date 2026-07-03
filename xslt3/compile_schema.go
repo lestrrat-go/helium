@@ -515,8 +515,18 @@ func hasNSDeclForPrefix(elem *helium.Element, prefix string) bool {
 
 // resolveXSDTypeName normalizes a QName type reference (e.g., "xs:ID",
 // "xsd:integer", or "Q{http://www.w3.org/2001/XMLSchema}ID") to the
-// canonical "xs:..." prefix form used by xpath3 constants.
+// canonical "xs:..." prefix form used by xpath3 constants. A bare (unprefixed)
+// name is resolved against no namespace.
 func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
+	return resolveXSDTypeNameNS(qname, nsBindings, "", false)
+}
+
+// resolveXSDTypeNameNS is like resolveXSDTypeName but resolves a bare
+// (unprefixed) non-builtin type name against the in-scope xpath-default-namespace
+// when one is in effect. Per XSLT/XPath, an unprefixed type name in an @as/@type
+// attribute takes the default element/type namespace; a built-in xs: name and a
+// prefixed/EQName form are unaffected.
+func resolveXSDTypeNameNS(qname string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
 	qname = strings.TrimSpace(qname)
 	if qname == "" {
 		return ""
@@ -546,21 +556,39 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 			return xpath3.QAnnotation(uri, local)
 		}
 	}
-	// Bare name (no prefix, no Q{} wrapper): treat as user-defined type
-	// in no namespace. Use Q{} annotation form to match xsdTypeNameFromDef.
+	// Bare name (no prefix, no Q{} wrapper): a user-defined type taking the
+	// in-scope default element/type namespace (xpath-default-namespace) when one
+	// is in effect, else no namespace. Use Q{} annotation form to match
+	// xsdTypeNameFromDef.
+	if hasXPathDefaultNS && xpathDefaultNS != "" {
+		return xpath3.QAnnotation(xpathDefaultNS, qname)
+	}
 	return "Q{}" + qname
+}
+
+// schemaDeclsForValidation returns the in-scope schema declarations for
+// compile-time static checking, or nil when the stylesheet is not schema-aware.
+// When non-nil it lets the xpath3 static check permit an unprefixed atomic/schema
+// type name (resolved against the default element/type namespace or as a
+// no-namespace schema type) instead of raising XPST0081.
+func (c *compiler) schemaDeclsForValidation() xpath3.SchemaDeclarations {
+	if !c.stylesheet.schemaAware || len(c.stylesheet.schemas) == 0 {
+		return nil
+	}
+	return &schemaRegistry{schemas: c.stylesheet.schemas}
 }
 
 // validateAsSequenceType checks compile-time validity of an as= sequenceType
 // expression when schemas are imported. It detects schema-element(Q) and
 // schema-attribute(Q) references and verifies that Q is declared in at least
 // one imported schema. Raises XTSE0590 when a referenced element or attribute
-// is not found.
+// is not found. An unprefixed schema-element()/schema-attribute() name resolves
+// against the in-scope xpath-default-namespace.
 //
 // This covers the most common case where compile-time static errors arise:
 // using schema-element() or schema-attribute() with an undeclared name.
 func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error {
-	return c.validateAsSequenceTypeWithNS(ctx, as, context, c.nsBindings, "", false)
+	return c.validateAsSequenceTypeWithNS(ctx, as, context, c.nsBindings, c.xpathDefaultNS, c.hasXPathDefaultNS)
 }
 
 // validateAsSequenceTypeWithNS is like validateAsSequenceType but resolves
