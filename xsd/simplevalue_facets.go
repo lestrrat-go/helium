@@ -364,7 +364,7 @@ func resolveLexicalQName(value string, ns map[string]string) (QName, error) {
 // variant here would change xsd's golden-validated facet error output.
 func facetLength(val, builtinLocal string) int {
 	switch builtinLocal {
-	case "IDREFS", "ENTITIES", "NMTOKENS":
+	case typeIDRefs, typeEntities, typeNMTokens:
 		// The built-in LIST datatypes: length/minLength/maxLength count the number
 		// of whitespace-separated LIST ITEMS (XSD Part 2 §3.16 / cvc-length), not
 		// characters. An empty value has zero items. value.XSDFields splits on XSD
