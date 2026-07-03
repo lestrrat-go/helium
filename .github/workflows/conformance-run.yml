@@ -1,0 +1,110 @@
+name: Conformance run
+
+# Reusable conformance run. Clones this helium ref plus the sibling
+# helium-w3c-tests harness, fetches the pinned upstream fixtures for one W3C
+# suite, runs it (optionally with the performance-gated slow tests enabled) and
+# fails when the suite reports any failures.
+#
+# Invoked by conformance.yml (nightly/manual entrypoint) and by release.yml
+# (the release-gating slow xslt30 run). Kept as a single source of truth so the
+# checkout/fetch/run logic is not duplicated.
+on:
+  workflow_call:
+    inputs:
+      suite:
+        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10)
+        type: string
+        default: xslt30
+      slow:
+        description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUITE: ${{ inputs.suite }}
+      # HELIUM_SLOW_TESTS is treated as "enabled" whenever it is non-empty, so
+      # it must be left EMPTY (never "0") when slow tests are off.
+      HELIUM_SLOW_TESTS: ${{ inputs.slow && '1' || '' }}
+    steps:
+      # Check out this helium repo at the triggering ref (the code under test).
+      # No repository:/ref: so it uses the ref the calling workflow ran against.
+      - name: Check out helium (code under test)
+        uses: actions/checkout@v4
+        with:
+          path: helium
+
+      # The conformance harness lives in helium-w3c-tests, whose go.mod uses
+      # `replace github.com/lestrrat-go/helium => ../helium`, so the helium
+      # checkout above must sit as a sibling directory next to it.
+      - name: Check out helium-w3c-tests (sibling harness)
+        uses: actions/checkout@v4
+        with:
+          repository: lestrrat-go/helium-w3c-tests
+          ref: main
+          path: helium-w3c-tests
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: helium/go.mod
+          cache-dependency-path: helium-w3c-tests/go.sum
+
+      # The xsd10 run reuses the xsd11 upstream source checkout; only qt3,
+      # xslt30 and xsd11 are fetchable suite names.
+      - name: Resolve fetch suite
+        working-directory: helium-w3c-tests
+        run: |
+          case "$SUITE" in
+            xsd10) echo "FETCH_SUITE=xsd11" >> "$GITHUB_ENV" ;;
+            *)     echo "FETCH_SUITE=$SUITE" >> "$GITHUB_ENV" ;;
+          esac
+
+      - name: Fetch pinned suite fixtures
+        working-directory: helium-w3c-tests
+        run: go run ./cmd/w3cgen fetch "$FETCH_SUITE"
+
+      - name: Run conformance suite
+        working-directory: helium-w3c-tests
+        run: |
+          mkdir -p test-results
+          go run ./cmd/w3ctest \
+            -out "test-results/${SUITE}-junit.xml" \
+            -summary "test-results/${SUITE}-summary.md" \
+            "$SUITE"
+
+      - name: Upload conformance results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.suite }}-conformance-results
+          path: |
+            helium-w3c-tests/test-results/*-junit.xml
+            helium-w3c-tests/test-results/*-summary.md
+          if-no-files-found: warn
+
+      # Gate on the reported failure COUNT, not merely the runner exit code: a
+      # non-zero <testsuites failures="N"> fails the job even if the harness
+      # exited 0. The run step above already exits non-zero on a failing suite,
+      # so this only ever confirms a green run or catches a stray exit-0 report.
+      - name: Enforce zero conformance failures
+        working-directory: helium-w3c-tests
+        run: |
+          report="test-results/${SUITE}-junit.xml"
+          if [ ! -f "$report" ]; then
+            echo "conformance report $report not found" >&2
+            exit 1
+          fi
+          failures=$(grep -o 'failures="[0-9]\+"' "$report" | head -1 | grep -o '[0-9]\+')
+          failures=${failures:-unknown}
+          echo "$SUITE conformance failures: $failures"
+          if [ "$failures" != "0" ]; then
+            echo "conformance suite $SUITE reported $failures failure(s)" >&2
+            exit 1
+          fi

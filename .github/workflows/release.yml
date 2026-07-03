@@ -9,7 +9,19 @@ permissions:
   contents: write
 
 jobs:
+  # Release-gating conformance run: the full slow XSLT 3.0 suite must pass with
+  # zero failures before anything is published. goreleaser needs: this job, so a
+  # red slow run blocks the release even though the tag is already pushed.
+  conformance-gate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/conformance-run.yml
+    with:
+      suite: xslt30
+      slow: true
+
   goreleaser:
+    needs: conformance-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
