@@ -156,10 +156,10 @@ func parseStylesheetDocument(ctx context.Context, injected *helium.Parser, data 
 // This is a convenience wrapper over NewCompiler().Compile(ctx, doc).
 //
 // The returned [*Stylesheet] is immutable and safe for concurrent use by
-// multiple goroutines, each with its own source document; it may be reused
-// across many transformations. See the package documentation's Concurrency
-// section (in particular the source-document caveat for schema-aware
-// transforms).
+// multiple goroutines; it may be reused across many transformations. The
+// caller's source is treated as read-only (including by schema-aware transforms),
+// so a single source may be shared, read-only, across concurrent transforms. See
+// the package documentation's Concurrency section.
 func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
 	return NewCompiler().Compile(ctx, doc)
 }
@@ -168,9 +168,10 @@ func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, 
 // This is a convenience wrapper over ss.Transform(source).Do(ctx).
 //
 // ss is not mutated and may be transformed concurrently from multiple
-// goroutines, each with its own source document. A schema-aware transform
-// mutates source in place, so such a source must not be shared across
-// concurrent transforms (see the package documentation's Concurrency section).
+// goroutines. The caller's source is treated as read-only (including by a
+// schema-aware transform, which validates a private copy), so a single source
+// may be shared, read-only, across concurrent transforms (see the package
+// documentation's Concurrency section).
 func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*helium.Document, error) {
 	if ss == nil {
 		return nil, errNilStylesheet
@@ -182,9 +183,10 @@ func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*h
 // This is a convenience wrapper over ss.Transform(source).Serialize(ctx).
 //
 // ss is not mutated and may be transformed concurrently from multiple
-// goroutines, each with its own source document. A schema-aware transform
-// mutates source in place, so such a source must not be shared across
-// concurrent transforms (see the package documentation's Concurrency section).
+// goroutines. The caller's source is treated as read-only (including by a
+// schema-aware transform, which validates a private copy), so a single source
+// may be shared, read-only, across concurrent transforms (see the package
+// documentation's Concurrency section).
 func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet) (string, error) {
 	if ss == nil {
 		return "", errNilStylesheet

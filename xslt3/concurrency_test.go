@@ -306,6 +306,134 @@ func TestStylesheetConcurrentSchemaAwareDistinctSources(t *testing.T) {
 	}
 }
 
+// TestSchemaAwareDoesNotMutateSource proves the read-only-source contract for a
+// schema-aware transform: source-schema validation inserts default/fixed
+// attributes into the tree it validates, but that tree is now a PRIVATE COPY, so
+// the caller's original source document is left untouched. The result still
+// reflects the schema default (the copy carries the inserted attribute), proving
+// the mutation moved off the caller's tree rather than being skipped.
+func TestSchemaAwareDoesNotMutateSource(t *testing.T) {
+	schema := compileSchemaString(t, `
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="def" type="xs:string" default="DEF"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+
+	// The stylesheet reads the schema-defaulted @def, so the default-attribute
+	// insertion is observable in the output.
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/root"><out def="{@def}"/></xsl:template>
+</xsl:stylesheet>`)
+
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	// Before the transform the caller's root carries no 'def' attribute.
+	root := src.DocumentElement()
+	require.NotNil(t, root)
+	_, present := root.GetAttribute("def")
+	require.False(t, present, "precondition: source must not already carry the schema default")
+
+	out, err := ss.Transform(src).SourceSchemas(schema).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, `def="DEF"`, "result must reflect the schema default")
+
+	// After the transform the caller's original source is unchanged: the
+	// default/fixed attribute was inserted into a private copy, not this tree.
+	root = src.DocumentElement()
+	require.NotNil(t, root)
+	_, present = root.GetAttribute("def")
+	require.False(t, present, "schema-aware transform must not mutate the caller's source document")
+}
+
+// TestStylesheetConcurrentSharedSourceSchemaAware proves the strengthened
+// shared-source guarantee: because a schema-aware transform validates a PRIVATE
+// COPY of the source (never the caller's tree), a SINGLE source document may be
+// shared across many concurrent schema-aware transforms of the same compiled
+// stylesheet. Before the source was treated read-only, this would race (each
+// transform inserted default attributes into the shared tree in place). Every
+// goroutine reads the same shared *helium.Document and must produce the same
+// deterministic, schema-defaulted output; under -race, any write to the shared
+// source (or the compiled stylesheet/schema) would be reported.
+func TestStylesheetConcurrentSharedSourceSchemaAware(t *testing.T) {
+	const (
+		goroutines = 50
+		iterations = 25
+	)
+
+	schema := compileSchemaString(t, `
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="tag" type="xs:string"/>
+            <xs:attribute name="def" type="xs:string" default="DEF"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/root">
+    <out><tag><xsl:value-of select="item/@tag"/></tag><def><xsl:value-of select="item/@def"/></def></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	// ONE shared source document, handed to every concurrent schema-aware
+	// transform. Its 'item' has an explicit @tag but no @def (the schema default).
+	sharedSrc, err := helium.NewParser().Parse(t.Context(), []byte(
+		`<root><item tag="T"/></root>`))
+	require.NoError(t, err)
+
+	const wantFrag = `<out><tag>T</tag><def>DEF</def></out>`
+
+	failures := make([]string, goroutines)
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for iter := range iterations {
+				out, err := ss.Transform(sharedSrc).SourceSchemas(schema).Serialize(t.Context())
+				if err != nil {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: transform error: %v", i, iter, err)
+					return
+				}
+				if !strings.Contains(out, wantFrag) {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: output missing %q\ngot: %s", i, iter, wantFrag, out)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i, f := range failures {
+		require.Empty(t, f, "goroutine %d reported a failure", i)
+	}
+
+	// The shared source is still pristine: no 'def' attribute leaked into it.
+	root := sharedSrc.DocumentElement()
+	require.NotNil(t, root)
+	for item := range helium.Children(root) {
+		el, ok := item.(*helium.Element)
+		if !ok {
+			continue
+		}
+		_, present := el.GetAttribute("def")
+		require.False(t, present, "shared source must not be mutated by concurrent schema-aware transforms")
+	}
+}
+
 func compileSchemaString(t *testing.T, src string) *xsd.Schema {
 	t.Helper()
 
