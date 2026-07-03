@@ -542,57 +542,6 @@ func reduceSingletonGroup(p *Particle) *Particle {
 	}
 }
 
-// modelGroupContainsElementDecl reports whether a model group carries at least
-// one EMITTING element-declaration particle anywhere in its (nested) content. A
-// group composed solely of wildcards and/or empty/nested groups — or one whose
-// only element declarations are NON-EMITTING (effective maxOccurs 0, own or via
-// an ancestor group being maxOccurs=0) — is NOT a group of element declarations,
-// so the §3.9.6 "no wildcard-restricts-element-group rule" rejection does not
-// apply to it. A prohibited element (or an element inside a maxOccurs=0 group)
-// emits nothing, so it never colors the base as an element group; only a
-// genuinely emitting element declaration makes this predicate true. Reuses
-// particleEmitsNothing (the codebase's effective-occurrence non-emission test,
-// folding ancestor-group occurrences) so a whole maxOccurs=0 group contributes
-// nothing and is not recursed into.
-func modelGroupContainsElementDecl(g *ModelGroup) bool {
-	for _, p := range g.Particles {
-		if particleEmitsNothing(p) {
-			continue
-		}
-		switch t := p.Term.(type) {
-		case *ElementDecl:
-			return true
-		case *ModelGroup:
-			if modelGroupContainsElementDecl(t) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// wildcardRestrictsModelGroup decides the §3.9.6 WILDCARD-restricting-MODEL-GROUP
-// case SOUNDLY (fail-closed): it returns true only when it can PROVE
-// L(derived wildcard particle) ⊆ L(base model group). §3.9.6 provides no
-// derivation rule for this shape, so an accept is justified only by a language
-// argument. The provable sub-cases:
-//
-//   - EMPTY language {}: a matchesNothing derived wildcard forced to occur (min>0)
-//     is unsatisfiable, so its language is ∅ ⊆ every base.
-//   - {ε} language: a prohibited (maxOccurs=0) or matchesNothing-with-min0 derived
-//     particle matches only the empty string; {ε} ⊆ L(base) iff the base is
-//     emptiable.
-//   - a base group of ELEMENT DECLARATIONS admits named elements the emitting
-//     wildcard does not constrain — no language argument makes the wildcard a
-//     subset, so REJECT.
-//   - a base group composed SOLELY of wildcards (no emitting element declaration)
-//     that reduces LANGUAGE-EXACTLY to a single wildcard with a contiguous
-//     occurrence interval: the derived wildcard restricts that reduced base
-//     wildcard by the ordinary wildcard-vs-wildcard NSSubset rule (occurrence
-//     subset, processContents at least as strong, namespace constraint subset).
-//
-// Anything else — a non-uniform-wildcard base group, a base whose occurrence
-// count-set has a HOLE, or any shape the reduction cannot represent — is REJECTED.
 // strictWildcardAdmitsNoGlobal reports whether a STRICT wildcard resolves NO child at
 // validation time. Strict processContents accepts only an element with a matching
 // GLOBAL element declaration, so a strict wildcard that admits (by namespace/notQName)
@@ -613,7 +562,46 @@ func strictWildcardAdmitsNoGlobal(wc *Wildcard, schema *Schema) bool {
 	return true
 }
 
+// wildcardRestrictsModelGroup decides the §3.9.6 WILDCARD-restricting-MODEL-GROUP
+// case SOUNDLY (fail-closed): it returns true only when it can PROVE
+// L(derived wildcard particle r) ⊆ L(base model group b). §3.9.6 provides no
+// derivation rule for this shape, so an accept is justified only by a language
+// argument.
+//
+// The derived side is a SINGLE uniform wildcard rt with occurrence
+// [r.MinOccurs, r.MaxOccurs]; its language is the set of sequences of any length in
+// that interval whose every child is a name rt admits, each validated at rt's
+// processContents. For the base to be a superset it must, for every such child
+// count k, accept a length-k sequence of ARBITRARY rt-admitted names ("all-wildcard"
+// documents). reduceWildcardOnlyParticle computes the base's ALL-WILDCARD emission
+// profile: a CONTIGUOUS count interval [lo, hi] plus a SET of pc-tagged namespace
+// "cover" branches such that at every emitted position the base can independently
+// admit any name in the union of the covering branches (a choice contributes a set
+// of branches; a required element makes the position "dead" — no all-wildcard
+// document — and an optional element contributes ε). The derived wildcard is a valid
+// restriction iff:
+//
+//   - EMPTY language {}: a derived wildcard whose NAMESPACE constraint admits no name
+//     (namespace="") yet must occur (min>0) is unsatisfiable, so L(derived)=∅ ⊆ every
+//     base.
+//   - {ε} language: a prohibited (maxOccurs=0) or matchesNothing-with-min0 derived
+//     particle matches only ε; {ε} ⊆ L(base) iff the base is emptiable.
+//   - otherwise the base reduces (no dead position, no occurrence HOLE) to
+//     [lo, hi] + cover, the derived occurrence is within [lo, hi], AND rt's admitted
+//     names are covered by the base branches whose processContents is no STRICTER
+//     than rt's (a base branch stricter than rt would reject content rt admits, so
+//     the derived would not be a subset).
+//
+// A STRICT wildcard resolving no globally-declared name (strictWildcardAdmitsNoGlobal)
+// is ALSO empty-language and is DELIBERATELY not treated as such here: it is the common
+// case in a globals-free schema (diverting every strict wildcard away from the sound
+// reduction path), and accepting it over an element group would diverge from the
+// §3.9.6 syntactic reject (W3C particlesHa163). The reduction below decides those cases
+// soundly and conformantly without it. Anything the reduction cannot represent
+// language-exactly — a dead base position, a non-uniform base position, an
+// occurrence-count HOLE — is REJECTED.
 func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema) bool {
+	_ = bt // base model group reached via b.Term; kept for call-site symmetry
 	matchesNothing := wildcardMatchesNothing(rt)
 	switch {
 	case matchesNothing && r.MinOccurs > 0:
@@ -621,49 +609,52 @@ func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *Mod
 	case r.MaxOccurs == 0 || matchesNothing:
 		return particleEmptiable(b)
 	}
-	// An emitting derived wildcard against a base group of element declarations has
-	// no language argument: reject.
-	if modelGroupContainsElementDecl(bt) {
-		return false
-	}
-	// The base is a pure-wildcard group. Reduce it LANGUAGE-EXACTLY to a single
-	// wildcard particle if possible; otherwise fail-closed. A successful reduction
-	// yields a uniform wildcard constraint and a CONTIGUOUS occurrence interval, so
-	// the derived wildcard is a valid restriction iff it NSSubset-restricts it.
+	// Reduce the base to its ALL-WILDCARD emission profile. A dead base (a required
+	// element on every path) has no all-wildcard document, so an emitting derived
+	// wildcard cannot be a subset; a non-representable shape fails closed.
 	red, ok := reduceWildcardOnlyParticle(b)
-	if !ok || red.wc == nil {
+	if !ok || red.dead || len(red.cover) == 0 {
 		return false
 	}
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, red.lo, red.hi) {
 		return false
 	}
-	if processContentsStrength(rt.ProcessContents) < processContentsStrength(red.wc.ProcessContents) {
-		return false
-	}
-	return wildcardConstraintSubset(rt, red.wc, schema, false)
+	return coverAdmitsWildcard(red.cover, rt, schema)
 }
 
-// wildcardOnlyReduction is the LANGUAGE-EXACT reduction of a pure-wildcard
-// particle to a single wildcard: a uniform wildcard constraint (wc) plus a
-// CONTIGUOUS occurrence-count interval [lo, hi] (hi == -1 means unbounded). wc is
-// nil when the reduced language is ε-only (the particle emits no names).
+// coverBranch is one pc-tagged namespace contribution of a base group's
+// all-wildcard emission: at a position governed by this branch the base admits any
+// name in con, validated at pc. wc is the source wildcard, retained so the
+// single-branch coverage check can use the full notQName/##defined-aware subset.
+type coverBranch struct {
+	wc  *Wildcard
+	con wcConstraint
+	pc  ProcessContentsKind
+}
+
+// wildcardOnlyReduction is the ALL-WILDCARD emission profile of a base particle: a
+// CONTIGUOUS occurrence-count interval [lo, hi] (hi == -1 means unbounded) plus the
+// SET of cover branches admissible at each emitted position. An empty cover with
+// [0,0] is the ε-only reduction (the particle emits no wildcard children). dead=true
+// marks a particle with NO all-wildcard document (a required element declaration on
+// every path); the caller rejects an emitting derived wildcard against it.
 type wildcardOnlyReduction struct {
-	wc     *Wildcard
+	dead   bool
+	cover  []coverBranch
 	lo, hi int
 }
 
-// reduceWildcardOnlyParticle reduces a particle whose emitting content is composed
-// SOLELY of wildcards (element declarations must already be excluded by the
-// caller) to a single equivalent wildcard with a contiguous occurrence interval.
-// It is SOUND and fail-closed: it returns ok=false whenever it cannot PROVE the
-// reduction is language-exact — a non-uniform wildcard constraint across positions,
-// or an occurrence combination that would introduce a count HOLE. A successful
-// reduction means L(particle) == L(wc){lo,hi} exactly (or the empty string when
-// wc is nil).
+// reduceWildcardOnlyParticle computes the all-wildcard emission profile of a base
+// particle. It is SOUND and fail-closed: it returns ok=false whenever it cannot
+// PROVE the profile is language-exact (a non-uniform position, or an occurrence
+// combination that would introduce a count HOLE). An element declaration is handled
+// rather than excluded: an emptiable (minOccurs=0) element contributes ε (an
+// all-wildcard document emits zero of it), while a required (minOccurs>=1) element
+// makes the position dead.
 func reduceWildcardOnlyParticle(p *Particle) (wildcardOnlyReduction, bool) {
 	if particleEmitsNothing(p) {
 		// A prohibited/non-emitting particle contributes only the empty string.
-		return wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}, true
+		return wildcardOnlyReduction{lo: 0, hi: 0}, true
 	}
 	switch t := p.Term.(type) {
 	case *Wildcard:
@@ -672,79 +663,123 @@ func reduceWildcardOnlyParticle(p *Particle) (wildcardOnlyReduction, bool) {
 			// before reduction, so bail conservatively here.
 			return wildcardOnlyReduction{}, false
 		}
-		// A single wildcard leaf emits [min, max] of itself — a contiguous interval.
-		return wildcardOnlyReduction{wc: t, lo: p.MinOccurs, hi: p.MaxOccurs}, true
+		return wildcardOnlyReduction{
+			cover: []coverBranch{{wc: t, con: wildcardConstraint(t), pc: t.ProcessContents}},
+			lo:    p.MinOccurs,
+			hi:    p.MaxOccurs,
+		}, true
+	case *ElementDecl:
+		if p.MinOccurs == 0 {
+			// An optional element: an all-wildcard document emits zero of it (ε).
+			return wildcardOnlyReduction{lo: 0, hi: 0}, true
+		}
+		// A required element: every document through this position carries it, so
+		// there is no all-wildcard document here.
+		return wildcardOnlyReduction{dead: true}, true
 	case *ModelGroup:
 		body, ok := reduceWildcardOnlyGroupBody(t)
 		if !ok {
 			return wildcardOnlyReduction{}, false
+		}
+		if body.dead {
+			// An optional group over a dead body can be skipped entirely (ε); a
+			// required group forces the dead body, so the position stays dead.
+			if p.MinOccurs == 0 {
+				return wildcardOnlyReduction{lo: 0, hi: 0}, true
+			}
+			return wildcardOnlyReduction{dead: true}, true
 		}
 		return applyOccReduction(body, p.MinOccurs, p.MaxOccurs)
 	}
 	return wildcardOnlyReduction{}, false
 }
 
-// reduceWildcardOnlyGroupBody combines a pure-wildcard model group's members into
-// one reduction (BEFORE the group's own occurrence is applied): a sequence/all
-// SUMS member intervals, a choice UNIONS them. A uniform wildcard constraint must
-// hold across every emitting member; a choice whose member intervals do not form a
-// contiguous union bails.
+// reduceWildcardOnlyGroupBody combines a model group's members into one all-wildcard
+// profile (BEFORE the group's own occurrence is applied): a sequence/all SUMS member
+// profiles (all members contribute at distinct positions, so they must share one
+// cover); a choice UNIONS the profiles of its non-dead branches. A sequence with a
+// dead member is dead; a choice all of whose branches are dead is dead.
 func reduceWildcardOnlyGroupBody(g *ModelGroup) (wildcardOnlyReduction, bool) {
 	if g.Compositor == CompositorChoice {
-		acc := wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}
-		first := true
+		acc := wildcardOnlyReduction{}
+		hasLive := false
 		for _, child := range g.Particles {
 			m, ok := reduceWildcardOnlyParticle(child)
 			if !ok {
 				return wildcardOnlyReduction{}, false
 			}
-			if first {
-				acc = m
-				first = false
+			if m.dead {
+				// A choice can avoid a dead branch, so it is excluded from the
+				// all-wildcard union rather than killing the whole choice.
 				continue
 			}
-			wc, ok := choiceMergeWildcardConstraint(acc, m)
+			if !hasLive {
+				acc = m
+				hasLive = true
+				continue
+			}
+			merged, ok := unionReduction(acc, m)
 			if !ok {
 				return wildcardOnlyReduction{}, false
 			}
-			lo, hi, ok := unionInterval(acc.lo, acc.hi, m.lo, m.hi)
-			if !ok {
-				return wildcardOnlyReduction{}, false
-			}
-			acc = wildcardOnlyReduction{wc: wc, lo: lo, hi: hi}
+			acc = merged
+		}
+		if !hasLive {
+			return wildcardOnlyReduction{dead: true}, true
 		}
 		return acc, true
 	}
 	// sequence / all: SUM member intervals (a Minkowski sum of contiguous integer
 	// intervals stays contiguous, so no gap can arise here).
-	acc := wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}
+	acc := wildcardOnlyReduction{lo: 0, hi: 0}
 	for _, child := range g.Particles {
 		m, ok := reduceWildcardOnlyParticle(child)
 		if !ok {
 			return wildcardOnlyReduction{}, false
 		}
-		wc, ok := mergeWildcardConstraint(acc.wc, m.wc)
+		if m.dead {
+			// A required member of a sequence/all forces an element at every
+			// document, so no all-wildcard document exists.
+			return wildcardOnlyReduction{dead: true}, true
+		}
+		cover, ok := mergeSequenceCovers(acc.cover, m.cover)
 		if !ok {
 			return wildcardOnlyReduction{}, false
 		}
-		acc = wildcardOnlyReduction{wc: wc, lo: acc.lo + m.lo, hi: addOccursMax(acc.hi, m.hi)}
+		acc = wildcardOnlyReduction{cover: cover, lo: acc.lo + m.lo, hi: addOccursMax(acc.hi, m.hi)}
 	}
 	return acc, true
+}
+
+// unionReduction unions two CHOICE-branch profiles (each already non-dead). The
+// count intervals union (contiguously, else bail); the covers combine via
+// unionCovers, which enforces the per-position uniformity soundness guard.
+func unionReduction(a, b wildcardOnlyReduction) (wildcardOnlyReduction, bool) {
+	cover, ok := unionCovers(a, b)
+	if !ok {
+		return wildcardOnlyReduction{}, false
+	}
+	lo, hi, ok := unionInterval(a.lo, a.hi, b.lo, b.hi)
+	if !ok {
+		return wildcardOnlyReduction{}, false
+	}
+	return wildcardOnlyReduction{cover: cover, lo: lo, hi: hi}, true
 }
 
 // applyOccReduction folds a group's own occurrence [gmin, gmax] over an already
 // contiguous body reduction. It preserves language-exactness only when the result
 // stays a CONTIGUOUS interval; a folding that would introduce a HOLE (e.g. a body
-// that emits exactly 2 repeated 1..∞ times → {2,4,6,…}) bails.
+// that emits exactly 2 repeated 1..∞ times → {2,4,6,…}) bails. The cover is
+// position-uniform, so repeating the body does not change it.
 func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnlyReduction, bool) {
-	if gmax == 0 || body.wc == nil {
+	if gmax == 0 || len(body.cover) == 0 {
 		// Prohibited group, or an ε-only body: emits only the empty string.
-		return wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}, true
+		return wildcardOnlyReduction{lo: 0, hi: 0}, true
 	}
 	switch {
 	case gmin == gmax:
 		// A fixed number of copies of a contiguous body stays contiguous.
-		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: mulOccurs(gmin, body.hi)}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: mulOccurs(gmin, body.hi)}, true
 	case body.hi == -1:
 		// Each copy already spans to ∞. With gmin >= 1 the smallest copy count
 		// reaches [gmin*lo, ∞) and every larger count is a subset, so the union is
@@ -756,10 +791,10 @@ func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnly
 		if gmin == 0 && body.lo > 1 {
 			return wildcardOnlyReduction{}, false
 		}
-		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: -1}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: -1}, true
 	case body.lo == 0:
 		// Every copy count includes 0, so the union is [0, gmax*hi] — contiguous.
-		return wildcardOnlyReduction{wc: body.wc, lo: 0, hi: mulOccurs(gmax, body.hi)}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: 0, hi: mulOccurs(gmax, body.hi)}, true
 	default:
 		// body.lo >= 1, finite body.hi, gmin < gmax. The union of consecutive copy
 		// intervals [k*lo, k*hi] is gap-free iff each abuts the next:
@@ -768,7 +803,7 @@ func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnly
 		if gmin*body.hi+1 < (gmin+1)*body.lo {
 			return wildcardOnlyReduction{}, false
 		}
-		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: mulOccurs(gmax, body.hi)}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: mulOccurs(gmax, body.hi)}, true
 	}
 }
 
@@ -797,96 +832,174 @@ func unionInterval(alo, ahi, blo, bhi int) (int, int, bool) {
 	return alo, max(ahi, bhi), true
 }
 
-// choiceMergeWildcardConstraint combines the reduced wildcard of one CHOICE branch
-// (m) into the accumulated reduction of the earlier branches (acc). A choice picks
-// exactly ONE branch, so its language is the UNION of the branches' languages —
-// unlike a sequence/all (mergeWildcardConstraint), whose members all contribute and
-// therefore must share one constraint. Branches with the SAME constraint keep it
-// (any occurrence interval is fine: every emitted child is in that one namespace).
-// Branches with DIFFERENT constraints may be folded into ONE wildcard only when the
-// union is LANGUAGE-EXACT: each side emits AT MOST ONE child (hi in {0,1}) so the
-// choice can never emit a namespace MIX (e.g. one urn:a AND one urn:b) that a single
-// union wildcard would wrongly admit, AND both carry the SAME processContents (a
-// single wildcard cannot encode per-namespace validation strength). The union is the
-// EXACT wcConstraint union (unionWildcards11), never the lossy 1.0 approximation.
-// Anything else is not representable and fails closed. (The occurrence-interval union
-// itself is handled by the caller via unionInterval.)
-func choiceMergeWildcardConstraint(acc, m wildcardOnlyReduction) (*Wildcard, bool) {
-	switch {
-	case acc.wc == nil:
-		return m.wc, true
-	case m.wc == nil:
-		return acc.wc, true
-	case sameWildcardConstraint(acc.wc, m.wc):
-		return acc.wc, true
-	}
-	if acc.wc.ProcessContents != m.wc.ProcessContents {
-		return nil, false
-	}
-	// A branch (or the accumulated union of earlier branches) that can emit more than
-	// one child makes a same-count namespace mix expressible in the single union
-	// wildcard but not in the choice — so different-namespace folding is exact only
-	// when every side is at most one child.
-	if acc.hi == -1 || acc.hi > 1 || m.hi == -1 || m.hi > 1 {
-		return nil, false
-	}
-	return unionWildcards11(acc.wc, m.wc), true
-}
-
-// mergeWildcardConstraint combines the uniform wildcard constraint of two
-// reductions: a nil operand adopts the other, and two present constraints must be
-// IDENTICAL (a language-exact single-wildcard fold requires every position to
-// admit the same name-set). Differing constraints bail. Used for sequence/all
-// folds, where every member contributes (a choice UNION would be unsound).
-func mergeWildcardConstraint(a, b *Wildcard) (*Wildcard, bool) {
-	if a == nil {
+// mergeSequenceCovers combines the covers of two SEQUENCE/ALL members. Because the
+// members occupy DIFFERENT positions of the same document, every position must admit
+// the SAME name-set for a single uniform derived wildcard to cover them: an empty
+// (ε) cover adopts the other, otherwise both must be a SINGLE branch over the SAME
+// namespace constraint (the merged branch keeps the STRICTER processContents, since
+// the derived wildcard must satisfy the strictest position it covers). A
+// multi-branch (choice-derived) member inside a sequence with another non-ε member,
+// or two members over different namespaces, is not position-uniform and fails closed.
+func mergeSequenceCovers(a, b []coverBranch) ([]coverBranch, bool) {
+	if len(a) == 0 {
 		return b, true
 	}
-	if b == nil {
+	if len(b) == 0 {
 		return a, true
 	}
-	if sameWildcardConstraint(a, b) {
-		return a, true
+	if len(a) != 1 || len(b) != 1 || !sameConstraint(a[0].con, b[0].con) {
+		return nil, false
 	}
-	return nil, false
+	// A sequence is CONJUNCTIVE — every position of the merged run must hold. Two
+	// members whose namespace matches but whose name-level 1.1 exclusions
+	// (notQName/##defined) differ have DIFFERENT admitted name-sets per position, so
+	// collapsing them to one branch would silently drop an exclusion. Fail closed
+	// unless neither member carries a name-level exclusion (then the shared namespace
+	// constraint fully describes both positions).
+	if coverBranchHasNameFields(a[0]) || coverBranchHasNameFields(b[0]) {
+		return nil, false
+	}
+	stronger := a[0]
+	if processContentsStrength(b[0].pc) > processContentsStrength(a[0].pc) {
+		stronger = b[0]
+	}
+	return []coverBranch{stronger}, true
 }
 
-// sameWildcardConstraint reports whether two wildcards admit exactly the same
-// name-set and validate identically. Equality is ORDER-INDEPENDENT on every
-// list-valued field — the namespace/notNamespace constraint is compared through the
-// shared normalized wcConstraint (which resolves ##any/##other/##local against
-// TargetNS and represents the admitted/excluded namespaces as an unordered set), and
-// the notQName/##definedSibling name lists are compared as SETS — so two wildcards
-// that list the SAME namespaces or QNames in a different lexical order are equal (a
-// provable subset is not lost to a spurious ordering difference). The name-marker
-// flags (##defined/##definedSibling) and processContents must still match exactly.
-func sameWildcardConstraint(a, b *Wildcard) bool {
-	if a.ProcessContents != b.ProcessContents ||
-		a.NotQNameDefined != b.NotQNameDefined ||
-		a.NotQNameDefinedSibling != b.NotQNameDefinedSibling {
-		return false
-	}
-	ca, cb := wildcardConstraint(a), wildcardConstraint(b)
-	if ca.neg != cb.neg || !maps.Equal(ca.set, cb.set) {
-		return false
-	}
-	return sameQNameSet(a.NotQName, b.NotQName) && sameQNameSet(a.SiblingNames, b.SiblingNames)
+// coverBranchHasNameFields reports whether a cover branch's source wildcard carries a
+// NAME-level 1.1 exclusion (notQName / ##defined / ##definedSibling) that the
+// namespace-only wcConstraint does not capture.
+func coverBranchHasNameFields(br coverBranch) bool {
+	return len(br.wc.NotQName) > 0 || br.wc.NotQNameDefined || br.wc.NotQNameDefinedSibling || len(br.wc.SiblingNames) > 0
 }
 
-// sameQNameSet reports whether two QName slices denote the same SET (membership,
-// order- and duplicate-independent). Used by sameWildcardConstraint so a
-// reordered-but-equivalent notQName/##definedSibling list is not treated as a
-// different constraint.
-func sameQNameSet(a, b []QName) bool {
-	as := make(map[QName]struct{}, len(a))
-	for _, q := range a {
-		as[q] = struct{}{}
+// unionCovers combines the covers of two CHOICE branches. A choice picks one branch
+// per document, so its all-wildcard positions may independently be any of the
+// branches' names ONLY when the combination stays position-uniform: if the two
+// covers are IDENTICAL (same (constraint, processContents) branches) the union is
+// themselves at any occurrence; otherwise the profiles differ per branch, so each
+// side must emit AT MOST ONE child (hi in {0,1}) — a multi-child run would force a
+// same-branch namespace/pc block that the uniform union wildcard cannot express.
+// The result is the deduplicated union of the branch sets, preserving each branch's
+// own processContents (the choice offers ALL of them at each position).
+func unionCovers(a, b wildcardOnlyReduction) ([]coverBranch, bool) {
+	if len(a.cover) == 0 {
+		return b.cover, true
 	}
-	bs := make(map[QName]struct{}, len(b))
-	for _, q := range b {
-		bs[q] = struct{}{}
+	if len(b.cover) == 0 {
+		return a.cover, true
 	}
-	return maps.Equal(as, bs)
+	if !coversIdentical(a.cover, b.cover) {
+		if a.hi == -1 || a.hi > 1 || b.hi == -1 || b.hi > 1 {
+			return nil, false
+		}
+	}
+	out := append([]coverBranch(nil), a.cover...)
+	for _, y := range b.cover {
+		dup := false
+		for _, x := range out {
+			if x.pc == y.pc && sameConstraint(x.con, y.con) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, y)
+		}
+	}
+	return out, true
+}
+
+// coversIdentical reports whether two covers describe the SAME set of
+// (namespace-constraint, processContents) branches, order-independently.
+func coversIdentical(a, b []coverBranch) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	used := make([]bool, len(b))
+	for _, x := range a {
+		found := false
+		for j, y := range b {
+			if !used[j] && x.pc == y.pc && sameConstraint(x.con, y.con) {
+				used[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// coverAdmitsWildcard reports whether the derived wildcard rt's language is covered
+// by a base all-wildcard cover: rt's admitted names must all fall in the union of
+// the cover branches whose processContents is NO STRICTER than rt's (a stricter base
+// branch would reject content rt admits at that name, so the derived would not be a
+// subset). A single covering branch uses the full notQName/##defined-aware wildcard
+// subset; multiple covering branches fall back to the namespace-constraint union and
+// fail closed if any carries a name-level 1.1 exclusion (which the union cannot
+// represent soundly). rt's own name-level exclusions only NARROW it, so ignoring
+// them there stays conservative.
+func coverAdmitsWildcard(cover []coverBranch, rt *Wildcard, schema *Schema) bool {
+	wStrength := processContentsStrength(rt.ProcessContents)
+	var covering []coverBranch
+	for _, br := range cover {
+		if processContentsStrength(br.pc) <= wStrength {
+			covering = append(covering, br)
+		}
+	}
+	if len(covering) == 0 {
+		return false
+	}
+	if len(covering) == 1 {
+		return wildcardConstraintSubset(rt, covering[0].wc, schema, false)
+	}
+	union := wcConstraint{set: map[string]struct{}{}}
+	for _, br := range covering {
+		if coverBranchHasNameFields(br) {
+			return false
+		}
+		union = constraintUnion(union, br.con)
+	}
+	return constraintSubset(wildcardConstraint(rt), union)
+}
+
+// sameConstraint reports whether two normalized namespace constraints admit exactly
+// the same set of namespaces.
+func sameConstraint(a, b wcConstraint) bool {
+	return a.neg == b.neg && maps.Equal(a.set, b.set)
+}
+
+// constraintSubset reports whether every namespace sub admits is also admitted by
+// super (a pure namespace-set subset, ignoring name-level exclusions).
+func constraintSubset(sub, super wcConstraint) bool {
+	switch {
+	case !super.neg && sub.neg:
+		return false
+	case !super.neg && !sub.neg:
+		for ns := range sub.set {
+			if _, ok := super.set[ns]; !ok {
+				return false
+			}
+		}
+		return true
+	case super.neg && !sub.neg:
+		for ns := range sub.set {
+			if _, ok := super.set[ns]; ok {
+				return false
+			}
+		}
+		return true
+	default: // both negated
+		for ns := range super.set {
+			if _, ok := sub.set[ns]; !ok {
+				return false
+			}
+		}
+		return true
+	}
 }
 
 // pointlessReduce folds a §3.9.6-POINTLESS model-group particle down to its

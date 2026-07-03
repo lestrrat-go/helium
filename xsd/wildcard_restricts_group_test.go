@@ -689,3 +689,197 @@ func TestWildcardRestrictsGroupNamespaceListOrder(t *testing.T) {
 		}
 	}
 }
+
+// FINDING 3 (round 4) — the wildcard-restricts-model-group proof is BRANCH-AWARE. A
+// base xs:choice with an ELEMENT branch alongside a WILDCARD branch is not a "group of
+// element declarations" that blanket-rejects an emitting derived wildcard: the choice
+// admits either <a> OR a urn:x child, so a derived wildcard confined to the WILDCARD
+// branch's language (any urn:x skip) is a valid subset — the base wildcard branch
+// governs those children. The element branch contributes nothing the derived wildcard
+// must produce. A derived wildcard broader than the covering branch (any ##any) admits
+// names — e.g. <c> — that neither the element branch nor the wildcard branch accepts,
+// so it is NOT a subset and stays rejected. Version-INDEPENDENT.
+func TestWildcardRestrictsChoiceWithElementBranch(t *testing.T) {
+	t.Parallel()
+
+	mk := func(derivedAny string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:any namespace="urn:x" processContents="skip"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>` + derivedAny + `</xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+	}
+
+	tests := []struct {
+		name       string
+		derivedAny string
+		wantErr    bool
+		reason     string
+	}{
+		{
+			name:       "confined-to-wildcard-branch accepts",
+			derivedAny: `<xs:any namespace="urn:x" processContents="skip"/>`,
+			wantErr:    false,
+			reason:     "the derived wildcard is confined to the base wildcard branch's language — a subset",
+		},
+		{
+			name:       "broader-than-branch rejects",
+			derivedAny: `<xs:any namespace="##any" processContents="skip"/>`,
+			wantErr:    true,
+			reason:     "the derived ##any admits names neither the element nor the wildcard branch accepts — not a subset",
+		},
+	}
+
+	for _, tc := range tests {
+		for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			t.Run(tc.name+"/"+versionName(ver), func(t *testing.T) {
+				t.Parallel()
+				schema, _, cerr := compileWith(t, ver, mk(tc.derivedAny))
+				if tc.wantErr {
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, tc.reason)
+					require.Nil(t, schema)
+					return
+				}
+				require.NoError(t, cerr, tc.reason)
+				require.NotNil(t, schema)
+			})
+		}
+	}
+}
+
+// FINDING 4 (round 4) — a base xs:choice of HETEROGENEOUS-processContents wildcard
+// branches must NOT be forced into one reduced wildcard. choice(any urn:a strict, any
+// urn:b skip) is a set of two pc-tagged branches. A derived any urn:b skip is governed
+// by the skip branch (skip >= skip), so it is a valid subset even though the two
+// branches cannot fold to a single wildcard (different pc). A derived any urn:a skip,
+// however, is governed by the base's STRICT urn:a branch — skip is weaker, so the
+// derived admits urn:a content the base strict branch rejects → NOT a subset, rejected.
+// The branch-set coverage keys on "base branch no stricter than the derived".
+// Version-INDEPENDENT.
+func TestWildcardRestrictsChoiceHeterogeneousPC(t *testing.T) {
+	t.Parallel()
+
+	mk := func(derivedAny string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:any namespace="urn:a" processContents="strict"/>
+        <xs:any namespace="urn:b" processContents="skip"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>` + derivedAny + `</xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+	}
+
+	tests := []struct {
+		name       string
+		derivedAny string
+		wantErr    bool
+		reason     string
+	}{
+		{
+			name:       "skip-branch-covered accepts",
+			derivedAny: `<xs:any namespace="urn:b" processContents="skip"/>`,
+			wantErr:    false,
+			reason:     "the derived urn:b skip is covered by the base skip branch (skip >= skip)",
+		},
+		{
+			name:       "weaker-than-strict-branch rejects",
+			derivedAny: `<xs:any namespace="urn:a" processContents="skip"/>`,
+			wantErr:    true,
+			reason:     "the derived urn:a skip admits content the base's STRICT urn:a branch rejects — not a subset",
+		},
+	}
+
+	for _, tc := range tests {
+		for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			t.Run(tc.name+"/"+versionName(ver), func(t *testing.T) {
+				t.Parallel()
+				schema, _, cerr := compileWith(t, ver, mk(tc.derivedAny))
+				if tc.wantErr {
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, tc.reason)
+					require.Nil(t, schema)
+					return
+				}
+				require.NoError(t, cerr, tc.reason)
+				require.NotNil(t, schema)
+			})
+		}
+	}
+}
+
+// FINDING 1 (round 4) — the §3.4.6.4 quadrant-B exemption must be OCCURRENCE-CAPACITY
+// aware. When a derived declared wildcard maps to a base declared wildcard (quadrant D)
+// only UP TO that base wildcard's occurrence capacity, the EXCESS spills into the base
+// OPEN content and must satisfy the open-content restriction (namespace/processContents).
+// Here the base wraps a declared `any urn:x skip maxOccurs=1` in an emptiable group (so
+// the derived wildcard maps to the base MODEL GROUP and the content-model check delegates
+// to quadrant B) plus INTERLEAVE open content over `urn:x STRICT`; the derived declares
+// `any urn:x skip maxOccurs=unbounded`. The first urn:x child is covered by the base
+// declared wildcard, but every further one spills into the base's STRICT open content —
+// which the derived's SKIP does not enforce, so the base rejects invalid urn:x content
+// the derived accepts. A capacity-blind exemption compiles this unsoundly; the
+// capacity-aware exemption rejects it. When the base declared wildcard's capacity is
+// UNBOUNDED (covers the derived), no child spills and the restriction is a valid subset.
+func TestWildcardRestrictsGroupOpenContentCapacity(t *testing.T) {
+	t.Parallel()
+
+	mk := func(baseMax string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x" xmlns:t="urn:x">
+  <xs:complexType name="base">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:x" processContents="strict"/></xs:openContent>
+    <xs:sequence>
+      <xs:sequence minOccurs="0">
+        <xs:any namespace="urn:x" processContents="skip" minOccurs="0" maxOccurs="` + baseMax + `"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:openContent mode="interleave"><xs:any namespace="urn:x" processContents="strict"/></xs:openContent>
+        <xs:sequence>
+          <xs:any namespace="urn:x" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+	}
+
+	t.Run("excess-spills-to-strict-open rejects", func(t *testing.T) {
+		t.Parallel()
+		schema, _, cerr := compileWith(t, xsd.Version11, mk("1"))
+		require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+			"the derived skip wildcard's excess beyond the base declared max spills into the base's STRICT open content, escaping validation")
+		require.Nil(t, schema)
+	})
+
+	t.Run("base-capacity-covers-derived accepts", func(t *testing.T) {
+		t.Parallel()
+		schema, _, cerr := compileWith(t, xsd.Version11, mk("unbounded"))
+		require.NoError(t, cerr,
+			"an unbounded base declared wildcard covers the derived, so no child spills into open content — a valid restriction")
+		require.NotNil(t, schema)
+	})
+}

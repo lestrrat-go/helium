@@ -201,17 +201,23 @@ func (c *compiler) checkDerivedWildcardReadmitsBaseOpen(ctx context.Context, td 
 		if !constraintsIntersect(wildcardConstraint(dw.wc), openCon) {
 			continue // the derived declared wildcard does not touch the base open content's namespace
 		}
-		// Exempt a derived declared wildcard that validly RESTRICTS a base DECLARED
-		// wildcard — that interaction is quadrant D (restriction_particle.go).
-		exempt := false
+		// A derived declared wildcard that validly RESTRICTS a base DECLARED wildcard is
+		// quadrant D (restriction_particle.go) up to that base wildcard's OCCURRENCE
+		// CAPACITY. Attribution goes to the declared wildcards first, and the EXCESS
+		// beyond the aggregate base declared-wildcard capacity spills into the base OPEN
+		// content — so exempt dw ONLY when its whole capacity fits: sum the effMax of the
+		// base declared wildcards dw validly restricts (namespace subset, processContents
+		// at least as strong), and require that aggregate to COVER dw's effMax. When the
+		// derived capacity exceeds it, dw touches the base open content and must satisfy
+		// the open-content restriction below (namespace/pc/order), not be blanket-exempt.
+		baseDeclCap := 0
 		for _, bw := range baseWCs {
 			if wildcardConstraintSubset(dw.wc, bw.wc, c.schema, false) &&
 				processContentsStrength(dw.wc.ProcessContents) >= processContentsStrength(bw.wc.ProcessContents) {
-				exempt = true
-				break
+				baseDeclCap = maxOccursAdd(baseDeclCap, bw.effMax)
 			}
 		}
-		if exempt {
+		if occursCovers(baseDeclCap, dw.effMax) {
 			continue
 		}
 		// The derived declared wildcard re-admits the base OPEN content's language.
