@@ -1541,6 +1541,9 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 // intermediate-type blocks; xsi:type and CTA use typeDerivationBlocked directly (they
 // key on the selected/base type's block, not every intermediate's).
 func substTypeDerivationBlocked(derived, base *TypeDef, elemBlock BlockFlags) bool {
+	if derived == nil || base == nil {
+		return false
+	}
 	if typeDerivationBlocked(derived, base, elemBlock) {
 		return true
 	}
