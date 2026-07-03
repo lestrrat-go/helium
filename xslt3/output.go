@@ -586,49 +586,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		}
 	}
 
-	// SERE0006: a character in the result tree that is not valid in the output
-	// XML version. Only the XML/XHTML methods emit an XML declaration; the XML
-	// 1.0 Char production forbids the C0/C1 control characters that XML 1.1
-	// permits as character references, so serializing such content as XML 1.0
-	// (the default when version is unset or "1.0") is a serialization error.
-	if (method == methodXML || method == methodXHTML) && outDef.Version != "1.1" {
-		if err := checkXML10Chars(doc); err != nil {
-			return err
-		}
-	}
-
 	return nil
-}
-
-// checkXML10Chars reports a SERE0006 serialization error when the result tree
-// contains character data that is a valid XML 1.1 character but not a valid
-// XML 1.0 character (the C0/C1 control characters other than tab, LF and CR).
-func checkXML10Chars(doc *helium.Document) error {
-	var firstErr error
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() != helium.TextNode && n.Type() != helium.CDATASectionNode {
-			return nil
-		}
-		for _, r := range string(n.Content()) {
-			if !isXML10Char(r) {
-				firstErr = dynamicError(errCodeSERE0006,
-					"character U+%04X is not valid in XML 1.0 output", r)
-				return firstErr
-			}
-		}
-		return nil
-	}))
-	return firstErr
-}
-
-// isXML10Char implements the XML 1.0 Char production:
-//
-//	Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-func isXML10Char(r rune) bool {
-	return r == 0x9 || r == 0xA || r == 0xD ||
-		(r >= 0x20 && r <= 0xD7FF) ||
-		(r >= 0xE000 && r <= 0xFFFD) ||
-		(r >= 0x10000 && r <= 0x10FFFF)
 }
 
 // countRootElements counts the number of element children of the document root.

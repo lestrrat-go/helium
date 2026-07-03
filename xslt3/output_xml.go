@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"errors"
 	"io"
 	"strings"
 
@@ -45,7 +46,10 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 			return err
 		}
 	}
-	writer := helium.NewWriter().EscapeNonASCII(false)
+	// This path only handles XML 1.0-family output (needsXML11 is false above),
+	// so a character invalid in XML 1.0 is a SERE0006 serialization error. The
+	// check is folded into the writer's existing escape pass (no extra traversal).
+	writer := helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(true)
 	if outDef.Indent {
 		writer = writer.Format(true)
 	}
@@ -59,7 +63,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if needStandalone || needStripNewline {
 		var buf strings.Builder
 		if err := writer.WriteTo(&buf, doc); err != nil {
-			return err
+			return xmlInvalidCharError(err)
 		}
 		out := buf.String()
 		if needStandalone {
@@ -73,7 +77,17 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 		_, err := io.WriteString(w, out)
 		return err
 	}
-	return writer.WriteTo(w, doc)
+	return xmlInvalidCharError(writer.WriteTo(w, doc))
+}
+
+// xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the
+// XSLT serialization error SERE0006, passing every other error (and nil)
+// through unchanged.
+func xmlInvalidCharError(err error) error {
+	if err != nil && errors.Is(err, helium.ErrInvalidXMLChar) {
+		return dynamicError(errCodeSERE0006, "%s", err.Error())
+	}
+	return err
 }
 
 // injectStandalone inserts standalone="yes" or standalone="no" into the

@@ -38,13 +38,14 @@ const xmlTextNoEnc = "textnoenc"
 // escapeNonASCII flag, XHTML detection) lives in a writeSession created
 // inside each terminal method.
 type Writer struct {
-	format            bool
-	indentString      string
-	skipDTD           bool
-	noEmpty           bool
-	noDecl            bool
-	noEscapeNonASCII  bool
-	allowPrefixUndecl bool // emit xmlns:prefix="" undeclarations (XML 1.1)
+	format             bool
+	indentString       string
+	skipDTD            bool
+	noEmpty            bool
+	noDecl             bool
+	noEscapeNonASCII   bool
+	allowPrefixUndecl  bool // emit xmlns:prefix="" undeclarations (XML 1.1)
+	rejectInvalidChars bool // error (SERE0006) instead of replacing XML-invalid chars
 }
 
 // writeSession holds the mutable state for a single serialization pass.
@@ -226,6 +227,17 @@ func (w Writer) EscapeNonASCII(v bool) Writer {
 // may be emitted.
 func (w Writer) AllowPrefixUndeclarations(v bool) Writer {
 	w.allowPrefixUndecl = v
+	return w
+}
+
+// RejectInvalidChars controls how the writer handles a character that is not
+// valid in the target XML version (e.g. a C0/C1 control character in XML 1.0
+// output). When false (the default) such a character is replaced with U+FFFD;
+// when true the write fails with ErrInvalidXMLChar (the XSLT/XQuery
+// serialization error SERE0006). This detection is folded into the existing
+// text/attribute escaping pass, so it adds no extra traversal.
+func (w Writer) RejectInvalidChars(v bool) Writer {
+	w.rejectInvalidChars = v
 	return w
 }
 
@@ -444,7 +456,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				return err
 			}
 		} else {
-			if err := escapeText(out, c, false, d.escapeNonASCII); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars); err != nil {
 				return err
 			}
 		}
@@ -553,7 +565,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII); err != nil {
+					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars); err != nil {
 						return err
 					}
 				} else {
