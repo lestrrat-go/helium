@@ -362,11 +362,20 @@ func resolveLexicalQName(value string, ns map[string]string) (QName, error) {
 // base64Binary as len*3/4, whereas relaxng strict-decodes the binary value (and
 // also handles list types). They are kept separate because adopting the strict
 // variant here would change xsd's golden-validated facet error output.
-func facetLength(value, builtinLocal string) int {
+func facetLength(val, builtinLocal string) int {
 	switch builtinLocal {
+	case typeIDRefs, typeEntities, typeNMTokens:
+		// The built-in LIST datatypes: length/minLength/maxLength count the number
+		// of whitespace-separated LIST ITEMS (XSD Part 2 §3.16 / cvc-length), not
+		// characters. An empty value has zero items. value.XSDFields splits on XSD
+		// whitespace only (space/tab/CR/LF), matching validateListValue.
+		if val == "" {
+			return 0
+		}
+		return len(value.XSDFields(val))
 	case "hexBinary":
 		// Length in octets (bytes) = len(hexString) / 2.
-		return len(value) / 2
+		return len(val) / 2
 	case "base64Binary":
 		// Length in octets — simplified.
 		s := strings.Map(func(r rune) rune {
@@ -374,11 +383,11 @@ func facetLength(value, builtinLocal string) int {
 				return -1
 			}
 			return r
-		}, value)
+		}, val)
 		s = strings.TrimRight(s, "=")
 		return len(s) * 3 / 4
 	default:
 		// String types: length in characters.
-		return len([]rune(value))
+		return len([]rune(val))
 	}
 }
