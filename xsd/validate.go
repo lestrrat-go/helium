@@ -949,6 +949,19 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 	vc.edcType = td
 	defer func() { vc.edcType = prevEDC }()
 
+	// cvc-elt.5.2.2: a FIXED value constraint on an element whose content type is
+	// MIXED forbids element children (5.2.2.1) and requires the ·initial value·
+	// (the concatenation of the element's direct character-data children, element
+	// descendants removed) to equal the fixed value as a string (5.2.2.2.2). This
+	// is a string comparison, not a typed value-space comparison. An empty element
+	// (no element and no character children) is clause 5.1 — the fixed value is
+	// assigned as the element's value — so it is left valid. Version-independent.
+	if td.ContentType == ContentTypeMixed && edecl != nil && edecl.Fixed != nil {
+		if err := vc.validateMixedFixed(ctx, elem, edecl); err != nil {
+			return err
+		}
+	}
+
 	switch td.ContentType {
 	case ContentTypeEmpty:
 		// XSD 1.1 §3.4.2.3.3: an empty explicit content type plus effective open
@@ -1020,6 +1033,37 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 			return vc.validateContentModelOpen(ctx, elem, td.ContentModel, td.OpenContent)
 		}
 		return vc.validateContentModel(ctx, elem, td.ContentModel)
+	}
+	return nil
+}
+
+// validateMixedFixed enforces cvc-elt.5.2.2 for an element whose content type is
+// MIXED and whose declaration carries a FIXED value constraint. The caller has
+// already checked that edecl.Fixed is non-nil. A completely empty element (no
+// element and no character children) is clause 5.1 and is left valid — the fixed
+// value is simply assigned. Otherwise 5.2.2.1 forbids element children and
+// 5.2.2.2.2 requires the initial value (direct character data) to equal the fixed
+// value as a string.
+func (vc *validationContext) validateMixedFixed(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
+	hasElem := hasChildElement(elem)
+	initial := elemTextContent(elem)
+	// Clause 5.1: neither element nor character children — the fixed value is
+	// assigned, so the element is valid.
+	if !hasElem && initial == "" {
+		return nil
+	}
+	// Clause 5.2.2.1: a fixed value constraint forbids element children.
+	if hasElem {
+		msg := fmt.Sprintf("Element children are not allowed because the element declaration has a fixed value constraint '%s'.", *edecl.Fixed)
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return fmt.Errorf("fixed value constraint")
+	}
+	// Clause 5.2.2.2.2: the initial value of a mixed-content element must equal
+	// the fixed value (string comparison of the canonical lexical representation).
+	if initial != *edecl.Fixed {
+		msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", initial, *edecl.Fixed)
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return fmt.Errorf("fixed value constraint")
 	}
 	return nil
 }
