@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"maps"
 	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -198,25 +199,41 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// the only sound option.
 			//
 			// EXCEPTION (XSD 1.1 open content): a child matching the derived declared
-			// wildcard may be governed as the BASE's OPEN content rather than by the
-			// base declared model group — but ONLY when both hold:
+			// wildcard may be governed as the BASE's OPEN content rather than by the base
+			// declared model group — but ONLY when all hold:
 			//   1. the base model group at this position is EMPTIABLE (skippable), so a
 			//      document that drops it entirely and supplies only wildcard-matched
-			//      (open-content) children is still valid against the base; and
+			//      (open-content) children is still valid against the base;
 			//   2. the derived wildcard's namespace is a SUBSET of the base open-content
 			//      wildcard, so every name it admits actually lands in the open-content
 			//      region (a name outside it is admitted by NEITHER the emptiable base
-			//      model nor the open content → not a subset).
-			// When both hold, the §3.4.6.4 quadrant-B guard
+			//      model nor the open content → not a subset); and
+			//   3. the ORDERING the base open content imposes is preserved:
+			//      - INTERLEAVE imposes NO ordering, so an open-content-governed child may
+			//        appear anywhere; a derived declared wildcard at ANY position keeps the
+			//        language a subset — always OK.
+			//      - SUFFIX requires open-content children to TRAIL every declared element,
+			//        but a derived declared wildcard occupies a NON-trailing position in
+			//        this recursion (it is mapped against a base model-group particle, not
+			//        the trailing region), so a child it admits could appear BEFORE required
+			//        declared content the base forces to come first — the suffix ordering is
+			//        not preserved. So a SUFFIX base is delegated only when the derived
+			//        wildcard is PROVEN to admit NOTHING, i.e. a STRICT wildcard resolving no
+			//        globally-declared element (its language is empty, so no non-trailing
+			//        child can arise). Otherwise fail closed. (The ε/∅-NAMESPACE cases are
+			//        decided by wildcardRestrictsModelGroup below.)
+			// When all hold, the §3.4.6.4 quadrant-B guard
 			// (checkDerivedWildcardReadmitsBaseOpen) enforces the remaining soundness —
-			// processContents at least as strong and suffix ordering — so delegate to it
-			// rather than double-reject here. A NON-emptiable base group (its required
-			// content is dropped) or a wildcard reaching outside the base open content is
-			// NOT covered: fall through to the sound wildcardRestrictsModelGroup decision.
+			// processContents at least as strong — so delegate to it rather than
+			// double-reject here. A NON-emptiable base group (its required content is
+			// dropped), a wildcard reaching outside the base open content, or a suffix base
+			// whose derived wildcard can admit a child is NOT covered: fall through to the
+			// sound wildcardRestrictsModelGroup decision.
 			if version == Version11 {
 				if baseOC := baseOpenContentFromContext(ctx); baseOC != nil && baseOC.Wildcard != nil &&
 					particleEmptiable(b) &&
-					wildcardConstraintSubset(rt, baseOC.Wildcard, schema, false) {
+					wildcardConstraintSubset(rt, baseOC.Wildcard, schema, false) &&
+					(baseOC.Mode == OpenContentInterleave || strictWildcardAdmitsNoGlobal(rt, schema)) {
 					return true
 				}
 			}
@@ -576,6 +593,26 @@ func modelGroupContainsElementDecl(g *ModelGroup) bool {
 //
 // Anything else — a non-uniform-wildcard base group, a base whose occurrence
 // count-set has a HOLE, or any shape the reduction cannot represent — is REJECTED.
+// strictWildcardAdmitsNoGlobal reports whether a STRICT wildcard resolves NO child at
+// validation time. Strict processContents accepts only an element with a matching
+// GLOBAL element declaration, so a strict wildcard that admits (by namespace/notQName)
+// no globally-declared element's expanded name matches nothing — its language is empty.
+// Non-strict wildcards (skip/lax) accept unvalidated / laxly-assessed children, so this
+// returns false for them (they can admit a child even with no matching global). Used to
+// let a SUFFIX open-content delegation accept a derived declared wildcard proven to
+// contribute no (non-trailing) child.
+func strictWildcardAdmitsNoGlobal(wc *Wildcard, schema *Schema) bool {
+	if wc.ProcessContents != ProcessStrict {
+		return false
+	}
+	for qn := range schema.elements {
+		if wildcardAllowsExpandedName(wc, qn.Local, qn.NS, schema, false) {
+			return false
+		}
+	}
+	return true
+}
+
 func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema) bool {
 	matchesNothing := wildcardMatchesNothing(rt)
 	switch {
@@ -815,18 +852,41 @@ func mergeWildcardConstraint(a, b *Wildcard) (*Wildcard, bool) {
 }
 
 // sameWildcardConstraint reports whether two wildcards admit exactly the same
-// name-set and validate identically — a CONSERVATIVE structural equality over
-// every namespace/notQName/processContents field (order-sensitive on the list
-// fields, so a reordered-but-equivalent pair conservatively bails).
+// name-set and validate identically. Equality is ORDER-INDEPENDENT on every
+// list-valued field — the namespace/notNamespace constraint is compared through the
+// shared normalized wcConstraint (which resolves ##any/##other/##local against
+// TargetNS and represents the admitted/excluded namespaces as an unordered set), and
+// the notQName/##definedSibling name lists are compared as SETS — so two wildcards
+// that list the SAME namespaces or QNames in a different lexical order are equal (a
+// provable subset is not lost to a spurious ordering difference). The name-marker
+// flags (##defined/##definedSibling) and processContents must still match exactly.
 func sameWildcardConstraint(a, b *Wildcard) bool {
-	return a.Namespace == b.Namespace &&
-		a.ProcessContents == b.ProcessContents &&
-		a.TargetNS == b.TargetNS &&
-		a.NotQNameDefined == b.NotQNameDefined &&
-		a.NotQNameDefinedSibling == b.NotQNameDefinedSibling &&
-		slices.Equal(a.NotNamespace, b.NotNamespace) &&
-		slices.Equal(a.NotQName, b.NotQName) &&
-		slices.Equal(a.SiblingNames, b.SiblingNames)
+	if a.ProcessContents != b.ProcessContents ||
+		a.NotQNameDefined != b.NotQNameDefined ||
+		a.NotQNameDefinedSibling != b.NotQNameDefinedSibling {
+		return false
+	}
+	ca, cb := wildcardConstraint(a), wildcardConstraint(b)
+	if ca.neg != cb.neg || !maps.Equal(ca.set, cb.set) {
+		return false
+	}
+	return sameQNameSet(a.NotQName, b.NotQName) && sameQNameSet(a.SiblingNames, b.SiblingNames)
+}
+
+// sameQNameSet reports whether two QName slices denote the same SET (membership,
+// order- and duplicate-independent). Used by sameWildcardConstraint so a
+// reordered-but-equivalent notQName/##definedSibling list is not treated as a
+// different constraint.
+func sameQNameSet(a, b []QName) bool {
+	as := make(map[QName]struct{}, len(a))
+	for _, q := range a {
+		as[q] = struct{}{}
+	}
+	bs := make(map[QName]struct{}, len(b))
+	for _, q := range b {
+		bs[q] = struct{}{}
+	}
+	return maps.Equal(as, bs)
 }
 
 // pointlessReduce folds a §3.9.6-POINTLESS model-group particle down to its

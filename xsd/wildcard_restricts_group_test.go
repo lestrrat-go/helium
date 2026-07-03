@@ -602,3 +602,90 @@ func TestWildcardRestrictsChoiceUnionRejectsMultiChildBranch(t *testing.T) {
 		})
 	}
 }
+
+// FINDING 1 (round 3) — the XSD 1.1 open-content delegation must be INTERLEAVE-only.
+// Suffix open content requires open-content children to TRAIL every declared element,
+// so a derived declared wildcard placed BEFORE a required declared element cannot be
+// governed by the base's suffix open content. Here the base is
+// choice(a)?, b, any(urn:t)* with SUFFIX open content over urn:t; the derived reorders
+// a urn:t wildcard to the FRONT (any(urn:t), b, any(urn:t)*). The base rejects a urn:t
+// child before b (it must trail b as declared-wildcard/open content), but the derived
+// accepts it — not a language subset. The delegation must NOT accept the front wildcard
+// against the emptiable choice(a)? by leaning on the trailing open content.
+func TestWildcardRestrictsGroupSuffixOpenContentReorder(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="base">
+    <xs:openContent mode="suffix"><xs:any namespace="urn:t" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:choice minOccurs="0">
+        <xs:element name="a" type="xs:string"/>
+      </xs:choice>
+      <xs:element name="b" type="xs:string"/>
+      <xs:any namespace="urn:t" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:openContent mode="suffix"><xs:any namespace="urn:t" processContents="skip"/></xs:openContent>
+        <xs:sequence>
+          <xs:any namespace="urn:t" processContents="skip"/>
+          <xs:element name="b" type="xs:string"/>
+          <xs:any namespace="urn:t" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+		"a derived declared wildcard reordered before a required element cannot be governed by the base's SUFFIX open content, which requires trailing children")
+	require.Nil(t, schema)
+}
+
+// FINDING 2 (round 3) — wildcard-constraint equality must be an ORDER-INDEPENDENT SET
+// comparison. A base pure-wildcard sequence of two wildcards over the SAME namespace
+// set listed in DIFFERENT lexical order (urn:a urn:b, then urn:b urn:a) reduces
+// language-exactly to any({urn:a,urn:b}){2,2}; the derived any(urn:a){2,2} is a
+// provable subset. Comparing the namespace lists lexically would fail the reduction
+// and false-reject the reversed-order base. Version-INDEPENDENT.
+func TestWildcardRestrictsGroupNamespaceListOrder(t *testing.T) {
+	t.Parallel()
+
+	mk := func(secondNS string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:sequence>
+        <xs:any namespace="urn:a urn:b" processContents="skip"/>
+        <xs:any namespace="` + secondNS + `" processContents="skip"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="urn:a" minOccurs="2" maxOccurs="2" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+	}
+
+	for _, secondNS := range []string{"urn:a urn:b", "urn:b urn:a"} {
+		for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			t.Run(secondNS+"/"+versionName(ver), func(t *testing.T) {
+				t.Parallel()
+				schema, _, cerr := compileWith(t, ver, mk(secondNS))
+				require.NoError(t, cerr,
+					"two base wildcards over the same namespace set (any order) reduce to any({urn:a,urn:b}){2,2}; any(urn:a){2,2} is a subset")
+				require.NotNil(t, schema)
+			})
+		}
+	}
+}
