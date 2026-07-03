@@ -580,6 +580,7 @@ type mergeSource struct {
 	SortBeforeMerge bool
 	BaseURI         string // effective base URI for resolving for-each-source URIs
 	Validation      string // validation mode (strict/lax/preserve/strip) for loaded sources
+	TypeName        string // named schema type annotation (e.g., "Q{ns}typeName")
 	Keys            []*mergeKey
 }
 

@@ -848,15 +848,16 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 	if err := c.validateXSLTAttrs(ctx, elem, mergeSourceAllowedAttrs); err != nil {
 		return nil, err
 	}
-	// XTSE0020: the type attribute requires schema-aware type validation
-	// on merge-source items, which is not yet implemented.
-	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
-		return nil, staticError(errCodeXTSE0020, "xsl:merge-source type=%q attribute validation is not supported", typeAttr)
-	}
 	src := &mergeSource{
 		Name:       getAttr(elem, "name"),
 		BaseURI:    stylesheetBaseURI(elem, c.baseURI, c.moduleRoot),
 		Validation: getAttr(elem, "validation"),
+	}
+	// The type attribute names a schema type against which each source
+	// document is validated; the resulting PSVI type annotations flow onto
+	// the selected merge items (mirroring xsl:source-document).
+	if typeName := getAttr(elem, "type"); typeName != "" {
+		src.TypeName = resolveQName(typeName, c.nsBindings)
 	}
 
 	// Parse streamable attribute — must be a valid xs:boolean.
