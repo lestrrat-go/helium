@@ -233,13 +233,35 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 
 # Current status
 
-* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
-* Experimental: W3C XML Digital Signatures 1.1 (`xmldsig1`) and XML Encryption 1.1 (`xmlenc1`). These APIs may change and may move to a separate repository.
-* W3C conformance suites: 21,987 / 22,473 QT3 tests pass for XPath 3.1; 12,343 / 13,127 W3C tests pass for XSLT 3.0 with 0 failures (12,824 with `HELIUM_SLOW_TESTS=1` via the on-demand `.github/workflows/conformance.yml` workflow, which runs +481 performance-gated tests that all pass, still 0 failures; the 784 default skips are performance-gated slow tests, legitimate XSLT 2.0-vs-3.0 divergences where our 3.0 output is correct, optional features, and other out-of-scope cases — none a missing mandatory Basic 3.0 facility); XSD 1.0 (the default) passes 14,082 / 14,399 (97.8%) of the W3C XML Schema Test Suite's schema-validity tests and 24,613 / 25,004 of its instance tests; XSD 1.1 passes the XSD-1.1-tagged portion of the same suite — 1,049 test cases from the IBM, Saxon, Oracle, and W3C-WG collections, 0 failures. Committed evidence (stamped summaries + JUnit) sits beside each package — `xpath3/summary-qt3.md`, `xsd/summary-xsd10.md`, `xsd/summary-xsd11.md`, `xslt3/summary-xslt30.md`, and the matching `results-*.xml`.
-* libxml2-compat golden tests: core XML parsing 100%, XSD 99.6%, RELAX NG 100%, Schematron 100%, C14N 100%, HTML 100%.
-* XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards-compatible processing (XSLT 1.0 semantics + XPath 1.0 compatibility mode, enabled per element when the effective version is below 2.0) is implemented and in scope; only XSLT 1.0/2.0 *syntax* support is out of scope.
-* A `helium` CLI provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
-* Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
+* **Implemented:** XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
+* **Experimental:** W3C XML Digital Signatures 1.1 (`xmldsig1`) and XML Encryption 1.1 (`xmlenc1`) — these APIs may change and may move to a separate repository.
+* **CLI:** the `helium` command provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
+
+Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
+
+## W3C conformance suites
+
+Each row links to the package's README (for scope and details) and its committed, point-in-time evidence (a stamped summary; a matching JUnit `results-*.xml` sits beside it).
+
+| Suite | Result | Package | Evidence |
+|-------|--------|---------|----------|
+| XPath 3.1 (QT3) | 21,987 / 22,473 | [`xpath3`](xpath3/README.md) | [summary](xpath3/summary-qt3.md) |
+| XSLT 3.0 | 12,343 / 13,127 · **0 failures** | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md) |
+| XSD 1.0 — schema validity (default) | 14,082 / 14,399 (97.8%) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
+| XSD 1.0 — instance validity (default) | 24,613 / 25,004 | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
+| XSD 1.1 (opt-in) | 1,049 cases · **0 failures** | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd11.md) |
+
+XSLT 3.0 has **zero failing tests**; every one of the 784 default skips is accounted for — performance-gated slow tests, legitimate XSLT 2.0-vs-3.0 divergences (where our 3.0 output is correct), optional features, and other out-of-scope cases — none a missing mandatory Basic 3.0 facility. Running with `HELIUM_SLOW_TESTS=1` (the on-demand [`conformance.yml`](.github/workflows/conformance.yml) workflow) passes **12,824**, executing +481 performance-gated tests with 0 failures. The XSD 1.1 cases are drawn from the IBM, Saxon, Oracle, and W3C-WG collections.
+
+## libxml2 compatibility (golden tests)
+
+| Core XML | XSD | RELAX NG | Schematron | C14N | HTML |
+|:--------:|:---:|:--------:|:----------:|:----:|:----:|
+| 100% | 99.6% | 100% | 100% | 100% | 100% |
+
+## Scope
+
+XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards-compatible processing (XSLT 1.0 semantics + XPath 1.0 compatibility mode, enabled per element when the effective version is below 2.0) is implemented and in scope; only XSLT 1.0/2.0 *syntax* support is out of scope.
 
 # For coding agents
 
