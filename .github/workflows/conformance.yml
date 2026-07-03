@@ -21,6 +21,10 @@ on:
         description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
         type: boolean
         default: false
+      harness_ref:
+        description: helium-w3c-tests (harness) git ref to pin (commit/tag/branch); use for an audit/release run. Nightly stays on main.
+        type: string
+        default: main
   # Nightly full run of the XSLT 3.0 suite with slow tests enabled.
   schedule:
     - cron: "0 6 * * *"
@@ -36,3 +40,6 @@ jobs:
       # with slow tests on. For a manual run, honor the dispatch inputs.
       suite: ${{ inputs.suite || 'xslt30' }}
       slow: ${{ github.event_name == 'schedule' || inputs.slow || false }}
+      # Nightly/scheduled has no inputs, so this resolves to main; a manual run
+      # may pin an exact harness commit/tag for a reproducible audit run.
+      harness_ref: ${{ inputs.harness_ref || 'main' }}
