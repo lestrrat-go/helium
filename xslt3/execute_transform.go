@@ -89,6 +89,26 @@ func remapSelectionToCopy(sel xpath3.Sequence, src *helium.Document, nodeMap map
 	return items
 }
 
+// dropSelectionItems removes from an initial match selection any NodeItem whose
+// node is in the removed set. It is used after an IN-PLACE whitespace strip of
+// the (already-copied) source: a selected whitespace-only node the strip unlinked
+// must be dropped so it is absent from the selection and does not skew
+// position()/last() in the apply-templates loop. Non-node items and retained
+// nodes pass through unchanged.
+func dropSelectionItems(sel xpath3.Sequence, removed map[helium.Node]struct{}) xpath3.Sequence {
+	items := make(xpath3.ItemSlice, 0, sequence.Len(sel))
+	for i := range sequence.Len(sel) {
+		item := sel.Get(i)
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if _, gone := removed[ni.Node]; gone {
+				continue
+			}
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
 // mapElementAttributes records the correspondence between the attributes of an
 // original element and those of its copy, keyed by expanded (URI, local) name
 // (unique within a single element).
@@ -200,14 +220,16 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		effectiveSource = nil
 	}
 
-	// xsl:strip-space (and the schema-aware whitespace rules) remove whitespace-only
-	// text nodes from the source tree. The source document is owned by the caller,
-	// so it must never be mutated in place: doing so destroys node identity, corrupts
-	// a tree the caller may reuse (e.g. for a later XPath query or a second
-	// transform), and is unsafe under concurrent reuse. Whitespace stripping below
-	// therefore runs against a private deep copy (copyAndStrip), which becomes the
-	// exec context's source so the initial context node and all node identity stay
-	// consistent. The copy is built only when there is stripping work to do.
+	// The caller's source document is owned by the caller and must never be
+	// mutated in place: doing so destroys node identity, corrupts a tree the
+	// caller may reuse (e.g. for a later XPath query or a second transform), and
+	// is unsafe under concurrent reuse. Two operations would otherwise mutate it:
+	// xsl:strip-space / schema-aware whitespace stripping (which removes
+	// whitespace-only text nodes), and source-schema validation (which inserts
+	// default/fixed attributes). Both therefore run against a private deep copy
+	// that becomes the exec context's source, so the initial context node and all
+	// node identity stay consistent. A copy is built only when validation or
+	// stripping actually has work to do.
 	var matchSelection xpath3.Sequence
 	if cfg != nil {
 		matchSelection = cfg.initialMatchSelection
@@ -219,16 +241,6 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// must run against the (empty) selection — producing no output — rather than
 	// falling through to the source document.
 	selectionSupplied := matchSelection != nil
-	// validationSource is the ORIGINAL, un-stripped source. Source-schema
-	// validation runs against it (before any strip copy) for two reasons: a
-	// schema that rejects whitespace-only content must not have its violation
-	// masked by xsl:strip-space, and — more importantly — the schema type
-	// annotations it produces DRIVE the strip decision (XSLT 3.0 §4.4.2: an
-	// element-only content type strips whitespace regardless of xsl:preserve-space,
-	// while simple/mixed content or an assertion-bearing ancestor preserves it
-	// regardless of xsl:strip-space). The strip copy therefore runs AFTER
-	// validation, below, consulting those annotations.
-	validationSource := effectiveSource
 
 	captureItems := cfg != nil && cfg.rawCapture
 	if defOut := ss.outputs[""]; defOut != nil && isItemSerializationMethod(defOut.Method) {
@@ -330,19 +342,47 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		runtimeSchemas = mergeRuntimeSchemas(runtimeSchemas, cfg.sourceSchemas)
 	}
 	sourceValidated := false
+	// sourceCopied records whether effectiveSource has been replaced by a private
+	// deep copy (made for schema validation). When set, the strip block below
+	// strips that copy IN PLACE rather than making a second deep copy.
+	sourceCopied := false
 	if ss.schemaAware || len(runtimeSchemas) > 0 {
 		ec.schemaRegistry = &schemaRegistry{schemas: runtimeSchemas}
 		ec.typeAnnotations = make(map[helium.Node]string)
-		if len(runtimeSchemas) > 0 && validationSource != nil {
-			// Validate the ORIGINAL, un-stripped source so xsl:strip-space cannot
-			// drop whitespace-only nodes (and thus mask schema violations) before
-			// validation, and so the schema type annotations are available to drive
-			// the strip decision below. Annotations key on the original nodes; the
-			// strip block below (if any) remaps them onto the copy the transform runs on.
-			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, validationSource)
+		if len(runtimeSchemas) > 0 && effectiveSource != nil {
+			// Source-schema validation inserts default/fixed attributes into the
+			// tree it validates, so it must never touch the caller's source. Work
+			// on a private, byte-faithful deep copy: validate + annotate + navigate
+			// the copy, leaving the caller's source read-only. The copy reuses
+			// copyAndStrip with no strip rules and no schema classifier (a pure
+			// copy), so the original->copy node map needed to remap an initial-match
+			// selection comes for free; the strip block below strips this SAME copy
+			// in place (no second copy). The type annotations produced by validating
+			// the copy key on the copy's nodes, which is also what drives the
+			// XSLT 3.0 §4.4.2 whitespace-strip decision below.
+			needMap := selectionSupplied && sequence.Len(matchSelection) > 0
+			srcCopy, upfrontMap, copyErr := copyAndStrip(effectiveSource, nil, nil, needMap, nil)
+			if copyErr != nil {
+				return nil, copyErr
+			}
+			// The initial match selection (if any) was computed against the caller's
+			// original tree; remap each selected node onto the copy the transform
+			// navigates. The pure copy omits nothing, so every node has a mapping.
+			if needMap {
+				matchSelection = remapSelectionToCopy(matchSelection, effectiveSource, upfrontMap)
+			}
+			effectiveSource = srcCopy
+			ec.sourceDoc = srcCopy
+			ec.currentNode = srcCopy
+			ec.contextNode = srcCopy
+			sourceCopied = true
+
+			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, effectiveSource)
 			if valErr != nil && ss.defaultValidation == validationStrict {
 				return nil, valErr
 			}
+			// Annotations and nilled flags key on the copy's nodes (validation ran
+			// on the copy), so no remap is needed.
 			for node, typeName := range vr.Annotations {
 				ec.annotateNode(node, typeName)
 			}
@@ -355,17 +395,33 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// xsl:strip-space, plus the schema-aware whitespace rules (XSLT 3.0 §4.4.2),
 	// remove or preserve whitespace-only text nodes in the source tree. The source
-	// document is owned by the caller and must never be mutated in place, so this
-	// runs against a private deep copy (copyAndStrip) that omits the stripped nodes;
-	// the copy becomes the exec context's source. A copy is built only when there
-	// is actual work — explicit xsl:strip-space rules, or an element-only content
-	// type whose whitespace the schema strips — so the common no-strip case keeps
-	// the original source (and its node identity) untouched.
+	// document is owned by the caller and must never be mutated in place. A copy is
+	// built only when there is actual work — explicit xsl:strip-space rules, or an
+	// element-only content type whose whitespace the schema strips — so the common
+	// no-strip case keeps the caller's source (and its node identity) untouched.
 	if effectiveSource != nil {
 		schemaClass := newSchemaWSClassifier(ec.typeAnnotations, ec.schemaRegistry)
 		doStrip := len(ss.stripSpace) > 0 ||
 			(schemaClass != nil && sourceNeedsSchemaStrip(effectiveSource, schemaClass))
-		if doStrip {
+		switch {
+		case doStrip && sourceCopied:
+			// effectiveSource is already the private copy made for schema
+			// validation, so strip it IN PLACE to avoid a second deep copy. The
+			// type annotations already key on this tree (validation ran on it), so
+			// no remap is needed. Any initial-match-selection node the strip removes
+			// is dropped so it does not skew position()/last().
+			var removed map[helium.Node]struct{}
+			if selectionSupplied && sequence.Len(matchSelection) > 0 {
+				removed = make(map[helium.Node]struct{})
+			}
+			ec.stripWhitespaceFromNodeInto(effectiveSource, removed)
+			if len(removed) > 0 {
+				matchSelection = dropSelectionItems(matchSelection, removed)
+			}
+		case doStrip:
+			// Non-schema path: the caller's source has not been copied, so copy and
+			// strip it in a single pass (omitting whitespace-only nodes from the
+			// copy), and remap the selection onto the copy.
 			needSelectionMap := matchSelection != nil && sequence.Len(matchSelection) > 0
 			// Build the original->copy node map whenever the initial match selection
 			// or the gathered type annotations must be carried over to the copy.

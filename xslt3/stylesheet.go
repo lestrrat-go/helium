@@ -90,13 +90,14 @@ type funcKey struct {
 //
 // A *Stylesheet is immutable after compilation and safe for concurrent use by
 // multiple goroutines: the same compiled stylesheet may be transformed from
-// many goroutines at once, each with its OWN source document, without external
-// synchronization. Every mutable per-transform state lives in a separate
-// execution context created per call, so transforms never share state and never
-// write back to the stylesheet. Note that a schema-aware / source-validating
-// transform mutates its source document in place, so such a source must not be
-// shared across concurrent transforms. See the package documentation's
-// Concurrency section for the full contract.
+// many goroutines at once without external synchronization. Every mutable
+// per-transform state lives in a separate execution context created per call, so
+// transforms never share state and never write back to the stylesheet. The
+// caller's source document is treated as read-only in all cases (whitespace
+// stripping and source-schema validation both run against a private copy), so a
+// single source may be shared, read-only, across concurrent transforms —
+// schema-aware or not. See the package documentation's Concurrency section for
+// the full contract.
 type Stylesheet struct {
 	version string
 	// compatExprs holds every compiled XPath expression that must evaluate in

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<products>
+  <product id="P1" name="Notebook" price="3.50"/>
+  <product id="P2" name="Pen" price="1.20"/>
+  <product id="P3" name="Stapler" price="8.00"/>
+</products>

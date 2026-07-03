@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <category id="bakery" name="Bakery">
+    <product sku="B-1"><name>Sourdough Loaf</name><price>4.95</price></product>
+    <product sku="B-2"><name>Croissant</name><price>2.10</price></product>
+    <product sku="B-3"><name>Bagel</name><price>1.25</price></product>
+  </category>
+</catalog>

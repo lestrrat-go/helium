@@ -40,7 +40,7 @@ jobs:
       # Check out this helium repo at the triggering ref (the code under test).
       # No repository:/ref: so it uses the ref the calling workflow ran against.
       - name: Check out helium (code under test)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: helium
 
@@ -50,14 +50,14 @@ jobs:
       # defaults to main; a caller may pin an exact commit/tag for a
       # reproducible audit run.
       - name: Check out helium-w3c-tests (sibling harness)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: lestrrat-go/helium-w3c-tests
           ref: ${{ inputs.harness_ref }}
           path: helium-w3c-tests
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: helium/go.mod
           cache-dependency-path: helium-w3c-tests/go.sum
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload conformance results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.suite }}-conformance-results
           path: |

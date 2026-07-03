@@ -311,6 +311,12 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 				if ns.Prefix() == elemPrefix {
 					continue // already declared by StartElementNS
 				}
+				// The "xml" prefix is predefined by the Namespaces in XML
+				// spec and bound implicitly everywhere, so a redundant,
+				// non-canonical xmlns:xml declaration must never be emitted.
+				if ns.Prefix() == "xml" {
+					continue
+				}
 				if ns.Prefix() == "" {
 					if err := sw.WriteAttribute("xmlns", ns.URI()); err != nil {
 						return err

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sales>
+  <region code="NA" name="North America"/>
+  <region code="EU" name="Europe"/>
+  <sale region="EU" amount="99.99"/>
+  <sale region="NA" amount="5000.00"/>
+  <sale region="NA" amount="2500.50"/>
+</sales>
