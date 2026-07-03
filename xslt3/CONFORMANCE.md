@@ -40,6 +40,29 @@ The authoritative per-case reasons are the harness `w3cImplicitSkips` map
 `summary-xslt30.md`'s "Skipped by reason" table is regenerated from them. Every
 skip below reconciles to those sources.
 
+This taxonomy is also enforced as a machine-readable, CI-gated contract. The
+`helium-w3c-tests` module carries a generated per-case skip ledger
+(`expectations/xslt30-skip-ledger.json`, one row per default-run skip: test id,
+pinned upstream-suite commit, skip-class — the five labels below — reason, spec
+dependency, paired passing 3.0 case) and a count contract
+(`expectations/xslt30-skip-counts.json`). Both are regenerated from the real
+skip sources with `go test ./xslt3 -run TestXSLT30SkipLedger -update-ledger` and
+must never be hand-edited. `TestXSLT30SkipLedger` (run without the flag) is a
+fast, fixture-free drift-check — wired into the `Conformance Ledger` CI workflow
+— that fails if the failure count is nonzero, a skip is unrecorded or
+reclassified, a mandatory-facility skip appears (any skip that classifies as
+neither one of the four labels nor the enumerated narrow-quirk allowlist), or
+the default/slow skip counts drift.
+
+Known limitation: by project policy CI lives in helium, so the `Conformance
+Ledger` workflow runs on helium PRs against `helium-w3c-tests@main`;
+`helium-w3c-tests` has no CI of its own. A `helium-w3c-tests` PR that edits a
+skip source without regenerating the ledger is therefore not gated on that PR —
+the drift is caught on the next helium PR instead. Contributors editing skip
+sources in `helium-w3c-tests` must regenerate the ledger with
+`go test ./xslt3 -run TestXSLT30SkipLedger -update-ledger` (or `go generate ./xslt3`)
+and commit it alongside the change.
+
 ## Conformance-level table
 
 The eight W3C conformance levels (Basic + seven optional), plus two
