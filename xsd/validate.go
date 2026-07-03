@@ -1045,11 +1045,12 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 // 5.2.2.2.2 requires the initial value (direct character data) to equal the fixed
 // value as a string.
 func (vc *validationContext) validateMixedFixed(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
-	hasElem := hasChildElement(elem)
-	initial := mixedInitialValue(elem)
+	initial, hasChar, hasElem := mixedInitialValue(elem)
 	// Clause 5.1: neither element nor character children — the fixed value is
-	// assigned, so the element is valid.
-	if !hasElem && initial == "" {
+	// assigned, so the element is valid. A present-but-empty character node
+	// (hasChar true, initial "") is NOT clause-5.1 empty: it is character
+	// content that must match the fixed value.
+	if !hasElem && !hasChar {
 		return nil
 	}
 	// Clause 5.2.2.1: a fixed value constraint forbids element children.
@@ -2227,24 +2228,55 @@ func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 	return nil
 }
 
-// mixedInitialValue returns the ·initial value· of a mixed-content element per
-// cvc-elt.5.2.2.2.2: the concatenation, in document order, of its direct
-// character-data content. That includes text and CDATA children AND the
-// replacement text of a direct entity reference (an EntityRefNode is character
-// content, not an element child, so its content contributes to the initial
-// value). Element descendants are excluded (they are handled by clause 5.2.2.1).
-func mixedInitialValue(elem *helium.Element) string {
-	if elem == nil {
-		return ""
-	}
-	var buf []byte
-	for child := range helium.Children(elem) {
+// mixedContentScan accumulates the classification of a mixed-content element's
+// content used by cvc-elt.5.2.2: the ·initial value· (the concatenation, in
+// document order, of direct character data), whether any character content is
+// present, and whether any element content is present.
+type mixedContentScan struct {
+	initial []byte
+	hasChar bool
+	hasElem bool
+}
+
+// scan walks the direct children of parent and classifies each node kind:
+//   - TextNode / CDATASectionNode: character content — contributes to the
+//     initial value and sets hasChar (even for a zero-length text node).
+//   - ElementNode: element content — sets hasElem.
+//   - EntityRefNode / EntityNode: a direct entity reference is character
+//     content, not an element child, but its EXPANSION (reached through the
+//     intermediate EntityNode) may contain element and/or character nodes, so it
+//     is walked recursively — an entity whose replacement text contains an
+//     element therefore hits clause 5.2.2.1, and its character data contributes
+//     to the initial value.
+//   - CommentNode / ProcessingInstructionNode: neither character nor element
+//     content per the spec — ignored (not part of the initial value, not an
+//     element child).
+func (s *mixedContentScan) scan(parent helium.Node) {
+	for child := range helium.Children(parent) {
 		switch child.Type() {
-		case helium.TextNode, helium.CDATASectionNode, helium.EntityRefNode:
-			buf = append(buf, child.Content()...)
+		case helium.TextNode, helium.CDATASectionNode:
+			s.initial = append(s.initial, child.Content()...)
+			s.hasChar = true
+		case helium.ElementNode:
+			s.hasElem = true
+		case helium.EntityRefNode, helium.EntityNode:
+			s.scan(child)
 		}
 	}
-	return string(buf)
+}
+
+// mixedInitialValue returns the ·initial value· of a mixed-content element per
+// cvc-elt.5.2.2.2.2 (the concatenation of its direct character data), whether it
+// has any character content, and whether it has any element content. Entity
+// references are decomposed into their expansion so entity-borne element and
+// character content are attributed correctly. See mixedContentScan.scan.
+func mixedInitialValue(elem *helium.Element) (initial string, hasChar, hasElem bool) {
+	if elem == nil {
+		return "", false, false
+	}
+	var s mixedContentScan
+	s.scan(elem)
+	return string(s.initial), s.hasChar, s.hasElem
 }
 
 // elemTextContent returns the concatenated text content of an element,

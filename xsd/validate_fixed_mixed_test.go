@@ -2,6 +2,10 @@ package xsd_test
 
 import (
 	"testing"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
+	"github.com/stretchr/testify/require"
 )
 
 // TestFixedValueMixedContent verifies cvc-elt.5.2.2 for an element whose content
@@ -75,6 +79,79 @@ func TestFixedValueMixedEntityRef(t *testing.T) {
 		const instance = `<!DOCTYPE root [ <!ENTITY e "abc"> ]>
 <root>&e;</root>`
 		runFixedValueCase(t, schemaXML, instance, false)
+	})
+	// An entity whose replacement text contains an ELEMENT hits clause
+	// 5.2.2.1 (element children are forbidden when a fixed value is present),
+	// even though the reference itself reaches validation as character content.
+	// The expansion (EntityRefNode -> EntityNode -> ElementNode) must be walked
+	// to see the element.
+	t.Run("entity ref expands to element markup", func(t *testing.T) {
+		t.Parallel()
+		const instance = `<!DOCTYPE root [ <!ENTITY e "<a>1</a>"> ]>
+<root>&e;</root>`
+		runFixedValueCase(t, schemaXML, instance, true)
+	})
+	// An entity expanding to mixed text+element markup is likewise rejected by
+	// clause 5.2.2.1 for the element it contributes.
+	t.Run("entity ref expands to mixed markup", func(t *testing.T) {
+		t.Parallel()
+		const instance = `<!DOCTYPE root [ <!ENTITY e "abc<a>1</a>"> ]>
+<root>&e;</root>`
+		runFixedValueCase(t, schemaXML, instance, true)
+	})
+}
+
+// TestFixedValueMixedEmptyTextNode verifies that a present-but-empty character
+// node (a zero-length text child) is NOT treated as clause-5.1 empty: it is
+// character content, so it must match the fixed value. A zero-length text node
+// is not produced by the parser, so the instance DOM is constructed directly.
+func TestFixedValueMixedEmptyTextNode(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="abc"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDOC)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root></root>`))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NoError(t, root.AddChild(doc.CreateText([]byte{})))
+
+	var errs string
+	err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+	require.Error(t, err)
+	require.Contains(t, errs, "fixed value constraint")
+}
+
+// TestFixedValueMixedCommentPIOnly verifies that an element whose only children
+// are comments and/or processing instructions is clause-5.1 empty (comments and
+// PIs are neither character nor element content), so the fixed value is assigned
+// and the element is valid.
+func TestFixedValueMixedCommentPIOnly(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="abc"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	t.Run("comment only", func(t *testing.T) {
+		t.Parallel()
+		runFixedValueCase(t, schemaXML, `<root><!-- c --></root>`, false)
+	})
+	t.Run("pi only", func(t *testing.T) {
+		t.Parallel()
+		runFixedValueCase(t, schemaXML, `<root><?pi data?></root>`, false)
 	})
 }
 
