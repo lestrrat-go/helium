@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<program conference="HeliumConf" year="2026">
+  <talk id="intro-to-xslt" minutes="90">
+    <title>Intro to XSLT</title>
+    <presenter name="Ada Lovelace" affiliation="Helium Labs"/>
+  </talk>
+  <talk id="streaming-grouping" minutes="45">
+    <title>Streaming &amp; Grouping</title>
+    <presenter name="Grace Hopper" affiliation="Acme"/>
+    <presenter name="Alan Turing" affiliation="Globex"/>
+  </talk>
+</program>

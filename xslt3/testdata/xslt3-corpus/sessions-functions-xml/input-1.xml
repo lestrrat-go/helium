@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schedule>
+  <session start="09:00" end="10:30">
+    <title>Intro to XSLT</title>
+    <speaker org="Helium Labs">Ada Lovelace</speaker>
+  </session>
+  <session start="11:00" end="11:45">
+    <title>Streaming &amp; Grouping</title>
+    <speaker org="Acme">Grace Hopper</speaker>
+    <speaker org="Globex">Alan Turing</speaker>
+  </session>
+</schedule>
