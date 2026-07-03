@@ -31,6 +31,9 @@ func (nsFooTypeDecls) ValidateCastWithNS(_ context.Context, value, typeName stri
 }
 func (nsFooTypeDecls) ListItemType(typeName string) (string, bool) { return "", false }
 func (nsFooTypeDecls) UnionMemberTypes(typeName string) []string   { return nil }
+func (nsFooTypeDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	return false
+}
 
 // TestCastUnprefixedUserTypeUnderDefaultNS verifies that the cast schema fallback
 // resolves an UNPREFIXED user-defined target type using the ALREADY-RESOLVED

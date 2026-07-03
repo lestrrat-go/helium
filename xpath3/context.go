@@ -73,6 +73,14 @@ type SchemaDeclarations interface {
 	// Both names use the annotation format: "xs:localName" for XSD built-ins,
 	// "Q{ns}localName" for user-defined types.
 	IsSubtypeOf(typeName, baseTypeName string) bool
+	// IsSubstitutionGroupMember reports whether the element (memberLocal, memberNS)
+	// is substitutable for — i.e. a (transitive) member of the substitution group
+	// headed by — the element (headLocal, headNS). It drives the schema-element()
+	// kind test, which matches an element whose name is a member of the head's
+	// substitution group (not merely a type-derivation of the head's type).
+	// Returns false when the schema declares no such head or no such membership,
+	// preserving behavior for callers that are not substitution-group aware.
+	IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool
 	// ValidateCast checks whether a string value is valid for a user-defined
 	// schema type (including facet constraints). Returns nil if valid or the
 	// type is not found; returns an error if the value violates facets.

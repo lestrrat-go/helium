@@ -98,6 +98,9 @@ func (d unionCastDecls) ValidateCastWithNS(ctx context.Context, value, typeName 
 	return d.ValidateCast(ctx, value, typeName)
 }
 func (unionCastDecls) ListItemType(typeName string) (string, bool) { return "", false }
+func (unionCastDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	return false
+}
 func (unionCastDecls) UnionMemberTypes(typeName string) []string {
 	switch typeName {
 	case testBuiltinUnion:

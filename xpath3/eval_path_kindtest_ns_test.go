@@ -32,6 +32,9 @@ func (noNSFooAttrDecls) ValidateCastWithNS(_ context.Context, value, typeName st
 }
 func (noNSFooAttrDecls) ListItemType(typeName string) (string, bool) { return "", false }
 func (noNSFooAttrDecls) UnionMemberTypes(typeName string) []string   { return nil }
+func (noNSFooAttrDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	return false
+}
 
 // predeclaredNSDecls is a minimal SchemaDeclarations that declares one element
 // {NSXS}foo and one attribute {NSXS}foo of type xs:string, where NSXS is the
@@ -71,6 +74,9 @@ func (predeclaredNSDecls) ValidateCastWithNS(_ context.Context, value, typeName 
 }
 func (predeclaredNSDecls) ListItemType(typeName string) (string, bool) { return "", false }
 func (predeclaredNSDecls) UnionMemberTypes(typeName string) []string   { return nil }
+func (predeclaredNSDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	return false
+}
 
 // TestSchemaTestPredeclaredPrefix verifies that schema-element()/
 // schema-attribute() step tests and the equivalent "instance of" tests resolve

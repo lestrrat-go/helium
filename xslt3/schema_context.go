@@ -258,10 +258,10 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 // the base-type chain (IsSubtypeOf) OR is an ATOMIC member of the baseTypeName
 // union (Type Derivation OK (Simple), §3.16.6.3). It is used for element(*, T) /
 // attribute(*, T) pattern type tests, where a union member matches its union.
-// It is intentionally NOT folded into IsSubtypeOf: the shared derives-from is
-// also used as a substitution-group proxy in xpath3's schema-element step, where
-// admitting union membership would wrongly match an unrelated element whose type
-// happens to be a member of the head element's union type.
+// It is intentionally NOT folded into IsSubtypeOf, which is a strict
+// type-derivation predicate: admitting union membership there would wrongly
+// match an unrelated element whose type happens to be a member of the head
+// element's union type.
 func (r *schemaRegistry) isSubtypeOrUnionMember(typeName, baseTypeName string) bool {
 	if r.IsSubtypeOf(typeName, baseTypeName) {
 		return true
@@ -375,8 +375,10 @@ func (r *schemaRegistry) UnionMemberTypes(typeName string) []string {
 	return members
 }
 
-// IsSubstitutionGroupMember checks if an element (memberLocal, memberNS) is in
-// the substitution group of the head element (headLocal, headNS).
+// IsSubstitutionGroupMember implements xpath3.SchemaDeclarations. It checks if
+// an element (memberLocal, memberNS) is a transitive member (after
+// block/derivation filtering) of the substitution group headed by the element
+// (headLocal, headNS), driving the schema-element() kind test.
 func (r *schemaRegistry) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
 	headQN := xsd.QName{Local: headLocal, NS: headNS}
 	memberQN := xsd.QName{Local: memberLocal, NS: memberNS}

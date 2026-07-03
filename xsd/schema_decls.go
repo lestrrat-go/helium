@@ -186,6 +186,21 @@ func (d schemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 	return false
 }
 
+// IsSubstitutionGroupMember implements xpath3.SchemaDeclarations. It reports
+// whether the element (memberLocal, memberNS) is a transitive member (after
+// block/derivation filtering) of the substitution group headed by
+// (headLocal, headNS), so the schema-element() kind test matches by
+// substitution-group membership rather than mere type-derivation.
+func (d schemaDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	member := QName{Local: memberLocal, NS: memberNS}
+	for _, m := range d.schema.SubstGroupMembers(QName{Local: headLocal, NS: headNS}) {
+		if m.Name == member {
+			return true
+		}
+	}
+	return false
+}
+
 // ValidateCast validates value against a user-defined simple type's facets.
 func (d schemaDecls) ValidateCast(ctx context.Context, value, typeName string) error {
 	return d.validateCast(ctx, value, typeName, nil)

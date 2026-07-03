@@ -750,21 +750,22 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 		local, ns := resolveSchemaTestName(test.Name, ec, false)
 		nameMatch := ixpath.LocalNameOf(n) == local && ixpath.NodeNamespaceURI(n) == ns
 		if !nameMatch {
-			// Check substitution group membership: the node's element
-			// must be in the substitution group headed by (local, ns)
-			// and its type annotation must be a subtype of the head's type.
-			headType, headFound := ec.schemaDeclarations.LookupSchemaElement(local, ns)
-			if !headFound {
+			// The node's name is not the head's own name, so it matches only
+			// when the node's element is a member of the substitution group
+			// headed by (local, ns). Substitution-group membership already
+			// requires each member's declared type to derive from the head's
+			// type, so a validated (non-untyped) member satisfies the kind
+			// test; a type-derivation check alone would wrongly admit any
+			// element whose type happens to derive from the head's type
+			// without being substitutable for it.
+			if !ec.schemaDeclarations.IsSubstitutionGroupMember(ixpath.LocalNameOf(n), ixpath.NodeNamespaceURI(n), local, ns) {
 				return false
 			}
 			ann := nodeTypeAnnotation(n, ec)
-			if ann == "" {
-				ann = TypeUntyped
-			}
-			if ann == TypeUntyped {
+			if ann == "" || ann == TypeUntyped {
 				return false
 			}
-			return isSubtypeOf(ann, headType) || ec.schemaDeclarations.IsSubtypeOf(ann, headType)
+			return true
 		}
 		typeName, found := ec.schemaDeclarations.LookupSchemaElement(local, ns)
 		if !found {
