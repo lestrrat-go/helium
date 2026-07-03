@@ -305,11 +305,28 @@ func (n docnode) LastChild() Node {
 	return n.lastChild
 }
 
+// maxCycleCheckDepth bounds the child-pointer descent in wouldCreateCycle so a
+// pathologically deep or (via a hand-built foreign child link) already-cyclic
+// child graph cannot make the check recurse without limit. Real document trees
+// are far shallower; together with the per-call visited set the cap only guards
+// the degenerate cases.
+const maxCycleCheckDepth = 1 << 12
+
 // wouldCreateCycle reports whether installing cur under parent would create a
-// cycle. That happens when cur is the parent itself or an ancestor of the
-// parent: making it a descendant would put a node below itself. Walking
-// parent's ancestor chain (inclusive of parent) and looking for cur covers
-// both cases, including the self-insertion case when cur == parent.
+// cycle. That happens when parent is cur itself or is already reachable from
+// cur: closing the link parent->cur then forms the loop parent -> cur -> ... ->
+// parent.
+//
+// Walking parent's ANCESTOR chain (inclusive of parent) and looking for cur
+// covers every such case — including the self-insertion cur == parent — at
+// O(depth(parent)) WHEN parent/child links are consistent. But a child link may
+// point at a node whose own parent pointer points elsewhere: an entity
+// reference's child is the shared Entity node, whose parent stays the DTD
+// (mirroring libxml2). A cycle formed through such a foreign link (e.g.
+// ent.AddChild(ref) where ref's child is ent) is invisible to the ancestor
+// walk, so when cur has children we additionally verify parent is not reachable
+// from cur by following CHILD pointers. The parser hot path appends childless
+// leaves and skips that second descent entirely.
 func wouldCreateCycle(parent, cur Node) bool {
 	cdn := cur.baseDocNode()
 	for anc := parent; anc != nil; anc = anc.Parent() {
@@ -317,7 +334,54 @@ func wouldCreateCycle(parent, cur Node) bool {
 			return true
 		}
 	}
+	if parent == nil || cdn.firstChild == nil {
+		return false
+	}
+	return childReaches(cur, parent.baseDocNode(), 0, nil)
+}
+
+// childReaches reports whether target is reachable from node by following child
+// pointers (node inclusive). It enumerates each node's OWN children via
+// nextOwnedChild so a foreign child link (an entity reference's Entity child,
+// owned by the DTD) is not followed into another list's siblings, and it guards
+// a shared or cyclic child graph with a lazily-allocated visited set plus a
+// depth cap, so it always terminates.
+func childReaches(node Node, target *docnode, depth int, visited map[*docnode]struct{}) bool {
+	dn := node.baseDocNode()
+	if dn == target {
+		return true
+	}
+	if dn.firstChild == nil {
+		return false
+	}
+	if depth >= maxCycleCheckDepth {
+		return false
+	}
+	if visited == nil {
+		visited = make(map[*docnode]struct{})
+	}
+	if _, seen := visited[dn]; seen {
+		return false
+	}
+	visited[dn] = struct{}{}
+	for child := dn.firstChild; child != nil; child = nextOwnedChild(dn, child) {
+		if childReaches(child, target, depth+1, visited) {
+			return true
+		}
+	}
 	return false
+}
+
+// nextOwnedChild returns the next sibling of child within owner's child list, or
+// nil when child is foreign-owned (its parent is not owner). A foreign child's
+// sibling pointers belong to another list — an entity reference's Entity child
+// is owned by the DTD — so following them would walk out of owner's children.
+func nextOwnedChild(owner *docnode, child Node) Node {
+	cp := child.Parent()
+	if cp == nil || cp.baseDocNode() != owner {
+		return nil
+	}
+	return child.NextSibling()
 }
 
 // addChildPreflight runs the shared self/cycle guard and auto-unlink that every
