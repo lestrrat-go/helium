@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<company>
+  <departments>
+    <department id="eng" name="Engineering"/>
+    <department id="sales" name="Sales"/>
+  </departments>
+  <staff>
+    <person name="Ada" dept="eng"/>
+    <person name="Bob" dept="sales"/>
+    <person name="Cora" dept="eng"/>
+  </staff>
+</company>

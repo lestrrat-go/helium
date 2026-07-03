@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<index title="XSLT Glossary">
+  <group letter="A">
+    <term name="Atomization">Extracting typed values from nodes.</term>
+    <term name="Axis">A path direction in XPath.</term>
+  </group>
+  <group letter="N">
+    <term name="Namespace">A URI-qualified name scope.</term>
+    <term name="Node">A point in the document tree.</term>
+  </group>
+  <group letter="S">
+    <term name="Sequence">An ordered list of items.</term>
+  </group>
+</index>

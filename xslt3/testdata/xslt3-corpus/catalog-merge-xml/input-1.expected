@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<invoices store="Helium Store">
+  <invoice id="1001" customer="Acme">
+    <item product="P1" name="Notebook" qty="3" unitPrice="3.50" lineTotal="10.50"/>
+    <item product="P2" name="Pen" qty="10" unitPrice="1.20" lineTotal="12.00"/>
+    <total subtotal="22.50" tax="1.80" grand="24.30"/>
+  </invoice>
+  <invoice id="1002" customer="Globex">
+    <item product="P3" name="Stapler" qty="1" unitPrice="8.00" lineTotal="8.00"/>
+    <item product="P1" name="Notebook" qty="1" unitPrice="3.50" lineTotal="3.50"/>
+    <total subtotal="11.50" tax="0.92" grand="12.42"/>
+  </invoice>
+</invoices>

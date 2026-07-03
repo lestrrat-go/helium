@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<glossary>
+  <entry><term>Axis</term><definition>A path direction in XPath.</definition></entry>
+  <entry><term>Atomization</term><definition>Extracting typed values from nodes.</definition></entry>
+  <entry><term>Node</term><definition>A point in the document tree.</definition></entry>
+  <entry><term>Namespace</term><definition>A URI-qualified name scope.</definition></entry>
+  <entry><term>Sequence</term><definition>An ordered list of items.</definition></entry>
+</glossary>
