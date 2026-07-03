@@ -44,7 +44,7 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	if paramTypes != nil {
 		for i, arg := range args {
 			if i < len(paramTypes) {
-				coerced, err := coerceFuncallArg(arg, paramTypes[i], r.name, i, ec)
+				coerced, err := coerceFuncallArg(ctx, arg, paramTypes[i], r.name, i, ec)
 				if err != nil {
 					return nil, err
 				}
@@ -303,7 +303,7 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 				copy(coerced, args)
 				for i, arg := range args {
 					if i < len(paramTypes) {
-						c, ok := coerceToSequenceType(arg, paramTypes[i], capturedEC)
+						c, ok := coerceToSequenceType(ctx, arg, paramTypes[i], capturedEC)
 						if !ok {
 							return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
 						}
@@ -357,7 +357,7 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 				arg := args[i]
 				// Apply function coercion rules if type specified
 				if param.TypeHint != nil {
-					coerced, ok := coerceToSequenceType(arg, *param.TypeHint, &innerCtx)
+					coerced, ok := coerceToSequenceType(ctx, arg, *param.TypeHint, &innerCtx)
 					if !ok {
 						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
 					}
@@ -371,7 +371,7 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 			}
 			// Apply function coercion rules for return type if specified
 			if e.ReturnType != nil {
-				coerced, ok := coerceToSequenceType(result, *e.ReturnType, &innerCtx)
+				coerced, ok := coerceToSequenceType(ctx, result, *e.ReturnType, &innerCtx)
 				if !ok {
 					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
 				}
@@ -416,7 +416,7 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 			if i >= len(paramTypes) {
 				continue
 			}
-			coerced, err := coerceFuncallArg(fixedArgs[i], paramTypes[i], r.name, i, ec)
+			coerced, err := coerceFuncallArg(ctx, fixedArgs[i], paramTypes[i], r.name, i, ec)
 			if err != nil {
 				return nil, err
 			}
@@ -448,7 +448,7 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 					if idx >= len(paramTypes) {
 						continue
 					}
-					coerced, err := coerceFuncallArg(fullArgs[idx], paramTypes[idx], r.name, idx, ec)
+					coerced, err := coerceFuncallArg(ctx, fullArgs[idx], paramTypes[idx], r.name, idx, ec)
 					if err != nil {
 						return nil, err
 					}
@@ -466,8 +466,8 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 // atomization/cast error (FOTY0013, FORG0001, …) surfaces unchanged so try/catch
 // can dispatch on it; a plain type/cardinality mismatch becomes XPTY0004. This is
 // the shared helper for evalFunctionCall's direct path and partialApply.
-func coerceFuncallArg(arg Sequence, st SequenceType, fnName string, idx int, ec *evalContext) (Sequence, error) {
-	coerced, err := coerceToSequenceTypeE(arg, st, ec)
+func coerceFuncallArg(ctx context.Context, arg Sequence, st SequenceType, fnName string, idx int, ec *evalContext) (Sequence, error) {
+	coerced, err := coerceToSequenceTypeE(ctx, arg, st, ec)
 	if err != nil {
 		if !errors.Is(err, errCoerceMismatch) {
 			return nil, err

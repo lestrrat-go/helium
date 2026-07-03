@@ -32,6 +32,17 @@ func (e *Expression) Validate(namespaces map[string]string) error {
 	return e.prefixPlan.Validate(namespaces, false, nil)
 }
 
+// ValidateWithSchema is like Validate but also supplies the in-scope schema
+// declarations. When decls is non-nil, an unprefixed atomic/schema type name is
+// permitted (it resolves against the default element/type namespace or as a
+// no-namespace schema type at evaluation time) instead of raising XPST0081.
+func (e *Expression) ValidateWithSchema(namespaces map[string]string, decls SchemaDeclarations) error {
+	if err := e.requireCompiledProgram(); err != nil {
+		return err
+	}
+	return e.prefixPlan.Validate(namespaces, false, decls)
+}
+
 // String returns the original XPath expression string.
 func (e *Expression) String() string {
 	return e.source

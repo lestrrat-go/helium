@@ -67,6 +67,14 @@ type compileConfig struct {
 	// explicit Version() call sets versionSet and always wins.
 	version    Version
 	versionSet bool
+	// defaultVersion is the fallback version used when the caller has NOT forced
+	// a version via Version() and the schema declares no vc:minVersion hint. When
+	// defaultVersionSet is false the fallback is Version10 (the standalone
+	// default). A forced Version() and a vc:minVersion hint both take precedence
+	// over it, so this only chooses between 1.0 and 1.1 for a schema silent on
+	// version.
+	defaultVersion    Version
+	defaultVersionSet bool
 	// rootKey is the resolved fs.FS key of the TOP-LEVEL schema document, when
 	// known (set by CompileFile). compileSchema seeds includeVisited with it so a
 	// circular include/redefine that points back at the root (main -> inc -> main)
@@ -87,6 +95,13 @@ type validateConfig struct {
 	errorHandler   helium.ErrorHandler
 	annotations    *TypeAnnotations
 	nilledElements *NilledElements
+	// skipDatatypeIntegrity, when true, suppresses the document-wide xs:ID /
+	// xs:IDREF / xs:IDREFS and xs:ENTITY / xs:ENTITIES value-space integrity
+	// walks (both XSD 1.1-only). Content-model, type, and identity-constraint
+	// (xs:key/unique/keyref) validation are unaffected. It exists for callers
+	// that validate an element/subtree as a fragment and apply document-scope
+	// ID/IDREF integrity themselves at the correct scope (e.g. xslt3).
+	skipDatatypeIntegrity bool
 }
 
 // TypeAnnotations maps document nodes to their XSD type names.
@@ -189,6 +204,25 @@ func (c Compiler) Version(v Version) Compiler {
 	c = c.clone()
 	c.cfg.version = v
 	c.cfg.versionSet = true
+	return c
+}
+
+// DefaultVersion sets the XML Schema specification version used as a fallback
+// when the caller has not forced a version via [Compiler.Version] and the
+// schema document declares no vc:minVersion hint on its root <xs:schema>.
+//
+// Version resolution order is: a forced [Compiler.Version] (always wins), then a
+// vc:minVersion="1.1"-or-higher hint on the root, then this configured default,
+// then [Version10]. So DefaultVersion changes only the "schema is silent on
+// version" case; it never overrides an explicit Version() or a vc hint.
+//
+// The standalone compiler default remains [Version10]; this knob lets an
+// embedding layer (e.g. xslt3's xsl:import-schema) opt its imported schemas into
+// [Version11] semantics by default while still honoring an explicit version.
+func (c Compiler) DefaultVersion(v Version) Compiler {
+	c = c.clone()
+	c.cfg.defaultVersion = v
+	c.cfg.defaultVersionSet = true
 	return c
 }
 
@@ -331,6 +365,26 @@ func (v Validator) Annotations(ann *TypeAnnotations) Validator {
 func (v Validator) NilledElements(ne *NilledElements) Validator {
 	v = v.clone()
 	v.cfg.nilledElements = ne
+	return v
+}
+
+// SkipDatatypeIntegrityChecks controls whether the document-wide xs:ID /
+// xs:IDREF / xs:IDREFS uniqueness+referential-integrity walk and the xs:ENTITY /
+// xs:ENTITIES value-space walk run. Both are XSD 1.1-only; in XSD 1.0 they never
+// run and this option has no effect.
+//
+// When enabled, those two document-scoped datatype-integrity walks are skipped.
+// Content-model validation, simple/complex type validation, and the
+// xs:key/xs:unique/xs:keyref identity-constraint walk are unaffected.
+//
+// This is for callers that validate an element or subtree as a fragment (so a
+// self-contained "document" is not the real scope) and enforce document-scope
+// ID/IDREF integrity themselves at the correct granularity — notably xslt3,
+// which validates a constructed element via a temporary document but must not
+// apply whole-document ID uniqueness to an element-level validation.
+func (v Validator) SkipDatatypeIntegrityChecks(skip bool) Validator {
+	v = v.clone()
+	v.cfg.skipDatatypeIntegrity = skip
 	return v
 }
 

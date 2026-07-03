@@ -489,7 +489,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if countAttr := getAttr(elem, "count"); countAttr != "" {
-		p, err := compilePattern(countAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
+		p, err := compilePattern(countAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
 		if err != nil {
 			return nil, err
 		}
@@ -497,7 +497,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if fromAttr := getAttr(elem, "from"); fromAttr != "" {
-		p, err := compilePattern(fromAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
+		p, err := compilePattern(fromAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
 		if err != nil {
 			return nil, err
 		}
@@ -976,7 +976,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 		if err := c.checkTypeAttrSchemaAware(ctx, "LRE (xsl:type)", typeAttr); err != nil {
 			return nil, err
 		}
-		lre.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		lre.TypeName = resolveXSDTypeNameNS(typeAttr, c.nsBindings, c.xpathDefaultNS, c.hasXPathDefaultNS)
 	}
 
 	// Handle xsl:default-validation on LRE (XSLT 3.0 §3.6)

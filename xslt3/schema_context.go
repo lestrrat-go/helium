@@ -663,7 +663,9 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 		if s.TargetNamespace() == rootNS {
 			var ann xsd.TypeAnnotations
 			var nilled xsd.NilledElements
-			err := xsd.NewValidator(s).Annotations(&ann).NilledElements(&nilled).Validate(ctx, doc)
+			err := xsd.NewValidator(s).
+				SkipDatatypeIntegrityChecks(true).
+				Annotations(&ann).NilledElements(&nilled).Validate(ctx, doc)
 			return validateDocResult{Annotations: ann, NilledElements: nilled}, err
 		}
 	}
@@ -676,7 +678,9 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 			if s.TargetNamespace() == "" {
 				var ann xsd.TypeAnnotations
 				var nilled xsd.NilledElements
-				err := xsd.NewValidator(s).Annotations(&ann).NilledElements(&nilled).Validate(ctx, doc)
+				err := xsd.NewValidator(s).
+					SkipDatatypeIntegrityChecks(true).
+					Annotations(&ann).NilledElements(&nilled).Validate(ctx, doc)
 				return validateDocResult{Annotations: ann, NilledElements: nilled}, err
 			}
 		}

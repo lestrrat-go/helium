@@ -88,7 +88,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// and route those nested loads through the invocation's resolver
 		// (default-deny) instead of the xsd compiler's default os.Open.
 		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
-		schemaCompiler := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys)
+		schemaCompiler := xsd.NewCompiler().DefaultVersion(xsd.Version11).BaseDir(schemaCompileBaseDir(uri)).FS(fsys)
 		if p := ec.injectedParser(); p != nil {
 			schemaCompiler = schemaCompiler.Parser(*p)
 		}
@@ -99,6 +99,43 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		schemas = append(schemas, schema)
 	}
 	return schemas, nil
+}
+
+// collectPackageSchemas returns the schemas of ss followed by the schemas of
+// every package it uses, transitively, deduped by schema-object identity. The
+// main stylesheet's own schemas come first so its declarations take precedence
+// on a name collision. Identity (not target-namespace) dedup is deliberate:
+// distinct packages may each import a no-namespace schema declaring different
+// types, and both sets must stay resolvable in the runtime registry.
+func collectPackageSchemas(ss *Stylesheet) []*xsd.Schema {
+	return appendPackageSchemas(nil, ss, make(map[*xsd.Schema]struct{}), make(map[*Stylesheet]struct{}))
+}
+
+// appendPackageSchemas appends pkg's schemas (then its used packages',
+// transitively) to out, skipping schema objects already in seen and packages
+// already in visited.
+func appendPackageSchemas(out []*xsd.Schema, pkg *Stylesheet, seen map[*xsd.Schema]struct{}, visited map[*Stylesheet]struct{}) []*xsd.Schema {
+	if pkg == nil {
+		return out
+	}
+	if _, ok := visited[pkg]; ok {
+		return out
+	}
+	visited[pkg] = struct{}{}
+	for _, schema := range pkg.schemas {
+		if schema == nil {
+			continue
+		}
+		if _, ok := seen[schema]; ok {
+			continue
+		}
+		seen[schema] = struct{}{}
+		out = append(out, schema)
+	}
+	for _, sub := range pkg.usedPackages {
+		out = appendPackageSchemas(out, sub, seen, visited)
+	}
+	return out
 }
 
 func mergeRuntimeSchemas(existing []*xsd.Schema, extra []*xsd.Schema) []*xsd.Schema {

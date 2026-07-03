@@ -11,7 +11,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/lestrrat-go/helium/xsd"
 )
 
 // remapValidationNode resolves a node from the original (validated) source tree to
@@ -299,7 +298,14 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// Build the runtime schema registry from both xsl:import-schema and any
 	// xsi:schemaLocation declarations on the source document so typed source
 	// trees remain available even when the stylesheet itself has no imports.
-	runtimeSchemas := append([]*xsd.Schema(nil), ss.schemas...)
+	// Include schemas imported by every used package (transitively) too: a
+	// component reached across an xsl:use-package boundary — e.g. the original
+	// function invoked by xsl:original — carries a declared type (as="...") that
+	// only the DEFINING package's schema can resolve, so its type names must be
+	// available in the same registry. Deduped by schema-object identity (not by
+	// target namespace) so two packages that each declare a no-namespace type
+	// both remain resolvable.
+	runtimeSchemas := collectPackageSchemas(ss)
 	if effectiveSource != nil {
 		sourceSchemas, schemaErr := ec.loadSchemasFromSchemaLocation(ctx, effectiveSource)
 		// A schema-location load failure is normally non-fatal under lax

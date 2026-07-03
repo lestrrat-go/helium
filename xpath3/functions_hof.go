@@ -417,7 +417,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 			return fn.Call(ctx, callArgs)
 		},
 	}
-	fi.Invoke = func(_ context.Context, callArgs []Sequence) (Sequence, error) {
+	fi.Invoke = func(ctx context.Context, callArgs []Sequence) (Sequence, error) {
 		if len(callArgs) != arity {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
 		}
@@ -431,7 +431,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 			copy(coerced, callArgs)
 			for i, arg := range callArgs {
 				if i < len(paramTypes) {
-					c, ok := coerceToSequenceType(arg, paramTypes[i], capturedEC)
+					c, ok := coerceToSequenceType(ctx, arg, paramTypes[i], capturedEC)
 					if !ok {
 						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", qv.Local, i+1, paramTypes[i])}
 					}
