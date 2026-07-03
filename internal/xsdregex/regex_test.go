@@ -224,7 +224,7 @@ func TestXSD10CharClassRangeAfterRange(t *testing.T) {
 	})
 
 	t.Run("xsd10 still accepts ordinary multi-range classes", func(t *testing.T) {
-		for _, pat := range []string{`[a-z0-9]`, `[a-z-]`, `[-a-z]`, `[a-c-[b]]`, `[abc-]`, `[+-/]`, `[!-~-]`, `[0-9a-fA-F]`} {
+		for _, pat := range []string{`[a-z0-9]`, `[a-z-]`, `[-a-z]`, `[a-c-[b]]`, `[a-z--[b-z]]`, `[abc-]`, `[+-/]`, `[!-~-]`, `[0-9a-fA-F]`} {
 			t.Run(pat, func(t *testing.T) {
 				_, err := xsdregex.Compile(pat + "*")
 				require.NoError(t, err, "pattern %q must still compile in XSD 1.0", pat)
