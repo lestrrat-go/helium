@@ -2531,6 +2531,43 @@ func isUrSimpleType(td *TypeDef) bool {
 	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == typeAnySimpleType
 }
 
+// effectiveAttrWildcard returns the complete {attribute wildcard} of a complex
+// type for the restriction-derivation check: its directly-declared
+// xs:anyAttribute INTERSECTED with the complete wildcards of every attribute
+// group it references (XSD §3.4.2 "complete wildcard"). In XSD 1.1 the group
+// wildcards are already merged into td.AnyAttribute at link time, so this returns
+// td.AnyAttribute unchanged. In XSD 1.0 group wildcards are NOT merged into a
+// type's {attribute wildcard} at validation (byte-identical), so this re-derives
+// the complete wildcard on demand from the recorded group wildcards (populated
+// diagnostic-free in parseNamedAttributeGroup) — a base whose only attribute
+// wildcard comes transitively through a referenced attribute group is thus seen
+// as having one, so a valid restriction that adds/subsets it is not falsely
+// rejected as "the base does not have an attribute wildcard".
+func (c *compiler) effectiveAttrWildcard(td *TypeDef) *Wildcard {
+	if td == nil {
+		return nil
+	}
+	w := td.AnyAttribute
+	if c.version == Version11 {
+		return w
+	}
+	for _, qn := range c.attrGroupRefs[td] {
+		if _, ok := c.schema.attrGroups[qn]; !ok {
+			continue
+		}
+		gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{})
+		if gw == nil {
+			continue
+		}
+		if w == nil {
+			w = gw
+			continue
+		}
+		w = intersectWildcards(w, gw)
+	}
+	return w
+}
+
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
 // are compatible with the base type's attribute uses.
 func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
@@ -2566,6 +2603,13 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			baseAttrs[au.Name] = au
 		}
 	}
+
+	// The base's EFFECTIVE {attribute wildcard} — its directly-declared
+	// xs:anyAttribute PLUS any wildcard contributed transitively through a
+	// referenced attribute group. In XSD 1.0 td.BaseType.AnyAttribute alone omits
+	// the group-ref wildcard, so a valid restriction against such a base would be
+	// falsely rejected without this.
+	baseWildcard := c.effectiveAttrWildcard(td.BaseType)
 
 	// Check each derived non-prohibited attribute against the base.
 	for _, au := range td.Attributes {
@@ -2621,7 +2665,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 						component+", attribute use '"+au.Name.Local+"'", msg))
 				}
 			}
-		} else if td.BaseType.AnyAttribute == nil || !wildcardAllowsExpandedName(td.BaseType.AnyAttribute, au.Name.Local, au.Name.NS, c.schema, true) {
+		} else if baseWildcard == nil || !wildcardAllowsExpandedName(baseWildcard, au.Name.Local, au.Name.NS, c.schema, true) {
 			// No matching attribute, and no base wildcard that ADMITS this derived
 			// attribute's expanded name — the full test honors the base wildcard's
 			// notNamespace/notQName/##defined, not just its namespace constraint, so
@@ -2660,21 +2704,24 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		}
 	}
 
-	// derivation-ok-restriction 4: Wildcard checks.
+	// derivation-ok-restriction 4: Wildcard checks. The base side uses its
+	// EFFECTIVE {attribute wildcard} (baseWildcard) so a wildcard the base holds
+	// only transitively through a referenced attribute group still satisfies 4.1
+	// and is compared for 4.2/4.3.
 	if td.AnyAttribute != nil {
 		// 4.1: Base must also have a wildcard.
-		if td.BaseType.AnyAttribute == nil {
+		if baseWildcard == nil {
 			msg := fmt.Sprintf("The complex type definition has an attribute wildcard, but the base complex type definition %s does not have one.", baseQualified)
 			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
-			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute, c.schema, true) {
+			if !wildcardConstraintSubset(td.AnyAttribute, baseWildcard, c.schema, true) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 			}
 			// 4.3: Derived processContents must be >= base strength (strict > lax > skip).
 			// libxml2 attributes this error to the base type's source location.
-			if processContentsStrength(td.AnyAttribute.ProcessContents) < processContentsStrength(td.BaseType.AnyAttribute.ProcessContents) {
+			if processContentsStrength(td.AnyAttribute.ProcessContents) < processContentsStrength(baseWildcard.ProcessContents) {
 				errLine := src.line
 				errComponent := component
 				errFile := source
