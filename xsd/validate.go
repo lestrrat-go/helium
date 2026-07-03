@@ -1802,7 +1802,16 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		// such as an xs:key field "@t:a" can match it.
 		if au.Name.NS != "" {
 			ns := inScopeNamespace(elem, au.Name.NS)
-			if ns == nil {
+			// XSD 1.1 §3.4.5.1 namespace fixup: a defaulted/fixed namespaced
+			// attribute must carry a usable prefix bound to its namespace. When no
+			// in-scope binding exists — or only the default namespace (prefix ""),
+			// which an attribute cannot use — bind one, preferring the declaration's
+			// own prefix and minting a fresh one if that prefix is taken by a
+			// different URI. XSD 1.0 leaves the attribute exactly as before
+			// (byte-identical): an unprefixed namespace declaration when unbound.
+			if vc.version == Version11 && (ns == nil || ns.Prefix() == "") {
+				ns = vc.fixupDefaultAttrNamespace(elem, au)
+			} else if ns == nil {
 				ns = helium.NewNamespace("", au.Name.NS)
 			}
 			_, _ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
@@ -1998,6 +2007,69 @@ func freshNSPrefix(inScope map[string]string, base string) string {
 			return candidate
 		}
 	}
+}
+
+// fixupDefaultAttrNamespace performs XSD 1.1 §3.4.5.1 namespace fixup for a
+// defaulted/fixed namespaced attribute that has no usable in-scope prefix. It
+// binds a prefix to the attribute's namespace on elem (declaring it there so the
+// validated tree carries the namespace node) and returns the namespace to use.
+// The prefix preferred is the one the declaration's own namespace context used
+// for that URI (the schema author's prefix, e.g. "p" for ref="p:foo"); if that
+// prefix is absent it is used directly, if taken by a different URI a fresh
+// non-colliding prefix is minted.
+func (vc *validationContext) fixupDefaultAttrNamespace(elem *helium.Element, au *AttrUse) *helium.Namespace {
+	uri := au.Name.NS
+	inScope := collectNSContext(elem)
+	// Reuse an in-scope NON-EMPTY prefix already bound to the namespace, if any
+	// (inScopeNamespace may have returned a default-namespace binding, unusable for
+	// an attribute name, while a prefixed binding to the same URI also exists).
+	if p := smallestPrefixFor(inScope, uri); p != "" {
+		return helium.NewNamespace(p, uri)
+	}
+	prefer := preferredDeclPrefix(au, uri)
+	if prefer != "" {
+		if cur, bound := inScope[prefer]; !bound || cur == uri {
+			ns := helium.NewNamespace(prefer, uri)
+			elem.AddNamespaceDecl(ns)
+			return ns
+		}
+	}
+	base := prefer
+	if base == "" {
+		base = "ns"
+	}
+	np := freshNSPrefix(inScope, base)
+	ns := helium.NewNamespace(np, uri)
+	elem.AddNamespaceDecl(ns)
+	return ns
+}
+
+// preferredDeclPrefix returns the prefix the attribute's declaration namespace
+// context bound to uri (the schema author's prefix for the attribute name),
+// preferring the value-constraint context in effect. When several prefixes map
+// to uri the lexicographically smallest is chosen for determinism. The empty
+// prefix (default namespace) is never returned — an attribute name cannot use it.
+func preferredDeclPrefix(au *AttrUse, uri string) string {
+	m := au.DefaultNS
+	if au.Fixed != nil {
+		m = au.FixedNS
+	}
+	return smallestPrefixFor(m, uri)
+}
+
+// smallestPrefixFor returns the lexicographically-smallest NON-EMPTY prefix in m
+// mapping to uri (deterministic across nondeterministic map iteration), or "".
+func smallestPrefixFor(m map[string]string, uri string) string {
+	best := ""
+	for p, u := range m {
+		if p == "" || u != uri {
+			continue
+		}
+		if best == "" || p < best {
+			best = p
+		}
+	}
+	return best
 }
 
 // validateWildcardAttr validates an attribute matched by a wildcard according
