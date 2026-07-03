@@ -3,6 +3,7 @@ package helium
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,4 +32,68 @@ func TestChildReachesNoDepthCap(t *testing.T) {
 	outside := doc.CreateElement("outside")
 	require.False(t, childReaches(first, outside.baseDocNode()),
 		"a node outside the subtree must not be reported reachable")
+}
+
+// TestChildReachesTerminatesOnCyclicSiblingList verifies the child-pointer
+// reachability search terminates when a node's child list has a cyclic sibling
+// pointer. The popped-node visited set alone does not bound the inner sibling
+// enumeration, so a self-referential or 2-cycle sibling link would spin forever
+// without the per-list sibling guard.
+func TestChildReachesTerminatesOnCyclicSiblingList(t *testing.T) {
+	t.Run("self-cycle", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		parent := doc.CreateElement("parent")
+		c := doc.CreateElement("c")
+		require.NoError(t, parent.AddChild(c))
+
+		// Corrupt the sibling list into a self-cycle: c.next = c.
+		c.SetNextSibling(c)
+
+		outside := doc.CreateElement("outside")
+		require.False(t, childReaches(parent, outside.baseDocNode()),
+			"a target not in the cyclic list must terminate and report false")
+		require.True(t, childReaches(parent, c.baseDocNode()),
+			"a node in the cyclic list must still be found")
+	})
+
+	t.Run("two-cycle", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		parent := doc.CreateElement("parent")
+		c1 := doc.CreateElement("c1")
+		c2 := doc.CreateElement("c2")
+		require.NoError(t, parent.AddChild(c1))
+		require.NoError(t, parent.AddChild(c2))
+
+		// Close a 2-cycle: c1 -> c2 -> c1.
+		c2.SetNextSibling(c1)
+
+		outside := doc.CreateElement("outside")
+		require.False(t, childReaches(parent, outside.baseDocNode()),
+			"a target not in the cyclic list must terminate and report false")
+	})
+}
+
+// TestWalkRejectsEntityChildCycle verifies Walk returns ErrWalkCycle (rather
+// than looping forever) on a child-pointer cycle that the guarded insertion API
+// refuses to build: an entity reference's shared Entity child links back to the
+// reference (ent.firstChild = ref, ref.firstChild = ent). The cycle is closed
+// through the lower-level docnode links, bypassing AddChild.
+func TestWalkRejectsEntityChildCycle(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+	require.NoError(t, err)
+
+	ref, err := doc.CreateReference("e")
+	require.NoError(t, err)
+	require.Equal(t, ent, ref.FirstChild(), "reference's child is the shared Entity node")
+
+	// Close the cycle the ancestor-and-child insertion guard would reject.
+	ent.firstChild = ref
+	ent.lastChild = ref
+
+	err = Walk(ref, NodeWalkerFunc(func(Node) error { return nil }))
+	require.ErrorIs(t, err, ErrWalkCycle,
+		"Walk must detect the child-pointer cycle and return ErrWalkCycle instead of hanging")
 }

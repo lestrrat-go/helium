@@ -180,10 +180,27 @@ func (n docnode) Parent() Node {
 	return n.parent
 }
 
-func (n docnode) Content() []byte {
+// Content aggregates the content of this node's own children. It advances
+// between children with the owned-boundary rule (nextOwnedChild): a foreign
+// child — an entity reference's shared Entity child, owned by the DTD, whose
+// sibling pointers belong to the DTD declaration list — ends the aggregation
+// instead of spilling into another list's siblings, and a per-call seen set
+// stops a cyclic sibling pointer from looping forever. The receiver is a pointer
+// so it is the real owning node against which child ownership is checked. Each
+// child's own Content() aggregates its subtree; that recursion cannot loop for
+// graphs built through the guarded insertion API — an Entity's Content() is its
+// stored text, not a child aggregation, so any cycle routed through an entity
+// terminates there.
+func (n *docnode) Content() []byte {
 	b := bytes.Buffer{}
-	for e := n.firstChild; e != nil; e = e.NextSibling() {
-		_, _ = b.Write(e.Content())
+	seen := make(map[*docnode]struct{})
+	for child := n.firstChild; child != nil; child = nextOwnedChild(n, child) {
+		cdn := child.baseDocNode()
+		if _, dup := seen[cdn]; dup {
+			break
+		}
+		seen[cdn] = struct{}{}
+		_, _ = b.Write(child.Content())
 	}
 	return b.Bytes()
 }
@@ -240,6 +257,20 @@ func (f NodeWalkerFunc) Visit(n Node) error {
 // Walk performs a depth-first traversal of the node tree rooted at n,
 // calling w.Visit for each node. There is no direct libxml2 equivalent; callers
 // typically write manual tree traversal loops in C.
+//
+// Walk is safe on hand-built or foreign-linked graphs that a plain
+// child-pointer descent would loop on. It advances between siblings using the
+// OWNED-BOUNDARY rule — a child whose Parent() is not the frame's node (an
+// entity reference's shared Entity child, owned by the DTD, whose sibling
+// pointers belong to another list) ends that child list — so the traversal
+// never wanders out of a node's own children. It also carries the set of nodes
+// currently on the DFS stack (the active path): descending into a node already
+// on that path is a back-edge (a cycle), and Walk returns ErrWalkCycle instead
+// of looping. Memory is O(active-path depth). A shared DAG node reached on a
+// different path (not currently on the stack) is not a cycle and is still
+// visited on each occurrence — Walk does not maintain a global visited set, so
+// DAG traversal is unchanged. On an acyclic, parent-consistent tree behavior is
+// identical to a naive recursive descent.
 func Walk(n Node, w NodeWalker) error {
 	if n == nil {
 		return errors.New("nil node")
@@ -251,6 +282,7 @@ func Walk(n Node, w NodeWalker) error {
 		activeChild Node
 	}
 
+	onPath := make(map[*docnode]struct{})
 	stack := []walkFrame{{node: n}}
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
@@ -259,22 +291,40 @@ func Walk(n Node, w NodeWalker) error {
 				return err
 			}
 			top.entered = true
+			onPath[top.node.baseDocNode()] = struct{}{}
 			top.activeChild = top.node.FirstChild()
 			continue
 		}
 
 		if top.activeChild == nil {
+			delete(onPath, top.node.baseDocNode())
 			stack = stack[:len(stack)-1]
 			if len(stack) > 0 {
 				parent := &stack[len(stack)-1]
-				parent.activeChild = parent.activeChild.NextSibling()
+				parent.activeChild = nextWalkSibling(parent.node, parent.activeChild)
 			}
 			continue
 		}
 
+		if _, cyclic := onPath[top.activeChild.baseDocNode()]; cyclic {
+			return ErrWalkCycle
+		}
 		stack = append(stack, walkFrame{node: top.activeChild})
 	}
 	return nil
+}
+
+// nextWalkSibling advances child to the next sibling within owner's own child
+// list, applying the owned-boundary rule and stopping on an immediate
+// self-referential sibling pointer (child.next == child) so a corrupted sibling
+// link cannot make the traversal spin. A longer sibling cycle is broken by the
+// active-path guard once it descends back into a node already on the stack.
+func nextWalkSibling(owner Node, child Node) Node {
+	next := nextOwnedChild(owner.baseDocNode(), child)
+	if next == child {
+		return nil
+	}
+	return next
 }
 
 func (n docnode) LocalName() string {
@@ -341,7 +391,10 @@ func wouldCreateCycle(parent, cur Node) bool {
 // depth is detected (a depth cap here would fail OPEN and admit a deep cycle).
 // It enumerates each node's OWN children via nextOwnedChild so a foreign child
 // link (an entity reference's Entity child, owned by the DTD) is not followed
-// into another list's siblings.
+// into another list's siblings, and it stops enumerating a sibling list as soon
+// as it revisits a node — a cyclic sibling pointer (child.next == child, or a
+// longer sibling loop) would otherwise spin here forever, since the popped-node
+// visited set alone does not bound the inner enumeration.
 func childReaches(node Node, target *docnode) bool {
 	visited := make(map[*docnode]struct{})
 	stack := []Node{node}
@@ -355,7 +408,13 @@ func childReaches(node Node, target *docnode) bool {
 			continue
 		}
 		visited[dn] = struct{}{}
+		siblingSeen := make(map[*docnode]struct{})
 		for child := dn.firstChild; child != nil; child = nextOwnedChild(dn, child) {
+			cdn := child.baseDocNode()
+			if _, dup := siblingSeen[cdn]; dup {
+				break
+			}
+			siblingSeen[cdn] = struct{}{}
 			stack = append(stack, child)
 		}
 	}
