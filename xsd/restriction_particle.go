@@ -172,20 +172,33 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			if version != Version10 {
 				return true
 			}
-			// A NON-EMITTING derived wildcard has the empty language, a trivial subset
-			// of any base — accept regardless of the base. Non-emitting means either a
-			// prohibited occurrence (maxOccurs=0) OR an empty positive namespace
-			// constraint (`namespace=""`), which matches no expanded name.
-			if r.MaxOccurs == 0 || wildcardMatchesNothing(rt) {
+			// Decide by the LANGUAGE of the derived wildcard particle vs the base
+			// model group of element declarations. §3.9.6 has no rule for a wildcard
+			// restricting a group of element declarations, so an EMITTING wildcard is
+			// never a valid restriction; the only accepts come from a derived particle
+			// whose language is trivially a subset of the base's.
+			matchesNothing := wildcardMatchesNothing(rt)
+			switch {
+			case matchesNothing && r.MinOccurs > 0:
+				// EMPTY language {}: the wildcard must occur at least once but its
+				// positive namespace constraint is empty, so it matches no expanded
+				// name and is unsatisfiable. {} is a subset of L(base) for every base.
 				return true
+			case r.MaxOccurs == 0 || matchesNothing:
+				// {ε} language: the derived particle can occur zero times and can never
+				// match one or more — a prohibited occurrence (maxOccurs=0), or a
+				// matchesNothing wildcard with minOccurs=0. {ε} ⊆ L(base) iff the base
+				// contains the empty sequence, i.e. the base is emptiable.
+				return particleEmptiable(b)
 			}
-			// The base "model group" may be a §3.9.6-POINTLESS 1/1 wrapper around a
-			// single non-element term (e.g. sequence(sequence(xs:any))). Fold it to
-			// that term and re-dispatch: a base that is really just a WILDCARD then
-			// falls through to the NSSubset rule (wildcard-vs-wildcard), and a base
-			// that reduces to a single ELEMENT hits wildcard-vs-element (rejected).
-			// Only a base that stays a model group of ELEMENT declarations has no
-			// wildcard-restricting rule and is rejected here.
+			// An EMITTING derived wildcard (a non-empty positive/negated namespace
+			// constraint, occurring at least sometimes). The base "model group" may be
+			// a §3.9.6-POINTLESS 1/1 wrapper around a single non-element term (e.g.
+			// sequence(sequence(xs:any))). Fold it to that term and re-dispatch: a base
+			// that is really just a WILDCARD then falls through to the NSSubset rule
+			// (wildcard-vs-wildcard), and a base that reduces to a single ELEMENT hits
+			// wildcard-vs-element (rejected). A base that stays a model group of ELEMENT
+			// declarations has no wildcard-restricting rule and is rejected.
 			if red, reduced := pointlessReduce(b); reduced {
 				return particleValidRestriction(ctx, r, red, schema, version)
 			}

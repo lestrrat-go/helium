@@ -119,3 +119,96 @@ func TestWildcardEmptyNamespaceRestrictsGroup(t *testing.T) {
 		"an empty-namespace derived wildcard has the empty language and validly restricts a base element group in XSD 1.0")
 	require.NotNil(t, schema)
 }
+
+// wildcardGroupSchema builds a restriction of a base model group of element
+// declarations by a `<xs:sequence>` wrapping a single `<xs:any>` carrying the
+// given attribute string (namespace/minOccurs/maxOccurs). baseChoice controls
+// whether the base group is NON-emptiable (choice(a,b){2}) or EMPTIABLE
+// (choice(a,b) minOccurs="0").
+func wildcardGroupSchema(anyAttrs, baseChoiceAttrs string) string {
+	return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice ` + baseChoiceAttrs + `>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any ` + anyAttrs + `/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+}
+
+// The derived wildcard's LANGUAGE relative to the base model group decides
+// validity in XSD 1.0 (§3.9.6 has no wildcard-restricts-element-group rule):
+//   - an EMPTY language {} (a matchesNothing wildcard that must still occur ≥1)
+//     is a subset of every base → ACCEPT;
+//   - the {ε} language (maxOccurs="0", or a matchesNothing wildcard with
+//     minOccurs="0") is a subset iff the base is emptiable;
+//   - an EMITTING wildcard has no rule → REJECT.
+func TestWildcardRestrictsGroupLanguageCells(t *testing.T) {
+	t.Parallel()
+
+	const nonEmptiableBase = `maxOccurs="2"`      // choice(a,b){2} — never empty
+	const emptiableBase = `minOccurs="0"`         // choice(a,b){0,1} — emptiable
+
+	tests := []struct {
+		name        string
+		anyAttrs    string
+		baseAttrs   string
+		wantErr     bool
+		description string
+	}{
+		{
+			name:        "empty-ns min0 over non-emptiable base rejects",
+			anyAttrs:    `namespace="" minOccurs="0"`,
+			baseAttrs:   nonEmptiableBase,
+			wantErr:     true,
+			description: "language {ε}; a non-emptiable base does not contain ε",
+		},
+		{
+			name:        "maxOccurs0 over non-emptiable base rejects",
+			anyAttrs:    `namespace="##any" maxOccurs="0"`,
+			baseAttrs:   nonEmptiableBase,
+			wantErr:     true,
+			description: "language {ε}; a non-emptiable base does not contain ε",
+		},
+		{
+			name:        "empty-ns min1 over non-emptiable base accepts",
+			anyAttrs:    `namespace="" minOccurs="1"`,
+			baseAttrs:   nonEmptiableBase,
+			wantErr:     false,
+			description: "empty language {}: must match ≥1 of an impossible namespace → subset of any base",
+		},
+		{
+			name:        "empty-ns min0 over emptiable base accepts",
+			anyAttrs:    `namespace="" minOccurs="0"`,
+			baseAttrs:   emptiableBase,
+			wantErr:     false,
+			description: "language {ε}; an emptiable base contains ε",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := wildcardGroupSchema(tc.anyAttrs, tc.baseAttrs)
+			schema, _, cerr := compileWith(t, xsd.Version10, schemaXML)
+			if tc.wantErr {
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, tc.description)
+				require.Nil(t, schema)
+				return
+			}
+			require.NoError(t, cerr, tc.description)
+			require.NotNil(t, schema)
+		})
+	}
+}
