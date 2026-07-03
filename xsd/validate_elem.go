@@ -819,11 +819,13 @@ func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl 
 		// The head's EFFECTIVE {disallowed substitutions} unions the head element's
 		// block with its declared TYPE's {prohibited substitutions} (Substitution
 		// Group OK / cvc-elt.4.3), so a member reached by a derivation method the
-		// intermediate OR original head's TYPE blocks is not admitted.
-		if typeDerivationBlocked(memberType, curHeadType, item.head.Block) {
+		// intermediate OR original head's TYPE blocks is not admitted; the
+		// substitution-specific walk also honors any INTERMEDIATE type's block on the
+		// member's derivation chain.
+		if substTypeDerivationBlocked(memberType, curHeadType, item.head.Block) {
 			continue
 		}
-		if typeDerivationBlocked(memberType, headType, edecl.Block) {
+		if substTypeDerivationBlocked(memberType, headType, edecl.Block) {
 			continue
 		}
 		seen[member.Name] = struct{}{}
@@ -1523,6 +1525,50 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
 			return true
 		}
+	}
+	return false
+}
+
+// substTypeDerivationBlocked reports whether admitting `derived` as a substitution
+// for a head declaration whose effective type is `base` is blocked. It layers the
+// substitution-group-specific rule on top of typeDerivationBlocked (which handles
+// the head element's block unioned with the BASE type's {prohibited substitutions}):
+// per Substitution Group OK (Transitive) §3.3.6.3, the {prohibited substitutions} of
+// every INTERMEDIATE type definition in the derivation chain also block a step using
+// the forbidden method. So a chain Base <- Mid(block="extension") <- Leaf is not
+// substitutable for a head of type Base even though neither Base nor the head element
+// blocks extension — Mid does. Only the substitution-group path considers
+// intermediate-type blocks; xsi:type and CTA use typeDerivationBlocked directly (they
+// key on the selected/base type's block, not every intermediate's).
+func substTypeDerivationBlocked(derived, base *TypeDef, elemBlock BlockFlags) bool {
+	if typeDerivationBlocked(derived, base, elemBlock) {
+		return true
+	}
+	// Walk the BaseType chain from derived toward base. At each step `td` is derived
+	// from `td.BaseType` via `td.Derivation`; an INTERMEDIATE base type (one strictly
+	// between derived and base) whose {prohibited substitutions} forbids that method
+	// blocks the substitution. The final `base` is already covered by
+	// typeDerivationBlocked's base-type union above.
+	for td := derived; td != nil && td != base; td = td.BaseType {
+		next := td.BaseType
+		if next == nil || next == base {
+			break
+		}
+		if derivationMethodBlocked(td.Derivation, next.Block) {
+			return true
+		}
+	}
+	return false
+}
+
+// derivationMethodBlocked reports whether the given derivation method is forbidden
+// by the {prohibited substitutions} bitmask.
+func derivationMethodBlocked(method DerivationKind, blocked BlockFlags) bool {
+	switch method {
+	case DerivationExtension:
+		return blocked&BlockExtension != 0
+	case DerivationRestriction:
+		return blocked&BlockRestriction != 0
 	}
 	return false
 }

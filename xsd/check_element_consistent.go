@@ -438,13 +438,14 @@ func (c *compiler) foldSubstitutionMembers(head *ElementDecl, byName map[QName][
 			memberType := c.resolveDeclaredType(member)
 			// The member must be substitutable for the IMMEDIATE head 'cur' ...
 			// (using each head's EFFECTIVE {disallowed substitutions}: the union of
-			// its element block and its declared TYPE's {prohibited substitutions}).
-			if typeDerivationBlocked(memberType, curType, cur.Block) {
+			// its element block and its declared TYPE's {prohibited substitutions},
+			// plus any INTERMEDIATE type's block on the member's derivation chain).
+			if substTypeDerivationBlocked(memberType, curType, cur.Block) {
 				continue
 			}
 			// ... and also for the ORIGINAL head, whose disallowed substitutions
 			// apply transitively to every member of the group.
-			if typeDerivationBlocked(memberType, headType, head.Block) {
+			if substTypeDerivationBlocked(memberType, headType, head.Block) {
 				continue
 			}
 			if _, seen := visited[member.Name]; seen {

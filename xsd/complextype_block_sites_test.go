@@ -68,6 +68,71 @@ func TestComplexTypeBlock_SubstitutionGroup(t *testing.T) {
 	}
 }
 
+// TestComplexTypeBlock_SubstitutionIntermediate covers the intermediate-type case of
+// Substitution Group OK (Transitive) §3.3.6.3: the {prohibited substitutions} of an
+// INTERMEDIATE type definition in a member's derivation chain — not only the head/base
+// type — must block the substitution. Chain Base <- Mid(block="extension") <- Leaf,
+// head <h> type Base, member <m> type Leaf: Leaf derives from Mid by extension and Mid
+// blocks extension, so <m> is not substitutable for <h> even though neither Base nor
+// the head element blocks extension. Removing Mid's block makes it valid.
+// Version-independent (the closure feeds the 1.0 matcher and the 1.1 instance path).
+func TestComplexTypeBlock_SubstitutionIntermediate(t *testing.T) {
+	schemaFor := func(midBlock string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                  xmlns:t="urn:t" targetNamespace="urn:t"
+                  elementFormDefault="qualified">
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Mid" ` + midBlock + `>
+    <xs:complexContent>
+      <xs:extension base="t:Base">
+        <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Leaf">
+    <xs:complexContent>
+      <xs:extension base="t:Mid">
+        <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="h" type="t:Base"/>
+  <xs:element name="m" type="t:Leaf" substitutionGroup="t:h"/>
+  <xs:element name="container">
+    <xs:complexType><xs:sequence><xs:element ref="t:h"/></xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`
+	}
+	instance := `<t:container xmlns:t="urn:t"><t:m><t:a>x</t:a><t:b>y</t:b><t:c>z</t:c></t:m></t:container>`
+
+	compileValidate := func(t *testing.T, v xsd.Version, midBlock string) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaFor(midBlock)))
+		require.NoError(t, err)
+		sc, err := xsd.NewCompiler().Version(v).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		return xsd.NewValidator(sc).Validate(t.Context(), idoc)
+	}
+
+	for _, tc := range []struct {
+		name string
+		ver  xsd.Version
+	}{{"xsd10", xsd.Version10}, {"xsd11", xsd.Version11}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("intermediate TYPE block=extension rejects member", func(t *testing.T) {
+				require.ErrorIs(t, compileValidate(t, tc.ver, `block="extension"`), xsd.ErrValidationFailed)
+			})
+			t.Run("no intermediate TYPE block accepts member", func(t *testing.T) {
+				require.NoError(t, compileValidate(t, tc.ver, ``))
+			})
+		})
+	}
+}
+
 // TestComplexTypeBlock_CTAAlternative covers site 2: an <xs:alternative> whose
 // {type definition} is derived by extension from the element's declared type must be
 // rejected at compile time when the declared type carries block="extension" (the
