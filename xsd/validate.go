@@ -859,8 +859,10 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// declared type — otherwise a blocked narrowing whose value is also valid under
 	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
 	// block="restriction") would be wrongly accepted. This mirrors the per-child
-	// match sites, which already treat a blocked xsi:type as a content error.
-	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
+	// match sites, which already treat a blocked xsi:type as a content error. The
+	// blocked set unions the element declaration's block with the declared type's
+	// {prohibited substitutions} (cvc-elt.4.3).
+	if td != declType && isDerivationBlocked(td, declType, edecl.Block|declType.prohibitedSubstitutions()) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("blocked xsi:type")
@@ -1095,8 +1097,9 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			continue
 		}
 		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-		// for a global element assessed through xs:anyType too.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+		// for a global element assessed through xs:anyType too. The blocked set unions
+		// the element declaration's block with the declared type's block.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block|declType.prohibitedSubstitutions()) {
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
 				"The xsi:type definition is blocked by the element declaration.")
 			contentErr = fmt.Errorf("blocked xsi:type")

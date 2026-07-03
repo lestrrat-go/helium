@@ -476,8 +476,10 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 		return xsiErr
 	}
 	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-	// here just like at matchElementParticle/root.
-	if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+	// here just like at matchElementParticle/root. The blocked set is the UNION of
+	// the element declaration's block and the declared type's {prohibited
+	// substitutions}.
+	if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block|declType.prohibitedSubstitutions()) {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
@@ -712,8 +714,9 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			contentErr = xsiErr
 			continue
 		}
-		// Check block flags against xsi:type derivation.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+		// Check block flags against xsi:type derivation (cvc-elt.4.3): the union of
+		// the element declaration's block and the declared type's block.
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block|declType.prohibitedSubstitutions()) {
 			msg := "The xsi:type definition is blocked by the element declaration."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("blocked xsi:type")
@@ -1182,8 +1185,9 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		return xsiErr
 	}
 	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced for
-	// a strict wildcard-matched global element too.
-	if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+	// a strict wildcard-matched global element too. The blocked set unions the
+	// element declaration's block with the declared type's {prohibited substitutions}.
+	if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block|declType.prohibitedSubstitutions()) {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
@@ -1439,6 +1443,16 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 		}
 	}
 	return false
+}
+
+// prohibitedSubstitutions returns the type's {prohibited substitutions} (block),
+// or the empty set when the type is nil. cvc-elt.4.3 unions this with the element
+// declaration's {disallowed substitutions} when checking an xsi:type derivation.
+func (td *TypeDef) prohibitedSubstitutions() BlockFlags {
+	if td == nil {
+		return 0
+	}
+	return td.Block
 }
 
 // isDerivationBlocked walks the BaseType chain from derived to base and returns

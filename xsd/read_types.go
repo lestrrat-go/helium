@@ -159,6 +159,19 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 		}
 	}
 
+	// The complex type's {prohibited substitutions} (block): the @block value
+	// (only present on a top-level complexType) folded with the schema-level
+	// blockDefault, masked to {extension, restriction} (substitution belongs to
+	// element declarations). cvc-elt.4.3 unions this with the element's block when
+	// checking an xsi:type derivation. Version-independent; a type silent on block
+	// (including every anonymous complexType) picks up blockDefault.
+	if hasAttr(elem, attrBlock) {
+		td.Block = parseBlockFlags(getAttr(elem, attrBlock)) & (BlockExtension | BlockRestriction)
+		td.BlockSet = true
+	} else {
+		td.Block = c.schema.blockDefault & (BlockExtension | BlockRestriction)
+	}
+
 	if c.readBooleanAttr(ctx, elem, "mixed") {
 		td.ContentType = ContentTypeMixed
 	}
