@@ -544,7 +544,19 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 			if alt.Type == nil {
 				continue
 			}
-			if isValidlySubstitutable(alt.Type, declType) {
+			// xs:error is always a valid alternative type (it makes the element
+			// invalid by design) and is not subject to derivation blocking.
+			if isErrorType(alt.Type) {
+				continue
+			}
+			// The alternative type must be validly substitutable for the declared
+			// type AND its derivation must not be blocked by the element's EFFECTIVE
+			// {disallowed substitutions} — the union of the element block and the
+			// declared TYPE's {prohibited substitutions} (cvc-elt.4.3, via the shared
+			// helper), so a CTA alternative selected by extension is rejected when the
+			// declared type blocks extension.
+			if isValidlySubstitutable(alt.Type, declType) &&
+				!typeDerivationBlocked(alt.Type, declType, edecl.Block) {
 				continue
 			}
 			msg := fmt.Sprintf("The type alternative's type '{%s}%s' is not validly substitutable for the declared type '{%s}%s' of the element declaration.",
