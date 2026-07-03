@@ -212,6 +212,12 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 		}
 		return SingleAtomic(result), nil
 	}
+	// A user-defined list type (xs:list) casts to a SEQUENCE of item atoms.
+	if ec != nil && ec.schemaDeclarations != nil {
+		if itemType, ok := ec.schemaDeclarations.ListItemType(targetType); ok {
+			return castToUserList(ctx, ec, av, targetType, itemType)
+		}
+	}
 	result, err := CastAtomic(av, targetType)
 	if err != nil {
 		if result, err = schemaAwareCast(ctx, ec, av, targetType); err != nil {
@@ -272,8 +278,67 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		_, castErr := CastAtomic(av, TypeDouble)
 		return SingleBoolean(castErr == nil), nil
 	}
+	// A user-defined list type (xs:list): castable iff a string/untypedAtomic
+	// source tokenizes into tokens each castable to the item type, and the whole
+	// value satisfies the list type's own facets. A multi-item (already-expanded)
+	// list-typed source was rejected by the singleton cardinality check above.
+	if ec != nil && ec.schemaDeclarations != nil {
+		if itemType, ok := ec.schemaDeclarations.ListItemType(targetType); ok {
+			return SingleBoolean(castableToUserList(ctx, ec, av, targetType, itemType)), nil
+		}
+	}
 	_, castErr := schemaAwareCast(ctx, ec, av, targetType)
 	return SingleBoolean(castErr == nil), nil
+}
+
+// castableToUserList reports whether av is castable to a user-defined list type
+// (F&O 3.1 §19.1.2): a string/untypedAtomic source is split on XSD whitespace and
+// each token must be castable to the list's item type, then the whole normalized
+// value must satisfy the list type's own facets (length/pattern). Any other
+// already-typed atomic source is not castable to a list (its lexical is not a list
+// literal). An empty token set (an empty/whitespace-only source) is the empty list,
+// castable iff the list facets accept zero items.
+func castableToUserList(ctx context.Context, ec *evalContext, av AtomicValue, listType, itemType string) bool {
+	if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
+		return false
+	}
+	s, err := AtomicToString(av)
+	if err != nil {
+		return false
+	}
+	for _, tok := range xsdListFields(s) {
+		if _, castErr := schemaAwareCast(ctx, ec, AtomicValue{TypeName: TypeString, Value: tok}, itemType); castErr != nil {
+			return false
+		}
+	}
+	return ec.schemaDeclarations.ValidateCastWithNS(ctx, s, listType, ec.namespaces) == nil
+}
+
+// castToUserList casts a string/untypedAtomic source to a user-defined list type,
+// returning the sequence of item atoms (each typed as the item type). Mirrors
+// castableToUserList's tokenize-and-cast semantics; a token that is not castable
+// to the item type, a non-string source, or a list-facet violation is FORG0001.
+func castToUserList(ctx context.Context, ec *evalContext, av AtomicValue, listType, itemType string) (Sequence, error) {
+	if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
+		return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %s to list type %s", av.TypeName, listType)}
+	}
+	s, err := AtomicToString(av)
+	if err != nil {
+		return nil, err
+	}
+	if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, listType, ec.namespaces); vErr != nil {
+		return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, listType, vErr)}
+	}
+	tokens := xsdListFields(s)
+	items := make(ItemSlice, 0, len(tokens))
+	for _, tok := range tokens {
+		cast, castErr := schemaAwareCast(ctx, ec, AtomicValue{TypeName: TypeString, Value: tok}, itemType)
+		if castErr != nil {
+			return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast token %q to %s: %v", tok, itemType, castErr)}
+		}
+		items = append(items, cast)
+	}
+	return items, nil
 }
 
 // isValidListCastable checks whether a string value is castable to
