@@ -190,6 +190,13 @@ func (r *schemaRegistry) LookupSchemaType(local, ns string) (baseType string, ok
 // It checks whether typeName is the same as or a subtype of baseTypeName using
 // the annotation format ("xs:localName" for built-ins, "Q{ns}localName" for user-defined).
 func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
+	// Canonicalize the XSD-namespace Q{...}local form to xs:local so the
+	// built-in hierarchy and union-member comparisons (which produce xs:local
+	// via xsdTypeNameFromDef) see a consistent spelling regardless of whether
+	// the caller resolved a builtin type through its prefix (Q{XMLSchema}local)
+	// or left it as xs:local.
+	typeName = canonicalizeBuiltinTypeName(typeName)
+	baseTypeName = canonicalizeBuiltinTypeName(baseTypeName)
 	if typeName == baseTypeName {
 		return true
 	}
@@ -202,7 +209,9 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 		if isBuiltinSubtypeOf(typeName, baseTypeName) {
 			return true
 		}
-		// Also check if baseTypeName is a union type with typeName as a member.
+		// A built-in type is validly derived from a union type that has it (or a
+		// supertype) as a member — e.g. xs:time derives from a union of
+		// xs:date/xs:time/xs:dateTime, so `$t instance of theUnion` holds.
 		if !isXSBuiltin(baseTypeName) {
 			baseLocal, baseNS := splitAnnotationName(baseTypeName)
 			for _, s := range r.schemas {
@@ -232,7 +241,7 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 		cur := td.BaseType
 		for cur != nil {
 			curName := xsdTypeNameFromDef(cur)
-			if curName == baseTypeName {
+			if canonicalizeBuiltinTypeName(curName) == baseTypeName {
 				return true
 			}
 			if isXSBuiltin(curName) {
@@ -242,20 +251,70 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 		}
 		return false
 	}
-	// Check if baseTypeName is a union type and typeName is a member type.
+	return false
+}
+
+// isSubtypeOrUnionMember reports whether typeName is derived from baseTypeName by
+// the base-type chain (IsSubtypeOf) OR is an ATOMIC member of the baseTypeName
+// union (Type Derivation OK (Simple), §3.16.6.3). It is used for element(*, T) /
+// attribute(*, T) pattern type tests, where a union member matches its union.
+// It is intentionally NOT folded into IsSubtypeOf: the shared derives-from is
+// also used as a substitution-group proxy in xpath3's schema-element step, where
+// admitting union membership would wrongly match an unrelated element whose type
+// happens to be a member of the head element's union type.
+func (r *schemaRegistry) isSubtypeOrUnionMember(typeName, baseTypeName string) bool {
+	if r.IsSubtypeOf(typeName, baseTypeName) {
+		return true
+	}
+	return r.isUnionMember(typeName, baseTypeName)
+}
+
+// isUnionMember returns true if baseTypeName is a union type having typeName —
+// or a type typeName derives from — among its (transitive) member types.
+//
+// Only ATOMIC member types (and nested unions, walked recursively) confer this
+// derivation: a LIST member does not make a same-typed node match
+// element(*, U) / attribute(*, U). W3C match-232 requires the atomic-member
+// derivation (an xs:integer attribute matches attribute(*, partIntegerUnion)),
+// while match-197 requires that a list-typed element (myListType) does NOT match
+// element(*, listUnionType) even though myListType is a union member.
+func (r *schemaRegistry) isUnionMember(typeName, baseTypeName string) bool {
+	typeName = canonicalizeBuiltinTypeName(typeName)
+	baseTypeName = canonicalizeBuiltinTypeName(baseTypeName)
 	baseLocal, baseNS := splitAnnotationName(baseTypeName)
 	for _, s := range r.schemas {
 		baseTD, found := s.LookupType(baseLocal, baseNS)
 		if !found {
 			continue
 		}
-		if baseTD.Variety == xsd.TypeVarietyUnion {
-			for _, member := range baseTD.MemberTypes {
-				memberName := xsdTypeNameFromDef(member)
-				if typeName == memberName || r.IsSubtypeOf(typeName, memberName) {
-					return true
-				}
+		if baseTD.Variety != xsd.TypeVarietyUnion {
+			continue
+		}
+		for _, member := range baseTD.MemberTypes {
+			if effectiveVarietyIsList(member) {
+				continue
 			}
+			memberName := canonicalizeBuiltinTypeName(xsdTypeNameFromDef(member))
+			if typeName == memberName {
+				return true
+			}
+			if r.IsSubtypeOf(typeName, memberName) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// effectiveVarietyIsList reports whether td's effective variety (following the
+// base-type chain, mirroring the xsd package's resolveVariety) is list.
+func effectiveVarietyIsList(td *xsd.TypeDef) bool {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		switch cur.Variety {
+		case xsd.TypeVarietyList:
+			return true
+		case xsd.TypeVarietyUnion:
+			return false
 		}
 	}
 	return false
@@ -334,6 +393,17 @@ func (r *schemaRegistry) IsSubstitutionGroupMember(memberLocal, memberNS, headLo
 // isXSBuiltin returns true if the annotation name is an xs: built-in type.
 func isXSBuiltin(name string) bool {
 	return len(name) > 3 && name[:3] == "xs:"
+}
+
+// canonicalizeBuiltinTypeName rewrites the XSD-namespace Q{ns}local annotation
+// form to the xs:local form so built-in type comparisons are spelling-agnostic.
+// Non-XSD names are returned unchanged.
+func canonicalizeBuiltinTypeName(name string) string {
+	local, ns := splitAnnotationName(name)
+	if ns == lexicon.NamespaceXSD {
+		return "xs:" + local
+	}
+	return name
 }
 
 // builtinSimpleTypes is the set of xs: built-in simple (atomic/list/union) types

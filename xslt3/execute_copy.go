@@ -563,6 +563,13 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 					ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
 				}
 			} else if effectiveVal == validationStrict || effectiveVal == validationLax || effectiveVal == validationStrip {
+				// validation="strip" removes type annotations but XDM retains
+				// the is-id / is-idrefs properties, so fn:id()/fn:idref() must
+				// still resolve over the stripped copy. Record them BEFORE the
+				// strip removes the source-derived annotations.
+				if effectiveVal == validationStrip {
+					ec.preserveIDAnnotationsForCopy(v.Node, out.current, lastBefore)
+				}
 				// Apply validation/strip to the most recently added node in output.
 				// In sequence mode the copied node lives in pendingItems, not
 				// as a child of out.current.

@@ -443,6 +443,93 @@ func (ec *execContext) transferAnnotationsForCopy(src helium.Node, parent helium
 	}
 }
 
+// idFamilyAnnotation returns node's type annotation when it is xs:ID / xs:IDREF
+// / xs:IDREFS (or a subtype), else "". It consults both the live and the
+// preserved annotation maps so a strip copy of an already-stripped tree keeps
+// the is-id property.
+func (ec *execContext) idFamilyAnnotation(node helium.Node) string {
+	ann := ""
+	if ec.typeAnnotations != nil {
+		ann = ec.typeAnnotations[node]
+	}
+	if ann == "" && ec.preservedIDAnnotations != nil {
+		ann = ec.preservedIDAnnotations[node]
+	}
+	if ann == "" {
+		return ""
+	}
+	if isIDType(ann, ec.schemaRegistry) || isIDRefType(ann, ec.schemaRegistry) || isIDRefsType(ann, ec.schemaRegistry) {
+		return ann
+	}
+	return ""
+}
+
+func (ec *execContext) preserveNodeIDAnnotation(node helium.Node, ann string) {
+	if ec.preservedIDAnnotations == nil {
+		ec.preservedIDAnnotations = make(map[helium.Node]string)
+	}
+	ec.preservedIDAnnotations[node] = ann
+}
+
+// deepPreserveIDAnnotations records the is-id / is-idref(s) property of each
+// source node onto the corresponding copy node in preservedIDAnnotations. Per
+// XDM, validation="strip" removes the type annotation but retains the is-id /
+// is-idrefs properties, so fn:id()/fn:idref() still resolve over the stripped
+// copy. The two subtrees must have the same structure.
+func (ec *execContext) deepPreserveIDAnnotations(src, dst helium.Node) {
+	if ann := ec.idFamilyAnnotation(src); ann != "" {
+		ec.preserveNodeIDAnnotation(dst, ann)
+	}
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			for _, srcAttr := range srcElem.Attributes() {
+				ann := ec.idFamilyAnnotation(srcAttr)
+				if ann == "" {
+					continue
+				}
+				for _, dstAttr := range dstElem.Attributes() {
+					if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+						ec.preserveNodeIDAnnotation(dstAttr, ann)
+						break
+					}
+				}
+			}
+		}
+	}
+	srcChild := src.FirstChild()
+	dstChild := dst.FirstChild()
+	for srcChild != nil && dstChild != nil {
+		ec.deepPreserveIDAnnotations(srcChild, dstChild)
+		srcChild = srcChild.NextSibling()
+		dstChild = dstChild.NextSibling()
+	}
+}
+
+// preserveIDAnnotationsForCopy records is-id / is-idrefs properties from a
+// stripped copy's source subtree onto the newly-copied nodes, mirroring
+// transferAnnotationsForCopy's document-vs-single-node structure matching.
+func (ec *execContext) preserveIDAnnotationsForCopy(src, parent, lastBefore helium.Node) {
+	if src.Type() == helium.DocumentNode {
+		var firstNew helium.Node
+		if lastBefore == nil {
+			firstNew = parent.FirstChild()
+		} else {
+			firstNew = lastBefore.NextSibling()
+		}
+		srcChild := src.FirstChild()
+		dstChild := firstNew
+		for srcChild != nil && dstChild != nil {
+			ec.deepPreserveIDAnnotations(srcChild, dstChild)
+			srcChild = srcChild.NextSibling()
+			dstChild = dstChild.NextSibling()
+		}
+		return
+	}
+	if last := parent.LastChild(); last != nil {
+		ec.deepPreserveIDAnnotations(src, last)
+	}
+}
+
 // varScope is a variable scope chain.
 type varScope struct {
 	vars           map[string]xpath3.Sequence
