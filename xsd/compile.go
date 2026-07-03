@@ -1434,18 +1434,19 @@ func getAttrNS(elem *helium.Element, ns, name string) string {
 }
 
 // resolveVersion determines the effective XSD specification version for a
-// compilation. An explicit Compiler.Version() (cfg.versionSet) always wins.
-// Otherwise a vc:minVersion="1.1" (or higher) hint on the root <xs:schema>
-// upgrades to 1.1; absent any hint, the default is Version10. vc:maxVersion is
-// not consulted for processor selection — it gates per-element conditional
+// compilation. Resolution order: an explicit Compiler.Version() (cfg.versionSet)
+// always wins; else a vc:minVersion="1.1" (or higher) hint on the root
+// <xs:schema> upgrades to 1.1; else a configured Compiler.DefaultVersion()
+// (cfg.defaultVersionSet) is used; else the default is Version10. vc:maxVersion
+// is not consulted for processor selection — it gates per-element conditional
 // inclusion, not the overall version.
 //
 // The hint is parsed with the SAME rules the conditional-inclusion pre-pass uses
 // for vc decimals: ASCII XML whitespace trim only (NOT strings.TrimSpace, which
 // also strips NBSP) and EXACT xs:decimal comparison (isValidXSDDecimal +
 // value.CompareDecimal, not float64). So an NBSP-padded value or a malformed
-// decimal does NOT auto-select 1.1 (treated as no hint → default 1.0), and a
-// high-precision value just below 1.1 is not float-rounded up into 1.1.
+// decimal does NOT auto-select 1.1 (treated as no hint → configured default),
+// and a high-precision value just below 1.1 is not float-rounded up into 1.1.
 func resolveVersion(cfg *compileConfig, root *helium.Element) Version {
 	if cfg != nil && cfg.versionSet {
 		return cfg.version
@@ -1455,6 +1456,9 @@ func resolveVersion(cfg *compileConfig, root *helium.Element) Version {
 		if isValidXSDDecimal(s) && value.CompareDecimal(s, "1.1") >= 0 {
 			return Version11
 		}
+	}
+	if cfg != nil && cfg.defaultVersionSet {
+		return cfg.defaultVersion
 	}
 	return Version10
 }
