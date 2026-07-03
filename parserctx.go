@@ -227,6 +227,13 @@ func (ctx *parserCtx) pushNS(prefix, uri string) {
 	ctx.nsTab.Push(prefix, uri)
 }
 
+// isXML11 reports whether the document being parsed declared XML version 1.1
+// in its XML declaration. Used to gate XML 1.1-only well-formedness relaxations
+// such as namespace prefix undeclaration (xmlns:pfx="").
+func (ctx *parserCtx) isXML11() bool {
+	return ctx.version == "1.1"
+}
+
 const (
 	cbEntityDecl = iota
 	cbGetParameterEntity

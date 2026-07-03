@@ -610,7 +610,13 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 		return
 	}
 
-	if isXMLCharValue(uint32(val)) && val <= unicode.MaxRune {
+	charOK := isXMLCharValue(uint32(val))
+	if !charOK && ctx.isXML11() {
+		// XML 1.1 permits character references to the C0/C1 control
+		// characters the 1.0 Char production forbids (all but U+0000).
+		charOK = isXML11CharValue(uint32(val))
+	}
+	if charOK && val <= unicode.MaxRune {
 		r = val
 		return
 	}

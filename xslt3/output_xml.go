@@ -19,7 +19,11 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// producing only comments and text), use the stream-based serializer
 	// which does not inject newlines between top-level children.
 	noDocElem := doc.DocumentElement() == nil
-	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 || (outDef.Indent && len(outDef.SuppressIndentation) > 0) || noDocElem {
+	// The stream-based serializer honors the XML 1.1 output-version declaration
+	// and the undeclare-prefixes namespace-undeclaration output; the default
+	// helium.Writer path does neither, so route to it when either applies.
+	needsXML11 := outDef.UndeclarePrefixes || (outDef.Version != "" && outDef.Version != lexicon.XSLTVersion10)
+	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 || (outDef.Indent && len(outDef.SuppressIndentation) > 0) || noDocElem || needsXML11 {
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.
@@ -117,7 +121,13 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		if enc == "" {
 			enc = lexicon.EncodingUTF8U
 		}
-		if err := sw.StartDocument(lexicon.XSLTVersion10, enc, ""); err != nil {
+		// The output XML version defaults to 1.0; xsl:output/@version="1.1"
+		// selects an XML 1.1 declaration.
+		xmlVersion := lexicon.XSLTVersion10
+		if outDef.Version == "1.1" {
+			xmlVersion = outDef.Version
+		}
+		if err := sw.StartDocument(xmlVersion, enc, ""); err != nil {
 			return err
 		}
 	}
@@ -154,8 +164,9 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 	}
 
 	ictx := &xmlIndentCtx{
-		indent:      outDef.Indent,
-		suppressSet: suppressSet,
+		indent:            outDef.Indent,
+		suppressSet:       suppressSet,
+		undeclarePrefixes: outDef.UndeclarePrefixes,
 	}
 
 	err := serializeXMLNodeWithCharMap(&sw, doc, charMap, cdataSet, enc, outDef.NormalizationForm, ictx)
@@ -172,6 +183,11 @@ type xmlIndentCtx struct {
 	depth       int
 	suppressSet map[string]struct{}
 	suppressed  bool // true when inside a suppress-indentation element
+	// undeclarePrefixes enables serialization of XML 1.1 prefixed namespace
+	// undeclarations (xmlns:pfx="") from empty-URI namespace declarations in the
+	// result tree. A default-namespace undeclaration (xmlns="") is always
+	// serialized regardless (it is valid in XML 1.0).
+	undeclarePrefixes bool
 }
 
 func (ic *xmlIndentCtx) writeIndent(sw *stream.Writer) error {
@@ -280,6 +296,12 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 						return err
 					}
 				} else {
+					// A prefixed namespace undeclaration (empty URI) is an XML 1.1
+					// construct; emit it only when undeclare-prefixes is enabled,
+					// otherwise the prefix is simply left undeclared in the output.
+					if ns.URI() == "" && !ictx.undeclarePrefixes {
+						continue
+					}
 					if err := sw.WriteAttribute("xmlns:"+ns.Prefix(), ns.URI()); err != nil {
 						return err
 					}

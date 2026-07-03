@@ -244,6 +244,48 @@ func TestParseRejectsDuplicateAttribute(t *testing.T) {
 	}
 }
 
+func TestParseXML11PrefixUndeclaration(t *testing.T) {
+	// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an empty
+	// value (xmlns:pfx="") undeclares the prefix. This is well-formed only in an
+	// XML 1.1 document; XML 1.0 forbids it.
+	const undecl = `<doc xmlns:a="http://a/"><para xmlns:a=""/></doc>`
+
+	// XML 1.0: rejected.
+	_, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<?xml version="1.0"?>`+undecl))
+	require.Error(t, err, "XML 1.0 must reject a prefixed namespace undeclaration")
+
+	// No XML declaration defaults to XML 1.0: rejected.
+	_, err = helium.NewParser().Parse(t.Context(), []byte(undecl))
+	require.Error(t, err, "an implicit XML 1.0 document must reject xmlns:pfx=\"\"")
+
+	// XML 1.1: accepted, and the prefix binding is removed on the inner element.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<?xml version="1.1"?>`+undecl))
+	require.NoError(t, err, "XML 1.1 must accept a prefixed namespace undeclaration")
+
+	para := doc.DocumentElement().FirstChild().(*helium.Element)
+	require.Equal(t, "para", para.Name())
+	var hasUndecl bool
+	for _, ns := range para.Namespaces() {
+		if ns.Prefix() == "a" {
+			require.Equal(t, "", ns.URI(),
+				"the prefix a must be undeclared (empty URI) on the inner element")
+			hasUndecl = true
+		}
+	}
+	require.True(t, hasUndecl, "the undeclaration must be recorded on the inner element")
+
+	// The reserved xml/xmlns prefixes may never be undeclared, even in XML 1.1.
+	for _, input := range []string{
+		`<?xml version="1.1"?><doc xmlns:xml=""/>`,
+		`<?xml version="1.1"?><doc xmlns:xmlns=""/>`,
+	} {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err, "must reject undeclaring a reserved prefix in %q", input)
+	}
+}
+
 func TestParseNamespace(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <helium:root xmlns:helium="https://github.com/lestrrat-go/helium">
@@ -3466,6 +3508,28 @@ func TestCharacterReferences(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
 	require.NoError(t, err)
 	require.Equal(t, "dec=A hex=B high=\U0001F600", string(doc.DocumentElement().Content()))
+}
+
+func TestParseXML11ControlCharRef(t *testing.T) {
+	t.Parallel()
+
+	// XML 1.1 permits character references to the C0/C1 control characters
+	// (all but U+0000) that the XML 1.0 Char production forbids.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<?xml version="1.1"?><root>&#7;&#131;&#133;</root>`))
+	require.NoError(t, err, "XML 1.1 must accept control-character references")
+	require.Equal(t, "\u0007\u0083\u0085", string(doc.DocumentElement().Content()))
+
+	// XML 1.0 (and an implicit-1.0 document) must still reject them, and U+0000
+	// is invalid in every XML version.
+	for _, in := range []string{
+		`<?xml version="1.0"?><root>&#7;</root>`,
+		`<root>&#7;</root>`,
+		`<?xml version="1.1"?><root>&#0;</root>`,
+	} {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.Error(t, err, "must reject %q", in)
+	}
 }
 
 // TestMalformedDocuments exercises well-formedness error branches across the

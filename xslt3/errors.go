@@ -22,6 +22,7 @@ const (
 	errCodeSEPM0009 = "SEPM0009" // omit-xml-declaration conflicts with standalone/doctype
 	errCodeSEPM0010 = "SEPM0010" // undeclare-prefixes="yes" requires XML 1.1
 	errCodeSEPM0016 = "SEPM0016" // invalid serialization parameter value
+	errCodeSERE0006 = "SERE0006" // character invalid for the output XML version
 	errCodeSERE0012 = "SERE0012" // invalid character in text
 	errCodeSERE0014 = "SERE0014" // invalid character in comment or PI
 	errCodeSERE0015 = "SERE0015" // invalid character in namespace

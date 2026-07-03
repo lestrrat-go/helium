@@ -377,6 +377,14 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
 	}
 	if uri == "" {
+		// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an
+		// empty value undeclares the prefix (removes the in-scope binding).
+		// This is well-formed only in an XML 1.1 document; XML 1.0 forbids it.
+		// The reserved xml/xmlns prefixes were already handled above, so they
+		// cannot be undeclared here.
+		if pctx.isXML11() {
+			return nil
+		}
 		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
 	}
 	u, err := url.Parse(uri)
