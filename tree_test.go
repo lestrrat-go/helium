@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -171,6 +172,31 @@ func TestWalk(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		require.Equal(t, []string{"root", "a", "b"}, visited)
+	})
+
+	t.Run("stays within subtree across shared entity children", func(t *testing.T) {
+		// An entity reference's child is the shared Entity node, whose parent
+		// (and sibling links) belong to the DTD's child list, not the
+		// reference's. Walk must treat that foreign-owned child as the end of
+		// the reference's child list: following its sibling pointers would
+		// wander into the DTD's other entity declarations and — when an
+		// entity's expansion references an earlier-declared entity, as &b;
+		// does &a; here — re-enter an ancestor and never terminate.
+		const docXML = `<!DOCTYPE root [<!ENTITY a "x"><!ENTITY b "&a;&a;">]>
+<root>&b;</root>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(docXML))
+		require.NoError(t, err)
+
+		visits := 0
+		err = helium.Walk(doc, helium.NodeWalkerFunc(func(helium.Node) error {
+			visits++
+			if visits > 1000 {
+				return errors.New("runaway walk")
+			}
+			return nil
+		}))
+		require.NoError(t, err)
+		require.Less(t, visits, 100)
 	})
 
 	t.Run("skips sibling removed during traversal", func(t *testing.T) {

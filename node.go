@@ -267,7 +267,7 @@ func Walk(n Node, w NodeWalker) error {
 			stack = stack[:len(stack)-1]
 			if len(stack) > 0 {
 				parent := &stack[len(stack)-1]
-				parent.activeChild = parent.activeChild.NextSibling()
+				parent.activeChild = nextOwnedSibling(parent.node, parent.activeChild)
 			}
 			continue
 		}
@@ -275,6 +275,23 @@ func Walk(n Node, w NodeWalker) error {
 		stack = append(stack, walkFrame{node: top.activeChild})
 	}
 	return nil
+}
+
+// nextOwnedSibling advances a Walk traversal from child within parent's child
+// list. A child link may reference a node owned by ANOTHER parent's child list:
+// an entity reference's child is the shared Entity node, whose parent stays the
+// DTD (mirroring libxml2). That node's sibling pointers belong to the owning
+// list, so following them would walk out of parent's subtree into the DTD's
+// entity declarations — visiting nodes that are not descendants of parent, and
+// looping forever when the wander re-enters an ancestor (e.g. an entity whose
+// expansion references an earlier-declared entity). A foreign-owned child is
+// therefore the end of parent's child list.
+func nextOwnedSibling(parent, child Node) Node {
+	cp := child.Parent()
+	if cp == nil || cp.baseDocNode() != parent.baseDocNode() {
+		return nil
+	}
+	return child.NextSibling()
 }
 
 func (n docnode) LocalName() string {
