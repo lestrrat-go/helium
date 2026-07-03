@@ -207,18 +207,52 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 
 // outputBoolAttr reads a boolean xsl:output attribute. When the attribute is
 // absent (present=false) the value is ignored; when present but not a valid
-// xs:boolean lexical form it returns SEPM0016. The attr name is embedded in the
-// error verbatim, matching the param constants' literal values.
-func outputBoolAttr(elem *helium.Element, attr string) (bool, bool, error) {
+// value it returns SEPM0016. The attr name is embedded in the error verbatim,
+// matching the param constants' literal values.
+//
+// The accepted value space depends on the stylesheet's effective XSLT version.
+// XSLT 3.0 uses Serialization 3.0, whose boolean serialization parameters accept
+// the full xs:boolean lexical space {yes, no, true, false, 1, 0}. XSLT 2.0 (and
+// 1.0) use the earlier serialization spec, restricting them to {yes, no}; when
+// yesNoOnly is true any other lexical form (including true/false/1/0) is invalid.
+func outputBoolAttr(elem *helium.Element, attr string, yesNoOnly bool) (bool, bool, error) {
 	v := getAttr(elem, attr)
 	if v == "" {
 		return false, false, nil
+	}
+	if yesNoOnly {
+		switch strings.TrimSpace(v) {
+		case lexicon.ValueYes:
+			return true, true, nil
+		case lexicon.ValueNo:
+			return false, true, nil
+		default:
+			return false, false, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
+		}
 	}
 	b, ok := parseXSDBool(v)
 	if !ok {
 		return false, false, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
 	}
 	return b, true, nil
+}
+
+// serializationYesNoOnly reports whether an effective XSLT version predates the
+// Serialization 3.0 widening of the boolean serialization-parameter value space.
+// XSLT 2.0 (and 1.0) restrict xsl:output boolean parameters — and standalone's
+// boolean synonyms — to the yes/no lexical space; XSLT 3.0+ accepts the full
+// xs:boolean lexical space. An absent/unparseable version defaults to 3.0
+// (permissive), matching the compiler's default effective version.
+func serializationYesNoOnly(ver string) bool {
+	ver = strings.TrimSpace(ver)
+	if ver == "" {
+		return false
+	}
+	f, err := strconv.ParseFloat(ver, 64)
+	if err != nil {
+		return false
+	}
+	return f < 3.0
 }
 
 func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) error {
@@ -278,50 +312,65 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		outDef.Encoding = lexicon.EncodingUTF8U
 	}
 
+	// Determine the accepted lexical space for boolean serialization parameters.
+	// XSLT 2.0 (and 1.0) restrict them to yes/no; XSLT 3.0+ accepts the full
+	// xs:boolean lexical space. The governing XSLT version is the effective
+	// (in-scope module) version — NOT the xsl:output element's own @version,
+	// which is the serialization (output XML/HTML version) parameter.
+	yesNoOnly := serializationYesNoOnly(c.effectiveVersion)
+
 	// Validate and parse boolean output attributes.
 	// SEPM0016: invalid boolean values.
-	if b, present, err := outputBoolAttr(elem, paramIndent); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramIndent, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.Indent = b
 		outDef.IndentRaw = getAttr(elem, paramIndent)
 	}
-	if b, present, err := outputBoolAttr(elem, paramOmitXMLDeclaration); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramOmitXMLDeclaration, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.OmitDeclaration = b
 		outDef.OmitDeclarationExplicit = true
 	}
-	if b, present, err := outputBoolAttr(elem, paramUndeclarePrefixes); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramUndeclarePrefixes, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.UndeclarePrefixes = b
 	}
-	if b, present, err := outputBoolAttr(elem, paramByteOrderMark); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramByteOrderMark, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.ByteOrderMark = b
 	}
 	// Parse escape-uri-attributes.
-	if b, present, err := outputBoolAttr(elem, paramEscapeURIAttributes); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramEscapeURIAttributes, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.EscapeURIAttributes = &b
 	}
-	if b, present, err := outputBoolAttr(elem, paramIncludeContentType); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramIncludeContentType, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.IncludeContentType = &b
 	}
-	// Validate standalone: must be "yes", "no", "omit", or boolean equivalents.
+	// Validate standalone: must be "yes", "no", "omit", or (XSLT 3.0+ only) a
+	// boolean synonym. Under the yes/no-only value space true/false/1/0 are
+	// invalid, matching the boolean serialization parameters.
 	if v := getAttr(elem, paramStandalone); v != "" {
 		v = strings.TrimSpace(v)
 		switch v {
 		case lexicon.ValueYes, lexicon.ValueNo, "omit":
 			// valid as-is
 		case lexicon.ValueTrue, "1":
+			if yesNoOnly {
+				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
+			}
 			v = lexicon.ValueYes
 		case lexicon.ValueFalse, "0":
+			if yesNoOnly {
+				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
+			}
 			v = lexicon.ValueNo
 		default:
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
@@ -374,7 +423,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 	// xsl:output attribute or the parameter document. It is compile-time merge
 	// bookkeeping only and is deliberately kept off the public OutputDef type.
 	var adnExplicit bool
-	if b, present, err := outputBoolAttr(elem, paramAllowDuplicateNames); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramAllowDuplicateNames, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.AllowDuplicateNames = b
@@ -390,7 +439,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		outDef.SuppressIndentation = resolved
 	}
 
-	if b, present, err := outputBoolAttr(elem, paramBuildTree); err != nil {
+	if b, present, err := outputBoolAttr(elem, paramBuildTree, yesNoOnly); err != nil {
 		return err
 	} else if present {
 		outDef.BuildTree = &b
