@@ -45,12 +45,12 @@ func Example_untrustedService() {
 		return
 	}
 
-	// 3. Deadline-bearing context. A cancelled/expired ctx aborts compilation and
+	// 2. Deadline-bearing context. A cancelled/expired ctx aborts compilation and
 	//    the transform promptly. Never pass context.Background() for untrusted work.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 2. Hardened parse. helium's default parser is already XXE-blocked,
+	// 3. Hardened parse. helium's default parser is already XXE-blocked,
 	//    deny-all-filesystem, and no-network; we do NOT weaken it.
 	p := helium.NewParser()
 
@@ -77,8 +77,13 @@ func Example_untrustedService() {
 	// 5 + 6. Cap output through a size-limited writer, and set a small
 	//    MaxResourceBytes as defense-in-depth for any resolver-fetched resource
 	//    or xsl:analyze-string match enumeration. MaxResourceBytes is PER-RESOURCE,
-	//    not a total-output budget — the writer cap is what bounds total output.
-	const maxOutputBytes = 1 * 1024 * 1024 // 1 MiB serialized result
+	//    not a total-output budget — the writer cap is what bounds the PRIMARY
+	//    serialized result. It does NOT bound total output: xsl:result-document
+	//    trees are delivered separately through ResultDocumentHandler and bypass
+	//    this writer cap, so an untrusted-input service should either reject
+	//    stylesheets that use xsl:result-document or wrap that handler with its
+	//    own byte budget.
+	const maxOutputBytes = 1 * 1024 * 1024 // 1 MiB primary serialized result
 	out := &limitedWriter{w: new(bytes.Buffer), remaining: maxOutputBytes}
 
 	err = stylesheet.Transform(sourceDoc).
@@ -109,7 +114,8 @@ func readCapped(r io.Reader, limit int64) ([]byte, error) {
 
 // limitedWriter caps the total number of bytes written to the wrapped writer,
 // returning errOutputTooLarge once the cap would be exceeded. This bounds the
-// serialized result size of an output-fanout stylesheet.
+// PRIMARY serialized result only; xsl:result-document trees are delivered
+// through ResultDocumentHandler and never pass through this writer.
 type limitedWriter struct {
 	w         io.Writer
 	remaining int64
