@@ -1544,31 +1544,21 @@ func substTypeDerivationBlocked(derived, base *TypeDef, elemBlock BlockFlags) bo
 	if typeDerivationBlocked(derived, base, elemBlock) {
 		return true
 	}
-	// Walk the BaseType chain from derived toward base. At each step `td` is derived
-	// from `td.BaseType` via `td.Derivation`; an INTERMEDIATE base type (one strictly
-	// between derived and base) whose {prohibited substitutions} forbids that method
-	// blocks the substitution. The final `base` is already covered by
-	// typeDerivationBlocked's base-type union above.
-	for td := derived; td != nil && td != base; td = td.BaseType {
-		next := td.BaseType
-		if next == nil || next == base {
-			break
-		}
-		if derivationMethodBlocked(td.Derivation, next.Block) {
+	// For every INTERMEDIATE base type `mid` strictly between derived and base, the
+	// substitution is blocked if the FULL derivation from derived DOWN TO mid uses any
+	// method mid's {prohibited substitutions} forbids — not merely the single child
+	// step into mid. A blocked method may occur ANYWHERE in the derived..mid suffix:
+	// e.g. Base <- Mid(block="extension") <- R(restriction) <- Leaf(extension) is
+	// blocked because Leaf..Mid includes Leaf's extension step even though the direct
+	// step into Mid (R's) is a restriction. isDerivationBlocked walks the derived..mid
+	// suffix and returns true iff the given mask intersects the set of methods used
+	// along it, giving exactly that whole-suffix semantics. The final `base` is already
+	// covered by typeDerivationBlocked's base-type union above.
+	const derivBits = BlockExtension | BlockRestriction
+	for mid := derived.BaseType; mid != nil && mid != base; mid = mid.BaseType {
+		if isDerivationBlocked(derived, mid, mid.prohibitedSubstitutions()&derivBits) {
 			return true
 		}
-	}
-	return false
-}
-
-// derivationMethodBlocked reports whether the given derivation method is forbidden
-// by the {prohibited substitutions} bitmask.
-func derivationMethodBlocked(method DerivationKind, blocked BlockFlags) bool {
-	switch method {
-	case DerivationExtension:
-		return blocked&BlockExtension != 0
-	case DerivationRestriction:
-		return blocked&BlockRestriction != 0
 	}
 	return false
 }
