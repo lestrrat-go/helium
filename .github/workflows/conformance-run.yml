@@ -19,6 +19,10 @@ on:
         description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
         type: boolean
         default: false
+      harness_ref:
+        description: helium-w3c-tests (harness) git ref to check out (commit/tag/branch). Defaults to main so callers that do not pin (e.g. release.yml) keep tracking the harness tip.
+        type: string
+        default: main
 
 permissions:
   contents: read
@@ -42,12 +46,14 @@ jobs:
 
       # The conformance harness lives in helium-w3c-tests, whose go.mod uses
       # `replace github.com/lestrrat-go/helium => ../helium`, so the helium
-      # checkout above must sit as a sibling directory next to it.
+      # checkout above must sit as a sibling directory next to it. harness_ref
+      # defaults to main; a caller may pin an exact commit/tag for a
+      # reproducible audit run.
       - name: Check out helium-w3c-tests (sibling harness)
         uses: actions/checkout@v4
         with:
           repository: lestrrat-go/helium-w3c-tests
-          ref: main
+          ref: ${{ inputs.harness_ref }}
           path: helium-w3c-tests
 
       - name: Set up Go
@@ -70,6 +76,22 @@ jobs:
         working-directory: helium-w3c-tests
         run: go run ./cmd/w3cgen fetch "$FETCH_SUITE"
 
+      # Capture the full provenance of this run so the emitted summary stands
+      # alone: which helium (code under test) commit, which helium-w3c-tests
+      # (harness) commit, which Go toolchain, and whether slow tests ran.
+      - name: Collect provenance
+        run: |
+          {
+            echo "HELIUM_COMMIT=$(git -C helium rev-parse HEAD)"
+            echo "HARNESS_COMMIT=$(git -C helium-w3c-tests rev-parse HEAD)"
+            echo "GO_VERSION=$(go version)"
+            if [ -n "$HELIUM_SLOW_TESTS" ]; then
+              echo "RUN_MODE=slow (HELIUM_SLOW_TESTS=1)"
+            else
+              echo "RUN_MODE=default"
+            fi
+          } >> "$GITHUB_ENV"
+
       - name: Run conformance suite
         working-directory: helium-w3c-tests
         run: |
@@ -77,6 +99,10 @@ jobs:
           go run ./cmd/w3ctest \
             -out "test-results/${SUITE}-junit.xml" \
             -summary "test-results/${SUITE}-summary.md" \
+            -helium-commit "$HELIUM_COMMIT" \
+            -harness-commit "$HARNESS_COMMIT" \
+            -go-version "$GO_VERSION" \
+            -mode "$RUN_MODE" \
             "$SUITE"
 
       - name: Upload conformance results
