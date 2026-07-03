@@ -532,8 +532,11 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 //     also impose (matched by resolved QName) is lost.
 //   - block / {disallowed substitutions}: validateWildcardChild applies the GLOBAL's
 //     block, so any restriction/extension/substitution the LOCAL blocks but the global
-//     does not (`local.Block &^ global.Block != 0`) is lost — e.g. a base local
-//     block="#all" rejecting an xsi:type derivation the global admits.
+//     does not is lost — e.g. a base local block="#all" rejecting an xsi:type
+//     derivation the global admits. The EFFECTIVE blocked set on each side is the
+//     UNION of the element declaration's {disallowed substitutions} and its effective
+//     declared TYPE's {prohibited substitutions} (cvc-elt.4.3), so a block carried by
+//     the base-local's TYPE (not the element) is preserved too.
 //   - default (ASYMMETRIC): a BASE-LOCAL default is NOT a constraint (it only supplies
 //     a value for an empty element; it forbids nothing) — so it is not compared. But a
 //     GLOBAL default the local LACKS (or a VALUE-SPACE-DIFFERENT one, DefaultNS-aware) IS
@@ -554,7 +557,9 @@ func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global
 	if global.Nillable && !local.Nillable {
 		return "is nillable while the base declaration is not, so it would accept xsi:nil the base rejected"
 	}
-	if local.Block&^global.Block != 0 {
+	localBlocked := local.Block | effectiveDeclType(local, c.schema).prohibitedSubstitutions()
+	globalBlocked := global.Block | effectiveDeclType(global, c.schema).prohibitedSubstitutions()
+	if localBlocked&^globalBlocked != 0 {
 		return "does not block every derivation/substitution the base declaration's 'block' forbade"
 	}
 	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, c.schema, c.version)) {

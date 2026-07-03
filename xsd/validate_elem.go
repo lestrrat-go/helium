@@ -1220,7 +1220,16 @@ func (vc *validationContext) validateWildcardElementConsistent(ctx context.Conte
 	qn := QName{Local: child.name, NS: child.ns}
 	for _, decl := range vc.edcLocalDecls(mg, qn) {
 		localType := effectiveDeclType(decl, vc.schema)
-		if localType == nil || isValidlySubstitutable(governing, localType) {
+		if localType == nil {
+			continue
+		}
+		// The wildcard's governing type must be substitutable for the base-local
+		// declared type AND not blocked by the EFFECTIVE {disallowed substitutions}
+		// — the UNION of the element declaration's block and its declared TYPE's
+		// {prohibited substitutions} (cvc-elt.4.3, nil-safe) — so a derivation the
+		// base-local's TYPE blocks cannot be re-admitted through the wildcard.
+		if isValidlySubstitutable(governing, localType) &&
+			!isDerivationBlocked(governing, localType, decl.Block|localType.prohibitedSubstitutions()) {
 			continue
 		}
 		msg := fmt.Sprintf("The wildcard-matched element's governing type definition is not validly substitutable for the locally declared type definition of element '%s'.", child.displayName)
