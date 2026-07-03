@@ -212,6 +212,13 @@ func (d *Document) Version() string {
 	return d.version
 }
 
+// SetVersion sets the document's XML declaration version (e.g. "1.0" or "1.1").
+// Serialization consults this to decide whether XML 1.1 restricted control
+// characters are emitted as character references rather than rejected.
+func (d *Document) SetVersion(v string) {
+	d.version = v
+}
+
 // URL returns the document URI, used as the base for relative URI resolution.
 // This mirrors libxml2's xmlDoc.URL field.
 func (d *Document) URL() string {

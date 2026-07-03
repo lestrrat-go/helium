@@ -129,6 +129,12 @@ func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDe
 
 func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
 	sw := stream.NewWriter(w)
+	// XML 1.1 output serializes restricted control characters as decimal
+	// character references. Set this up front so it applies even when the XML
+	// declaration is omitted (StartDocument, when written, sets it too).
+	if outDef.Version == "1.1" {
+		sw = sw.XMLVersion("1.1")
+	}
 
 	if !outDef.OmitDeclaration {
 		enc := outDef.Encoding

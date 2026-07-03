@@ -86,6 +86,51 @@ var (
 
 const upperHex = "0123456789ABCDEF"
 
+// isXML11RestrictedChar reports whether r is an XML 1.1 restricted character: a
+// control character that is a valid XML 1.1 Char but must be serialized as a
+// character reference rather than appearing literally (XML 1.1 §2.11). Tab
+// (U+0009), LF (U+000A), and CR (U+000D) are excluded — they follow the ordinary
+// escaping rules.
+func isXML11RestrictedChar(r rune) bool {
+	switch {
+	case r >= 0x1 && r <= 0x8:
+		return true
+	case r == 0xB || r == 0xC:
+		return true
+	case r >= 0xE && r <= 0x1F:
+		return true
+	case r >= 0x7F && r <= 0x84:
+		return true
+	case r >= 0x86 && r <= 0x9F:
+		return true
+	default:
+		return false
+	}
+}
+
+// decimalCharRef writes r as a decimal character reference ("&#N;") into buf and
+// returns the populated slice.
+func decimalCharRef(buf *[12]byte, r rune) []byte {
+	n := len(buf)
+	n--
+	buf[n] = ';'
+	v := int(r)
+	if v <= 0 {
+		n--
+		buf[n] = '0'
+	}
+	for v > 0 {
+		n--
+		buf[n] = byte('0' + v%10)
+		v /= 10
+	}
+	n--
+	buf[n] = '#'
+	n--
+	buf[n] = '&'
+	return buf[n:]
+}
+
 func hexCharRef(buf *[8]byte, r rune) []byte {
 	buf[0] = '&'
 	buf[1] = '#'
@@ -111,9 +156,10 @@ func isInCharacterRange(r rune) bool {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars bool) error {
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, xml11 bool) error {
 	var esc []byte
 	var hbuf [8]byte
+	var dbuf [12]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -141,6 +187,13 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars b
 			// U+FFFD, which is IN range, so it is not a version error here.
 			if rejectInvalidChars && !isInCharacterRange(r) {
 				return ErrInvalidXMLChar
+			}
+			// XML 1.1 restricted control characters are valid but may not appear
+			// literally: emit them as decimal character references (before the
+			// escapeNonASCII hex branch and the out-of-range replacement).
+			if xml11 && isXML11RestrictedChar(r) {
+				esc = decimalCharRef(&dbuf, r)
+				break
 			}
 			if escapeNonASCII && !(0x20 <= r && r < 0x80) { //nolint:staticcheck
 				if r < 0x100 {
@@ -174,9 +227,10 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars b
 	return nil
 }
 
-func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInvalidChars bool) error {
+func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInvalidChars, xml11 bool) error {
 	var esc []byte
 	var hbuf [8]byte
+	var dbuf [12]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -203,6 +257,13 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInva
 			// U+FFFD, which is IN range, so it is not a version error here.
 			if rejectInvalidChars && !isInCharacterRange(r) {
 				return ErrInvalidXMLChar
+			}
+			// XML 1.1 restricted control characters are valid but may not appear
+			// literally: emit them as decimal character references (before the
+			// escapeNonASCII hex branch and the out-of-range replacement).
+			if xml11 && isXML11RestrictedChar(r) {
+				esc = decimalCharRef(&dbuf, r)
+				break
 			}
 			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { //nolint:staticcheck
 				if r < 0x100 {

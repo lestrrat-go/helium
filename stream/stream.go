@@ -84,6 +84,7 @@ type Writer struct {
 	commentDash   bool          // true if the current comment body ends with '-' (would form '--->' on close)
 	piQuestion    bool          // true if the current PI body ends with '?' (would form '?>' across writes)
 	cdataBrackets int           // count (0,1,2) of trailing ']' in the current CDATA body, to detect ']]>' across writes
+	xml11         bool          // true when serializing XML 1.1: restricted control chars are emitted as decimal character references instead of being rejected
 }
 
 // NewWriter creates a Writer that writes to w. Configure the Writer
@@ -113,6 +114,50 @@ func (w Writer) QuoteChar(q byte) Writer {
 		w.quoteChar = q
 	}
 	return w
+}
+
+// XMLVersion returns a copy of the Writer configured for the given XML
+// output version. When v is "1.1", the restricted control characters that
+// XML 1.1 permits (but which may not appear literally) are serialized as
+// decimal character references in text and attribute content instead of
+// being rejected. Any other value selects XML 1.0 behavior (the default),
+// where those characters are rejected as invalid. StartDocument also sets
+// this from its version argument, so callers that emit an XML declaration
+// need not call this explicitly; it is required only when the declaration
+// is omitted.
+func (w Writer) XMLVersion(v string) Writer {
+	w.xml11 = v == "1.1"
+	return w
+}
+
+// isXML11RestrictedChar reports whether r is an XML 1.1 restricted character:
+// a control character that is a valid XML 1.1 Char but must be serialized as a
+// character reference rather than appearing literally (XML 1.1 §2.11).
+// Tab (U+0009), LF (U+000A), and CR (U+000D) are excluded — they are handled by
+// the ordinary escaping rules.
+func isXML11RestrictedChar(r rune) bool {
+	switch {
+	case r >= 0x1 && r <= 0x8:
+		return true
+	case r == 0xB || r == 0xC:
+		return true
+	case r >= 0xE && r <= 0x1F:
+		return true
+	case r >= 0x7F && r <= 0x84:
+		return true
+	case r >= 0x86 && r <= 0x9F:
+		return true
+	default:
+		return false
+	}
+}
+
+// isXML11Char implements the XML 1.1 Char production (excluding U+0000):
+// Char ::= [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF].
+func isXML11Char(r rune) bool {
+	return (r >= 0x1 && r <= 0xD7FF) ||
+		(r >= 0xE000 && r <= 0xFFFD) ||
+		(r >= 0x10000 && r <= 0x10FFFF)
 }
 
 // Error returns the sticky error, if any. Once an error occurs, all
@@ -194,6 +239,22 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 				writeRawByte = true
 			}
 		default:
+			// In XML 1.1 output, a restricted control character is valid but
+			// may not appear literally: emit it as a decimal character
+			// reference. Only decode a rune for bytes that could begin one
+			// (C0 controls and any non-ASCII lead byte), so the ASCII fast
+			// path and all XML 1.0 output stay byte-identical.
+			if w.xml11 {
+				if b := s[i]; b < 0x20 || b >= 0x7F {
+					if r, width := utf8.DecodeRuneInString(s[i:]); isXML11RestrictedChar(r) {
+						if start < i {
+							w.writeStr(s[start:i])
+						}
+						w.writeDecimalCharRef(r)
+						start = i + width
+					}
+				}
+			}
 			continue
 		}
 		if start < i {
@@ -209,6 +270,29 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 	if start < len(s) {
 		w.writeStr(s[start:])
 	}
+}
+
+// writeDecimalCharRef writes r as a decimal character reference ("&#N;").
+func (w *Writer) writeDecimalCharRef(r rune) {
+	var buf [12]byte
+	n := len(buf)
+	n--
+	buf[n] = ';'
+	v := int(r)
+	if v <= 0 {
+		n--
+		buf[n] = '0'
+	}
+	for v > 0 {
+		n--
+		buf[n] = byte('0' + v%10)
+		v /= 10
+	}
+	n--
+	buf[n] = '#'
+	n--
+	buf[n] = '&'
+	w.writeStr(string(buf[n:]))
 }
 
 // writeByte writes a single byte.
@@ -498,6 +582,27 @@ func validateXMLChars(kind, s string) error {
 	return nil
 }
 
+// validateContentChars validates text or attribute content that will be
+// escaped before emission. In XML 1.1 output the restricted control characters
+// are permitted because writeEscaped serializes them as character references;
+// otherwise this is identical to validateXMLChars. It is used only for text and
+// attribute content — comment, PI, and CDATA content cannot carry a character
+// reference, so those keep the strict validateXMLChars check.
+func (w *Writer) validateContentChars(kind, s string) error {
+	if !w.xml11 {
+		return validateXMLChars(kind, s)
+	}
+	if !utf8.ValidString(s) {
+		return fmt.Errorf("stream: invalid UTF-8 byte sequence in %s content", kind)
+	}
+	for _, r := range s {
+		if !isXML11Char(r) {
+			return fmt.Errorf("stream: invalid XML character %#U in %s content", r, kind)
+		}
+	}
+	return nil
+}
+
 // validateDTDFragment validates an element contentspec written verbatim into
 // the internal subset. Beyond rejecting non-XML characters, it forbids the
 // markup-delimiter characters '<' and '>', which can never legitimately appear
@@ -628,6 +733,9 @@ func (w *Writer) StartDocument(version, enc, standalone string) error {
 	}
 	if standalone != "" && standalone != "yes" && standalone != "no" {
 		return fmt.Errorf("stream: invalid standalone value %q (want \"yes\", \"no\", or empty)", standalone)
+	}
+	if version == "1.1" {
+		w.xml11 = true
 	}
 	// Validate the encoding name BEFORE writing any output: first against the XML
 	// EncName production (so a syntactically malformed value like "utf 8" cannot
@@ -878,7 +986,7 @@ func (w *Writer) WriteElement(name, content string) error {
 	}
 	// Pre-validate content before StartElement emits the opening tag, so a
 	// rejected write leaves the writer unmutated.
-	if err := validateXMLChars("text", content); err != nil {
+	if err := w.validateContentChars("text", content); err != nil {
 		return err
 	}
 	if err := w.StartElement(name); err != nil {
@@ -897,7 +1005,7 @@ func (w *Writer) WriteElementNS(prefix, localName, namespaceURI, content string)
 	}
 	// Pre-validate content before StartElementNS declares the namespace or
 	// emits markup, so a rejected write leaves the writer unmutated.
-	if err := validateXMLChars("text", content); err != nil {
+	if err := w.validateContentChars("text", content); err != nil {
 		return err
 	}
 	if err := w.StartElementNS(prefix, localName, namespaceURI); err != nil {
@@ -1001,7 +1109,7 @@ func (w *Writer) WriteAttribute(name, value string) error {
 	}
 	// Pre-validate the value before StartAttribute emits ` name="`, so a
 	// rejected write leaves the writer unmutated.
-	if err := validateXMLChars("attribute", value); err != nil {
+	if err := w.validateContentChars("attribute", value); err != nil {
 		return err
 	}
 	if err := w.StartAttribute(name); err != nil {
@@ -1020,7 +1128,7 @@ func (w *Writer) WriteAttributeNS(prefix, localName, namespaceURI, value string)
 	}
 	// Pre-validate the value before StartAttributeNS declares the namespace or
 	// emits markup, so a rejected write leaves the writer unmutated.
-	if err := validateXMLChars("attribute", value); err != nil {
+	if err := w.validateContentChars("attribute", value); err != nil {
 		return err
 	}
 	if err := w.StartAttributeNS(prefix, localName, namespaceURI); err != nil {
@@ -1042,7 +1150,7 @@ func (w *Writer) WriteString(content string) error {
 	}
 	switch w.state {
 	case stateName:
-		if err := validateXMLChars("text", content); err != nil {
+		if err := w.validateContentChars("text", content); err != nil {
 			return err
 		}
 		w.closeTagIfOpen()
@@ -1051,7 +1159,7 @@ func (w *Writer) WriteString(content string) error {
 		}
 		w.writeTextEscaped(content)
 	case stateNone, stateText, stateDocument:
-		if err := validateXMLChars("text", content); err != nil {
+		if err := w.validateContentChars("text", content); err != nil {
 			return err
 		}
 		if len(w.elemStack) > 0 {
@@ -1059,7 +1167,7 @@ func (w *Writer) WriteString(content string) error {
 		}
 		w.writeTextEscaped(content)
 	case stateAttribute:
-		if err := validateXMLChars("attribute", content); err != nil {
+		if err := w.validateContentChars("attribute", content); err != nil {
 			return err
 		}
 		w.writeAttrEscaped(content)

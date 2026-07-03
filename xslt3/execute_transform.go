@@ -263,6 +263,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if defOut := ss.outputs[""]; defOut != nil && defOut.Method != "" {
 		ec.currentResultDocMethod = defOut.Method
 	}
+	// Record the output XML version on the result document so any serializer —
+	// including a plain DOM writer that does not consult the output definition —
+	// serializes XML 1.1 restricted control characters as character references.
+	if defOut := ss.outputs[""]; defOut != nil && defOut.Version != "" {
+		resultDoc.SetVersion(defOut.Version)
+	}
 
 	if effectiveSource != nil {
 		ec.currentNode = effectiveSource
