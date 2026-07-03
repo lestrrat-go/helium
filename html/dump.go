@@ -55,6 +55,7 @@ func (w Writer) WriteTo(out io.Writer, node helium.Node) error {
 		noDefaultDTD:          cfg.noDefaultDTD,
 		noEscapeURIAttributes: cfg.noEscapeURIAttributes,
 		escapeControlChars:    cfg.escapeControlChars,
+		nullNamespaceHTMLOnly: cfg.nullNamespaceHTMLOnly,
 	}
 	return d.dumpNode(out, node)
 }
@@ -104,6 +105,7 @@ type htmlDumper struct {
 	noDefaultDTD          bool
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
+	nullNamespaceHTMLOnly bool
 	// err is a sticky serialization error. Once set, all checked write
 	// helpers become no-ops and terminal methods return it. This mirrors
 	// the writeSession sticky-error pattern in writer.go so that a writer
@@ -543,8 +545,14 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 		return err
 	}
 
-	// Void element: no closing tag
-	if info != nil && info.empty {
+	// Void element: no closing tag. Under HTML 4.01 rules
+	// (nullNamespaceHTMLOnly), an element in a non-null namespace is not an
+	// HTML element and is serialized with an explicit end tag instead.
+	isVoid := info != nil && info.empty
+	if d.nullNamespaceHTMLOnly && e.URI() != "" {
+		isVoid = false
+	}
+	if isVoid {
 		d.writeString(out, ">")
 		if d.format && shouldNewlineAfterVoid(e, info) {
 			d.writeString(out, "\n")

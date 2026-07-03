@@ -18,6 +18,10 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	isHTML5 := isHTMLVersion5(outDef.HTMLVersion)
 	// Use effective version (with XSLT 3.0 default=5) for character escaping.
 	escapeCtrl := effectiveHTMLVersion5(outDef)
+	// HTML 4.01 mode: an explicit html-version < 5. Under HTML 4 rules only
+	// no-namespace elements are HTML elements, so a namespaced void element
+	// (e.g. an XHTML-namespace <meta>) is serialized with an explicit end tag.
+	html4 := isHTMLVersionBelow5(outDef.HTMLVersion)
 
 	if hasDoctypeAttrs {
 		rootName := "html"
@@ -88,6 +92,9 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	}
 	if escapeCtrl {
 		hw = hw.EscapeControlChars(true)
+	}
+	if html4 {
+		hw = hw.NullNamespaceHTMLOnly(true)
 	}
 	return hw.WriteTo(w, doc)
 }

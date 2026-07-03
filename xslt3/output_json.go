@@ -21,12 +21,8 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 		// No captured items: serialize DOM content as text for JSON
 		return serializeAdaptiveItems(w, items, doc, nil)
 	}
-	nodeMethod := ""
-	if outDef != nil {
-		nodeMethod = outDef.JSONNodeOutputMethod
-	}
 	if itemsLen == 1 {
-		s, err := serializeItemJSON(items.Get(0), nodeMethod)
+		s, err := serializeItemJSON(items.Get(0), outDef)
 		if err != nil {
 			return err
 		}
@@ -38,7 +34,7 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	for i := range itemsLen {
 		members[i] = xpath3.ItemSlice{items.Get(i)}
 	}
-	s, err := serializeItemJSON(xpath3.NewArray(members), nodeMethod)
+	s, err := serializeItemJSON(xpath3.NewArray(members), outDef)
 	if err != nil {
 		return err
 	}
@@ -46,17 +42,26 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	return err
 }
 
-// serializeItemJSON serializes a single XDM item as JSON.
-// nodeMethod specifies the json-node-output-method for serializing nodes.
-func serializeItemJSON(item xpath3.Item, nodeMethod string) (string, error) {
+// serializeItemJSON serializes a single XDM item as JSON. The json-node-output
+// method and its serialization parameters (e.g. html-version) are taken from
+// outDef, which may be nil.
+func serializeItemJSON(item xpath3.Item, outDef *OutputDef) (string, error) {
+	nodeMethod := ""
+	if outDef != nil {
+		nodeMethod = outDef.JSONNodeOutputMethod
+	}
 	switch v := item.(type) {
 	case xpath3.MapItem:
-		return serializeMapJSON(v, nodeMethod)
+		return serializeMapJSON(v, outDef)
 	case xpath3.ArrayItem:
-		return serializeArrayJSON(v, nodeMethod)
+		return serializeArrayJSON(v, outDef)
 	case xpath3.NodeItem:
 		if nodeMethod != "" && nodeMethod != methodText {
-			return jsonEscapeString(serializeNodeWithMethod(v.Node, nodeMethod)), nil
+			htmlVersion := ""
+			if outDef != nil {
+				htmlVersion = outDef.HTMLVersion
+			}
+			return jsonEscapeString(serializeNodeWithMethod(v.Node, nodeMethod, htmlVersion)), nil
 		}
 		return jsonEscapeString(nodeStringValue(v.Node)), nil
 	case xpath3.AtomicValue:
@@ -70,7 +75,7 @@ func serializeItemJSON(item xpath3.Item, nodeMethod string) (string, error) {
 }
 
 // serializeMapJSON serializes a map as a JSON object.
-func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
+func serializeMapJSON(m xpath3.MapItem, outDef *OutputDef) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	first := true
@@ -92,7 +97,7 @@ func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 		}
 		switch vLen {
 		case 1:
-			s, err := serializeItemJSON(v.Get(0), nodeMethod)
+			s, err := serializeItemJSON(v.Get(0), outDef)
 			if err != nil {
 				serErr = err
 				return err
@@ -105,7 +110,7 @@ func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 			for i := range vLen {
 				members[i] = xpath3.ItemSlice{v.Get(i)}
 			}
-			s, err := serializeItemJSON(xpath3.NewArray(members), nodeMethod)
+			s, err := serializeItemJSON(xpath3.NewArray(members), outDef)
 			if err != nil {
 				serErr = err
 				return err
@@ -122,7 +127,7 @@ func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 }
 
 // serializeArrayJSON serializes an array as a JSON array.
-func serializeArrayJSON(a xpath3.ArrayItem, nodeMethod string) (string, error) {
+func serializeArrayJSON(a xpath3.ArrayItem, outDef *OutputDef) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('[')
 	members := a.Members()
@@ -136,7 +141,7 @@ func serializeArrayJSON(a xpath3.ArrayItem, nodeMethod string) (string, error) {
 		}
 		switch mLen {
 		case 1:
-			s, err := serializeItemJSON(member.Get(0), nodeMethod)
+			s, err := serializeItemJSON(member.Get(0), outDef)
 			if err != nil {
 				return "", err
 			}
@@ -149,7 +154,7 @@ func serializeArrayJSON(a xpath3.ArrayItem, nodeMethod string) (string, error) {
 			for j := range mLen {
 				submembers[j] = xpath3.ItemSlice{member.Get(j)}
 			}
-			s, err := serializeItemJSON(xpath3.NewArray(submembers), nodeMethod)
+			s, err := serializeItemJSON(xpath3.NewArray(submembers), outDef)
 			if err != nil {
 				return "", err
 			}

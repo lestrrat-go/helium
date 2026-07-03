@@ -328,8 +328,11 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 }
 
 // serializeNodeWithMethod serializes a node using the specified output method.
-// This is used for json-node-output-method to serialize nodes within JSON output.
-func serializeNodeWithMethod(node helium.Node, method string) string {
+// This is used for json-node-output-method to serialize nodes within JSON
+// output. htmlVersion carries the effective html-version serialization
+// parameter (empty when unset) so nested html/xhtml serialization observes the
+// same version as the principal output, e.g. HTML 4.01 minimization rules.
+func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) string {
 	var buf bytes.Buffer
 	switch method {
 	case methodHTML:
@@ -337,6 +340,7 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 		outDef := defaultOutputDef()
 		outDef.Method = methodHTML
 		outDef.OmitDeclaration = true
+		outDef.HTMLVersion = htmlVersion
 		_ = serializeHTML(&buf, doc, outDef)
 		s := buf.String()
 		// If we wrapped the node in <html>, strip the wrapper tags
@@ -708,4 +712,19 @@ func isHTMLVersion5(v string) bool {
 		return false
 	}
 	return f >= 5.0
+}
+
+// isHTMLVersionBelow5 returns true when the html-version string is explicitly
+// set to a numeric value below 5.0 (e.g. "4", "4.0", "4.01"). An empty or
+// unparseable value returns false, so the default (HTML5) is not treated as
+// HTML 4.
+func isHTMLVersionBelow5(v string) bool {
+	if v == "" {
+		return false
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return false
+	}
+	return f < 5.0
 }
