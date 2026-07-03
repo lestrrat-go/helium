@@ -212,6 +212,7 @@ func (*forEachInst) instructionTag() {}
 // variableInst represents xsl:variable (local).
 type variableInst struct {
 	sourceInfo
+	xpathNS
 	Name   string
 	Select *xpath3.Expression
 	Body   []instruction
@@ -578,8 +579,8 @@ type mergeSource struct {
 	StreamableAttr  bool
 	SortBeforeMerge bool
 	BaseURI         string // effective base URI for resolving for-each-source URIs
-	Validation      string // "strict", "lax", "preserve", "strip"
-	TypeName        string // type annotation (e.g., "Q{ns}typeName")
+	Validation      string // validation mode (strict/lax/preserve/strip) for loaded sources
+	TypeName        string // named schema type annotation (e.g., "Q{ns}typeName")
 	Keys            []*mergeKey
 }
 

@@ -561,7 +561,7 @@ func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulat
 		return staticError(errCodeXPST0008, "variable $value is not in scope in accumulator-rule match pattern")
 	}
 
-	matchPat, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
+	matchPat, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
 	if err != nil {
 		return err
 	}

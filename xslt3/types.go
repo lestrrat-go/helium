@@ -300,7 +300,7 @@ func coerceItemWithContext(ctx context.Context, item xpath3.Item, itemType strin
 		}
 		// Try function coercion for return type flexibility — creates a
 		// wrapper that coerces args/return at call time.
-		coerced, ok := xpath3.CoerceToSequenceType(seq, st)
+		coerced, ok := xpath3.CoerceToSequenceTypeContext(ctx, seq, st)
 		if ok && coerced != nil && sequence.Len(coerced) == 1 {
 			return coerced.Get(0), nil
 		}
@@ -690,9 +690,14 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 	case "untypedAtomic":
 		return xpath3.TypeUntypedAtomic
 	}
-	// Unprefixed non-builtin type names: use Q{} annotation form to match
-	// xsdTypeNameFromDef which produces Q{}local for no-namespace types.
+	// Unprefixed non-builtin type names take the in-scope default element/type
+	// namespace (xpath-default-namespace) when one is in effect; otherwise no
+	// namespace. Use Q{} annotation form to match xsdTypeNameFromDef which
+	// produces Q{}local for no-namespace types.
 	if !strings.ContainsAny(name, ":{") {
+		if len(ec) > 0 && ec[0] != nil && ec[0].hasXPathDefaultNS && ec[0].xpathDefaultNS != "" {
+			return xpath3.QAnnotation(ec[0].xpathDefaultNS, name)
+		}
 		return "Q{}" + name
 	}
 	return name

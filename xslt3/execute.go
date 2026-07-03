@@ -250,6 +250,34 @@ func (ec *execContext) annotateNode(node helium.Node, typeName string) {
 	ec.typeAnnotations[node] = typeName
 }
 
+// remapAnnotationsToCopy rewrites the type-annotation and nilled-element maps,
+// gathered against the original (validated) source tree, so their keys point at
+// the corresponding nodes of the strip copy the transform navigates. nodeMap is
+// the original->copy correspondence produced by copyAndStrip; an annotated node
+// always has a copy (whitespace-only omitted nodes are never annotated), so no
+// entry is lost.
+func (ec *execContext) remapAnnotationsToCopy(nodeMap map[helium.Node]helium.Node) {
+	if nodeMap == nil {
+		return
+	}
+	if len(ec.typeAnnotations) > 0 {
+		remapped := make(map[helium.Node]string, len(ec.typeAnnotations))
+		for node, typeName := range ec.typeAnnotations {
+			remapped[remapValidationNode(nodeMap, node)] = typeName
+		}
+		ec.typeAnnotations = remapped
+	}
+	if len(ec.nilledElements) > 0 {
+		remapped := make(map[*helium.Element]struct{}, len(ec.nilledElements))
+		for elem := range ec.nilledElements {
+			if mapped, ok := remapValidationNode(nodeMap, elem).(*helium.Element); ok {
+				remapped[mapped] = struct{}{}
+			}
+		}
+		ec.nilledElements = remapped
+	}
+}
+
 // markNilled records that an element was confirmed nilled by XSD validation.
 func (ec *execContext) markNilled(elem *helium.Element) {
 	if ec.nilledElements == nil {
@@ -379,6 +407,15 @@ func (ec *execContext) isNilled(elem *helium.Element) bool {
 func (ec *execContext) deepTransferAnnotations(src, dst helium.Node) {
 	if ec.typeAnnotations == nil {
 		return
+	}
+	// The nilled property is preserved by validation="preserve" alongside the
+	// type annotation, so a deep (xsl:copy-of) copy carries it to the copy.
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			if ec.isNilled(srcElem) {
+				ec.markNilled(dstElem)
+			}
+		}
 	}
 	if ann, ok := ec.typeAnnotations[src]; ok {
 		ec.annotateNode(dst, ann)

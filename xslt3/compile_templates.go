@@ -101,7 +101,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
 		if err != nil {
 			return err
 		}

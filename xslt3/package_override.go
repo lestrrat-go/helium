@@ -288,7 +288,7 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible())
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
 		if err != nil {
 			return nil, err
 		}

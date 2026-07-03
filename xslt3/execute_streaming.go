@@ -61,8 +61,28 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	}
 
 	// Apply schema validation when validation="strict"|"lax" or type is specified.
-	if err := ec.validateAndAnnotateDoc(ctx, doc, inst.Validation, inst.TypeName, "source-document"); err != nil {
-		return err
+	if ec.schemaRegistry != nil && (inst.Validation == validationStrict || inst.Validation == validationLax || inst.TypeName != "") {
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
+		if valErr != nil {
+			if inst.TypeName != "" {
+				return dynamicError(errCodeXTTE1540,
+					"source-document: content does not match declared type %s: %v", inst.TypeName, valErr)
+			}
+			if inst.Validation == validationStrict {
+				return dynamicError(errCodeXTTE1510,
+					"source-document: strict validation failed: %v", valErr)
+			}
+		}
+		for node, typeName := range vr.Annotations {
+			ec.annotateNode(node, typeName)
+		}
+		for elem := range vr.NilledElements {
+			ec.markNilled(elem)
+		}
+		// Strip whitespace-only text nodes in element-only content.
+		// The XDM produced by schema validation should not include
+		// insignificant whitespace in element-only content models.
+		ec.stripSchemaWhitespace(doc, vr.Annotations)
 	}
 
 	// Apply input-type-annotations="strip": remove all type annotations so
@@ -955,8 +975,11 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 			}
 
 			// Load document from URI using the merge-source's effective base URI.
-			doc, err := ec.loadMergeDocument(ctx, uri, src)
+			doc, err := ec.loadMergeDocument(ctx, uri, src.BaseURI)
 			if err != nil {
+				return nil, err
+			}
+			if err := ec.applyMergeSourceValidation(ctx, src, doc); err != nil {
 				return nil, err
 			}
 			if err := ec.prepareMergeSourceAccumulators(ctx, src, doc); err != nil {
@@ -1366,46 +1389,48 @@ func (ec *execContext) checkAccumulatorType(ctx context.Context, def *accumulato
 	return checkSequenceType(ctx, seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
 }
 
-// validateAndAnnotateDoc validates doc against the imported schemas when the
-// merge/source instruction requests it (validation="strict"|"lax" or a named
-// type) and records the resulting PSVI type annotations and nilled elements on
-// the execution context. The what label distinguishes the reporting
-// instruction in any dynamic error. It is a no-op when no validation is
-// requested or the processor is not schema-aware.
-func (ec *execContext) validateAndAnnotateDoc(ctx context.Context, doc *helium.Document, validation, typeName, what string) error {
-	if ec.schemaRegistry == nil || (validation != validationStrict && validation != validationLax && typeName == "") {
+// applyMergeSourceValidation applies xsl:merge-source/@validation and @type to
+// a loaded merge document. A named @type or strict/lax validation validates the
+// document against the imported schemas, annotating its nodes with their schema
+// types and recording nilled elements, so downstream schema-aware expressions
+// (e.g. "current-merge-group() instance of schema-element(X)*") see the PSVI
+// type information. Mirrors xsl:source-document validation.
+func (ec *execContext) applyMergeSourceValidation(ctx context.Context, src *mergeSource, doc *helium.Document) error {
+	if ec.schemaRegistry == nil {
 		return nil
 	}
-	vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
-	if valErr != nil {
-		if typeName != "" {
-			return dynamicError(errCodeXTTE1540,
-				"%s: content does not match declared type %s: %v", what, typeName, valErr)
+	if src.TypeName != "" || src.Validation == validationStrict || src.Validation == validationLax {
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
+		if valErr != nil {
+			if src.TypeName != "" {
+				return dynamicError(errCodeXTTE1540,
+					"xsl:merge-source: content does not match declared type %s: %v", src.TypeName, valErr)
+			}
+			if src.Validation == validationStrict {
+				return dynamicError(errCodeXTTE1510,
+					"xsl:merge-source: strict validation failed: %v", valErr)
+			}
 		}
-		if validation == validationStrict {
-			return dynamicError(errCodeXTTE1510,
-				"%s: strict validation failed: %v", what, valErr)
+		for node, typeName := range vr.Annotations {
+			ec.annotateNode(node, typeName)
 		}
+		for elem := range vr.NilledElements {
+			ec.markNilled(elem)
+		}
+		ec.stripSchemaWhitespace(doc, vr.Annotations)
+		return nil
 	}
-	for node, tn := range vr.Annotations {
-		ec.annotateNode(node, tn)
+	if src.Validation == validationStrip {
+		ec.stripAnnotations(doc.DocumentElement())
 	}
-	for elem := range vr.NilledElements {
-		ec.markNilled(elem)
-	}
-	// Strip whitespace-only text nodes in element-only content. The XDM
-	// produced by schema validation should not include insignificant
-	// whitespace in element-only content models.
-	ec.stripSchemaWhitespace(doc, vr.Annotations)
 	return nil
 }
 
-// loadMergeDocument loads an XML document for an xsl:merge-source, resolving
-// its URI relative to the source's effective base URI (which accounts for
-// xml:base) and applying the source's validation/type when requested.
-func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, src *mergeSource) (*helium.Document, error) {
+// loadMergeDocument loads an XML document from a URI, resolving it relative
+// to the given effective base URI (which accounts for xml:base).
+func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effectiveBaseURI string) (*helium.Document, error) {
 	// Resolve URI relative to the effective base URI.
-	effectiveBase := src.BaseURI
+	effectiveBase := effectiveBaseURI
 	if effectiveBase == "" {
 		effectiveBase = ec.stylesheet.baseURI
 	}
@@ -1430,12 +1455,6 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, src *m
 	// Apply xsl:strip-space.
 	if len(ec.effectiveStripSpace()) > 0 {
 		ec.stripWhitespaceFromDoc(doc)
-	}
-
-	// Apply schema validation when validation="strict"|"lax" or type is
-	// specified, so the selected merge items carry PSVI type annotations.
-	if err := ec.validateAndAnnotateDoc(ctx, doc, src.Validation, src.TypeName, "merge-source"); err != nil {
-		return nil, err
 	}
 
 	if ec.docCache == nil {
