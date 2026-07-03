@@ -695,6 +695,13 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 
 // writeNSDecl writes a single namespace declaration attribute.
 func (d *htmlDumper) writeNSDecl(out io.Writer, prefix, uri string) {
+	// The "xml" prefix is predefined by the Namespaces in XML spec (bound
+	// implicitly to the XML namespace everywhere), so a literal
+	// xmlns:xml="http://www.w3.org/XML/1998/namespace" declaration is
+	// redundant and non-canonical and must never be emitted.
+	if prefix == "xml" {
+		return
+	}
 	if prefix == "" {
 		d.writeString(out, " xmlns=\"")
 		d.writeString(out, uri)
