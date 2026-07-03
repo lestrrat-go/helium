@@ -94,6 +94,101 @@ func TestRestrictionAttrNamespace(t *testing.T) {
 		require.Contains(t, compileFatalErrors(t, schema), noMatchingUse)
 	})
 
+	t.Run("accepts restriction adding wildcard when base wildcard is transitive via attribute group", func(t *testing.T) {
+		t.Parallel()
+		// The base type declares NO direct xs:anyAttribute; its attribute wildcard
+		// comes transitively through a referenced attribute group (g -> nested g2
+		// with <xs:anyAttribute namespace="##other">). A restriction that adds its
+		// own ##other wildcard is therefore a valid subset of the base's effective
+		// (complete) attribute wildcard and must NOT be rejected with "the base
+		// complex type definition does not have one". This is the schema-for-xslt20
+		// 'transform-element-base-type' shape; it must compile in XSD 1.0 (default).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attributeGroup name="g2">
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:anyAttribute namespace="##other" processContents="lax"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="g">
+    <xs:attributeGroup ref="t:g2"/>
+    <xs:attribute name="b" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attributeGroup ref="t:g"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:anyAttribute namespace="##other" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("does not narrow a direct base wildcard by a group-ref wildcard", func(t *testing.T) {
+		t.Parallel()
+		// The base has a DIRECT <xs:anyAttribute namespace="##any"/> AND a
+		// referenced attribute group contributing a NARROWER ##other wildcard.
+		// XSD 1.0 instance validation uses only the direct ##any wildcard, so the
+		// restriction check must too: a derived ##any wildcard is a valid subset of
+		// the direct base ##any and must compile. Intersecting the direct wildcard
+		// with the group's ##other would narrow the base and newly reject this in
+		// 1.0 — a byte-identical break.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:anyAttribute namespace="##other" processContents="lax"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attributeGroup ref="t:g"/>
+    <xs:anyAttribute namespace="##any"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:anyAttribute namespace="##any"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects restriction widening a transitive base attribute-group wildcard", func(t *testing.T) {
+		t.Parallel()
+		// Control: the base's effective wildcard (via the attribute group) is
+		// restricted to ##other; a derived ##any wildcard is a WIDENING, not a
+		// subset, so the derivation must still be rejected. This proves the fix
+		// compares against the real transitive wildcard rather than blanket-accepting.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:anyAttribute namespace="##other" processContents="lax"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attributeGroup ref="t:g"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:anyAttribute namespace="##any" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "not a valid subset")
+	})
+
 	t.Run("accepts derived attr admitted by base wildcard namespace", func(t *testing.T) {
 		t.Parallel()
 		// Base has an attribute wildcard covering ##targetNamespace (urn:t).

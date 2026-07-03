@@ -131,7 +131,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		hasXPathDefaultNS = true
 	}
 
-	matchPat, err := compilePattern(matchAttr, elem, xpathDefaultNS, hasXPathDefaultNS, c.backwardsCompatible())
+	matchPat, err := compilePattern(matchAttr, elem, xpathDefaultNS, hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
 	if err != nil {
 		return err
 	}
