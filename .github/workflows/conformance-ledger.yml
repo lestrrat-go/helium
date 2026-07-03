@@ -50,7 +50,7 @@ jobs:
           path: helium-w3c-tests
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: helium/go.mod
           cache-dependency-path: helium-w3c-tests/go.sum
