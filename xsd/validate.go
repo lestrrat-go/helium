@@ -2362,8 +2362,8 @@ func (s *mixedContentScan) pushOwnedChildren(stack *[]scanFrame, parent helium.N
 	for child := parent.FirstChild(); child != nil; child = ownedNext(parent, child) {
 		kids = append(kids, child)
 	}
-	for i := len(kids) - 1; i >= 0; i-- {
-		*stack = append(*stack, scanFrame{node: kids[i]})
+	for _, child := range slices.Backward(kids) {
+		*stack = append(*stack, scanFrame{node: child})
 	}
 }
 
