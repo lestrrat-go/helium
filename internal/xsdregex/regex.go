@@ -1501,8 +1501,11 @@ func checkXSD10ClassRanges(runes []rune, start, end int) error {
 		}
 		if c == '-' {
 			// A '-' is literal at the group start, immediately before the
-			// closing ']' (i+1 == end), or as the '-[' subtraction operator.
-			if i == contentStart || i+1 >= end || runes[i+1] == '[' {
+			// closing ']' (i+1 == end), as the '-[' subtraction operator, or
+			// as a literal member directly abutting the '-[' subtraction (the
+			// first '-' of "--[", e.g. [a-z--[b-z]]).
+			if i == contentStart || i+1 >= end || runes[i+1] == '[' ||
+				(runes[i+1] == '-' && i+2 < end && runes[i+2] == '[') {
 				prevRangeEnd = false
 				i++
 				continue
