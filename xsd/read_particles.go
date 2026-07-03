@@ -235,6 +235,30 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			c.attrGroupWildcards[qn] = c.parseAnyAttribute(ctx, ce)
 			continue
 		}
+		// XSD 1.0: record the group's attribute wildcard (namespace + processContents
+		// only, no diagnostics) so checkRestrictionAttrs can compute a base type's
+		// effective/complete {attribute wildcard} when it is contributed transitively
+		// through this attribute group. XSD 1.0 never merges group wildcards into a
+		// type's {attribute wildcard} at validation (byte-identical); this record is
+		// consulted ONLY by the compile-time restriction-derivation check. The full
+		// readWildcard path is deliberately NOT used here — it would emit new 1.0
+		// diagnostics (checkWildcardAttrs / validateWildcardNamespace / a bad
+		// processContents value) for a malformed anyAttribute that XSD 1.0 currently
+		// silently accepts inside an attribute group.
+		if isXSDElement(ce, elemAnyAttribute) {
+			if _, exists := c.attrGroupWildcards[qn]; !exists {
+				ns := WildcardNSAny
+				if hasAttr(ce, attrNamespace) {
+					ns = getAttr(ce, attrNamespace)
+				}
+				c.attrGroupWildcards[qn] = &Wildcard{
+					Namespace:       ns,
+					ProcessContents: quietProcessContents(ce),
+					TargetNS:        c.schema.targetNamespace,
+				}
+			}
+			continue
+		}
 		// Record nested xs:attributeGroup ref children so checkAttrGroupDuplicates
 		// can flatten the transitively-referenced groups and detect a duplicate
 		// attribute use introduced through a reference (ag-props-correct.2).

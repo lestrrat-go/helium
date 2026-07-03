@@ -56,6 +56,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	errCounter := &fatalErrorCounter{}
 	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
 	schemaCompiler := xsd.NewCompiler().
+		DefaultVersion(xsd.Version11).
 		ErrorHandler(errCounter).
 		BaseDir(schemaCompileBaseDir(uri)).
 		FS(fsys)
@@ -291,7 +292,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			// (inlineDoc); only their nested references reach the resolver FS,
 			// rooted at the import-schema element's base URI.
 			fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
-			compiler := xsd.NewCompiler().ErrorHandler(errCounter).FS(fsys)
+			compiler := xsd.NewCompiler().DefaultVersion(xsd.Version11).ErrorHandler(errCounter).FS(fsys)
 			if baseURI != "" {
 				compiler = compiler.BaseDir(schemaCompileBaseDir(baseURI))
 			}
