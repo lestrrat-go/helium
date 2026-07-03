@@ -64,6 +64,122 @@ func Example_xslt3_transform_string() {
 source: [examples/xslt3_transform_string_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_transform_string_example_test.go)
 <!-- END INCLUDE -->
 
+## Security
+
+External resource access is a security boundary, and `xslt3` is **default-deny**:
+with no resolver configured, a compiled stylesheet can neither read the
+filesystem nor reach the network. The engine itself never calls `os.Open`,
+`os.ReadFile`, `os.Create`, or `http.DefaultClient` — every external retrieval is
+routed through a resolver the caller must install explicitly. This is the same
+posture as the parser, `xinclude`, and `xsd` compiler (see the repository-wide
+[`# Security`](../README.md#security) section and
+[`SECURITY.md`](../SECURITY.md), the repository security policy;
+[`CONFORMANCE.md`](CONFORMANCE.md) records external-resource loading as
+default-deny).
+
+### What is gated
+
+Every operation that would reach outside the in-memory stylesheet and source
+document is gated:
+
+| Operation | Without a resolver |
+|-----------|--------------------|
+| `xsl:import` / `xsl:include` (module loads) | compile fails — `XTSE0165` ("no URIResolver configured") |
+| `xsl:use-package` | compile fails — no `PackageResolver` configured |
+| `xsl:import-schema`, `xsi:schemaLocation` source schemas | schema load refused |
+| `doc()` / `fn:doc()` / `document()` | dynamic error — "no URIResolver configured" (or "no HTTPClient or URIResolver" for `http(s)`) |
+| `xsl:source-document`, `xsl:merge` `for-each-source` | dynamic error — `FODC0002` |
+| `unparsed-text()` / `unparsed-text-lines()` | retrieval error — `FOUT1170` |
+| Availability probes — `doc-available()`, `unparsed-text-available()`, `stream-available()` | return `false` (no error, no host access) |
+
+`xsl:result-document` never writes to the filesystem either: secondary result
+documents are delivered in-memory to a `ResultDocumentHandler` (or collected),
+so output is confined to the caller's process. Retrieval functions raise their
+spec-mandated errors; the *availability* probes report `false` rather than
+stat-ing the host.
+
+### Granting access
+
+Access is granted by installing a resolver. There are two resolver interfaces —
+one for compile time, one for the transform:
+
+- Compile time: `Compiler.URIResolver(r)` where `r` satisfies
+  `xslt3.URIResolver` (`Resolve(uri string) (io.ReadCloser, error)`), plus
+  `Compiler.PackageResolver(r)` (`ResolvePackage(name, version string) (io.ReadCloser, string, error)`)
+  for `xsl:use-package`.
+- Transform time: `Invocation.URIResolver(r)` where `r` satisfies
+  `xpath3.URIResolver` (`ResolveURI(uri string) (io.ReadCloser, error)`),
+  `Invocation.CollectionResolver(r)` for `fn:collection`, and
+  `Invocation.HTTPClient(client)` to opt in to network retrieval for
+  `http(s)` URIs. Without an `HTTPClient` (and without a resolver that reaches
+  the network) network access stays refused.
+
+Back your resolver with a **confined** `fs.FS` rooted at a trusted directory and
+map incoming URIs to paths within it, rejecting anything that escapes the root.
+Grant only what the transform legitimately needs; do not hand untrusted
+stylesheets or untrusted source documents an OS-rooted or network-capable
+resolver.
+
+```go
+// A confined resolver backed by an fs.FS rooted at a trusted directory.
+type confinedResolver struct{ fsys fs.FS }
+
+// ResolveURI satisfies xpath3.URIResolver (used at transform time).
+func (r confinedResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	// Map uri -> a path inside fsys however your deployment requires,
+	// rejecting any path that would escape the trusted root.
+	return r.fsys.Open(pathWithinRoot(uri)) // your own validating mapper
+}
+
+// Resolve satisfies xslt3.URIResolver (used at compile time, e.g. xsl:import).
+func (r confinedResolver) Resolve(uri string) (io.ReadCloser, error) {
+	return r.fsys.Open(pathWithinRoot(uri))
+}
+
+res := confinedResolver{fsys: trustedFS}
+
+ss, err := xslt3.NewCompiler().
+	URIResolver(res). // allow xsl:import / xsl:include from trustedFS
+	Compile(ctx, stylesheetDoc)
+// ...
+out, err := ss.Transform(source).
+	URIResolver(res). // allow doc() / xsl:source-document / unparsed-text()
+	// HTTPClient(client). // opt in to network only if genuinely required
+	Serialize(ctx)
+```
+
+Even after a resolver grants access, the bytes it returns are parsed with the
+hardened default parser: external DTD/entity loading (XXE) stays **blocked**
+unless you explicitly opt in via `Compiler.AllowExternalEntities(true)` /
+`Invocation.AllowExternalEntities(true)`, and the injected `Compiler.Parser` /
+`Invocation.Parser` governs the parse policy of every loaded document.
+
+### Cancellation
+
+Both compilation and transformation honor `context.Context` cancellation and
+deadlines. `Compile`, and the transform delivery methods (`Serialize`, `Do`,
+`WriteTo`), take a `ctx`, and the compile and execution loops poll `ctx.Err()`
+at their iteration points (e.g. `execute_control.go`, `execute_apply.go`,
+`execute_streaming.go`, `execute_misc.go`; `compile.go`, `compile_imports.go`,
+`compile_templates.go`), so a cancelled or expired context aborts the work
+promptly rather than running to completion. Always pass a `ctx` with a deadline
+when processing untrusted input.
+
+### Caller responsibilities
+
+The engine bounds a few things itself: each external resource read is capped at
+`MaxResourceBytes` (10 MiB default; `Invocation.MaxResourceBytes` overrides it),
+which also bounds `xsl:analyze-string` match enumeration. But the engine cannot
+know your overall resource budget, so the caller must still:
+
+- Enforce a maximum **raw input size** before parsing the stylesheet and source
+  document — the byte cap governs resolver-fetched resources, not the primary
+  source you hand in.
+- Bound **output size**: a stylesheet can fan out large numbers of
+  `xsl:result-document`s and materialize large result trees in memory. Cap the
+  work (or reject the stylesheet) when transforming untrusted input.
+- Pass a `context.Context` with a deadline (see Cancellation above).
+
 ## Conformance
 
 `xslt3` targets **Basic XSLT 3.0** conformance (W3C XSLT 3.0 spec §27).
