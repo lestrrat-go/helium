@@ -156,6 +156,49 @@ func TestWildcardRestrictsPureWildcardGroup(t *testing.T) {
 	require.NotNil(t, schema)
 }
 
+// A base group whose only element declaration is NON-EMITTING (a prohibited
+// element, minOccurs="0" maxOccurs="0") is effectively pure-wildcard: the
+// prohibited element emits nothing and can never appear in an instance, so an
+// emitting derived wildcard restricting the base is a wildcard-vs-wildcard
+// question the rejection must not decide. modelGroupContainsElementDecl counts
+// only EMITTING element declarations, so it does not color this base as an
+// element group and the restriction COMPILES in XSD 1.0.
+//
+// The base's inner sequence{1,unbounded}(any{2,2} skip, e{0,0}) has an
+// occurrence HOLE (2,4,6,… elements, never 1), so pointlessReduce refuses to
+// fold it to a bare wildcard — the derived wildcard therefore reaches the
+// wildcard-restricts-base-model-group rule (particleValidRestriction line ~211)
+// where modelGroupContainsElementDecl decides. Without the emitting-only fix the
+// prohibited e is miscounted and the restriction is wrongly REJECTED.
+func TestWildcardRestrictsGroupWithProhibitedElement(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:sequence maxOccurs="unbounded">
+        <xs:any namespace="##any" minOccurs="2" maxOccurs="2" processContents="skip"/>
+        <xs:element name="e" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version10, schemaXML)
+	require.NoError(t, cerr,
+		"a base group whose only element declaration is prohibited (maxOccurs=0) is effectively pure-wildcard, so an emitting derived wildcard validly restricts it in XSD 1.0")
+	require.NotNil(t, schema)
+}
+
 // wildcardGroupSchema builds a restriction of a base model group of element
 // declarations by a `<xs:sequence>` wrapping a single `<xs:any>` carrying the
 // given attribute string (namespace/minOccurs/maxOccurs). baseChoice controls

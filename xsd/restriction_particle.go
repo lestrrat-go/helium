@@ -524,12 +524,22 @@ func reduceSingletonGroup(p *Particle) *Particle {
 }
 
 // modelGroupContainsElementDecl reports whether a model group carries at least
-// one element-declaration particle anywhere in its (nested) content. A group
-// composed solely of wildcards and/or empty/nested groups is NOT a group of
-// element declarations, so the §3.9.6 "no wildcard-restricts-element-group rule"
-// rejection does not apply to it.
+// one EMITTING element-declaration particle anywhere in its (nested) content. A
+// group composed solely of wildcards and/or empty/nested groups — or one whose
+// only element declarations are NON-EMITTING (effective maxOccurs 0, own or via
+// an ancestor group being maxOccurs=0) — is NOT a group of element declarations,
+// so the §3.9.6 "no wildcard-restricts-element-group rule" rejection does not
+// apply to it. A prohibited element (or an element inside a maxOccurs=0 group)
+// emits nothing, so it never colors the base as an element group; only a
+// genuinely emitting element declaration makes this predicate true. Reuses
+// particleEmitsNothing (the codebase's effective-occurrence non-emission test,
+// folding ancestor-group occurrences) so a whole maxOccurs=0 group contributes
+// nothing and is not recursed into.
 func modelGroupContainsElementDecl(g *ModelGroup) bool {
 	for _, p := range g.Particles {
+		if particleEmitsNothing(p) {
+			continue
+		}
 		switch t := p.Term.(type) {
 		case *ElementDecl:
 			return true
