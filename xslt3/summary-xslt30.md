@@ -83,3 +83,92 @@ This is a point-in-time snapshot; regenerate to refresh.
 | test requires assertions disabled; we evaluate assertions | 1 |
 | too slow for CI: large iteration count with variable binding | 1 |
 | user-defined function shadows built-in format-number; arity mismatch | 1 |
+
+## Slow run (HELIUM_SLOW_TESTS=1, on-demand CI)
+
+The counts above are the default local baseline (the reproducible pass run
+from `go test ./xslt3/`). The on-demand GitHub Actions workflow
+`.github/workflows/conformance.yml` (`workflow_dispatch` with a `slow` toggle,
+plus a nightly cron) runs the suite with `HELIUM_SLOW_TESTS=1`, which additionally
+executes the **+481 performance-gated** cases the default run skips. They all pass
+with **0 failures**, so the slow run is a strict superset of the default baseline:
+
+| Outcome | Count |
+|---------|------:|
+| Pass | 12824 |
+| Skip | 303 |
+| Fail | 0 |
+| **Total** | **13127** |
+
+The performance-gated cases are CI runtime gates, not capability gaps. The slow
+JUnit output is committed beside this file as `results-xslt30-slow.xml` (the
+default-run counterpart is `results-xslt30.xml`).
+
+### Skipped by reason (slow run)
+
+
+| Reason | Count |
+|--------|------:|
+| too slow for CI: each test processes 1.1M codepoints with regex | 120 |
+| XSLT 2.0-only: 3.0-only regex construct (non-capturing group / reluctant quantifier) is valid in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error FORX0002) | 38 |
+| feature present but test requires absent: schema_aware | 31 |
+| XSLT 2.0-only: match/error pattern syntax relaxed in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error XTSE0340) | 8 |
+| feature present but test requires absent: disabling_output_escaping | 8 |
+| year component value present but test requires absent: support year above 9999 | 7 |
+| feature present but test requires absent: backwards_compatibility | 6 |
+| year component value present but test requires absent: support negative year | 6 |
+| feature present but test requires absent: XSD_1.1 | 5 |
+| XSLT 2.0-only: function/arity added in XSLT 3.0 / XPath 3.1; our 3.0 processor correctly accepts (test expects the 2.0 error XPST0017) | 4 |
+| requires XQuery load-xquery-module | 4 |
+| XSD 1.0-only regex error; we target XSD 1.1 | 3 |
+| XSLT 2.0-only: xsl:sequence with contained sequence constructor is valid in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error XTSE0010) | 3 |
+| too slow for CI: large iteration count in xsl:evaluate | 3 |
+| uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable) | 3 |
+| XML 1.1: control characters in stylesheet not supported by parser | 2 |
+| feature present but test requires absent: dynamic_evaluation | 2 |
+| implementation handles zero-length matches (XSLT 3.0) | 2 |
+| legitimate 2.0-vs-3.0 divergence: XTTE0520 absent from XSLT 3.0 (apply-templates select="3" processed by the built-in atomic template rule); W3C catalog marks this case "test not applicable to XSLT 3.0", spec dependency XSLT20 | 2 |
+| schema-aware source annotation: data(Date) instance of StandardDate requires atomizing a source element typed as a simpleContent union (GeneralDate = StandardDate \| xs:string) through its active member, plus exact xhtml indent-width serialization; the unprefixed-type-name XPST0081 compile blocker is fixed | 2 |
+| year component value present but test requires absent: support year zero | 2 |
+| Unicode-version dependency (not a spec divergence): `[\w]` is correctly [^\p{P}\p{Z}\p{C}]; the test expects U+2308/U+2309 to match \w (pre-Unicode-6.1 Sm), but Go's current Unicode tables classify them as Ps/Pe punctuation so \w correctly excludes them | 1 |
+| XSD 1.0 test; our processor targets XSD 1.1 (xs:dateTimeStamp is available) | 1 |
+| XSLT 2.0 test; 3.0 processor recognizes exponent-separator | 1 |
+| XSLT 2.0 test; XSLT 3.0 correctly accepts empty xsl:value-of | 1 |
+| XSLT 2.0-only: asserts XSLT 3.0 functions (copy-of/snapshot/parse-json) are absent (2.0 processor); helium correctly makes them available | 1 |
+| XSLT 2.0-only: asserts the F+O 3.0 function library is absent (2.0 processor); helium is a 3.0/3.1 processor so those functions are correctly available | 1 |
+| XSLT 2.0-only: construct valid in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error XTTE1120) | 1 |
+| XSLT 2.0-only: current-group() absent returns empty in 2.0 but raises XTDE1061 in XSLT 3.0; our 3.0 processor correctly errors (paired 081b PASSes on the same stylesheet) | 1 |
+| XSLT 2.0-only: current-grouping-key() in positional group returns empty in 2.0 but raises XTDE1071 in XSLT 3.0; our 3.0 processor correctly errors (paired 015b PASSes on the same stylesheet) | 1 |
+| XSLT 2.0-only: element-available('xsl:key') is false in 2.0 but true in 3.0 (W3C bug#27068); our 3.0 processor returns true (paired function-0302b PASSes) | 1 |
+| XSLT 2.0-only: forwards-compatible processing differs in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error XTSE0340) | 1 |
+| XSLT 2.0-only: generate-id is unavailable in the 2.0 use-when static context but available in 3.0; our 3.0 processor exposes it (paired use-when-0407a PASSes) | 1 |
+| XSLT 2.0-only: run-time xs:QName(string) cast raises XPTY0004 in 2.0 but is permitted in 3.0; our 3.0 processor permits it (paired type-0168b PASSes) | 1 |
+| XSLT 2.0-only: strip/preserve conflict is recoverable in 1.0/2.0 but a static error XTSE0270 in XSLT 3.0; our 3.0 processor correctly raises XTSE0270 (see the passing 3.0 variant strip-space-019a) | 1 |
+| XSLT 2.0-only: use-when cannot access documents in 2.0 (doc-available forced false) but can in 3.0 (W3C note marks this 2.0-only); our 3.0 processor accesses documents | 1 |
+| XSLT 2.0-only: xsl:param required='yes' in xsl:function is XTSE0090 in 2.0 but allowed in 3.0; our 3.0 processor accepts it (paired function-0119b PASSes) | 1 |
+| backwards-compatible default output method (xhtml->xml for an implicit 1.0 result tree) not implemented | 1 |
+| base-uri() of source nodes depends on fixture base URI, not the test-set file path | 1 |
+| feature present but test requires absent: XPath_3.1 | 1 |
+| feature present but test requires absent: streaming | 1 |
+| legitimate 2.0-vs-3.0 divergence: XPath 3.1 truncates fractional seconds (F&O §9.8.4.1); this XSLT20 case asserts 2.0 rounding, while the XSLT30+ variant format-date-002a (truncation) passes | 1 |
+| legitimate 2.0-vs-3.0 divergence: XPath 3.1 truncates fractional seconds (F&O §9.8.4.1); this XSLT20 case asserts 2.0 rounding, while the XSLT30+ variant format-date-003a (truncation) passes | 1 |
+| legitimate 2.0-vs-3.0 divergence: XPath 3.1 truncates fractional seconds (F&O §9.8.4.1); this XSLT20 case asserts 2.0 rounding, while the XSLT30+ variant format-date-013a (truncation) passes | 1 |
+| legitimate 2.0-vs-3.0 divergence: XTDE0047 removed in XSLT 3.0 (W3C bug 28418); initial-template + initial-mode no longer conflict, a 3.0 processor runs the template. Catalog spec dependency is XSLT20 | 1 |
+| legitimate 2.0-vs-3.0 divergence: XTDE0060 removed in XSLT 3.0 (a required param can now be supplied to the initial template); 002a is byte-identical to the passing initial-template-002, so a 3.0 processor produces a result rather than the 2.0-only error | 1 |
+| legitimate 2.0-vs-3.0 divergence: XTDE0060 removed in XSLT 3.0 (a required param can now be supplied to the initial template); 003a is byte-identical to the passing initial-template-003, so a 3.0 processor produces a result rather than the 2.0-only error | 1 |
+| legitimate 2.0-vs-3.0 divergence: XTTE0520 (apply-templates select must be node()*) is absent from XSLT 3.0 — a non-node selection is handled by the built-in atomic template rule (on-no-match=text-only-copy), so our 3.0 output is correct; catalog spec dependency is XSLT20 | 1 |
+| legitimate 2.0-vs-3.0 divergence: XTTE0520 absent from XSLT 3.0 (apply-templates select=concat(...) processed by the built-in atomic template rule); W3C catalog marks this case "test not applicable to XSLT 3.0", spec dependency XSLT20 | 1 |
+| legitimate 2.0-vs-3.0 divergence: XTTE1120 absent from XSLT 3.0 (for-each-group group-starting-with over atomic population — a non-node never matches a pattern, no error); W3C catalog note: "Error code XTTE1120 absent in xslt3.0 spec. Changed dependency to xslt20" | 1 |
+| missing external fixture NormalizationTest.txt | 1 |
+| parser limitation: external parameter entity resolution not supported | 1 |
+| placeholder error code: XXXX9999 | 1 |
+| premise relied on os.ReadFile failing for http:// URLs; see loadDocument retrieval refactor | 1 |
+| processor raises FODC0002 instead of ignoring document() failures | 1 |
+| requires XPath 1.0 grammar (div/mod as name after operator); compat mode changes semantics, not grammar | 1 |
+| requires XPath 1.0 grammar (empty function arguments); compat mode changes semantics, not grammar | 1 |
+| requires XPath 1.0 grammar (unprefixed 'function' as a name test); compat mode changes semantics, not grammar | 1 |
+| requires external entity resolution (SYSTEM entity reference) | 1 |
+| requires network access to saxonica.com | 1 |
+| test requires assertions disabled; we evaluate assertions | 1 |
+| too slow for CI: large iteration count with variable binding | 1 |
+| user-defined function shadows built-in format-number; arity mismatch | 1 |

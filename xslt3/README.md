@@ -80,6 +80,22 @@ module; see "Running the conformance tests" below):
 | Fail    | 0      |
 | Total   | 13,127 |
 
+This is the **reproducible local baseline** (`go test ./xslt3/`). The on-demand
+`.github/workflows/conformance.yml` workflow runs the same suite with
+`HELIUM_SLOW_TESTS=1` (the `slow` toggle), which additionally executes the
+**+481** performance-gated cases the default run skips. They all pass, so the
+slow run is a strict superset with **0 failures**:
+
+| Outcome | Count (slow, `HELIUM_SLOW_TESTS=1`) |
+|---------|-------|
+| Pass    | 12,824 |
+| Skip    | 303    |
+| Fail    | 0      |
+| Total   | 13,127 |
+
+The slow figures are on-demand CI evidence (committed as
+`results-xslt30-slow.xml`); the default baseline is what a local run reproduces.
+
 There are **no failing tests**. **Every skip is expected, not a deficiency.**
 Each carries a precise, individually-recorded reason and falls into one of the
 legitimate categories below — **none is a missing mandatory Basic XSLT 3.0
@@ -116,8 +132,8 @@ misinterpreted, and external resource access is default-deny.
 ### What is skipped, and why
 
 Every count below is bucketed from the regenerated `summary-xslt30.md`
-"Skipped by reason" table; the category counts sum to the 784 total. None
-represents a missing mandatory Basic XSLT 3.0 facility.
+"Skipped by reason" table for the **default** run; the category counts sum to
+the 784 total. None represents a missing mandatory Basic XSLT 3.0 facility.
 
 | Category | Count | Why it is a legitimate skip |
 |----------|------:|-----------------------------|
@@ -129,6 +145,13 @@ represents a missing mandatory Basic XSLT 3.0 facility.
 | XML-parser-layer limits | 4 | XML 1.1 control characters, external/parameter entity resolution — the parser layer, not the XSLT engine |
 | XPath 1.0 *grammar* differences | 3 | `div`/`mod` as a name after an operator, unprefixed `function` name test, empty function arguments — compat mode changes semantics, not the grammar |
 | Narrow defects / fixture or Unicode-version dependence | 9 | Individually-tracked quirks (`base-uri()` fixture dependence, a Unicode-version `\w` classification, `format-number` shadowing, the 1.0-only default output method) |
+
+In the on-demand slow run (`HELIUM_SLOW_TESTS=1`) the performance-gated bucket
+drops from **605 to 124** — the **+481** `HELIUM_SLOW_TESTS=1`-gated cases now
+run and all pass — so the slow skip total falls to **303** (784 − 481). The
+remaining 124 are the handful still too slow even for the slow CI bucket
+(large-corpus regex, large-iteration `xsl:evaluate`); every other category above
+is unchanged between the two runs.
 
 #### The XSLT 2.0-vs-3.0 divergence category
 
@@ -188,14 +211,16 @@ HELIUM_SLOW_TESTS=1 go test ./xslt3/ -run TestXSLT30W3C
 
 The performance-gated cases (the 605 counted above) are not run in the default
 CI pass. Helium ships an on-demand GitHub Actions workflow
-(`.github/workflows/conformance.yml`, `workflow_dispatch` + nightly) whose
-`slow` toggle sets `HELIUM_SLOW_TESTS=1`; a slow run passes roughly **480
-additional** performance-gated tests at **0 failures**, confirming they are CI
-runtime gates, not capability gaps.
+(`.github/workflows/conformance.yml`, `workflow_dispatch` with a `slow` toggle,
+plus a nightly cron) whose `slow` toggle sets `HELIUM_SLOW_TESTS=1`; a slow run
+passes **481 additional** performance-gated tests at **0 failures** (12,824 pass
+/ 303 skip / 0 fail, total 13,127), confirming they are CI runtime gates, not
+capability gaps. That workflow is how the slow figures above are produced.
 
 Helium keeps only the `xslt3` unit tests plus committed, point-in-time evidence
 beside this package — a stamped `summary-xslt30.md` and JUnit
-`results-xslt30.xml`. Regenerate them from the sibling module:
+`results-xslt30.xml` for the default run, plus `results-xslt30-slow.xml` for the
+on-demand slow run. Regenerate the default evidence from the sibling module:
 
 ```sh
 # in ../helium-w3c-tests, after fetch + generate
