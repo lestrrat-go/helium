@@ -9,20 +9,19 @@ import (
 )
 
 // TestMixedInitialValueCyclicEntity verifies the mixed-content fixed scan is
-// safe against a cyclic entity graph. A DOM built directly through the public
-// API can form a cycle in the entity child-pointer graph: Document.
-// CreateReference links the shared Entity node as the reference's child WITHOUT
-// setting the entity's parent (its parent stays the DTD), so AddChild's
-// ancestor-chain cycle guard cannot see the link and an Entity may become both
-// the child and the parent of a reference. The scan must terminate — the memo's
-// in-progress marker breaks the cyclic back-edge — rather than recurse forever
-// or overflow the stack.
+// safe against a cyclic entity graph AND fails closed on it. A DOM built
+// directly through the public API can form a cycle in the entity child-pointer
+// graph: Document.CreateReference links the shared Entity node as the
+// reference's child WITHOUT setting the entity's parent (its parent stays the
+// DTD), so an Entity may become both the child and the parent of a reference.
+// The scan must terminate (the memo's in-progress marker breaks the cyclic
+// back-edge) and report the initial value as INVALID — the cyclic expansion
+// cannot be materialized reliably, so the mixed-fixed check fails closed rather
+// than silently dropping the un-scanned content.
 //
 // The scan is exercised directly through mixedInitialValue rather than a full
-// Validator.Validate: full-document validation walks the whole document —
-// including the DTD, where the cycle lives — via helium.Walk, whose iterative
-// traversal is not cycle-guarded and grows its work stack without bound on such
-// a graph. That is a helium-core issue tracked separately; this test covers the
+// Validator.Validate because the cycle here lives in the DTD's entity graph,
+// which a full document walk reaches only incidentally; this test targets the
 // scan's own guard.
 func TestMixedInitialValueCyclicEntity(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
@@ -47,11 +46,8 @@ func TestMixedInitialValueCyclicEntity(t *testing.T) {
 	require.NoError(t, ent.AddChild(ref2))
 
 	require.NotPanics(t, func() {
-		initial, hasChar, hasElem := mixedInitialValue(root, "abc")
-		// The cyclic back-edge contributes nothing; the direct text node is the
-		// only character content, so the scan terminates with just it.
-		require.Equal(t, "def", initial)
-		require.True(t, hasChar)
-		require.False(t, hasElem)
+		_, _, _, invalid := mixedInitialValue(root, "abc")
+		// The cyclic back-edge is detected and the scan fails closed.
+		require.True(t, invalid, "a cyclic entity graph must mark the initial value invalid")
 	})
 }

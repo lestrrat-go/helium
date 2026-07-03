@@ -228,6 +228,67 @@ func TestFixedValueMixedDuplicateEntityRef(t *testing.T) {
 	})
 }
 
+// TestFixedValueMixedEntitySiblingIsolation verifies the scan attributes only
+// the referenced entity's OWN expansion to the initial value, never the content
+// of unrelated sibling entity declarations. A parsed entity reference's child is
+// the shared Entity node, whose sibling pointers belong to the DTD's declaration
+// list — so a naive NextSibling walk would spill the NEXT declared entity's
+// replacement into the initial value and reject a matching document.
+func TestFixedValueMixedEntitySiblingIsolation(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="abc"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	// &a; expands to "abc" (== fixed); entity b ("def") is a LATER sibling
+	// declaration in the DTD and must not be pulled into the initial value.
+	const instance = `<!DOCTYPE root [ <!ENTITY a "abc"> <!ENTITY b "def"> ]>
+<root>&a;</root>`
+	runFixedValueCase(t, schemaXML, instance, false)
+}
+
+// TestFixedValueMixedCommentOnlyEntity verifies that an entity whose materialized
+// expansion is only a comment contributes no character content: the element is
+// clause-5.1 empty (the fixed value is assigned) and valid. The entity carries a
+// non-empty Content() (its raw replacement text) alongside the comment child, so
+// the scan must recognize the materialized child subtree as authoritative rather
+// than falling back to Content() and treating the comment markup as literal text.
+func TestFixedValueMixedCommentOnlyEntity(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="abc"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	schema := mustCompileFixedMixedSchema(t, schemaXML)
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+	// Content() holds the raw replacement markup; the materialized expansion is a
+	// comment child.
+	ent, err := dtd.AddEntity("c", enum.InternalGeneralEntity, "", "", "<!-- x -->")
+	require.NoError(t, err)
+	require.NoError(t, ent.AddChild(doc.CreateComment([]byte(" x "))))
+
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.SetDocumentElement(root))
+	ref, err := doc.CreateReference("c")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(ref))
+
+	// The comment is neither character nor element content, so the element is
+	// clause-5.1 empty and the fixed value is assigned — valid.
+	require.NoError(t, validateWithOutput(t, xsd.NewValidator(schema), doc, nil))
+}
+
 // TestFixedValueMixedEmptyTextNode verifies that a present-but-empty character
 // node (a zero-length text child) is NOT treated as clause-5.1 empty: it is
 // character content, so it must match the fixed value. A zero-length text node
