@@ -60,4 +60,35 @@ func TestOpenContent_DropsBaseLocalTypeBlock(t *testing.T) {
 		_, _, cerr := compileV11(t, schema)
 		require.NoError(t, cerr, "no type block is lost, so the drop is a sound restriction")
 	})
+
+	// The effective-block comparison compares ONLY the derivation bits
+	// (extension/restriction). A base-local element carrying block="substitution"
+	// that is dropped and re-admitted via strict open content by an otherwise
+	// equivalent global element must be ACCEPTED: wildcard assessment does not use
+	// substitution-group matching and cvc-elt.4.3 derivation blocking ignores the
+	// substitution bit, so no derivation constraint is lost.
+	t.Run("dropped local with only block=substitution re-admitted via equivalent global is accepted", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:element name="e" type="xs:anyType"/>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="strict"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e" type="xs:anyType" block="substitution" minOccurs="0"/>
+      <xs:element name="keep" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent><xs:restriction base="t:B">
+      <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="strict"/></xs:openContent>
+      <xs:sequence>
+        <xs:element name="keep" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:restriction></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="doc" type="t:R"/>
+</xs:schema>`
+		_, _, cerr := compileV11(t, schema)
+		require.NoError(t, cerr, "only the substitution bit differs, which wildcard assessment does not enforce")
+	})
 }

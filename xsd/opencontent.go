@@ -557,10 +557,16 @@ func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global
 	if global.Nillable && !local.Nillable {
 		return "is nillable while the base declaration is not, so it would accept xsi:nil the base rejected"
 	}
-	localBlocked := local.Block | effectiveDeclType(local, c.schema).prohibitedSubstitutions()
-	globalBlocked := global.Block | effectiveDeclType(global, c.schema).prohibitedSubstitutions()
+	// Compare ONLY the derivation bits (extension/restriction). Wildcard assessment
+	// of a re-admitted child does not use substitution-group matching, and cvc-elt.4.3
+	// derivation blocking ignores the substitution bit — substitution-group blocking
+	// is handled by the name-admission / substitution-closure logic, not this same-name
+	// global-constraint check.
+	const derivBits = BlockExtension | BlockRestriction
+	localBlocked := (local.Block | effectiveDeclType(local, c.schema).prohibitedSubstitutions()) & derivBits
+	globalBlocked := (global.Block | effectiveDeclType(global, c.schema).prohibitedSubstitutions()) & derivBits
 	if localBlocked&^globalBlocked != 0 {
-		return "does not block every derivation/substitution the base declaration's 'block' forbade"
+		return "does not block every derivation the base declaration's 'block' forbade"
 	}
 	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, c.schema, c.version)) {
 		return "supplies a 'default' the base declaration does not, so it would accept an empty element the base rejected"
