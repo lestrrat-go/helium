@@ -75,8 +75,8 @@ module; see "Running the conformance tests" below):
 
 | Outcome | Count |
 |---------|-------|
-| Pass    | 12,343 |
-| Skip    | 784    |
+| Pass    | 12,346 |
+| Skip    | 781    |
 | Fail    | 0      |
 | Total   | 13,127 |
 
@@ -88,8 +88,8 @@ slow run is a strict superset with **0 failures**:
 
 | Outcome | Count (slow, `HELIUM_SLOW_TESTS=1`) |
 |---------|-------|
-| Pass    | 12,824 |
-| Skip    | 303    |
+| Pass    | 12,827 |
+| Skip    | 300    |
 | Fail    | 0      |
 | Total   | 13,127 |
 
@@ -133,7 +133,7 @@ misinterpreted, and external resource access is default-deny.
 
 Every count below is bucketed from the regenerated `summary-xslt30.md`
 "Skipped by reason" table for the **default** run; the category counts sum to
-the 784 total. None represents a missing mandatory Basic XSLT 3.0 facility.
+the 781 total. None represents a missing mandatory Basic XSLT 3.0 facility.
 
 | Category | Count | Why it is a legitimate skip |
 |----------|------:|-----------------------------|
@@ -142,13 +142,13 @@ the 784 total. None represents a missing mandatory Basic XSLT 3.0 facility.
 | Spec-version divergences (XSD 1.0 test vs our XSD 1.1 target) | 4 | We target XSD 1.1; the case asserts an XSD-1.0-only regex/type error |
 | Test requires a feature to be *absent* that we support | 70 | The test only applies to a processor *without* the feature (schema-awareness, disable-output-escaping, dynamic evaluation, XSD 1.1, out-of-range year components, …); we exceed its requirement |
 | External / non-interoperable resources | 9 | XQuery `load-xquery-module`, network access, Saxon-format `?select=` URIs, missing upstream fixtures — out of scope or W3C-noted non-interoperable |
-| XML-parser-layer limits | 4 | XML 1.1 control characters, external/parameter entity resolution — the parser layer, not the XSLT engine |
+| XML-parser-layer limits | 2 | External/parameter entity resolution — the parser layer, not the XSLT engine |
 | XPath 1.0 *grammar* differences | 3 | `div`/`mod` as a name after an operator, unprefixed `function` name test, empty function arguments — compat mode changes semantics, not the grammar |
-| Narrow defects / fixture or Unicode-version dependence | 9 | Individually-tracked quirks (`base-uri()` fixture dependence, a Unicode-version `\w` classification, `format-number` shadowing, the 1.0-only default output method) |
+| Narrow defects / fixture or Unicode-version dependence | 8 | Individually-tracked quirks (`base-uri()` fixture dependence, a Unicode-version `\w` classification, `format-number` shadowing, byte-exact xhtml serialization, the 1.0-only default output method) |
 
 In the on-demand slow run (`HELIUM_SLOW_TESTS=1`) the performance-gated bucket
 drops from **605 to 124** — the **+481** `HELIUM_SLOW_TESTS=1`-gated cases now
-run and all pass — so the slow skip total falls to **303** (784 − 481). The
+run and all pass — so the slow skip total falls to **300** (781 − 481). The
 remaining 124 are the handful still too slow even for the slow CI bucket
 (large-corpus regex, large-iteration `xsl:evaluate`); every other category above
 is unchanged between the two runs.
@@ -213,8 +213,8 @@ The performance-gated cases (the 605 counted above) are not run in the default
 CI pass. Helium ships an on-demand GitHub Actions workflow
 (`.github/workflows/conformance.yml`, `workflow_dispatch` with a `slow` toggle,
 plus a nightly cron) whose `slow` toggle sets `HELIUM_SLOW_TESTS=1`; a slow run
-passes **481 additional** performance-gated tests at **0 failures** (12,824 pass
-/ 303 skip / 0 fail, total 13,127), confirming they are CI runtime gates, not
+passes **481 additional** performance-gated tests at **0 failures** (12,827 pass
+/ 300 skip / 0 fail, total 13,127), confirming they are CI runtime gates, not
 capability gaps. That workflow is how the slow figures above are produced.
 
 Helium keeps only the `xslt3` unit tests plus committed, point-in-time evidence

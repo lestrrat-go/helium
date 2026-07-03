@@ -8,8 +8,8 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 12343 |
-| Skip | 784 |
+| Pass | 12346 |
+| Skip | 781 |
 | Fail | 0 |
 | **Total** | **13127** |
 
@@ -35,11 +35,9 @@ This is a point-in-time snapshot; regenerate to refresh.
 | XSLT 2.0-only: xsl:sequence with contained sequence constructor is valid in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error XTSE0010) | 3 |
 | too slow for CI: large iteration count in xsl:evaluate | 3 |
 | uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable) | 3 |
-| XML 1.1: control characters in stylesheet not supported by parser | 2 |
 | feature present but test requires absent: dynamic_evaluation | 2 |
 | implementation handles zero-length matches (XSLT 3.0) | 2 |
 | legitimate 2.0-vs-3.0 divergence: XTTE0520 absent from XSLT 3.0 (apply-templates select="3" processed by the built-in atomic template rule); W3C catalog marks this case "test not applicable to XSLT 3.0", spec dependency XSLT20 | 2 |
-| schema-aware source annotation: data(Date) instance of StandardDate requires atomizing a source element typed as a simpleContent union (GeneralDate = StandardDate \| xs:string) through its active member, plus exact xhtml indent-width serialization; the unprefixed-type-name XPST0081 compile blocker is fixed | 2 |
 | year component value present but test requires absent: support year zero | 2 |
 | Unicode-version dependency (not a spec divergence): `[\w]` is correctly [^\p{P}\p{Z}\p{C}]; the test expects U+2308/U+2309 to match \w (pre-Unicode-6.1 Sm), but Go's current Unicode tables classify them as Ps/Pe punctuation so \w correctly excludes them | 1 |
 | XSD 1.0 test; our processor targets XSD 1.1 (xs:dateTimeStamp is available) | 1 |
@@ -59,6 +57,7 @@ This is a point-in-time snapshot; regenerate to refresh.
 | XSLT 2.0-only: xsl:param required='yes' in xsl:function is XTSE0090 in 2.0 but allowed in 3.0; our 3.0 processor accepts it (paired function-0119b PASSes) | 1 |
 | backwards-compatible default output method (xhtml->xml for an implicit 1.0 result tree) not implemented | 1 |
 | base-uri() of source nodes depends on fixture base URI, not the test-set file path | 1 |
+| byte-exact xhtml serialization: transform output is content-correct (schema-aware source union atomization now formats dates), but assert-serialization needs Saxon-identical xhtml formatting — 3-space indent, inline-element-aware whitespace (no indentation inside span/a/br), XML declaration on the same line as the root element, and &#xa0; preservation — a serialization-algorithm detail, not a schema-annotation gap | 1 |
 | feature present but test requires absent: XPath_3.1 | 1 |
 | feature present but test requires absent: streaming | 1 |
 | legitimate 2.0-vs-3.0 divergence: XPath 3.1 truncates fractional seconds (F&O §9.8.4.1); this XSLT20 case asserts 2.0 rounding, while the XSLT30+ variant format-date-002a (truncation) passes | 1 |
@@ -95,8 +94,8 @@ with **0 failures**, so the slow run is a strict superset of the default baselin
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 12824 |
-| Skip | 303 |
+| Pass | 12827 |
+| Skip | 300 |
 | Fail | 0 |
 | **Total** | **13127** |
 
@@ -105,7 +104,6 @@ JUnit output is committed beside this file as `results-xslt30-slow.xml` (the
 default-run counterpart is `results-xslt30.xml`).
 
 ### Skipped by reason (slow run)
-
 
 | Reason | Count |
 |--------|------:|
@@ -124,11 +122,9 @@ default-run counterpart is `results-xslt30.xml`).
 | XSLT 2.0-only: xsl:sequence with contained sequence constructor is valid in XSLT 3.0; our 3.0 processor correctly accepts (test expects the 2.0 error XTSE0010) | 3 |
 | too slow for CI: large iteration count in xsl:evaluate | 3 |
 | uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable) | 3 |
-| XML 1.1: control characters in stylesheet not supported by parser | 2 |
 | feature present but test requires absent: dynamic_evaluation | 2 |
 | implementation handles zero-length matches (XSLT 3.0) | 2 |
 | legitimate 2.0-vs-3.0 divergence: XTTE0520 absent from XSLT 3.0 (apply-templates select="3" processed by the built-in atomic template rule); W3C catalog marks this case "test not applicable to XSLT 3.0", spec dependency XSLT20 | 2 |
-| schema-aware source annotation: data(Date) instance of StandardDate requires atomizing a source element typed as a simpleContent union (GeneralDate = StandardDate \| xs:string) through its active member, plus exact xhtml indent-width serialization; the unprefixed-type-name XPST0081 compile blocker is fixed | 2 |
 | year component value present but test requires absent: support year zero | 2 |
 | Unicode-version dependency (not a spec divergence): `[\w]` is correctly [^\p{P}\p{Z}\p{C}]; the test expects U+2308/U+2309 to match \w (pre-Unicode-6.1 Sm), but Go's current Unicode tables classify them as Ps/Pe punctuation so \w correctly excludes them | 1 |
 | XSD 1.0 test; our processor targets XSD 1.1 (xs:dateTimeStamp is available) | 1 |
@@ -148,6 +144,7 @@ default-run counterpart is `results-xslt30.xml`).
 | XSLT 2.0-only: xsl:param required='yes' in xsl:function is XTSE0090 in 2.0 but allowed in 3.0; our 3.0 processor accepts it (paired function-0119b PASSes) | 1 |
 | backwards-compatible default output method (xhtml->xml for an implicit 1.0 result tree) not implemented | 1 |
 | base-uri() of source nodes depends on fixture base URI, not the test-set file path | 1 |
+| byte-exact xhtml serialization: transform output is content-correct (schema-aware source union atomization now formats dates), but assert-serialization needs Saxon-identical xhtml formatting — 3-space indent, inline-element-aware whitespace (no indentation inside span/a/br), XML declaration on the same line as the root element, and &#xa0; preservation — a serialization-algorithm detail, not a schema-annotation gap | 1 |
 | feature present but test requires absent: XPath_3.1 | 1 |
 | feature present but test requires absent: streaming | 1 |
 | legitimate 2.0-vs-3.0 divergence: XPath 3.1 truncates fractional seconds (F&O §9.8.4.1); this XSLT20 case asserts 2.0 rounding, while the XSLT30+ variant format-date-002a (truncation) passes | 1 |
