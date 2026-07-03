@@ -300,7 +300,7 @@ func coerceItemWithContext(ctx context.Context, item xpath3.Item, itemType strin
 		}
 		// Try function coercion for return type flexibility — creates a
 		// wrapper that coerces args/return at call time.
-		coerced, ok := xpath3.CoerceToSequenceType(seq, st)
+		coerced, ok := xpath3.CoerceToSequenceTypeContext(ctx, seq, st)
 		if ok && coerced != nil && sequence.Len(coerced) == 1 {
 			return coerced.Get(0), nil
 		}

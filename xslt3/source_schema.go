@@ -129,6 +129,43 @@ func sourceHasSchemaLocation(doc *helium.Document) bool {
 	return false
 }
 
+// collectPackageSchemas returns the schemas of ss followed by the schemas of
+// every package it uses, transitively, deduped by schema-object identity. The
+// main stylesheet's own schemas come first so its declarations take precedence
+// on a name collision. Identity (not target-namespace) dedup is deliberate:
+// distinct packages may each import a no-namespace schema declaring different
+// types, and both sets must stay resolvable in the runtime registry.
+func collectPackageSchemas(ss *Stylesheet) []*xsd.Schema {
+	return appendPackageSchemas(nil, ss, make(map[*xsd.Schema]struct{}), make(map[*Stylesheet]struct{}))
+}
+
+// appendPackageSchemas appends pkg's schemas (then its used packages',
+// transitively) to out, skipping schema objects already in seen and packages
+// already in visited.
+func appendPackageSchemas(out []*xsd.Schema, pkg *Stylesheet, seen map[*xsd.Schema]struct{}, visited map[*Stylesheet]struct{}) []*xsd.Schema {
+	if pkg == nil {
+		return out
+	}
+	if _, ok := visited[pkg]; ok {
+		return out
+	}
+	visited[pkg] = struct{}{}
+	for _, schema := range pkg.schemas {
+		if schema == nil {
+			continue
+		}
+		if _, ok := seen[schema]; ok {
+			continue
+		}
+		seen[schema] = struct{}{}
+		out = append(out, schema)
+	}
+	for _, sub := range pkg.usedPackages {
+		out = appendPackageSchemas(out, sub, seen, visited)
+	}
+	return out
+}
+
 func mergeRuntimeSchemas(existing []*xsd.Schema, extra []*xsd.Schema) []*xsd.Schema {
 	if len(extra) == 0 {
 		return existing

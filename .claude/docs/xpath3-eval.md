@@ -212,7 +212,24 @@ to the atomized result. A single schema-typed node whose typed value is a
 list/union expands consistently with `data()`; a more-than-one-atom operand
 raises cast XPTY0004 or makes `castable` false. Function-call args are handled
 separately by signature coercion (`coerceToSequenceTypeE`, which also atomizes
-via `atomizeStream`).
+via `atomizeStream`). Its whole `coerceToSequenceType`/`coerceFuncallArg`/public
+`CoerceToSequenceType`+`CoerceToSequenceTypeContext` family threads a
+`context.Context` so the schema-aware cast it may trigger participates in
+cancellation.
+
+A user-defined UNION used as a required item type (e.g. an `xsl:function`
+`as="u"` parameter, reached across an `xsl:use-package`/`xsl:original` boundary)
+matches value-first: `atomicMatchesTargetType` — the shared gate for `instance
+of` and function coercion — admits an atomic value when it is an instance of one
+of the union's `SchemaDeclarations.UnionMemberTypes` (recursively for nested
+unions, `atomicMatchesUnionMember`, cycle-guarded), since a union's members are
+not base-chain subtypes of the union. An `xs:untypedAtomic` argument coerced to a
+non-builtin union/faceted target routes through the schema-aware cast
+(`schemaAwareCast`, first castable member wins), not `CastAtomic`. This requires
+the target union's type to be resolvable in `evalContext.schemaDeclarations`; the
+xslt3 runtime registry therefore includes every USED package's imported schemas
+(not only the main stylesheet's), so a component's declared `as=` type resolves
+in the DEFINING package's schema.
 
 For a USER-defined target type, when context-free `CastAtomic` fails and
 `evalContext.schemaDeclarations` is set, `evalCastExpr`/`evalCastableExpr` use a
