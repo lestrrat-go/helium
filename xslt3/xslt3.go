@@ -154,12 +154,19 @@ func parseStylesheetDocument(ctx context.Context, injected *helium.Parser, data 
 
 // CompileStylesheet compiles a parsed XSLT stylesheet document.
 // This is a convenience wrapper over NewCompiler().Compile(ctx, doc).
+//
+// The returned [*Stylesheet] is immutable and safe for concurrent use by
+// multiple goroutines; it may be reused across many transformations. See the
+// package documentation's Concurrency section.
 func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
 	return NewCompiler().Compile(ctx, doc)
 }
 
 // Transform applies the compiled stylesheet to the source document.
 // This is a convenience wrapper over ss.Transform(source).Do(ctx).
+//
+// ss is not mutated and may be transformed concurrently from multiple
+// goroutines (see the package documentation's Concurrency section).
 func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*helium.Document, error) {
 	if ss == nil {
 		return nil, errNilStylesheet
@@ -169,6 +176,9 @@ func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*h
 
 // TransformString applies the compiled stylesheet and returns the serialized result.
 // This is a convenience wrapper over ss.Transform(source).Serialize(ctx).
+//
+// ss is not mutated and may be transformed concurrently from multiple
+// goroutines (see the package documentation's Concurrency section).
 func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet) (string, error) {
 	if ss == nil {
 		return "", errNilStylesheet

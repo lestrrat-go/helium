@@ -35,6 +35,25 @@
 // For simple transforms, [Transform], [TransformString], and
 // [TransformToWriter] are convenience wrappers.
 //
+// # Concurrency
+//
+// A [*Stylesheet] returned by [Compiler.Compile] / [CompileStylesheet] is
+// immutable after compilation and is safe for concurrent use by multiple
+// goroutines. A single compiled stylesheet may be transformed from many
+// goroutines at once (via [Transform], [TransformString], [TransformToWriter],
+// [Stylesheet.Transform], [Stylesheet.ApplyTemplates], [Stylesheet.CallTemplate],
+// or [Stylesheet.CallFunction]) without external synchronization: every mutable
+// per-transform state (global-variable values, key tables, caches, accumulator
+// state, the result tree, and serialization overrides) lives in a per-call
+// execution context that is never shared between transforms. A transform never
+// mutates the compiled stylesheet, and it treats the caller's source document as
+// read-only (whitespace stripping runs against a private copy), so the same
+// source document may also be handed to concurrent transforms — provided the
+// caller does not mutate it concurrently. Compilation itself is not concurrent
+// with transformation of the same stylesheet: finish compiling before sharing
+// the result. [Invocation] and [Parameters] values are per-call configuration
+// and are not intended for concurrent mutation.
+//
 // # Examples
 //
 // Example code for this package lives in the examples/ directory at the

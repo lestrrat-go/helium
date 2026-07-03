@@ -87,6 +87,13 @@ type funcKey struct {
 }
 
 // Stylesheet is a compiled XSLT stylesheet ready for transformation.
+//
+// A *Stylesheet is immutable after compilation and safe for concurrent use by
+// multiple goroutines: the same compiled stylesheet may be transformed from
+// many goroutines at once without external synchronization. Every mutable
+// per-transform state lives in a separate execution context created per call,
+// so transforms never share state and never write back to the stylesheet. See
+// the package documentation's Concurrency section for the full contract.
 type Stylesheet struct {
 	version string
 	// compatExprs holds every compiled XPath expression that must evaluate in
