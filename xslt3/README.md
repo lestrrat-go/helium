@@ -75,8 +75,8 @@ module; see "Running the conformance tests" below):
 
 | Outcome | Count |
 |---------|-------|
-| Pass    | 11,156 |
-| Skip    | 1,971  |
+| Pass    | 11,296 |
+| Skip    | 1,831  |
 | Fail    | 0      |
 | Total   | 13,127 |
 
@@ -102,13 +102,13 @@ misinterpreted, and external resource access is default-deny.
 
 | Category | ~Count | Reason |
 |----------|-------:|--------|
-| `spec="XSLT20"`-only tests | ~1,120 | 2.0-specific expected outputs; not a runnable bucket for a 3.0 processor |
+| `spec="XSLT20"`-only tests | ~1,117 | 2.0-specific expected outputs; not a runnable bucket for a 3.0 processor |
 | Performance-gated (run with `HELIUM_SLOW_TESTS=1`) | ~605 | CI runtime only; not capability gaps |
-| Schema-awareness | ~55 | Optional level, in progress |
-| Tests requiring a feature to be *absent* (we support it) | ~35 | We exceed the test's requirement |
-| XML-parser-level limits (XML 1.1 control chars / ns-undeclaration, certain external entities) | ~33 | Parser layer, not the XSLT engine |
-| External / non-interoperable (XQuery `load-xquery-module`, network, Saxon-specific URIs) | ~12 | Out of scope or noted non-interoperable by the W3C catalog |
-| Genuine edge defects | ~25 | Narrow, individually-tracked quirks (e.g. type-annotation propagation, `snapshot()/root()` namespace nodes) |
+| Schema-awareness | ~9 | Optional level, in progress |
+| Tests requiring a feature to be *absent* (we support it) | ~60 | We exceed the test's requirement |
+| XML-parser-level limits (XML 1.1 control chars / ns-undeclaration, certain external entities) | ~21 | Parser layer, not the XSLT engine |
+| External / non-interoperable (XQuery `load-xquery-module`, network, Saxon-specific URIs) | ~9 | Out of scope or noted non-interoperable by the W3C catalog |
+| Genuine edge defects | ~10 | Narrow, individually-tracked quirks (e.g. type-annotation propagation, `snapshot()/root()` namespace nodes) |
 
 Backwards-compatible processing (XSLT 1.0 behavior + XPath 1.0 compatibility
 mode, enabled per element when the effective `[xsl:]version` is below 2.0) **is**
