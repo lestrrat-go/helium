@@ -101,34 +101,6 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 	return schemas, nil
 }
 
-// sourceHasSchemaLocation reports whether the source document's root element
-// carries an xsi:schemaLocation or xsi:noNamespaceSchemaLocation attribute,
-// i.e. whether loadSchemasFromSchemaLocation could discover a schema that types
-// the source even when the stylesheet itself is not schema-aware. It is a cheap
-// root-attribute scan (no resolution or compilation) used to decide, before the
-// runtime schema registry is built, whether the strip copy must carry an
-// original->copy node map so source validation annotations can be remapped onto
-// the copy the transform navigates.
-func sourceHasSchemaLocation(doc *helium.Document) bool {
-	if doc == nil {
-		return false
-	}
-	root := doc.DocumentElement()
-	if root == nil {
-		return false
-	}
-	for _, attr := range root.Attributes() {
-		if attr.URI() != lexicon.NamespaceXSI {
-			continue
-		}
-		switch attr.LocalName() {
-		case "schemaLocation", "noNamespaceSchemaLocation":
-			return true
-		}
-	}
-	return false
-}
-
 func mergeRuntimeSchemas(existing []*xsd.Schema, extra []*xsd.Schema) []*xsd.Schema {
 	if len(extra) == 0 {
 		return existing
