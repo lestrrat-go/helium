@@ -479,7 +479,7 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 	// here just like at matchElementParticle/root. The blocked set is the UNION of
 	// the element declaration's block and the declared type's {prohibited
 	// substitutions}.
-	if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block|declType.prohibitedSubstitutions()) {
+	if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
@@ -716,7 +716,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		}
 		// Check block flags against xsi:type derivation (cvc-elt.4.3): the union of
 		// the element declaration's block and the declared type's block.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block|declType.prohibitedSubstitutions()) {
+		if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
 			msg := "The xsi:type definition is blocked by the element declaration."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("blocked xsi:type")
@@ -816,10 +816,14 @@ func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl 
 		}
 		memberType := effectiveDeclType(member, schema)
 		curHeadType := effectiveDeclType(item.head, schema)
-		if isDerivationBlocked(memberType, curHeadType, item.head.Block) {
+		// The head's EFFECTIVE {disallowed substitutions} unions the head element's
+		// block with its declared TYPE's {prohibited substitutions} (Substitution
+		// Group OK / cvc-elt.4.3), so a member reached by a derivation method the
+		// intermediate OR original head's TYPE blocks is not admitted.
+		if typeDerivationBlocked(memberType, curHeadType, item.head.Block) {
 			continue
 		}
-		if isDerivationBlocked(memberType, headType, edecl.Block) {
+		if typeDerivationBlocked(memberType, headType, edecl.Block) {
 			continue
 		}
 		seen[member.Name] = struct{}{}
@@ -1187,7 +1191,7 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced for
 	// a strict wildcard-matched global element too. The blocked set unions the
 	// element declaration's block with the declared type's {prohibited substitutions}.
-	if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block|declType.prohibitedSubstitutions()) {
+	if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
@@ -1226,12 +1230,11 @@ func (vc *validationContext) validateWildcardElementConsistent(ctx context.Conte
 		// The wildcard's governing type must be substitutable for the base-local
 		// declared type AND not blocked by the EFFECTIVE {disallowed substitutions}
 		// — the UNION of the element declaration's block and its declared TYPE's
-		// {prohibited substitutions}, masked to the DERIVATION bits (cvc-elt.4.3,
-		// nil-safe) — so a derivation the base-local's TYPE blocks cannot be
-		// re-admitted through the wildcard.
-		const derivBits = BlockExtension | BlockRestriction
+		// {prohibited substitutions} (cvc-elt.4.3, via the shared helper) — so a
+		// derivation the base-local's TYPE blocks cannot be re-admitted through the
+		// wildcard.
 		if isValidlySubstitutable(governing, localType) &&
-			!isDerivationBlocked(governing, localType, (decl.Block|localType.prohibitedSubstitutions())&derivBits) {
+			!typeDerivationBlocked(governing, localType, decl.Block) {
 			continue
 		}
 		msg := fmt.Sprintf("The wildcard-matched element's governing type definition is not validly substitutable for the locally declared type definition of element '%s'.", child.displayName)
@@ -1464,6 +1467,20 @@ func (td *TypeDef) prohibitedSubstitutions() BlockFlags {
 		return 0
 	}
 	return td.Block
+}
+
+// typeDerivationBlocked reports whether deriving `derived` from `base` uses a
+// method forbidden by the EFFECTIVE {disallowed substitutions}: the UNION of the
+// supplied element-declaration block `elemBlock` and the BASE TYPE's {prohibited
+// substitutions}, masked to the derivation bits (extension/restriction). Both
+// cvc-elt.4.3 (xsi:type / CTA) and Substitution Group OK use this union, so a
+// derivation blocked by the base TYPE's @block is caught even when the referring
+// element declaration carries no block. Nil-safe throughout (prohibitedSubstitutions
+// and isDerivationBlocked both handle nil), so it doubles as the single shared
+// derivation-block gate at every substitutability site.
+func typeDerivationBlocked(derived, base *TypeDef, elemBlock BlockFlags) bool {
+	const derivBits = BlockExtension | BlockRestriction
+	return isDerivationBlocked(derived, base, (elemBlock|base.prohibitedSubstitutions())&derivBits)
 }
 
 // isDerivationBlocked walks the BaseType chain from derived to base and returns
