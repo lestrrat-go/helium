@@ -64,14 +64,19 @@ func TestOpenContent_DerivedWildcardReadmitsBaseOpen(t *testing.T) {
 		require.Error(t, cerr, "##any admits namespaces the base open content (urn:x only) excluded")
 	})
 
-	t.Run("base WITHOUT open content is unaffected (derived declared wildcard compiles)", func(t *testing.T) {
+	t.Run("base WITHOUT open content: derived wildcard restricting a base element group is rejected", func(t *testing.T) {
 		t.Parallel()
 		schema := build(
 			``,
 			`<xs:any namespace="##any" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>`,
 			``)
 		_, _, cerr := compileV11(t, schema)
-		require.NoError(t, cerr, "no base open content means no quadrant-B interaction")
+		// With no open content on either type, no quadrant-B guard governs this and
+		// the particle-level wildcard-restricts-model-group check applies soundly: a
+		// skip ##any wildcard admits names (and empty/overlong content) the base
+		// element group `sequence(choice(a){0,1})` rejects, so it is NOT a language
+		// subset and the restriction is invalid.
+		require.Error(t, cerr, "a wildcard restricting a base element group with no open content is not a language subset")
 	})
 }
 

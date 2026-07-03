@@ -89,6 +89,15 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	derivedP := &Particle{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG}
 	baseP := &Particle{MinOccurs: baseMG.MinOccurs, MaxOccurs: baseMG.MaxOccurs, Term: baseMG}
 
+	// When XSD 1.1 open content is involved, the particle-level
+	// wildcard-restricts-model-group decision stays lenient: the §3.4.6.4
+	// open-content quadrant guards (opencontent.go) enforce soundness of a derived
+	// wildcard re-admitting the base's declared content, so rejecting here would
+	// double-count that interaction.
+	if c.version == Version11 && (typeHasOpenContent(td) || typeHasOpenContent(base)) {
+		ctx = withWildcardModelGroupLenient(ctx)
+	}
+
 	if particleValidRestriction(ctx, derivedP, baseP, c.schema, c.version) {
 		return
 	}
@@ -116,6 +125,30 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 	baseQualified := "'{" + base.Name.NS + "}" + base.Name.Local + "'"
 	msg := "The content model is not a valid restriction of the content model of the base complex type definition " + baseQualified + "."
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
+}
+
+// wildcardModelGroupLenientKey marks (in ctx) that the current restriction check
+// involves XSD 1.1 open content. The particle-level wildcard-restricts-model-group
+// decision then stays lenient because the §3.4.6.4 open-content quadrant guards
+// (opencontent.go) enforce the real soundness of a derived wildcard re-admitting
+// the base's declared content.
+type wildcardModelGroupLenientKey struct{}
+
+func withWildcardModelGroupLenient(ctx context.Context) context.Context {
+	return context.WithValue(ctx, wildcardModelGroupLenientKey{}, true)
+}
+
+func wildcardModelGroupLenient(ctx context.Context) bool {
+	v, _ := ctx.Value(wildcardModelGroupLenientKey{}).(bool)
+	return v
+}
+
+// typeHasOpenContent reports whether a complex type carries open content — an
+// explicit/effective <xs:openContent> or a pending schema-level
+// <xs:defaultOpenContent> that may apply. Used to keep the wildcard-restricts-
+// model-group particle decision lenient for open-content restrictions.
+func typeHasOpenContent(td *TypeDef) bool {
+	return td != nil && (td.OpenContent != nil || td.pendingDefaultOpenContent != nil)
 }
 
 // particleValidRestriction reports whether the restriction particle r is a valid
@@ -162,63 +195,24 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			return false
 		case *ModelGroup:
 			// §3.9.6 (Particle Valid (Restriction)) has NO derivation rule for a
-			// WILDCARD restricting a base MODEL GROUP of element declarations: the
-			// wildcard admits expanded names the element group forbids, so it can never
-			// be a valid restriction. XSD 1.0 has no language-inclusion fallback, so
-			// reject here directly. XSD 1.1 keeps the prior conservative accept: the
-			// particleLanguageSubset fallback that proves subset relationships in 1.1
-			// cannot model a derived wildcard, so it never reaches this case and the
-			// 1.1 path is unchanged.
-			if version != Version10 {
+			// WILDCARD restricting a base MODEL GROUP. A restriction is valid only when
+			// L(derived) ⊆ L(base), so this case is SOUND / fail-closed: it accepts
+			// ONLY the sub-cases it can rigorously prove. This is version-INDEPENDENT —
+			// the particleLanguageSubset fallback (Version11-only) cannot model a
+			// derived wildcard, so it never proves anything here; deciding directly is
+			// the only sound option.
+			//
+			// EXCEPTION: when XSD 1.1 OPEN CONTENT is involved, a derived declared
+			// wildcard re-admitting the base's declared content is governed by the
+			// §3.4.6.4 open-content quadrant guards (opencontent.go
+			// checkDerivedWildcardReadmitsBaseOpen / checkOpenContentDropsBaseLocal),
+			// which enforce the real soundness. checkRestrictionParticles flags that
+			// via the context, and this decision stays LENIENT so it does not
+			// double-reject a case the open-content machinery already governs.
+			if version == Version11 && wildcardModelGroupLenient(ctx) {
 				return true
 			}
-			// Decide by the LANGUAGE of the derived wildcard particle vs the base
-			// model group of element declarations. §3.9.6 has no rule for a wildcard
-			// restricting a group of element declarations, so an EMITTING wildcard is
-			// never a valid restriction; the only accepts come from a derived particle
-			// whose language is trivially a subset of the base's.
-			matchesNothing := wildcardMatchesNothing(rt)
-			switch {
-			case matchesNothing && r.MinOccurs > 0:
-				// EMPTY language {}: the wildcard must occur at least once but its
-				// positive namespace constraint is empty, so it matches no expanded
-				// name and is unsatisfiable. {} is a subset of L(base) for every base.
-				return true
-			case r.MaxOccurs == 0 || matchesNothing:
-				// {ε} language: the derived particle can occur zero times and can never
-				// match one or more — a prohibited occurrence (maxOccurs=0), or a
-				// matchesNothing wildcard with minOccurs=0. {ε} ⊆ L(base) iff the base
-				// contains the empty sequence, i.e. the base is emptiable.
-				return particleEmptiable(b)
-			}
-			// An EMITTING derived wildcard (a non-empty positive/negated namespace
-			// constraint, occurring at least sometimes). The base "model group" may be
-			// a §3.9.6-POINTLESS 1/1 wrapper around a single non-element term (e.g.
-			// sequence(sequence(xs:any))). Fold it to that term and re-dispatch: a base
-			// that is really just a WILDCARD then falls through to the NSSubset rule
-			// (wildcard-vs-wildcard), and a base that reduces to a single ELEMENT hits
-			// wildcard-vs-element (rejected).
-			if red, reduced := pointlessReduce(b); reduced {
-				return particleValidRestriction(ctx, r, red, schema, version)
-			}
-			// §3.9.6 gives no rule for a wildcard restricting a base group of element
-			// DECLARATIONS, so an emitting wildcard restricting such a group is
-			// rejected. But a base group composed solely of wildcards and/or empty
-			// nested groups (no element declaration anywhere) is NOT an element group:
-			// a wildcard restricting it is a wildcard-vs-wildcard language question
-			// this rule must not decide, so stay conservative (accept) and let the
-			// ordinary wildcard/language rules govern.
-			if modelGroupContainsElementDecl(bt) {
-				return false
-			}
-			// KNOWN LIMITATION: the full §3.9.6 wildcard-vs-wildcard-model-group
-			// language-inclusion decision (namespace / cardinality / compositor subset
-			// of an emitting derived wildcard against a base group of wildcards) is not
-			// implemented — the particleLanguageSubset fallback is Version11-only and
-			// cannot model a derived wildcard. This conservative accept is byte-identical
-			// to the pre-fix XSD 1.0 behavior; this PR only adds the provably-sound
-			// rejection for a base group that carries element declarations.
-			return true
+			return wildcardRestrictsModelGroup(r, rt, b, bt, schema)
 		}
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
@@ -550,6 +544,237 @@ func modelGroupContainsElementDecl(g *ModelGroup) bool {
 		}
 	}
 	return false
+}
+
+// wildcardRestrictsModelGroup decides the §3.9.6 WILDCARD-restricting-MODEL-GROUP
+// case SOUNDLY (fail-closed): it returns true only when it can PROVE
+// L(derived wildcard particle) ⊆ L(base model group). §3.9.6 provides no
+// derivation rule for this shape, so an accept is justified only by a language
+// argument. The provable sub-cases:
+//
+//   - EMPTY language {}: a matchesNothing derived wildcard forced to occur (min>0)
+//     is unsatisfiable, so its language is ∅ ⊆ every base.
+//   - {ε} language: a prohibited (maxOccurs=0) or matchesNothing-with-min0 derived
+//     particle matches only the empty string; {ε} ⊆ L(base) iff the base is
+//     emptiable.
+//   - a base group of ELEMENT DECLARATIONS admits named elements the emitting
+//     wildcard does not constrain — no language argument makes the wildcard a
+//     subset, so REJECT.
+//   - a base group composed SOLELY of wildcards (no emitting element declaration)
+//     that reduces LANGUAGE-EXACTLY to a single wildcard with a contiguous
+//     occurrence interval: the derived wildcard restricts that reduced base
+//     wildcard by the ordinary wildcard-vs-wildcard NSSubset rule (occurrence
+//     subset, processContents at least as strong, namespace constraint subset).
+//
+// Anything else — a non-uniform-wildcard base group, a base whose occurrence
+// count-set has a HOLE, or any shape the reduction cannot represent — is REJECTED.
+func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema) bool {
+	matchesNothing := wildcardMatchesNothing(rt)
+	switch {
+	case matchesNothing && r.MinOccurs > 0:
+		return true
+	case r.MaxOccurs == 0 || matchesNothing:
+		return particleEmptiable(b)
+	}
+	// An emitting derived wildcard against a base group of element declarations has
+	// no language argument: reject.
+	if modelGroupContainsElementDecl(bt) {
+		return false
+	}
+	// The base is a pure-wildcard group. Reduce it LANGUAGE-EXACTLY to a single
+	// wildcard particle if possible; otherwise fail-closed. A successful reduction
+	// yields a uniform wildcard constraint and a CONTIGUOUS occurrence interval, so
+	// the derived wildcard is a valid restriction iff it NSSubset-restricts it.
+	red, ok := reduceWildcardOnlyParticle(b)
+	if !ok || red.wc == nil {
+		return false
+	}
+	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, red.lo, red.hi) {
+		return false
+	}
+	if processContentsStrength(rt.ProcessContents) < processContentsStrength(red.wc.ProcessContents) {
+		return false
+	}
+	return wildcardConstraintSubset(rt, red.wc, schema, false)
+}
+
+// wildcardOnlyReduction is the LANGUAGE-EXACT reduction of a pure-wildcard
+// particle to a single wildcard: a uniform wildcard constraint (wc) plus a
+// CONTIGUOUS occurrence-count interval [lo, hi] (hi == -1 means unbounded). wc is
+// nil when the reduced language is ε-only (the particle emits no names).
+type wildcardOnlyReduction struct {
+	wc     *Wildcard
+	lo, hi int
+}
+
+// reduceWildcardOnlyParticle reduces a particle whose emitting content is composed
+// SOLELY of wildcards (element declarations must already be excluded by the
+// caller) to a single equivalent wildcard with a contiguous occurrence interval.
+// It is SOUND and fail-closed: it returns ok=false whenever it cannot PROVE the
+// reduction is language-exact — a non-uniform wildcard constraint across positions,
+// or an occurrence combination that would introduce a count HOLE. A successful
+// reduction means L(particle) == L(wc){lo,hi} exactly (or the empty string when
+// wc is nil).
+func reduceWildcardOnlyParticle(p *Particle) (wildcardOnlyReduction, bool) {
+	if particleEmitsNothing(p) {
+		// A prohibited/non-emitting particle contributes only the empty string.
+		return wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}, true
+	}
+	switch t := p.Term.(type) {
+	case *Wildcard:
+		if wildcardMatchesNothing(t) {
+			// A matchesNothing wildcard is an ∅/ε edge case; the caller handles those
+			// before reduction, so bail conservatively here.
+			return wildcardOnlyReduction{}, false
+		}
+		// A single wildcard leaf emits [min, max] of itself — a contiguous interval.
+		return wildcardOnlyReduction{wc: t, lo: p.MinOccurs, hi: p.MaxOccurs}, true
+	case *ModelGroup:
+		body, ok := reduceWildcardOnlyGroupBody(t)
+		if !ok {
+			return wildcardOnlyReduction{}, false
+		}
+		return applyOccReduction(body, p.MinOccurs, p.MaxOccurs)
+	}
+	return wildcardOnlyReduction{}, false
+}
+
+// reduceWildcardOnlyGroupBody combines a pure-wildcard model group's members into
+// one reduction (BEFORE the group's own occurrence is applied): a sequence/all
+// SUMS member intervals, a choice UNIONS them. A uniform wildcard constraint must
+// hold across every emitting member; a choice whose member intervals do not form a
+// contiguous union bails.
+func reduceWildcardOnlyGroupBody(g *ModelGroup) (wildcardOnlyReduction, bool) {
+	if g.Compositor == CompositorChoice {
+		acc := wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}
+		first := true
+		for _, child := range g.Particles {
+			m, ok := reduceWildcardOnlyParticle(child)
+			if !ok {
+				return wildcardOnlyReduction{}, false
+			}
+			wc, ok := mergeWildcardConstraint(acc.wc, m.wc)
+			if !ok {
+				return wildcardOnlyReduction{}, false
+			}
+			if first {
+				acc = m
+				acc.wc = wc
+				first = false
+				continue
+			}
+			lo, hi, ok := unionInterval(acc.lo, acc.hi, m.lo, m.hi)
+			if !ok {
+				return wildcardOnlyReduction{}, false
+			}
+			acc = wildcardOnlyReduction{wc: wc, lo: lo, hi: hi}
+		}
+		return acc, true
+	}
+	// sequence / all: SUM member intervals (a Minkowski sum of contiguous integer
+	// intervals stays contiguous, so no gap can arise here).
+	acc := wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}
+	for _, child := range g.Particles {
+		m, ok := reduceWildcardOnlyParticle(child)
+		if !ok {
+			return wildcardOnlyReduction{}, false
+		}
+		wc, ok := mergeWildcardConstraint(acc.wc, m.wc)
+		if !ok {
+			return wildcardOnlyReduction{}, false
+		}
+		acc = wildcardOnlyReduction{wc: wc, lo: acc.lo + m.lo, hi: addOccursMax(acc.hi, m.hi)}
+	}
+	return acc, true
+}
+
+// applyOccReduction folds a group's own occurrence [gmin, gmax] over an already
+// contiguous body reduction. It preserves language-exactness only when the result
+// stays a CONTIGUOUS interval; a folding that would introduce a HOLE (e.g. a body
+// that emits exactly 2 repeated 1..∞ times → {2,4,6,…}) bails.
+func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnlyReduction, bool) {
+	if gmax == 0 || body.wc == nil {
+		// Prohibited group, or an ε-only body: emits only the empty string.
+		return wildcardOnlyReduction{wc: nil, lo: 0, hi: 0}, true
+	}
+	switch {
+	case gmin == gmax:
+		// A fixed number of copies of a contiguous body stays contiguous.
+		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: mulOccurs(gmin, body.hi)}, true
+	case body.hi == -1:
+		// Each copy already spans to ∞, so the union from gmin copies is
+		// [gmin*lo, ∞) — contiguous.
+		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: -1}, true
+	case body.lo == 0:
+		// Every copy count includes 0, so the union is [0, gmax*hi] — contiguous.
+		return wildcardOnlyReduction{wc: body.wc, lo: 0, hi: mulOccurs(gmax, body.hi)}, true
+	default:
+		// body.lo >= 1, finite body.hi, gmin < gmax. The union of consecutive copy
+		// intervals [k*lo, k*hi] is gap-free iff each abuts the next:
+		// k*hi + 1 >= (k+1)*lo. With hi >= lo this is monotone non-decreasing in k,
+		// so checking the smallest copy count gmin suffices.
+		if gmin*body.hi+1 < (gmin+1)*body.lo {
+			return wildcardOnlyReduction{}, false
+		}
+		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: mulOccurs(gmax, body.hi)}, true
+	}
+}
+
+// addOccursMax adds two maxOccurs values, treating -1 as unbounded.
+func addOccursMax(a, b int) int {
+	if a == -1 || b == -1 {
+		return -1
+	}
+	return a + b
+}
+
+// unionInterval merges two contiguous occurrence intervals into one, reporting
+// whether the union stays contiguous (the intervals overlap or are adjacent). -1
+// is unbounded.
+func unionInterval(alo, ahi, blo, bhi int) (int, int, bool) {
+	if alo > blo {
+		alo, ahi, blo, bhi = blo, bhi, alo, ahi
+	}
+	// [alo, ahi] is the lower interval. It must reach (adjacently) into [blo, bhi].
+	if ahi != -1 && ahi+1 < blo {
+		return 0, 0, false
+	}
+	if ahi == -1 || bhi == -1 {
+		return alo, -1, true
+	}
+	return alo, max(ahi, bhi), true
+}
+
+// mergeWildcardConstraint combines the uniform wildcard constraint of two
+// reductions: a nil operand adopts the other, and two present constraints must be
+// IDENTICAL (a language-exact single-wildcard fold requires every position to
+// admit the same name-set). Differing constraints bail.
+func mergeWildcardConstraint(a, b *Wildcard) (*Wildcard, bool) {
+	if a == nil {
+		return b, true
+	}
+	if b == nil {
+		return a, true
+	}
+	if sameWildcardConstraint(a, b) {
+		return a, true
+	}
+	return nil, false
+}
+
+// sameWildcardConstraint reports whether two wildcards admit exactly the same
+// name-set and validate identically — a CONSERVATIVE structural equality over
+// every namespace/notQName/processContents field (order-sensitive on the list
+// fields, so a reordered-but-equivalent pair conservatively bails).
+func sameWildcardConstraint(a, b *Wildcard) bool {
+	return a.Namespace == b.Namespace &&
+		a.ProcessContents == b.ProcessContents &&
+		a.TargetNS == b.TargetNS &&
+		a.NotQNameDefined == b.NotQNameDefined &&
+		a.NotQNameDefinedSibling == b.NotQNameDefinedSibling &&
+		slices.Equal(a.NotNamespace, b.NotNamespace) &&
+		slices.Equal(a.NotQName, b.NotQName) &&
+		slices.Equal(a.SiblingNames, b.SiblingNames)
 }
 
 // pointlessReduce folds a §3.9.6-POINTLESS model-group particle down to its

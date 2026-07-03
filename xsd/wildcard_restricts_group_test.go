@@ -9,10 +9,11 @@ import (
 
 // A derived xs:any wildcard restricting a base model group of element
 // declarations has NO derivation rule under §3.9.6 (Particle Valid
-// (Restriction)) — the wildcard admits expanded names the element group forbids
-// — so it is not a valid restriction in XSD 1.0 (W3C msData particlesHa163 and
-// siblings). XSD 1.1's particleLanguageSubset fallback cannot model a derived
-// wildcard, so it keeps the prior conservative accept for that path.
+// (Restriction)) — the wildcard admits expanded names the element group forbids,
+// so it is not a language subset — so it is invalid in BOTH XSD 1.0 and XSD 1.1
+// (W3C msData particlesHa163 and siblings). The wildcard-restricts-model-group
+// decision is version-independent and fail-closed: the particleLanguageSubset
+// fallback cannot model a derived wildcard, so accepting this would be unsound.
 func TestWildcardRestrictsModelGroup(t *testing.T) {
 	t.Parallel()
 
@@ -37,20 +38,23 @@ func TestWildcardRestrictsModelGroup(t *testing.T) {
   </xs:complexType>
 </xs:schema>`
 
-	t.Run("xsd10 rejects", func(t *testing.T) {
-		t.Parallel()
-		schema, _, cerr := compileWith(t, xsd.Version10, schemaXML)
-		require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
-			"a derived wildcard restricting a base model group is invalid in XSD 1.0")
-		require.Nil(t, schema)
-	})
+	for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		t.Run(versionName(ver)+" rejects", func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, ver, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"a derived wildcard restricting a base element group is not a language subset — invalid in both versions")
+			require.Nil(t, schema)
+		})
+	}
+}
 
-	t.Run("xsd11 accepts", func(t *testing.T) {
-		t.Parallel()
-		schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
-		require.NoError(t, cerr, "XSD 1.1 keeps the conservative accept for this path")
-		require.NotNil(t, schema)
-	})
+// versionName renders an xsd.Version as a stable subtest name.
+func versionName(v xsd.Version) string {
+	if v == xsd.Version11 {
+		return "xsd11"
+	}
+	return "xsd10"
 }
 
 // A base "model group" that is a §3.9.6-POINTLESS 1/1 wrapper around a single
@@ -156,21 +160,58 @@ func TestWildcardRestrictsPureWildcardGroup(t *testing.T) {
 	require.NotNil(t, schema)
 }
 
+// A base pure-wildcard group whose positions carry DIFFERENT namespace
+// constraints does not reduce language-exactly to a single uniform wildcard, so a
+// derived ##any wildcard is NOT a proven language subset — it would admit an
+// empty, single-child, wrong-namespace, or overlong sequence the base rejects.
+// The sound, fail-closed decision REJECTS it in both versions.
+func TestWildcardRestrictsMixedNamespaceWildcardGroup(t *testing.T) {
+	t.Parallel()
+
+	// base: sequence(sequence(any urn:a strict, any urn:b strict)) — language is
+	// exactly one urn:a child then one urn:b child.
+	// derived: sequence(any ##any skip min0 unbounded) — accepts far more.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:sequence>
+        <xs:any namespace="urn:a" processContents="strict"/>
+        <xs:any namespace="urn:b" processContents="strict"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" minOccurs="0" maxOccurs="unbounded" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		t.Run(versionName(ver), func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, ver, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"a mixed-namespace base wildcard group has no single-wildcard reduction, so a broadening derived wildcard is not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
 // A base group whose only element declaration is NON-EMITTING (a prohibited
 // element, minOccurs="0" maxOccurs="0") is effectively pure-wildcard: the
-// prohibited element emits nothing and can never appear in an instance, so an
-// emitting derived wildcard restricting the base is a wildcard-vs-wildcard
-// question the rejection must not decide. modelGroupContainsElementDecl counts
-// only EMITTING element declarations, so it does not color this base as an
-// element group and the restriction COMPILES in XSD 1.0.
-//
-// The base's inner sequence{1,unbounded}(any{2,2} skip, e{0,0}) has an
-// occurrence HOLE (2,4,6,… elements, never 1), so pointlessReduce refuses to
-// fold it to a bare wildcard — the derived wildcard therefore reaches the
-// wildcard-restricts-base-model-group rule (particleValidRestriction line ~211)
-// where modelGroupContainsElementDecl decides. Without the emitting-only fix the
-// prohibited e is miscounted and the restriction is wrongly REJECTED.
-func TestWildcardRestrictsGroupWithProhibitedElement(t *testing.T) {
+// prohibited element emits nothing, so the base reduces to its wildcards alone
+// and the derived wildcard is a valid restriction ONLY when its LANGUAGE is a
+// subset. Here the base's inner sequence{1,unbounded}(any{2,2} skip, e{0,0})
+// emits {2,4,6,…} children (an occurrence HOLE — never exactly 1), so it does
+// NOT reduce to a bare wildcard with a contiguous range. A derived any{1,1}
+// therefore admits a single child the base never accepts, so the restriction is
+// INVALID — the sound, fail-closed decision REJECTS it in both versions.
+func TestWildcardRestrictsGroupWithProhibitedElementHole(t *testing.T) {
 	t.Parallel()
 
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -193,10 +234,15 @@ func TestWildcardRestrictsGroupWithProhibitedElement(t *testing.T) {
   </xs:complexType>
 </xs:schema>`
 
-	schema, _, cerr := compileWith(t, xsd.Version10, schemaXML)
-	require.NoError(t, cerr,
-		"a base group whose only element declaration is prohibited (maxOccurs=0) is effectively pure-wildcard, so an emitting derived wildcard validly restricts it in XSD 1.0")
-	require.NotNil(t, schema)
+	for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		t.Run(versionName(ver), func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, ver, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"a base group emitting {2,4,6,…} children has an occurrence hole; a derived any{1,1} admits a single child the base rejects, so the restriction is not a language subset")
+			require.Nil(t, schema)
+		})
+	}
 }
 
 // wildcardGroupSchema builds a restriction of a base model group of element
@@ -290,4 +336,38 @@ func TestWildcardRestrictsGroupLanguageCells(t *testing.T) {
 			require.NotNil(t, schema)
 		})
 	}
+}
+
+// A base xs:choice with a non-emitting (maxOccurs=0) element branch alongside a
+// wildcard is ε-emptiable and carries no emitting element declaration, so an
+// emitting derived wildcard restricting it stays a conservative accept in XSD
+// 1.0. A syntactic fold of the base must not drop the choice branch's
+// emptiability and false-reject.
+func TestWildcardRestrictsChoiceWithProhibitedBranch(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:any namespace="##any"/>
+        <xs:element name="e" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" minOccurs="0"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version10, schemaXML)
+	require.NoError(t, cerr,
+		"an emitting wildcard restricting a pure-wildcard/ε-emptiable base group is a conservative accept in XSD 1.0")
+	require.NotNil(t, schema)
 }
