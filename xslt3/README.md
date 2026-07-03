@@ -68,7 +68,9 @@ source: [examples/xslt3_transform_string_example_test.go](https://github.com/les
 
 `xslt3` targets **Basic XSLT 3.0** conformance (W3C XSLT 3.0 spec §27).
 "Basic XSLT Processor" is the only required conformance level; the spec's
-other seven levels are optional features.
+other seven levels are optional features. See
+[`CONFORMANCE.md`](CONFORMANCE.md) for the explicit, auditable conformance
+declaration (level table, skip taxonomy, and the isolated narrow-quirk list).
 
 Against the W3C XSLT 3.0 test suite (run from the sibling `helium-w3c-tests`
 module; see "Running the conformance tests" below):
