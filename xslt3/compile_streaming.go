@@ -854,8 +854,9 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 		return nil, staticError(errCodeXTSE0020, "xsl:merge-source type=%q attribute validation is not supported", typeAttr)
 	}
 	src := &mergeSource{
-		Name:    getAttr(elem, "name"),
-		BaseURI: stylesheetBaseURI(elem, c.baseURI, c.moduleRoot),
+		Name:       getAttr(elem, "name"),
+		BaseURI:    stylesheetBaseURI(elem, c.baseURI, c.moduleRoot),
+		Validation: getAttr(elem, "validation"),
 	}
 
 	// Parse streamable attribute — must be a valid xs:boolean.

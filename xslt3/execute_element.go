@@ -417,9 +417,12 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 				}
 			}
 		}
-		for elem := range vr.NilledElements {
-			ec.markNilled(elem)
+		for nElem := range vr.NilledElements {
+			ec.markNilled(nElem)
 		}
+		// The nilled marks above are on the temporary validation copy; transfer
+		// them to the live tree so nilled() sees the constructed element.
+		ec.transferNilledStatus(copied, elem)
 		// Merge type annotations for the actual (non-copy) element by walking
 		// the temp tree and live tree in parallel.
 		if len(ann) > 0 {
@@ -517,6 +520,9 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 		for nElem := range vr.NilledElements {
 			ec.markNilled(nElem)
 		}
+		// The nilled marks above are on the temporary validation copy; transfer
+		// them to the live tree so nilled() sees the constructed element.
+		ec.transferNilledStatus(copied, elem)
 		// NOTE: xs:ID uniqueness and xs:IDREF resolution (XTTE1555) are NOT
 		// checked here at the element level, because partial validation of a
 		// subtree cannot resolve IDREFs that reference IDs elsewhere in the

@@ -578,6 +578,7 @@ type mergeSource struct {
 	StreamableAttr  bool
 	SortBeforeMerge bool
 	BaseURI         string // effective base URI for resolving for-each-source URIs
+	Validation      string // validation mode (strict/lax/preserve/strip) for loaded sources
 	Keys            []*mergeKey
 }
 
