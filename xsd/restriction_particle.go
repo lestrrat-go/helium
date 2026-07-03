@@ -167,8 +167,9 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// be a valid restriction. XSD 1.0 has no language-inclusion fallback, so
 			// reject here directly (a non-emitting derived wildcard — maxOccurs=0 — has
 			// the empty language and is a trivial subset, so accept it). XSD 1.1 keeps
-			// the conservative accept: its particleLanguageSubset fallback governs
-			// (and cannot represent a derived wildcard), so the 1.1 path is undisturbed.
+			// the prior conservative accept: the particleLanguageSubset fallback that
+			// proves subset relationships in 1.1 cannot model a derived wildcard, so it
+			// never reaches this case and the 1.1 path is unchanged.
 			if version == Version10 && r.MaxOccurs != 0 {
 				return false
 			}
