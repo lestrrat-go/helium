@@ -267,21 +267,26 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 		elem.SetNs(active)
 	}
 
-	// Copy attributes, preserving namespace information. Use the same value-
-	// parsing setters as helium.CopyDoc (SetAttribute/SetAttributeNS) so the copy
-	// is byte-for-byte identical, including any entity-reference handling.
+	// Copy attributes, preserving namespace information. Use the LITERAL setters
+	// (SetLiteralAttribute/SetLiteralAttributeNS): a.Value() is the parser's
+	// already-resolved value, so re-parsing it (SetAttribute/SetAttributeNS runs
+	// CreateAttribute, which interprets entity references) would choke on a bare
+	// '&' or '<' that was originally an entity (e.g. an href value carrying
+	// '&amp;'), and silently double-resolve a value like '&amp;amp;'. Storing the
+	// resolved value literally serializes byte-for-byte identically (the serializer
+	// re-escapes '&'/'<') while never re-interpreting it.
 	for _, a := range src.Attributes() {
 		if a.URI() != "" {
 			ns, nsErr := sc.dst.CreateNamespace(a.Prefix(), a.URI())
 			if nsErr != nil {
 				return nil, nsErr
 			}
-			if _, err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+			if err := elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+		if err := elem.SetLiteralAttribute(a.Name(), a.Value()); err != nil {
 			return nil, err
 		}
 	}
@@ -341,6 +346,15 @@ func (sc *stripCopier) stripText(src helium.Node, parent *helium.Element) bool {
 	}
 	if isElementStrippedBy(parent, sc.strip, sc.preserve) {
 		return true
+	}
+	// A copyAndStrip call with no strip rules AND no schema classifier is a PURE
+	// copy (used to make the private validation copy). It must stay byte-faithful
+	// and NOT drop DTD element-only whitespace, so the fallback below is skipped.
+	// A genuine strip invocation always carries strip rules or a classifier (the
+	// non-schema strip path always has non-empty strip rules), so this guard never
+	// affects it.
+	if len(sc.strip) == 0 && sc.schemaWS == nil {
+		return false
 	}
 	return hasElementOnlyContent(parent)
 }

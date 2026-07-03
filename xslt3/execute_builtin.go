@@ -493,6 +493,15 @@ func (ec *execContext) stripWhitespaceFromDoc(doc *helium.Document) {
 }
 
 func (ec *execContext) stripWhitespaceFromNode(root helium.Node) {
+	ec.stripWhitespaceFromNodeInto(root, nil)
+}
+
+// stripWhitespaceFromNodeInto is stripWhitespaceFromNode with an optional out
+// parameter: when removed is non-nil, every unlinked whitespace-only node is
+// recorded in it. The in-place strip of a schema-validated source copy uses this
+// so a selected node the strip removes can be dropped from the initial match
+// selection.
+func (ec *execContext) stripWhitespaceFromNodeInto(root helium.Node, removed map[helium.Node]struct{}) {
 	// Use an explicit stack to avoid deep recursion on large documents.
 	stack := make([]helium.Node, 0, 32)
 	stack = append(stack, root)
@@ -503,6 +512,9 @@ func (ec *execContext) stripWhitespaceFromNode(root helium.Node) {
 		for child != nil {
 			next := child.NextSibling()
 			if ec.shouldStripWhitespace(child) {
+				if removed != nil {
+					removed[child] = struct{}{}
+				}
 				helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
 			} else if child.FirstChild() != nil {
 				stack = append(stack, child)
