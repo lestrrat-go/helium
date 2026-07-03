@@ -986,7 +986,7 @@ func (w *Writer) WriteElement(name, content string) error {
 	}
 	// Pre-validate content before StartElement emits the opening tag, so a
 	// rejected write leaves the writer unmutated.
-	if err := validateXMLChars("text", content); err != nil {
+	if err := w.validateContentChars("text", content); err != nil {
 		return err
 	}
 	if err := w.StartElement(name); err != nil {
@@ -1005,7 +1005,7 @@ func (w *Writer) WriteElementNS(prefix, localName, namespaceURI, content string)
 	}
 	// Pre-validate content before StartElementNS declares the namespace or
 	// emits markup, so a rejected write leaves the writer unmutated.
-	if err := validateXMLChars("text", content); err != nil {
+	if err := w.validateContentChars("text", content); err != nil {
 		return err
 	}
 	if err := w.StartElementNS(prefix, localName, namespaceURI); err != nil {

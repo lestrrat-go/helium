@@ -495,6 +495,63 @@ func TestWriteElement(t *testing.T) {
 	require.Equal(t, `<item>hello</item>`, buf.String())
 }
 
+// TestWriteElementRestrictedCharEquivalence asserts that WriteElement /
+// WriteElementNS behave identically to StartElement(NS) + WriteString +
+// EndElement for an XML 1.1 restricted control character: rejected in XML 1.0
+// output, and emitted as a decimal character reference under XMLVersion("1.1").
+func TestWriteElementRestrictedCharEquivalence(t *testing.T) {
+	t.Parallel()
+	const content = "A\x01B" // U+0001: XML 1.1 restricted control char
+
+	writeConvenience := func(w stream.Writer) error {
+		return w.WriteElement("e", content)
+	}
+	writeConvenienceNS := func(w stream.Writer) error {
+		return w.WriteElementNS("", "e", "", content)
+	}
+	writeExpanded := func(w stream.Writer) error {
+		if err := w.StartElement("e"); err != nil {
+			return err
+		}
+		if err := w.WriteString(content); err != nil {
+			return err
+		}
+		return w.EndElement()
+	}
+
+	run := func(t *testing.T, xml11 bool, write func(stream.Writer) error) (string, error) {
+		t.Helper()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		if xml11 {
+			w = w.XMLVersion("1.1")
+		}
+		err := write(w)
+		return buf.String(), err
+	}
+
+	// XML 1.0: all three paths reject the restricted char.
+	for _, write := range []func(stream.Writer) error{writeConvenience, writeConvenienceNS, writeExpanded} {
+		_, err := run(t, false, write)
+		require.Error(t, err, "xml 1.0 must reject the restricted control char")
+	}
+
+	// XML 1.1: all three paths succeed and emit the decimal character reference,
+	// and the two convenience methods match the expanded StartElement+WriteString
+	// path byte-for-byte.
+	expanded, err := run(t, true, writeExpanded)
+	require.NoError(t, err)
+	require.Equal(t, "<e>A&#1;B</e>", expanded)
+
+	got, err := run(t, true, writeConvenience)
+	require.NoError(t, err)
+	require.Equal(t, expanded, got)
+
+	gotNS, err := run(t, true, writeConvenienceNS)
+	require.NoError(t, err)
+	require.Equal(t, expanded, gotNS)
+}
+
 func TestComment(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
