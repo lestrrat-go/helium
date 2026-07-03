@@ -187,24 +187,38 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 // when validation="strict" or validation="lax". Returns XTTE1510 when the
 // value is invalid, XTTE1555 when no matching global declaration is found
 // (strict only).
-func (ec *execContext) validateConstructedAttribute(ctx context.Context, localName, nsURI, value, validation string) error {
+// firstNonEmptyType returns explicit if non-empty, else fallback. An explicit
+// type= on xsl:attribute takes precedence over a validation-resolved type.
+func firstNonEmptyType(explicit, fallback string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return fallback
+}
+
+// validateConstructedAttribute validates a computed attribute against the global
+// attribute declaration for its name and returns the resolved type-annotation
+// name so the caller can annotate the attribute node (needed for
+// schema-attribute(N) pattern matching and instance-of tests). typeName is ""
+// when no declaration governs the attribute (lax with no declaration).
+func (ec *execContext) validateConstructedAttribute(ctx context.Context, localName, nsURI, value, validation string) (string, error) {
 	if ec.schemaRegistry == nil {
-		return nil
+		return "", nil
 	}
 	typeName, valid, valErr := ec.schemaRegistry.ValidateAttribute(ctx, localName, nsURI, value)
 	if typeName == "" {
 		// No matching global attribute declaration found.
 		if validation == validationStrict {
-			return dynamicError(errCodeXTTE1555,
+			return "", dynamicError(errCodeXTTE1555,
 				"no schema declaration found for attribute {%s}%s (validation=strict)", nsURI, localName)
 		}
-		return nil // lax: silently skip if no declaration
+		return "", nil // lax: silently skip if no declaration
 	}
 	if !valid || valErr != nil {
-		return dynamicError(errCodeXTTE1510,
+		return "", dynamicError(errCodeXTTE1510,
 			"attribute {%s}%s value %q is not valid for type %s: %v", nsURI, localName, value, typeName, valErr)
 	}
-	return nil
+	return typeName, nil
 }
 
 // validateAndNormalizeElementContent validates the text content of elem against
@@ -230,9 +244,23 @@ func (ec *execContext) validateAndNormalizeElementContent(ctx context.Context, e
 				td, schema := def.TD, def.Schema
 				switch td.ContentType {
 				case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
-					if err := td.ValidateElement(ctx, elem, schema); err != nil {
+					var ann xsd.TypeAnnotations
+					if err := td.ValidateElementAnnotated(ctx, elem, schema, &ann); err != nil {
 						lastErr = err
 						continue
+					}
+					// Propagate the PSVI type annotations the content-model
+					// validation assigned to descendant elements and attributes
+					// onto the live result tree, so later element(*, T) /
+					// schema-element() type tests see the subtree's schema types,
+					// not just the root (whose own annotation is set by the
+					// caller from the xsl:type/type attribute). Annotations are
+					// keyed on the live nodes of elem's subtree.
+					for node, typeName := range ann {
+						if node == helium.Node(elem) {
+							continue
+						}
+						ec.annotateNode(node, typeName)
 					}
 					return nil
 				case xsd.ContentTypeSimple:
@@ -810,22 +838,31 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			attrNS = ns
 		}
 		// Schema validation when validation attribute is set.
+		var valTypeName string
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation); err != nil {
+			tn, err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation)
+			if err != nil {
 				return err
 			}
+			valTypeName = tn
 		}
 		attr, attrErr := out.doc.CreateAttribute(localName, value, attrNS)
 		if attrErr != nil {
 			return attrErr
 		}
 		ni := xpath3.NodeItem{Node: attr}
-		if inst.TypeName != "" {
-			ec.annotateNode(attr, inst.TypeName)
-			ni.TypeAnnotation = inst.TypeName
+		// The explicit type= wins; otherwise a validation-resolved type carries
+		// the annotation so schema-attribute(N) / instance-of see the type.
+		annType := inst.TypeName
+		if annType == "" {
+			annType = valTypeName
+		}
+		if annType != "" {
+			ec.annotateNode(attr, annType)
+			ni.TypeAnnotation = annType
 			// Set ListItemType for list types (built-in or schema-defined).
 			if ec.schemaRegistry != nil {
-				if itemType, ok := ec.schemaRegistry.ListItemType(inst.TypeName); ok {
+				if itemType, ok := ec.schemaRegistry.ListItemType(annType); ok {
 					ni.ListItemType = itemType
 				}
 			}
@@ -888,10 +925,13 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		localName := resolved.localName
 		nsURI := resolved.nsURI
 		// Schema validation when validation attribute is set.
+		var valTypeName string
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation); err != nil {
+			tn, err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation)
+			if err != nil {
 				return err
 			}
+			valTypeName = tn
 		}
 		// If the prefix is already bound to a different URI on this element,
 		// generate a unique prefix to avoid conflicts.
@@ -911,7 +951,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		// Use literal mode: XSLT evaluation values are plain text
 		// that may contain & from resolved entities.
 		_ = elem.SetLiteralAttributeNS(localName, value, ns)
-		ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
+		ec.annotateAttr(elem, firstNonEmptyType(inst.TypeName, valTypeName), localName, nsURI, value)
 		out.noteOutput()
 		return nil
 	}
@@ -920,15 +960,18 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 	// explicit namespace="" that discarded the prefix).
 	localName := resolved.localName
 	// Schema validation for no-namespace attribute.
+	var valTypeName string
 	if inst.Validation == validationStrict || inst.Validation == validationLax {
-		if err := ec.validateConstructedAttribute(ctx, localName, "", value, inst.Validation); err != nil {
+		tn, err := ec.validateConstructedAttribute(ctx, localName, "", value, inst.Validation)
+		if err != nil {
 			return err
 		}
+		valTypeName = tn
 	}
 	// Remove existing attribute with same name to allow replacement
 	elem.RemoveAttribute(localName)
 	_ = elem.SetLiteralAttribute(localName, value)
-	ec.annotateAttr(elem, inst.TypeName, localName, "", value)
+	ec.annotateAttr(elem, firstNonEmptyType(inst.TypeName, valTypeName), localName, "", value)
 	out.noteOutput()
 	return nil
 }

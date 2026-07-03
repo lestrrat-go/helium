@@ -1470,8 +1470,26 @@ func matchSchemaAttributeTest(_ context.Context, ec *execContext, t xpath3.Schem
 	if ec.schemaRegistry == nil {
 		return false
 	}
-	_, found := ec.schemaRegistry.LookupAttribute(local, ns)
-	return found
+	declType, found := ec.schemaRegistry.LookupAttribute(local, ns)
+	if !found {
+		return false
+	}
+	// The attribute must have been validated against the GLOBAL declaration's
+	// type: its type annotation must be that type, or derived from it. An
+	// instance attribute whose (e.g. local) declaration gives it an unrelated
+	// type — my:toks declared globally as xs:string but validated as
+	// xs:NMTOKENS on the person element — does not match schema-attribute(N).
+	ann := ""
+	if ec.typeAnnotations != nil {
+		ann = ec.typeAnnotations[node]
+	}
+	if ann == "" || ann == lexicon.XSUntypedAtomic {
+		return false
+	}
+	if ann == declType || ec.schemaRegistry.IsSubtypeOf(ann, declType) {
+		return true
+	}
+	return false
 }
 
 // resolvePatternKindTestName resolves a kind-test name string (used by
@@ -1575,26 +1593,35 @@ func matchNameTest(_ context.Context, ec *execContext, nt xpath3.NameTest, node 
 	if nodeLocal != nt.Local || nodeURI != expectedURI {
 		return false
 	}
-	// XSLT 3.0 §6.6: when mode typed="strict", bare element name patterns
-	// are treated as schema-element() — the element must have been validated
-	// against the schema declaration for that name.
-	if isElem && ec != nil && nt.Prefix != "*" && isTypedStrictMode(ec) {
-		if ec.schemaRegistry == nil {
-			return false
-		}
-		declType, found := ec.schemaRegistry.LookupElement(nodeLocal, nodeURI)
-		if !found {
-			return false
-		}
-		ann := ""
-		if ec.typeAnnotations != nil {
-			ann = ec.typeAnnotations[node]
-		}
-		if ann == "" || ann == lexicon.XSUntyped {
-			return false
-		}
-		if ann != declType && !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
-			return false
+	// XSLT 3.0 §6.6: when the mode is typed (typed="strict" or typed="lax"), a
+	// bare element name pattern whose name is a global element declaration is
+	// treated as an implicit schema-element() — the element must have been
+	// validated against that declaration for the pattern to match. strict and
+	// lax differ in how an untyped / undeclared node is treated: strict rejects
+	// it, lax falls back to a plain by-name match. A TYPED node whose type is
+	// not derived from the declared type never matches in either (e.g. a
+	// constructed element carrying xsl:type="xs:string" for a name declared with
+	// a decimal type).
+	if isElem && ec != nil && nt.Prefix != "*" {
+		strict := isTypedStrictMode(ec)
+		if strict || isTypedLaxMode(ec) {
+			if ec.schemaRegistry == nil {
+				return !strict
+			}
+			declType, found := ec.schemaRegistry.LookupElement(nodeLocal, nodeURI)
+			if !found {
+				return !strict
+			}
+			ann := ""
+			if ec.typeAnnotations != nil {
+				ann = ec.typeAnnotations[node]
+			}
+			if ann == "" || ann == lexicon.XSUntyped {
+				return !strict
+			}
+			if ann != declType && !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
+				return false
+			}
 		}
 	}
 	return true
@@ -1602,16 +1629,30 @@ func matchNameTest(_ context.Context, ec *execContext, nt xpath3.NameTest, node 
 
 // isTypedStrictMode returns true if the current mode has typed="strict" or typed="yes".
 func isTypedStrictMode(ec *execContext) bool {
-	mode := ec.currentMode
-	if md := ec.stylesheet.modeDefs[mode]; md != nil {
+	if md := currentModeDef(ec); md != nil {
 		return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == lexicon.ValueTrue || md.Typed == "1"
 	}
-	if mode == "" {
-		if md := ec.stylesheet.modeDefs[modeDefault]; md != nil {
-			return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == lexicon.ValueTrue || md.Typed == "1"
-		}
+	return false
+}
+
+// isTypedLaxMode returns true if the current mode has typed="lax".
+func isTypedLaxMode(ec *execContext) bool {
+	if md := currentModeDef(ec); md != nil {
+		return md.Typed == validationLax
 	}
 	return false
+}
+
+// currentModeDef returns the mode definition for the current mode, falling back
+// to the default (unnamed) mode definition when the current mode is unnamed.
+func currentModeDef(ec *execContext) *modeDef {
+	if md := ec.stylesheet.modeDefs[ec.currentMode]; md != nil {
+		return md
+	}
+	if ec.currentMode == "" {
+		return ec.stylesheet.modeDefs[modeDefault]
+	}
+	return nil
 }
 
 // matchElementTest checks if a node matches an element() test.
@@ -1784,13 +1825,15 @@ func matchTypeAnnotation(_ context.Context, ec *execContext, node helium.Node, t
 	if xpath3.BuiltinIsSubtypeOf(fullAnn, fullType) {
 		return true
 	}
-	// Check via schema declarations for user-defined types.
+	// Check via schema declarations for user-defined types. An element(*, T) /
+	// attribute(*, T) type test also matches when the node's type is an atomic
+	// member of the union T (isSubtypeOrUnionMember), per Type Derivation OK.
 	if ec != nil && ec.schemaRegistry != nil {
 		// Also try with resolved QName forms
-		if ec.schemaRegistry.IsSubtypeOf(resolvedAnn, resolvedType) {
+		if ec.schemaRegistry.isSubtypeOrUnionMember(resolvedAnn, resolvedType) {
 			return true
 		}
-		return ec.schemaRegistry.IsSubtypeOf(fullAnn, fullType)
+		return ec.schemaRegistry.isSubtypeOrUnionMember(fullAnn, fullType)
 	}
 	return false
 }

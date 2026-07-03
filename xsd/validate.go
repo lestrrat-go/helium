@@ -667,11 +667,30 @@ func (td *TypeDef) Validate(ctx context.Context, value string, nsMap map[string]
 // This is used by XSLT xsl:type validation where the element is constructed
 // in the result tree and must conform to the given type.
 func (td *TypeDef) ValidateElement(ctx context.Context, elem *helium.Element, schema *Schema) error {
+	return td.ValidateElementAnnotated(ctx, elem, schema, nil)
+}
+
+// ValidateElementAnnotated validates an element's content against this type
+// definition, and — when ann is non-nil — records PSVI type annotations for the
+// element's descendant elements and attributes into *ann, keyed on the LIVE
+// nodes of elem's subtree. The root element's own annotation is the caller's
+// responsibility (it is the type named by the xsl:type/type attribute, not a
+// content-model match). This is used by XSLT xsl:type validation so that later
+// element(*, T) / schema-element() type tests see the schema types of the
+// constructed subtree, not just the root.
+func (td *TypeDef) ValidateElementAnnotated(ctx context.Context, elem *helium.Element, schema *Schema, ann *TypeAnnotations) error {
 	if td == nil {
 		return fmt.Errorf("nil type definition")
 	}
 	collector := &validationErrors{}
-	vc := newValidationContext(schema, &validateConfig{}, "", collector)
+	cfg := &validateConfig{}
+	if ann != nil {
+		if *ann == nil {
+			*ann = make(TypeAnnotations)
+		}
+		cfg.annotations = ann
+	}
+	vc := newValidationContext(schema, cfg, "", collector)
 	err := vc.validateElementContent(ctx, elem, nil, td)
 	if err == nil {
 		return nil
