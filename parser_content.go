@@ -261,6 +261,25 @@ func isXMLCharValue(c uint32) bool {
 	return (0x100 <= c && c <= 0xd7ff) || (0xe000 <= c && c <= 0xfffd) || (0x10000 <= c && c <= 0x10ffff)
 }
 
+// isXML11CharValue implements the XML 1.1 Char production:
+//
+//	Char ::= [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+//
+// The C0/C1 control characters (0x1-0x1F, 0x7F-0x9F) the XML 1.0 Char
+// production forbids are valid XML 1.1 characters; only U+0000 is disallowed.
+// XML 1.1 requires the restricted characters to appear as character references
+// rather than literally, so this predicate governs only the char-reference
+// value check.
+func isXML11CharValue(c uint32) bool {
+	if c == 0 {
+		return false
+	}
+	if c < 0x100 {
+		return true
+	}
+	return (0x100 <= c && c <= 0xd7ff) || (0xe000 <= c && c <= 0xfffd) || (0x10000 <= c && c <= 0x10ffff)
+}
+
 var (
 	ErrCDATANotFinished = errors.New("invalid CDATA section (premature end)")
 	ErrCDATAInvalid     = errors.New("invalid CDATA section")

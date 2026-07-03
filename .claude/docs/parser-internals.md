@@ -65,6 +65,11 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `nsNrTab []int` — namespace count per element level (parallel to nodeTab); used to pop exact count on element close
 - `spaceTab []int` — xml:space stack (-1=inherit, 0=default, 1=preserve)
 
+### XML 1.1 Version-Gated Relaxations
+`pctx.isXML11()` (`version == "1.1"`, from the XML declaration; absent decl = 1.0) gates two well-formedness relaxations; every non-1.1 document stays byte-identical:
+- **Namespace prefix undeclaration** (`parser_element.go` `validatePrefixedNamespaceDecl`): `xmlns:pfx=""` is accepted only in XML 1.1 and pushes an empty-URI binding onto `nsTab` (undeclaring the prefix); XML 1.0 rejects it ("Empty XML namespace is not allowed"). The reserved `xml`/`xmlns` prefixes are checked before the empty-URI branch, so they can never be undeclared. Applies to both literal and DTD-defaulted namespace declarations. A default-namespace undeclaration (`xmlns=""`) is legal in both versions and is handled separately.
+- **Control-character char references** (`parser_entity_ref.go` `parseCharRef`): a `&#N;`/`&#xN;` reference to a C0/C1 control character (all but U+0000) that the XML 1.0 Char production forbids is accepted in XML 1.1 via `isXML11CharValue` (`parser_content.go`). Only the char-reference value check is relaxed; literal control bytes and XML 1.0 documents are unchanged.
+
 ### SAX & Tree Building
 - `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder)
 - `doc *Document` — parsed document

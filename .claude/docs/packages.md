@@ -15,7 +15,7 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   - `Parser.ErrorHandler(ErrorHandler)` — sets the handler for validation errors produced during DTD validation (`ValidateDTD`); individual errors are delivered as they occur and `Parse` returns `ErrDTDValidationFailed` on failure. If the handler is an `io.Closer`, it is closed only after the DTD validation pass runs (i.e. when `ValidateDTD` is enabled and the document was parsed); it is not auto-closed for non-validating parses or for parse errors that abort before validation
   - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseFile(ctx, string) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
 - **NewWriter() → Writer** — create fluent XML writer builder
-  - Writer methods: `Format(bool)`, `IndentString(string)`, `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`
+  - Writer methods: `Format(bool)`, `IndentString(string)`, `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`, `RejectInvalidChars(bool)` (fail with `ErrInvalidXMLChar` — the XSLT SERE0006 error — instead of replacing an XML-invalid char with U+FFFD; folded into the escape pass, no extra traversal)
   - Terminal method: `WriteTo(io.Writer, Node) → error`
 - **Write(io.Writer, Node) → error** — serialize node with default settings
 - **WriteString(Node) → (string, error)** — serialize node to string with default settings

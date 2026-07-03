@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"unicode/utf8"
@@ -10,6 +11,12 @@ var (
 	qch_dquote = []byte{'"'}
 	qch_quote  = []byte{'\''}
 )
+
+// ErrInvalidXMLChar is returned by the writer when a character in the tree is
+// not valid in the target XML version and the writer is configured to reject
+// (rather than replace) such characters via Writer.RejectInvalidChars. It maps
+// to the XSLT/XQuery serialization error SERE0006.
+var ErrInvalidXMLChar = errors.New("character is not valid in the target XML version")
 
 func dumpQuotedString(out io.Writer, s string) error {
 	dqi := strings.IndexByte(s, qch_dquote[0])
@@ -104,7 +111,7 @@ func isInCharacterRange(r rune) bool {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars bool) error {
 	var esc []byte
 	var hbuf [8]byte
 	last := 0
@@ -127,6 +134,14 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 		case '\t':
 			esc = esc_tab
 		default:
+			// A character outside the XML character range (e.g. a C0/C1 control
+			// char) is a serialization error when rejection is enabled — checked
+			// before the escapeNonASCII char-reference branch so it is caught
+			// regardless of that setting. A malformed UTF-8 byte decodes to
+			// U+FFFD, which is IN range, so it is not a version error here.
+			if rejectInvalidChars && !isInCharacterRange(r) {
+				return ErrInvalidXMLChar
+			}
 			if escapeNonASCII && !(0x20 <= r && r < 0x80) { //nolint:staticcheck
 				if r < 0x100 {
 					esc = hexCharRef(&hbuf, r)
@@ -159,7 +174,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 	return nil
 }
 
-func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) error {
+func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInvalidChars bool) error {
 	var esc []byte
 	var hbuf [8]byte
 	last := 0
@@ -181,6 +196,14 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 		case '\r':
 			esc = esc_cr
 		default:
+			// A character outside the XML character range (e.g. a C0/C1 control
+			// char) is a serialization error when rejection is enabled — checked
+			// before the escapeNonASCII char-reference branch so it is caught
+			// regardless of that setting. A malformed UTF-8 byte decodes to
+			// U+FFFD, which is IN range, so it is not a version error here.
+			if rejectInvalidChars && !isInCharacterRange(r) {
+				return ErrInvalidXMLChar
+			}
 			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { //nolint:staticcheck
 				if r < 0x100 {
 					esc = hexCharRef(&hbuf, r)
