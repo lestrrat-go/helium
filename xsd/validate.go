@@ -1045,7 +1045,7 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 // 5.2.2.2.2 requires the initial value (direct character data) to equal the fixed
 // value as a string.
 func (vc *validationContext) validateMixedFixed(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
-	initial, hasChar, hasElem := mixedInitialValue(elem)
+	initial, hasChar, hasElem := mixedInitialValue(elem, *edecl.Fixed)
 	// Clause 5.1: neither element nor character children — the fixed value is
 	// assigned, so the element is valid. A present-but-empty character node
 	// (hasChar true, initial "") is NOT clause-5.1 empty: it is character
@@ -2236,33 +2236,159 @@ type mixedContentScan struct {
 	initial []byte
 	hasChar bool
 	hasElem bool
+	// budget caps len(initial). It is always at least one byte longer than the
+	// fixed value being compared against, so truncation can only occur when the
+	// true initial value is already longer than the fixed value — a guaranteed
+	// mismatch — and never changes the outcome of the equality check. The cap
+	// is what bounds total memory on an adversarial entity graph (a
+	// billion-laughs DAG doubles its expansion per level).
+	budget int
+	// memo caches the contribution of each entity reference / entity node so a
+	// node referenced twice replays its cached contribution instead of being
+	// re-walked (linear time on shared-expansion DAGs) or dropped (the initial
+	// value of "&e;&e;" must contain e's replacement twice). A nil entry marks
+	// a node whose contribution is still being computed: reaching it again is a
+	// cyclic back-edge (constructible through the public DOM API) and
+	// contributes nothing, so the walk always terminates.
+	memo map[helium.Node]*entityContribution
 }
+
+// entityContribution is the memoized effect of one entity reference / entity
+// node on the mixed-content scan: the character data its expansion contributes
+// to the initial value and the char/elem classification flags it sets.
+type entityContribution struct {
+	text    []byte
+	hasChar bool
+	hasElem bool
+}
+
+// maxEntityScanDepth bounds entity-expansion recursion in the mixed-fixed scan.
+// A parsed document has a finite, acyclic expansion well within this depth; the
+// cap (together with the memo's in-progress cycle guard) guards only against a
+// pathologically deep or cyclic entity graph built directly through the public
+// DOM API, so the scan cannot overflow the stack or loop forever.
+const maxEntityScanDepth = 512
+
+// maxMixedInitialSize is the floor for mixedContentScan.budget: an initial
+// value is accumulated exactly up to this size (or one byte past the fixed
+// value's length, whichever is larger) before truncation kicks in. Real
+// documents stay far below it, so error messages print the full content.
+const maxMixedInitialSize = 1 << 20
 
 // scan walks the direct children of parent and classifies each node kind:
 //   - TextNode / CDATASectionNode: character content — contributes to the
 //     initial value and sets hasChar (even for a zero-length text node).
 //   - ElementNode: element content — sets hasElem.
 //   - EntityRefNode / EntityNode: a direct entity reference is character
-//     content, not an element child, but its EXPANSION (reached through the
+//     content, not an element child. Its EXPANSION (reached through the
 //     intermediate EntityNode) may contain element and/or character nodes, so it
 //     is walked recursively — an entity whose replacement text contains an
 //     element therefore hits clause 5.2.2.1, and its character data contributes
-//     to the initial value.
+//     to the initial value. When there is NO materialized element/text
+//     expansion (an Entity node with no children, whose replacement text lives
+//     only in Content()), the Content() string is used as character content
+//     instead. The walk is memoized, cycle-guarded, depth-capped, and
+//     size-budgeted so a cyclic, duplicated, or exponentially self-referencing
+//     entity graph terminates in linear time and bounded memory.
 //   - CommentNode / ProcessingInstructionNode: neither character nor element
 //     content per the spec — ignored (not part of the initial value, not an
 //     element child).
 func (s *mixedContentScan) scan(parent helium.Node) {
+	s.scanChildren(parent, 0)
+}
+
+// scanChildren classifies the direct children of parent, recursing through
+// entity references.
+func (s *mixedContentScan) scanChildren(parent helium.Node, depth int) {
 	for child := range helium.Children(parent) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			s.initial = append(s.initial, child.Content()...)
+			s.appendInitial(child.Content())
 			s.hasChar = true
 		case helium.ElementNode:
 			s.hasElem = true
 		case helium.EntityRefNode, helium.EntityNode:
-			s.scan(child)
+			s.scanEntity(child, depth)
 		}
 	}
+}
+
+// appendInitial appends character data to the initial value, truncating at the
+// scan budget. Truncation is semantics-preserving for the fixed-value equality
+// check: it fires only once the accumulated value is longer than the fixed
+// value (budget > len(fixed)), which is already a mismatch.
+func (s *mixedContentScan) appendInitial(b []byte) {
+	if room := s.budget - len(s.initial); len(b) > room {
+		b = b[:room]
+	}
+	s.initial = append(s.initial, b...)
+}
+
+// scanEntity classifies an entity reference / entity node. A node whose
+// replacement text is materialized as a child element/text/entity subtree is
+// walked recursively; a node with no such expansion contributes its Content()
+// string as character content. Each node's contribution is computed once and
+// memoized: a repeat reference replays the cached text/flags (so duplicate
+// references contribute duplicate content in linear time even on a
+// shared-expansion DAG), a cyclic back-edge (found in-progress in the memo)
+// contributes nothing, and the depth cap bounds recursion on a deep acyclic
+// chain — so validation can never panic, hang, or exhaust memory.
+func (s *mixedContentScan) scanEntity(ent helium.Node, depth int) {
+	if depth >= maxEntityScanDepth {
+		return
+	}
+	if s.memo == nil {
+		s.memo = make(map[helium.Node]*entityContribution)
+	}
+	if contrib, seen := s.memo[ent]; seen {
+		if contrib != nil {
+			s.applyContribution(contrib)
+		}
+		return
+	}
+	// Mark in-progress so a cyclic back-edge to this node terminates.
+	s.memo[ent] = nil
+
+	start := len(s.initial)
+	savedChar, savedElem := s.hasChar, s.hasElem
+	s.hasChar, s.hasElem = false, false
+
+	if entityHasExpansion(ent) {
+		s.scanChildren(ent, depth+1)
+	} else if content := ent.Content(); len(content) > 0 {
+		s.appendInitial(content)
+		s.hasChar = true
+	}
+
+	s.memo[ent] = &entityContribution{
+		text:    slices.Clone(s.initial[start:]),
+		hasChar: s.hasChar,
+		hasElem: s.hasElem,
+	}
+	s.hasChar = s.hasChar || savedChar
+	s.hasElem = s.hasElem || savedElem
+}
+
+// applyContribution replays a memoized entity contribution into the scan.
+func (s *mixedContentScan) applyContribution(c *entityContribution) {
+	s.appendInitial(c.text)
+	s.hasChar = s.hasChar || c.hasChar
+	s.hasElem = s.hasElem || c.hasElem
+}
+
+// entityHasExpansion reports whether an entity reference / entity node carries a
+// materialized replacement subtree — a direct child that is element, character,
+// or nested-entity content. When it does the subtree is authoritative and is
+// walked; when it does not the node's Content() string is the replacement text.
+func entityHasExpansion(ent helium.Node) bool {
+	for child := range helium.Children(ent) {
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode, helium.ElementNode,
+			helium.EntityRefNode, helium.EntityNode:
+			return true
+		}
+	}
+	return false
 }
 
 // mixedInitialValue returns the ·initial value· of a mixed-content element per
@@ -2270,11 +2396,15 @@ func (s *mixedContentScan) scan(parent helium.Node) {
 // has any character content, and whether it has any element content. Entity
 // references are decomposed into their expansion so entity-borne element and
 // character content are attributed correctly. See mixedContentScan.scan.
-func mixedInitialValue(elem *helium.Element) (initial string, hasChar, hasElem bool) {
+//
+// fixed is the fixed value the caller compares the initial value against; it
+// sizes the accumulation budget so truncation can never fire on a value that
+// could still equal fixed (see mixedContentScan.budget).
+func mixedInitialValue(elem *helium.Element, fixed string) (initial string, hasChar, hasElem bool) {
 	if elem == nil {
 		return "", false, false
 	}
-	var s mixedContentScan
+	s := mixedContentScan{budget: max(maxMixedInitialSize, len(fixed)+1)}
 	s.scan(elem)
 	return string(s.initial), s.hasChar, s.hasElem
 }

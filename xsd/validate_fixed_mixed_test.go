@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -98,6 +99,132 @@ func TestFixedValueMixedEntityRef(t *testing.T) {
 		const instance = `<!DOCTYPE root [ <!ENTITY e "abc<a>1</a>"> ]>
 <root>&e;</root>`
 		runFixedValueCase(t, schemaXML, instance, true)
+	})
+}
+
+// mustCompileFixedMixedSchema parses and compiles a schema, failing the test on
+// any error.
+func mustCompileFixedMixedSchema(t *testing.T, schemaXML string) *xsd.Schema {
+	t.Helper()
+	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDOC)
+	require.NoError(t, err)
+	return schema
+}
+
+// TestFixedValueMixedEntityRefContentOnly verifies the mixed-content fixed check
+// treats an entity whose replacement text is never materialized as a
+// text/element subtree as character content. A DOM built via
+// Document.CreateReference attaches the declared Entity node as the reference's
+// child, but that Entity node itself has NO children (DTD.AddEntity stores the
+// replacement text only as the entity's Content()), so the initial-value
+// computation must fall back to the childless Entity node's Content();
+// otherwise the element would be mistaken for clause-5.1 empty and wrongly
+// accepted.
+func TestFixedValueMixedEntityRefContentOnly(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="abc"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	schema := mustCompileFixedMixedSchema(t, schemaXML)
+
+	build := func(t *testing.T, entityContent string) *helium.Document {
+		t.Helper()
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", entityContent)
+		require.NoError(t, err)
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		ref, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		// Sanity: the replacement text lives only in Content() (the reference's
+		// child is the childless Entity node — no text/element expansion).
+		require.Equal(t, []byte(entityContent), ref.Content())
+		require.NoError(t, root.AddChild(ref))
+		return doc
+	}
+
+	t.Run("content-only entity expands to non-matching value", func(t *testing.T) {
+		t.Parallel()
+		doc := build(t, "def")
+		var errs string
+		err := validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+		require.Error(t, err)
+		require.Contains(t, errs, "fixed value constraint")
+	})
+	t.Run("content-only entity expands to matching value", func(t *testing.T) {
+		t.Parallel()
+		doc := build(t, "abc")
+		require.NoError(t, validateWithOutput(t, xsd.NewValidator(schema), doc, nil))
+	})
+}
+
+// TestFixedValueMixedDuplicateEntityRef verifies that two references to the
+// SAME entity within one expansion each contribute the replacement text to the
+// initial value. The materialized expansion shares one Entity node across both
+// references (Document.CreateReference links the declared Entity as each
+// reference's child), so a naive walked-once cycle guard would count the shared
+// node a single time and compute "x" instead of "xx"; the memoized scan must
+// replay the cached contribution for the repeat reference.
+func TestFixedValueMixedDuplicateEntityRef(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="CT" fixed="xx"/>
+  <xs:complexType name="CT" mixed="true">
+    <xs:sequence>
+      <xs:element name="a" type="xs:byte" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	schema := mustCompileFixedMixedSchema(t, schemaXML)
+
+	// build constructs <root>&outer;</root> where outer's materialized
+	// expansion is two references to inner (replacement text innerContent).
+	build := func(t *testing.T, innerContent string) *helium.Document {
+		t.Helper()
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("inner", enum.InternalGeneralEntity, "", "", innerContent)
+		require.NoError(t, err)
+		outer, err := dtd.AddEntity("outer", enum.InternalGeneralEntity, "", "", "&inner;&inner;")
+		require.NoError(t, err)
+
+		refInner1, err := doc.CreateReference("inner")
+		require.NoError(t, err)
+		require.NoError(t, outer.AddChild(refInner1))
+		refInner2, err := doc.CreateReference("inner")
+		require.NoError(t, err)
+		require.NoError(t, outer.AddChild(refInner2))
+
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		refOuter, err := doc.CreateReference("outer")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(refOuter))
+		return doc
+	}
+
+	t.Run("duplicate references concatenate to the fixed value", func(t *testing.T) {
+		t.Parallel()
+		doc := build(t, "x")
+		require.NoError(t, validateWithOutput(t, xsd.NewValidator(schema), doc, nil))
+	})
+	t.Run("duplicate references concatenate to a non-matching value", func(t *testing.T) {
+		t.Parallel()
+		doc := build(t, "y")
+		var errs string
+		err := validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+		require.Error(t, err)
+		require.Contains(t, errs, "fixed value constraint")
 	})
 }
 
