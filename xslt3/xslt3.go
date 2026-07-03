@@ -156,8 +156,10 @@ func parseStylesheetDocument(ctx context.Context, injected *helium.Parser, data 
 // This is a convenience wrapper over NewCompiler().Compile(ctx, doc).
 //
 // The returned [*Stylesheet] is immutable and safe for concurrent use by
-// multiple goroutines; it may be reused across many transformations. See the
-// package documentation's Concurrency section.
+// multiple goroutines, each with its own source document; it may be reused
+// across many transformations. See the package documentation's Concurrency
+// section (in particular the source-document caveat for schema-aware
+// transforms).
 func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
 	return NewCompiler().Compile(ctx, doc)
 }
@@ -166,7 +168,9 @@ func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, 
 // This is a convenience wrapper over ss.Transform(source).Do(ctx).
 //
 // ss is not mutated and may be transformed concurrently from multiple
-// goroutines (see the package documentation's Concurrency section).
+// goroutines, each with its own source document. A schema-aware transform
+// mutates source in place, so such a source must not be shared across
+// concurrent transforms (see the package documentation's Concurrency section).
 func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*helium.Document, error) {
 	if ss == nil {
 		return nil, errNilStylesheet
@@ -178,7 +182,9 @@ func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*h
 // This is a convenience wrapper over ss.Transform(source).Serialize(ctx).
 //
 // ss is not mutated and may be transformed concurrently from multiple
-// goroutines (see the package documentation's Concurrency section).
+// goroutines, each with its own source document. A schema-aware transform
+// mutates source in place, so such a source must not be shared across
+// concurrent transforms (see the package documentation's Concurrency section).
 func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet) (string, error) {
 	if ss == nil {
 		return "", errNilStylesheet

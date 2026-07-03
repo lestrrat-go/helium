@@ -42,17 +42,33 @@
 // goroutines. A single compiled stylesheet may be transformed from many
 // goroutines at once (via [Transform], [TransformString], [TransformToWriter],
 // [Stylesheet.Transform], [Stylesheet.ApplyTemplates], [Stylesheet.CallTemplate],
-// or [Stylesheet.CallFunction]) without external synchronization: every mutable
-// per-transform state (global-variable values, key tables, caches, accumulator
-// state, the result tree, and serialization overrides) lives in a per-call
-// execution context that is never shared between transforms. A transform never
-// mutates the compiled stylesheet, and it treats the caller's source document as
-// read-only (whitespace stripping runs against a private copy), so the same
-// source document may also be handed to concurrent transforms — provided the
-// caller does not mutate it concurrently. Compilation itself is not concurrent
-// with transformation of the same stylesheet: finish compiling before sharing
-// the result. [Invocation] and [Parameters] values are per-call configuration
-// and are not intended for concurrent mutation.
+// or [Stylesheet.CallFunction]) without external synchronization, PROVIDED each
+// concurrent transform uses its own source document (see the source-document
+// caveat below). Every mutable per-transform state (global-variable values, key
+// tables, caches, accumulator state, the result tree, and serialization
+// overrides) lives in a per-call execution context that is never shared between
+// transforms, and a transform never mutates the compiled stylesheet.
+//
+// Source-document handling depends on whether the transform is schema-aware:
+//
+//   - A NON-schema-aware transform treats the caller's source document as
+//     read-only (whitespace stripping, when it applies, runs against a private
+//     copy). A single source document may therefore be shared, read-only, across
+//     concurrent non-schema-aware transforms, as long as the caller does not
+//     mutate it concurrently.
+//   - A SCHEMA-AWARE / source-validating transform — one where the stylesheet has
+//     an xsl:import-schema, [Invocation.SourceSchemas] supplies schemas, or the
+//     source carries an xsi:schemaLocation — VALIDATES AND MUTATES the caller's
+//     source tree IN PLACE (source-schema validation inserts default/fixed
+//     attributes). Such a source document must NOT be shared across concurrent
+//     transforms, and more generally a schema-aware transform mutates its input
+//     document. Give each concurrent schema-aware transform its own source
+//     document (and do not reuse a validated source for a second transform).
+//
+// Compilation itself is not concurrent with transformation of the same
+// stylesheet: finish compiling before sharing the result. [Invocation] and
+// [Parameters] values are per-call configuration and are not intended for
+// concurrent mutation.
 //
 // # Examples
 //

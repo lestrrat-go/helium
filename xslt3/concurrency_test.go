@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -159,4 +160,159 @@ func TestStylesheetConcurrentReuse(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStylesheetConcurrentSharedSourceNonSchemaAware proves the narrower
+// shared-source guarantee: a NON-schema-aware transform treats the caller's
+// source document as read-only (whitespace stripping, when it happens, runs on
+// a private copy), so a SINGLE source document may be handed to many concurrent
+// transforms of the same compiled stylesheet without external synchronization.
+// Every goroutine reads the same shared *helium.Document and must produce the
+// same deterministic output; under -race, any write to the shared source (or to
+// the compiled stylesheet) would be reported.
+//
+// The stylesheet includes xsl:strip-space so the copy-and-strip path (which
+// reads the shared tree) is exercised, and it reads element content/counts so
+// the shared source tree is traversed concurrently.
+func TestStylesheetConcurrentSharedSourceNonSchemaAware(t *testing.T) {
+	const (
+		goroutines = 50
+		iterations = 25
+	)
+
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:strip-space elements="*"/>
+  <xsl:template match="/root">
+    <out n="{count(item)}"><xsl:value-of select="item[1]/@id"/>|<xsl:value-of select="item[last()]/@id"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	// ONE shared source document, read concurrently by every goroutine.
+	sharedSrc, err := helium.NewParser().Parse(t.Context(), []byte(
+		`<root>  <item id="first"/>  <item id="mid"/>  <item id="last"/>  </root>`))
+	require.NoError(t, err)
+
+	const wantFrag = `<out n="3">first|last</out>`
+
+	failures := make([]string, goroutines)
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for iter := range iterations {
+				out, err := xslt3.TransformString(t.Context(), sharedSrc, ss)
+				if err != nil {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: transform error: %v", i, iter, err)
+					return
+				}
+				if !strings.Contains(out, wantFrag) {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: output missing %q\ngot: %s", i, iter, wantFrag, out)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i, f := range failures {
+		require.Empty(t, f, "goroutine %d reported a failure", i)
+	}
+}
+
+// TestStylesheetConcurrentSchemaAwareDistinctSources proves that a schema-aware
+// / source-validating transform is safe to run concurrently WHEN EACH GOROUTINE
+// USES ITS OWN SOURCE DOCUMENT. Such a transform validates-and-mutates its input
+// tree in place (source-schema validation inserts default/fixed attributes), so
+// the input must not be shared across concurrent transforms — but with distinct
+// per-goroutine sources there is no shared write target, and the compiled
+// *Stylesheet and *xsd.Schema remain read-only.
+//
+// This is the safe pattern the documentation prescribes for schema-aware
+// transforms; the unsafe shared-source schema-aware case is deliberately NOT
+// exercised here (the documentation warns against it).
+func TestStylesheetConcurrentSchemaAwareDistinctSources(t *testing.T) {
+	const (
+		goroutines = 50
+		iterations = 25
+	)
+
+	// A schema that declares a default attribute; validation inserts it into the
+	// (per-goroutine) source tree, which the stylesheet then reads back.
+	schema := compileSchemaString(t, `
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="tag" type="xs:string"/>
+            <xs:attribute name="def" type="xs:string" default="DEF"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+
+	// The stylesheet reads both the instance tag and the schema-defaulted attr,
+	// so the default-attribute insertion (the in-place mutation) is observed.
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/root">
+    <out><tag><xsl:value-of select="item/@tag"/></tag><def><xsl:value-of select="item/@def"/></def></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	failures := make([]string, goroutines)
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			wantTag := fmt.Sprintf("<tag>T%d</tag>", i)
+			const wantDef = "<def>DEF</def>"
+			for iter := range iterations {
+				// Each goroutine parses a FRESH source document per iteration:
+				// schema validation mutates the tree in place, so a source may
+				// not be reused across transforms even within one goroutine.
+				src, err := helium.NewParser().Parse(t.Context(),
+					fmt.Appendf(nil, `<root><item tag="T%d"/></root>`, i))
+				if err != nil {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: parse error: %v", i, iter, err)
+					return
+				}
+				out, err := ss.Transform(src).SourceSchemas(schema).Serialize(t.Context())
+				if err != nil {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: transform error: %v", i, iter, err)
+					return
+				}
+				if !strings.Contains(out, wantTag) {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: output missing %q\ngot: %s", i, iter, wantTag, out)
+					return
+				}
+				if !strings.Contains(out, wantDef) {
+					failures[i] = fmt.Sprintf("goroutine %d iter %d: output missing %q (schema default not inserted)\ngot: %s", i, iter, wantDef, out)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i, f := range failures {
+		require.Empty(t, f, "goroutine %d reported a failure", i)
+	}
+}
+
+func compileSchemaString(t *testing.T, src string) *xsd.Schema {
+	t.Helper()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	schema, err := xsd.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+	return schema
 }
