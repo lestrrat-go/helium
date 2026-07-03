@@ -818,6 +818,19 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// no-namespace schema declaring {}foo).
 	edecl, ok := vc.schema.LookupElement(local, ns)
 	if !ok {
+		// XSD 1.1 lax assessment (cvc-assess-elt.1.2): with no governing element
+		// declaration, an xsi:type attribute resolving to a known type definition
+		// governs the element. Assess it laxly against that type so its content is
+		// validated and PSVI type annotations are produced (matching the per-child
+		// wildcard/xs:anyType lax sites). Scoped to a lax fragment-validating caller
+		// (cfg.skipDatatypeIntegrity — the xslt3 source-validation path): a full
+		// standalone document validation keeps the strict "no matching global
+		// declaration" root policy (libxml2 parity). XSD 1.0 is byte-identical.
+		if vc.version == Version11 && vc.cfg != nil && vc.cfg.skipDatatypeIntegrity {
+			if _, hasType := vc.resolveXsiTypeQuiet(elem); hasType {
+				return vc.assessLaxElement(ctx, elem)
+			}
+		}
 		msg := "No matching global declaration available for the validation root."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), local, msg)
 		return fmt.Errorf("no matching global declaration")
