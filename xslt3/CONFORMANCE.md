@@ -54,6 +54,15 @@ reclassified, a mandatory-facility skip appears (any skip that classifies as
 neither one of the four labels nor the enumerated narrow-quirk allowlist), or
 the default/slow skip counts drift.
 
+Known limitation: by project policy CI lives in helium, so the `Conformance
+Ledger` workflow runs on helium PRs against `helium-w3c-tests@main`;
+`helium-w3c-tests` has no CI of its own. A `helium-w3c-tests` PR that edits a
+skip source without regenerating the ledger is therefore not gated on that PR —
+the drift is caught on the next helium PR instead. Contributors editing skip
+sources in `helium-w3c-tests` must regenerate the ledger with
+`go test ./xslt3 -run TestXSLT30SkipLedger -update-ledger` (or `go generate ./xslt3`)
+and commit it alongside the change.
+
 ## Conformance-level table
 
 The eight W3C conformance levels (Basic + seven optional), plus two
