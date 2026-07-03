@@ -900,8 +900,10 @@ var unicodeBlocks = map[string]string{
 	"SupplementaryPrivateUseArea-A":        `\x{F0000}-\x{FFFFD}`,
 	"SupplementaryPrivateUseArea-B":        `\x{100000}-\x{10FFFD}`,
 	"Tags":                                 `\x{E0000}-\x{E007F}`,
-	// Composite block: union of PrivateUseArea + SupplementaryPrivateUseArea-A + SupplementaryPrivateUseArea-B
-	"PrivateUse": `\x{E000}-\x{F8FF}\x{F0000}-\x{FFFFD}\x{100000}-\x{10FFFD}`,
+	// The "Private Use" block is the BMP Private Use Area U+E000-U+F8FF. The
+	// supplementary planes are the separate SupplementaryPrivateUseArea-A/-B
+	// blocks, so \p{IsPrivateUse} must NOT match them.
+	"PrivateUse": `\x{E000}-\x{F8FF}`,
 }
 
 // validateXPathRegex checks for patterns that Go's regexp accepts but
