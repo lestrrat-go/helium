@@ -802,7 +802,32 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 		excludedURIs[uri] = struct{}{}
 	}
 
+	// Namespaces involved in xsl:namespace-alias are never excluded from the
+	// result tree, overriding exclude-result-prefixes (XSLT 3.0 §11.1.3).
+	// A stylesheet-alias URI must survive so the alias loop below can rewrite it
+	// to the result namespace; a literal (result) URI must survive because an
+	// aliased element/attribute needs its namespace declaration emitted.
+	var aliasStylesheetURIs, aliasResultURIs map[string]struct{}
+	if len(c.stylesheet.namespaceAliases) > 0 {
+		aliasStylesheetURIs = make(map[string]struct{}, len(c.stylesheet.namespaceAliases))
+		aliasResultURIs = make(map[string]struct{}, len(c.stylesheet.namespaceAliases))
+		for _, a := range c.stylesheet.namespaceAliases {
+			if a.StylesheetURI != "" {
+				aliasStylesheetURIs[a.StylesheetURI] = struct{}{}
+			}
+			if a.ResultURI != "" {
+				aliasResultURIs[a.ResultURI] = struct{}{}
+			}
+		}
+	}
+
 	isExcluded := func(_, uri string) bool {
+		if _, ok := aliasStylesheetURIs[uri]; ok {
+			return false
+		}
+		if _, ok := aliasResultURIs[uri]; ok {
+			return false
+		}
 		_, ok := excludedURIs[uri]
 		return ok
 	}
