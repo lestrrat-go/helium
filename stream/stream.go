@@ -152,6 +152,18 @@ func isXML11RestrictedChar(r rune) bool {
 	}
 }
 
+// isXML11SerializeAsCharRef reports whether r must be written as a character
+// reference (rather than literally) in XML 1.1 output. This is the XML 1.1
+// RestrictedChar set (isXML11RestrictedChar) PLUS the two end-of-line characters
+// NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from RestrictedChar,
+// but XML 1.1 §2.11 line-ending normalization translates them to U+000A on input,
+// so a literal occurrence would not round-trip; emitting them as character
+// references preserves the value. In XML 1.0 neither is a line-ending character,
+// so this is consulted only on the xml11 path and 1.0 output stays byte-identical.
+func isXML11SerializeAsCharRef(r rune) bool {
+	return isXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
+}
+
 // isXML11Char implements the XML 1.1 Char production (excluding U+0000):
 // Char ::= [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF].
 func isXML11Char(r rune) bool {
@@ -239,14 +251,15 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 				writeRawByte = true
 			}
 		default:
-			// In XML 1.1 output, a restricted control character is valid but
-			// may not appear literally: emit it as a decimal character
-			// reference. Only decode a rune for bytes that could begin one
-			// (C0 controls and any non-ASCII lead byte), so the ASCII fast
-			// path and all XML 1.0 output stay byte-identical.
+			// In XML 1.1 output, a restricted control character (and the
+			// NEL/LINE SEPARATOR end-of-line characters) is valid but may not
+			// appear literally: emit it as a decimal character reference. Only
+			// decode a rune for bytes that could begin one (C0 controls and any
+			// non-ASCII lead byte), so the ASCII fast path and all XML 1.0 output
+			// stay byte-identical.
 			if w.xml11 {
 				if b := s[i]; b < 0x20 || b >= 0x7F {
-					if r, width := utf8.DecodeRuneInString(s[i:]); isXML11RestrictedChar(r) {
+					if r, width := utf8.DecodeRuneInString(s[i:]); isXML11SerializeAsCharRef(r) {
 						if start < i {
 							w.writeStr(s[start:i])
 						}

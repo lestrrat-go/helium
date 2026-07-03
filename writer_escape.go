@@ -108,6 +108,19 @@ func isXML11RestrictedChar(r rune) bool {
 	}
 }
 
+// isXML11SerializeAsCharRef reports whether r must be written as a character
+// reference (rather than literally) when producing XML 1.1 output. This is the
+// XML 1.1 RestrictedChar set (isXML11RestrictedChar) PLUS the two end-of-line
+// characters NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from
+// RestrictedChar, but XML 1.1 §2.11 line-ending normalization translates them to
+// U+000A on input, so a literal occurrence would not round-trip; emitting them as
+// character references preserves the value. In XML 1.0 neither is a line-ending
+// character, so this is gated on the xml11 flag and 1.0 serialization is
+// unaffected.
+func isXML11SerializeAsCharRef(r rune) bool {
+	return isXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
+}
+
 // decimalCharRef writes r as a decimal character reference ("&#N;") into buf and
 // returns the populated slice.
 func decimalCharRef(buf *[12]byte, r rune) []byte {
@@ -188,10 +201,11 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, 
 			if rejectInvalidChars && !isInCharacterRange(r) {
 				return ErrInvalidXMLChar
 			}
-			// XML 1.1 restricted control characters are valid but may not appear
-			// literally: emit them as decimal character references (before the
-			// escapeNonASCII hex branch and the out-of-range replacement).
-			if xml11 && isXML11RestrictedChar(r) {
+			// XML 1.1 restricted control characters (and the NEL/LINE SEPARATOR
+			// end-of-line characters) are valid but may not appear literally: emit
+			// them as decimal character references (before the escapeNonASCII hex
+			// branch and the out-of-range replacement).
+			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
 				break
 			}
@@ -258,10 +272,11 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInva
 			if rejectInvalidChars && !isInCharacterRange(r) {
 				return ErrInvalidXMLChar
 			}
-			// XML 1.1 restricted control characters are valid but may not appear
-			// literally: emit them as decimal character references (before the
-			// escapeNonASCII hex branch and the out-of-range replacement).
-			if xml11 && isXML11RestrictedChar(r) {
+			// XML 1.1 restricted control characters (and the NEL/LINE SEPARATOR
+			// end-of-line characters) are valid but may not appear literally: emit
+			// them as decimal character references (before the escapeNonASCII hex
+			// branch and the out-of-range replacement).
+			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
 				break
 			}
