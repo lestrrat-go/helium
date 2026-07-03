@@ -38,12 +38,12 @@ jobs:
       # helium at the triggering ref (the code under test), as a sibling of the
       # harness so helium-w3c-tests' `replace => ../helium` resolves.
       - name: Check out helium (code under test)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: helium
 
       - name: Check out helium-w3c-tests (skip ledger + drift-check)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: lestrrat-go/helium-w3c-tests
           ref: ${{ inputs.tests_ref || 'main' }}
