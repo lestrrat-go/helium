@@ -88,7 +88,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// and route those nested loads through the invocation's resolver
 		// (default-deny) instead of the xsd compiler's default os.Open.
 		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
-		schemaCompiler := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys)
+		schemaCompiler := xsd.NewCompiler().DefaultVersion(xsd.Version11).BaseDir(schemaCompileBaseDir(uri)).FS(fsys)
 		if p := ec.injectedParser(); p != nil {
 			schemaCompiler = schemaCompiler.Parser(*p)
 		}

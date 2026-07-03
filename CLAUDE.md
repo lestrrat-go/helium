@@ -14,6 +14,10 @@ The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexica
 
 The xsd package defaults to **XSD 1.0** and treats 1.1 as **opt-in** via `Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"` hint on the root `<xs:schema>` when no explicit version is set). The resolved version is frozen onto the compiled `Schema` so the `Validator` applies the same semantics. 1.0 stays the default so existing behavior and goldens are unchanged.
 
+`resolveVersion` (`compile.go`) resolves in order: a forced `Compiler.Version()` (always wins) → a `vc:minVersion="1.1"`-or-higher hint on the root → a configured `Compiler.DefaultVersion(v)` (the opt-in fallback for a schema silent on version) → `Version10`. `DefaultVersion` never overrides a forced version or a vc hint — it only chooses the fallback. The STANDALONE default stays `Version10`; `DefaultVersion` lets an embedding layer opt its schemas into 1.1 by default while still honoring an explicit version.
+
+`Validator.SkipDatatypeIntegrityChecks(true)` suppresses the two XSD 1.1 document-wide datatype-integrity walks (xs:ID/xs:IDREF/xs:IDREFS uniqueness+referential-integrity, and xs:ENTITY/xs:ENTITIES) in `validateDocument` (`cfg.skipDatatypeIntegrity`); content-model, type, and xs:key/unique/keyref identity-constraint validation are unaffected. It is for callers that validate an element/subtree as a fragment and enforce document-scope ID/IDREF integrity themselves (xslt3). No effect in 1.0 (the walks never run there).
+
 Implemented in 1.1 mode so far:
 - the 1.1-only lexical forms (`+INF` for xs:double/xs:float; year `0000` on the date types — both gated in `internal/xsd/value` via a `value.Version` argument; relaxng is pinned to `value.Version10`);
 - the 1.1 built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration, xs:anyAtomicType, xs:error);
@@ -97,6 +101,8 @@ The xslt3 package targets **Basic XSLT 3.0** conformance (W3C spec Section 27). 
 | XPath 3.1 | Implemented | Via xpath3 |
 | Dynamic Evaluation | Implemented | `xsl:evaluate` |
 | Backwards-Compatible Processing | Implemented | XSLT 1.0 behavior + XPath 1.0 compatibility mode |
+
+Schemas imported via `xsl:import-schema` (and a source-document schema) default to **XSD 1.1** (`compile_schema.go`/`source_schema.go` build the `xsd.Compiler` with `.DefaultVersion(xsd.Version11)`), so a schema silent on version compiles with 1.1 semantics (CTA/xs:alternative, unions, etc.) while an explicit `Compiler.Version()` or a schema `vc:minVersion` hint still wins. xslt3 validates a constructed element/subtree through `schemaRegistry.ValidateDoc` with `xsd.Validator.SkipDatatypeIntegrityChecks(true)`: content/type/CTA validation runs at 1.1 but the XSD 1.1 document-wide xs:ID/IDREF/ENTITY integrity walks are suppressed, because element-level validation (`xsl:validation="strict"` on an LRE) must not enforce whole-document ID uniqueness — xslt3 applies document-scope ID/IDREF integrity itself via `validateDocIDConstraints` at the true document/result-document scope (XTTE1555), matching the W3C validation-16xx semantics.
 
 ## XSLT — Backwards-Compatible Processing
 
