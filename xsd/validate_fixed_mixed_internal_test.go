@@ -1,12 +1,51 @@
 package xsd
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMixedInitialValueDeepAcyclicChain verifies a finite, acyclic entity chain
+// far deeper than any recursion cap is scanned in FULL — not rejected as
+// "invalid". The scan is iterative (an explicit stack), so a deep chain neither
+// overflows the goroutine stack nor trips a depth limit that would over-reject
+// valid content expanding exactly to the fixed value.
+func TestMixedInitialValueDeepAcyclicChain(t *testing.T) {
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+
+	// e0 is the leaf (Content "x"); e{i}'s materialized expansion is a reference
+	// to e{i-1}. Build bottom-up so each reference's target already exists. depth
+	// is well past the old 512 recursion cap.
+	const depth = 800
+	_, err = dtd.AddEntity("e0", enum.InternalGeneralEntity, "", "", "x")
+	require.NoError(t, err)
+	for i := 1; i <= depth; i++ {
+		ent, err := dtd.AddEntity(fmt.Sprintf("e%d", i), enum.InternalGeneralEntity, "", "", "")
+		require.NoError(t, err)
+		ref, err := doc.CreateReference(fmt.Sprintf("e%d", i-1))
+		require.NoError(t, err)
+		require.NoError(t, ent.AddChild(ref))
+	}
+
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.SetDocumentElement(root))
+	top, err := doc.CreateReference(fmt.Sprintf("e%d", depth))
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(top))
+
+	require.NotPanics(t, func() {
+		initial, hasChar, _, invalid := mixedInitialValue(root, "x")
+		require.False(t, invalid, "a finite acyclic chain %d deep must not be rejected as invalid", depth)
+		require.Equal(t, "x", initial, "the chain expands exactly to the leaf content")
+		require.True(t, hasChar)
+	})
+}
 
 // TestMixedInitialValueCyclicEntity verifies the mixed-content fixed scan is
 // safe against a cyclic entity graph AND fails closed on it. A DOM built

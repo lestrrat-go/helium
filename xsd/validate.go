@@ -1046,10 +1046,10 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 // value as a string.
 func (vc *validationContext) validateMixedFixed(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
 	initial, hasChar, hasElem, invalid := mixedInitialValue(elem, *edecl.Fixed)
-	// Fail closed: a cyclic or pathologically deep entity graph makes the initial
-	// value indeterminate and can never represent a valid fixed value.
+	// Fail closed: a cyclic entity graph makes the initial value indeterminate
+	// and can never represent a valid fixed value.
 	if invalid {
-		msg := fmt.Sprintf("The element content could not be evaluated against the fixed value constraint '%s' (cyclic or too-deeply-nested entity expansion).", *edecl.Fixed)
+		msg := fmt.Sprintf("The element content could not be evaluated against the fixed value constraint '%s' (cyclic entity expansion).", *edecl.Fixed)
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("fixed value constraint")
 	}
@@ -2259,11 +2259,11 @@ type mixedContentScan struct {
 	// contributes nothing, so the walk always terminates.
 	memo map[helium.Node]*entityContribution
 	// invalid marks the initial value as indeterminate: the entity graph is
-	// cyclic or deeper than maxEntityScanDepth, so its expansion cannot be
-	// materialized reliably. The mixed-fixed check then fails CLOSED (a cyclic /
-	// pathologically deep entity graph can never represent a valid fixed value),
-	// rather than silently dropping the un-scanned content and admitting an
-	// invalid element.
+	// cyclic, so its expansion cannot be materialized reliably. The mixed-fixed
+	// check then fails CLOSED (a cyclic entity graph can never represent a valid
+	// fixed value) rather than silently dropping the un-scanned content and
+	// admitting an invalid element. A deep-but-finite acyclic expansion is NOT
+	// invalid — it is scanned in full (the iterative walk has no depth cap).
 	invalid bool
 }
 
@@ -2276,61 +2276,142 @@ type entityContribution struct {
 	hasElem bool
 }
 
-// maxEntityScanDepth bounds entity-expansion recursion in the mixed-fixed scan.
-// A parsed document has a finite, acyclic expansion well within this depth (the
-// memo already terminates any cycle); the cap only bounds stack depth on a
-// pathologically deep entity graph built directly through the public DOM API.
-// Hitting it marks the scan invalid (fail closed), never silently truncates.
-const maxEntityScanDepth = 512
-
 // maxMixedInitialSize is the floor for mixedContentScan.budget: an initial
 // value is accumulated exactly up to this size (or one byte past the fixed
 // value's length, whichever is larger) before truncation kicks in. Real
 // documents stay far below it, so error messages print the full content.
 const maxMixedInitialSize = 1 << 20
 
-// scan walks the direct children of parent and classifies each node kind:
+// scanFrame is one work item on the iterative scan stack: either a node to
+// classify (ent == nil) or an entity whose expansion has been fully scanned and
+// must now be memoized and have its flags merged back (ent != nil).
+type scanFrame struct {
+	node                 helium.Node // node to classify (nil on a finalize frame)
+	ent                  helium.Node // entity to finalize (nil on a classify frame)
+	start                int         // finalize: index in initial where ent's contribution began
+	savedChar, savedElem bool        // finalize: outer flags to restore/merge
+}
+
+// scan classifies parent's mixed content by document-order iterative DFS,
+// classifying each descendant node kind:
 //   - TextNode / CDATASectionNode: character content — contributes to the
 //     initial value and sets hasChar (even for a zero-length text node).
 //   - ElementNode: element content — sets hasElem.
 //   - EntityRefNode / EntityNode: a direct entity reference is character
 //     content, not an element child. Its EXPANSION (reached through the
 //     intermediate EntityNode) may contain element and/or character nodes, so it
-//     is walked recursively — an entity whose replacement text contains an
-//     element therefore hits clause 5.2.2.1, and its character data contributes
-//     to the initial value. When there is NO materialized child at all (an
-//     Entity node whose replacement text lives only in Content()), the Content()
-//     string is used as character content instead. The walk enumerates each
-//     node's OWN children (ownedNext), is memoized (duplicate references replay
-//     their contribution), and FAILS CLOSED (marks the scan invalid) on a cyclic
-//     back-edge or on exceeding maxEntityScanDepth — so a cyclic, duplicated, or
-//     exponentially self-referencing entity graph terminates in bounded memory
-//     and never admits an invalid element by silently dropping content.
+//     is walked — an entity whose replacement text contains an element therefore
+//     hits clause 5.2.2.1, and its character data contributes to the initial
+//     value. When there is NO materialized child at all (an Entity node whose
+//     replacement text lives only in Content()), the Content() string is used as
+//     character content instead.
 //   - CommentNode / ProcessingInstructionNode: neither character nor element
 //     content per the spec — ignored (not part of the initial value, not an
 //     element child).
+//
+// The walk enumerates each node's OWN children (ownedNext), so a shared Entity
+// node's DTD sibling declarations are never spilled into the initial value. It
+// is ITERATIVE (an explicit stack, no recursion) so a deep — but finite —
+// entity chain cannot overflow the goroutine stack and is scanned in full (no
+// depth cap, hence no over-rejection of valid deep content). It is memoized
+// (each entity node's contribution is computed once and REPLAYED for a duplicate
+// reference, keeping a shared-expansion DAG linear), and FAILS CLOSED (marks the
+// scan invalid) only on a genuine cyclic back-edge — where the initial value is
+// ill-defined — so a cyclic entity graph terminates and can never admit an
+// invalid element by silently dropping content.
 func (s *mixedContentScan) scan(parent helium.Node) {
-	s.scanChildren(parent, 0)
-}
+	s.memo = make(map[helium.Node]*entityContribution)
+	var stack []scanFrame
+	s.pushOwnedChildren(&stack, parent)
+	for len(stack) > 0 {
+		f := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
 
-// scanChildren classifies the direct children of parent, recursing through
-// entity references. It enumerates parent's OWN children via ownedNext rather
-// than helium.Children: an entity reference's child is the shared Entity node,
-// whose sibling pointers belong to the DTD's declaration list, so a plain
-// NextSibling walk would spill into unrelated later entity declarations and add
-// their content to the initial value.
-func (s *mixedContentScan) scanChildren(parent helium.Node, depth int) {
-	for child := parent.FirstChild(); child != nil; child = ownedNext(parent, child) {
-		switch child.Type() {
+		if f.ent != nil {
+			// Finalize: record ent's own contribution, then merge its flags into
+			// the enclosing scope. Everything between ent's begin and this frame
+			// was ent's subtree (the stack kept siblings below this frame).
+			s.memo[f.ent] = &entityContribution{
+				text:    slices.Clone(s.initial[f.start:]),
+				hasChar: s.hasChar,
+				hasElem: s.hasElem,
+			}
+			s.hasChar = s.hasChar || f.savedChar
+			s.hasElem = s.hasElem || f.savedElem
+			continue
+		}
+
+		switch f.node.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			s.appendInitial(child.Content())
+			s.appendInitial(f.node.Content())
 			s.hasChar = true
 		case helium.ElementNode:
 			s.hasElem = true
 		case helium.EntityRefNode, helium.EntityNode:
-			s.scanEntity(child, depth)
+			s.beginEntity(&stack, f.node)
 		}
 	}
+}
+
+// pushOwnedChildren pushes parent's OWN children onto the scan stack in reverse
+// document order (so they pop in document order). ownedNext stops at a
+// foreign-owned child's siblings, so a shared Entity node's DTD sibling
+// declarations are not enqueued.
+func (s *mixedContentScan) pushOwnedChildren(stack *[]scanFrame, parent helium.Node) {
+	var kids []helium.Node
+	for child := parent.FirstChild(); child != nil; child = ownedNext(parent, child) {
+		kids = append(kids, child)
+	}
+	for i := len(kids) - 1; i >= 0; i-- {
+		*stack = append(*stack, scanFrame{node: kids[i]})
+	}
+}
+
+// beginEntity begins classifying an entity reference / entity node. A node
+// already in the memo replays its cached contribution (a completed entry) or
+// fails the scan closed (a nil, in-progress entry — a cyclic back-edge). A fresh
+// node is marked in-progress; a node with a materialized child subtree pushes a
+// finalize frame and its children (so the subtree is scanned before the entity
+// is memoized), while a childless entity contributes its Content() and is
+// memoized immediately.
+func (s *mixedContentScan) beginEntity(stack *[]scanFrame, ent helium.Node) {
+	if contrib, seen := s.memo[ent]; seen {
+		if contrib != nil {
+			s.applyContribution(contrib)
+			return
+		}
+		// A nil entry is IN-PROGRESS: reaching it again is a cyclic back-edge
+		// (constructible through the public DOM API; XML forbids recursive
+		// entities, so a parsed document never hits this). The initial value is
+		// then ill-defined — fail closed.
+		s.invalid = true
+		return
+	}
+	// Mark in-progress so a cyclic back-edge to this node terminates.
+	s.memo[ent] = nil
+
+	savedChar, savedElem := s.hasChar, s.hasElem
+	s.hasChar, s.hasElem = false, false
+	start := len(s.initial)
+
+	if entityHasExpansion(ent) {
+		*stack = append(*stack, scanFrame{ent: ent, start: start, savedChar: savedChar, savedElem: savedElem})
+		s.pushOwnedChildren(stack, ent)
+		return
+	}
+
+	// Childless entity: replacement text lives only in Content().
+	if content := ent.Content(); len(content) > 0 {
+		s.appendInitial(content)
+		s.hasChar = true
+	}
+	s.memo[ent] = &entityContribution{
+		text:    slices.Clone(s.initial[start:]),
+		hasChar: s.hasChar,
+		hasElem: s.hasElem,
+	}
+	s.hasChar = s.hasChar || savedChar
+	s.hasElem = s.hasElem || savedElem
 }
 
 // ownedNext returns the next sibling of child within parent's child list, or nil
@@ -2355,60 +2436,6 @@ func (s *mixedContentScan) appendInitial(b []byte) {
 		b = b[:room]
 	}
 	s.initial = append(s.initial, b...)
-}
-
-// scanEntity classifies an entity reference / entity node. A node whose
-// replacement text is materialized as a child element/text/entity subtree is
-// walked recursively; a node with no such expansion contributes its Content()
-// string as character content. Each node's contribution is computed once and
-// memoized: a repeat reference replays the cached text/flags (so duplicate
-// references contribute duplicate content in linear time even on a
-// shared-expansion DAG), a cyclic back-edge (found in-progress in the memo)
-// contributes nothing, and the depth cap bounds recursion on a deep acyclic
-// chain — so validation can never panic, hang, or exhaust memory.
-func (s *mixedContentScan) scanEntity(ent helium.Node, depth int) {
-	if depth >= maxEntityScanDepth {
-		// Too deep to materialize reliably — fail closed rather than drop the
-		// remaining expansion (which would silently undercount the initial value).
-		s.invalid = true
-		return
-	}
-	if s.memo == nil {
-		s.memo = make(map[helium.Node]*entityContribution)
-	}
-	if contrib, seen := s.memo[ent]; seen {
-		if contrib != nil {
-			s.applyContribution(contrib)
-			return
-		}
-		// A nil entry is IN-PROGRESS: reaching it again is a cyclic back-edge
-		// (constructible through the public DOM API; XML forbids recursive
-		// entities, so a parsed document never hits this). The initial value is
-		// then ill-defined — fail closed.
-		s.invalid = true
-		return
-	}
-	// Mark in-progress so a cyclic back-edge to this node terminates.
-	s.memo[ent] = nil
-
-	start := len(s.initial)
-	savedChar, savedElem := s.hasChar, s.hasElem
-	s.hasChar, s.hasElem = false, false
-
-	if entityHasExpansion(ent) {
-		s.scanChildren(ent, depth+1)
-	} else if content := ent.Content(); len(content) > 0 {
-		s.appendInitial(content)
-		s.hasChar = true
-	}
-
-	s.memo[ent] = &entityContribution{
-		text:    slices.Clone(s.initial[start:]),
-		hasChar: s.hasChar,
-		hasElem: s.hasElem,
-	}
-	s.hasChar = s.hasChar || savedChar
-	s.hasElem = s.hasElem || savedElem
 }
 
 // applyContribution replays a memoized entity contribution into the scan.
@@ -2440,9 +2467,10 @@ func entityHasExpansion(ent helium.Node) bool {
 // sizes the accumulation budget so truncation can never fire on a value that
 // could still equal fixed (see mixedContentScan.budget).
 //
-// invalid is true when the entity graph is cyclic or deeper than
-// maxEntityScanDepth, so the initial value could not be materialized reliably;
-// the caller must then fail closed (see mixedContentScan.invalid).
+// invalid is true when the entity graph is cyclic, so the initial value could
+// not be materialized reliably; the caller must then fail closed (see
+// mixedContentScan.invalid). A deep-but-finite acyclic expansion is scanned in
+// full and is not invalid.
 func mixedInitialValue(elem *helium.Element, fixed string) (initial string, hasChar, hasElem, invalid bool) {
 	if elem == nil {
 		return "", false, false, false
