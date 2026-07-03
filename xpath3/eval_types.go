@@ -393,14 +393,21 @@ var errCoerceMismatch = errors.New("xpath3: sequence type mismatch")
 // URI-to-string promotion, and function coercion.  Returns the coerced
 // sequence and true on success, or the original sequence and false on failure.
 func CoerceToSequenceType(seq Sequence, st SequenceType) (Sequence, bool) {
-	return coerceToSequenceType(seq, st, nil)
+	return coerceToSequenceType(context.Background(), seq, st, nil)
+}
+
+// CoerceToSequenceTypeContext is CoerceToSequenceType with an explicit context,
+// threaded to the schema-aware cast a user-defined (union/faceted) target may
+// trigger so its facet validation participates in cancellation.
+func CoerceToSequenceTypeContext(ctx context.Context, seq Sequence, st SequenceType) (Sequence, bool) {
+	return coerceToSequenceType(ctx, seq, st, nil)
 }
 
 // coerceToSequenceType is the boolean-returning wrapper retained for callers that
 // only need success/failure. It discards the specific error code; callers that
 // must surface FOTY0013/FORG0001 should use coerceToSequenceTypeE.
-func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Sequence, bool) {
-	out, err := coerceToSequenceTypeE(seq, st, ec)
+func coerceToSequenceType(ctx context.Context, seq Sequence, st SequenceType, ec *evalContext) (Sequence, bool) {
+	out, err := coerceToSequenceTypeE(ctx, seq, st, ec)
 	if err != nil {
 		return seq, false
 	}
@@ -412,7 +419,7 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 // failure it returns that underlying error (FOTY0013, FORG0001, …). Atomization
 // errors take precedence over cardinality rejection, matching the spec ordering
 // (atomization happens before the occurrence check).
-func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequence, error) {
+func coerceToSequenceTypeE(ctx context.Context, seq Sequence, st SequenceType, ec *evalContext) (Sequence, error) {
 	// XPath 1.0 compatibility mode: apply the 1.0 function-conversion rules
 	// (first-item truncation; fn:string / fn:number coercion) before the ordinary
 	// path. Reached only under XSLT backwards-compatible processing.
@@ -563,6 +570,19 @@ func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequ
 			if castTarget == TypeNumeric {
 				castTarget = TypeDouble
 			}
+			// A user-defined target (union or facet-restricted type) is not a
+			// built-in CastAtomic target: route through the schema-aware cast so an
+			// untypedAtomic value is cast to the first castable member of a union
+			// (function-conversion rules, §3.1.5.2), validating each member's facets.
+			if ec != nil && ec.schemaDeclarations != nil && !IsKnownXSDType(castTarget) {
+				cast, err := schemaAwareCast(ctx, ec, av, castTarget)
+				if err != nil {
+					return seq, err
+				}
+				result[i] = cast
+				i++
+				continue
+			}
 			cast, err := CastAtomic(av, castTarget)
 			if err != nil {
 				return seq, err
@@ -641,7 +661,7 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 			copy(callArgs, args)
 			if len(actual.ParamTypes) > 0 {
 				for i, arg := range args {
-					coerced, ok := coerceToSequenceType(arg, actual.ParamTypes[i], invokeCtx)
+					coerced, ok := coerceToSequenceType(ctx, arg, actual.ParamTypes[i], invokeCtx)
 					if !ok {
 						return nil, &XPathError{
 							Code:    lexicon.ErrXPTY0004,
@@ -657,7 +677,7 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 				return nil, err
 			}
 
-			coercedResult, ok := coerceToSequenceType(result, target.ReturnType, invokeCtx)
+			coercedResult, ok := coerceToSequenceType(ctx, result, target.ReturnType, invokeCtx)
 			if !ok {
 				return nil, &XPathError{
 					Code:    lexicon.ErrXPTY0004,
@@ -733,7 +753,62 @@ func atomicMatchesTargetType(av AtomicValue, targetType string, ec *evalContext)
 				ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeFloat) ||
 				ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDouble)
 		}
-		return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType)
+		if ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType) {
+			return true
+		}
+		// A user-defined UNION target matches when the value is an instance of
+		// one of its member types (XPath 3.1 §2.5.6.2 union sequence-type
+		// matching): the union's members are not base-chain subtypes of the
+		// union, so IsSubtypeOf alone never admits them. Members may themselves
+		// be unions, so recurse.
+		if atomicMatchesUnionMember(av, targetType, ec, nil) {
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+// atomicMatchesUnionMember reports whether av is an instance of one of the
+// member types of the union named targetType (or, recursively, a nested union
+// member). It returns false when targetType is not a union. The visited set
+// guards against a pathological cyclic union graph.
+func atomicMatchesUnionMember(av AtomicValue, targetType string, ec *evalContext, visited map[string]struct{}) bool {
+	if ec == nil || ec.schemaDeclarations == nil {
+		return false
+	}
+	members := ec.schemaDeclarations.UnionMemberTypes(targetType)
+	if len(members) == 0 {
+		return false
+	}
+	if _, seen := visited[targetType]; seen {
+		return false
+	}
+	if visited == nil {
+		visited = make(map[string]struct{})
+	}
+	visited[targetType] = struct{}{}
+	defer delete(visited, targetType)
+	for _, m := range members {
+		// Direct (non-union) instance match against the member type. This mirrors
+		// the non-union branches of atomicMatchesTargetType; the union recursion is
+		// handled below with the shared visited set rather than by re-entering
+		// atomicMatchesTargetType (which would reset the cycle guard).
+		if m == TypeAnyAtomicType {
+			return true
+		}
+		if isSubtypeOf(av.TypeName, m) {
+			return true
+		}
+		if av.BaseType != "" && IsKnownXSDType(av.BaseType) && isSubtypeOf(av.BaseType, m) {
+			return true
+		}
+		if ec.schemaDeclarations.IsSubtypeOf(av.TypeName, m) {
+			return true
+		}
+		if atomicMatchesUnionMember(av, m, ec, visited) {
+			return true
+		}
 	}
 	return false
 }

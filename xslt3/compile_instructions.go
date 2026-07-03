@@ -408,6 +408,8 @@ func (c *compiler) setInstructionXPathNS(_ context.Context, inst instruction, ha
 		set(&v.xpathNS)
 	case *literalResultElement:
 		set(&v.xpathNS)
+	case *variableInst:
+		set(&v.xpathNS)
 	}
 }
 

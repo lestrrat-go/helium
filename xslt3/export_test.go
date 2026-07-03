@@ -17,6 +17,6 @@ func ReadResourceBoundedForTest(r io.Reader, limit int64) ([]byte, error) {
 // external test package with the default (no) strip/preserve rules and no node
 // map, so the produced copy's independence from the source can be asserted.
 func CopyAndStripForTest(src *helium.Document) (*helium.Document, error) {
-	dst, _, err := copyAndStrip(src, nil, nil, false)
+	dst, _, err := copyAndStrip(src, nil, nil, false, nil)
 	return dst, err
 }
