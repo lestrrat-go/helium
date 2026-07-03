@@ -305,13 +305,6 @@ func (n docnode) LastChild() Node {
 	return n.lastChild
 }
 
-// maxCycleCheckDepth bounds the child-pointer descent in wouldCreateCycle so a
-// pathologically deep or (via a hand-built foreign child link) already-cyclic
-// child graph cannot make the check recurse without limit. Real document trees
-// are far shallower; together with the per-call visited set the cap only guards
-// the degenerate cases.
-const maxCycleCheckDepth = 1 << 12
-
 // wouldCreateCycle reports whether installing cur under parent would create a
 // cycle. That happens when parent is cur itself or is already reachable from
 // cur: closing the link parent->cur then forms the loop parent -> cur -> ... ->
@@ -337,36 +330,33 @@ func wouldCreateCycle(parent, cur Node) bool {
 	if parent == nil || cdn.firstChild == nil {
 		return false
 	}
-	return childReaches(cur, parent.baseDocNode(), 0, nil)
+	return childReaches(cur, parent.baseDocNode())
 }
 
 // childReaches reports whether target is reachable from node by following child
-// pointers (node inclusive). It enumerates each node's OWN children via
-// nextOwnedChild so a foreign child link (an entity reference's Entity child,
-// owned by the DTD) is not followed into another list's siblings, and it guards
-// a shared or cyclic child graph with a lazily-allocated visited set plus a
-// depth cap, so it always terminates.
-func childReaches(node Node, target *docnode, depth int, visited map[*docnode]struct{}) bool {
-	dn := node.baseDocNode()
-	if dn == target {
-		return true
-	}
-	if dn.firstChild == nil {
-		return false
-	}
-	if depth >= maxCycleCheckDepth {
-		return false
-	}
-	if visited == nil {
-		visited = make(map[*docnode]struct{})
-	}
-	if _, seen := visited[dn]; seen {
-		return false
-	}
-	visited[dn] = struct{}{}
-	for child := dn.firstChild; child != nil; child = nextOwnedChild(dn, child) {
-		if childReaches(child, target, depth+1, visited) {
+// pointers (node inclusive). It walks ITERATIVELY with an explicit stack and a
+// visited set, so it terminates on any child graph — shared (DAG) or hand-built
+// cyclic — visiting each node at most once and never overflowing the goroutine
+// stack on a deep tree. It is SOUND: it never bails out early, so a cycle at ANY
+// depth is detected (a depth cap here would fail OPEN and admit a deep cycle).
+// It enumerates each node's OWN children via nextOwnedChild so a foreign child
+// link (an entity reference's Entity child, owned by the DTD) is not followed
+// into another list's siblings.
+func childReaches(node Node, target *docnode) bool {
+	visited := make(map[*docnode]struct{})
+	stack := []Node{node}
+	for len(stack) > 0 {
+		dn := stack[len(stack)-1].baseDocNode()
+		stack = stack[:len(stack)-1]
+		if dn == target {
 			return true
+		}
+		if _, seen := visited[dn]; seen {
+			continue
+		}
+		visited[dn] = struct{}{}
+		for child := dn.firstChild; child != nil; child = nextOwnedChild(dn, child) {
+			stack = append(stack, child)
 		}
 	}
 	return false
