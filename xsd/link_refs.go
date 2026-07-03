@@ -2531,41 +2531,39 @@ func isUrSimpleType(td *TypeDef) bool {
 	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == typeAnySimpleType
 }
 
-// effectiveAttrWildcard returns the complete {attribute wildcard} of a complex
-// type for the restriction-derivation check: its directly-declared
-// xs:anyAttribute INTERSECTED with the complete wildcards of every attribute
-// group it references (XSD §3.4.2 "complete wildcard"). In XSD 1.1 the group
-// wildcards are already merged into td.AnyAttribute at link time, so this returns
-// td.AnyAttribute unchanged. In XSD 1.0 group wildcards are NOT merged into a
-// type's {attribute wildcard} at validation (byte-identical), so this re-derives
-// the complete wildcard on demand from the recorded group wildcards (populated
-// diagnostic-free in parseNamedAttributeGroup) — a base whose only attribute
-// wildcard comes transitively through a referenced attribute group is thus seen
-// as having one, so a valid restriction that adds/subsets it is not falsely
-// rejected as "the base does not have an attribute wildcard".
+// effectiveAttrWildcard returns the {attribute wildcard} of a complex type for
+// the restriction-derivation check. In XSD 1.1 the group-ref wildcards are
+// already merged into td.AnyAttribute at link time, so this returns it unchanged.
+// In XSD 1.0 group wildcards are NOT merged into a type's {attribute wildcard} at
+// validation (byte-identical); this re-derives one on demand ONLY to recognize a
+// base whose attribute wildcard comes SOLELY through a referenced attribute group
+// (td.AnyAttribute nil): it fills in the first group-ref complete wildcard so
+// derivation-ok-restriction 4.1 sees a wildcard and 4.2/4.3 have one to compare.
+//
+// A DIRECT td.AnyAttribute is returned as-is and is NEVER narrowed by intersecting
+// group-ref wildcards: 1.0 instance validation uses only the direct wildcard, so
+// narrowing it here would newly reject a restriction whose derived wildcard is a
+// subset of the direct base wildcard but not of the (narrower) intersection —
+// breaking 1.0 byte-identical behavior. The first group-ref wildcard suffices to
+// discharge 4.1 for the transitive-only case; the full multi-group intersection is
+// not modeled here.
 func (c *compiler) effectiveAttrWildcard(td *TypeDef) *Wildcard {
 	if td == nil {
 		return nil
 	}
 	w := td.AnyAttribute
-	if c.version == Version11 {
+	if c.version == Version11 || w != nil {
 		return w
 	}
 	for _, qn := range c.attrGroupRefs[td] {
 		if _, ok := c.schema.attrGroups[qn]; !ok {
 			continue
 		}
-		gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{})
-		if gw == nil {
-			continue
+		if gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{}); gw != nil {
+			return gw
 		}
-		if w == nil {
-			w = gw
-			continue
-		}
-		w = intersectWildcards(w, gw)
 	}
-	return w
+	return nil
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
