@@ -54,6 +54,7 @@ type Writer struct {
 type writeSession struct {
 	Writer
 	escapeNonASCII bool
+	xml11          bool // true when the document declares XML 1.1: restricted control chars serialize as decimal character references
 	isXHTML        bool
 	encoding       string // document encoding, used for XHTML meta injection
 	indent         int    // current indent depth (used when format is true)
@@ -301,6 +302,9 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 
 func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	s := writeSession{Writer: d}
+	// An XML 1.1 document may carry restricted control characters; serialize
+	// them as decimal character references. XML 1.0 output is unaffected.
+	s.xml11 = doc.version == "1.1"
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
@@ -456,7 +460,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				return err
 			}
 		} else {
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars, d.xml11); err != nil {
 				return err
 			}
 		}
@@ -565,7 +569,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars); err != nil {
+					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars, d.xml11); err != nil {
 						return err
 					}
 				} else {
