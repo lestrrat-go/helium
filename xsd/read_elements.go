@@ -205,6 +205,25 @@ func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 // readProcessContents reads and validates the @processContents attribute of a
 // wildcard. An absent attribute defaults to "strict". An invalid value is
 // reported as a schema parser error and treated as the "strict" default.
+// quietProcessContents reads a wildcard's @processContents WITHOUT emitting any
+// diagnostic (unlike readProcessContents, which reports a bad value). It is used
+// to record an XSD 1.0 attribute-group wildcard for the restriction-derivation
+// check while keeping the 1.0 path byte-identical: a malformed value defaults to
+// strict, exactly as readProcessContents' fallback does, but without the error.
+func quietProcessContents(elem *helium.Element) ProcessContentsKind {
+	if !hasAttr(elem, attrProcessContents) {
+		return ProcessStrict
+	}
+	switch normalizeWhiteSpace(getAttr(elem, attrProcessContents), "collapse") {
+	case attrValLax:
+		return ProcessLax
+	case attrValSkip:
+		return ProcessSkip
+	default:
+		return ProcessStrict
+	}
+}
+
 func (c *compiler) readProcessContents(ctx context.Context, elem *helium.Element) ProcessContentsKind {
 	if !hasAttr(elem, attrProcessContents) {
 		return ProcessStrict
