@@ -979,6 +979,9 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 			if err != nil {
 				return nil, err
 			}
+			if err := ec.applyMergeSourceValidation(ctx, src, doc); err != nil {
+				return nil, err
+			}
 			if err := ec.prepareMergeSourceAccumulators(ctx, src, doc); err != nil {
 				return nil, err
 			}
@@ -1381,6 +1384,35 @@ func (ec *execContext) checkAccumulatorType(ctx context.Context, def *accumulato
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative
 // to the given effective base URI (which accounts for xml:base).
+// applyMergeSourceValidation applies xsl:merge-source/@validation to a loaded
+// merge document. Strict/lax validation annotates the document's nodes with
+// their schema types and records nilled elements, so downstream schema-aware
+// expressions (e.g. "current-merge-group() instance of schema-element(X)*")
+// see the PSVI type information. Mirrors xsl:source-document validation.
+func (ec *execContext) applyMergeSourceValidation(ctx context.Context, src *mergeSource, doc *helium.Document) error {
+	if ec.schemaRegistry == nil {
+		return nil
+	}
+	switch src.Validation {
+	case validationStrict, validationLax:
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
+		if valErr != nil && src.Validation == validationStrict {
+			return dynamicError(errCodeXTTE1510,
+				"xsl:merge-source: strict validation failed: %v", valErr)
+		}
+		for node, typeName := range vr.Annotations {
+			ec.annotateNode(node, typeName)
+		}
+		for elem := range vr.NilledElements {
+			ec.markNilled(elem)
+		}
+		ec.stripSchemaWhitespace(doc, vr.Annotations)
+	case validationStrip:
+		ec.stripAnnotations(doc.DocumentElement())
+	}
+	return nil
+}
+
 func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effectiveBaseURI string) (*helium.Document, error) {
 	// Resolve URI relative to the effective base URI.
 	effectiveBase := effectiveBaseURI

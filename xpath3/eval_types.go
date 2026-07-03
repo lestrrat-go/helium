@@ -907,6 +907,14 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return false
 		}
 		local, ns := resolveSchemaTestName(t.Name, ec, false)
+		// The node's PSVI type annotation. Prefer the annotation carried on the
+		// NodeItem; fall back to the evalContext's node→type map (populated by
+		// schema validation) so a node whose annotation lives only in the map —
+		// e.g. an item from current-merge-group() — is still recognized.
+		nodeAnn := ni.TypeAnnotation
+		if nodeAnn == "" {
+			nodeAnn = nodeTypeAnnotation(ni.Node, ec)
+		}
 		// The node must have the same name as the declared element
 		// (or a substitution group member — checked separately below).
 		nameMatch := ixpath.LocalNameOf(ni.Node) == local && ixpath.NodeNamespaceURI(ni.Node) == ns
@@ -920,7 +928,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 				return false
 			}
 			// The node's type must be a subtype of the head's type.
-			ann := ni.TypeAnnotation
+			ann := nodeAnn
 			if ann == "" {
 				ann = TypeUntyped
 			}
@@ -937,7 +945,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if !found {
 			return false
 		}
-		ann := ni.TypeAnnotation
+		ann := nodeAnn
 		if ann == "" {
 			ann = TypeUntyped
 		}
@@ -970,6 +978,9 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return false
 		}
 		ann := ni.TypeAnnotation
+		if ann == "" {
+			ann = nodeTypeAnnotation(ni.Node, ec)
+		}
 		if ann == "" {
 			ann = TypeUntypedAtomic
 		}

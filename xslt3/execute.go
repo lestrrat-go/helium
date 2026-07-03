@@ -408,6 +408,15 @@ func (ec *execContext) deepTransferAnnotations(src, dst helium.Node) {
 	if ec.typeAnnotations == nil {
 		return
 	}
+	// The nilled property is preserved by validation="preserve" alongside the
+	// type annotation, so a deep (xsl:copy-of) copy carries it to the copy.
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			if ec.isNilled(srcElem) {
+				ec.markNilled(dstElem)
+			}
+		}
+	}
 	if ann, ok := ec.typeAnnotations[src]; ok {
 		ec.annotateNode(dst, ann)
 	}
