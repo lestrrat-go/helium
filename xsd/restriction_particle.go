@@ -211,6 +211,13 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			if modelGroupContainsElementDecl(bt) {
 				return false
 			}
+			// KNOWN LIMITATION: the full §3.9.6 wildcard-vs-wildcard-model-group
+			// language-inclusion decision (namespace / cardinality / compositor subset
+			// of an emitting derived wildcard against a base group of wildcards) is not
+			// implemented — the particleLanguageSubset fallback is Version11-only and
+			// cannot model a derived wildcard. This conservative accept is byte-identical
+			// to the pre-fix XSD 1.0 behavior; this PR only adds the provably-sound
+			// rejection for a base group that carries element declarations.
 			return true
 		}
 	case *ModelGroup:
