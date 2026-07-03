@@ -253,6 +253,28 @@ sources use the original lexical value, while already-typed sources use the
 accepted member-cast result's lexical form. `cast` returns the atomic value for
 the matching member.
 
+A user-defined LIST target type (resolved via `SchemaDeclarations.ListItemType`)
+casts by tokenization (F&O 3.1 §19.1.2): a string/untypedAtomic source is split on
+XSD whitespace (`xsdListFields`) and each token must be castable to the item type
+through the same schema-aware path, then the whole normalized value validates
+against the list type's own facets via `ValidateCastWithNS`. `castToUserList`
+returns the sequence of per-item atoms (each typed as the item type) for `cast`;
+`castableToUserList` returns the boolean for `castable`. Any other already-typed
+atomic source is not a list literal → not castable (an empty/whitespace-only
+source is the empty list, castable iff the list facets accept zero items). A
+multi-item list-typed operand (e.g. the xslt3 `s:intListType1("1 2 3")`
+constructor, which expands to a sequence of item atoms) is rejected earlier by the
+singleton-cardinality check on the atomized operand, so casting it to the same
+list type is correctly NOT castable (it is a sequence, not a single value).
+
+`AtomicToString` (canonical lexical) normalizes a schema-derived USER-typed atom
+(a non-XSD `TypeName` with a known-XSD `BaseType`) to its builtin base before
+formatting, mirroring `CastAtomic`'s dispatch normalization — so a user-typed
+temporal/binary/QName atom (e.g. a value of a user type derived from `xs:date`)
+stringifies as its canonical XSD lexical (`"2001-01-01"`) rather than the generic
+Go `%v` fallback. This keeps a union target's re-validation lexical correct when
+the accepted member value carries a user type annotation.
+
 When the cast source is itself an already-resolved `QNameValue` (e.g. `data(@q)`
 where the prefix is declared only on the instance node, absent from the
 assertion's static namespace map), `qnameCastLexical` re-validates using the

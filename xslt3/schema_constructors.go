@@ -69,6 +69,15 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 		}
 
 		if baseType == "" || variety != xsd.TypeVarietyAtomic {
+			// A LIST-typed value is a SEQUENCE of item atoms (XDM list semantics),
+			// not a single string atom — so its cardinality and per-item typing
+			// match a real list value (e.g. `s:intListType1("1 2 3")` is three
+			// xs:integer items, not one string, so it is not a singleton).
+			if variety == xsd.TypeVarietyList {
+				if seq, ok := ec.expandSchemaListValue(td, schemaNormalizeLexical(lexical, td)); ok {
+					return seq, nil
+				}
+			}
 			return xpath3.SingleAtomic(xpath3.AtomicValue{
 				TypeName: typeName,
 				Value:    schemaNormalizeLexical(lexical, td),
@@ -80,9 +89,13 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 			return nil, err
 		}
 		// Preserve the actual typed value (e.g., *big.Int for integer types)
-		// so that aggregate functions like sum() can operate on it.
+		// so that aggregate functions like sum() can operate on it. Stamp the
+		// builtin BaseType (the AtomizeItem/schema-aware-cast convention) so the
+		// user-typed atom normalizes to its base for cast dispatch and canonical
+		// string formatting (e.g. a user xs:date atom stringifies as "2001-01-01").
 		return xpath3.SingleAtomic(xpath3.AtomicValue{
 			TypeName: typeName,
+			BaseType: baseType,
 			Value:    cast.Value,
 		}), nil
 	}
@@ -166,6 +179,48 @@ func (ec *execContext) schemaTypeName(uri, local string) string {
 		return xpath3.QAnnotation(uri, local)
 	}
 	return local
+}
+
+// listItemTypeDef returns the item type definition of a list type, following the
+// base-type chain (a restriction of a list keeps the base's item type).
+func listItemTypeDef(listTD *xsd.TypeDef) *xsd.TypeDef {
+	for cur := listTD; cur != nil; cur = cur.BaseType {
+		if cur.Variety == xsd.TypeVarietyList && cur.ItemType != nil {
+			return cur.ItemType
+		}
+	}
+	return nil
+}
+
+// expandSchemaListValue expands a (validated, whitespace-collapsed) list lexical
+// into a sequence of per-item atoms, each typed as the item type — the XDM
+// representation of a list value. It only handles an ATOMIC item type (the common
+// case, e.g. xs:list itemType="xs:integer"); a union/list item type returns ok=false
+// so the caller keeps the single-atom fallback rather than mis-typing the tokens.
+func (ec *execContext) expandSchemaListValue(listTD *xsd.TypeDef, lexical string) (xpath3.Sequence, bool) {
+	itemTD := listItemTypeDef(listTD)
+	if itemTD == nil {
+		return nil, false
+	}
+	itemBuiltin := schemaBuiltinXPathType(itemTD)
+	if itemBuiltin == "" || schemaTypeVariety(itemTD) != xsd.TypeVarietyAtomic {
+		return nil, false
+	}
+	itemName := ec.schemaTypeName(itemTD.Name.NS, itemTD.Name.Local)
+	tokens := strings.Fields(lexical)
+	items := make(xpath3.ItemSlice, 0, len(tokens))
+	for _, tok := range tokens {
+		cast, err := xpath3.CastFromString(tok, itemBuiltin)
+		if err != nil {
+			return nil, false
+		}
+		items = append(items, xpath3.AtomicValue{
+			TypeName: itemName,
+			BaseType: itemBuiltin,
+			Value:    cast.Value,
+		})
+	}
+	return items, true
 }
 
 func schemaTypeVariety(td *xsd.TypeDef) xsd.TypeVariety {

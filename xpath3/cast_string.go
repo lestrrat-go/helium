@@ -28,6 +28,18 @@ func AtomicToString(v AtomicValue) (string, error) {
 
 // atomicToString returns the canonical string representation of an atomic value.
 func atomicToString(v AtomicValue) (string, error) {
+	// A schema-derived USER type annotation (e.g. Q{ns}unrestrictedDate, stamped
+	// onto an atom by a schema-aware cast or the xsd $value binding) is opaque to
+	// the per-type canonical formatters below, which key on the builtin TypeName —
+	// so a user-typed temporal/binary/QName atom would fall through to the generic
+	// Go %v formatter and produce a non-canonical lexical (e.g. time.Time's default
+	// format instead of "2001-01-01"). Normalize such a source to its recorded
+	// builtin BaseType (preserving the Value) so it formats exactly like its base,
+	// mirroring CastAtomic's dispatch normalization. The BaseType must be a KNOWN
+	// XSD builtin and the TypeName a NON-XSD user name; built-in atoms are untouched.
+	if v.TypeName != "" && v.BaseType != "" && IsKnownXSDType(v.BaseType) && !IsKnownXSDType(v.TypeName) {
+		return atomicToString(AtomicValue{TypeName: v.BaseType, Value: v.Value})
+	}
 	switch v.TypeName {
 	case TypeString, TypeAnyURI, TypeUntypedAtomic,
 		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
