@@ -161,7 +161,17 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// clear violation.
 			return false
 		case *ModelGroup:
-			// NSRecurseCheckCardinality — conservatively accept.
+			// §3.9.6 (Particle Valid (Restriction)) has NO derivation rule for a
+			// WILDCARD restricting a base MODEL GROUP of element declarations: the
+			// wildcard admits expanded names the element group forbids, so it can never
+			// be a valid restriction. XSD 1.0 has no language-inclusion fallback, so
+			// reject here directly (a non-emitting derived wildcard — maxOccurs=0 — has
+			// the empty language and is a trivial subset, so accept it). XSD 1.1 keeps
+			// the conservative accept: its particleLanguageSubset fallback governs
+			// (and cannot represent a derived wildcard), so the 1.1 path is undisturbed.
+			if version == Version10 && r.MaxOccurs != 0 {
+				return false
+			}
 			return true
 		}
 	case *ModelGroup:
