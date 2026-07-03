@@ -165,15 +165,31 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// WILDCARD restricting a base MODEL GROUP of element declarations: the
 			// wildcard admits expanded names the element group forbids, so it can never
 			// be a valid restriction. XSD 1.0 has no language-inclusion fallback, so
-			// reject here directly (a non-emitting derived wildcard — maxOccurs=0 — has
-			// the empty language and is a trivial subset, so accept it). XSD 1.1 keeps
-			// the prior conservative accept: the particleLanguageSubset fallback that
-			// proves subset relationships in 1.1 cannot model a derived wildcard, so it
-			// never reaches this case and the 1.1 path is unchanged.
-			if version == Version10 && r.MaxOccurs != 0 {
-				return false
+			// reject here directly. XSD 1.1 keeps the prior conservative accept: the
+			// particleLanguageSubset fallback that proves subset relationships in 1.1
+			// cannot model a derived wildcard, so it never reaches this case and the
+			// 1.1 path is unchanged.
+			if version != Version10 {
+				return true
 			}
-			return true
+			// A NON-EMITTING derived wildcard has the empty language, a trivial subset
+			// of any base — accept regardless of the base. Non-emitting means either a
+			// prohibited occurrence (maxOccurs=0) OR an empty positive namespace
+			// constraint (`namespace=""`), which matches no expanded name.
+			if r.MaxOccurs == 0 || wildcardMatchesNothing(rt) {
+				return true
+			}
+			// The base "model group" may be a §3.9.6-POINTLESS 1/1 wrapper around a
+			// single non-element term (e.g. sequence(sequence(xs:any))). Fold it to
+			// that term and re-dispatch: a base that is really just a WILDCARD then
+			// falls through to the NSSubset rule (wildcard-vs-wildcard), and a base
+			// that reduces to a single ELEMENT hits wildcard-vs-element (rejected).
+			// Only a base that stays a model group of ELEMENT declarations has no
+			// wildcard-restricting rule and is rejected here.
+			if red, reduced := pointlessReduce(b); reduced {
+				return particleValidRestriction(ctx, r, red, schema, version)
+			}
+			return false
 		}
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
