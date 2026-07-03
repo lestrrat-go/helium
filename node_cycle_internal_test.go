@@ -97,3 +97,24 @@ func TestWalkRejectsEntityChildCycle(t *testing.T) {
 	require.ErrorIs(t, err, ErrWalkCycle,
 		"Walk must detect the child-pointer cycle and return ErrWalkCycle instead of hanging")
 }
+
+// TestWalkRejectsSiblingCycle verifies Walk terminates (rather than spinning
+// forever) on a sibling cycle LONGER than one node: a parent whose two children
+// form a 2-cycle a -> b -> a. The active-path guard alone does not catch this —
+// each child is popped off the stack before its next sibling is examined — so
+// the per-frame seenChildren set must return ErrWalkCycle.
+func TestWalkRejectsSiblingCycle(t *testing.T) {
+	doc := NewDefaultDocument()
+	parent := doc.CreateElement("parent")
+	a := doc.CreateElement("a")
+	b := doc.CreateElement("b")
+	require.NoError(t, parent.AddChild(a))
+	require.NoError(t, parent.AddChild(b))
+
+	// Close a 2-cycle in the sibling list: a -> b -> a.
+	b.SetNextSibling(a)
+
+	err := Walk(parent, NodeWalkerFunc(func(Node) error { return nil }))
+	require.ErrorIs(t, err, ErrWalkCycle,
+		"Walk must detect the sibling cycle and return ErrWalkCycle instead of hanging")
+}

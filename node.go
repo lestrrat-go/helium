@@ -280,6 +280,13 @@ func Walk(n Node, w NodeWalker) error {
 		node        Node
 		entered     bool
 		activeChild Node
+		// seenChildren records every child of node this frame has already
+		// enumerated, so a child that repeats within the SAME sibling list —
+		// a sibling cycle longer than one node (a -> b -> a, all siblings of
+		// node) — is detected. The active-path guard alone misses it: each
+		// child is popped and removed from onPath before its next sibling is
+		// examined, so the enumeration would otherwise spin forever.
+		seenChildren map[*docnode]struct{}
 	}
 
 	onPath := make(map[*docnode]struct{})
@@ -306,9 +313,18 @@ func Walk(n Node, w NodeWalker) error {
 			continue
 		}
 
-		if _, cyclic := onPath[top.activeChild.baseDocNode()]; cyclic {
+		childKey := top.activeChild.baseDocNode()
+		if _, cyclic := onPath[childKey]; cyclic {
 			return ErrWalkCycle
 		}
+		if _, dup := top.seenChildren[childKey]; dup {
+			return ErrWalkCycle
+		}
+		if top.seenChildren == nil {
+			top.seenChildren = make(map[*docnode]struct{})
+		}
+		top.seenChildren[childKey] = struct{}{}
+		// top may dangle after the append reallocates stack; mark before it.
 		stack = append(stack, walkFrame{node: top.activeChild})
 	}
 	return nil
@@ -317,8 +333,9 @@ func Walk(n Node, w NodeWalker) error {
 // nextWalkSibling advances child to the next sibling within owner's own child
 // list, applying the owned-boundary rule and stopping on an immediate
 // self-referential sibling pointer (child.next == child) so a corrupted sibling
-// link cannot make the traversal spin. A longer sibling cycle is broken by the
-// active-path guard once it descends back into a node already on the stack.
+// link cannot make the traversal spin. A longer sibling cycle (a -> b -> a) is
+// broken by the caller's per-frame seenChildren set, which returns ErrWalkCycle
+// when a child repeats within one sibling list.
 func nextWalkSibling(owner Node, child Node) Node {
 	next := nextOwnedChild(owner.baseDocNode(), child)
 	if next == child {
