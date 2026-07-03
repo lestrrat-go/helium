@@ -197,12 +197,21 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// sequence(sequence(xs:any))). Fold it to that term and re-dispatch: a base
 			// that is really just a WILDCARD then falls through to the NSSubset rule
 			// (wildcard-vs-wildcard), and a base that reduces to a single ELEMENT hits
-			// wildcard-vs-element (rejected). A base that stays a model group of ELEMENT
-			// declarations has no wildcard-restricting rule and is rejected.
+			// wildcard-vs-element (rejected).
 			if red, reduced := pointlessReduce(b); reduced {
 				return particleValidRestriction(ctx, r, red, schema, version)
 			}
-			return false
+			// §3.9.6 gives no rule for a wildcard restricting a base group of element
+			// DECLARATIONS, so an emitting wildcard restricting such a group is
+			// rejected. But a base group composed solely of wildcards and/or empty
+			// nested groups (no element declaration anywhere) is NOT an element group:
+			// a wildcard restricting it is a wildcard-vs-wildcard language question
+			// this rule must not decide, so stay conservative (accept) and let the
+			// ordinary wildcard/language rules govern.
+			if modelGroupContainsElementDecl(bt) {
+				return false
+			}
+			return true
 		}
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
@@ -505,6 +514,25 @@ func reduceSingletonGroup(p *Particle) *Particle {
 			Term:      only.Term,
 		}
 	}
+}
+
+// modelGroupContainsElementDecl reports whether a model group carries at least
+// one element-declaration particle anywhere in its (nested) content. A group
+// composed solely of wildcards and/or empty/nested groups is NOT a group of
+// element declarations, so the §3.9.6 "no wildcard-restricts-element-group rule"
+// rejection does not apply to it.
+func modelGroupContainsElementDecl(g *ModelGroup) bool {
+	for _, p := range g.Particles {
+		switch t := p.Term.(type) {
+		case *ElementDecl:
+			return true
+		case *ModelGroup:
+			if modelGroupContainsElementDecl(t) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // pointlessReduce folds a §3.9.6-POINTLESS model-group particle down to its

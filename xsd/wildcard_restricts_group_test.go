@@ -120,6 +120,42 @@ func TestWildcardEmptyNamespaceRestrictsGroup(t *testing.T) {
 	require.NotNil(t, schema)
 }
 
+// §3.9.6 gives no rule for a wildcard restricting a base group of element
+// DECLARATIONS, but a base group composed SOLELY of wildcards and/or empty
+// nested groups is NOT an element group: an emitting derived wildcard restricting
+// it is a wildcard-vs-wildcard language question, which this rule must not decide.
+// So the emitting reject does not fire and the restriction COMPILES in XSD 1.0.
+// Here the base's nested sequence{2,2}(xs:any{3,3}) has language equivalent to
+// xs:any{6,6}, which the derived wildcard supplies; no element declaration appears
+// in that base group.
+func TestWildcardRestrictsPureWildcardGroup(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:any namespace="##any" minOccurs="3" maxOccurs="3" processContents="skip"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" minOccurs="6" maxOccurs="6" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version10, schemaXML)
+	require.NoError(t, cerr,
+		"a wildcard restricting a base group with no element declarations is a wildcard-vs-wildcard question, not decided by the wildcard-restricts-element-group rejection")
+	require.NotNil(t, schema)
+}
+
 // wildcardGroupSchema builds a restriction of a base model group of element
 // declarations by a `<xs:sequence>` wrapping a single `<xs:any>` carrying the
 // given attribute string (namespace/minOccurs/maxOccurs). baseChoice controls
@@ -157,8 +193,8 @@ func wildcardGroupSchema(anyAttrs, baseChoiceAttrs string) string {
 func TestWildcardRestrictsGroupLanguageCells(t *testing.T) {
 	t.Parallel()
 
-	const nonEmptiableBase = `maxOccurs="2"`      // choice(a,b){2} — never empty
-	const emptiableBase = `minOccurs="0"`         // choice(a,b){0,1} — emptiable
+	const nonEmptiableBase = `maxOccurs="2"` // choice(a,b){2} — never empty
+	const emptiableBase = `minOccurs="0"`    // choice(a,b){0,1} — emptiable
 
 	tests := []struct {
 		name        string
@@ -176,7 +212,7 @@ func TestWildcardRestrictsGroupLanguageCells(t *testing.T) {
 		},
 		{
 			name:        "maxOccurs0 over non-emptiable base rejects",
-			anyAttrs:    `namespace="##any" maxOccurs="0"`,
+			anyAttrs:    `namespace="##any" minOccurs="0" maxOccurs="0"`,
 			baseAttrs:   nonEmptiableBase,
 			wantErr:     true,
 			description: "language {ε}; a non-emptiable base does not contain ε",
