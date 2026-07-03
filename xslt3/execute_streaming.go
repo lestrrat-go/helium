@@ -492,6 +492,89 @@ func compareSingleMergeKey(a, b mergeKeyValue) (int, error) {
 	return 0, nil
 }
 
+// compareMergeKeysForVerify compares two merge key value arrays for
+// sort-order verification (XTDE2220). It behaves like compareMergeKeyValues
+// but, for a non-numeric key level with a declared collation, compares the
+// keys' string values under that collation. Merge keys selected from untyped
+// nodes atomize to xs:untypedAtomic and would otherwise compare by codepoint
+// through compareSingleMergeKey, ignoring the declared collation — so data
+// sorted for one collation and merged under another would be seen as sorted.
+func compareMergeKeysForVerify(a, b []mergeKeyValue, orders []mergeKeyOrder, colls []func(x, y string) int) (int, error) {
+	for i, ord := range orders {
+		if i >= len(a) || i >= len(b) {
+			break
+		}
+		var (
+			c   int
+			err error
+		)
+		if i < len(colls) && colls[i] != nil && mergeKeyStringLike(a[i]) && mergeKeyStringLike(b[i]) {
+			c, err = compareMergeKeyStringsColl(a[i], b[i], colls[i])
+		} else {
+			c, err = compareSingleMergeKey(a[i], b[i])
+		}
+		if err != nil {
+			return 0, err
+		}
+		if ord.desc {
+			c = -c
+		}
+		if c != 0 {
+			return c, nil
+		}
+	}
+	return 0, nil
+}
+
+// compareMergeKeyStringsColl compares two merge key values as strings under
+// the supplied collation compare function.
+func compareMergeKeyStringsColl(a, b mergeKeyValue, coll func(x, y string) int) (int, error) {
+	as, err := mergeKeyString(a)
+	if err != nil {
+		return 0, err
+	}
+	bs, err := mergeKeyString(b)
+	if err != nil {
+		return 0, err
+	}
+	return coll(as, bs), nil
+}
+
+// mergeKeyStringLike reports whether a merge key value should be compared as a
+// string under a declared collation. A key selected from an untyped node
+// (xs:untypedAtomic), a genuine xs:string/xs:anyURI, or a pure string fallback
+// qualifies; a data-type="number" key or a genuinely-ordered non-string atom
+// (numeric, date, boolean, …) does not — those keep their typed/codepoint
+// ordering via compareSingleMergeKey, matching the n-way merge comparison and
+// avoiding a spurious out-of-order verdict (e.g. "10" < "2").
+func mergeKeyStringLike(mkv mergeKeyValue) bool {
+	if mkv.numeric {
+		return false
+	}
+	if mkv.atom.TypeName == "" {
+		return true
+	}
+	switch mkv.atom.TypeName {
+	case xpath3.TypeString, xpath3.TypeUntypedAtomic, xpath3.TypeAnyURI:
+		return true
+	default:
+		return false
+	}
+}
+
+// mergeKeyString returns the string value of a merge key value, atomizing a
+// typed atomic value when present and falling back to the recorded string.
+func mergeKeyString(mkv mergeKeyValue) (string, error) {
+	if mkv.atom.TypeName != "" {
+		s, err := xpath3.AtomicToString(mkv.atom)
+		if err != nil {
+			return "", err
+		}
+		return s, nil
+	}
+	return mkv.str, nil
+}
+
 // applyNumericMergeKey converts a merge key value to numeric mode.
 // When data-type="number", the key's string value is parsed as a number.
 // Non-numeric values become NaN, and two NaN values are treated as equal
@@ -638,6 +721,21 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		}
 	}
 
+	// Pre-resolve the per-key-level collations from the first source's key
+	// definitions. Cross-source collation consistency is enforced above
+	// (XTDE2210), so the first source's collations govern the whole merge —
+	// they drive both the sort-order verification (XTDE2220) below and the
+	// n-way merge comparison.
+	firstKeyDefs := inst.Sources[0].Keys
+	var keyCollations []func(a, b string) int
+	for _, mk := range firstKeyDefs {
+		collFn, collErr := ec.resolveMergeKeyCollation(ctx, mk)
+		if collErr != nil {
+			return collErr
+		}
+		keyCollations = append(keyCollations, collFn)
+	}
+
 	// Sort or verify sort order for each source's items.
 	// Each source uses its OWN data-type for sort verification.
 	for si := range allSources {
@@ -696,49 +794,25 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 				src.keys[i] = origKeys[e.idx]
 			}
 		} else {
-			// Default: verify items are already sorted (XTDE2210).
-			// Resolve collation for each key level and apply it to the
-			// verify keys so the comparison uses the correct ordering.
-			//
-			// When collation-related attributes (lang, collation,
-			// case-order) are present, skip verification because our
-			// Go UCA approximation may not perfectly match the sort
-			// order of the original data (especially for alternate=
-			// shifted/blanked and locale-specific letter ordering).
-			srcKeyDefs := inst.Sources[src.sourceIdx].Keys
-			skipVerify := false
-			for _, mk := range srcKeyDefs {
-				if mk.HasCollation {
-					skipVerify = true
-					break
+			// Default: verify items are already sorted (XTDE2220). String
+			// keys are compared under the declared collation (e.g. a UCA
+			// collation with lang/case-order/alternate), so data sorted for
+			// one collation but merged under another is detected as unsorted.
+			for i := 1; i < len(verifyKeys); i++ {
+				cmp, cmpErr := compareMergeKeysForVerify(verifyKeys[i-1], verifyKeys[i], orders, keyCollations)
+				if cmpErr != nil {
+					return cmpErr
 				}
-			}
-			if !skipVerify {
-				for i := 1; i < len(verifyKeys); i++ {
-					cmp, cmpErr := compareMergeKeyValues(verifyKeys[i-1], verifyKeys[i], orders)
-					if cmpErr != nil {
-						return cmpErr
-					}
-					if cmp > 0 {
-						return dynamicError(errCodeXTDE2210, "merge input is not sorted according to the declared merge key")
-					}
+				if cmp > 0 {
+					return dynamicError(errCodeXTDE2220, "merge input is not sorted according to the declared merge key")
 				}
 			}
 		}
 	}
 
-	// Apply the first source's data-type and collation for the n-way merge comparison.
+	// Apply the first source's data-type and collation for the n-way merge
+	// comparison, reusing the collations resolved above for verification.
 	firstDTs := perSourceDataTypes[0]
-	firstKeyDefs := inst.Sources[0].Keys
-	// Pre-resolve collations for the first source's key definitions.
-	var nwayCollations []func(a, b string) int
-	for _, mk := range firstKeyDefs {
-		collFn, collErr := ec.resolveMergeKeyCollation(ctx, mk)
-		if collErr != nil {
-			return collErr
-		}
-		nwayCollations = append(nwayCollations, collFn)
-	}
 	for si := range allSources {
 		src := &allSources[si]
 		for i := range src.keys {
@@ -746,8 +820,8 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 				if k < len(firstDTs) && firstDTs[k] == lexicon.TypeNumber {
 					applyNumericMergeKey(&src.keys[i][k])
 				}
-				if k < len(nwayCollations) && nwayCollations[k] != nil {
-					src.keys[i][k].collCompare = nwayCollations[k]
+				if k < len(keyCollations) && keyCollations[k] != nil {
+					src.keys[i][k].collCompare = keyCollations[k]
 				}
 			}
 		}
