@@ -89,13 +89,16 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	derivedP := &Particle{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG}
 	baseP := &Particle{MinOccurs: baseMG.MinOccurs, MaxOccurs: baseMG.MaxOccurs, Term: baseMG}
 
-	// When XSD 1.1 open content is involved, the particle-level
-	// wildcard-restricts-model-group decision stays lenient: the §3.4.6.4
-	// open-content quadrant guards (opencontent.go) enforce soundness of a derived
-	// wildcard re-admitting the base's declared content, so rejecting here would
-	// double-count that interaction.
-	if c.version == Version11 && (typeHasOpenContent(td) || typeHasOpenContent(base)) {
-		ctx = withWildcardModelGroupLenient(ctx)
+	// XSD 1.1: thread the BASE type's EFFECTIVE {open content} into the check so the
+	// deep wildcard-restricts-model-group decision can tell whether a derived declared
+	// wildcard's children are governed as the base's OPEN content (delegating that
+	// interaction to the §3.4.6.4 quadrant-B guard, checkDerivedWildcardReadmitsBaseOpen)
+	// rather than the base declared model group. Recomputed read-only because
+	// resolveOpenContent has not yet populated base.OpenContent.
+	if c.version == Version11 {
+		if baseOC := c.effectiveOpenContentReadonly(base, map[*TypeDef]bool{}); baseOC != nil && baseOC.Wildcard != nil {
+			ctx = withBaseOpenContent(ctx, baseOC)
+		}
 	}
 
 	if particleValidRestriction(ctx, derivedP, baseP, c.schema, c.version) {
@@ -127,28 +130,20 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
 }
 
-// wildcardModelGroupLenientKey marks (in ctx) that the current restriction check
-// involves XSD 1.1 open content. The particle-level wildcard-restricts-model-group
-// decision then stays lenient because the §3.4.6.4 open-content quadrant guards
-// (opencontent.go) enforce the real soundness of a derived wildcard re-admitting
-// the base's declared content.
-type wildcardModelGroupLenientKey struct{}
+// baseOpenContentKey carries (in ctx) the BASE type's effective {open content} for
+// the current restriction check, so the deep wildcard-restricts-model-group decision
+// can tell whether a derived declared wildcard's children are governed as the base's
+// OPEN content (and thus by the §3.4.6.4 quadrant-B guard) rather than the base
+// declared model group. Nil/absent means the base carries no open content.
+type baseOpenContentKey struct{}
 
-func withWildcardModelGroupLenient(ctx context.Context) context.Context {
-	return context.WithValue(ctx, wildcardModelGroupLenientKey{}, true)
+func withBaseOpenContent(ctx context.Context, oc *OpenContent) context.Context {
+	return context.WithValue(ctx, baseOpenContentKey{}, oc)
 }
 
-func wildcardModelGroupLenient(ctx context.Context) bool {
-	v, _ := ctx.Value(wildcardModelGroupLenientKey{}).(bool)
-	return v
-}
-
-// typeHasOpenContent reports whether a complex type carries open content — an
-// explicit/effective <xs:openContent> or a pending schema-level
-// <xs:defaultOpenContent> that may apply. Used to keep the wildcard-restricts-
-// model-group particle decision lenient for open-content restrictions.
-func typeHasOpenContent(td *TypeDef) bool {
-	return td != nil && (td.OpenContent != nil || td.pendingDefaultOpenContent != nil)
+func baseOpenContentFromContext(ctx context.Context) *OpenContent {
+	oc, _ := ctx.Value(baseOpenContentKey{}).(*OpenContent)
+	return oc
 }
 
 // particleValidRestriction reports whether the restriction particle r is a valid
@@ -202,15 +197,28 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// derived wildcard, so it never proves anything here; deciding directly is
 			// the only sound option.
 			//
-			// EXCEPTION: when XSD 1.1 OPEN CONTENT is involved, a derived declared
-			// wildcard re-admitting the base's declared content is governed by the
-			// §3.4.6.4 open-content quadrant guards (opencontent.go
-			// checkDerivedWildcardReadmitsBaseOpen / checkOpenContentDropsBaseLocal),
-			// which enforce the real soundness. checkRestrictionParticles flags that
-			// via the context, and this decision stays LENIENT so it does not
-			// double-reject a case the open-content machinery already governs.
-			if version == Version11 && wildcardModelGroupLenient(ctx) {
-				return true
+			// EXCEPTION (XSD 1.1 open content): a child matching the derived declared
+			// wildcard may be governed as the BASE's OPEN content rather than by the
+			// base declared model group — but ONLY when both hold:
+			//   1. the base model group at this position is EMPTIABLE (skippable), so a
+			//      document that drops it entirely and supplies only wildcard-matched
+			//      (open-content) children is still valid against the base; and
+			//   2. the derived wildcard's namespace is a SUBSET of the base open-content
+			//      wildcard, so every name it admits actually lands in the open-content
+			//      region (a name outside it is admitted by NEITHER the emptiable base
+			//      model nor the open content → not a subset).
+			// When both hold, the §3.4.6.4 quadrant-B guard
+			// (checkDerivedWildcardReadmitsBaseOpen) enforces the remaining soundness —
+			// processContents at least as strong and suffix ordering — so delegate to it
+			// rather than double-reject here. A NON-emptiable base group (its required
+			// content is dropped) or a wildcard reaching outside the base open content is
+			// NOT covered: fall through to the sound wildcardRestrictsModelGroup decision.
+			if version == Version11 {
+				if baseOC := baseOpenContentFromContext(ctx); baseOC != nil && baseOC.Wildcard != nil &&
+					particleEmptiable(b) &&
+					wildcardConstraintSubset(rt, baseOC.Wildcard, schema, false) {
+					return true
+				}
 			}
 			return wildcardRestrictsModelGroup(r, rt, b, bt, schema)
 		}
@@ -653,15 +661,14 @@ func reduceWildcardOnlyGroupBody(g *ModelGroup) (wildcardOnlyReduction, bool) {
 			if !ok {
 				return wildcardOnlyReduction{}, false
 			}
-			wc, ok := mergeWildcardConstraint(acc.wc, m.wc)
-			if !ok {
-				return wildcardOnlyReduction{}, false
-			}
 			if first {
 				acc = m
-				acc.wc = wc
 				first = false
 				continue
+			}
+			wc, ok := choiceMergeWildcardConstraint(acc, m)
+			if !ok {
+				return wildcardOnlyReduction{}, false
 			}
 			lo, hi, ok := unionInterval(acc.lo, acc.hi, m.lo, m.hi)
 			if !ok {
@@ -702,8 +709,16 @@ func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnly
 		// A fixed number of copies of a contiguous body stays contiguous.
 		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: mulOccurs(gmin, body.hi)}, true
 	case body.hi == -1:
-		// Each copy already spans to ∞, so the union from gmin copies is
-		// [gmin*lo, ∞) — contiguous.
+		// Each copy already spans to ∞. With gmin >= 1 the smallest copy count
+		// reaches [gmin*lo, ∞) and every larger count is a subset, so the union is
+		// [gmin*lo, ∞) — contiguous. With gmin == 0 the count set is
+		// {0} ∪ [body.lo, ∞): contiguous only when body.lo <= 1 (0 abuts 1). A
+		// body.lo > 1 leaves a HOLE at 1..body.lo-1 (e.g. group{0,1} over any{2,∞}
+		// emits {0} ∪ [2,∞), never exactly 1), so the reduction is not language-exact
+		// and must fail closed — otherwise a derived any{1,1} is wrongly accepted.
+		if gmin == 0 && body.lo > 1 {
+			return wildcardOnlyReduction{}, false
+		}
 		return wildcardOnlyReduction{wc: body.wc, lo: gmin * body.lo, hi: -1}, true
 	case body.lo == 0:
 		// Every copy count includes 0, so the union is [0, gmax*hi] — contiguous.
@@ -745,10 +760,47 @@ func unionInterval(alo, ahi, blo, bhi int) (int, int, bool) {
 	return alo, max(ahi, bhi), true
 }
 
+// choiceMergeWildcardConstraint combines the reduced wildcard of one CHOICE branch
+// (m) into the accumulated reduction of the earlier branches (acc). A choice picks
+// exactly ONE branch, so its language is the UNION of the branches' languages —
+// unlike a sequence/all (mergeWildcardConstraint), whose members all contribute and
+// therefore must share one constraint. Branches with the SAME constraint keep it
+// (any occurrence interval is fine: every emitted child is in that one namespace).
+// Branches with DIFFERENT constraints may be folded into ONE wildcard only when the
+// union is LANGUAGE-EXACT: each side emits AT MOST ONE child (hi in {0,1}) so the
+// choice can never emit a namespace MIX (e.g. one urn:a AND one urn:b) that a single
+// union wildcard would wrongly admit, AND both carry the SAME processContents (a
+// single wildcard cannot encode per-namespace validation strength). The union is the
+// EXACT wcConstraint union (unionWildcards11), never the lossy 1.0 approximation.
+// Anything else is not representable and fails closed. (The occurrence-interval union
+// itself is handled by the caller via unionInterval.)
+func choiceMergeWildcardConstraint(acc, m wildcardOnlyReduction) (*Wildcard, bool) {
+	switch {
+	case acc.wc == nil:
+		return m.wc, true
+	case m.wc == nil:
+		return acc.wc, true
+	case sameWildcardConstraint(acc.wc, m.wc):
+		return acc.wc, true
+	}
+	if acc.wc.ProcessContents != m.wc.ProcessContents {
+		return nil, false
+	}
+	// A branch (or the accumulated union of earlier branches) that can emit more than
+	// one child makes a same-count namespace mix expressible in the single union
+	// wildcard but not in the choice — so different-namespace folding is exact only
+	// when every side is at most one child.
+	if acc.hi == -1 || acc.hi > 1 || m.hi == -1 || m.hi > 1 {
+		return nil, false
+	}
+	return unionWildcards11(acc.wc, m.wc), true
+}
+
 // mergeWildcardConstraint combines the uniform wildcard constraint of two
 // reductions: a nil operand adopts the other, and two present constraints must be
 // IDENTICAL (a language-exact single-wildcard fold requires every position to
-// admit the same name-set). Differing constraints bail.
+// admit the same name-set). Differing constraints bail. Used for sequence/all
+// folds, where every member contributes (a choice UNION would be unsound).
 func mergeWildcardConstraint(a, b *Wildcard) (*Wildcard, bool) {
 	if a == nil {
 		return b, true

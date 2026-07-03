@@ -79,43 +79,17 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 	if td == nil || !td.IsComplex || td.ContentType == ContentTypeSimple {
 		return
 	}
-
-	// Effective (locally specified, default-folded) open content.
-	var eff *OpenContent
-	if td.openContentExplicit {
-		eff = td.OpenContent // nil for mode="none"
-	} else if td.pendingDefaultOpenContent != nil {
-		def := td.pendingDefaultOpenContent
-		if def.AppliesToEmpty || !contentTypeEmptyForOpenContent(td) {
-			eff = &OpenContent{Mode: def.Mode, Wildcard: def.Wildcard}
-		}
-	}
-
-	// Materialize ##definedSibling SiblingNames on the local effective open content
-	// BEFORE any extension union or restriction check, so the union/check carries the
-	// finite sibling exclusions (the base operand is already materialized base-first).
-	eff = c.materializeOpenContentSiblings(eff, td)
+	eff := c.localEffectiveOpenContent(td)
 
 	if td.Derivation == DerivationExtension && td.BaseType != nil {
 		baseOC := td.BaseType.OpenContent
-		switch {
-		case eff == nil:
-			td.OpenContent = baseOC // inherit base (§3.4.2.2 4.1)
-		case baseOC == nil:
-			td.OpenContent = eff // §3.4.2.2 4.2
-		default:
-			// §3.4.6.2 1.4.3.2.2.2: an extension may not relax a base 'interleave'
-			// open content to 'suffix'.
-			if baseOC.Mode == OpenContentInterleave && eff.Mode == OpenContentSuffix {
-				c.reportOpenContentTypeError(ctx, td,
-					"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'.")
-			}
-			mode := eff.Mode
-			if baseOC.Mode == OpenContentInterleave {
-				mode = OpenContentInterleave
-			}
-			td.OpenContent = &OpenContent{Mode: mode, Wildcard: wildcardUnion(baseOC.Wildcard, eff.Wildcard, c.version)}
+		// §3.4.6.2 1.4.3.2.2.2: an extension may not relax a base 'interleave' open
+		// content to 'suffix'.
+		if baseOC != nil && eff != nil && baseOC.Mode == OpenContentInterleave && eff.Mode == OpenContentSuffix {
+			c.reportOpenContentTypeError(ctx, td,
+				"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'.")
 		}
+		td.OpenContent = mergeExtensionOpenContent(baseOC, eff, c.version)
 		return
 	}
 
@@ -126,6 +100,72 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 		c.checkOpenContentDropsBaseWildcard(ctx, td, eff)
 		c.checkDerivedWildcardReadmitsBaseOpen(ctx, td)
 	}
+}
+
+// localEffectiveOpenContent computes a complex type's LOCALLY specified,
+// default-folded {open content} — the explicit <xs:openContent> (nil for
+// mode="none") or, absent that, the per-document <xs:defaultOpenContent> (applied
+// unless the effective content type is empty and appliesToEmpty is false) — with
+// ##definedSibling SiblingNames materialized. It does NOT fold in the base's open
+// content (extension inherit/merge is mergeExtensionOpenContent's job). Shared by
+// computeEffectiveOpenContent and the read-only effectiveOpenContentReadonly so the
+// two cannot diverge.
+func (c *compiler) localEffectiveOpenContent(td *TypeDef) *OpenContent {
+	var eff *OpenContent
+	if td.openContentExplicit {
+		eff = td.OpenContent // nil for mode="none"
+	} else if td.pendingDefaultOpenContent != nil {
+		def := td.pendingDefaultOpenContent
+		if def.AppliesToEmpty || !contentTypeEmptyForOpenContent(td) {
+			eff = &OpenContent{Mode: def.Mode, Wildcard: def.Wildcard}
+		}
+	}
+	// Materialize ##definedSibling SiblingNames on the local effective open content
+	// BEFORE any extension union or restriction check, so the union/check carries the
+	// finite sibling exclusions (the base operand is already materialized base-first).
+	return c.materializeOpenContentSiblings(eff, td)
+}
+
+// mergeExtensionOpenContent combines an EXTENSION's base and own local open content
+// (§3.4.2.2 clause 4): a nil local inherits the base (4.1), a nil base keeps the
+// local (4.2), and otherwise the wildcards union with a base 'interleave' mode
+// winning. It is a PURE value function — it does not emit the
+// suffix-extends-interleave diagnostic (the caller keeps that inline) — so it is
+// reused by the read-only resolver.
+func mergeExtensionOpenContent(baseOC, eff *OpenContent, version Version) *OpenContent {
+	switch {
+	case eff == nil:
+		return baseOC
+	case baseOC == nil:
+		return eff
+	default:
+		mode := eff.Mode
+		if baseOC.Mode == OpenContentInterleave {
+			mode = OpenContentInterleave
+		}
+		return &OpenContent{Mode: mode, Wildcard: wildcardUnion(baseOC.Wildcard, eff.Wildcard, version)}
+	}
+}
+
+// effectiveOpenContentReadonly computes a complex type's effective {open content}
+// WITHOUT writing td.OpenContent or emitting diagnostics, mirroring
+// computeEffectiveOpenContent exactly (via the shared helpers). checkRestrictionParticles
+// needs a BASE type's effective open content but runs BEFORE resolveOpenContent has
+// populated td.OpenContent — an extension base's field still holds its pre-merge
+// local value — so it recomputes here. Cycle-guarded via seen.
+func (c *compiler) effectiveOpenContentReadonly(td *TypeDef, seen map[*TypeDef]bool) *OpenContent {
+	if td == nil || !td.IsComplex || td.ContentType == ContentTypeSimple {
+		return nil
+	}
+	if seen[td] {
+		return nil
+	}
+	seen[td] = true
+	eff := c.localEffectiveOpenContent(td)
+	if td.Derivation == DerivationExtension && td.BaseType != nil {
+		return mergeExtensionOpenContent(c.effectiveOpenContentReadonly(td.BaseType, seen), eff, c.version)
+	}
+	return eff
 }
 
 // checkDerivedWildcardReadmitsBaseOpen guards QUADRANT B of the restriction

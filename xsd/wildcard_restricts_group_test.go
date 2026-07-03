@@ -371,3 +371,234 @@ func TestWildcardRestrictsChoiceWithProhibitedBranch(t *testing.T) {
 		"an emitting wildcard restricting a pure-wildcard/ε-emptiable base group is a conservative accept in XSD 1.0")
 	require.NotNil(t, schema)
 }
+
+// FINDING 1 — the XSD 1.1 open-content leniency must NOT be a blanket type-level
+// accept. Here the base declares a NON-emptiable model group (choice(a) requires an
+// `a`) and carries interleave open content over urn:open; the derived drops the
+// required element and restricts with a declared wildcard over the DISJOINT
+// urn:other. The base accepts neither a urn:other child (not in its open content)
+// nor an empty declared model (a is required), so the derived is not a language
+// subset. Because the base group at this position is not emptiable AND the derived
+// wildcard reaches outside the base open content, the wildcard-restricts-model-group
+// decision falls through to the sound reject rather than deferring to quadrant B
+// (which exempts a disjoint-namespace wildcard).
+func TestWildcardRestrictsGroupOpenContentDisjointNamespace(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:open" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:openContent mode="interleave"><xs:any namespace="urn:open" processContents="skip"/></xs:openContent>
+        <xs:sequence>
+          <xs:any namespace="urn:other" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+		"a wildcard over a namespace disjoint from the base open content, dropping a required base element, is not a language subset")
+	require.Nil(t, schema)
+}
+
+// The emptiable-base companion of FINDING 1: the base model group IS emptiable
+// (choice(a) minOccurs=0) and carries interleave open content over urn:open, but the
+// derived declared wildcard is over the DISJOINT urn:other. A urn:other child is
+// admitted by neither the emptiable declared model nor the base open content, so the
+// derived still is not a subset — the namespace-subset guard (not just emptiability)
+// keeps it rejected.
+func TestWildcardRestrictsEmptiableGroupOpenContentDisjoint(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:open" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:choice minOccurs="0">
+        <xs:element name="a" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:openContent mode="interleave"><xs:any namespace="urn:open" processContents="skip"/></xs:openContent>
+        <xs:sequence>
+          <xs:any namespace="urn:other" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+		"an emitting wildcard outside the base open content namespace is not covered even when the base group is emptiable")
+	require.Nil(t, schema)
+}
+
+// The delegation-accept companion of FINDING 1: the base model group is emptiable
+// AND the derived declared wildcard is a SUBSET of the base open content (urn:open),
+// with processContents at least as strong (skip>=skip), so its children land in the
+// open-content region and the restriction is a valid subset. The wildcard-restricts-
+// model-group decision defers to quadrant B, which accepts.
+func TestWildcardRestrictsEmptiableGroupOpenContentCovered(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:openContent mode="interleave"><xs:any namespace="urn:open" processContents="skip"/></xs:openContent>
+    <xs:sequence>
+      <xs:choice minOccurs="0">
+        <xs:element name="a" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:openContent mode="interleave"><xs:any namespace="urn:open" processContents="skip"/></xs:openContent>
+        <xs:sequence>
+          <xs:any namespace="urn:open" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.NoError(t, cerr,
+		"a derived wildcard within the base open content namespace over an emptiable base group is a valid subset restriction")
+	require.NotNil(t, schema)
+}
+
+// FINDING 2 — the occurrence-interval collapse must model language EXACTLY, holes
+// included. The base wraps an optional group (sequence{0,1}) around an
+// any{2,unbounded}, so its emission count-set is {0} ∪ [2,∞) — a HOLE at 1. A
+// derived any{1,1} emits exactly one child, which the base never accepts, so the
+// restriction is invalid. applyOccReduction must NOT collapse {0} ∪ [2,∞) to [0,∞).
+// Version-INDEPENDENT: the reduction runs in both XSD 1.0 and 1.1.
+func TestWildcardRestrictsGroupOccurrenceHoleAtOne(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:sequence minOccurs="0" maxOccurs="1">
+        <xs:any namespace="##any" minOccurs="2" maxOccurs="unbounded" processContents="skip"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		t.Run(versionName(ver), func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, ver, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"the base emits {0} union [2, infinity) — a hole at 1 — so a derived any{1,1} is not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// FINDING 3 — a base xs:choice of two skip wildcards over DIFFERENT namespaces
+// (urn:a, urn:b), each emitting at most one child, reduces LANGUAGE-EXACTLY to a
+// single wildcard over {urn:a, urn:b}: the choice picks one branch, i.e. one child in
+// urn:a OR one in urn:b — exactly what the union wildcard admits (no room to mix, as
+// each branch is {1,1}). So the derived any urn:a skip IS a subset. The choice
+// reduction must UNION the namespaces (with identical processContents), not require
+// identical constraints. Version-INDEPENDENT.
+func TestWildcardRestrictsChoiceUnionNamespaces(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:any namespace="urn:a" processContents="skip"/>
+        <xs:any namespace="urn:b" processContents="skip"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="urn:a" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		t.Run(versionName(ver), func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, ver, schemaXML)
+			require.NoError(t, cerr,
+				"a base choice of single-child wildcards over urn:a|urn:b reduces to one wildcard over {urn:a,urn:b}; any urn:a is a subset")
+			require.NotNil(t, schema)
+		})
+	}
+}
+
+// The soundness boundary of FINDING 3: when a choice branch emits MORE than one
+// child (any urn:b {2,2}), unioning the namespaces would let the single reduced
+// wildcard admit a namespace MIX (e.g. one urn:a and one urn:b) that the choice —
+// which picks one branch — forbids. So the different-namespace union is NOT
+// language-exact and the reduction fails closed, keeping a broadening derived
+// wildcard rejected. Version-INDEPENDENT.
+func TestWildcardRestrictsChoiceUnionRejectsMultiChildBranch(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:any namespace="urn:a" processContents="skip"/>
+        <xs:any namespace="urn:b" minOccurs="2" maxOccurs="2" processContents="skip"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" minOccurs="0" maxOccurs="unbounded" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, ver := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		t.Run(versionName(ver), func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, ver, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"a choice branch emitting two urn:b children makes the namespace union inexact, so the broadening derived wildcard is not a proven subset")
+			require.Nil(t, schema)
+		})
+	}
+}
