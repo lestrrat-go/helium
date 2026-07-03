@@ -1109,14 +1109,17 @@ func (p *parser) parseStep() (Step, error) {
 
 	// @ is short for attribute::
 	axis := AxisChild
+	axisSpecified := false
 	switch tok.Type {
 	case TokenAt:
 		axis = AxisAttribute
+		axisSpecified = true
 		p.lexer.Next()
 	case TokenName, TokenFunction, TokenMap, TokenArray:
 		if p.lexer.PeekAt(1).Type == TokenColonColon {
 			if a, ok := ixpath.AxisFromName(tok.Value); ok {
 				axis = a
+				axisSpecified = true
 				p.lexer.Next()
 				p.lexer.Next() // consume '::'
 			} else {
@@ -1129,7 +1132,13 @@ func (p *parser) parseStep() (Step, error) {
 	if err != nil {
 		return Step{}, err
 	}
-	if axis == AxisChild {
+	// The default axis is child, except when the (unabbreviated) node test is
+	// an attribute/schema-attribute or namespace-node kind test, in which case
+	// the default axis is attribute or namespace respectively (XPath 3.0
+	// §3.3.2.1). This substitution applies ONLY when no axis was written
+	// explicitly: an explicit "child::attribute(x)" keeps the child axis (and so
+	// selects nothing, since attributes are never children).
+	if axis == AxisChild && !axisSpecified {
 		switch nodeTest.(type) {
 		case NamespaceNodeTest:
 			axis = AxisNamespace
