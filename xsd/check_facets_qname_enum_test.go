@@ -25,11 +25,12 @@ func TestEnumValueAgainstBaseQNameValueSpace(t *testing.T) {
 		offending        string
 	}{
 		{
-			// "abc" is a perfectly bound (prefix-less) QName, so the prefix-binding
-			// check passes; but its collapsed length is 3, which violates the
-			// xs:length value="2" facet carried by the base. The value-space check
-			// must reject it.
-			name: "qname base length facet out-of-space enum rejected",
+			// Per XSD Part 2 (W3C Schema errata, bug 4009), length/minLength/maxLength
+			// do NOT apply to xs:QName — the facet is vacuously satisfied. So "abc",
+			// a perfectly bound (prefix-less) QName, is a valid enumeration value even
+			// though the base carries xs:length value="2": the length facet does not
+			// constrain a QName, so the schema must COMPILE.
+			name: "qname base length facet does not constrain enum",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="qname2">
     <xs:restriction base="xs:QName">
@@ -43,8 +44,7 @@ func TestEnumValueAgainstBaseQNameValueSpace(t *testing.T) {
   </xs:simpleType>
   <xs:element name="root" type="enumQname2"/>
 </xs:schema>`,
-			wantCompileError: true,
-			offending:        "abc",
+			wantCompileError: false,
 		},
 		{
 			// "ab" satisfies the length-2 facet and is a valid bound QName, so the

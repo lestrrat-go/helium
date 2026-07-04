@@ -235,9 +235,18 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 	}
 
 	// Length facets — interpretation depends on the builtin base type.
+	//
+	// length/minLength/maxLength do NOT apply to xs:QName or xs:NOTATION: their
+	// length is undefined (a QName's value is an (namespace, local) pair, not a
+	// string), so per XSD Part 2 (W3C Schema errata, bug 4009) these facets are
+	// VACUOUSLY SATISFIED by every value. A schema may still declare them, but they
+	// never constrain a value — enforcing a lexical rune-count here wrongly rejects
+	// e.g. an `xs:QName` restricted to `length="7"` holding the value `a`.
+	// Version-independent.
+	lengthApplies := builtinLocal != lexicon.TypeQName && builtinLocal != lexicon.TypeNotation
 	valueLen := facetLength(val, builtinLocal)
 
-	if fs.Length != nil {
+	if fs.Length != nil && lengthApplies {
 		if valueLen != *fs.Length {
 			msg := fmt.Sprintf("[facet 'length'] The value has a length of '%d'; this differs from the allowed length of '%d'.", valueLen, *fs.Length)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
@@ -245,7 +254,7 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 		}
 	}
 
-	if fs.MinLength != nil {
+	if fs.MinLength != nil && lengthApplies {
 		if valueLen < *fs.MinLength {
 			msg := fmt.Sprintf("[facet 'minLength'] The value has a length of '%d'; this underruns the allowed minimum length of '%d'.", valueLen, *fs.MinLength)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
@@ -253,7 +262,7 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 		}
 	}
 
-	if fs.MaxLength != nil {
+	if fs.MaxLength != nil && lengthApplies {
 		if valueLen > *fs.MaxLength {
 			msg := fmt.Sprintf("[facet 'maxLength'] The value has a length of '%d'; this exceeds the allowed maximum length of '%d'.", valueLen, *fs.MaxLength)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
