@@ -601,6 +601,29 @@ func unseenParticleNames(particles []*Particle, seen []bool, schema *Schema) []s
 // validateContentModelTop validates children against a model group, checking
 // that ALL children are consumed. This is the top-level entry point.
 func (vc *validationContext) validateContentModelTop(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) error {
+	// Fast path: if the greedy structural try fully consumes the children, the
+	// greedy matcher will succeed too, so run it directly (unchanged behavior,
+	// single validation pass). tryMatchModelGroup is pure — no side effects, no
+	// diagnostics — so this pre-scan cannot emit a premature error.
+	tryCons, tryErr := vc.tryMatchModelGroup(ctx, mg, children, 0)
+	if tryErr == nil && tryCons == len(children) {
+		return vc.matchContentModelFull(ctx, parent, mg, children)
+	}
+
+	// Greedy could not fully consume. The content model may still be an
+	// occurrence-partition-ambiguous match a greedy pass false-rejects; bounded
+	// backtracking decides. When it proves acceptance, validate each child's
+	// content against its UPA-unique declaration (visiting each child once).
+	if vc.contentModelAccepts(ctx, mg, children) {
+		return vc.validateContentModelChildren(ctx, parent, mg, children)
+	}
+
+	// Genuinely does not match: run the greedy matcher for the correct diagnostics.
+	return vc.matchContentModelFull(ctx, parent, mg, children)
+}
+
+// matchContentModelFull runs the greedy matcher and reports any leftover child.
+func (vc *validationContext) matchContentModelFull(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) error {
 	consumed, err := vc.matchContentModel(ctx, parent, mg, children)
 	if err != nil {
 		return err
