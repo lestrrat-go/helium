@@ -22,7 +22,7 @@ Measured against the W3C XML Schema Test Suite:
 
 | Mode | Result | Collections |
 |------|--------|-------------|
-| **XSD 1.0** (default) | 14,082 / 14,399 (97.8%) schema-validity tests; 24,613 / 25,004 instance tests | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
+| **XSD 1.0** (default) | 14,178 / 14,399 (98.5%) schema-validity tests; 24,799 / 25,005 instance tests | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
 | **XSD 1.1** | 1,049 / 1,049 (100%) XSD-1.1-tagged cases, 0 failures | IBM, Saxon, Oracle, W3C-WG |
 
 The 1.0-era collections (Microsoft, NIST, Sun, Boeing) contain no 1.1-tagged
