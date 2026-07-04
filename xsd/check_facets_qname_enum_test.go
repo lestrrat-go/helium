@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnumValueAgainstBaseQNameValueSpace verifies that the per-literal QName/
-// NOTATION suppression in checkEnumValueAgainstBase is narrow: a QName base that
-// is further restricted with a value-space facet (xs:length) still has its
-// enumeration values validated against the base value space, so an out-of-space
-// member is rejected at COMPILE time. Previously a blanket early-return for any
-// QName/NOTATION base over-suppressed and let such a schema compile.
+// TestEnumValueAgainstBaseQNameValueSpace verifies how a QName base carrying an
+// xs:length facet treats its enumeration members. Per XSD Part 2 (W3C errata bug
+// 4009) the length facets do not apply to xs:QName, so an enumeration value the
+// base's xs:length would nominally exclude (e.g. "abc" under xs:length value="2")
+// still COMPILES — the length facet is vacuous. A well-formed, bound QName member
+// is accepted regardless of its rune count.
 func TestEnumValueAgainstBaseQNameValueSpace(t *testing.T) {
 	t.Parallel()
 

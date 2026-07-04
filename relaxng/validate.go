@@ -2152,10 +2152,11 @@ func validateXSDType(typeName, text string, params []*param) int {
 // stays reachable for the ordering-facet comparisons below.
 //
 // The length facets (length/minLength/maxLength) are measured via facetLength on
-// every applicable type — including xs:QName and xs:NOTATION, where they are
-// CONSTRAINING (XSD 1.0 / libxml2 parity, matching the xsd package's facetLength)
-// rather than a no-op, so RELAX NG rejects an out-of-length QName/NOTATION exactly
-// as the shared xsd validator does;
+// every applicable type — including xs:QName and xs:NOTATION, where RELAX NG's
+// datatype library (predating W3C Schema errata 4009) treats them as CONSTRAINING
+// and REJECTS an out-of-length QName/NOTATION. The xsd validator now treats those
+// facets as vacuous on QName/NOTATION (errata 4009), so the two paths intentionally
+// diverge there; on every other applicable type they agree;
 // the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated through
 // the shared XSD value engine (value.Compare) so RELAX NG and XSD agree on the
 // value space (e.g. xs:integer "5" really is less than "10"); and the digit

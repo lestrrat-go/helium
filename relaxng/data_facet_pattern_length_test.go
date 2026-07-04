@@ -95,13 +95,13 @@ func TestDataLengthFacetApplicability(t *testing.T) {
 	})
 }
 
-// TestDataLengthFacetQNameEnforced covers RNG-104+105 r4: the length facets
-// (length, minLength, maxLength) on xs:QName and xs:NOTATION are CONSTRAINING
-// (XSD 1.0 / libxml2 parity, matching the shared xsd validator's facetLength), not
-// a no-op. A value whose rune count violates the bound is REJECTED exactly as the
-// xsd package rejects it, while an in-bounds value is accepted, the bound is still
-// compile-validated as an xs:nonNegativeInteger, and string-type enforcement is
-// unaffected.
+// TestDataLengthFacetQNameEnforced covers RNG-104+105 r4: RELAX NG's datatype
+// library treats the length facets (length, minLength, maxLength) on xs:QName and
+// xs:NOTATION as CONSTRAINING (predating W3C Schema errata 4009), not a no-op — a
+// value whose rune count violates the bound is REJECTED. This intentionally DIVERGES
+// from the xsd validator, which treats those facets as vacuous on QName/NOTATION per
+// errata 4009. An in-bounds value is accepted, the bound is still compile-validated
+// as an xs:nonNegativeInteger, and string-type enforcement is unaffected.
 func TestDataLengthFacetQNameEnforced(t *testing.T) {
 	t.Parallel()
 

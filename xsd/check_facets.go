@@ -422,9 +422,10 @@ func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, f
 		// checkEnumQNameAndNotation; suppress the report HERE for just that literal
 		// to avoid a duplicate / differently-phrased diagnostic. This is per-literal,
 		// not a blanket skip of the whole type: a QName/NOTATION base still has its
-		// other enumeration literals validated against the base value space, so e.g.
-		// a QName base restricted with xs:length value="2" rejects an out-of-space
-		// "abc" enumeration member rather than silently compiling it.
+		// other enumeration literals validated against the base value space (prefix
+		// binding, and any applicable facets). The length facets do NOT apply to
+		// QName/NOTATION (errata 4009; see checkFacets), so they never contribute a
+		// rejection here — only genuinely value-space-invalid members are caught.
 		if c.enumLiteralHasUnboundQName(ctx, ev, enumNS, td, variety) {
 			continue
 		}
