@@ -874,17 +874,15 @@ func TestIDCFieldLaxWildcardDescendant(t *testing.T) {
 	}
 }
 
-// TestIDCFieldSkipWildcardDescendant covers IDC field canonicalization for a
-// field reached through an `xs:any processContents="skip"` wildcard-matched
-// wrapper that has NO global element declaration. Skipped content is NOT
-// schema-assessed, so matchWildcardParticle historically returned at the matched
-// wrapper without walking its subtree — leaving the nested global IDC host `root`
-// and its `item` children with no ACTUAL type recorded. Pass-2 IDC evaluation
-// then fell back to declared/raw types and missed the xsi:type="itemType" inline
-// xs:integer @n, comparing `5` and `+5` lexically and reporting them UNIQUE. With
-// an annotation-only traversal of the skipped subtree (no validation, no errors)
-// the actual type is recorded, so `5` and `+5` canonicalize equal in xs:integer
-// value space and COLLIDE.
+// TestIDCFieldSkipWildcardDescendant covers an IDC <xs:field> reached through an
+// `xs:any processContents="skip"` wildcard-matched wrapper. The field host `root`
+// and its `item` children live inside the skipped subtree and are therefore NOT
+// schema-assessed — an xsi:type actual type recorded purely for canonicalization
+// is NOT an assessment. Per §3.11.4 the @n field node carries no PSVI type: in XSD
+// 1.1 the skipped selector nodes drop out of the qualified node-set (nothing is
+// constrained → valid); in XSD 1.0 there is no skipped-node relaxation, so the
+// unassessed field node is a cvc-identity-constraint.3 non-simple violation
+// (invalid) regardless of the xsi:type override or the field values.
 func TestIDCFieldSkipWildcardDescendant(t *testing.T) {
 	t.Parallel()
 
@@ -921,55 +919,38 @@ func TestIDCFieldSkipWildcardDescendant(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-	cases := []struct {
-		name     string
-		instance string
-		valid    bool
-	}{
-		{
-			name: "skip-wildcard-nested xsi:type integer 5 and +5 collide",
-			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-				`<unknown><root><item xsi:type="itemType" n="5"/>` +
-				`<item xsi:type="itemType" n="+5"/></root></unknown></doc>`,
-			valid: false,
-		},
-		{
-			name: "skip-wildcard-nested xsi:type integer 5 and 6 distinct",
-			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-				`<unknown><root><item xsi:type="itemType" n="5"/>` +
-				`<item xsi:type="itemType" n="6"/></root></unknown></doc>`,
-			valid: true,
-		},
-	}
+	const instance = `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+		`<unknown><root><item xsi:type="itemType" n="5"/>` +
+		`<item xsi:type="itemType" n="+5"/></root></unknown></doc>`
 
-	v := compileValidator(t, schema)
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
-			require.NoError(t, err)
+	t.Run("skip-content field is no value in 1.1", func(t *testing.T) {
+		t.Parallel()
+		v := compileValidatorVersion(t, schema, true)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.NoError(t, err, "1.1 skip-content field must contribute no value, got: %s", errs)
+	})
 
-			var errs string
-			err = validateWithOutput(t, v, doc, &errs)
-			if tc.valid {
-				require.NoError(t, err, "expected valid, got errors: %s", errs)
-				return
-			}
-			require.Error(t, err, "expected validation error")
-		})
-	}
+	t.Run("skip-content field rejected as non-simple in 1.0", func(t *testing.T) {
+		t.Parallel()
+		v := compileValidatorVersion(t, schema, false)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.Error(t, err, "1.0 unassessed skip-content field must be rejected")
+		require.Contains(t, errs, "not simple")
+	})
 }
 
-// TestIDCFieldSkipWildcardSelectedSelf covers IDC field canonicalization when a
-// PARENT IDC SELECTS the `xs:any processContents="skip"` wildcard-matched element
-// ITSELF (not a descendant of it). Skipped content is NOT schema-assessed, so the
-// matched element carries no ACTUAL type from content validation. The annotation
-// walk over the skipped subtree historically annotated only the matched element's
-// CHILDREN, never the matched element itself — so the parent IDC's field over the
-// matched element's xsi:type-introduced inline xs:integer @n fell back to the raw
-// lexical value and compared `5` and `+5` as DISTINCT. With the matched element
-// itself annotated with its xsi:type ACTUAL type, `5` and `+5` canonicalize equal
-// in xs:integer value space and COLLIDE.
+// TestIDCFieldSkipWildcardSelectedSelf covers an IDC that SELECTS the
+// `xs:any processContents="skip"` wildcard-matched elements THEMSELVES. Like the
+// descendant case, the matched `item` elements are unassessed skip content: their
+// xsi:type-introduced @n field node has no PSVI type. In XSD 1.1 the selector
+// drops the skipped nodes (valid); in XSD 1.0 the field node is an unassessed
+// non-simple cvc-identity-constraint.3 violation (invalid).
 func TestIDCFieldSkipWildcardSelectedSelf(t *testing.T) {
 	t.Parallel()
 
@@ -999,43 +980,30 @@ func TestIDCFieldSkipWildcardSelectedSelf(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-	cases := []struct {
-		name     string
-		instance string
-		valid    bool
-	}{
-		{
-			name: "parent-IDC-selected skip element xsi:type integer 5 and +5 collide",
-			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-				`<item xsi:type="itemType" n="5"/>` +
-				`<item xsi:type="itemType" n="+5"/></doc>`,
-			valid: false,
-		},
-		{
-			name: "parent-IDC-selected skip element xsi:type integer 5 and 6 distinct",
-			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-				`<item xsi:type="itemType" n="5"/>` +
-				`<item xsi:type="itemType" n="6"/></doc>`,
-			valid: true,
-		},
-	}
+	const instance = `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+		`<item xsi:type="itemType" n="5"/>` +
+		`<item xsi:type="itemType" n="+5"/></doc>`
 
-	v := compileValidator(t, schema)
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
-			require.NoError(t, err)
+	t.Run("selected skip element field is no value in 1.1", func(t *testing.T) {
+		t.Parallel()
+		v := compileValidatorVersion(t, schema, true)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.NoError(t, err, "1.1 selected skip element field must contribute no value, got: %s", errs)
+	})
 
-			var errs string
-			err = validateWithOutput(t, v, doc, &errs)
-			if tc.valid {
-				require.NoError(t, err, "expected valid, got errors: %s", errs)
-				return
-			}
-			require.Error(t, err, "expected validation error")
-		})
-	}
+	t.Run("selected skip element field rejected as non-simple in 1.0", func(t *testing.T) {
+		t.Parallel()
+		v := compileValidatorVersion(t, schema, false)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.Error(t, err, "1.0 unassessed selected skip element field must be rejected")
+		require.Contains(t, errs, "not simple")
+	})
 }
 
 // TestIDCFieldAnyTypeSubstitutionGroupMember covers IDC field canonicalization for
@@ -1108,11 +1076,164 @@ func TestIDCFieldAnyTypeSubstitutionGroupMember(t *testing.T) {
 	}
 }
 
+// TestIDCFieldNotationDefaultNamespace covers identity-constraint key
+// canonicalization for an xs:NOTATION field. An UNPREFIXED xs:NOTATION value picks
+// up the in-scope DEFAULT namespace (like the schema's declared-notation lookup and
+// the facet comparison paths), so a prefixed `p:jpeg` and an unprefixed `jpeg`
+// under a default namespace urn:p both denote {urn:p}jpeg and COLLIDE for
+// xs:unique/xs:key. A distinct notation (png) stays distinct. Runs for both the
+// xs:unique and xs:key constraint kinds so both route through canonicalAtomicKey.
+func TestIDCFieldNotationDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	// targetNamespace and default namespace are both urn:p, so the unprefixed
+	// enumeration literals jpeg/png name {urn:p}jpeg/{urn:p}png (the declared
+	// notations), and elementFormDefault="qualified" puts the local `item` elements
+	// in urn:p (the selector p:item resolves via the schema's p binding).
+	schemaFor := func(kind string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns="urn:p" targetNamespace="urn:p" elementFormDefault="qualified">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="imageKind">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="jpeg"/>
+      <xs:enumeration value="png"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="imageKind" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:` + kind + ` name="itemKey">
+      <xs:selector xpath="p:item"/>
+      <xs:field xpath="."/>
+    </xs:` + kind + `>
+  </xs:element>
+</xs:schema>`
+	}
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// p:jpeg = {urn:p}jpeg; unprefixed jpeg picks up default ns urn:p =
+			// {urn:p}jpeg. Same canonical value → duplicate.
+			name:     "prefixed and unprefixed notation same default ns collide",
+			instance: `<root xmlns="urn:p" xmlns:p="urn:p"><item>p:jpeg</item><item>jpeg</item></root>`,
+			valid:    false,
+		},
+		{
+			// {urn:p}jpeg vs {urn:p}png — distinct notations.
+			name:     "distinct notations stay distinct",
+			instance: `<root xmlns="urn:p" xmlns:p="urn:p"><item>p:jpeg</item><item>png</item></root>`,
+			valid:    true,
+		},
+	}
+
+	for _, kind := range []string{"unique", "key"} {
+		v := compileValidator(t, schemaFor(kind))
+		for _, tc := range cases {
+			t.Run(kind+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+				require.NoError(t, err)
+
+				var errs string
+				err = validateWithOutput(t, v, doc, &errs)
+				if tc.valid {
+					require.NoError(t, err, "expected valid, got errors: %s", errs)
+					return
+				}
+				require.Error(t, err, "expected validation error")
+			})
+		}
+	}
+}
+
+// TestIDCFieldQNameNoDefaultNamespace verifies the xs:QName IDC path is UNCHANGED
+// by the NOTATION default-namespace resolution: an unprefixed xs:QName VALUE
+// resolves to NO namespace (value-space semantics), NOT the in-scope default. So
+// with a default namespace urn:x in scope, `p:a` = {urn:x}a and unprefixed `a` =
+// {}a are DISTINCT — the contrast with the NOTATION case above, which collides.
+func TestIDCFieldQNameNoDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:x" targetNamespace="urn:x" elementFormDefault="qualified">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="xs:QName" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="p:item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// p:a = {urn:x}a; unprefixed a = {}a (QName value ignores the default ns).
+			// Distinct, so no duplicate.
+			name:     "prefixed and unprefixed qname distinct under default ns",
+			instance: `<root xmlns="urn:x" xmlns:p="urn:x"><item>p:a</item><item>a</item></root>`,
+			valid:    true,
+		},
+		{
+			// Two prefixes bound to the same uri: {urn:x}a both → duplicate.
+			name:     "same uri different prefix qname collide",
+			instance: `<root xmlns="urn:x" xmlns:p="urn:x" xmlns:q="urn:x"><item>p:a</item><item>q:a</item></root>`,
+			valid:    false,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
 	require.NoError(t, err)
 	schema, err := xsd.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+	return xsd.NewValidator(schema)
+}
+
+// compileValidatorVersion compiles src at the requested XSD version (v11=true for
+// XSD 1.1, false for the 1.0 default) and returns a validator.
+func compileValidatorVersion(t *testing.T, src string, v11 bool) xsd.Validator {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	c := xsd.NewCompiler()
+	if v11 {
+		c = c.Version(xsd.Version11)
+	}
+	schema, err := c.Compile(t.Context(), doc)
 	require.NoError(t, err)
 	return xsd.NewValidator(schema)
 }

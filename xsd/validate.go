@@ -291,11 +291,14 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	if (instanceIsQName && fixedIsQName) || (instanceIsNotation && fixedIsNotation) {
 		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
 		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
-		iqn, ierr := resolveLexicalQName(ni, instanceNS)
+		// resolveNotationOrQNameValue applies the unprefixed-NOTATION default-namespace
+		// resolution (both members are NOTATION-derived here), consistent with the
+		// same-member fixedAtomicMatches bottom; QName-derived members are unchanged.
+		iqn, ierr := resolveNotationOrQNameValue(ni, instanceLocal, instanceNS)
 		if ierr != nil {
 			return false
 		}
-		fqn, ferr := resolveLexicalQName(nf, fixedNS)
+		fqn, ferr := resolveNotationOrQNameValue(nf, fixedLocal, fixedNS)
 		if ferr != nil {
 			return false
 		}
@@ -433,8 +436,13 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 // equality of the normalized lexical forms.
 func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedNS map[string]string) bool {
 	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
-		iqn, ierr := resolveLexicalQName(instance, instanceNS)
-		fqn, ferr := resolveLexicalQName(fixed, fixedNS)
+		// resolveNotationOrQNameValue applies the unprefixed-NOTATION default-namespace
+		// resolution (instance value → instanceNS[""], fixed/enum literal → fixedNS[""])
+		// so this shared bottom — reached by the direct atomic, list-item, and
+		// union-member comparison paths — agrees with the compile-time declared-notation
+		// value space. xs:QName keeps the no-default-namespace value-space rule.
+		iqn, ierr := resolveNotationOrQNameValue(instance, builtinLocal, instanceNS)
+		fqn, ferr := resolveNotationOrQNameValue(fixed, builtinLocal, fixedNS)
 		// A prefix that cannot be resolved makes the QName/NOTATION itself invalid;
 		// the fixed comparison must NOT fall back to raw lexical equality (which
 		// would wrongly accept a fixed "s:name" against an instance "s:name" that
@@ -551,6 +559,19 @@ type validationContext struct {
 	// skip-admitted attribute is never mistaken for an xs:ID/xs:IDREF via a global
 	// fallback (which would false-reject duplicate skipped IDs).
 	actualAttrType map[*helium.Attribute]*TypeDef
+	// assessedAttrs records every attribute node that was genuinely SCHEMA-ASSESSED
+	// during pass-1 — matched by an explicit attribute use (typed OR untyped),
+	// inserted as a default/fixed value, or admitted by a strict/lax xs:anyAttribute
+	// wildcard WITH a matching global declaration. It is the presence-only companion
+	// of actualAttrType: an UNTYPED assessed attribute (a declared use or a
+	// wildcard-admitted global with no @type — {type definition} = xs:anySimpleType)
+	// has no *TypeDef but IS assessed, so it is absent from actualAttrType yet present
+	// here. The §3.11.4 identity-constraint field-node classification consults this
+	// map (not actualAttrType, and never a canonicalization-only owner-type walk) so
+	// an untyped assessed attribute is a GOVERNED simple field while a skip/
+	// lax-without-global-admitted or ancestor-skipped attribute is unassessed.
+	// Populated in BOTH versions (the field classification runs in 1.0 too).
+	assessedAttrs map[*helium.Attribute]struct{}
 }
 
 // assertEffectiveValue is a recorded element default/fixed effective value plus the
@@ -596,6 +617,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		attrInheritable:  make(map[*helium.Attribute]struct{}),
 		assessedElemType: make(map[*helium.Element]*TypeDef),
 		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
+		assessedAttrs:    make(map[*helium.Attribute]struct{}),
 	}
 	if version == Version11 {
 		vc.assertAnnotations = make(TypeAnnotations)
@@ -2187,15 +2209,23 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		return nil
 	}
 
+	// This wildcard-admitted attribute IS genuinely schema-assessed (strict/lax
+	// with a matching global; skip and lax-without-global returned above). Record
+	// the assessment for the §3.11.4 identity-constraint field classification even
+	// when the global is UNTYPED (xs:anySimpleType) — a governed simple-typed field
+	// node — and even when its fixed-value check below fails.
+	if vc.assessedAttrs != nil {
+		vc.assessedAttrs[a] = struct{}{}
+	}
+
 	// Global attribute found — validate value against its effective type if
 	// known (an inline anonymous simpleType takes precedence over a named type).
 	// TypeDef.Validate handles facets, lists, and unions, not just the builtin
 	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
 
-	// This wildcard-admitted attribute IS schema-assessed (strict/lax with a
-	// matching global declaration — skip already returned above), so record its
-	// type for the XSD 1.1 ID/IDREF pass.
+	// Record the resolved type for the XSD 1.1 ID/IDREF pass and IDC
+	// canonicalization (an untyped global records no type but stays assessed above).
 	if ok && vc.actualAttrType != nil {
 		vc.actualAttrType[a] = attrTD
 	}
@@ -2937,6 +2967,13 @@ func (vc *validationContext) attrUseType(au *AttrUse) (*TypeDef, bool) {
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
 func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
+	// Mark the attribute as genuinely SCHEMA-ASSESSED, independent of whether a
+	// *TypeDef resolves: an untyped attribute use (no <xs:simpleType>, no @type) has
+	// {type definition} = xs:anySimpleType, itself a simple type, so it is a GOVERNED
+	// identity-constraint field node even though it records no type below.
+	if vc.assessedAttrs != nil {
+		vc.assessedAttrs[a] = struct{}{}
+	}
 	td, ok := vc.attrUseType(au)
 	if !ok {
 		return

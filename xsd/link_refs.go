@@ -49,6 +49,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// still reports rather than silently resolving to {}local.
 				ge, ok = c.schema.elements[QName{Local: qn.Local}]
 			}
+			// A type= reference (edecl.IsRef==false) names the TYPE symbol space, so a
+			// same-named TYPE takes precedence over a like-named GLOBAL ELEMENT:
+			// <xs:element type="foo"> must adopt complexType foo, not a colliding
+			// global element foo (W3C particlesL032). Only when NO such type exists
+			// does helium leniently fall back to the element's type via the block
+			// below. A ref= reference always uses the element symbol space.
+			if ok && ge != edecl && !edecl.IsRef && c.typeExistsForRef(edecl, qn) {
+				ok = false
+			}
 			if ok && ge != edecl {
 				edecl.Type = ge.Type
 				if edecl.IsRef {
@@ -1690,6 +1699,24 @@ func (c *compiler) checkNonImportedNamespaceRefs(ctx context.Context, realElems,
 		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", is.qn.NS, is.qn.Local)
 		c.schemaError(ctx, schemaElemDeclErrorAttr(source, is.line, is.local, msg))
 	}
+}
+
+// typeExistsForRef reports whether a type= reference qn resolves in the TYPE
+// symbol space, mirroring the type-map resolution in the elemRefs loop (the exact
+// qn, plus the chameleon empty-namespace fallback for a chameleon-eligible
+// reference). It lets that loop prefer a same-named TYPE over a colliding global
+// element for a type= reference, while still falling back to the element's type
+// when no such type exists.
+func (c *compiler) typeExistsForRef(edecl *ElementDecl, qn QName) bool {
+	if _, ok := c.schema.types[qn]; ok {
+		return true
+	}
+	if _, eligible := c.chameleonEligible[edecl]; eligible {
+		if _, ok := c.schema.types[QName{Local: qn.Local, NS: ""}]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveNamedType resolves a named type reference to its definition, mirroring
