@@ -708,3 +708,81 @@ func TestCheckElementsRepresentationGateSymmetry(t *testing.T) {
 		})
 	}
 }
+
+// TestReadParticlesTypesNameProhibitionGateSymmetry closes the @name-prohibition
+// axis in read_particles.go and read_types.go: every gate that prohibits @name on a
+// reference form (attributeGroup ref / model group ref), an inline model group, or a
+// LOCAL type definition (complexType / simpleType) is symmetric between a
+// PRESENT-but-collapse-empty @name — the literal "" AND the whitespace-only "   "
+// (xs:NCName fixes whiteSpace "collapse") — each of which emits EXACTLY the one
+// invalid-NCName value diagnostic and NO spurious "name not allowed" / "must not have
+// a name" structural secondary. A genuinely-present VALID @name still fires the
+// prohibition. Version-INDEPENDENT (all five gates are ungated on version).
+func TestReadParticlesTypesNameProhibitionGateSymmetry(t *testing.T) {
+	t.Parallel()
+
+	const wantNCName = "is not a valid 'NCName'"
+
+	// Each schema has one %s for the @name value under test; notWant is the
+	// structural prohibition wording that must NOT appear for a collapse-empty @name.
+	gates := []struct {
+		name    string
+		schema  string
+		notWant string
+	}{
+		// read_particles.go:359 — @name on an attributeGroup REFERENCE.
+		{"attrgroup-ref", `<xs:attributeGroup name="ag"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>` +
+			`<xs:complexType name="t"><xs:attributeGroup ref="ag" name="%s"/></xs:complexType>`,
+			"not allowed on an attributeGroup reference"},
+		// read_particles.go:400 — @name on a model group REFERENCE.
+		{"group-ref", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` +
+			`<xs:complexType name="t"><xs:sequence><xs:group ref="g" name="%s"/></xs:sequence></xs:complexType>`,
+			"not allowed on a model group reference"},
+		// read_particles.go:483 — @name on an inline model group.
+		{"inline-model-group", `<xs:complexType name="t"><xs:sequence name="%s"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
+			"not allowed on an inline model group"},
+		// read_types.go:136 — @name on a LOCAL complexType.
+		{"local-complextype", `<xs:element name="e"><xs:complexType name="%s"><xs:sequence/></xs:complexType></xs:element>`,
+			"must not have a 'name' attribute"},
+		// read_types.go:1166 — @name on a LOCAL simpleType.
+		{"local-simpletype", `<xs:element name="e"><xs:simpleType name="%s"><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`,
+			"must not have a 'name' attribute"},
+	}
+
+	for _, tc := range gates {
+		// present-empty ≡ whitespace-only: each yields exactly one invalid-NCName
+		// value diagnostic and no structural prohibition secondary.
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
+				t.Parallel()
+				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
+					fmt.Sprintf(tc.schema, val.v))
+				for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+					schema, errs, cerr := compileWith(t, v, schemaXML)
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: %s", v, errs)
+					require.Nil(t, schema)
+					require.Equal(t, 1, strings.Count(errs, wantNCName),
+						"version=%v: exactly one invalid-NCName diagnostic; got: %s", v, errs)
+					require.NotContains(t, errs, tc.notWant,
+						"version=%v: no spurious %q prohibition secondary; got: %s", v, tc.notWant, errs)
+				}
+			})
+		}
+
+		// A genuinely-present VALID @name still fires the structural prohibition and
+		// leaks no invalid-NCName diagnostic.
+		t.Run("valid-name-still-fires/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
+				fmt.Sprintf(tc.schema, "bogusName"))
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+				require.Contains(t, errs, tc.notWant,
+					"version=%v: a valid @name must still fire the prohibition; got: %s", v, errs)
+				require.NotContains(t, errs, wantNCName,
+					"version=%v: a valid @name is not an invalid NCName; got: %s", v, errs)
+			}
+		})
+	}
+}

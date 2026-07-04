@@ -132,8 +132,12 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 	// or an xs:alternative — must NOT carry a @name (XSD Structures §3.4.2:
 	// localComplexType has no {name}). Only a top-level complexType (child of
 	// xs:schema/xs:redefine/xs:override) is named. Version-independent XSD rule;
-	// report-and-continue so the body still parses.
-	if local && hasAttr(elem, attrName) && c.filename != "" {
+	// report-and-continue so the body still parses. The prohibition fires only for a
+	// GENUINELY-PRESENT (collapse-non-empty) @name (via ncnameCompanionUsable); a
+	// present-but-collapse-empty @name (""/whitespace-only, xs:NCName collapses) is
+	// instead the one invalid-NCName value diagnostic with no "must not have a name"
+	// secondary, so present-empty ≡ whitespace-only.
+	if local && c.filename != "" && c.ncnameCompanionUsable(ctx, elem, elemComplexType) {
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
 			elem.LocalName(), componentLocalComplexType,
 			"A local complexType definition must not have a 'name' attribute."))
@@ -1162,8 +1166,12 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 	// restriction/list/union, an element, an attribute, or an xs:alternative —
 	// must NOT carry a @name (XSD Structures §3.14.2: {name} is absent). Only a
 	// top-level simpleType (child of xs:schema/xs:redefine/xs:override) is named.
-	// Version-independent XSD rule; report-and-continue so the body still parses.
-	if local && hasAttr(elem, attrName) && c.filename != "" {
+	// Version-independent XSD rule; report-and-continue so the body still parses. The
+	// prohibition fires only for a GENUINELY-PRESENT (collapse-non-empty) @name (via
+	// ncnameCompanionUsable); a present-but-collapse-empty @name (""/whitespace-only,
+	// xs:NCName collapses) is instead the one invalid-NCName value diagnostic with no
+	// "must not have a name" secondary, so present-empty ≡ whitespace-only.
+	if local && c.filename != "" && c.ncnameCompanionUsable(ctx, elem, elemSimpleType) {
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
 			elem.LocalName(), componentLocalSimpleType,
 			"A local simpleType definition must not have a 'name' attribute."))

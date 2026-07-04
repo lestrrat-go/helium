@@ -350,13 +350,17 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 // A '@name' — the DEFINITION form, which is valid only as a top-level xs:schema or
 // xs:redefine child — is a schema-representation error, as is any non-annotation
 // element child (e.g. a nested xs:attribute/xs:attributeGroup/xs:anyAttribute). The
+// '@name' prohibition fires only for a GENUINELY-PRESENT (collapse-non-empty) value
+// (via ncnameCompanionUsable); a present-but-collapse-empty @name (""/whitespace-only,
+// xs:NCName collapses) is instead reported as the one invalid-NCName value diagnostic
+// with no spurious "name not allowed" secondary, so present-empty ≡ whitespace-only. The
 // PERMITTED XSD 1.1 circular self-reference uses this reference form (ref only, no
 // name, no content) and is therefore unaffected. Version-INDEPENDENT XSD rule.
 func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 	if c.filename == "" {
 		return
 	}
-	if hasAttr(ce, attrName) {
+	if c.ncnameCompanionUsable(ctx, ce, elemAttributeGroup) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", attrName,
 			"The attribute 'name' is not allowed on an attributeGroup reference; use 'ref'."))
 	}
@@ -382,8 +386,12 @@ func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 // derivation body, or nested in an xs:sequence/xs:choice/xs:all — is a reference,
 // whose only naming attribute is 'ref' and whose content model is (annotation?).
 // A '@name' — the DEFINITION form, valid only as a top-level xs:schema /
-// xs:redefine / xs:override child — is a schema-representation error, as is a
-// missing 'ref' or any non-annotation element child. It returns true when the
+// xs:redefine / xs:override child — is a schema-representation error (fired only for
+// a GENUINELY-PRESENT collapse-non-empty value via ncnameCompanionUsable; a
+// present-but-collapse-empty @name ""/whitespace-only yields the one invalid-NCName
+// value diagnostic and no "name not allowed" secondary, present-empty ≡
+// whitespace-only), as is a missing 'ref' or any non-annotation element child. It
+// returns true when the
 // reference is structurally well-formed (a PRESENT 'ref' attribute, no 'name', no
 // stray child), so the caller records the group ref and resolves its value — a
 // PRESENT-but-empty ref="" is passed through as a present ref so resolveQName reports
@@ -397,7 +405,7 @@ func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Ele
 		return ref != ""
 	}
 	ok := true
-	if hasAttr(ce, attrName) {
+	if c.ncnameCompanionUsable(ctx, ce, elemGroup) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "group", attrName,
 			"The attribute 'name' is not allowed on a model group reference; use 'ref'."))
 		ok = false
@@ -479,8 +487,12 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 	reportStray := func(ce *helium.Element) {
 		reportGrammar(ce, fmt.Sprintf("The content is not valid. Expected is %s.", expectedContent))
 	}
-	// An inline model group must not carry a @name attribute.
-	if hasAttr(elem, attrName) {
+	// An inline model group must not carry a @name attribute. The prohibition fires
+	// only for a GENUINELY-PRESENT (collapse-non-empty) value; a present-but-collapse-
+	// empty @name (""/whitespace-only, xs:NCName collapses) is instead the one
+	// invalid-NCName value diagnostic with no "name not allowed" secondary
+	// (present-empty ≡ whitespace-only).
+	if c.ncnameCompanionUsable(ctx, elem, compElem) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), compElem, attrName,
 			"Attribute 'name' is not allowed on an inline model group."))
 	}
