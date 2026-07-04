@@ -29,6 +29,22 @@ type openMissSchemaFS struct{ openErr error }
 
 func (f openMissSchemaFS) Open(string) (fs.File, error) { return nil, f.openErr }
 
+// fatalOpenError is a FatalSchemaLoader-satisfying open error: a resource/policy
+// denial that must abort compilation rather than be demoted to a warning.
+type fatalOpenError struct{}
+
+func (fatalOpenError) Error() string         { return "xsd_test: fatal open policy denial" }
+func (fatalOpenError) FatalSchemaLoad() bool { return true }
+
+// openFatalReadFileFS fails at Open with a FATAL (FatalSchemaLoader) error but ALSO
+// implements ReadFileFS, whose ReadFile returns a BENIGN miss. It models a
+// ReadFileFS-backed FS that denies Open for policy/resource reasons: the fatal
+// open denial must NOT be masked by falling through to the benign ReadFile miss.
+type openFatalReadFileFS struct{ readErr error }
+
+func (openFatalReadFileFS) Open(string) (fs.File, error)      { return nil, fatalOpenError{} }
+func (f openFatalReadFileFS) ReadFile(string) ([]byte, error) { return nil, f.readErr }
+
 const includeMainSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:include schemaLocation="nested.xsd"/>
@@ -63,5 +79,22 @@ func TestNestedIncludeOpenMissWarns(t *testing.T) {
 
 		_, err = xsd.NewCompiler().FS(openMissSchemaFS{openErr}).BaseDir(".").Compile(t.Context(), doc)
 		require.NoError(t, err, "open-miss (%v) must be a skipped fetch-miss, not fatal", openErr)
+	}
+}
+
+// TestNestedIncludeFatalOpenNotMaskedByReadFile verifies that a FATAL open error
+// (a FatalSchemaLoader resource/policy denial) is returned fatal even when the
+// ReadFileFS fallback would return a benign fs.ErrNotExist/fs.ErrInvalid: the
+// benign ReadFile miss must NOT mask the fatal open denial.
+func TestNestedIncludeFatalOpenNotMaskedByReadFile(t *testing.T) {
+	t.Parallel()
+
+	for _, readErr := range []error{fs.ErrNotExist, fs.ErrInvalid} {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+		require.NoError(t, err)
+
+		_, err = xsd.NewCompiler().FS(openFatalReadFileFS{readErr}).BaseDir(".").Compile(t.Context(), doc)
+		require.Error(t, err, "fatal open denial must abort even when ReadFile returns a benign miss (%v)", readErr)
+		require.True(t, xsd.IsFatalSchemaLoad(err), "fatal open denial must stay fatal, not be masked by a benign ReadFile miss (%v)", readErr)
 	}
 }

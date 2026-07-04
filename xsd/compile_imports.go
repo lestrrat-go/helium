@@ -63,33 +63,49 @@ const maxNestedSchemaSize = 10 << 20 // 10 MiB
 // the unbounded fs.ReadFile every nested-schema loader used to call. It prefers
 // the streaming [fs.File] from Open so an endless device (e.g. /dev/zero) is
 // bounded while reading (iolimit reads one extra byte so a source that
-// under-reports its size is still caught). When the FS does not support Open
-// (e.g. a ReadFileFS-only in-memory FS whose Open returns an error), it falls
-// back to fs.ReadFile and enforces the same cap on the fully-read result. The
-// cap breach is reported as [errSchemaTooLarge], classified fatal by
-// [IsFatalSchemaLoad].
+// under-reports its size is still caught). When the FS does not support Open but
+// Open failed with a BENIGN miss (e.g. a ReadFileFS-only in-memory FS whose Open
+// returns fs.ErrNotExist), it falls back to fs.ReadFile and enforces the same cap
+// on the fully-read result. A FATAL open error — [IsFatalSchemaLoad] (a resource/
+// policy denial) or the default deny-all FS ([iofs.DenyAll]) — aborts immediately
+// and is NOT retried through fs.ReadFile, so a benign ReadFile miss cannot mask a
+// fatal denial. The cap breach is reported as [errSchemaTooLarge], classified
+// fatal by [IsFatalSchemaLoad].
 func (c *compiler) readNestedSchema(path string) ([]byte, error) {
-	if f, err := c.fsys.Open(path); err == nil {
-		data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
-		_ = f.Close()
-		if exceeded {
-			return nil, errSchemaTooLarge
+	f, openErr := c.fsys.Open(path)
+	if openErr != nil {
+		// A FATAL open error must abort IMMEDIATELY: a resource/policy denial
+		// ([IsFatalSchemaLoad]) or the default deny-all FS ([iofs.DenyAll], whose
+		// Open returns a benign fs.ErrNotExist errno the FS type disambiguates).
+		// Falling through to fs.ReadFile could return a benign fs.ErrNotExist/
+		// fs.ErrInvalid that nestedFetchMiss then demotes to a warning, masking the
+		// fatal denial. Fail-closed: keep the open error's classification.
+		if _, denyAll := c.fsys.(iofs.DenyAll); denyAll || IsFatalSchemaLoad(openErr) {
+			return nil, openErr //nolint:wrapcheck // callers/classifiers key on the original error
 		}
-		if readErr != nil {
-			// Post-open read failure: the location RESOLVED and OPENED, so this is a
-			// real I/O failure, NOT a benign schemaLocation fetch/resolution miss.
-			// Tag it fatal so nestedFetchMiss cannot demote it to a warning even when
-			// readErr is itself fs.ErrInvalid/fs.ErrNotExist (fail-closed).
-			return nil, fmt.Errorf("%w: %w", errNestedSchemaReadAfterOpen, readErr)
+		// Benign open miss: fall back to fs.ReadFile for a ReadFileFS-only FS whose
+		// Open is unsupported. A fatal ReadFile error still classifies fatal via
+		// IsFatalSchemaLoad; only a genuine benign miss stays demotable.
+		data, rfErr := fs.ReadFile(c.fsys, path)
+		if rfErr != nil {
+			return nil, rfErr //nolint:wrapcheck // callers wrap with the schemaLocation for context
+		}
+		if int64(len(data)) > maxNestedSchemaSize {
+			return nil, errSchemaTooLarge
 		}
 		return data, nil
 	}
-	data, err := fs.ReadFile(c.fsys, path)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // callers wrap with the schemaLocation for context
-	}
-	if int64(len(data)) > maxNestedSchemaSize {
+	data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
+	_ = f.Close()
+	if exceeded {
 		return nil, errSchemaTooLarge
+	}
+	if readErr != nil {
+		// Post-open read failure: the location RESOLVED and OPENED, so this is a
+		// real I/O failure, NOT a benign schemaLocation fetch/resolution miss.
+		// Tag it fatal so nestedFetchMiss cannot demote it to a warning even when
+		// readErr is itself fs.ErrInvalid/fs.ErrNotExist (fail-closed).
+		return nil, fmt.Errorf("%w: %w", errNestedSchemaReadAfterOpen, readErr)
 	}
 	return data, nil
 }
