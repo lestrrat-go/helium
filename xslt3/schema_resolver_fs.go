@@ -34,38 +34,50 @@ type schemaResolverFS struct {
 	load func(ctx context.Context, uri string) ([]byte, error)
 }
 
-// Open implements [fs.FS]. It loads the named schema document through the
-// configured byte-loader and returns it as an in-memory file. The name is the
-// canonical nested-schema URI already resolved by the xsd compiler, so it is
-// forwarded unchanged. Any loader error (including the default-deny "no
-// URIResolver configured" case) is returned as a *fs.PathError so fs.ReadFile
-// surfaces it.
+// Open implements [fs.FS] and is the xslt3→xsd BOUNDARY for NESTED schema loads
+// (xs:include/xs:import/xs:redefine reached while an xsl:import-schema or
+// source-document schema compiles). The name is the canonical nested-schema URI
+// already resolved by the xsd compiler, so it is forwarded to the byte-loader
+// unchanged. The loader's error is TRANSLATED into XSD's fs.FS classification
+// vocabulary so the xsd nested-load classifier ([xsd.readNestedSchema]) demotes
+// or keeps-fatal CONSISTENTLY with the xslt3 side — the boundary is total:
+//   - a CONFIRMED benign resolution miss ([isDemotableSchemaMiss] — the positively
+//     tagged errSchemaResolutionMiss / not-found, e.g. a resolver returning a bare
+//     errors.New("not found") that does NOT itself satisfy fs.ErrNotExist) is
+//     re-expressed as a *fs.PathError{Op:"open", Err: fs.ErrNotExist} so XSD's
+//     Open-path isBenignResolutionMiss demotes the OPTIONAL nested include to a
+//     warning-and-skip instead of over-rejecting it (schemaLocation is a hint);
+//   - EVERYTHING ELSE (a post-open read failure, a permission denial, a
+//     resource-cap breach, a policy denial, or any other/ambiguous error) is
+//     wrapped [fatalSchemaLoadError] so xsd.IsFatalSchemaLoad (and XSD's
+//     notDemotable veto) keeps it FATAL regardless of the inner errno — a
+//     non-miss error must never be demoted through the boundary. The original
+//     chain is preserved (Unwrap), so errors.Is(fs.ErrPermission)/ErrResourceTooLarge
+//     still hold for callers at the xslt3 boundary.
 func (s schemaResolverFS) Open(name string) (fs.File, error) {
 	data, err := s.load(s.ctx, name)
-	if err != nil {
-		// The xsd compiler demotes an ordinary xs:import load failure to a
-		// non-fatal warning ("Failed to locate a schema ... Skipping the
-		// import."). A resource-limit breach must NOT be silently demoted, or
-		// the cap is defeated for a nested xs:import target. Mark it so the xsd
-		// import path (which checks xsd.FatalSchemaLoader) treats it as fatal,
-		// while keeping ErrResourceTooLarge in the chain so callers at the
-		// xslt3 boundary can still errors.Is it.
-		//
-		// A default-deny POLICY denial ([errSchemaResolverDenied] — no
-		// URIResolver configured, filesystem access is opt-in) must ALSO stay
-		// fatal: unlike a configured resolver that merely lacks the target (a
-		// fetch miss the xsd compiler may demote to a warning, since
-		// schemaLocation is only a hint), a policy denial silently continuing
-		// would hand back a half-assembled schema and mask that host access was
-		// refused. Marking it here routes it through xsd.IsFatalSchemaLoad while
-		// preserving the "no URIResolver configured" message for callers.
-		if errors.Is(err, ErrResourceTooLarge) || errors.Is(err, errSchemaResolverDenied) {
-			err = fatalSchemaLoadError{err}
-		}
-		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+	if err == nil {
+		return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
 	}
-	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
+	if isDemotableSchemaMiss(err) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: schemaMissNotExistError{err}}
+	}
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fatalSchemaLoadError{err}}
 }
+
+// schemaMissNotExistError adapts a CONFIRMED xslt3 resolution miss into XSD's fs.FS
+// vocabulary: it satisfies errors.Is(_, fs.ErrNotExist) — so xsd's Open-path
+// isBenignResolutionMiss demotes the optional nested load — while preserving the
+// original loader error's message and unwrap chain. It reports fs.ErrNotExist via
+// Is rather than embedding the sentinel so the original chain (carrying the
+// resolver's own message and any errSchemaResolutionMiss tag) stays intact.
+type schemaMissNotExistError struct{ cause error }
+
+func (e schemaMissNotExistError) Error() string { return e.cause.Error() }
+
+func (e schemaMissNotExistError) Unwrap() error { return e.cause }
+
+func (schemaMissNotExistError) Is(target error) bool { return target == fs.ErrNotExist }
 
 // errSchemaResolverDenied marks a nested-schema load refused by the compile-time
 // default-deny policy (no URIResolver configured — filesystem access is opt-in).
