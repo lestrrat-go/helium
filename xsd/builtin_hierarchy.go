@@ -95,6 +95,13 @@ func builtinSimpleDerivedFrom(sub, super string) bool {
 	return false
 }
 
+// isAnyType reports whether td is the ur-type xs:anyType (the complex root of the
+// whole type hierarchy). Its BaseType chain is not pointer-linked from the simple
+// types, so callers that need to recognize it compare by expanded name.
+func isAnyType(td *TypeDef) bool {
+	return td != nil && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == typeAnyType
+}
+
 // isBuiltinSimpleType reports whether td is a built-in (XSD-namespace) SIMPLE type
 // definition. The built-in simple types are registered WITHOUT BaseType pointer
 // links, so their derivation must be resolved through the builtinSimpleBase table
