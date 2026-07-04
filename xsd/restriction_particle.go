@@ -324,7 +324,7 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		if !substElementRestrictionAllowed(ctx) || b.MaxOccurs != 1 {
 			return false
 		}
-		return derivedElementRestrictsBaseSubstMember(ctx, r, rt, b, bt, schema, version)
+		return derivedRestrictsSubstMemberOf(ctx, r, rt, b, bt, schema, version)
 	}
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 		return false
@@ -406,20 +406,35 @@ func isElementParticle(p *Particle) bool {
 	return ok
 }
 
-// derivedElementRestrictsBaseSubstMember reports whether the derived element rt is
-// an instance-admissible substitution-group member of the base element bt whose
-// declaration rt validly restricts (NameAndTypeOK against the concrete member — same
-// name plus a type/occurrence/fixed/nillable subset), so a derived LOCAL element that
-// merely shares a member's name but widens its type is NOT accepted. The base particle
-// b's occurrence range (b.MaxOccurs == 1 here) bounds the derived, so the member
-// particle carries b's occurrence rather than a bare {1,1}.
-func derivedElementRestrictsBaseSubstMember(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, schema *Schema, version Version) bool {
-	for _, m := range instanceSubstMembers(bt, schema) {
-		if m.Name != rt.Name {
+// derivedRestrictsSubstMemberOf reports whether the derived element `derived`
+// (particle derivedP) is an instance-admissible substitution-group member of base
+// element `base` AND validly restricts that concrete member (NameAndTypeOK — same
+// name plus a type/occurrence/fixed/nillable subset), with the synthetic member
+// particle carrying `occ`'s occurrence range (the group-leaf path passes a bare
+// {1,1}; the direct element-to-element path passes the base element particle's
+// range). The member must be restricted in its GOVERNING type, which a member that
+// omits @type INHERITS from its substitution head; elementRestrictsElement compares
+// raw ElementDecl.Type pointers and skips the type-derivation check when either is
+// nil, so both sides' EFFECTIVE type (effectiveDeclType follows the substitution-head
+// inheritance) is resolved into shallow copies first — a derived local element that
+// widens an untyped member's inherited type is thus rejected, and when the member has
+// a concrete effective type but the derived's is unresolved we fall closed.
+func derivedRestrictsSubstMemberOf(ctx context.Context, derivedP *Particle, derived *ElementDecl, occ *Particle, base *ElementDecl, schema *Schema, version Version) bool {
+	derivedType := effectiveDeclType(derived, schema)
+	for _, m := range instanceSubstMembers(base, schema) {
+		if m.Name != derived.Name {
 			continue
 		}
-		memberP := &Particle{MinOccurs: b.MinOccurs, MaxOccurs: b.MaxOccurs, Term: m}
-		if elementRestrictsElement(ctx, r, rt, memberP, m, schema, version) {
+		memberType := effectiveDeclType(m, schema)
+		if memberType != nil && derivedType == nil {
+			continue
+		}
+		derivedCopy := *derived
+		derivedCopy.Type = derivedType
+		memberCopy := *m
+		memberCopy.Type = memberType
+		memberP := &Particle{MinOccurs: occ.MinOccurs, MaxOccurs: occ.MaxOccurs, Term: &memberCopy}
+		if elementRestrictsElement(ctx, derivedP, &derivedCopy, memberP, &memberCopy, schema, version) {
 			return true
 		}
 	}
@@ -2064,34 +2079,11 @@ func leafIsSubstMemberOfBaseElement(ctx context.Context, leafP *Particle, leaf *
 	if !ok {
 		return false
 	}
-	// The leaf must restrict the member in its GOVERNING type, which a member that
-	// omits @type INHERITS from its substitution head. elementRestrictsElement
-	// compares the raw ElementDecl.Type pointers and skips the type-derivation
-	// check when either is nil, so a same-named leaf that widens an untyped
-	// member's inherited type would slip through. Resolve both sides' effective
-	// type (effectiveDeclType follows the substitution-head inheritance) into
-	// shallow copies before the check; if the member has a concrete governing type
-	// but the leaf's effective type is unresolved we cannot prove the
-	// language-subset, so fall closed.
-	leafType := effectiveDeclType(leaf, schema)
-	for _, m := range instanceSubstMembers(be, schema) {
-		if m.Name != leaf.Name {
-			continue
-		}
-		memberType := effectiveDeclType(m, schema)
-		if memberType != nil && leafType == nil {
-			continue
-		}
-		leafCopy := *leaf
-		leafCopy.Type = leafType
-		memberCopy := *m
-		memberCopy.Type = memberType
-		memberP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: &memberCopy}
-		if elementRestrictsElement(ctx, leafP, &leafCopy, memberP, &memberCopy, schema, version) {
-			return true
-		}
-	}
-	return false
+	// The base element particle admits its whole substitution group at instance
+	// time; a leaf restricting one member is a valid name-narrowing restriction of
+	// it. The synthetic member particle carries a bare {1,1} occurrence (the leaf's
+	// own group already accounts for occurrence).
+	return derivedRestrictsSubstMemberOf(ctx, leafP, leaf, &Particle{MinOccurs: 1, MaxOccurs: 1}, be, schema, version)
 }
 
 // particleElementRange computes the total (min, max) number of ELEMENTS a

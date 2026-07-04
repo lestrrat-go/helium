@@ -447,4 +447,29 @@ func TestElementRestrictsSubstMember(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	t.Run("rejects local element widening an untyped subst member's inherited type", func(t *testing.T) {
+		t.Parallel()
+		// The base subst member m1 OMITS @type, inheriting head's xs:integer. A derived
+		// LOCAL element m1 typed xs:string admits <m1>abc</m1>, which the base rejects.
+		// The type-derivation check must resolve the member's inherited effective type,
+		// not skip it on the member's nil raw Type.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="head" type="xs:integer"/>
+  <xs:element name="m1" substitutionGroup="t:head"/>
+  <xs:complexType name="base">
+    <xs:sequence><xs:element ref="t:head"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:sequence><xs:element name="m1" type="xs:string"/></xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }
