@@ -1229,41 +1229,30 @@ func (c *compiler) checkFacetMutualExclusion(ctx context.Context, td *TypeDef, f
 }
 
 // lengthConflictsWithMinMax reports whether a length facet co-occurring with a
-// minLength/maxLength facet is a schema error. Per the schema component
-// constraint "length and minLength or maxLength" (Part 2, W3C bug 6446), the
-// co-occurrence is PERMITTED when the min/max is value-consistent with length
-// (minLength <= length <= maxLength) AND is INHERITED from an ancestor in the
-// base chain — e.g. a restriction of xs:NMTOKENS (intrinsic minLength=1) to
-// length=5,minLength=1. Any other co-occurrence (an inconsistent value, or a
-// min/max freshly introduced alongside length) stays an error.
+// minLength/maxLength facet declared on THIS restriction step is a schema error.
+// Per the schema component constraint "length and minLength or maxLength"
+// (Part 2 §4.3.1.4, W3C bug 6446), length may co-occur with minLength/maxLength
+// ONLY when the min/maxLength is genuinely INHERITED — its effective value comes
+// from a proper ancestor — AND this step merely RESTATES that same value rather
+// than introducing a fresh, tighter bound alongside length, AND the value is
+// consistent with length (minLength <= length <= maxLength). So a restriction of
+// xs:IDREFS (intrinsic minLength=1) to length=5,minLength=1 is permitted (own
+// minLength 1 == inherited 1), while length=5 with a fresh minLength=2 (own 2 !=
+// inherited 1), or a base maxLength=10 restated as length=5,maxLength=8 (own 8 !=
+// inherited 10), is an error. The own value is td's OWN-step facet; the inherited
+// value is taken over PROPER ancestors only (baseChain(td.BaseType) excludes td),
+// so the own-vs-inherited comparison distinguishes a restatement from a fresh
+// bound without needing separate facet-source tracking.
 func lengthConflictsWithMinMax(td *TypeDef, fs *FacetSet) bool {
 	if fs.MinLength != nil {
-		if *fs.MinLength > *fs.Length || !inheritedLengthFacetPresent(td, true) {
+		im := effectiveInheritedMinLength(td)
+		if im == nil || *fs.MinLength != *im || *fs.MinLength > *fs.Length {
 			return true
 		}
 	}
 	if fs.MaxLength != nil {
-		if *fs.MaxLength < *fs.Length || !inheritedLengthFacetPresent(td, false) {
-			return true
-		}
-	}
-	return false
-}
-
-// inheritedLengthFacetPresent reports whether some ancestor type in td's base
-// chain declares the minLength (minLength=true) or maxLength (false) facet.
-func inheritedLengthFacetPresent(td *TypeDef, minLength bool) bool {
-	if td == nil || td.BaseType == nil {
-		return false
-	}
-	for cur := range baseChain(td.BaseType) {
-		if cur.Facets == nil {
-			continue
-		}
-		if minLength && cur.Facets.MinLength != nil {
-			return true
-		}
-		if !minLength && cur.Facets.MaxLength != nil {
+		im := effectiveInheritedMaxLength(td)
+		if im == nil || *fs.MaxLength != *im || *fs.MaxLength < *fs.Length {
 			return true
 		}
 	}
