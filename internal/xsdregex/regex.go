@@ -742,18 +742,22 @@ var xmlNameStartCharRangeNeg = mustComplementClassRanges(xmlNameStartCharRange)
 
 const xmlNameCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}`
 
-// XSD 1.0 / XPath 2.0 \c carves U+0346 out of the combining range (W3C
-// regex-syntax-xslt20 suite); XSD 1.1 uses the full range (see the *11 variants
-// below). Keep this isolated from Name/NCName constructor validation.
+// The XPath-2.0 \c flavor carves U+0346 out of the combining range (W3C
+// regex-syntax-xslt20 suite). This carved variant is selected ONLY on the
+// xpath3 Translate/Validate path (xsdPattern=false); every XSD pattern facet —
+// 1.0 and 1.1 — uses the full range below (see the *11 variants). Selection is by
+// the xsdPattern flavor, NOT the version. Keep this isolated from Name/NCName
+// constructor validation.
 const xpathRegexNameCharClass = `[a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{345}\x{347}-\x{36F}\x{203F}-\x{2040}]`
 const xpathRegexNameCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{345}\x{347}-\x{36F}\x{203F}-\x{2040}`
 
 var xpathRegexNameCharClassNeg = `[^` + xpathRegexNameCharRange + `]`
 var xpathRegexNameCharRangeNeg = mustComplementClassRanges(xpathRegexNameCharRange)
 
-// XSD 1.1 (XML 1.1 / XML 1.0 5th edition) \c admits the full combining range
-// U+0300–U+036F, including U+0346, matching xmlNameCharRange. The 1.0/XPath 2.0
-// forms above carve U+0346 out; these variants are selected in XSD 1.1 mode.
+// The full \c combining range U+0300–U+036F (XML 1.1 / XML 1.0 5th edition,
+// including U+0346), matching xmlNameCharRange. Selected for EVERY XSD pattern
+// facet (xsdPattern=true, 1.0 and 1.1) and for the xpath3 XSD-1.1 path; the carved
+// forms above apply only to the xpath3 XPath-2.0 flavor (xsdPattern=false).
 var xpathRegexNameCharClass11 = `[` + xmlNameCharRange + `]`
 var xpathRegexNameCharClassNeg11 = `[^` + xmlNameCharRange + `]`
 var xpathRegexNameCharRangeNeg11 = mustComplementClassRanges(xmlNameCharRange)
