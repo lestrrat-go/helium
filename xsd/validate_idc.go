@@ -261,6 +261,10 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 		allPresent := true
 		fieldErr := false
 		for i, fieldXPath := range idc.Fields {
+			// fieldClass records how the single selected field node (if any) is
+			// classified per §3.11.4. It stays fieldGoverned for a string/number
+			// field result (no node) so the post-switch violation check is inert.
+			fieldClass := fieldGoverned
 			fieldEv := ev
 			if i < len(idc.FieldDefaultNS) {
 				fieldEv = ev.DefaultElementNamespace(idc.FieldDefaultNS[i])
@@ -310,24 +314,16 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					allPresent = false
 				} else {
 					fieldNode = fieldResult.NodeSet[0]
-					// XSD 1.1 (§3.11.4): a field node inside a
-					// processContents="skip" wildcard-matched subtree is UNASSESSED
-					// and carries no type annotation, so it contributes NO value
-					// rather than failing the simple-type requirement. Treat it like
-					// the empty node-set for this field. In XSD 1.0 there is no such
-					// relaxation (skipContentNodes is empty), so the unassessed node
-					// still flows into the simple-type check below and is rejected.
-					if _, skip := vc.skipContentNodes[fieldNode]; skip {
-						allPresent = false
-						continue
-					}
-					// XSD 1.1 (§3.11.4): an ATTRIBUTE field admitted only by a skip
-					// (or lax-without-global) anyAttribute wildcard is likewise
-					// UNASSESSED — no type annotation — so it contributes NO value,
-					// even when a same-named global attribute declaration exists.
-					// In XSD 1.0 it flows to the simple-type check below and is
-					// rejected (mirroring the skip-content element in 1.0).
-					if a, ok := fieldNode.(*helium.Attribute); ok && vc.version == Version11 && !vc.attrFieldAssessed(a, elem, edecl, schema) {
+					fieldClass = vc.classifyFieldNode(fieldNode)
+					// §3.11.4 (XSD 1.1): an UNASSESSED field node — a
+					// processContents="skip" wildcard-matched element, an attribute
+					// admitted only by a skip/lax-without-global wildcard or whose
+					// ancestor element is skipped, or any node with no PSVI type —
+					// contributes NO value. Drop it from this field (like the empty
+					// node-set), whatever same-named global declaration may exist. In
+					// XSD 1.0 there is no such relaxation, so classifyFieldNode returns
+					// fieldViolation instead and the node is rejected below.
+					if fieldClass == fieldSkipped {
 						allPresent = false
 						continue
 					}
@@ -350,13 +346,12 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			entry.canon = append(entry.canon, canonicalFieldKey(ctx, value, fieldNode, fieldTD))
 
 			// cvc-identity-constraint.3: a field must evaluate to the empty
-			// node-set or to a single node with a SIMPLE type. A field pointing at
-			// a complex-typed element, or at an attribute admitted only by a
-			// lax/skip anyAttribute wildcard (which is not schema-assessed and so
-			// carries no type), is a validity error. An XSD 1.1 skip-content
-			// ELEMENT field node was already handled above (it contributes no
-			// value); in XSD 1.0 such a node reaches here and is rejected.
-			if fieldNode != nil && !vc.fieldNodeSimpleTyped(fieldNode, fieldTD, elem, edecl, schema) {
+			// node-set or to a single node governed by a SIMPLE (or simple-content)
+			// type. classifyFieldNode flags fieldViolation for a genuinely-assessed
+			// COMPLEX element, and (in XSD 1.0, which has no skipped-node relaxation)
+			// for any unassessed/unresolved node. A skipped node was already dropped
+			// above; a string/number field result keeps fieldClass == fieldGoverned.
+			if fieldClass == fieldViolation {
 				if entry.elem != nil {
 					idcName := idcDisplayName(idc, vc.schema)
 					msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node whose type is not simple.",
@@ -630,67 +625,69 @@ func fieldNodeNSContext(n helium.Node) map[string]string {
 	return map[string]string{}
 }
 
-// fieldNodeSimpleTyped reports whether an IDC field node has a SIMPLE type, as
-// cvc-identity-constraint.3 requires. An attribute is simple-typed only when it
-// was actually ASSESSED (attrFieldAssessed): recorded with a type at a genuine
-// assessment site, or matching a declared attribute use on its owner's type (an
-// untyped use is xs:anySimpleType, itself a simple type). A matching GLOBAL
-// attribute declaration alone does NOT count — an attribute admitted only by a
-// skip (or lax-without-global) anyAttribute wildcard is UNASSESSED regardless of
-// any same-named global, so it is not simple-typed. An element is simple-typed
-// when its resolved type is a simple type definition or a complex type with
-// SIMPLE content; a complex type with element-only/mixed/empty content is not. A
-// field node whose type cannot otherwise be resolved is treated conservatively as
-// simple-typed, except for the unassessed-attribute case above.
-func (vc *validationContext) fieldNodeSimpleTyped(n helium.Node, td *TypeDef, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
+// fieldNodeClass classifies an identity-constraint <xs:field> result node per
+// cvc-identity-constraint.3 / XSD 1.1 §3.11.4.
+type fieldNodeClass int
+
+const (
+	// fieldGoverned: the node was genuinely SCHEMA-ASSESSED with a simple (or
+	// simple-content) type — it contributes its typed value to the key sequence.
+	fieldGoverned fieldNodeClass = iota
+	// fieldSkipped: the node contributes NO value; it drops out of the qualified
+	// node-set. In XSD 1.1 this covers EVERY unassessed field node — a
+	// processContents="skip" wildcard-matched element, an attribute admitted only
+	// by a skip/lax-without-global wildcard or whose ancestor element is skipped,
+	// and any node whose type could not be assessed.
+	fieldSkipped
+	// fieldViolation: cvc-identity-constraint.3 is violated — a genuinely-assessed
+	// COMPLEX element (element-only/mixed/empty content), or, in XSD 1.0 (which has
+	// no skipped-node relaxation), any unassessed/unresolved node.
+	fieldViolation
+)
+
+// classifyFieldNode classifies a single IDC field-result node. The determination
+// is based ONLY on GENUINE ASSESSMENT records — assessedElemType for elements and
+// assessedAttrs for attributes, both written exclusively at real pass-1 assessment
+// sites — never on the canonicalization-only actualElemType map or a schema-
+// declaration fallback. So a skip-content element, an attribute whose ancestor is
+// skipped or that was admitted only by a skip/lax-without-global wildcard, and any
+// node with no PSVI type are all UNASSESSED and classified version-aware
+// (unassessedFieldClass); a wildcard-admitted UNTYPED global attribute
+// (xs:anySimpleType) and an untyped declared attribute use ARE assessed and stay
+// GOVERNED.
+func (vc *validationContext) classifyFieldNode(n helium.Node) fieldNodeClass {
 	switch v := n.(type) {
 	case *helium.Attribute:
-		return vc.attrFieldAssessed(v, host, hostDecl, schema)
+		if _, ok := vc.assessedAttrs[v]; ok {
+			// Every assessed attribute has a SIMPLE type (an untyped use is
+			// xs:anySimpleType); an attribute can never be complex-typed.
+			return fieldGoverned
+		}
+		return vc.unassessedFieldClass()
 	case *helium.Element:
-		if td == nil {
-			return true
+		td, ok := vc.assessedElemType[v]
+		if !ok {
+			return vc.unassessedFieldClass()
 		}
-		// A simple type definition, or a complex type with simple content.
-		return !td.IsComplex || td.ContentType == ContentTypeSimple
+		// A simple type definition, or a complex type with SIMPLE content.
+		if !td.IsComplex || td.ContentType == ContentTypeSimple {
+			return fieldGoverned
+		}
+		return fieldViolation
 	default:
-		return true
+		return fieldGoverned
 	}
 }
 
-// attrFieldAssessed reports whether an attribute field node was schema-ASSESSED
-// during validation. An attribute is assessed when it was recorded with a type
-// at a genuine assessment site (annotateAttrUse for a typed use, or
-// validateWildcardAttr for a strict/lax wildcard WITH a matching global —
-// vc.actualAttrType), OR when it matches a declared attribute use on its owner's
-// type (walking the base chain), which covers an untyped declaration
-// (xs:anySimpleType, itself a simple type). A matching GLOBAL declaration alone
-// is deliberately NOT sufficient: an attribute admitted only by a skip (or
-// lax-without-global) anyAttribute wildcard is never assessed against that
-// global, so it carries no type and cannot be a simple-typed IDC field.
-func (vc *validationContext) attrFieldAssessed(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
-	if _, ok := vc.actualAttrType[attr]; ok {
-		return true
+// unassessedFieldClass classifies a field node carrying no genuine assessment
+// record. XSD 1.1 §3.11.4 treats it as skipped (no value); XSD 1.0 has no such
+// relaxation, so an unassessed/unresolved node is a cvc-identity-constraint.3
+// violation.
+func (vc *validationContext) unassessedFieldClass() fieldNodeClass {
+	if vc.version == Version11 {
+		return fieldSkipped
 	}
-	aqn := QName{Local: attr.LocalName(), NS: attr.URI()}
-	if owner, ok := attr.Parent().(*helium.Element); ok {
-		if td := vc.resolveElemType(owner, host, hostDecl, schema); td != nil && attrUseExists(td, aqn) {
-			return true
-		}
-	}
-	return false
-}
-
-// attrUseExists reports whether a complex type (or any type in its base chain)
-// declares an attribute use matching the given QName, regardless of its type.
-func attrUseExists(td *TypeDef, aqn QName) bool {
-	for cur := range baseChain(td) {
-		for _, au := range cur.Attributes {
-			if au.Name == aqn {
-				return true
-			}
-		}
-	}
-	return false
+	return fieldViolation
 }
 
 // resolveFieldType resolves the *TypeDef of an IDC field node. host/hostDecl are
