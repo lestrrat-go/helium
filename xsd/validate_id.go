@@ -145,6 +145,20 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 			}
 			vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a))
 		}
+		// This is the INSTANCE manifestation of the one-ID-per-element rule: >1
+		// ID-typed attribute actually PRESENT on an element. It covers the current
+		// targets (attZ014a/attZ014b supply their two ID attributes via a wildcard,
+		// so the element instance carries two IDs) and every constructible case where
+		// two ID attributes co-occur. Two related XSD 1.0 SCHEMA-COMPONENT rules are
+		// DEFERRED (compile-time, not yet enforced):
+		//   (i) the static Schema Component Constraint that a complex type must not
+		//       have two or more ID-typed attribute USES even when one/both are
+		//       optional and never both present in any instance (Part 1 §3.4.6). The
+		//       instance cap here does not reject such a type at compile time.
+		//   (ii) the full "wild IDs" rule — a declared ID attribute use together with
+		//       a wildcard-admitted global ID attribute is invalid even when the
+		//       declared use is ABSENT in the instance. The instance-present case is
+		//       covered by this cap; the declared-absent static case is not.
 		if vc.version == Version10 && idAttrCount > 1 {
 			col.valid = false
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
