@@ -18,6 +18,9 @@ import (
 func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 	t.Parallel()
 
+	// Shared expected-fragment for the named-component (@name) NCName rejections.
+	const wantNCName = "is not a valid 'xs:NCName'"
+
 	// Finding 1: a collapsed @name is what is REGISTERED — a ref to the trimmed
 	// name resolves against the registered {tns}child declaration. If the trailing
 	// space were retained the ref="child" would dangle and compilation would fail.
@@ -208,28 +211,28 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 			`<xs:simpleType name="a b">
     <xs:restriction base="xs:string"/>
   </xs:simpleType>`,
-			"is not a valid 'xs:NCName'",
+			wantNCName,
 		},
 		{
 			"complexType-name",
 			`<xs:complexType name="a b">
     <xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
   </xs:complexType>`,
-			"is not a valid 'xs:NCName'",
+			wantNCName,
 		},
 		{
 			"group-name",
 			`<xs:group name="a b">
     <xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
   </xs:group>`,
-			"is not a valid 'xs:NCName'",
+			wantNCName,
 		},
 		{
 			"attributeGroup-name",
 			`<xs:attributeGroup name="a b">
     <xs:attribute name="x" type="xs:string"/>
   </xs:attributeGroup>`,
-			"is not a valid 'xs:NCName'",
+			wantNCName,
 		},
 		{
 			"union-memberTypes",
