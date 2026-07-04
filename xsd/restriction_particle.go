@@ -1994,12 +1994,30 @@ func leafIsSubstMemberOfBaseElement(ctx context.Context, leafP *Particle, leaf *
 	if !ok {
 		return false
 	}
+	// The leaf must restrict the member in its GOVERNING type, which a member that
+	// omits @type INHERITS from its substitution head. elementRestrictsElement
+	// compares the raw ElementDecl.Type pointers and skips the type-derivation
+	// check when either is nil, so a same-named leaf that widens an untyped
+	// member's inherited type would slip through. Resolve both sides' effective
+	// type (effectiveDeclType follows the substitution-head inheritance) into
+	// shallow copies before the check; if the member has a concrete governing type
+	// but the leaf's effective type is unresolved we cannot prove the
+	// language-subset, so fall closed.
+	leafType := effectiveDeclType(leaf, schema)
 	for _, m := range instanceSubstMembers(be, schema) {
 		if m.Name != leaf.Name {
 			continue
 		}
-		memberP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: m}
-		if elementRestrictsElement(ctx, leafP, leaf, memberP, m, schema, version) {
+		memberType := effectiveDeclType(m, schema)
+		if memberType != nil && leafType == nil {
+			continue
+		}
+		leafCopy := *leaf
+		leafCopy.Type = leafType
+		memberCopy := *m
+		memberCopy.Type = memberType
+		memberP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: &memberCopy}
+		if elementRestrictsElement(ctx, leafP, &leafCopy, memberP, &memberCopy, schema, version) {
 			return true
 		}
 	}
