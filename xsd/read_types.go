@@ -1382,6 +1382,18 @@ func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, der
 	// — so the two do not double-report the same present-empty attribute.
 	hasMemberTypes := hasAttr(deriv, attrMemberTypes)
 
+	// The base/itemType-vs-simpleType MUTUAL-EXCLUSION fires only for a GENUINELY-
+	// PRESENT (collapse-non-empty) @base/@itemType. A present-but-collapse-empty value
+	// (""/whitespace-only — both xs:QName, whiteSpace fixed "collapse") is an invalid
+	// (empty) QName reported ONCE as its own value diagnostic (base by resolveQName at
+	// the store site, itemType by the empty-itemType check below), so it must NOT also
+	// trigger the structural "must not have both …" secondary — present-empty stays
+	// symmetric with whitespace-only. The missing-source checks keep the plain
+	// hasBase/hasItemType PRESENCE gate, so a present-empty base/itemType still counts
+	// as a base/itemType source and does not fire "must have a base or a simpleType child".
+	baseUsable := hasBase && collapsedAttr(deriv, attrBase) != ""
+	itemTypeUsable := hasItemType && collapsedAttr(deriv, attrItemType) != ""
+
 	// An empty itemType attribute is not a valid xs:QName (it must name the list's
 	// item type). getAttr treats absent and empty identically, so the empty case
 	// is only reachable via hasAttr.
@@ -1424,10 +1436,10 @@ func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, der
 			if isRestriction && facetSeen {
 				report(ce.Line(), "The simpleType child of a restriction must appear before the facets.")
 			}
-			if isRestriction && hasBase {
+			if isRestriction && baseUsable {
 				report(ce.Line(), "A restriction must not have both a 'base' attribute and a simpleType child.")
 			}
-			if isList && hasItemType {
+			if isList && itemTypeUsable {
 				report(ce.Line(), "A list must not have both an 'itemType' attribute and a simpleType child.")
 			}
 			simpleTypeSeen = true

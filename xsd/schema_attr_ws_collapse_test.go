@@ -786,3 +786,97 @@ func TestReadParticlesTypesNameProhibitionGateSymmetry(t *testing.T) {
 		})
 	}
 }
+
+// TestDerivationBodyAndAlternativeQNameGateSymmetry closes the remaining
+// QName mutual-exclusion gates outside check_elements.go: the simpleType
+// derivation-body base/itemType-vs-inline-simpleType mutual exclusion
+// (read_types.go checkSimpleTypeDerivationBody) and the xs:alternative
+// type-vs-inline-type mutual exclusion (alternative.go parseTypeAlternative). A
+// PRESENT-but-collapse-empty @base/@itemType/@type — the literal "" AND the
+// whitespace-only "   " (all xs:QName, whiteSpace fixed "collapse") — emits EXACTLY
+// the one value diagnostic and NO "must not have both …" structural secondary, so
+// present-empty ≡ whitespace-only. A genuinely-present VALID value alongside the
+// inline type still fires the mutual exclusion.
+func TestDerivationBodyAndAlternativeQNameGateSymmetry(t *testing.T) {
+	t.Parallel()
+
+	const wantQName = "is not a valid QName"
+
+	// Each gate: the collapse-empty %s value, its ONE value diagnostic (wantValue),
+	// the mutual-exclusion secondary that must be suppressed (mutEx), a genuinely-
+	// present valid value (validVal) that must still fire mutEx, and the versions to
+	// exercise (xs:alternative is 1.1-only).
+	gates := []struct {
+		name      string
+		schema    string
+		wantValue string
+		mutEx     string
+		validVal  string
+		versions  []xsd.Version
+	}{
+		// read_types.go — restriction @base vs inline <xs:simpleType>. The empty @base
+		// value diagnostic comes from resolveQName at the store site.
+		{
+			"simpletype-restriction-base",
+			`<xs:simpleType name="st"><xs:restriction base="%s"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:restriction></xs:simpleType>`,
+			wantQName,
+			"A restriction must not have both a 'base' attribute and a simpleType child",
+			"xs:string",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		// read_types.go — list @itemType vs inline <xs:simpleType>. The empty @itemType
+		// value diagnostic is the list-specific "must be a valid QName; it must not be empty".
+		{
+			"simpletype-list-itemtype",
+			`<xs:simpleType name="lt"><xs:list itemType="%s"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:list></xs:simpleType>`,
+			"it must not be empty",
+			"A list must not have both an 'itemType' attribute and a simpleType child",
+			"xs:string",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		// alternative.go — xs:alternative @type vs inline type definition (1.1-only).
+		{
+			"alternative-type-inline",
+			`<xs:element name="e" type="xs:string"><xs:alternative test="true()" type="%s"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative></xs:element>`,
+			wantQName,
+			"must not have both a 'type' attribute and an inline type definition",
+			"xs:string",
+			[]xsd.Version{xsd.Version11},
+		},
+	}
+
+	for _, tc := range gates {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
+				t.Parallel()
+				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
+					fmt.Sprintf(tc.schema, val.v))
+				for _, v := range tc.versions {
+					schema, errs, cerr := compileWith(t, v, schemaXML)
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: %s", v, errs)
+					require.Nil(t, schema)
+					require.Equal(t, 1, strings.Count(errs, tc.wantValue),
+						"version=%v: exactly one %q value diagnostic; got: %s", v, tc.wantValue, errs)
+					require.NotContains(t, errs, tc.mutEx,
+						"version=%v: no spurious mutual-exclusion secondary %q; got: %s", v, tc.mutEx, errs)
+				}
+			})
+		}
+
+		// A genuinely-present VALID value alongside the inline type still fires the
+		// mutual exclusion — the fix suppresses only the collapse-empty cell.
+		t.Run("two-valid-still-fires/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
+				fmt.Sprintf(tc.schema, tc.validVal))
+			for _, v := range tc.versions {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+				require.Contains(t, errs, tc.mutEx,
+					"version=%v: a valid value alongside an inline type must still fire the mutual exclusion; got: %s", v, errs)
+				require.NotContains(t, errs, wantQName,
+					"version=%v: a valid value is not an invalid QName; got: %s", v, errs)
+			}
+		})
+	}
+}
