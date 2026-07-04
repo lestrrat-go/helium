@@ -571,7 +571,15 @@ func entriesOverlap(a, b firstSetEntry, version Version) bool {
 		}
 		return entryWildcardMatchesNS(a, b.qname.NS)
 	}
-	// Two wildcards: check if their namespace constraints can both match the same namespace.
+	// Two wildcards. Occurrence-copies of ONE wildcard particle share an ORIGIN
+	// (applyOccurs re-walks the same textual leaf, see nextOrigin) — the same
+	// particle repeated is never a cos-nonambig (UPA) violation, exactly as for
+	// element-vs-element above. Only DISTINCT wildcard particles (distinct
+	// origins, e.g. choice(any, any)) compete, and then only when their namespace
+	// constraints can both match the same namespace. VERSION-INDEPENDENT.
+	if a.origin == b.origin {
+		return false
+	}
 	return wildcardsOverlap(a, b)
 }
 
