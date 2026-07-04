@@ -514,6 +514,28 @@ func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI st
 	return nil, fmt.Errorf("no URIResolver configured for %q", resolvedURI)
 }
 
+// schemaFetchAvailable reports whether a resolver / HTTPClient is configured to
+// fetch uri, mirroring retrieveDocumentBytes's config dispatch. When false, a
+// source-schema fetch is a default-deny POLICY DENIAL (not a benign fetch miss),
+// so its failure must stay fatal even under lax validation — the same distinction
+// loadSchemaBytes draws via its c.resolver == nil check.
+func (ec *execContext) schemaFetchAvailable(uri string) bool {
+	var resolver xpath3.URIResolver
+	var httpClient *http.Client
+	if ec.transformConfig != nil {
+		resolver = ec.transformConfig.uriResolver
+		httpClient = ec.transformConfig.httpClient
+	}
+	isHTTP := false
+	if u, err := url.Parse(uri); err == nil {
+		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
+	}
+	if isHTTP {
+		return httpClient != nil || resolver != nil
+	}
+	return resolver != nil
+}
+
 // resourceLimit returns the per-resource read cap for runtime resolver/HTTP
 // reads, taken from the transformConfig (0 = MaxResourceBytes default).
 func (ec *execContext) resourceLimit() int64 {

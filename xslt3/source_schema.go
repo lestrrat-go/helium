@@ -35,7 +35,10 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 			for i := 1; i < len(fields); i += 2 {
 				resolved, err := resolveSchemaURI(fields[i], baseURI)
 				if err != nil {
-					return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w", fields[i], baseURI, err)
+					// A malformed schema-location reference is authoritatively broken,
+					// not a benign fetch miss — tag it content-invalid so it stays fatal
+					// even under lax validation.
+					return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w: %w", fields[i], baseURI, errSchemaContentInvalid, err)
 				}
 				if resolved == "" {
 					continue
@@ -50,7 +53,10 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 			ref := strings.TrimSpace(attr.Value())
 			resolved, err := resolveSchemaURI(ref, baseURI)
 			if err != nil {
-				return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w", ref, baseURI, err)
+				// A malformed schema-location reference is authoritatively broken, not a
+				// benign fetch miss — tag it content-invalid so it stays fatal even under
+				// lax validation.
+				return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w: %w", ref, baseURI, errSchemaContentInvalid, err)
 			}
 			if resolved == "" {
 				continue
@@ -71,6 +77,16 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 	for _, uri := range paths {
 		data, err := ec.retrieveDocumentBytes(ctx, uri)
 		if err != nil {
+			// Phase-tag the fetch failure so the caller's fetch/content/denial
+			// taxonomy classifies it. With no resolver/HTTPClient configured this is a
+			// default-deny POLICY DENIAL (tagged errSchemaResolverDenied) that stays
+			// fatal even under lax validation; with one configured it is a benign FETCH
+			// MISS (schemaLocation is only a hint) left untagged so lax validation may
+			// skip it — a resource-cap breach (ErrResourceTooLarge) still survives in
+			// the chain and stays fatal via isFatalSchemaLoadError.
+			if !ec.schemaFetchAvailable(uri) {
+				return nil, fmt.Errorf("load source schema %q: %w: %w", uri, errSchemaResolverDenied, err)
+			}
 			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
 		}
 		// Parse with the schema's own URI as the base so doc.URL() carries the
@@ -81,7 +97,9 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// is re-parsed into duplicate components instead of being skipped.
 		schemaDoc, err := secureXMLParser(ec.injectedParser(), uri, ec.resourceLimit()).Parse(ctx, data)
 		if err != nil {
-			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
+			// Malformed XML — a post-fetch CONTENT error (the bytes were fetched but
+			// are unusable), tagged so lax validation cannot mask it.
+			return nil, fmt.Errorf("parse source schema %q: %w: %w", uri, errSchemaContentInvalid, err)
 		}
 		// Root the XSD compiler's base directory at the schema's location so
 		// the schema's own relative xs:include/xs:import references resolve,
@@ -94,7 +112,12 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		}
 		schema, err := schemaCompiler.Compile(ctx, schemaDoc)
 		if err != nil {
-			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
+			// Invalid XSD (or a fatal nested load the xsd compiler surfaced) — a
+			// post-fetch CONTENT error, tagged so lax validation cannot mask it. A
+			// nested fatal-load marker in err (e.g. a resource-cap breach or policy
+			// denial on a nested xs:include/xs:import) survives the join, so
+			// isFatalSchemaLoadError still recognizes it.
+			return nil, fmt.Errorf("compile source schema %q: %w: %w", uri, errSchemaContentInvalid, err)
 		}
 		schemas = append(schemas, schema)
 	}
