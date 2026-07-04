@@ -3,6 +3,7 @@ package xsd
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -82,4 +83,49 @@ func TestMixedFixedCyclicEntityRejectedByAddChild(t *testing.T) {
 	err = ent.AddChild(ref2)
 	require.Error(t, err, "AddChild must reject building a cyclic entity graph")
 	require.Nil(t, ent.FirstChild(), "the rejected reference must not be linked under the Entity")
+}
+
+// TestMixedFixedCorruptSiblingCycleFailsClosed exercises the scan's SECOND line
+// of defense: a NextSibling chain corrupted into a self-cycle through the
+// low-level node primitives (which AddChild's guard cannot catch — it only
+// guards parent/child insertion, not a direct SetNextSibling). The scan's
+// child-collection loop is cycle-guarded, so it terminates and marks the scan
+// invalid rather than spinning forever. mixedInitialValue must therefore return
+// invalid=true (the caller then fails the fixed-value check closed) and, above
+// all, must RETURN — a regression would hang the scan.
+func TestMixedFixedCorruptSiblingCycleFailsClosed(t *testing.T) {
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+	require.NoError(t, err)
+
+	// Give the entity a materialized text child, then corrupt that child's
+	// sibling chain into a self-loop. text.Parent() stays the entity, so
+	// ownedNext keeps returning text — an unbounded loop without the guard.
+	text := doc.CreateText([]byte("a"))
+	require.NoError(t, ent.AddChild(text))
+	text.SetNextSibling(text)
+
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.SetDocumentElement(root))
+	ref, err := doc.CreateReference("e")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(ref))
+
+	type scanResult struct {
+		invalid bool
+	}
+	done := make(chan scanResult, 1)
+	go func() {
+		_, _, _, invalid := mixedInitialValue(root, "x")
+		done <- scanResult{invalid: invalid}
+	}()
+
+	select {
+	case r := <-done:
+		require.True(t, r.invalid, "a corrupted sibling cycle must fail the scan closed")
+	case <-time.After(5 * time.Second):
+		t.Fatal("mixedInitialValue did not return: the sibling-cycle guard is missing")
+	}
 }

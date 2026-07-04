@@ -2366,9 +2366,22 @@ func (s *mixedContentScan) scan(parent helium.Node) {
 // document order (so they pop in document order). ownedNext stops at a
 // foreign-owned child's siblings, so a shared Entity node's DTD sibling
 // declarations are not enqueued.
+//
+// The sibling walk is cycle-guarded: a well-formed child list visits each node
+// once, so a repeat means the NextSibling chain has been corrupted into a cycle
+// (only constructible through the low-level node primitives, not AddChild — see
+// TestMixedFixedCyclicEntityRejectedByAddChild). Rather than spin forever it
+// stops at the back-edge and marks the scan invalid, so the fixed-value check
+// fails closed on a corrupted DOM exactly as it does on a cyclic entity graph.
 func (s *mixedContentScan) pushOwnedChildren(stack *[]scanFrame, parent helium.Node) {
 	var kids []helium.Node
+	seen := make(map[helium.Node]struct{})
 	for child := parent.FirstChild(); child != nil; child = ownedNext(parent, child) {
+		if _, dup := seen[child]; dup {
+			s.invalid = true
+			break
+		}
+		seen[child] = struct{}{}
 		kids = append(kids, child)
 	}
 	for _, child := range slices.Backward(kids) {
