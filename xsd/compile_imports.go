@@ -42,20 +42,25 @@ var errSchemaPathEscape = errors.New("xsd: schema location escapes base director
 // a content failure fatal.
 var errSchemaContentInvalid = errors.New("xsd: nested schema content is invalid")
 
-// errSchemaFetchMiss marks a benign FETCH/RESOLUTION failure of a nested schema
-// (xs:include/xs:import/xs:redefine target): the schemaLocation could not be
-// resolved, opened, or read for a non-security reason — a missing file
-// ([fs.ErrNotExist]), an http:// hint opened as a filesystem path yielding
-// EINVAL, a transient network miss. schemaLocation is only a hint (src-include.1
-// / src-import), so a tagged fetch miss is the ONLY nested-load failure the
-// classifiers ([nestedLoadFailureFatal] / [processImport]) demote to a warning
-// and skip. It is applied ONLY by the shared FETCH phase ([fetchNestedSchema]),
-// which withholds the tag from a SECURITY/POLICY denial (path escape, depth or
-// byte-cap breach, a [FatalSchemaLoader] refusal such as xslt3's default-deny
-// "no URIResolver configured" policy, or a refusal from the default deny-all FS)
-// so denials stay fatal. Every error AFTER the fetch phase (malformed XML,
-// non-xs:schema root, or any declaration/redefine/nested-content processing
-// failure) is likewise untagged and therefore fatal.
+// errSchemaFetchMiss is the POSITIVE tag applied — at exactly ONE place,
+// [readNestedSchema]'s benign RESOLUTION-phase misses — to the only nested-load
+// failures that may be demoted to a warning. [nestedFetchMiss] keys on this tag
+// ALONE, never on a raw [fs.ErrNotExist]/[fs.ErrInvalid] errno. schemaLocation is
+// only a hint (src-include.1 / src-import / src-redefine.1), so a target that
+// cannot be RESOLVED — a FAILED Open reporting a benign missing/unresolvable
+// errno, or an atomic fs.ReadFile fallback reporting a CANONICAL "file not
+// found" — is skipped (matching libxml2); but the same errno arising in a
+// LATER/unclassifiable phase — a post-Open read, a message-wrapped fs.ReadFile
+// fallback error, content parsing, an external-entity read, a non-xs:schema
+// root — carries no tag, so it stays FATAL. A SECURITY/POLICY denial (path
+// escape, depth or byte-cap breach, a [FatalSchemaLoader] refusal such as
+// xslt3's default-deny "no URIResolver configured" policy, a permission denial,
+// or a refusal from the default deny-all FS) is likewise never tagged, so
+// denials stay fatal. Making the demotable decision a single positive tag means
+// no downstream error can masquerade as a resolution miss, however its errno
+// chain reads. The wrapped error chain is preserved for errors.Is/errors.As.
+// It is one of the tags in the nested-load taxonomy (the CONTENT-failure
+// counterpart being [errSchemaContentInvalid]).
 var errSchemaFetchMiss = errors.New("xsd: nested schema fetch miss")
 
 // errSchemaTooLarge signals that a nested schema (xs:include/xs:import/
@@ -65,6 +70,19 @@ var errSchemaFetchMiss = errors.New("xsd: nested schema fetch miss")
 // hostile schemaLocation (e.g. /dev/zero) must abort compilation rather than
 // be swallowed.
 var errSchemaTooLarge = errors.New("xsd: schema resource exceeds size limit")
+
+// errNestedSchemaReadAfterOpen tags an error that occurred while READING a
+// nested schema document AFTER its [fs.File] was successfully opened (a
+// post-open streaming Read failure), distinguishing it from an Open/resolution
+// miss. schemaLocation is only a hint, so a genuine FETCH/RESOLUTION miss (the
+// Open step failing with [fs.ErrNotExist]/[fs.ErrInvalid]) is demoted to a
+// warning and skipped; but a location that RESOLVED and OPENED and then failed
+// to read is a real I/O failure that must ABORT compilation (fail-closed).
+// Wrapping the read error with this sentinel makes [IsFatalSchemaLoad] classify
+// it fatal — so [nestedFetchMiss] never demotes it, even when the underlying
+// read error is itself [fs.ErrInvalid]/[fs.ErrNotExist]. The wrapped error chain
+// is preserved for errors.Is/errors.As.
+var errNestedSchemaReadAfterOpen = errors.New("xsd: nested schema read failed after open")
 
 // maxNestedSchemaSize bounds the number of bytes read from any single nested
 // schema document loaded via xs:include/xs:import/xs:redefine, so an endless or
@@ -78,68 +96,208 @@ const maxNestedSchemaSize = 10 << 20 // 10 MiB
 // the unbounded fs.ReadFile every nested-schema loader used to call. It prefers
 // the streaming [fs.File] from Open so an endless device (e.g. /dev/zero) is
 // bounded while reading (iolimit reads one extra byte so a source that
-// under-reports its size is still caught). When the FS does not support Open
-// (e.g. a ReadFileFS-only in-memory FS whose Open returns an error), it falls
-// back to fs.ReadFile and enforces the same cap on the fully-read result. The
-// cap breach is reported as [errSchemaTooLarge], classified fatal by
-// [IsFatalSchemaLoad].
+// under-reports its size is still caught).
+//
+// Demotion to a warning is by POSITIVE TAG. A benign miss ([fs.ErrNotExist] or
+// [fs.ErrInvalid]) from a FAILED Open with NO ReadFileFS fallback is wrapped in
+// [errSchemaFetchMiss], the sole tag [nestedFetchMiss] demotes — a FAILED Open is by
+// definition the resolution phase. EVERY other Open error is FATAL and returned
+// UNTAGGED: a resource/policy denial ([IsFatalSchemaLoad]), the default deny-all FS
+// ([iofs.DenyAll]), a permission denial ([fs.ErrPermission]), an outside-root policy
+// error, or any other/ambiguous errno.
+//
+// The [fs.ReadFileFS] fallback (retried when Open reports a benign miss) may SERVE
+// THE BYTES (a ReadFileFS-only FS whose Open is unsupported). Because fs.ReadFile is
+// ATOMIC (open+read+close in one call), its errors are mostly phase-UNCLASSIFIABLE —
+// a post-resolution read failure is indistinguishable from a genuine miss — so a
+// fallback error is DEMOTED only when it is a CANONICAL "file not found"
+// ([isDirectNotExist]: the bare fs.ErrNotExist sentinel or a *fs.PathError with
+// Op=="open" whose Err satisfies fs.ErrNotExist, the one shape that can never be a
+// read failure). EVERY other fallback error — fs.ErrInvalid, a message-wrapped errno
+// that is not such a PathError (even one wrapping fs.ErrNotExist), a non-"open" Op,
+// anything else — is returned UNTAGGED and stays FATAL (fail-closed).
+//
+// A POST-OPEN read failure is wrapped in [errNestedSchemaReadAfterOpen] (fatal,
+// untagged). The cap breach is [errSchemaTooLarge] (fatal). Because the tag is
+// applied only at the FAILED-Open resolution phase, a downstream CONTENT/parse error
+// whose chain happens to contain fs.ErrInvalid/fs.ErrNotExist is NOT tagged and stays
+// fatal.
 func (c *compiler) readNestedSchema(path string) ([]byte, error) {
-	if f, err := c.fsys.Open(path); err == nil {
-		data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
-		_ = f.Close()
-		if exceeded {
-			return nil, errSchemaTooLarge
+	f, openErr := c.fsys.Open(path)
+	if openErr != nil {
+		// A FATAL open error aborts IMMEDIATELY and UNTAGGED: a resource/policy denial
+		// ([IsFatalSchemaLoad]) or the default deny-all FS ([iofs.DenyAll], whose Open
+		// returns a benign fs.ErrNotExist errno the FS type disambiguates).
+		if _, denyAll := c.fsys.(iofs.DenyAll); denyAll || IsFatalSchemaLoad(openErr) {
+			return nil, openErr //nolint:wrapcheck // callers/classifiers key on the original error
 		}
-		if readErr != nil {
-			return nil, readErr //nolint:wrapcheck // callers wrap with the schemaLocation for context
+		// A NON-BENIGN open error (fs.ErrPermission, an "outside root" policy error,
+		// or any other/ambiguous errno) is NOT a resolution miss and is fatal: return
+		// it verbatim and UNTAGGED so nestedFetchMiss never demotes it. Fail-closed.
+		if !isBenignResolutionMiss(openErr) {
+			return nil, openErr //nolint:wrapcheck // non-benign open error is fatal, not a miss
 		}
-		return data, nil
+		// Benign open miss. A ReadFileFS may still SERVE THE BYTES even when its Open is
+		// unsupported (a ReadFileFS-only FS whose Open returns fs.ErrNotExist/
+		// fs.ErrInvalid), so retry through fs.ReadFile for that FS kind only (a plain
+		// fs.FS's fs.ReadFile would merely re-Open and reproduce the identical miss).
+		if _, ok := c.fsys.(fs.ReadFileFS); ok {
+			data, rfErr := fs.ReadFile(c.fsys, path)
+			if rfErr == nil {
+				if int64(len(data)) > maxNestedSchemaSize {
+					return nil, errSchemaTooLarge
+				}
+				return data, nil
+			}
+			// The fallback errored. fs.ReadFile is ATOMIC (open+read+close in one call),
+			// so its errors are mostly phase-UNCLASSIFIABLE: a ReadFileFS whose ReadFile
+			// RESOLVES the file but then fails mid-READ returns an errno indistinguishable
+			// from a genuine miss. So the fallback demotes ONLY a CANONICAL filesystem
+			// "file not found" at the RESOLUTION/OPEN phase ([isDirectNotExist]: the bare
+			// fs.ErrNotExist sentinel or a *fs.PathError with Op=="open" whose Err satisfies
+			// fs.ErrNotExist — including a real syscall.ENOENT from os.DirFS) — the one shape
+			// that unambiguously denotes NON-EXISTENCE at resolution and can never be a
+			// post-resolution read failure. EVERY other fallback error — fs.ErrInvalid, a
+			// custom message wrap that is not such a PathError (even one wrapping
+			// fs.ErrNotExist), a *fs.PathError with a non-open Op (e.g.
+			// {Op:"read", Err: fs.ErrNotExist}, a post-open read failure), anything else —
+			// is UNCLASSIFIABLE and returned UNTAGGED, so it stays FATAL (fail-closed).
+			if !isDirectNotExist(rfErr) {
+				return nil, rfErr //nolint:wrapcheck // unclassifiable fallback error; fail closed
+			}
+			return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, rfErr)
+		}
+		// Open reported a benign resolution miss and no ReadFileFS fallback applies:
+		// TAG it — a FAILED Open is by definition the resolution phase — so
+		// nestedFetchMiss, and nothing downstream, demotes it.
+		return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, openErr)
 	}
-	data, err := fs.ReadFile(c.fsys, path)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // callers wrap with the schemaLocation for context
-	}
-	if int64(len(data)) > maxNestedSchemaSize {
+	data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
+	_ = f.Close()
+	if exceeded {
 		return nil, errSchemaTooLarge
+	}
+	if readErr != nil {
+		// Post-open read failure: the location RESOLVED and OPENED, so this is a
+		// real I/O failure, NOT a benign schemaLocation fetch/resolution miss.
+		// Tag it fatal so nestedFetchMiss cannot demote it to a warning even when
+		// readErr is itself fs.ErrInvalid/fs.ErrNotExist (fail-closed).
+		return nil, fmt.Errorf("%w: %w", errNestedSchemaReadAfterOpen, readErr)
 	}
 	return data, nil
 }
 
-// fetchNestedSchema is the FETCH phase shared by
-// loadInclude/loadRedefine/loadImport: it reads the resolved nested-schema path
-// through the configured [fs.FS] under the byte cap ([readNestedSchema]). A
-// benign fetch/resolution failure is tagged [errSchemaFetchMiss] so the caller's
-// classifier may demote it to a warning (schemaLocation is only a hint); a
-// SECURITY/POLICY denial is returned UNTAGGED so it stays fatal. Routing every
-// load site's fetch failure through this ONE helper is what keeps their
-// fatal-vs-warning classification from diverging, and confines demotion to the
-// fetch phase — any later parse/root-verification/declaration-processing error
-// is never tagged here and is fatal by default.
-func (c *compiler) fetchNestedSchema(path string) ([]byte, error) {
-	data, err := c.readNestedSchema(path)
-	if err == nil {
-		return data, nil
-	}
-	if c.fetchDenialFatal(err) {
-		return nil, err
-	}
-	return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, err)
+// notDemotable is the shared veto BOTH demotion predicates — [isBenignResolutionMiss]
+// (the Open path) and [isDirectNotExist] (the fs.ReadFile fallback) — consult FIRST,
+// so the "may this nested-load failure be demoted to a warning?" decision cannot
+// diverge between the two sites. It reports whether err is DISQUALIFIED from any
+// resolution-miss demotion regardless of its errno, because it:
+//   - is (or wraps, anywhere in its LINEAR unwrap chain) a MULTI-ERROR
+//     ([errors.Join] / any Unwrap() []error) — a single file-open never legitimately
+//     produces one, and a join defeats errors.Is/errors.As first-match selection, so a
+//     benign sibling could mask a fatal (permission/read) sibling ([containsMultiError]);
+//   - satisfies fs.ErrPermission anywhere in its chain — a permission denial is not a
+//     resolution miss; or
+//   - is a fatal schema-load condition ([IsFatalSchemaLoad]).
+//
+// A predicate that passes this veto then applies its own PHASE-appropriate accept: the
+// Open path admits the broad benign errno set (a FAILED Open IS the resolution phase),
+// the atomic-fs.ReadFile fallback admits only the stricter canonical "file not found"
+// shape. Because both route through this one guard, [errors.Join] of a permission and a
+// benign miss — or any permission/fatal anywhere in the tree — is FATAL at EITHER site.
+func notDemotable(err error) bool {
+	return containsMultiError(err) || errors.Is(err, fs.ErrPermission) || IsFatalSchemaLoad(err)
 }
 
-// fetchDenialFatal reports whether a fetch-phase error is a SECURITY/POLICY
-// denial that must stay fatal rather than be demoted to a fetch-miss warning: a
-// condition [IsFatalSchemaLoad] recognizes (path escape, include/import depth,
-// byte cap, or a [FatalSchemaLoader] refusal — including xslt3's default-deny
-// "no URIResolver configured" policy), or a refusal from the default deny-all FS
-// ([iofs.DenyAll], which returns [fs.ErrNotExist] for every Open — so the errno
-// is indistinguishable from a genuine miss and the FS type, not the error,
-// decides).
-func (c *compiler) fetchDenialFatal(err error) bool {
-	if IsFatalSchemaLoad(err) {
+// isBenignResolutionMiss reports whether err is a benign schemaLocation
+// RESOLUTION miss — a missing file ([fs.ErrNotExist]) or an unresolvable location
+// hint ([fs.ErrInvalid], e.g. an http:// URL opened as a filesystem path). It
+// gates the whitelist ONLY inside [readNestedSchema], where a benign miss is then
+// wrapped in [errSchemaFetchMiss]; downstream classification keys on that tag, not
+// on the errno, so this predicate is never consulted after the resolution phase.
+//
+// The shared [notDemotable] veto is applied FIRST — the SAME veto [isDirectNotExist]
+// uses — so a MULTI-ERROR ([errors.Join]), an fs.ErrPermission anywhere in the chain,
+// or a fatal schema-load condition is NEVER demoted even when it ALSO wraps a benign
+// fs.ErrNotExist/fs.ErrInvalid errno. A failed Open IS the resolution phase, so only
+// after that veto is the broad benign errno set an accept.
+func isBenignResolutionMiss(err error) bool {
+	if notDemotable(err) {
+		return false
+	}
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid)
+}
+
+// isDirectNotExist reports whether err is a CANONICAL filesystem "file not found"
+// at the RESOLUTION/OPEN phase — the one shape that unambiguously denotes
+// non-existence and can never be a post-resolution read failure. It accepts ONLY a
+// SINGLE-CHAIN error that is one of:
+//   - the bare [fs.ErrNotExist] sentinel (err == fs.ErrNotExist), or
+//   - a [*fs.PathError] (reachable through LINEAR wrapping via [errors.As]) whose Op
+//     is exactly "open" — the resolution/open operation, NOT "read"/"stat"/any other
+//     op, which are post-open failures — and whose OWN [fs.PathError.Err] cause
+//     satisfies fs.ErrNotExist under [errors.Is].
+//
+// The shared [notDemotable] veto — a MULTI-ERROR ([errors.Join] / any error implementing
+// Unwrap() []error, anywhere in the linear unwrap chain), an fs.ErrPermission anywhere in
+// the chain, or a fatal schema-load condition — is applied FIRST, before any other test.
+// A real filesystem never reports a single file-open through a joined error: a
+// multi-error bundles multiple independent failures, which is inherently suspicious for a
+// resolution miss AND defeats errors.As's first-match selection — errors.As would pick a
+// benign Op=="open"/ErrNotExist sibling and ignore a fatal (read/permission) PathError
+// joined alongside. Rejecting the whole multi-error class up front keeps every
+// errors.Join shape FATAL and makes the subsequent errors.As on a single chain
+// unambiguous (there is exactly one PathError to select). The same veto keeps a
+// whole-chain fs.ErrPermission / [IsFatalSchemaLoad] cause FATAL. This is the SAME guard
+// [isBenignResolutionMiss] consults, so the Open path and this fallback cannot diverge. A
+// genuine [os.DirFS] / [fstest.MapFS] miss returns a SINGLE *fs.PathError{Op:"open",
+// Err: syscall.ENOENT} — not a Join — so it is still accepted and WARNS.
+//
+// The Op=="open" guard is the load-bearing phase discriminator: a failed Open IS the
+// resolution phase, so an "open" PathError denotes non-existence at resolution and can
+// never be a post-resolution read failure. The membership test is on the SELECTED
+// PathError's OWN cause (errors.Is(pe.Err, fs.ErrNotExist)), and is errors.Is (not an
+// exact ==) so a real errno like syscall.ENOENT — what os.DirFS returns for a missing
+// file, satisfying fs.ErrNotExist yet NOT the fs.ErrNotExist sentinel by == — is
+// correctly accepted, while a *fs.PathError{Op:"read", Err: fs.ErrNotExist}/{Op:"stat",
+// …} (a POST-resolution failure that merely reports the ErrNotExist errno) is still
+// REJECTED, so it stays UNTAGGED and therefore FATAL (fail-closed).
+//
+// Everything else — a message-wrapped fs.ErrNotExist that is NOT a *fs.PathError
+// (fmt.Errorf("...: %w", …)), a non-"open" Op, or an err whose selected PathError does
+// not satisfy fs.ErrNotExist at all — is REJECTED. This is the last classifiable edge
+// for the inherently-atomic fs.ReadFile fallback in [readNestedSchema].
+func isDirectNotExist(err error) bool {
+	if notDemotable(err) {
+		return false
+	}
+	if err == fs.ErrNotExist {
 		return true
 	}
-	_, denyAll := c.fsys.(iofs.DenyAll)
-	return denyAll
+	var pe *fs.PathError
+	if !errors.As(err, &pe) {
+		return false
+	}
+	return pe.Op == "open" && errors.Is(pe.Err, fs.ErrNotExist)
+}
+
+// containsMultiError reports whether err or anything in its LINEAR unwrap chain
+// (following single Unwrap() error links) implements Unwrap() []error — i.e. is an
+// [errors.Join] / multi-error. A single file-open never legitimately produces one, so
+// its presence anywhere in the chain disqualifies err from the resolution-miss
+// classification in [isDirectNotExist].
+func containsMultiError(err error) bool {
+	for e := err; e != nil; {
+		if _, ok := e.(interface{ Unwrap() []error }); ok {
+			return true
+		}
+		u, ok := e.(interface{ Unwrap() error })
+		if !ok {
+			return false
+		}
+		e = u.Unwrap()
+	}
+	return false
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
@@ -172,6 +330,9 @@ type FatalSchemaLoader interface {
 //     inside an IMPORTED schema would be demoted to a warning and silently ignored
 //     by loadImport's nested-processing fallback;
 //   - a nested schema exceeded the byte cap while being read ([errSchemaTooLarge]);
+//   - a nested schema failed to READ after its file was successfully opened
+//     ([errNestedSchemaReadAfterOpen]) — a resolved-and-opened location that then
+//     fails to read is a real I/O failure, not a benign schemaLocation miss;
 //   - the configured [fs.FS] returned an error satisfying [FatalSchemaLoader]
 //     (e.g. a resource-limit breach such as a too-large external resource).
 //
@@ -180,7 +341,7 @@ type FatalSchemaLoader interface {
 // matched via errors.Is / errors.As, so they remain unexported; this helper is
 // the public surface.
 func IsFatalSchemaLoad(err error) bool {
-	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errIncludeDepthExceeded) || errors.Is(err, errSchemaTooLarge) {
+	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errIncludeDepthExceeded) || errors.Is(err, errSchemaTooLarge) || errors.Is(err, errNestedSchemaReadAfterOpen) {
 		return true
 	}
 	var f FatalSchemaLoader
@@ -285,6 +446,16 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 		case c.version == Version11 && isXSDElement(elem, elemOverride):
 			// xs:override is an XSD 1.1 construct. In 1.0 mode it is ignored
 			// (skipped) so existing 1.0 behavior stays byte-identical.
+			//
+			// §4.2.4 (the schema-for-schemas): @schemaLocation is REQUIRED on
+			// xs:override. Its ABSENCE is a schema-representation error (reject
+			// the schema), matching the xs:include/xs:redefine handling above —
+			// distinct from a present-but-unresolvable hint (demoted to a warning
+			// by the load taxonomy).
+			if !hasAttr(elem, attrSchemaLocation) {
+				c.reportMissingSchemaLocation(ctx, elem, elemOverride)
+				continue
+			}
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
@@ -308,25 +479,32 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 }
 
 // nestedLoadFailureFatal reports whether an xs:include/xs:redefine (and, via
-// [processImport], xs:import; and, via [loadOverride]/[demoteNestedOverrideLoad],
-// xs:override) load error must abort compilation rather than be demoted to a
-// warning. It is FAIL-CLOSED and PHASE-AWARE: the ONLY demotable
-// condition is a benign fetch/resolution miss tagged [errSchemaFetchMiss] by the
-// shared FETCH phase ([fetchNestedSchema]) — schemaLocation is only a hint
-// (src-include.1 / src-redefine.1), so a missing or unreadable target is skipped
-// (matching libxml2). Everything else is fatal:
-//
-//   - a SECURITY/POLICY denial (path escape, depth/byte-cap breach, a
-//     [FatalSchemaLoader] refusal such as xslt3's default-deny "no URIResolver"
-//     policy, or a deny-all FS) — the fetch phase withholds the fetch-miss tag
-//     from these, so they never look like a miss;
-//   - a CONTENT failure (malformed XML or a non-xs:schema root —
-//     [errSchemaContentInvalid]);
-//   - ANY post-fetch declaration/redefine/nested-processing failure (untagged,
-//     fatal by the fail-closed default), so a fetched-but-invalid schema (e.g. a
-//     complexType missing its @name) is never silently downgraded to a warning.
+// [processImport], xs:import; and, via [loadOverride]/[overrideLoadTarget],
+// xs:override) load error must abort compilation rather than be
+// demoted to a warning. It is FAIL-CLOSED: the ONLY demotable condition is a
+// CONFIRMED benign fetch/resolution miss ([nestedFetchMiss]) — schemaLocation is
+// only a hint (src-include.1 / src-import), so a missing or unresolvable target
+// is skipped (matching libxml2). Everything else — a security/policy denial, a
+// CONTENT failure (malformed XML or a non-xs:schema root), or any other/ambiguous
+// error — is fatal.
 func (c *compiler) nestedLoadFailureFatal(err error) bool {
-	return !errors.Is(err, errSchemaFetchMiss)
+	return !c.nestedFetchMiss(err)
+}
+
+// nestedFetchMiss reports whether err is a CONFIRMED benign FETCH/RESOLUTION miss
+// of a nested schemaLocation — the ONLY nested-load failure demoted to a warning.
+// The demotable decision is a SINGLE POINT OF TRUTH: it keys ONLY on the POSITIVE
+// [errSchemaFetchMiss] tag that [readNestedSchema] applies AT THE RESOLUTION PHASE,
+// never on a raw [fs.ErrNotExist]/[fs.ErrInvalid] errno. So a benign missing/
+// unresolvable target (the tag's only source) is skipped, while the SAME errno
+// arising later — a post-open read failure, a CONTENT/parse error, an external-
+// entity read, a non-xs:schema root, a security/policy denial, the deny-all FS —
+// is UNTAGGED and stays fatal, however its errno chain reads. The
+// [IsFatalSchemaLoad] guard is defensive: a tagged error can never also be a fatal
+// sentinel (the tag wraps only benign resolution errnos), but keying "fatal wins"
+// makes that invariant explicit and fail-closed.
+func (c *compiler) nestedFetchMiss(err error) bool {
+	return errors.Is(err, errSchemaFetchMiss) && !IsFatalSchemaLoad(err)
 }
 
 // reportMissingSchemaLocation reports the schema-representation error for an
@@ -433,13 +611,12 @@ func (c *compiler) processImport(ctx context.Context, elem *helium.Element) erro
 
 	if err := c.loadImport(ctx, loc, ns, elem); err != nil {
 		// schemaLocation is only a hint (src-import), so a benign FETCH/RESOLUTION
-		// miss (a missing file, an http:// location opened as a path yielding
-		// EINVAL, ...) is demoted to a warning and the import skipped. The shared
+		// miss (a missing file, or an http:// hint opened as a path yielding
+		// fs.ErrInvalid) is demoted to a warning and the import skipped. The shared
 		// fail-closed classifier keeps every other outcome FATAL — a
 		// security/policy denial (the cap/deny-all cannot be silently defeated for
-		// an xs:import target), a CONTENT failure (malformed XML / non-xs:schema
-		// root), and any post-fetch declaration/nested-processing failure — so it
-		// cannot diverge from the include/redefine path.
+		// an xs:import target) and a CONTENT failure (malformed XML / non-xs:schema
+		// root) — so the import path cannot diverge from the include/redefine path.
 		if c.nestedLoadFailureFatal(err) {
 			return err
 		}
@@ -504,7 +681,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	}
 	c.includeVisited[path] = struct{}{}
 
-	data, err := c.fetchNestedSchema(path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		// The read attempt failed, but the loaded-set marker was added above
 		// (before the read, so a self-referential include cannot recurse).
@@ -777,7 +954,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	}
 	c.includeVisited[path] = struct{}{}
 
-	data, err := c.fetchNestedSchema(path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		// Roll back the loaded-set marker added above (see loadInclude): a
 		// missing redefine target demoted to a warning must not leave the path
@@ -1554,7 +1731,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	c.importActive[path] = ns
 	defer delete(c.importActive, path)
 
-	data, err := c.fetchNestedSchema(path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}

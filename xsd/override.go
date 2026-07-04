@@ -401,7 +401,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	c.overrideVisited[vkey] = struct{}{}
 	c.overridePaths[path] = struct{}{}
 
-	data, err := c.fetchNestedSchema(path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		// A genuine fetch/resolution miss is tagged [errSchemaFetchMiss] so the
 		// caller ([loadOverride]/[overrideProcessNested], via [nestedLoadFailureFatal])
@@ -653,6 +653,13 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 		}
 		switch {
 		case isXSDElement(elem, elemInclude):
+			// §4.2.3 src-include.1: @schemaLocation is REQUIRED; its ABSENCE is a
+			// representation error (matching processIncludes), distinct from a
+			// present-but-empty hint which is silently skipped.
+			if !hasAttr(elem, attrSchemaLocation) {
+				c.reportMissingSchemaLocation(ctx, elem, elemInclude)
+				continue
+			}
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
@@ -669,6 +676,12 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			}
 			maps.Copy(nestedMatched, m)
 		case isXSDElement(elem, elemOverride):
+			// §4.2.4: @schemaLocation is REQUIRED on xs:override; its ABSENCE is a
+			// representation error (matching processIncludes).
+			if !hasAttr(elem, attrSchemaLocation) {
+				c.reportMissingSchemaLocation(ctx, elem, elemOverride)
+				continue
+			}
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
@@ -710,6 +723,12 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			// load condition aborts.
 			err = c.processImport(ctx, elem)
 		case isXSDElement(elem, elemRedefine):
+			// §4.2.3 src-redefine.1: @schemaLocation is REQUIRED; its ABSENCE is a
+			// representation error (matching processIncludes).
+			if !hasAttr(elem, attrSchemaLocation) {
+				c.reportMissingSchemaLocation(ctx, elem, elemRedefine)
+				continue
+			}
 			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue

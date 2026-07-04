@@ -115,21 +115,55 @@ func (e fatalSchemaLoadError) FatalSchemaLoad() bool { return true }
 // isFatalSchemaLoadError reports whether err (or anything in its chain) is a
 // fatal schema-load condition that must never be demoted to a warning or papered
 // over by a fallback to a pre-compiled schema. It is the SINGLE classifier on
-// the xslt3 side: it delegates the cross-package conditions (path escape,
-// import-depth overflow, and any [xsd.FatalSchemaLoader]) to [xsd.IsFatalSchemaLoad]
-// — the one source of truth shared with the xsd compiler — and additionally
-// recognizes two xslt3-package sentinels the TOP-LEVEL schema-location load
-// returns directly (unwrapped, so they are not yet a FatalSchemaLoader at that
-// point): [ErrResourceTooLarge], the per-resource cap sentinel, and
-// [errSchemaResolverDenied], the default-deny policy denial ("no URIResolver
-// configured"). A policy denial on the top-level import-schema path must stay
-// fatal — falling through to the precompiled fallback would let a
-// no-resolver-configured schema-location silently compile via a registered
-// ImportSchemas entry, bypassing the secure-by-default policy.
+// the xslt3 side and MIRRORS the xsd compiler's nested-load demotion veto
+// (`notDemotable`), so the top-level import-schema and source-document loaders
+// agree with the nested include/import/redefine path on what may be demoted.
+//
+// It delegates the cross-package sentinel conditions (path escape, import-depth
+// overflow, and any [xsd.FatalSchemaLoader]) to [xsd.IsFatalSchemaLoad] — the
+// one source of truth shared with the xsd compiler — and additionally treats as
+// fatal:
+//
+//   - two xslt3-package sentinels the TOP-LEVEL schema-location load returns
+//     directly (unwrapped, so they are not yet a FatalSchemaLoader at that
+//     point): [ErrResourceTooLarge], the per-resource cap sentinel, and
+//     [errSchemaResolverDenied], the default-deny policy denial ("no URIResolver
+//     configured") — falling through to the precompiled fallback would let a
+//     no-resolver-configured schema-location silently compile via a registered
+//     ImportSchemas entry, bypassing the secure-by-default policy;
+//   - a PERMISSION denial ([fs.ErrPermission]) anywhere in the chain — a policy
+//     denial from a configured resolver/FS is NOT a benign fetch miss, so it must
+//     never fall back to a precompiled schema;
+//   - a MULTI-ERROR ([errors.Join] / any Unwrap() []error) — a single
+//     schema-location fetch never legitimately produces one, and a join defeats
+//     errors.Is first-match selection, so a benign miss could mask a fatal
+//     sibling; rejecting the whole class is fail-closed.
 func isFatalSchemaLoadError(err error) bool {
 	return errors.Is(err, ErrResourceTooLarge) ||
 		errors.Is(err, errSchemaResolverDenied) ||
+		errors.Is(err, fs.ErrPermission) ||
+		schemaLoadHasMultiError(err) ||
 		xsd.IsFatalSchemaLoad(err)
+}
+
+// schemaLoadHasMultiError reports whether err or anything in its LINEAR unwrap
+// chain (following single Unwrap() error links) implements Unwrap() []error —
+// i.e. is an [errors.Join] / multi-error. It mirrors the xsd compiler's
+// containsMultiError guard so a schema-load failure carrying a joined error tree
+// (where a benign sibling could mask a fatal one under errors.Is) is never
+// demoted to a fetch miss.
+func schemaLoadHasMultiError(err error) bool {
+	for e := err; e != nil; {
+		if _, ok := e.(interface{ Unwrap() []error }); ok {
+			return true
+		}
+		u, ok := e.(interface{ Unwrap() error })
+		if !ok {
+			return false
+		}
+		e = u.Unwrap()
+	}
+	return false
 }
 
 // resolveSchemaURI resolves a schema-location reference against a base URI.
