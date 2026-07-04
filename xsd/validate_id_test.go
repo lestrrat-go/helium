@@ -188,6 +188,63 @@ func TestValidateIDIDREF(t *testing.T) {
 		require.Error(t, compileValidate(t, xsd.Version10, twoIDAttrSchema, inst))
 		require.NoError(t, compileValidate(t, xsd.Version11, twoIDAttrSchema, inst))
 	})
+
+	// Two attributes of type union(xs:int, xs:ID). The union is not itself
+	// ID-typed, so the cap must detect ID-ness VALUE-dependently, the same way the
+	// uniqueness collection does — an attribute counts only when its value selects
+	// the xs:ID member.
+	const unionIDAttrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrID">
+    <xs:union memberTypes="xs:int xs:ID"/>
+  </xs:simpleType>
+  <xs:complexType name="base">
+    <xs:attribute name="u1" type="intOrID"/>
+    <xs:attribute name="u2" type="intOrID"/>
+  </xs:complexType>
+  <xs:element name="doc" type="base"/>
+</xs:schema>`
+
+	t.Run("XSD 1.0 caps two union(int,ID) attributes both carrying IDs", func(t *testing.T) {
+		t.Parallel()
+		// "aaa"/"bbb" are not valid xs:int, so each resolves to the xs:ID member —
+		// two ID-bearing attributes → rejected in 1.0, accepted in 1.1.
+		inst := `<doc u1="aaa" u2="bbb"/>`
+		require.Error(t, compileValidate(t, xsd.Version10, unionIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, unionIDAttrSchema, inst))
+	})
+
+	t.Run("XSD 1.0 union int value does not count toward the ID cap", func(t *testing.T) {
+		t.Parallel()
+		// u1="5" resolves to xs:int (no ID leaf, doesn't count); only u2="aaa" is
+		// ID-bearing → one ID attribute → valid in both versions.
+		inst := `<doc u1="5" u2="aaa"/>`
+		require.NoError(t, compileValidate(t, xsd.Version10, unionIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, unionIDAttrSchema, inst))
+	})
+
+	// Two attributes of type list-of-xs:ID. A list is not itself ID-typed either,
+	// so the cap must count via the same decomposition (a list contributes ID
+	// leaves for its tokens).
+	const listIDAttrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="idList">
+    <xs:list itemType="xs:ID"/>
+  </xs:simpleType>
+  <xs:complexType name="base">
+    <xs:attribute name="l1" type="idList"/>
+    <xs:attribute name="l2" type="idList"/>
+  </xs:complexType>
+  <xs:element name="doc" type="base"/>
+</xs:schema>`
+
+	t.Run("XSD 1.0 caps two list-of-ID attributes", func(t *testing.T) {
+		t.Parallel()
+		// Each list contributes xs:ID leaves, so both attributes are ID-bearing →
+		// rejected in 1.0, accepted in 1.1. Tokens are all distinct (no uniqueness
+		// violation), isolating the cardinality cap.
+		inst := `<doc l1="a b" l2="c d"/>`
+		require.Error(t, compileValidate(t, xsd.Version10, listIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, listIDAttrSchema, inst))
+	})
 }
 
 // TestIDConstraintRef covers XSD 1.1 identity-constraint @ref: a key/unique/

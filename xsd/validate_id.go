@@ -131,19 +131,17 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 				continue
 			}
 			atd := vc.attrTypeForID(a)
-			if atd == nil {
+			if atd == nil || !idFamilyType(atd) {
 				continue
 			}
-			// XSD 1.0: an element may bear at most one attribute whose type is (or
-			// derives from) xs:ID. XSD 1.1 removed this cap, so multiple ID attributes
-			// are legal there — counted and enforced only under Version10.
-			if builtinBaseLocal(atd) == "ID" {
+			// An attribute counts toward the XSD 1.0 one-ID-attribute cap iff its
+			// value contributes at least one xs:ID leaf under the SAME list/union
+			// active-member decomposition the collection uses (so a union(xs:int,
+			// xs:ID) attribute counts only when its value is an ID, and a list of
+			// xs:ID counts) — keeping the cap consistent with the uniqueness table.
+			if vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a)) {
 				idAttrCount++
 			}
-			if !idFamilyType(atd) {
-				continue
-			}
-			vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a))
 		}
 		// This is the INSTANCE manifestation of the one-ID-per-element rule: >1
 		// ID-typed attribute actually PRESENT on an element. It covers the current
@@ -211,24 +209,37 @@ func idFamilyType(td *TypeDef) bool {
 // and queuing xs:IDREF references at the atomic ID/IDREF leaves. fieldNode
 // supplies namespace context for union active-member resolution. List values are
 // split and each item recursed; a union value is resolved to its active member.
-func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idCollector, td *TypeDef, raw string, owner helium.Node, fieldNode helium.Node, elem *helium.Element, attr string) {
+//
+// It returns whether the decomposition yielded at least one xs:ID leaf (VALUE-
+// dependent: a union(xs:int, xs:ID) attribute reports true only when its value
+// selects the xs:ID member; a list of xs:ID reports true when it has ID tokens).
+// The Version10 one-ID-attribute cap uses this return so it detects ID-ness the
+// SAME way the collection does, keeping the cap and the uniqueness table
+// consistent by construction.
+func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idCollector, td *TypeDef, raw string, owner helium.Node, fieldNode helium.Node, elem *helium.Element, attr string) bool {
 	switch resolveVariety(td) {
 	case TypeVarietyList:
 		item := resolveItemType(td)
 		if item == nil {
-			return
+			return false
 		}
+		hasID := false
 		for _, f := range value.XSDFields(raw) {
-			vc.collectIDFromValue(ctx, col, item, f, owner, fieldNode, elem, attr)
+			if vc.collectIDFromValue(ctx, col, item, f, owner, fieldNode, elem, attr) {
+				hasID = true
+			}
 		}
+		return hasID
 	case TypeVarietyUnion:
 		if m := unionActiveMember(ctx, raw, fieldNode, td); m != nil {
-			vc.collectIDFromValue(ctx, col, m, raw, owner, fieldNode, elem, attr)
+			return vc.collectIDFromValue(ctx, col, m, raw, owner, fieldNode, elem, attr)
 		}
+		return false
 	default:
 		switch builtinBaseLocal(td) {
 		case "ID":
 			vc.recordID(ctx, col, normalizeWhiteSpace(raw, "collapse"), owner, elem, attr)
+			return true
 		case lexicon.TypeIDREF:
 			vc.recordIDRef(col, normalizeWhiteSpace(raw, "collapse"), elem, attr)
 		case lexicon.TypeIDREFS:
@@ -238,6 +249,7 @@ func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idColl
 				vc.recordIDRef(col, f, elem, attr)
 			}
 		}
+		return false
 	}
 }
 
