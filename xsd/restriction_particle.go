@@ -147,6 +147,26 @@ func baseOpenContentFromContext(ctx context.Context) *OpenContent {
 	return oc
 }
 
+// substElementRestrictionKey marks (in ctx) a DIRECT element-to-element positional
+// mapping — recurseOrdered pairing a derived element particle against a base element
+// particle — where a derived element that is an instance-admissible substitution-group
+// MEMBER of the base element may validly restrict it (NameAndTypeOK against the member).
+// It is set ONLY at that sound site, so the group-mapping recursion (sequence:choice
+// MapAndSum, choice/all reductions) does NOT inherit it: a subst-member narrowing buried
+// in a MapAndSum is a §3.9.6 restriction 1.0 syntactically rejects (W3C particlesZ028,
+// invalid in 1.0 / valid in 1.1), whereas the direct element:element mapping is accepted
+// (W3C elemZ027_e/f, particlesZ008).
+type substElementRestrictionKey struct{}
+
+func withSubstElementRestriction(ctx context.Context) context.Context {
+	return context.WithValue(ctx, substElementRestrictionKey{}, true)
+}
+
+func substElementRestrictionAllowed(ctx context.Context) bool {
+	v, _ := ctx.Value(substElementRestrictionKey{}).(bool)
+	return v
+}
+
 // particleValidRestriction reports whether the restriction particle r is a valid
 // restriction of the base particle b. Returning true means "accepted" — and, per
 // the conservative contract above, it also returns true for any case the
@@ -252,23 +272,33 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			return groupRestrictsWildcard(r, rt, b, schema)
 		case *ElementDecl:
 			// A derived model GROUP restricting a base single ELEMENT. XSD 1.0 §3.9.6
-			// has NO Sequence/Choice/All:Element derivation rule, so this is valid ONLY
-			// when the group is §3.9.6-POINTLESS — it folds (safe occurrence hoisting:
-			// at each level the group's or the single member's {max occurs} is 1) down
-			// to a single element particle that validly restricts the base element. A
-			// genuinely REPEATING group (e.g. sequence maxOccurs="2" of element{1,2},
-			// which emits the element 1..4 times) is NOT pointless and admits content the
-			// base single element does not, so it is rejected. XSD 1.1 keeps the broader
-			// language-inclusion leniency (groupRestrictsElement), backed by the
-			// particleLanguageSubset fallback, so its behavior is unchanged.
-			if version == Version10 {
-				red, reduced := pointlessReduce(r)
-				if !reduced {
-					return false
-				}
-				return particleValidRestriction(ctx, red, b, schema, version)
+			// has no Sequence/Choice/All:Element derivation rule; the mainstream
+			// (Xerces/libxml2/W3C suite) interpretation accepts it when the group's
+			// language is a subset of the base element's.
+			if version == Version11 {
+				return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
 			}
-			return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
+			// XSD 1.0: groupRestrictsElement bounds the group's total EMISSION range
+			// (particleElementRange) within the base element's occurrence and then
+			// requires every emitted leaf to validly restrict the base element
+			// (substitution-group membership included, so a choice of the base
+			// element's substitution members restricts it — W3C elemZ027). That
+			// range check is a min/max interval, so it is HOLE-BLIND: when the base
+			// element is REPEATABLE (MaxOccurs > 1) a derived emission set with a gap
+			// (e.g. {0}∪[2,4] from an emptiable group over a multi-occur member)
+			// passes the interval test yet admits content the base does not. So the
+			// language-inclusion path is used only when the base element is
+			// AT-MOST-ONCE (MaxOccurs == 1), where the interval bound forces the
+			// derived emission into {0,1} and no hole can hide; otherwise fall back
+			// to the conservative §3.9.6-pointless single-element fold.
+			if b.MaxOccurs == 1 {
+				return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
+			}
+			red, reduced := pointlessReduce(r)
+			if !reduced {
+				return false
+			}
+			return particleValidRestriction(ctx, red, b, schema, version)
 		}
 	}
 	return true
@@ -280,19 +310,37 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 // is checked conservatively.
 func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, schema *Schema, version Version) bool {
 	if rt.Name.Local != bt.Name.Local || rt.Name.NS != bt.Name.NS {
-		return false
+		// Name mismatch. A base element particle admits, at instance time, its head
+		// plus its whole (instance-admissible, block/abstract/derivation-filtered)
+		// substitution group, so a derived element that is a MEMBER of the base
+		// element's substitution group — and validly restricts that member
+		// (NameAndTypeOK) — is a valid restriction (W3C elemZ027_e/f, particlesZ008).
+		// Enabled ONLY from the direct element-to-element positional mapping
+		// (recurseOrdered, via the context flag), so the group-mapping recursion does
+		// not use it (particlesZ028 stays 1.0-invalid), and ONLY when the base element
+		// is AT-MOST-ONCE (b.MaxOccurs == 1): a repeating base element's occurrence
+		// check is a hole-blind interval, so a subst-member narrowing of it could hide
+		// content the base rejects (W3C elemZ026, particlesV020 stay rejected).
+		if !substElementRestrictionAllowed(ctx) || b.MaxOccurs != 1 {
+			return false
+		}
+		return derivedRestrictsSubstMemberOf(ctx, r, rt, b, bt, schema, version)
 	}
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 		return false
 	}
 	// Type derivation: the derived element's type must be the same as, or derived
 	// from, the base element's type. When either type is unresolved, accept
-	// conservatively. In XSD 1.1, when the base element's type is a union, a
-	// derived type validly derived from one of the union's (transitive) members
-	// is also a valid restriction (member substitutability), so use the
-	// union-aware predicate rather than a plain base-chain walk.
+	// conservatively. The check is BUILT-IN-AWARE (strictBuiltinAwareDerivedFrom,
+	// as in all_subsumption.go's NameAndTypeOK): the 1.0 built-in simple types are
+	// not BaseType-linked, so a plain isDerivedFrom would miss e.g. derived xs:int
+	// restricting base xs:integer — a valid, version-independent restriction. In
+	// XSD 1.1, when the base element's type is a union, a derived type validly
+	// derived from one of the union's (transitive) members is also a valid
+	// restriction (member substitutability), so the union-aware predicate is tried
+	// too.
 	if rt.Type != nil && bt.Type != nil {
-		ok := isDerivedFrom(rt.Type, bt.Type)
+		ok := strictBuiltinAwareDerivedFrom(rt.Type, bt.Type)
 		if !ok && version == Version11 {
 			ok = isXsiTypeDerivedFromDeclared(rt.Type, bt.Type)
 		}
@@ -354,6 +402,47 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		}
 	}
 	return true
+}
+
+// isElementParticle reports whether a particle's term is an element declaration.
+func isElementParticle(p *Particle) bool {
+	_, ok := p.Term.(*ElementDecl)
+	return ok
+}
+
+// derivedRestrictsSubstMemberOf reports whether the derived element `derived`
+// (particle derivedP) is an instance-admissible substitution-group member of base
+// element `base` AND validly restricts that concrete member (NameAndTypeOK — same
+// name plus a type/occurrence/fixed/nillable subset), with the synthetic member
+// particle carrying `occ`'s occurrence range (the group-leaf path passes a bare
+// {1,1}; the direct element-to-element path passes the base element particle's
+// range). The member must be restricted in its GOVERNING type, which a member that
+// omits @type INHERITS from its substitution head; elementRestrictsElement compares
+// raw ElementDecl.Type pointers and skips the type-derivation check when either is
+// nil, so both sides' EFFECTIVE type (effectiveDeclType follows the substitution-head
+// inheritance) is resolved into shallow copies first — a derived local element that
+// widens an untyped member's inherited type is thus rejected, and when the member has
+// a concrete effective type but the derived's is unresolved we fall closed.
+func derivedRestrictsSubstMemberOf(ctx context.Context, derivedP *Particle, derived *ElementDecl, occ *Particle, base *ElementDecl, schema *Schema, version Version) bool {
+	derivedType := effectiveDeclType(derived, schema)
+	for _, m := range instanceSubstMembers(base, schema) {
+		if m.Name != derived.Name {
+			continue
+		}
+		memberType := effectiveDeclType(m, schema)
+		if memberType != nil && derivedType == nil {
+			continue
+		}
+		derivedCopy := *derived
+		derivedCopy.Type = derivedType
+		memberCopy := *m
+		memberCopy.Type = memberType
+		memberP := &Particle{MinOccurs: occ.MinOccurs, MaxOccurs: occ.MaxOccurs, Term: &memberCopy}
+		if elementRestrictsElement(ctx, derivedP, &derivedCopy, memberP, &memberCopy, schema, version) {
+			return true
+		}
+	}
+	return false
 }
 
 // groupRestrictsGroup handles the model-group cases (recurse / map-and-sum). It
@@ -1219,9 +1308,19 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, sch
 		if particleEmitsNothing(bp) {
 			continue
 		}
-		if ri < len(rParticles) && particleValidRestriction(ctx, rParticles[ri], bp, schema, version) {
-			ri++
-			continue
+		if ri < len(rParticles) {
+			// A DIRECT element-to-element positional pair is the sound site for
+			// substitution-group-member restriction (see substElementRestrictionKey):
+			// enable it only here, so a group descent (e.g. sequence:choice MapAndSum)
+			// does not inherit it.
+			pairCtx := ctx
+			if isElementParticle(rParticles[ri]) && isElementParticle(bp) {
+				pairCtx = withSubstElementRestriction(ctx)
+			}
+			if particleValidRestriction(pairCtx, rParticles[ri], bp, schema, version) {
+				ri++
+				continue
+			}
 		}
 		// This base particle is not matched by the current derived particle. It is
 		// only allowed to be unmatched if it is emptiable (can occur zero times).
@@ -1940,7 +2039,21 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 		switch t := p.Term.(type) {
 		case *ElementDecl:
 			leafP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: t}
-			if !particleValidRestriction(ctx, leafP, beP, schema, version) {
+			if particleValidRestriction(ctx, leafP, beP, schema, version) {
+				continue
+			}
+			// A derived leaf that VALIDLY RESTRICTS a substitution-group MEMBER of
+			// the base element is also a valid restriction: the base element particle
+			// admits its whole (instance-admissible, block/abstract/derivation-
+			// filtered) substitution group at instance time, so a leaf restricting one
+			// member has a language that is a subset. The leaf must actually restrict
+			// the concrete member declaration (NameAndTypeOK against it), not merely
+			// share its name — a derived LOCAL element with a member's name but a
+			// wider type would otherwise falsely accept content the base rejects.
+			// groupRestrictsElement already bounds the group's total emission within
+			// the base element's occurrence (§3.9.6 mainstream interpretation — W3C
+			// elemZ027).
+			if !leafIsSubstMemberOfBaseElement(ctx, leafP, t, beP, schema, version) {
 				return false
 			}
 		case *Wildcard:
@@ -1954,6 +2067,27 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 		}
 	}
 	return true
+}
+
+// leafIsSubstMemberOfBaseElement reports whether the derived element leaf validly
+// restricts an instance-admissible substitution-group member of the base element
+// particle's declaration. A base element particle admits its head plus that whole
+// (concrete, block/abstract/derivation-filtered) substitution group at instance
+// time, so a leaf restricting one member is a valid name-narrowing restriction of
+// it. The leaf must actually restrict the concrete member declaration
+// (elementRestrictsElement / NameAndTypeOK — same name plus a type/occurrence/
+// fixed/nillable subset), so a derived LOCAL element that merely shares a member's
+// name but widens its type is NOT accepted.
+func leafIsSubstMemberOfBaseElement(ctx context.Context, leafP *Particle, leaf *ElementDecl, beP *Particle, schema *Schema, version Version) bool {
+	be, ok := beP.Term.(*ElementDecl)
+	if !ok {
+		return false
+	}
+	// The base element particle admits its whole substitution group at instance
+	// time; a leaf restricting one member is a valid name-narrowing restriction of
+	// it. The synthetic member particle carries a bare {1,1} occurrence (the leaf's
+	// own group already accounts for occurrence).
+	return derivedRestrictsSubstMemberOf(ctx, leafP, leaf, &Particle{MinOccurs: 1, MaxOccurs: 1}, be, schema, version)
 }
 
 // particleElementRange computes the total (min, max) number of ELEMENTS a
