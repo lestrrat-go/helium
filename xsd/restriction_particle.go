@@ -348,12 +348,19 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 			return false
 		}
 		// NameAndTypeOK clause 3.2.5.2 (§3.9.6, version-INDEPENDENT): R's type must
-		// be validly derived from B's type given the DISALLOWED subset {extension,
-		// list, union} — i.e. by RESTRICTION only (or be identical). A type that
-		// reaches B's type through an EXTENSION step is NOT a valid restriction of
-		// B's element, even though it is derived from it (W3C particlesIj008). This
-		// is unconditional (independent of any @block), so it is a separate gate from
-		// the type-@block cvc-elt.4.3 check below.
+		// be validly derived from B's type given the disallowed subset {extension,
+		// list, union}. In practice only the EXTENSION step is a reachable violation
+		// here: a type reaching B's type through an extension step is not a valid
+		// restriction of B's element even though it is derived from it (W3C
+		// particlesIj008). We deliberately do NOT block the list/union arm — Type
+		// Derivation OK (Simple) §3.16.3 clause 2.2.3 UNCONDITIONALLY allows a list-
+		// or union-variety type to be derived from xs:anySimpleType, so a base
+		// element typed xs:anySimpleType/xs:anyType validly retyped to a list/union
+		// in a complexContent restriction is legal (W3C stZ067/stZ068/stZ069,
+		// particlesIk014/Ik017/Ik018 are all expected-VALID); blocking list/union
+		// would over-reject those. The check is unconditional (independent of any
+		// @block), so it is a separate gate from the type-@block cvc-elt.4.3 check
+		// below.
 		if isDerivationBlocked(rt.Type, bt.Type, BlockExtension) {
 			return false
 		}
