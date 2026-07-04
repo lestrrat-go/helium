@@ -472,4 +472,29 @@ func TestElementRestrictsSubstMember(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	t.Run("accepts built-in-derived type restricting a subst member", func(t *testing.T) {
+		t.Parallel()
+		// A derived subst member m1 typed xs:int validly restricts a base subst member
+		// m1 typed xs:integer — xs:int IS derived from xs:integer, but the 1.0 built-ins
+		// are not BaseType-linked, so the NameAndTypeOK type check must be built-in-aware
+		// (strictBuiltinAwareDerivedFrom) rather than a plain base-chain walk.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="head" type="xs:integer"/>
+  <xs:element name="m1" type="xs:integer" substitutionGroup="t:head"/>
+  <xs:complexType name="base">
+    <xs:sequence><xs:element ref="t:head"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:sequence><xs:element name="m1" type="xs:int"/></xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
 }

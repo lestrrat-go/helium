@@ -331,12 +331,16 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 	}
 	// Type derivation: the derived element's type must be the same as, or derived
 	// from, the base element's type. When either type is unresolved, accept
-	// conservatively. In XSD 1.1, when the base element's type is a union, a
-	// derived type validly derived from one of the union's (transitive) members
-	// is also a valid restriction (member substitutability), so use the
-	// union-aware predicate rather than a plain base-chain walk.
+	// conservatively. The check is BUILT-IN-AWARE (strictBuiltinAwareDerivedFrom,
+	// as in all_subsumption.go's NameAndTypeOK): the 1.0 built-in simple types are
+	// not BaseType-linked, so a plain isDerivedFrom would miss e.g. derived xs:int
+	// restricting base xs:integer — a valid, version-independent restriction. In
+	// XSD 1.1, when the base element's type is a union, a derived type validly
+	// derived from one of the union's (transitive) members is also a valid
+	// restriction (member substitutability), so the union-aware predicate is tried
+	// too.
 	if rt.Type != nil && bt.Type != nil {
-		ok := isDerivedFrom(rt.Type, bt.Type)
+		ok := strictBuiltinAwareDerivedFrom(rt.Type, bt.Type)
 		if !ok && version == Version11 {
 			ok = isXsiTypeDerivedFromDeclared(rt.Type, bt.Type)
 		}
