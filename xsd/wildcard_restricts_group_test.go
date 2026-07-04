@@ -1119,6 +1119,68 @@ func TestWildcardRestrictsChoiceDispatchSound(t *testing.T) {
 	}
 }
 
+// The element-precedence exemption for the choice dispatch paths is OCCURRENCE-aware for a
+// derived SEQUENCE (MapAndSum): declaring the element name is NOT enough when the base admits
+// MORE occurrences of it than the derived element covers. A base `choice maxOccurs="2"` admits
+// two `<e>` children (both routed to the e:int branch by precedence); a derived
+// `sequence(e:int, any skip)` consumes the FIRST `<e>` as the element but the SECOND spills to
+// the wildcard — so `<e>1</e><e>bad</e>` validates under the derived while the base rejects it.
+// Reject. (For a derived CHOICE, precedence routes EVERY same-named child to the element branch
+// regardless of occurrence, so the identical `choice maxOccurs="2"` restriction stays sound.)
+func TestWildcardRestrictsSequenceChoiceOrderedSpill(t *testing.T) {
+	t.Parallel()
+
+	spill := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:choice maxOccurs="2">
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:element name="e" type="xs:int"/>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, spill)
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+		"the derived sequence element covers only one <e>; the base's second <e> spills to the derived skip wildcard, so the derived is not a language subset")
+	require.Nil(t, schema)
+
+	// Sound companion: the SAME base restricted by an identical derived CHOICE (not a sequence).
+	// Choice precedence routes both <e> children to the element branch — no spill — so it compiles.
+	choiceOK := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:choice maxOccurs="2">
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:choice maxOccurs="2">
+          <xs:element name="e" type="xs:int"/>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema2, _, cerr2 := compileWith(t, xsd.Version11, choiceOK)
+	require.NoError(t, cerr2,
+		"a derived choice routes every same-named child to the element branch regardless of occurrence — no wildcard spill")
+	require.NotNil(t, schema2)
+}
+
 // A base xs:all element declaration is an ABSTRACT head `h` with a concrete
 // substitution-group member `m`. The base routes <m> to the `h` element particle
 // (validated against m's int type), NOT to the base ##any wildcard — substitution
