@@ -299,21 +299,29 @@ func (vc *validationContext) btBodyReach(ctx context.Context, m *btMemo, mg *Mod
 	return nil
 }
 
-// btReachAll returns the deterministic greedy end position(s) for an xs:all group
-// at pos (plus pos itself when the group is optional / emptiable).
+// btReachAll returns the reachable end position(s) for an xs:all group at pos: the
+// deterministic greedy full match (per-member counting), plus — for an OPTIONAL
+// group (minOccurs==0) — the zero-consumption SKIP endpoint (pos itself).
+//
+// The skip is added UNCONDITIONALLY for an optional group, even when tryMatchAll
+// errors: an optional all-group always admits the empty sequence, consuming no
+// children, so a following particle may consume them instead (mirrors the greedy
+// matchers' minOccurs==0 zero-consumption skip at validate_elem.go — which
+// tryMatchAll itself does NOT apply, so it reports a required-member-missing error
+// where the group should simply be skipped). Only this zero-consumption endpoint
+// is added; a PARTIAL (incomplete) match is never an endpoint, so it cannot let
+// the group consume children it shouldn't.
 func (vc *validationContext) btReachAll(ctx context.Context, mg *ModelGroup, children []childElem, pos int) []int {
-	consumed, err := vc.tryMatchAll(ctx, mg, children, pos)
-	if err != nil {
-		return nil
-	}
-	if consumed == 0 {
-		return []int{pos}
-	}
-	// The group's own optionality allows a zero-length alternative too.
+	var out []int
+	seen := make(map[int]struct{})
 	if mg.MinOccurs == 0 {
-		return []int{pos, pos + consumed}
+		out = addUnique(out, seen, pos)
 	}
-	return []int{pos + consumed}
+	consumed, err := vc.tryMatchAll(ctx, mg, children, pos)
+	if err == nil {
+		out = addUnique(out, seen, pos+consumed)
+	}
+	return out
 }
 
 // validateContentModelChildren validates every child's content when

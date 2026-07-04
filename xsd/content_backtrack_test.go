@@ -140,6 +140,43 @@ func TestContentBacktrackSameNameDistinctDecl(t *testing.T) {
 	})
 }
 
+// TestContentBacktrackOptionalAll exercises btReachAll's optional-all skip: an
+// OPTIONAL xs:all group (minOccurs=0) with a required member admits the empty
+// sequence (the group is skipped, consuming no children) but still rejects a
+// partial match where the group is entered but a required member is absent. The
+// empty-instance case routes through the backtracker (tryMatchAll reports the
+// required member missing without honoring minOccurs=0), so btReachAll's
+// zero-consumption skip endpoint must make it valid — while never admitting a
+// partial match.
+func TestContentBacktrackOptionalAll(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all minOccurs="0">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	t.Run("empty instance skips the optional all", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root/>`))
+	})
+	t.Run("full all match accepted", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><a>1</a><b>2</b></root>`))
+	})
+	t.Run("partial all match rejected (no skip masking a required member)", func(t *testing.T) {
+		t.Parallel()
+		// The group is entered (<a> present) but required <b> is absent; skipping
+		// the optional group cannot mask this (there is no following particle to
+		// consume the leftover <a>).
+		require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><a>1</a></root>`))
+	})
+}
+
 // validateBtInstance compiles schemaXML at the given version (which must be valid)
 // and validates instanceXML, returning the validation error (nil when valid).
 func validateBtInstance(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {
