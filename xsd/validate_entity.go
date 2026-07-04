@@ -29,7 +29,7 @@ import (
 func (vc *validationContext) validateEntities(ctx context.Context, doc *helium.Document) bool {
 	valid := true
 
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -77,7 +77,11 @@ func (vc *validationContext) validateEntities(ctx context.Context, doc *helium.D
 			}
 		}
 		return nil
-	}))
+	})); err != nil {
+		// A tree cycle (ErrWalkCycle) leaves the walk partial; the document
+		// cannot be certified valid.
+		valid = false
+	}
 
 	return valid
 }

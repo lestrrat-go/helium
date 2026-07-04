@@ -730,8 +730,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return false
 	}
 
-	// Walk the document tree for content model validation.
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	// Walk the document tree for content model validation. A tree cycle
+	// (ErrWalkCycle) leaves the walk partial, so the document is not valid.
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -743,10 +744,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			valid = false
 		}
 		return nil
-	}))
+	})); err != nil {
+		valid = false
+	}
 
 	// Second walk: evaluate identity constraints (xs:key, xs:keyref, xs:unique).
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -772,7 +775,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			}
 		}
 		return nil
-	}))
+	})); err != nil {
+		valid = false
+	}
 
 	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
 	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these
@@ -859,8 +864,10 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// declared type — otherwise a blocked narrowing whose value is also valid under
 	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
 	// block="restriction") would be wrongly accepted. This mirrors the per-child
-	// match sites, which already treat a blocked xsi:type as a content error.
-	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
+	// match sites, which already treat a blocked xsi:type as a content error. The
+	// blocked set unions the element declaration's block with the declared type's
+	// {prohibited substitutions} (cvc-elt.4.3).
+	if td != declType && typeDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("blocked xsi:type")
@@ -1147,8 +1154,9 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			continue
 		}
 		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-		// for a global element assessed through xs:anyType too.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+		// for a global element assessed through xs:anyType too. The blocked set unions
+		// the element declaration's block with the declared type's block.
+		if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
 				"The xsi:type definition is blocked by the element declaration.")
 			contentErr = fmt.Errorf("blocked xsi:type")

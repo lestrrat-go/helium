@@ -421,6 +421,8 @@ func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
 // hasDOEMarkers checks if the document contains any disable-output-escaping markers.
 func hasDOEMarkers(doc *helium.Document) bool {
 	found := false
+	// The result tree is freshly built via guarded AddChild, so it is acyclic
+	// and Walk cannot return ErrWalkCycle here; the error is safely ignored.
 	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.ProcessingInstructionNode && n.Name() == "disable-output-escaping" {
 			found = true

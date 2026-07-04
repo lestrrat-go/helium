@@ -74,7 +74,11 @@ type deepCopier struct {
 // is the user state for src.
 func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[string]*Namespace, parentState any) error {
 	srcElem, _ := AsNode[*Element](src)
-	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
+	// src is always a document or element, whose children it owns, so Children's
+	// owned-boundary advance equals a raw NextSibling walk here while adding a
+	// per-list seen guard, so a corrupt (cyclic) source child list terminates the
+	// copy instead of spinning.
+	for c := range Children(src) {
 		if c.Type() == DTDNode {
 			continue
 		}
