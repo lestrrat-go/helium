@@ -880,3 +880,181 @@ func TestDerivationBodyAndAlternativeQNameGateSymmetry(t *testing.T) {
 		})
 	}
 }
+
+// TestPresentEmptyQNameNCNameSiteSymmetry closes the remaining reference /
+// required-@name / targetNamespace-secondary / keyref-@refer gates that key on a
+// QName- or NCName-valued schema attribute. For every gate a PRESENT-but-collapse-
+// empty value — the literal "" AND the whitespace-only "   " (xs:QName / xs:NCName
+// both fix whiteSpace "collapse") — must produce the IDENTICAL diagnostics: exactly
+// the one invalid-value diagnostic, no spurious structural / prohibition / "missing"
+// secondary. A genuinely-ABSENT attribute keeps its own missing/required diagnostic
+// (the absent-regression table below).
+func TestPresentEmptyQNameNCNameSiteSymmetry(t *testing.T) {
+	t.Parallel()
+
+	const (
+		wantQName  = "is not a valid QName"
+		wantNCName = "is not a valid 'NCName'"
+	)
+
+	// Each case: a %s-templated schema whose empty and whitespace-only fills must
+	// yield byte-identical diagnostics; wantPresent is the one value diagnostic that
+	// MUST appear; wantAbsent is the spurious secondary that must NOT.
+	cases := []struct {
+		name        string
+		schema      string
+		wantPresent string
+		wantAbsent  string
+		versions    []xsd.Version
+	}{
+		// Finding 1 — model-group reference: a present-empty @ref alongside a valid
+		// @name reports the one invalid-QName, NOT the "name not allowed" secondary
+		// (uniform with the attributeGroup reference below).
+		{
+			"model-group-ref-empty-with-name",
+			`<xs:complexType name="ct"><xs:sequence><xs:group ref="%s" name="g"/></xs:sequence></xs:complexType>`,
+			wantQName,
+			"not allowed on a model group reference",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		// Finding 1 — attributeGroup reference: same, the mirror of the model-group
+		// case (previously reported BOTH; now the single invalid-QName).
+		{
+			"attributegroup-ref-empty-with-name",
+			`<xs:complexType name="ct"><xs:attributeGroup ref="%s" name="g"/></xs:complexType>`,
+			wantQName,
+			"name' is not allowed on an attributeGroup reference",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		// Finding 2 — global element @name: present-empty is an invalid (empty)
+		// NCName, NOT "required but missing" (which is reserved for a genuinely-absent
+		// @name, exercised in the absent table).
+		{
+			"global-element-name-empty",
+			`<xs:element name="%s" type="xs:string"/>`,
+			wantNCName,
+			"is required but missing",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		// Finding 2 — local element @name: present-empty enters the named branch and
+		// is an invalid (empty) NCName for both forms (no divergence with the raw
+		// whitespace-only case).
+		{
+			"local-element-name-empty",
+			`<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="%s" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
+			wantNCName,
+			"",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		// Finding 3 — local attribute @name + @targetNamespace: present-empty @name is
+		// the one invalid-NCName; the "requires a ... name" targetNamespace secondary
+		// is suppressed (previously fired only for the literal "").
+		{
+			"local-attribute-name-empty-targetns",
+			`<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="keep" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>` +
+				`<xs:complexType name="ct"><xs:simpleContent><xs:restriction base="b"><xs:attribute name="%s" type="xs:string" targetNamespace="urn:x"/></xs:restriction></xs:simpleContent></xs:complexType>`,
+			wantNCName,
+			"requires a local attribute declaration with a 'name'",
+			[]xsd.Version{xsd.Version11},
+		},
+		// Finding 3 (sibling) — local element @name + @targetNamespace: the same
+		// suppression for the local ELEMENT targetNamespace secondary.
+		{
+			"local-element-name-empty-targetns",
+			`<xs:complexType name="b"><xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence></xs:complexType>` +
+				`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="%s" type="xs:string" targetNamespace="urn:x"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`,
+			wantNCName,
+			"requires a local element declaration with a 'name'",
+			[]xsd.Version{xsd.Version11},
+		},
+		// Finding 4 — keyref @refer: present-empty is the one invalid-QName, NOT the
+		// "no refer attribute" (absent) diagnostic.
+		{
+			"keyref-refer-empty",
+			`<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence></xs:complexType>` +
+				`<xs:key name="k"><xs:selector xpath="c"/><xs:field xpath="."/></xs:key>` +
+				`<xs:keyref name="kr" refer="%s"><xs:selector xpath="c"/><xs:field xpath="."/></xs:keyref></xs:element>`,
+			wantQName,
+			"has no 'refer' attribute naming a key or unique",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run("symmetry/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, v := range tc.versions {
+				emptyXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, fmt.Sprintf(tc.schema, ""))
+				wsXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, fmt.Sprintf(tc.schema, "   "))
+
+				schemaEmpty, errsEmpty, cerrEmpty := compileWith(t, v, emptyXML)
+				_, errsWs, cerrWs := compileWith(t, v, wsXML)
+
+				require.ErrorIs(t, cerrEmpty, xsd.ErrCompilationFailed, "version=%v: present-empty must reject; got: %s", v, errsEmpty)
+				require.ErrorIs(t, cerrWs, xsd.ErrCompilationFailed, "version=%v: whitespace-only must reject; got: %s", v, errsWs)
+				require.Nil(t, schemaEmpty)
+
+				// The core symmetry claim: "" and "   " collapse to the same value, so
+				// the emitted diagnostics are byte-identical.
+				require.Equal(t, errsEmpty, errsWs,
+					"version=%v: present-empty and whitespace-only must emit identical diagnostics", v)
+
+				require.Contains(t, errsEmpty, tc.wantPresent,
+					"version=%v: the one value diagnostic %q must appear; got: %s", v, tc.wantPresent, errsEmpty)
+				if tc.wantAbsent != "" {
+					require.NotContains(t, errsEmpty, tc.wantAbsent,
+						"version=%v: no spurious secondary %q; got: %s", v, tc.wantAbsent, errsEmpty)
+				}
+			}
+		})
+	}
+
+	// A genuinely-ABSENT attribute keeps its own missing/required diagnostic and does
+	// NOT emit the present-empty invalid-value diagnostic.
+	absent := []struct {
+		name        string
+		schema      string
+		wantMissing string
+		wantAbsent  string
+		versions    []xsd.Version
+	}{
+		{
+			"global-element-name-absent",
+			`<xs:element type="xs:string"/>`,
+			"is required but missing",
+			wantNCName,
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		{
+			"keyref-refer-absent",
+			`<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence></xs:complexType>` +
+				`<xs:key name="k"><xs:selector xpath="c"/><xs:field xpath="."/></xs:key>` +
+				`<xs:keyref name="kr"><xs:selector xpath="c"/><xs:field xpath="."/></xs:keyref></xs:element>`,
+			"has no 'refer' attribute naming a key or unique",
+			wantQName,
+			[]xsd.Version{xsd.Version10, xsd.Version11},
+		},
+		{
+			"local-attribute-targetns-name-absent",
+			`<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="keep" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>` +
+				`<xs:complexType name="ct"><xs:simpleContent><xs:restriction base="b"><xs:attribute type="xs:string" targetNamespace="urn:x"/></xs:restriction></xs:simpleContent></xs:complexType>`,
+			"requires a local attribute declaration with a 'name'",
+			wantNCName,
+			[]xsd.Version{xsd.Version11},
+		},
+	}
+	for _, tc := range absent {
+		t.Run("absent/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			for _, v := range tc.versions {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: absent-attribute case must reject; got: %s", v, errs)
+				require.Contains(t, errs, tc.wantMissing,
+					"version=%v: a genuinely-absent attribute keeps its missing/required diagnostic; got: %s", v, errs)
+				require.NotContains(t, errs, tc.wantAbsent,
+					"version=%v: an absent attribute is not a present-empty invalid value; got: %s", v, errs)
+			}
+		})
+	}
+}

@@ -846,12 +846,16 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 	// declaration name is the collapsed value, exactly as for global declarations.
 	name := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
 	if name == "" {
-		if c.version != Version11 || !hasAttr(elem, attrTargetNamespace) {
+		// Distinguish a genuinely-ABSENT @name from a PRESENT-but-collapse-empty one
+		// ("" or "   "). A present-empty @name is an invalid (empty) NCName already
+		// reported by checkLocalElement, and a v11 targetNamespace-only local element
+		// legitimately omits @name — both use a valid internal recovery name so
+		// compilation reaches the usual ErrCompilationFailed gate. Only a genuinely
+		// missing name (absent @name, no @ref, and — in 1.1 — no @targetNamespace) is
+		// the internal parser error.
+		if !hasAttr(elem, attrName) && (c.version != Version11 || !hasAttr(elem, attrTargetNamespace)) {
 			return nil, fmt.Errorf("xsd: local element missing name")
 		}
-		// checkLocalElement has already reported the schema error. Use a valid,
-		// internal recovery name so compilation reaches the usual ErrCompilationFailed
-		// gate instead of returning a raw parser error.
 		name = fmt.Sprintf("__invalid_local_element_%d", elem.Line())
 	}
 
@@ -1156,18 +1160,27 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			"The attribute 'refer' is not allowed.")
 	}
 	if kind == IDCKeyRef {
-		// xs:keyref/@refer is an xs:QName (whiteSpace fixed "collapse"), so collapse
-		// at the read point: the stored Refer and the validateQName check in
-		// resolveIDCReferQName both see the collapsed value, so a padded
-		// refer=" k " resolves instead of failing on a whitespace-padded prefix.
-		idc.Refer = collapsedAttr(elem, attrRefer)
-		// @refer is a QName; resolve it namespace-aware against the constraint
-		// element's in-scope namespaces. An empty refer or an unbound prefix is a
-		// fatal schema error (reported later by checkKeyRefRefers, which also
-		// verifies the referenced constraint exists). Store the resolved QName so
-		// validation can look the target up by full identity rather than by local
-		// name only.
-		idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
+		// xs:keyref/@refer is an xs:QName (whiteSpace fixed "collapse"). Dispatch on
+		// PRESENCE: a PRESENT-but-collapse-empty @refer ("" or "   ") is an invalid
+		// (empty) QName — report that ONE value diagnostic here and mark referUnbound
+		// so checkKeyRefRefers does NOT also emit its "no refer attribute" (absent)
+		// diagnostic. Present-empty is NOT absent, so present-empty ≡ whitespace-only.
+		// A genuinely-ABSENT @refer leaves idc.Refer empty and keeps that "no refer
+		// attribute naming a key or unique" diagnostic (checkKeyRefRefers).
+		switch {
+		case hasAttr(elem, attrRefer) && collapsedAttr(elem, attrRefer) == "":
+			c.reportInvalidQNameValue(ctx, elem, attrRefer, "")
+			idc.referUnbound = true
+		default:
+			// Collapse at the read point so the stored Refer and the validateQName
+			// check in resolveIDCReferQName both see the collapsed value (a padded
+			// refer=" k " resolves instead of failing on a whitespace-padded prefix).
+			// resolveIDCReferQName resolves the QName namespace-aware; an unbound
+			// prefix is a fatal error there. Store the resolved QName so validation
+			// looks the target up by full identity rather than by local name only.
+			idc.Refer = collapsedAttr(elem, attrRefer)
+			idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
+		}
 	}
 	// fieldLines tracks the source line of each <field>, parallel to idc.Fields,
 	// so a malformed field XPath is reported against the right element.

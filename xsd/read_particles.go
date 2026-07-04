@@ -343,6 +343,17 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	return nil
 }
 
+// refPresentEmpty reports whether @ref is PRESENT but collapses to the empty
+// string ("" or whitespace-only). @ref is an xs:QName (whiteSpace fixed
+// "collapse"), so a present-but-collapse-empty ref is an invalid (empty) QName —
+// the reference form's PRIMARY attribute is malformed. Both reference checks
+// (checkContentModelGroupRef / checkAttrGroupRef) use this to report that one
+// value diagnostic and suppress the @name-prohibition secondary, so the two forms
+// behave identically and present-empty ≡ whitespace-only.
+func refPresentEmpty(elem *helium.Element) bool {
+	return hasAttr(elem, attrRef) && collapsedAttr(elem, attrRef) == ""
+}
+
 // checkAttrGroupRef enforces the XML representation of an attributeGroup
 // REFERENCE (§3.6.2): a nested <xs:attributeGroup> appearing inside a named
 // attribute group definition, a complexType, or a derivation body is a reference,
@@ -360,7 +371,12 @@ func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 	if c.filename == "" {
 		return
 	}
-	if c.ncnameCompanionUsable(ctx, ce, elemAttributeGroup) {
+	// @ref is the PRIMARY reference attribute. A present-but-collapse-empty
+	// ref="" / "   " is an invalid (empty) QName — the caller's resolveQName reports
+	// that one value diagnostic — so SUPPRESS the @name-prohibition secondary here,
+	// uniformly with checkContentModelGroupRef, so the two reference forms behave
+	// identically (one invalid-QName diagnostic, no spurious "name not allowed").
+	if !refPresentEmpty(ce) && c.ncnameCompanionUsable(ctx, ce, elemAttributeGroup) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", attrName,
 			"The attribute 'name' is not allowed on an attributeGroup reference; use 'ref'."))
 	}
@@ -403,6 +419,15 @@ func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Ele
 		// Representation diagnostics need a source label; preserve the legacy
 		// behavior (record only a non-empty ref) when none is available.
 		return ref != ""
+	}
+	// @ref is the PRIMARY reference attribute. A present-but-collapse-empty
+	// ref="" / "   " is an invalid (empty) QName: report that ONE value diagnostic
+	// and reject the ref, SUPPRESSING the @name-prohibition secondary — uniformly
+	// with checkAttrGroupRef. The caller skips resolution on a false return, so this
+	// is the sole report and present-empty ≡ whitespace-only.
+	if refPresentEmpty(ce) {
+		c.reportInvalidQNameValue(ctx, ce, attrRef, "")
+		return false
 	}
 	ok := true
 	if c.ncnameCompanionUsable(ctx, ce, elemGroup) {

@@ -159,17 +159,20 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	// Content-model ordering: annotation must be the first child (§3.3.2).
 	c.checkElementContentOrder(ctx, elem)
 
-	// name is required for global elements. Presence is detected on the RAW value
-	// (an absent or literally-empty name), while the NCName test runs on the
-	// COLLAPSED value (xs:element/@name is xs:NCName, whiteSpace fixed "collapse"):
-	// a padded name="sub2-elem " is valid, a whitespace-only name collapses to
-	// empty and is an invalid NCName, and an internal-whitespace name="a b" fails.
-	if name == "" {
+	// name is required for global elements. Presence is detected by hasAttr, so a
+	// genuinely-ABSENT @name is "required but missing", while a PRESENT @name — the
+	// literal "" AND the whitespace-only "   " (xs:element/@name is xs:NCName,
+	// whiteSpace fixed "collapse", so both collapse to the empty string) — is an
+	// invalid (empty) NCName, symmetric between the two forms. A padded
+	// name="sub2-elem " is valid; an internal-whitespace name="a b" fails.
+	if !hasAttr(elem, attrName) {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."))
-	} else if !xmlchar.IsValidNCName(normalizeWhiteSpace(name, "collapse")) {
+	} else if cname := normalizeWhiteSpace(name, "collapse"); !xmlchar.IsValidNCName(cname) {
+		// Report the COLLAPSED value so name="" and name="   " (both collapse to "")
+		// emit the identical '' diagnostic, matching ncnameCompanionUsable.
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
-			"The value '"+name+"' is not a valid 'NCName'."))
+			"The value '"+cname+"' is not a valid 'NCName'."))
 	}
 
 	// ref is not allowed at global level. @ref is xs:QName: a PRESENT-but-collapse-
@@ -599,8 +602,13 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 				break // only report first
 			}
 		}
-	} else if name != "" {
-		// Named local element constraints.
+	} else if hasAttr(elem, attrName) {
+		// Named local element constraints (dispatch on PRESENCE, not a non-empty
+		// value): a PRESENT-but-collapse-empty @name — the literal "" AND the
+		// whitespace-only "   " (xs:NCName, whiteSpace collapse) — enters this branch
+		// and is reported as an invalid (empty) NCName below, symmetric between the
+		// two forms; a genuinely-ABSENT @name falls through to the targetNamespace
+		// branch (and, with no @ref/@name, to parseLocalElement's missing-name path).
 		// Matches libxml2 ordering: maxOccurs, not-allowed attrs,
 		// block/final value checks, default+fixed, type/content children.
 
@@ -611,9 +619,11 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Structures §3.3.2; xsd:element/@name is of type xs:NCName, whiteSpace
 		// fixed "collapse"), exactly as for global declarations — the value is
 		// collapsed before the NCName test.
-		if !xmlchar.IsValidNCName(normalizeWhiteSpace(name, "collapse")) {
+		if cname := normalizeWhiteSpace(name, "collapse"); !xmlchar.IsValidNCName(cname) {
+			// Report the COLLAPSED value so name="" and name="   " emit the identical
+			// '' diagnostic, matching ncnameCompanionUsable.
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
-				"The value '"+name+"' is not a valid 'NCName'."))
+				"The value '"+cname+"' is not a valid 'NCName'."))
 		}
 
 		// maxOccurs must be a non-negative integer (or "unbounded"). A maxOccurs of
@@ -711,7 +721,11 @@ func (c *compiler) checkLocalElementTargetNamespace(ctx context.Context, elem *h
 
 	line := elem.Line()
 	local := elem.LocalName()
-	if getAttr(elem, attrName) == "" {
+	// Fire the "requires a name" diagnostic only when @name is genuinely ABSENT
+	// (hasAttr): a PRESENT-but-collapse-empty @name ("" or "   ") is reported as an
+	// invalid (empty) NCName by checkLocalElement, so this secondary is suppressed —
+	// present-empty ≡ whitespace-only, one diagnostic.
+	if !hasAttr(elem, attrName) {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "element",
 			"The attribute 'targetNamespace' requires a local element declaration with a 'name'."))
 		return
@@ -1066,7 +1080,11 @@ func (c *compiler) checkLocalAttributeTargetNamespace(ctx context.Context, elem 
 
 	line := elem.Line()
 	local := elem.LocalName()
-	if getAttr(elem, attrName) == "" {
+	// Fire the "requires a name" diagnostic only when @name is genuinely ABSENT
+	// (hasAttr): a PRESENT-but-collapse-empty @name ("" or "   ") is reported as an
+	// invalid (empty) NCName by checkAttributeUse, so this secondary is suppressed —
+	// present-empty ≡ whitespace-only, one diagnostic.
+	if !hasAttr(elem, attrName) {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 			"The attribute 'targetNamespace' requires a local attribute declaration with a 'name'."))
 	}
