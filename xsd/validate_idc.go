@@ -321,6 +321,16 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 						allPresent = false
 						continue
 					}
+					// XSD 1.1 (§3.11.4): an ATTRIBUTE field admitted only by a skip
+					// (or lax-without-global) anyAttribute wildcard is likewise
+					// UNASSESSED — no type annotation — so it contributes NO value,
+					// even when a same-named global attribute declaration exists.
+					// In XSD 1.0 it flows to the simple-type check below and is
+					// rejected (mirroring the skip-content element in 1.0).
+					if a, ok := fieldNode.(*helium.Attribute); ok && vc.version == Version11 && !vc.attrFieldAssessed(a, elem, edecl, schema) {
+						allPresent = false
+						continue
+					}
 					value = nodeStringValue(fieldNode)
 				}
 			case xpath1.StringResult:
@@ -621,26 +631,21 @@ func fieldNodeNSContext(n helium.Node) map[string]string {
 }
 
 // fieldNodeSimpleTyped reports whether an IDC field node has a SIMPLE type, as
-// cvc-identity-constraint.3 requires. An attribute is simple-typed whenever it is
-// schema-known — resolved to a type, recorded as assessed, or merely declared (an
-// untyped attribute declaration is xs:anySimpleType, itself a simple type); an
-// attribute admitted only by a lax/skip anyAttribute wildcard is NOT
-// schema-assessed and carries no type, so it is not simple-typed. An element is
-// simple-typed when its resolved type is a simple type definition or a complex
-// type with SIMPLE content; a complex type with element-only/mixed/empty content
-// is not. A field node whose type cannot otherwise be resolved is treated
-// conservatively as simple-typed, except for the wildcard-admitted attribute case
-// above.
+// cvc-identity-constraint.3 requires. An attribute is simple-typed only when it
+// was actually ASSESSED (attrFieldAssessed): recorded with a type at a genuine
+// assessment site, or matching a declared attribute use on its owner's type (an
+// untyped use is xs:anySimpleType, itself a simple type). A matching GLOBAL
+// attribute declaration alone does NOT count — an attribute admitted only by a
+// skip (or lax-without-global) anyAttribute wildcard is UNASSESSED regardless of
+// any same-named global, so it is not simple-typed. An element is simple-typed
+// when its resolved type is a simple type definition or a complex type with
+// SIMPLE content; a complex type with element-only/mixed/empty content is not. A
+// field node whose type cannot otherwise be resolved is treated conservatively as
+// simple-typed, except for the unassessed-attribute case above.
 func (vc *validationContext) fieldNodeSimpleTyped(n helium.Node, td *TypeDef, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
 	switch v := n.(type) {
 	case *helium.Attribute:
-		if td != nil {
-			return true
-		}
-		if _, ok := vc.actualAttrType[v]; ok {
-			return true
-		}
-		return vc.attrFieldDeclared(v, host, hostDecl, schema)
+		return vc.attrFieldAssessed(v, host, hostDecl, schema)
 	case *helium.Element:
 		if td == nil {
 			return true
@@ -652,22 +657,25 @@ func (vc *validationContext) fieldNodeSimpleTyped(n helium.Node, td *TypeDef, ho
 	}
 }
 
-// attrFieldDeclared reports whether an attribute field node has a schema
-// DECLARATION — a matching attribute use on its owner's type (walking the base
-// chain) or a global attribute declaration — regardless of whether that
-// declaration carries an explicit type. A declared-but-untyped attribute is
-// xs:anySimpleType (a simple type) and so a valid IDC field even when its type
-// does not resolve; an attribute with no declaration at all is admitted only by
-// an anyAttribute wildcard.
-func (vc *validationContext) attrFieldDeclared(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
+// attrFieldAssessed reports whether an attribute field node was schema-ASSESSED
+// during validation. An attribute is assessed when it was recorded with a type
+// at a genuine assessment site (annotateAttrUse for a typed use, or
+// validateWildcardAttr for a strict/lax wildcard WITH a matching global —
+// vc.actualAttrType), OR when it matches a declared attribute use on its owner's
+// type (walking the base chain), which covers an untyped declaration
+// (xs:anySimpleType, itself a simple type). A matching GLOBAL declaration alone
+// is deliberately NOT sufficient: an attribute admitted only by a skip (or
+// lax-without-global) anyAttribute wildcard is never assessed against that
+// global, so it carries no type and cannot be a simple-typed IDC field.
+func (vc *validationContext) attrFieldAssessed(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
+	if _, ok := vc.actualAttrType[attr]; ok {
+		return true
+	}
 	aqn := QName{Local: attr.LocalName(), NS: attr.URI()}
 	if owner, ok := attr.Parent().(*helium.Element); ok {
 		if td := vc.resolveElemType(owner, host, hostDecl, schema); td != nil && attrUseExists(td, aqn) {
 			return true
 		}
-	}
-	if _, ok := schema.globalAttrs[aqn]; ok {
-		return true
 	}
 	return false
 }
