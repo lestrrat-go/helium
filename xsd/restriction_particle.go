@@ -1517,6 +1517,13 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 	// EXEMPTION: a STRICT derived wildcard resolving to a GLOBAL element whose type
 	// validly restricts the dropped base element (derivedElemNameAndTypeOK) keeps the
 	// content within the base type, so it is a valid restriction.
+	//
+	// SUBSTITUTION MEMBERS: the base also routes an instance-admissible
+	// substitution-group member of a dropped base element to that element (validated
+	// against the member's type via the substitution group), so an UNENFORCING derived
+	// wildcard (skip, or lax with no matching global) that re-admits a member name
+	// accepts content the base validates more strictly — checked alongside the own
+	// name below.
 	for i, bp := range baseElems {
 		if sumMax[i] != 0 {
 			continue // kept in the derived — governed by its derived declaration
@@ -1538,6 +1545,9 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 					continue
 				}
 			}
+			return false
+		}
+		if droppedAllElementMemberReadmittedByUnenforcingWildcard(be, derivedWilds, schema) {
 			return false
 		}
 	}
@@ -1633,6 +1643,31 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		return false
 	}
 	return true
+}
+
+// droppedAllElementMemberReadmittedByUnenforcingWildcard reports whether a DROPPED
+// base xs:all element's instance-admissible substitution-group member name is
+// re-admitted by an UNENFORCING derived wildcard (skip, or lax with no matching
+// global). The base routes such a member child to this element particle — validated
+// against the member's type via the substitution group — so an unenforcing derived
+// wildcard that admits the member accepts content the base validates more strictly,
+// and the derived is not a language subset. A strict / lax-with-global derived
+// wildcard resolves a governing type the DYNAMIC EDC checks against the base local
+// type at validation, so it is left to that runtime check (compile accepts). This
+// mirrors the element-precedence reservation applied to the choice/sequence reduction
+// (wildcardReadmitsReservedElement) and recurseOrdered
+// (baseElementReadmittedByUnenforcingWildcard) paths, reusing instanceSubstMembers
+// and wildcardUnenforcingForName so all three stay consistent.
+func droppedAllElementMemberReadmittedByUnenforcingWildcard(be *ElementDecl, derivedWilds []*Particle, schema *Schema) bool {
+	for _, m := range instanceSubstMembers(be, schema) {
+		for _, dw := range derivedWilds {
+			dwc, _ := dw.Term.(*Wildcard)
+			if wildcardUnenforcingForName(dwc, m.Name, schema) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // baseWildcardExclusive reports whether base wildcard bw is the only base

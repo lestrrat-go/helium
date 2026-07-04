@@ -993,3 +993,114 @@ func TestWildcardRestrictsGroupReservedElementExcluded(t *testing.T) {
 		"the base element is in a namespace the derived wildcard excludes, so no reserved name is re-admitted — a valid subset restriction")
 	require.NotNil(t, schema)
 }
+
+// A base xs:all element declaration is an ABSTRACT head `h` with a concrete
+// substitution-group member `m`. The base routes <m> to the `h` element particle
+// (validated against m's int type), NOT to the base ##any wildcard — substitution
+// membership, like element precedence. The derived restriction drops the element and
+// re-admits its language through `xs:any notQName="h" processContents="skip"`: the
+// notQName EXCLUDES the head name h but ADMITS the concrete member m. A skip wildcard
+// never assesses m's type, so the derived accepts <m>bad</m> the base rejects — not a
+// language subset. The dropped-element guard must reserve the member name (not just
+// the head's own name) and REJECT. The overlapping element/wildcard base is
+// UPA-invalid in XSD 1.0, so this is reachable only in 1.1.
+func TestWildcardRestrictsAllSubstMemberReadmittedRejects(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:int" abstract="true"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="h" minOccurs="0"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:any namespace="##any" notQName="h" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="broot" type="base"/>
+  <xs:element name="droot" type="derived"/>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+		"the base routes the substitution member <m> to the dropped element's type; a skip derived wildcard re-admitting m is not a language subset")
+	require.Nil(t, schema)
+}
+
+// The sound companions of the substitution-member guard: each COMPILES because the
+// derived wildcard does NOT UNENFORCINGLY re-admit the member name m.
+//
+//   - namespace-excluded: the head/member live in urn:sub, but the derived wildcard's
+//     namespace is urn:other — it excludes m, so nothing re-admits it.
+//   - strict-defers: the derived wildcard is STRICT, so it resolves a governing type
+//     the DYNAMIC EDC checks against the base local type at validation — compile
+//     accepts and defers, rather than over-rejecting.
+func TestWildcardRestrictsAllSubstMemberSoundCompiles(t *testing.T) {
+	t.Parallel()
+
+	nsExcluded := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+      xmlns:s="urn:sub" targetNamespace="urn:sub"
+      elementFormDefault="qualified">
+  <xs:element name="h" type="xs:int" abstract="true"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="s:h"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="s:h" minOccurs="0"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:any namespace="urn:other" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	strictDefers := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:int" abstract="true"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="h" minOccurs="0"/>
+      <xs:any namespace="##any" processContents="strict"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:any namespace="##any" notQName="h" processContents="strict"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"namespace-excluded", nsExcluded},
+		{"strict-defers", strictDefers},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.NoError(t, cerr,
+				"the derived wildcard does not unenforcingly re-admit the substitution member, so the restriction is a valid subset")
+			require.NotNil(t, schema)
+		})
+	}
+}
