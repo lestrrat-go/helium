@@ -18,6 +18,7 @@ type idcTable struct {
 	keys       []idcEntry
 	keyMissing bool // an xs:key selected node had an absent field (cvc-identity-constraint.4.2.1)
 	fieldError bool // a field XPath selected more than one node (cvc-identity-constraint.3)
+	fieldType  bool // a field selected a node whose type is not simple (cvc-identity-constraint.3)
 }
 
 // idcEntry holds a single key-sequence value and the node that produced it.
@@ -79,6 +80,12 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		// evaluation; surface it as a validation failure.
 		if table.fieldError {
 			lastErr = fmt.Errorf("field evaluates to more than one node")
+		}
+
+		// A field that selected a node with a non-simple type was already
+		// reported during evaluation; surface it as a validation failure.
+		if table.fieldType {
+			lastErr = fmt.Errorf("field evaluates to a node whose type is not simple")
 		}
 
 		if idc.Kind == IDCKeyRef {
@@ -320,6 +327,24 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			// type cannot be resolved.
 			fieldTD := vc.resolveFieldType(fieldNode, elem, edecl, schema)
 			entry.canon = append(entry.canon, canonicalFieldKey(ctx, value, fieldNode, fieldTD))
+
+			// cvc-identity-constraint.3: a field must evaluate to the empty
+			// node-set or to a single node with a SIMPLE type. A field pointing at
+			// a complex-typed element, or at an attribute admitted only by a
+			// lax/skip anyAttribute wildcard (which is not schema-assessed and so
+			// carries no type), is a validity error. Version-independent.
+			if fieldNode != nil && !vc.fieldNodeSimpleTyped(fieldNode, fieldTD, elem, edecl, schema) {
+				if entry.elem != nil {
+					idcName := idcDisplayName(idc, vc.schema)
+					msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node whose type is not simple.",
+						fieldXPath, idcKindName(idc.Kind), idcName)
+					vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemDisplayName(entry.elem), msg)
+				}
+				table.fieldType = true
+				allPresent = false
+				fieldErr = true
+				break
+			}
 		}
 
 		if allPresent {
@@ -580,6 +605,71 @@ func fieldNodeNSContext(n helium.Node) map[string]string {
 		}
 	}
 	return map[string]string{}
+}
+
+// fieldNodeSimpleTyped reports whether an IDC field node has a SIMPLE type, as
+// cvc-identity-constraint.3 requires. An attribute is simple-typed whenever it is
+// schema-known — resolved to a type, recorded as assessed, or merely declared (an
+// untyped attribute declaration is xs:anySimpleType, itself a simple type); an
+// attribute admitted only by a lax/skip anyAttribute wildcard is NOT
+// schema-assessed and carries no type, so it is not simple-typed. An element is
+// simple-typed when its resolved type is a simple type definition or a complex
+// type with SIMPLE content; a complex type with element-only/mixed/empty content
+// is not. A field node whose type cannot otherwise be resolved is treated
+// conservatively as simple-typed, except for the wildcard-admitted attribute case
+// above.
+func (vc *validationContext) fieldNodeSimpleTyped(n helium.Node, td *TypeDef, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
+	switch v := n.(type) {
+	case *helium.Attribute:
+		if td != nil {
+			return true
+		}
+		if _, ok := vc.actualAttrType[v]; ok {
+			return true
+		}
+		return vc.attrFieldDeclared(v, host, hostDecl, schema)
+	case *helium.Element:
+		if td == nil {
+			return true
+		}
+		// A simple type definition, or a complex type with simple content.
+		return !td.IsComplex || td.ContentType == ContentTypeSimple
+	default:
+		return true
+	}
+}
+
+// attrFieldDeclared reports whether an attribute field node has a schema
+// DECLARATION — a matching attribute use on its owner's type (walking the base
+// chain) or a global attribute declaration — regardless of whether that
+// declaration carries an explicit type. A declared-but-untyped attribute is
+// xs:anySimpleType (a simple type) and so a valid IDC field even when its type
+// does not resolve; an attribute with no declaration at all is admitted only by
+// an anyAttribute wildcard.
+func (vc *validationContext) attrFieldDeclared(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) bool {
+	aqn := QName{Local: attr.LocalName(), NS: attr.URI()}
+	if owner, ok := attr.Parent().(*helium.Element); ok {
+		if td := vc.resolveElemType(owner, host, hostDecl, schema); td != nil && attrUseExists(td, aqn) {
+			return true
+		}
+	}
+	if _, ok := schema.globalAttrs[aqn]; ok {
+		return true
+	}
+	return false
+}
+
+// attrUseExists reports whether a complex type (or any type in its base chain)
+// declares an attribute use matching the given QName, regardless of its type.
+func attrUseExists(td *TypeDef, aqn QName) bool {
+	for cur := range baseChain(td) {
+		for _, au := range cur.Attributes {
+			if au.Name == aqn {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // resolveFieldType resolves the *TypeDef of an IDC field node. host/hostDecl are
