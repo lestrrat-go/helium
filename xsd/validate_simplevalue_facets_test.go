@@ -336,7 +336,10 @@ func compileSchemaErrors(t *testing.T, schemaXML string) string {
 func TestNotationEnumeration(t *testing.T) {
 	t.Parallel()
 
-	const enumSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+	// The notations are declared in the schema targetNamespace urn:p, so the
+	// enumeration values "p:jpeg"/"p:png" (p bound to urn:p) name declared
+	// notations (§3.14.6).
+	const enumSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" targetNamespace="urn:p">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:notation name="png" public="image/png"/>
   <xs:simpleType name="imageNotation">
@@ -350,13 +353,13 @@ func TestNotationEnumeration(t *testing.T) {
 
 	t.Run("enumeration-derived unbound prefix rejected", func(t *testing.T) {
 		t.Parallel()
-		_, err := validateInstance(t, enumSchema, `<n>q:jpeg</n>`)
+		_, err := validateInstance(t, enumSchema, `<n xmlns="urn:p">q:jpeg</n>`)
 		require.Error(t, err)
 	})
 
 	t.Run("enumeration-derived bound prefix accepted", func(t *testing.T) {
 		t.Parallel()
-		errs, err := validateInstance(t, enumSchema, `<n xmlns:p="urn:p">p:jpeg</n>`)
+		errs, err := validateInstance(t, enumSchema, `<n xmlns="urn:p" xmlns:p="urn:p">p:jpeg</n>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
@@ -371,6 +374,140 @@ func TestNotationEnumeration(t *testing.T) {
 		errs := compileSchemaErrors(t, bareSchema)
 		require.NotEmpty(t, errs, "expected a compile error for un-enumerated NOTATION base")
 		require.Contains(t, errs, "NOTATION")
+	})
+}
+
+// TestNotationEnumUnprefixedDefaultNamespace verifies that an UNPREFIXED
+// xs:NOTATION enumeration LITERAL resolves against the schema's in-scope DEFAULT
+// namespace consistently at compile time (the declared-notation lookup,
+// check_facets.go) AND at validation time (the facet comparison,
+// simplevalue_facets.go). The schema declares its default namespace equal to its
+// target namespace, so `<xs:enumeration value="jpeg"/>` names {urn:p}jpeg on both
+// sides; a prefixed instance value p:jpeg (same namespace) therefore matches the
+// enumeration, while an instance value in no namespace does not — the enum's
+// value space is identical at both phases.
+func TestNotationEnumUnprefixedDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	// xmlns default == targetNamespace, so the unprefixed enumeration literal
+	// "jpeg" names the declared {urn:p}jpeg notation (§3.14.6) — the schema
+	// compiles (agreeing that the enum is {urn:p}jpeg, not {}jpeg).
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:p" targetNamespace="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:element name="n">
+    <xs:simpleType>
+      <xs:restriction base="xs:NOTATION">
+        <xs:enumeration value="jpeg"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("prefixed instance value in the schema default namespace matches", func(t *testing.T) {
+		t.Parallel()
+		// The runtime enum resolves the unprefixed literal to {urn:p}jpeg (the
+		// schema default namespace), matching the prefixed instance value p:jpeg.
+		errs, err := validateInstance(t, schemaXML,
+			`<n xmlns="urn:p" xmlns:p="urn:p">p:jpeg</n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("no-namespace instance value does not match", func(t *testing.T) {
+		t.Parallel()
+		// A NOTATION *value* with no prefix resolves to no namespace, so it cannot
+		// equal the {urn:p}jpeg enumeration — proving the enum picked up the schema
+		// default namespace rather than staying {}jpeg.
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:n xmlns:tns="urn:p">jpeg</tns:n>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}
+
+// TestNotationEnumUnprefixedDefaultNamespaceListUnion verifies the unprefixed
+// xs:NOTATION default-namespace resolution applies uniformly across the LIST-item
+// and UNION-member enumeration comparison paths, not just the direct atomic one.
+// Both bottom out in the shared fixedAtomicMatches comparator, so an unprefixed
+// enumeration literal under the schema default namespace names {urn:p}jpeg and a
+// prefixed instance value in that namespace matches — while a no-default-namespace
+// value does not.
+func TestNotationEnumUnprefixedDefaultNamespaceListUnion(t *testing.T) {
+	t.Parallel()
+
+	// notationItem is a NOTATION-derived item/member type; the enclosing list and
+	// union each carry a whole-value enumeration whose unprefixed literals resolve
+	// against the schema default namespace (== target namespace).
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:p" targetNamespace="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="notationItem">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="jpeg"/>
+      <xs:enumeration value="png"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="list">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:list itemType="notationItem"/>
+        </xs:simpleType>
+        <xs:enumeration value="jpeg png"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="union">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="notationItem xs:string"/>
+        </xs:simpleType>
+        <xs:enumeration value="jpeg"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("list: prefixed instance items in the default namespace match", func(t *testing.T) {
+		t.Parallel()
+		// The list-level enumeration literal "jpeg png" resolves each unprefixed item
+		// to {urn:p}jpeg/{urn:p}png (schema default ns); the prefixed instance items
+		// name the same expanded QNames via fixedListMatches → fixedAtomicMatches.
+		errs, err := validateInstance(t, schemaXML,
+			`<list xmlns="urn:p" xmlns:p="urn:p">p:jpeg p:png</list>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("list: no-default-namespace items do not match", func(t *testing.T) {
+		t.Parallel()
+		// With no in-scope default namespace the instance items resolve to no
+		// namespace, so they cannot equal the {urn:p}jpeg/{urn:p}png enumeration items.
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:list xmlns:tns="urn:p">jpeg png</tns:list>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+
+	t.Run("union: prefixed instance value in the default namespace matches", func(t *testing.T) {
+		t.Parallel()
+		// The union-level enumeration literal "jpeg" (active in the notationItem
+		// member) resolves to {urn:p}jpeg; the prefixed instance value p:jpeg names
+		// the same QName via fixedUnionMatches → fixedAtomicMatches.
+		errs, err := validateInstance(t, schemaXML,
+			`<union xmlns="urn:p" xmlns:p="urn:p">p:jpeg</union>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("union: no-default-namespace value does not match", func(t *testing.T) {
+		t.Parallel()
+		// With no default namespace the instance "jpeg" is active in the xs:string
+		// member (it fails the notationItem enumeration), so it is not the {urn:p}jpeg
+		// enumeration value — the union enumeration rejects it (reported as a
+		// union-level error, the per-facet message being suppressed).
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:union xmlns:tns="urn:p">jpeg</tns:union>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value of the local union type")
 	})
 }
 
@@ -751,15 +888,21 @@ func TestUnionOfListsEnumerationValueSpace(t *testing.T) {
 	})
 }
 
-// TestNotationCarrierRecursive verifies item 3 (W09): the NOTATION-without-
-// enumeration check is recursive over varieties. An xs:list itemType="xs:NOTATION"
-// and a union member typed xs:NOTATION (neither enumeration-derived) are rejected
-// at compile time, while a list/union built over an enumeration-derived NOTATION
-// type compiles cleanly.
+// TestNotationCarrierRecursive verifies the NOTATION-carrier recursion over
+// varieties. The bare built-in xs:NOTATION referenced directly as an xs:list
+// itemType or union memberType is NOT an error in XSD 1.0 — only a RESTRICTION of
+// xs:NOTATION requires an enumeration (W3C particlesZ007 declares a valid union
+// memberTypes="xs:NOTATION"), and that restriction is judged at its own simpleType
+// definition; XSD 1.1 rejects even the bare built-in carrier (simple092/093). But
+// a USER-DEFINED simple type that restricts xs:NOTATION WITHOUT an enumeration
+// remains a schema-representation error when used as a list item / union member in
+// BOTH versions — the version-10 exemption applies only to the bare built-in. A
+// list/union built over an enumeration-derived NOTATION type that names a declared
+// notation compiles cleanly.
 func TestNotationCarrierRecursive(t *testing.T) {
 	t.Parallel()
 
-	t.Run("list of un-enumerated NOTATION rejected", func(t *testing.T) {
+	t.Run("list of bare xs:NOTATION compiles in 1.0 but not 1.1", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="notationList">
@@ -767,12 +910,13 @@ func TestNotationCarrierRecursive(t *testing.T) {
   </xs:simpleType>
   <xs:element name="n" type="notationList"/>
 </xs:schema>`
-		errs := compileSchemaErrors(t, schemaXML)
-		require.NotEmpty(t, errs, "expected a compile error for list of un-enumerated NOTATION")
-		require.Contains(t, errs, "NOTATION")
+		require.Empty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"the bare built-in xs:NOTATION as a list item type is not an error in XSD 1.0 (particlesZ007)")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"the bare built-in xs:NOTATION as a list item type IS an error in XSD 1.1 (simple092)")
 	})
 
-	t.Run("union member un-enumerated NOTATION rejected", func(t *testing.T) {
+	t.Run("union member bare xs:NOTATION compiles in 1.0 but not 1.1", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="notationOrInt">
@@ -780,18 +924,60 @@ func TestNotationCarrierRecursive(t *testing.T) {
   </xs:simpleType>
   <xs:element name="n" type="notationOrInt"/>
 </xs:schema>`
-		errs := compileSchemaErrors(t, schemaXML)
-		require.NotEmpty(t, errs, "expected a compile error for union member un-enumerated NOTATION")
-		require.Contains(t, errs, "NOTATION")
+		require.Empty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"the bare built-in xs:NOTATION as a union member is not an error in XSD 1.0 (particlesZ007)")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"the bare built-in xs:NOTATION as a union member IS an error in XSD 1.1 (simple093)")
+	})
+
+	// A USER-DEFINED simple type that restricts xs:NOTATION without supplying an
+	// enumeration is not enumeration-derived. Used as a list item type, this is a
+	// schema-representation error in BOTH XSD 1.0 and 1.1 — the version-10
+	// exemption applies only to the BARE built-in xs:NOTATION carrier, never to a
+	// user-defined restriction of it.
+	t.Run("list of user-defined non-enumerated NOTATION restriction rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="notationRestr">
+    <xs:restriction base="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:simpleType name="notationList">
+    <xs:list itemType="notationRestr"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationList"/>
+</xs:schema>`
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"a list of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.0")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"a list of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.1")
+	})
+
+	// The same for a union memberType: a user-defined non-enumerated restriction of
+	// xs:NOTATION as a union member is rejected in BOTH versions.
+	t.Run("union member user-defined non-enumerated NOTATION restriction rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="notationRestr">
+    <xs:restriction base="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:simpleType name="notationOrInt">
+    <xs:union memberTypes="notationRestr xs:int"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationOrInt"/>
+</xs:schema>`
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"a union member of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.0")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"a union member of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.1")
 	})
 
 	t.Run("list of enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION">
-      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="jpeg"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="notationList">
@@ -805,11 +991,11 @@ func TestNotationCarrierRecursive(t *testing.T) {
 
 	t.Run("union member enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION">
-      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="jpeg"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="notationOrInt">
@@ -856,11 +1042,11 @@ func TestNotationTypeOnDeclaration(t *testing.T) {
 
 	t.Run("element typed via enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION">
-      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="jpeg"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="n" type="imageNotation"/>
@@ -1238,16 +1424,20 @@ func TestQNameUnprefixedIgnoresDefaultNamespace(t *testing.T) {
 	})
 }
 
-// TestNotationUnprefixedIgnoresDefaultNamespace mirrors the QName case for
-// xs:NOTATION: an UNPREFIXED NOTATION *value* resolves to NO namespace and must
-// not pick up the in-scope default namespace of either the schema or the
-// instance. The schema and instance declare DIFFERENT default namespaces, yet
-// an enumeration of unprefixed "jpeg" must match an unprefixed instance "jpeg".
-func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
+// TestNotationUnprefixedPicksUpDefaultNamespace verifies that an UNPREFIXED
+// xs:NOTATION value resolves against its own in-scope DEFAULT namespace — the
+// same rule the compile-time declared-notation lookup applies to the enumeration
+// literal — so the enum's value space is identical at compile and validation
+// (W3C msData/simpleType/stZ075). The notation and enumeration value are declared
+// in the schema targetNamespace urn:tns; the enumeration literal "tns:jpeg" names
+// the declared {urn:tns}jpeg notation. A prefixed instance value bound to urn:tns
+// matches it, an unprefixed instance value under a default namespace of urn:tns
+// resolves to {urn:tns}jpeg and matches too, and an unprefixed value with NO
+// default namespace resolves to no namespace and does NOT match.
+func TestNotationUnprefixedPicksUpDefaultNamespace(t *testing.T) {
 	t.Parallel()
 
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns="urn:schema-default"
     targetNamespace="urn:tns"
     xmlns:tns="urn:tns">
   <xs:notation name="jpeg" public="image/jpeg"/>
@@ -1255,23 +1445,30 @@ func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
   <xs:element name="n">
     <xs:simpleType>
       <xs:restriction base="xs:NOTATION">
-        <xs:enumeration value="jpeg"/>
+        <xs:enumeration value="tns:jpeg"/>
       </xs:restriction>
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
 
-	t.Run("unprefixed value matches enumeration across different default namespaces", func(t *testing.T) {
+	t.Run("prefixed value bound to target namespace matches enumeration", func(t *testing.T) {
 		t.Parallel()
 		errs, err := validateInstance(t, schemaXML,
-			`<tns:n xmlns:tns="urn:tns" xmlns="urn:instance-default">jpeg</tns:n>`)
+			`<tns:n xmlns:tns="urn:tns">tns:jpeg</tns:n>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
-	t.Run("unprefixed value does not pick up instance default namespace", func(t *testing.T) {
+	t.Run("unprefixed value under matching default namespace matches enumeration", func(t *testing.T) {
 		t.Parallel()
 		errs, err := validateInstance(t, schemaXML,
-			`<tns:n xmlns:tns="urn:tns" xmlns:d="urn:instance-default">d:jpeg</tns:n>`)
+			`<tns:n xmlns:tns="urn:tns" xmlns="urn:tns">jpeg</tns:n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("unprefixed value with no default namespace resolves to no namespace and fails", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:n xmlns:tns="urn:tns">jpeg</tns:n>`)
 		require.Error(t, err)
 		require.Contains(t, errs, "[facet 'enumeration']")
 	})
