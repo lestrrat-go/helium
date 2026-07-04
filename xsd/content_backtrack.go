@@ -22,17 +22,28 @@ import (
 // the set of reachable end positions for each (particle|group, position) state,
 // memoized so the state space is O(#particles * #children) rather than
 // exponential, with a hard cap (btStateCap) after which it fails closed (returns
-// "not proven", keeping the greedy verdict). It uses the SAME per-child matching
-// predicates as the greedy matcher (elemMatchesDeclOrSubst, wildcardAllowsExpandedName),
-// so it models exactly the greedy content-model language and never accepts a
-// non-member. `xs:all` groups are matched greedily (deterministic per-member
-// counting, no occurrence backtracking), which is conservative: it can only fail
-// to prove, never over-accept.
+// "not proven", keeping the greedy verdict).
 //
-// It is used ONLY as a recovery step AFTER the greedy structural match fails to
-// fully consume, so the common (greedy-complete) path is unchanged and pays only
-// a pure structural pre-scan. When it accepts, validateContentModelChildren
-// validates each child's content against its (UPA-unique) declaration.
+// WILDCARD-FREE PRECONDITION: the backtracker runs ONLY on content models with no
+// xs:any particle at any nesting depth (modelGroupHasWildcard). A separate,
+// looser automaton than the greedy matcher would otherwise have to re-implement
+// every XSD 1.1 element-over-wildcard precedence rule (choice commit-no-fallback,
+// sequence reservation, xs:all attribution) to avoid admitting an instance the
+// greedy matcher correctly rejects. Gating out wildcards eliminates that entire
+// class in one rule: with no wildcards, element-over-wildcard precedence can never
+// arise, and a wildcard-free UPA-deterministic content model's reachability
+// automaton accepts exactly its regular language. A model containing any wildcard
+// is left to the greedy matcher, whose (precedence-aware) verdict already stands —
+// fail-closed, since the backtracker only ever runs after greedy already failed.
+//
+// It uses the SAME per-child predicate as the greedy matcher
+// (elemMatchesDeclOrSubst), so it models exactly the greedy content-model
+// language and never accepts a non-member. `xs:all` groups are matched greedily
+// (deterministic per-member counting, no occurrence backtracking), which is
+// conservative: it can only fail to prove, never over-accept.
+//
+// When it accepts, validateContentModelChildren validates each child's content
+// against its (UPA-unique) element declaration.
 
 const btStateCap = 200000
 
@@ -49,14 +60,35 @@ type btMemo struct {
 }
 
 // contentModelAccepts reports whether children can be fully consumed by mg under
-// some occurrence partition. It is pure (no side effects, no diagnostics).
+// some occurrence partition. It is pure (no side effects, no diagnostics), and
+// runs only on wildcard-free content models (see the wildcard-free precondition
+// above); a model with any wildcard is not proven here (defers to greedy).
 func (vc *validationContext) contentModelAccepts(ctx context.Context, mg *ModelGroup, children []childElem) bool {
+	if modelGroupHasWildcard(mg) {
+		return false
+	}
 	m := &btMemo{cache: make(map[reachKey][]int)}
 	ends := vc.btReachGroup(ctx, m, mg, children)
 	if m.capped {
 		return false
 	}
 	return slices.Contains(ends, len(children))
+}
+
+// modelGroupHasWildcard reports whether the model group tree contains any xs:any
+// wildcard particle at any nesting depth.
+func modelGroupHasWildcard(mg *ModelGroup) bool {
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *Wildcard:
+			return true
+		case *ModelGroup:
+			if modelGroupHasWildcard(term) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func addUnique(dst []int, seen map[int]struct{}, e int) []int {
@@ -68,8 +100,7 @@ func addUnique(dst []int, seen map[int]struct{}, e int) []int {
 }
 
 // btReachParticle returns every end position reachable by matching particle p
-// starting at pos, for every pos in an aggregate is handled by callers. Here it
-// operates on a single start position embedded via the memo key.
+// starting at pos. Results are memoized by (particle, pos).
 func (vc *validationContext) btReachParticle(ctx context.Context, m *btMemo, p *Particle, children []childElem, pos int) []int {
 	if m.capped {
 		return nil
@@ -87,13 +118,13 @@ func (vc *validationContext) btReachParticle(ctx context.Context, m *btMemo, p *
 	switch term := p.Term.(type) {
 	case *ElementDecl:
 		out = vc.btReachElem(p, term, children, pos)
-	case *Wildcard:
-		out = vc.btReachWild(p, term, children, pos)
 	case *ModelGroup:
 		// A group particle's occurrence lives on the ModelGroup term (matchParticle
 		// reads term.MinOccurs/MaxOccurs, not p's), so delegate to the group reach.
 		out = vc.btReachGroupAt(ctx, m, term, children, pos)
 	}
+	// A *Wildcard term cannot occur: contentModelAccepts gates out wildcard-bearing
+	// models before any reach runs.
 	m.cache[key] = out
 	return out
 }
@@ -103,29 +134,6 @@ func (vc *validationContext) btReachParticle(ctx context.Context, m *btMemo, p *
 func (vc *validationContext) btReachElem(p *Particle, edecl *ElementDecl, children []childElem, pos int) []int {
 	maxc := 0
 	for pos+maxc < len(children) && elemMatchesDeclOrSubst(children[pos+maxc], edecl, vc.schema) {
-		maxc++
-		if p.MaxOccurs != Unbounded && maxc >= p.MaxOccurs {
-			break
-		}
-	}
-	if maxc < p.MinOccurs {
-		return nil
-	}
-	out := make([]int, 0, maxc-p.MinOccurs+1)
-	for k := p.MinOccurs; k <= maxc; k++ {
-		out = append(out, pos+k)
-	}
-	return out
-}
-
-// btReachWild mirrors btReachElem for a wildcard particle.
-func (vc *validationContext) btReachWild(p *Particle, wc *Wildcard, children []childElem, pos int) []int {
-	maxc := 0
-	for pos+maxc < len(children) {
-		ch := children[pos+maxc]
-		if !wildcardAllowsExpandedName(wc, ch.name, ch.ns, vc.schema, false) {
-			break
-		}
 		maxc++
 		if p.MaxOccurs != Unbounded && maxc >= p.MaxOccurs {
 			break
@@ -227,7 +235,10 @@ func (vc *validationContext) btReachGroupAt(ctx context.Context, m *btMemo, mg *
 }
 
 // btBodyReach returns end positions reachable by ONE pass through mg's body
-// (compositor content) from pos, ignoring mg's own occurrence.
+// (compositor content) from pos, ignoring mg's own occurrence. A sequence
+// composes its particles' reach sets; a choice unions its branches'. Because the
+// model is wildcard-free (contentModelAccepts gate), no element-over-wildcard
+// precedence can arise, so a plain union faithfully models the choice language.
 func (vc *validationContext) btBodyReach(ctx context.Context, m *btMemo, mg *ModelGroup, children []childElem, pos int) []int {
 	switch mg.Compositor {
 	case CompositorSequence:
@@ -247,31 +258,9 @@ func (vc *validationContext) btBodyReach(ctx context.Context, m *btMemo, mg *Mod
 		}
 		return cur
 	case CompositorChoice:
-		// XSD 1.1 element-over-wildcard precedence, COMMIT-NO-FALLBACK (mirrors
-		// tryMatchChoice/matchChoice): when ANY branch is an element-first consumer
-		// for the current child, the choice MUST consume that child through an
-		// element-first branch and may NOT fall back to a wildcard (or other
-		// non-element-first) branch — even if the chosen branch then fails to fully
-		// match. So only element-first branches contribute reachability for this
-		// position; a wildcard branch that would re-admit the child is NOT eligible.
-		// This prevents accepting an instance the greedy matcher (correctly) rejects
-		// by committing to an element branch that later fails.
-		var elemFirst []*Particle
-		if vc.version == Version11 && pos < len(children) {
-			child := children[pos]
-			for _, part := range mg.Particles {
-				if particleConsumesViaElement(part, child, vc.schema) {
-					elemFirst = append(elemFirst, part)
-				}
-			}
-		}
-		branches := mg.Particles
-		if len(elemFirst) > 0 {
-			branches = elemFirst
-		}
-		out := make([]int, 0, len(branches))
+		out := make([]int, 0, len(mg.Particles))
 		seen := make(map[int]struct{})
-		for _, part := range branches {
+		for _, part := range mg.Particles {
 			for _, e := range vc.btReachParticle(ctx, m, part, children, pos) {
 				out = addUnique(out, seen, e)
 			}
@@ -298,84 +287,52 @@ func (vc *validationContext) btReachAll(ctx context.Context, mg *ModelGroup, chi
 	return []int{pos + consumed}
 }
 
-// elemLeaf / wildLeaf hold a content-model leaf's already-asserted term, so the
-// per-child validation pass avoids repeated type assertions.
-type elemLeaf struct {
-	ed *ElementDecl
-}
-
-type wildLeaf struct {
-	wc *Wildcard
-}
-
 // validateContentModelChildren validates every child's content when
-// contentModelAccepts has confirmed the children form a valid structural match.
-// Because the content model is UPA-deterministic, each child's element name
-// selects a unique element-declaration leaf (or, failing that, a wildcard leaf),
-// independent of the occurrence partition; so each child is validated against the
-// same declaration it would receive in any accepting partition. This visits each
-// child exactly once, reusing the ordinary per-child validators so all content,
-// type, xsi:type, assertion, and IDC-annotation side effects match the greedy
-// path.
-func (vc *validationContext) validateContentModelChildren(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) error {
-	var elemLeaves []elemLeaf
-	var wildLeaves []wildLeaf
-	collectContentLeaves(mg, &elemLeaves, &wildLeaves)
-
+// contentModelAccepts has confirmed the (wildcard-free) children form a valid
+// structural match. Because the content model is UPA-deterministic, each child's
+// element name selects a unique element-declaration leaf, independent of the
+// occurrence partition; so each child is validated against the same declaration
+// it would receive in any accepting partition. This visits each child exactly
+// once, reusing matchElementParticle so all content, type, xsi:type, assertion,
+// and IDC-annotation side effects match the greedy path.
+func (vc *validationContext) validateContentModelChildren(ctx context.Context, parent *helium.Element, children []childElem, elemLeaves []*ElementDecl) error {
 	var contentErr error
 	for i := range children {
 		child := children[i]
-		single := children[i : i+1]
-		if ed := elemLeafForChild(child, elemLeaves, vc.schema); ed != nil {
-			one := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: ed}
-			if _, err := vc.matchElementParticle(ctx, parent, one, ed, single, 0, len(wildLeaves) > 0); err != nil {
-				contentErr = err
-			}
+		ed := elemLeafForChild(child, elemLeaves, vc.schema)
+		if ed == nil {
+			// contentModelAccepts guaranteed placement, so this is unreachable; report
+			// defensively rather than silently accept.
+			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, "This element is not expected.")
+			contentErr = fmt.Errorf("unexpected element")
 			continue
 		}
-		if wc := wildLeafForChild(child, wildLeaves, vc.schema); wc != nil {
-			one := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: wc}
-			if _, err := vc.matchWildcardParticle(ctx, parent, one, wc, single, 0, mg); err != nil {
-				contentErr = err
-			}
-			continue
+		one := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: ed}
+		if _, err := vc.matchElementParticle(ctx, parent, one, ed, children[i:i+1], 0, false); err != nil {
+			contentErr = err
 		}
-		// contentModelAccepts guaranteed placement, so this is unreachable; report
-		// defensively rather than silently accept.
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, "This element is not expected.")
-		contentErr = fmt.Errorf("unexpected element")
 	}
 	return contentErr
 }
 
-// collectContentLeaves gathers every element and wildcard leaf particle in the
-// model group tree, in document order.
-func collectContentLeaves(mg *ModelGroup, elemLeaves *[]elemLeaf, wildLeaves *[]wildLeaf) {
+// collectElementLeaves gathers every element leaf declaration in the model group
+// tree, in document order. The model is wildcard-free, so there are no wildcard
+// leaves to collect.
+func collectElementLeaves(mg *ModelGroup, leaves *[]*ElementDecl) {
 	for _, p := range mg.Particles {
 		switch term := p.Term.(type) {
 		case *ElementDecl:
-			*elemLeaves = append(*elemLeaves, elemLeaf{ed: term})
-		case *Wildcard:
-			*wildLeaves = append(*wildLeaves, wildLeaf{wc: term})
+			*leaves = append(*leaves, term)
 		case *ModelGroup:
-			collectContentLeaves(term, elemLeaves, wildLeaves)
+			collectElementLeaves(term, leaves)
 		}
 	}
 }
 
-func elemLeafForChild(child childElem, elemLeaves []elemLeaf, schema *Schema) *ElementDecl {
-	for _, leaf := range elemLeaves {
-		if elemMatchesDeclOrSubst(child, leaf.ed, schema) {
-			return leaf.ed
-		}
-	}
-	return nil
-}
-
-func wildLeafForChild(child childElem, wildLeaves []wildLeaf, schema *Schema) *Wildcard {
-	for _, leaf := range wildLeaves {
-		if wildcardAllowsExpandedName(leaf.wc, child.name, child.ns, schema, false) {
-			return leaf.wc
+func elemLeafForChild(child childElem, elemLeaves []*ElementDecl, schema *Schema) *ElementDecl {
+	for _, ed := range elemLeaves {
+		if elemMatchesDeclOrSubst(child, ed, schema) {
+			return ed
 		}
 	}
 	return nil

@@ -612,10 +612,13 @@ func (vc *validationContext) validateContentModelTop(ctx context.Context, parent
 
 	// Greedy could not fully consume. The content model may still be an
 	// occurrence-partition-ambiguous match a greedy pass false-rejects; bounded
-	// backtracking decides. When it proves acceptance, validate each child's
-	// content against its UPA-unique declaration (visiting each child once).
+	// backtracking (wildcard-free models only) decides. When it proves acceptance,
+	// validate each child's content against its UPA-unique declaration (visiting
+	// each child once).
 	if vc.contentModelAccepts(ctx, mg, children) {
-		return vc.validateContentModelChildren(ctx, parent, mg, children)
+		var elemLeaves []*ElementDecl
+		collectElementLeaves(mg, &elemLeaves)
+		return vc.validateContentModelChildren(ctx, parent, children, elemLeaves)
 	}
 
 	// Genuinely does not match: run the greedy matcher for the correct diagnostics.

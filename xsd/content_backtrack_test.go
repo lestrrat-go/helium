@@ -79,6 +79,33 @@ func TestContentBacktrackChoiceElementCommit(t *testing.T) {
 	})
 }
 
+// TestContentBacktrackSequenceWildcardCommit verifies the wildcard-free gate: a
+// content model containing an xs:any is NOT handled by the backtracker, so the
+// greedy matcher's (precedence-aware) verdict stands. Here a repeating sequence
+// with a leading optional element and a trailing skip wildcard must reject an
+// instance where the wildcard would have to consume a child the element is
+// element-first-consumer for (element-over-wildcard reservation).
+func TestContentBacktrackSequenceWildcardCommit(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence minOccurs="2" maxOccurs="2">
+      <xs:element name="a" type="xs:int" minOccurs="0"/>
+      <xs:any processContents="skip"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	t.Run("wildcard cannot steal element-first child", func(t *testing.T) {
+		t.Parallel()
+		// <a>1</a><x/> is only two children for a sequence that must repeat twice
+		// with a required wildcard each rep. Greedy (element-over-wildcard
+		// reservation) rejects; the backtracker must not run (model has a wildcard).
+		require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><a>1</a><x/></root>`))
+	})
+}
+
 // validateBtInstance compiles schemaXML at the given version (which must be valid)
 // and validates instanceXML, returning the validation error (nil when valid).
 func validateBtInstance(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {
