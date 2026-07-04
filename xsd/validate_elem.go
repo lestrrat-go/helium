@@ -492,7 +492,7 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 	if td == nil {
 		return nil
 	}
-	nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem, actualDecl)
 	if nilErr != nil {
 		return nilErr
 	}
@@ -731,7 +731,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// Annotate child element with its type for pass-2 identity-constraint evaluation.
 		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
-			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+			nilled, nilErr := vc.checkXsiNil(ctx, child.elem, actualDecl)
 			if nilErr != nil {
 				contentErr = nilErr
 			} else if nilled {
@@ -1209,7 +1209,7 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 	if td == nil {
 		return nil
 	}
-	nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem, edecl)
 	if nilErr != nil {
 		return nilErr
 	}
