@@ -102,11 +102,12 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		}
 		mgSeen = true
 		// The model group child of a named group DEFINITION uses the schema-for-
-		// schemas "explicitGroup"/"all" content model, which does NOT admit
-		// minOccurs/maxOccurs — those belong to the model group REFERENCE particle
-		// form (§3.7.2/§3.8.2). A child all/choice/sequence carrying either is a
-		// schema-representation error; report-and-continue so the group still
-		// compiles. Version-INDEPENDENT XSD rule.
+		// schemas "simpleExplicitGroup" (choice/sequence) / named-group "all"
+		// content model, which does NOT admit minOccurs/maxOccurs — unlike the
+		// inline "explicitGroup" particle and the model group REFERENCE form,
+		// which both do carry them (§3.7.2/§3.8.2). A child all/choice/sequence
+		// carrying either is a schema-representation error; report-and-continue so
+		// the group still compiles. Version-INDEPENDENT XSD rule.
 		if c.filename != "" {
 			compElem := elemSequence
 			switch compositor {
