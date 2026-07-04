@@ -27,6 +27,9 @@ func TestXsiTypeAnyTypeBlockRestriction(t *testing.T) {
   <xs:simpleType name="l">
     <xs:list itemType="xs:integer"/>
   </xs:simpleType>
+  <xs:complexType name="CT">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
 </xs:schema>`
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
 		require.NoError(t, err)
@@ -39,6 +42,10 @@ func TestXsiTypeAnyTypeBlockRestriction(t *testing.T) {
 
 	unionInst := `<e ` + xsiNS + ` xsi:type="u">5</e>`
 	listInst := `<e ` + xsiNS + ` xsi:type="l">1 2 3</e>`
+	// CT is a named complex type with a DIRECT model group and no explicit
+	// <xs:complexContent> derivation, so it has an implicit {base type
+	// definition} = xs:anyType by RESTRICTION (§3.4.2).
+	ctInst := `<e ` + xsiNS + ` xsi:type="CT"><a>x</a></e>`
 
 	t.Run("block=restriction rejects a union xsi:type", func(t *testing.T) {
 		t.Parallel()
@@ -60,6 +67,18 @@ func TestXsiTypeAnyTypeBlockRestriction(t *testing.T) {
 		require.ErrorIs(t, compileValidate(t, `block="#all"`, listInst), xsd.ErrValidationFailed)
 	})
 
+	t.Run("block=restriction rejects an implicit-base complex xsi:type", func(t *testing.T) {
+		t.Parallel()
+		// CT reaches xs:anyType via its implicit restriction step (§3.4.2), so
+		// block="restriction" must reject it even though CT is a complex type.
+		require.ErrorIs(t, compileValidate(t, `block="restriction"`, ctInst), xsd.ErrValidationFailed)
+	})
+
+	t.Run("block=#all rejects an implicit-base complex xsi:type", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileValidate(t, `block="#all"`, ctInst), xsd.ErrValidationFailed)
+	})
+
 	t.Run("no block accepts a simple xsi:type", func(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compileValidate(t, ``, unionInst))
@@ -70,5 +89,12 @@ func TestXsiTypeAnyTypeBlockRestriction(t *testing.T) {
 		// A simple type reaches xs:anyType only by restriction, so an extension-only
 		// block does not apply.
 		require.NoError(t, compileValidate(t, `block="extension"`, listInst))
+	})
+
+	t.Run("block=extension accepts an implicit-base complex xsi:type", func(t *testing.T) {
+		t.Parallel()
+		// CT's only derivation step to xs:anyType is the implicit RESTRICTION, which
+		// an extension-only block does not forbid, so it must remain accepted.
+		require.NoError(t, compileValidate(t, `block="extension"`, ctInst))
 	})
 }

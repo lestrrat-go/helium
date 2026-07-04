@@ -1526,12 +1526,22 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 			return true
 		}
 	}
-	// EVERY simple type restricts xs:anySimpleType, which in turn restricts the
-	// complex ur-type xs:anyType, so a block="restriction"/"#all" on an
-	// xs:anyType-typed element must reject a simple xsi:type. The BaseType pointer
-	// chain bottoms out (td == nil) before reaching the complex ur-type, so neither
-	// the union nor the built-in-simple-base hatch above catches it.
-	if td != base && blocked&BlockRestriction != 0 && isAnyType(base) && !derived.IsComplex {
+	// Reaching xs:anyType is ALWAYS a restriction step (§3.4.2): a simple type
+	// restricts xs:anySimpleType which restricts xs:anyType, and a complex type
+	// with no explicit <xs:complexContent>/<xs:simpleContent> derivation has an
+	// IMPLICIT {base type definition} = xs:anyType with {derivation method} =
+	// restriction. So on an xs:anyType-typed element a block="restriction"/"#all"
+	// must reject such an xsi:type (cvc-elt.4.3). The loop exits with td != base
+	// (i.e. td == nil) precisely when the BaseType pointer chain bottoms out WITHOUT
+	// reaching base by pointer — that is the implicit-restriction-to-anyType case,
+	// covering a simple xsi:type, a complex type with a direct model group, AND an
+	// explicit extension chain that bottoms out at such an implicit-base complex
+	// type (its suffix down to anyType still contains the implicit restriction step).
+	// An explicit <xs:extension base="xs:anyType"> instead reaches base BY POINTER
+	// (td == base), so it is correctly NOT blocked here — its only derivation step
+	// is the extension. Gated on blocked&BlockRestriction, so a block="extension"-
+	// only element still accepts these (the restriction step is not in its block).
+	if td != base && blocked&BlockRestriction != 0 && isAnyType(base) {
 		return true
 	}
 	return false
