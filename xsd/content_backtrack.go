@@ -24,26 +24,37 @@ import (
 // exponential, with a hard cap (btStateCap) after which it fails closed (returns
 // "not proven", keeping the greedy verdict).
 //
-// WILDCARD-FREE PRECONDITION: the backtracker runs ONLY on content models with no
-// xs:any particle at any nesting depth (modelGroupHasWildcard). A separate,
-// looser automaton than the greedy matcher would otherwise have to re-implement
-// every XSD 1.1 element-over-wildcard precedence rule (choice commit-no-fallback,
-// sequence reservation, xs:all attribution) to avoid admitting an instance the
-// greedy matcher correctly rejects. Gating out wildcards eliminates that entire
-// class in one rule: with no wildcards, element-over-wildcard precedence can never
-// arise, and a wildcard-free UPA-deterministic content model's reachability
-// automaton accepts exactly its regular language. A model containing any wildcard
-// is left to the greedy matcher, whose (precedence-aware) verdict already stands —
-// fail-closed, since the backtracker only ever runs after greedy already failed.
+// ENGAGEMENT ENVELOPE (inBacktrackEnvelope): the backtracker runs ONLY on content
+// models where its element-only, first-name-match design is PROVABLY SOUND. A
+// model outside the envelope is left to the greedy matcher, whose verdict already
+// stands — fail-closed, since the backtracker only ever runs after greedy already
+// failed. All three conditions must hold:
+//
+//  1. WILDCARD-FREE (no xs:any at any depth). Otherwise a looser automaton would
+//     have to re-implement every XSD 1.1 element-over-wildcard precedence rule
+//     (choice commit-no-fallback, sequence reservation, xs:all attribution) to
+//     avoid admitting an instance the greedy matcher correctly rejects. With no
+//     wildcards, element-over-wildcard precedence can never arise.
+//  2. UNAMBIGUOUS name→declaration: no two DISTINCT element-declaration leaves
+//     share a name. A UPA-clean model may still contain two same-name local
+//     declarations that differ in nillable/fixed/default (e.g. positional
+//     sequence(a nillable=true, a nillable=false)); first-name-match would
+//     misattribute the second child to the first declaration.
+//  3. NO substitution complication: no element leaf is a substitution-group head
+//     with members. A child matching via a differently-named substitution member
+//     (possibly differing in nillable/type) could be misattributed by
+//     first-name-match.
+//
+// Within the envelope every child's element name selects its UNIQUE declaration,
+// so a wildcard-free UPA-deterministic content model's reachability automaton
+// accepts exactly its regular language and validateContentModelChildren validates
+// each child against the same declaration the real matcher would.
 //
 // It uses the SAME per-child predicate as the greedy matcher
 // (elemMatchesDeclOrSubst), so it models exactly the greedy content-model
 // language and never accepts a non-member. `xs:all` groups are matched greedily
 // (deterministic per-member counting, no occurrence backtracking), which is
 // conservative: it can only fail to prove, never over-accept.
-//
-// When it accepts, validateContentModelChildren validates each child's content
-// against its (UPA-unique) element declaration.
 
 const btStateCap = 200000
 
@@ -61,10 +72,10 @@ type btMemo struct {
 
 // contentModelAccepts reports whether children can be fully consumed by mg under
 // some occurrence partition. It is pure (no side effects, no diagnostics), and
-// runs only on wildcard-free content models (see the wildcard-free precondition
-// above); a model with any wildcard is not proven here (defers to greedy).
+// runs only on content models inside the engagement envelope (see above); a model
+// outside the envelope is not proven here (defers to greedy).
 func (vc *validationContext) contentModelAccepts(ctx context.Context, mg *ModelGroup, children []childElem) bool {
-	if modelGroupHasWildcard(mg) {
+	if !inBacktrackEnvelope(mg, vc.schema) {
 		return false
 	}
 	m := &btMemo{cache: make(map[reachKey][]int)}
@@ -75,20 +86,38 @@ func (vc *validationContext) contentModelAccepts(ctx context.Context, mg *ModelG
 	return slices.Contains(ends, len(children))
 }
 
-// modelGroupHasWildcard reports whether the model group tree contains any xs:any
-// wildcard particle at any nesting depth.
-func modelGroupHasWildcard(mg *ModelGroup) bool {
+// inBacktrackEnvelope reports whether mg is inside the backtracker's provably-safe
+// engagement envelope: wildcard-free, with an unambiguous name→declaration
+// mapping (no two distinct element-declaration leaves sharing a name), and no
+// substitution-group head with members. See the file-level comment for why each
+// condition is required for the element-only first-name-match design to be sound.
+func inBacktrackEnvelope(mg *ModelGroup, schema *Schema) bool {
+	return envelopeWalk(mg, schema, make(map[QName]*ElementDecl))
+}
+
+func envelopeWalk(mg *ModelGroup, schema *Schema, byName map[QName]*ElementDecl) bool {
 	for _, p := range mg.Particles {
 		switch term := p.Term.(type) {
 		case *Wildcard:
-			return true
+			return false
+		case *ElementDecl:
+			if len(substitutableMembersFor(term, schema)) > 0 {
+				return false
+			}
+			prev, seen := byName[term.Name]
+			if seen && prev != term {
+				return false
+			}
+			if !seen {
+				byName[term.Name] = term
+			}
 		case *ModelGroup:
-			if modelGroupHasWildcard(term) {
-				return true
+			if !envelopeWalk(term, schema, byName) {
+				return false
 			}
 		}
 	}
-	return false
+	return true
 }
 
 func addUnique(dst []int, seen map[int]struct{}, e int) []int {

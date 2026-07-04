@@ -106,6 +106,40 @@ func TestContentBacktrackSequenceWildcardCommit(t *testing.T) {
 	})
 }
 
+// TestContentBacktrackSameNameDistinctDecl verifies the name→declaration
+// unambiguity envelope: a UPA-clean model with two DISTINCT same-name local
+// element declarations differing in nillable must NOT engage the backtracker,
+// because its first-name-match attribution would validate BOTH children against
+// the FIRST declaration and mask the second's constraint violation. A leading
+// occurrence-ambiguous group forces the greedy matcher to fail, so without the
+// envelope gate the fallback would run and over-accept.
+func TestContentBacktrackSameNameDistinctDecl(t *testing.T) {
+	t.Parallel()
+
+	// The leading sequence{2,2}(x+) is occurrence-partition-ambiguous (greedy
+	// over-consumes both <x> in the first rep and fails), forcing the fallback.
+	// The two <a> declarations share a name but differ in nillable.
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="x" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:element name="a" type="xs:string" nillable="true"/>
+      <xs:element name="a" type="xs:string" nillable="false"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	t.Run("second same-name decl constraint enforced (no first-match masking)", func(t *testing.T) {
+		t.Parallel()
+		// The second <a> is nillable=false, so xsi:nil="true" on it is invalid.
+		// First-name-match would validate it against the first (nillable=true) decl.
+		const inst = `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><x/><x/><a>ok</a><a xsi:nil="true"/></root>`
+		require.Error(t, validateBtInstance(t, xsd.Version11, schema, inst))
+	})
+}
+
 // validateBtInstance compiles schemaXML at the given version (which must be valid)
 // and validates instanceXML, returning the validation error (nil when valid).
 func validateBtInstance(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {
