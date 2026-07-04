@@ -18,6 +18,7 @@ type idcTable struct {
 	keys       []idcEntry
 	keyMissing bool // an xs:key selected node had an absent field (cvc-identity-constraint.4.2.1)
 	fieldError bool // a field XPath selected more than one node (cvc-identity-constraint.3)
+	fieldType  bool // a field selected a node whose type is not simple (cvc-identity-constraint.3)
 }
 
 // idcEntry holds a single key-sequence value and the node that produced it.
@@ -79,6 +80,12 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		// evaluation; surface it as a validation failure.
 		if table.fieldError {
 			lastErr = fmt.Errorf("field evaluates to more than one node")
+		}
+
+		// A field that selected a node with a non-simple type was already
+		// reported during evaluation; surface it as a validation failure.
+		if table.fieldType {
+			lastErr = fmt.Errorf("field evaluates to a node whose type is not simple")
 		}
 
 		if idc.Kind == IDCKeyRef {
@@ -283,11 +290,50 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			var fieldNode helium.Node
 			switch fieldResult.Type {
 			case xpath1.NodeSetResult:
-				if len(fieldResult.NodeSet) > 1 {
+				// §3.11.4 / cvc-identity-constraint.3: classify EVERY node in the
+				// field result. A SKIPPED node (an unassessed node in XSD 1.1)
+				// contributes NO value and drops out of the qualified node-set. A
+				// VIOLATION node (an assessed COMPLEX element, or any unassessed node
+				// in XSD 1.0, which has no skipped-node relaxation) invalidates the
+				// constraint. After dropping the skipped nodes, at most ONE GOVERNED
+				// node may remain — its typed value is the field value; MORE THAN ONE
+				// governed node is the genuine cardinality error (a node-set with more
+				// than one member).
+				var governed helium.Node
+				var violating helium.Node
+				governedCount := 0
+				for _, cand := range fieldResult.NodeSet {
+					switch vc.classifyFieldNode(cand) {
+					case fieldSkipped:
+						// contributes no value; drops out of the qualified node-set
+					case fieldViolation:
+						if violating == nil {
+							violating = cand
+						}
+					default: // fieldGoverned
+						governedCount++
+						if governed == nil {
+							governed = cand
+						}
+					}
+				}
+				if violating != nil {
+					if entry.elem != nil {
+						idcName := idcDisplayName(idc, vc.schema)
+						msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node whose type is not simple.",
+							fieldXPath, idcKindName(idc.Kind), idcName)
+						vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemDisplayName(entry.elem), msg)
+					}
+					table.fieldType = true
+					allPresent = false
+					fieldErr = true
+					break
+				}
+				if governedCount > 1 {
 					// cvc-identity-constraint.3: with the selected node as the
 					// context node, each field must evaluate to either an empty
-					// node-set or a node-set with exactly one member. More than
-					// one selected node is a validity error for every IDC kind.
+					// node-set or a node-set with exactly one member. More than one
+					// GOVERNED member is a validity error for every IDC kind.
 					if entry.elem != nil {
 						idcName := idcDisplayName(idc, vc.schema)
 						msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node-set with more than one member.",
@@ -299,10 +345,13 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					fieldErr = true
 					break
 				}
-				if len(fieldResult.NodeSet) == 0 {
+				if governedCount == 0 {
+					// The empty node-set / every-node-skipped case: the field is
+					// absent (fieldNode stays nil, value stays ""), handled like the
+					// old empty-node-set path below.
 					allPresent = false
 				} else {
-					fieldNode = fieldResult.NodeSet[0]
+					fieldNode = governed
 					value = nodeStringValue(fieldNode)
 				}
 			case xpath1.StringResult:
@@ -580,6 +629,71 @@ func fieldNodeNSContext(n helium.Node) map[string]string {
 		}
 	}
 	return map[string]string{}
+}
+
+// fieldNodeClass classifies an identity-constraint <xs:field> result node per
+// cvc-identity-constraint.3 / XSD 1.1 §3.11.4.
+type fieldNodeClass int
+
+const (
+	// fieldGoverned: the node was genuinely SCHEMA-ASSESSED with a simple (or
+	// simple-content) type — it contributes its typed value to the key sequence.
+	fieldGoverned fieldNodeClass = iota
+	// fieldSkipped: the node contributes NO value; it drops out of the qualified
+	// node-set. In XSD 1.1 this covers EVERY unassessed field node — a
+	// processContents="skip" wildcard-matched element, an attribute admitted only
+	// by a skip/lax-without-global wildcard or whose ancestor element is skipped,
+	// and any node whose type could not be assessed.
+	fieldSkipped
+	// fieldViolation: cvc-identity-constraint.3 is violated — a genuinely-assessed
+	// COMPLEX element (element-only/mixed/empty content), or, in XSD 1.0 (which has
+	// no skipped-node relaxation), any unassessed/unresolved node.
+	fieldViolation
+)
+
+// classifyFieldNode classifies a single IDC field-result node. The determination
+// is based ONLY on GENUINE ASSESSMENT records — assessedElemType for elements and
+// assessedAttrs for attributes, both written exclusively at real pass-1 assessment
+// sites — never on the canonicalization-only actualElemType map or a schema-
+// declaration fallback. So a skip-content element, an attribute whose ancestor is
+// skipped or that was admitted only by a skip/lax-without-global wildcard, and any
+// node with no PSVI type are all UNASSESSED and classified version-aware
+// (unassessedFieldClass); a wildcard-admitted UNTYPED global attribute
+// (xs:anySimpleType) and an untyped declared attribute use ARE assessed and stay
+// GOVERNED.
+func (vc *validationContext) classifyFieldNode(n helium.Node) fieldNodeClass {
+	switch v := n.(type) {
+	case *helium.Attribute:
+		if _, ok := vc.assessedAttrs[v]; ok {
+			// Every assessed attribute has a SIMPLE type (an untyped use is
+			// xs:anySimpleType); an attribute can never be complex-typed.
+			return fieldGoverned
+		}
+		return vc.unassessedFieldClass()
+	case *helium.Element:
+		td, ok := vc.assessedElemType[v]
+		if !ok {
+			return vc.unassessedFieldClass()
+		}
+		// A simple type definition, or a complex type with SIMPLE content.
+		if !td.IsComplex || td.ContentType == ContentTypeSimple {
+			return fieldGoverned
+		}
+		return fieldViolation
+	default:
+		return fieldGoverned
+	}
+}
+
+// unassessedFieldClass classifies a field node carrying no genuine assessment
+// record. XSD 1.1 §3.11.4 treats it as skipped (no value); XSD 1.0 has no such
+// relaxation, so an unassessed/unresolved node is a cvc-identity-constraint.3
+// violation.
+func (vc *validationContext) unassessedFieldClass() fieldNodeClass {
+	if vc.version == Version11 {
+		return fieldSkipped
+	}
+	return fieldViolation
 }
 
 // resolveFieldType resolves the *TypeDef of an IDC field node. host/hostDecl are
