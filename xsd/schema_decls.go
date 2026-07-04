@@ -304,6 +304,18 @@ func annotationParts(name string) (local, ns string) {
 	return name, ""
 }
 
+// Declarations returns an xpath3.SchemaDeclarations view over this compiled
+// schema, for schema-aware XPath evaluation: schema-element()/schema-attribute()
+// node tests, schema-aware cast/castable (facet validation), instance-of/subtype
+// tests, substitution-group membership, and typed-value atomization of nodes
+// carrying a PSVI type annotation (see Validator.Annotations). The returned view
+// borrows the schema read-only and is safe to share across concurrent
+// evaluations. It resolves user types through their builtin base and validates
+// casts with the schema's frozen version.
+func (s *Schema) Declarations() xpath3.SchemaDeclarations {
+	return schemaDecls{schema: s, version: s.version}
+}
+
 // assertSchemaDecls returns the SchemaDeclarations adapter for this validation's
 // schema, or nil when no schema is available.
 func (vc *validationContext) assertSchemaDecls() xpath3.SchemaDeclarations {
