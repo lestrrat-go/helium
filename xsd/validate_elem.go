@@ -1526,6 +1526,14 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 			return true
 		}
 	}
+	// EVERY simple type restricts xs:anySimpleType, which in turn restricts the
+	// complex ur-type xs:anyType, so a block="restriction"/"#all" on an
+	// xs:anyType-typed element must reject a simple xsi:type. The BaseType pointer
+	// chain bottoms out (td == nil) before reaching the complex ur-type, so neither
+	// the union nor the built-in-simple-base hatch above catches it.
+	if td != base && blocked&BlockRestriction != 0 && isAnyType(base) && !derived.IsComplex {
+		return true
+	}
 	return false
 }
 
