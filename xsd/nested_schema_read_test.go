@@ -394,9 +394,10 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 		t.Parallel()
 		// A JOINED error whose Op:"open" PathError actually reports a PERMISSION denial,
 		// with a bare fs.ErrNotExist joined ALONGSIDE. errors.Is(err, fs.ErrNotExist)
-		// is true on the whole tree (the sibling sentinel), and the selected PathError's
-		// Op is "open", so a whole-tree classifier would wrongly demote the denial. The
-		// selected PathError's OWN Err is fs.ErrPermission, not a miss, so it stays fatal.
+		// is true on the whole tree (the sibling sentinel), and errors.As would select
+		// the Op:"open" PathError — so a first-match classifier could reach it. The
+		// whole multi-error is rejected up front (errors.Join implements Unwrap()
+		// []error), so it stays fatal regardless.
 		err := compile(t, errors.Join(
 			&fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrPermission},
 			fs.ErrNotExist,
@@ -407,13 +408,39 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 	t.Run("joined-notexist-open-and-permission fatal", func(t *testing.T) {
 		t.Parallel()
 		// The mirror image: a benign Op:"open"/ErrNotExist PathError joined ALONGSIDE a
-		// bare fs.ErrPermission. errors.As selects the benign PathError, so the primary
-		// pe.Err check alone would demote; the whole-tree fs.ErrPermission guard keeps it
-		// fatal so a permission error joined anywhere in the chain is never masked.
+		// bare fs.ErrPermission. errors.As would select the benign PathError, so the
+		// pe.Err check alone would demote it; the multi-error rejection keeps it fatal
+		// so a fatal error joined anywhere in the chain is never masked.
 		err := compile(t, errors.Join(
 			&fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrNotExist},
 			fs.ErrPermission,
 		))
 		require.Error(t, err, "a permission error joined alongside a benign miss must not be demoted")
+	})
+
+	t.Run("joined-open-notexist-and-read-notexist fatal", func(t *testing.T) {
+		t.Parallel()
+		// The core repro: a JOINED error of two PathErrors — a benign Op:"open"/
+		// ErrNotExist FIRST and a post-open Op:"read"/ErrNotExist SECOND. errors.As
+		// selects the first (open/ErrNotExist) and there is no whole-tree permission/
+		// fatal cause to veto on, so a first-match classifier would demote a constructed
+		// post-open read failure. A real filesystem never joins two errors for one
+		// file-open, so the multi-error is rejected outright and stays fatal.
+		err := compile(t, errors.Join(
+			&fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrNotExist},
+			&fs.PathError{Op: "read", Path: nestedPath, Err: fs.ErrNotExist},
+		))
+		require.Error(t, err, "a joined open+read miss must not be demoted; a real FS never joins errors for one file-open")
+	})
+
+	t.Run("wrapped-join-open-and-read fatal", func(t *testing.T) {
+		t.Parallel()
+		// A multi-error NESTED inside a single-chain message wrapper is still rejected:
+		// containsMultiError walks the linear Unwrap() error chain and finds the join.
+		err := compile(t, fmt.Errorf("fetch failed: %w", errors.Join(
+			&fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrNotExist},
+			&fs.PathError{Op: "read", Path: nestedPath, Err: fs.ErrNotExist},
+		)))
+		require.Error(t, err, "a multi-error wrapped in a single-chain wrapper must not be demoted")
 	})
 }
