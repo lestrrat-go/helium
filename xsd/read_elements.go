@@ -1082,14 +1082,28 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			return nil
 		}
 		// A @ref constraint must not also declare its own name/selector/field/refer
-		// (the ref form is mutually exclusive with the full form). Companions are
-		// detected by PRESENCE (hasAttr), not value, so an empty-but-present
-		// name=""/refer="" is still rejected, consistent with the ref-form detection.
+		// (the ref form is mutually exclusive with the full form). A companion is
+		// PRESENT by hasAttr, but a present-but-empty @name/@refer — the literal ""
+		// OR a whitespace-only value (xs:NCName and xs:QName both fix whiteSpace
+		// "collapse") — is an invalid NCName/QName in its OWN right, so it emits that
+		// one value diagnostic (matching how present-empty @name/@refer are treated
+		// everywhere else) instead of the structural ref-conflict, keeping present-
+		// empty and whitespace-only symmetric. A present NON-empty companion still
+		// fires the ref-conflict.
 		if hasAttr(elem, attrName) {
-			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
+			if collapsedAttr(elem, attrName) == "" {
+				c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+					"The value '' of attribute 'name' is not a valid 'xs:NCName'.")
+			} else {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
+			}
 		}
 		if hasAttr(elem, attrRefer) {
-			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
+			if collapsedAttr(elem, attrRefer) == "" {
+				c.reportInvalidQNameValue(ctx, elem, attrRefer, "")
+			} else {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
+			}
 		}
 		for child := range helium.Children(elem) {
 			ce, ok := helium.AsNode[*helium.Element](child)

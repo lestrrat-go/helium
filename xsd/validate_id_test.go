@@ -1,6 +1,8 @@
 package xsd_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -539,6 +541,96 @@ func TestIDConstraintRefConflictingChildren(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compile(t, `<xs:unique ref="u"/>`))
 	})
+}
+
+// TestIDConstraintRefFormCompanionSymmetry verifies that a present-but-empty
+// @name / @refer companion on the XSD 1.1 identity-constraint @ref form is
+// treated like an invalid NCName/QName VALUE — emitting its one value diagnostic
+// and NOT the structural ref-conflict — with the literal "" and a whitespace-only
+// value ("   ") handled identically (xs:NCName / xs:QName both fix whiteSpace
+// "collapse"). A genuinely-present VALID companion still fires the ref-conflict.
+func TestIDConstraintRefFormCompanionSymmetry(t *testing.T) {
+	t.Parallel()
+
+	// The @ref names an existing same-kind unique so the ref itself resolves
+	// cleanly (no dangling-ref noise); appxIDC is the ref-form constraint under test.
+	compile := func(t *testing.T, appxIDC string) (string, error) {
+		t.Helper()
+		schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="chap" type="chap">
+          <xs:unique name="u"><xs:selector xpath="section"/><xs:field xpath="@nr"/></xs:unique>
+        </xs:element>
+        <xs:element name="appx" type="chap">
+          %s
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="chap">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="section">
+        <xs:complexType><xs:attribute name="nr" type="xs:int"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`, appxIDC)
+		_, errs, cerr := compileWith(t, xsd.Version11, schemaXML)
+		return errs, cerr
+	}
+
+	const wantNCName = "is not a valid 'xs:NCName'"
+	const wantQName = "is not a valid QName"
+	const wantConflict = "must not also specify"
+
+	// A collapse-empty companion emits its value diagnostic, never the ref-conflict.
+	valueCases := []struct {
+		name      string
+		idcFmt    string
+		wantValue string
+		wantOther string
+	}{
+		{"name", `<xs:unique ref="u" name="%s"/>`, wantNCName, wantQName},
+		{"refer", `<xs:unique ref="u" refer="%s"/>`, wantQName, wantNCName},
+	}
+	for _, tc := range valueCases {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
+				t.Parallel()
+				errs, cerr := compile(t, fmt.Sprintf(tc.idcFmt, val.v))
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "errs: %s", errs)
+				require.Contains(t, errs, tc.wantValue,
+					"present-empty @%s must emit its invalid-value diagnostic; got: %s", tc.name, errs)
+				require.NotContains(t, errs, wantConflict,
+					"present-empty @%s must not fire the structural ref-conflict; got: %s", tc.name, errs)
+				require.NotContains(t, errs, tc.wantOther,
+					"present-empty @%s must not leak the other value diagnostic; got: %s", tc.name, errs)
+			})
+		}
+	}
+
+	// A genuinely-present VALID companion still fires the ref-conflict.
+	validCases := []struct {
+		name   string
+		idc    string
+		compan string
+	}{
+		{"name", `<xs:unique ref="u" name="dup"/>`, "name"},
+		{"refer", `<xs:unique ref="u" refer="u"/>`, "refer"},
+	}
+	for _, tc := range validCases {
+		t.Run("valid-companion-still-conflicts/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			errs, cerr := compile(t, tc.idc)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "errs: %s", errs)
+			require.Contains(t, errs, "must not also specify '"+tc.compan+"'",
+				"valid @%s companion must still fire the ref-conflict; got: %s", tc.compan, errs)
+			require.Equal(t, 0, strings.Count(errs, wantNCName)+strings.Count(errs, wantQName),
+				"a valid companion is not an invalid NCName/QName value; got: %s", errs)
+		})
+	}
 }
 
 // TestIDConstraintRefValidPrefixed verifies that a valid PREFIXED @ref still
