@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"io"
 	"io/fs"
 	"testing"
 
@@ -62,6 +63,95 @@ const includeMainSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:include schemaLocation="nested.xsd"/>
 </xs:schema>`
+
+// contentBytesFS serves fixed nested-schema bytes: Open succeeds and the file
+// streams the whole content then EOF, so readNestedSchema completes and the
+// bytes reach the CONTENT (parse) phase. It models a schemaLocation that
+// RESOLVES and READS cleanly, isolating the later content phase.
+type contentBytesFS struct{ data []byte }
+
+func (f contentBytesFS) Open(string) (fs.File, error) { return &contentBytesFile{data: f.data}, nil }
+
+type contentBytesFile struct {
+	data []byte
+	off  int
+}
+
+func (contentBytesFile) Stat() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
+func (contentBytesFile) Close() error               { return nil }
+func (f *contentBytesFile) Read(p []byte) (int, error) {
+	if f.off >= len(f.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, f.data[f.off:])
+	f.off += n
+	return n, nil
+}
+
+// entityReadFailFS opens successfully but every read returns fs.ErrInvalid,
+// modeling an external entity whose file RESOLVES/opens but is then unreadable.
+// Wired as the PARSER's fs.FS, a schema referencing an external entity makes the
+// parser surface an error whose chain contains fs.ErrInvalid.
+type entityReadFailFS struct{}
+
+func (entityReadFailFS) Open(string) (fs.File, error) { return entityReadFailFile{}, nil }
+
+type entityReadFailFile struct{}
+
+func (entityReadFailFile) Stat() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
+func (entityReadFailFile) Close() error               { return nil }
+func (entityReadFailFile) Read([]byte) (int, error)   { return 0, fs.ErrInvalid }
+
+// nestedExternalEntitySchema is a well-formed xs:schema whose content references
+// an external general entity. Parsed with external-entity substitution enabled,
+// the failing external-entity read makes the parse error's chain contain
+// fs.ErrInvalid — a CONTENT-phase failure carrying the same errno a benign
+// resolution miss would, which must NOT be demoted.
+const nestedExternalEntitySchema = `<?xml version="1.0"?>
+<!DOCTYPE xs:schema [
+  <!ENTITY ext SYSTEM "ext.ent">
+]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:annotation><xs:documentation>&ext;</xs:documentation></xs:annotation>
+  </xs:element>
+</xs:schema>`
+
+// TestNestedIncludeContentPhaseErrnoIsFatal verifies the positive-tagging
+// invariant: a nested include whose schemaLocation RESOLVES and READS cleanly but
+// whose CONTENT (parse) phase then fails with an error wrapping fs.ErrInvalid — an
+// external-entity read failure — is FATAL, never demoted to a benign fetch-miss
+// warning. Only readNestedSchema's resolution-phase miss carries the demotable
+// errNestedFetchMiss tag; a downstream content error with the SAME errno does not,
+// so it cannot masquerade as a resolution miss.
+func TestNestedIncludeContentPhaseErrnoIsFatal(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+	require.NoError(t, err)
+
+	// The injected parser loads external entities from a filesystem whose reads
+	// fail with fs.ErrInvalid, so parsing the nested schema fails in the content
+	// phase with fs.ErrInvalid in its error chain.
+	entityParser := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		FS(entityReadFailFS{})
+
+	_, err = xsd.NewCompiler().
+		FS(contentBytesFS{[]byte(nestedExternalEntitySchema)}).
+		Parser(entityParser).
+		BaseDir(".").
+		Compile(t.Context(), doc)
+
+	require.Error(t, err, "a content-phase parse failure must abort compilation")
+	// The vulnerability being guarded: the error DOES wrap fs.ErrInvalid, so an
+	// errno-based whitelist would wrongly demote it, yet it is NOT a fatal sentinel
+	// — only the absence of the resolution-phase tag keeps it fatal.
+	require.ErrorIs(t, err, fs.ErrInvalid, "content-phase error wraps fs.ErrInvalid (the phase-confusion the tag prevents)")
+	require.False(t, xsd.IsFatalSchemaLoad(err), "not a fatal sentinel; the positive tag — absent here — is what would demote")
+}
 
 // TestNestedIncludeReadFailAfterOpenIsFatal verifies that a nested
 // schemaLocation which RESOLVES/opens but whose READ fails is a FATAL load,
