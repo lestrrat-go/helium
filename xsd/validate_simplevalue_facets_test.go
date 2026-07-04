@@ -424,6 +424,93 @@ func TestNotationEnumUnprefixedDefaultNamespace(t *testing.T) {
 	})
 }
 
+// TestNotationEnumUnprefixedDefaultNamespaceListUnion verifies the unprefixed
+// xs:NOTATION default-namespace resolution applies uniformly across the LIST-item
+// and UNION-member enumeration comparison paths, not just the direct atomic one.
+// Both bottom out in the shared fixedAtomicMatches comparator, so an unprefixed
+// enumeration literal under the schema default namespace names {urn:p}jpeg and a
+// prefixed instance value in that namespace matches — while a no-default-namespace
+// value does not.
+func TestNotationEnumUnprefixedDefaultNamespaceListUnion(t *testing.T) {
+	t.Parallel()
+
+	// notationItem is a NOTATION-derived item/member type; the enclosing list and
+	// union each carry a whole-value enumeration whose unprefixed literals resolve
+	// against the schema default namespace (== target namespace).
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:p" targetNamespace="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="notationItem">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="jpeg"/>
+      <xs:enumeration value="png"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="list">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:list itemType="notationItem"/>
+        </xs:simpleType>
+        <xs:enumeration value="jpeg png"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="union">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="notationItem xs:string"/>
+        </xs:simpleType>
+        <xs:enumeration value="jpeg"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("list: prefixed instance items in the default namespace match", func(t *testing.T) {
+		t.Parallel()
+		// The list-level enumeration literal "jpeg png" resolves each unprefixed item
+		// to {urn:p}jpeg/{urn:p}png (schema default ns); the prefixed instance items
+		// name the same expanded QNames via fixedListMatches → fixedAtomicMatches.
+		errs, err := validateInstance(t, schemaXML,
+			`<list xmlns="urn:p" xmlns:p="urn:p">p:jpeg p:png</list>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("list: no-default-namespace items do not match", func(t *testing.T) {
+		t.Parallel()
+		// With no in-scope default namespace the instance items resolve to no
+		// namespace, so they cannot equal the {urn:p}jpeg/{urn:p}png enumeration items.
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:list xmlns:tns="urn:p">jpeg png</tns:list>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+
+	t.Run("union: prefixed instance value in the default namespace matches", func(t *testing.T) {
+		t.Parallel()
+		// The union-level enumeration literal "jpeg" (active in the notationItem
+		// member) resolves to {urn:p}jpeg; the prefixed instance value p:jpeg names
+		// the same QName via fixedUnionMatches → fixedAtomicMatches.
+		errs, err := validateInstance(t, schemaXML,
+			`<union xmlns="urn:p" xmlns:p="urn:p">p:jpeg</union>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("union: no-default-namespace value does not match", func(t *testing.T) {
+		t.Parallel()
+		// With no default namespace the instance "jpeg" is active in the xs:string
+		// member (it fails the notationItem enumeration), so it is not the {urn:p}jpeg
+		// enumeration value — the union enumeration rejects it (reported as a
+		// union-level error, the per-facet message being suppressed).
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:union xmlns:tns="urn:p">jpeg</tns:union>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value of the local union type")
+	})
+}
+
 // TestEnumQNameUnboundPrefixCompileError verifies item 1: an enumeration literal
 // of a QName/NOTATION-restricted type whose prefix is not bound in the literal's
 // in-scope namespaces is reported as a compile-time schema error, rather than
