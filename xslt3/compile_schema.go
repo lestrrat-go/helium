@@ -23,6 +23,12 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// Fetch phase: any error here (a resolve/read miss) is returned UNTAGGED so
+	// the top-level import-schema caller may fall back to a precompiled schema.
+	// A policy denial / resource-cap breach is already fatal-tagged by
+	// loadSchemaBytes / schemaResolverFS. Everything AFTER this point is
+	// post-fetch and is tagged errSchemaContentInvalid (a malformed/invalid
+	// schema that WAS fetched must never be masked by the fallback).
 	data, err := c.loadSchemaBytes(ctx, uri)
 	if err != nil {
 		return nil, err
@@ -39,7 +45,9 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// of being re-parsed into duplicate components.
 	doc, err := parseExternalXML(ctx, c.parser, data, uri, false, nil, nil, c.maxResourceBytes)
 	if err != nil {
-		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
+		// Malformed XML — a post-fetch content error, tagged so the fallback
+		// cannot mask it.
+		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, errors.Join(errSchemaContentInvalid, err))
 	}
 	// Preserve relative include/import resolution within the schema by
 	// rooting the XSD compiler's base directory at the schema's location,
@@ -69,16 +77,20 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// reports this as ErrCompilationFailed (nil schema); the fatalErrorCounter
 	// carries the diagnostic count for the message.
 	if errors.Is(err, xsd.ErrCompilationFailed) {
-		return nil, staticError(errCodeXTSE0220,
+		return nil, staticErrorCause(errCodeXTSE0220, errSchemaContentInvalid,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	if err != nil {
-		return nil, err
+		// A post-fetch compile error (invalid XSD, or a fatal nested load the
+		// xsd compiler surfaced): tag it content-invalid so the fallback cannot
+		// mask it. A nested fatal-load marker in err survives the join, so
+		// isFatalSchemaLoadError still recognizes it.
+		return nil, errors.Join(errSchemaContentInvalid, err)
 	}
 	// Defensive: a fatal diagnostic without ErrCompilationFailed should not
 	// happen, but keep the XTSE0220 guard so an invalid schema never leaks.
 	if errCounter.count.Load() > 0 {
-		return nil, staticError(errCodeXTSE0220,
+		return nil, staticErrorCause(errCodeXTSE0220, errSchemaContentInvalid,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	return schema, nil
@@ -213,21 +225,24 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 
 		schema, err := c.compileSchemaFromURI(ctx, uri)
 		if err != nil {
-			// A genuine "schema not found / not applicable" error may fall back
-			// to a pre-compiled import schema registered for the namespace. But a
-			// fatal schema-load (resource-limit breach, path escape, or
-			// import-depth overflow) must NOT be papered over by the fallback —
-			// doing so would let an over-cap or path-traversal schema-location
-			// silently succeed, defeating the guard. The single classifier
-			// recognizes every fatal-load condition (including a nested path
-			// escape, which surfaces as a plain xsd sentinel that an interface-only
-			// check would miss); propagate those, preserving the sentinel for
-			// errors.Is. Decided BEFORE findImportSchema so no fatal load can fall
-			// through to the precompiled-schema path.
-			if isFatalSchemaLoadError(err) {
+			// Only a genuine FETCH MISS (the schema-location could not be
+			// fetched — an unresolvable location hint) may fall back to a
+			// pre-compiled import schema registered for the namespace. Every
+			// other outcome fails closed, on the SAME taxonomy as the nested
+			// path:
+			//   - a FATAL load (resource-cap breach, path escape, import-depth
+			//     overflow, or a policy/no-resolver denial) — isFatalSchemaLoadError;
+			//   - a CONTENT error (the bytes WERE fetched but were malformed XML
+			//     or invalid XSD) — isSchemaContentError.
+			// Masking either with the precompiled fallback would let an
+			// over-cap / path-traversal / broken-but-authoritative
+			// schema-location silently succeed via a registered ImportSchemas
+			// entry. Decided BEFORE findImportSchema so no fatal/content load
+			// can fall through to the precompiled-schema path.
+			if isFatalSchemaLoadError(err) || isSchemaContentError(err) {
 				return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 			}
-			// File not found — try pre-compiled import schemas by namespace.
+			// Genuine fetch miss — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
 				if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
 					c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)

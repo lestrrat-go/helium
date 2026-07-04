@@ -77,6 +77,28 @@ func (s schemaResolverFS) Open(name string) (fs.File, error) {
 // message is preserved for callers.
 var errSchemaResolverDenied = errors.New("xslt3: nested-schema load denied by default-deny policy")
 
+// errSchemaContentInvalid marks a schema-load failure that occurred AFTER the
+// bytes were successfully fetched — a malformed XML parse error, or an invalid
+// XSD / schema-construction failure reported by the xsd compiler. It is the
+// phase boundary of a schema load: the fetch phase ([compiler.loadSchemaBytes])
+// returns its errors UNTAGGED (a genuine fetch miss the top-level import-schema
+// path may fall back on), while every post-fetch return from
+// [compiler.compileSchemaFromURI] carries this sentinel. The top-level fallback
+// consults [isSchemaContentError] so a fetched-but-invalid schema-location is
+// fatal (not masked by a matching precompiled ImportSchemas entry) exactly like
+// the nested path — one consistent fetch-miss / content / denial taxonomy.
+var errSchemaContentInvalid = errors.New("xslt3: schema content invalid")
+
+// isSchemaContentError reports whether err (or anything in its chain) is a
+// post-fetch content error tagged with [errSchemaContentInvalid] — the bytes
+// loaded but were unusable (malformed XML or invalid XSD). Such an error must
+// never be papered over by the precompiled-schema fallback: the schema-location
+// was reachable, so masking it would silently swap an authoritative-but-broken
+// schema for a precompiled one.
+func isSchemaContentError(err error) bool {
+	return errors.Is(err, errSchemaContentInvalid)
+}
+
 // fatalSchemaLoadError marks a schema-load failure that the xsd compiler must
 // treat as fatal rather than demoting to a warning. It satisfies
 // [xsd.FatalSchemaLoader] and unwraps to the underlying error so the original
