@@ -133,6 +133,20 @@ func (l *Lexer) tokenize() error {
 			} else {
 				l.emit(TokenSlash, "/")
 			}
+		case r == ':':
+			// A ':' reaches the main scanner only at a token boundary
+			// (start of input or after whitespace); a QName's ':' is consumed
+			// contiguously by scanNameOrKeyword. XPath permits insignificant
+			// whitespace around the '::' axis separator (ExprWhitespace), so a
+			// space-separated '::' — e.g. 'child :: para' — must still lex as an
+			// axis. A lone ':' at a token boundary is not valid XPath.
+			if l.pos+1 < len(l.input) && l.input[l.pos+1] == ':' {
+				l.emit(TokenColonColon, "::")
+				l.advance(1)
+				l.advance(1)
+			} else {
+				return fmt.Errorf("%w: %q at position %d", ErrUnexpectedChar, string(r), l.pos)
+			}
 		case r == '.':
 			l.advance(1)
 			switch {
