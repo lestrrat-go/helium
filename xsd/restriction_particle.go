@@ -1953,15 +1953,18 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 			if particleValidRestriction(ctx, leafP, beP, schema, version) {
 				continue
 			}
-			// A derived leaf that is a substitution-group MEMBER of the base
-			// element is also a valid restriction: the base element particle admits
-			// its whole (instance-admissible, block/abstract/derivation-filtered)
-			// substitution group at instance time, so a leaf naming one member has
-			// language {member}, a subset. groupRestrictsElement already bounds the
-			// group's total emission within the base element's occurrence, so this
-			// only widens the accepted NAMES, never the occurrence (§3.9.6 mainstream
-			// interpretation — W3C elemZ027).
-			if !leafIsSubstMemberOfBaseElement(t, beP, schema) {
+			// A derived leaf that VALIDLY RESTRICTS a substitution-group MEMBER of
+			// the base element is also a valid restriction: the base element particle
+			// admits its whole (instance-admissible, block/abstract/derivation-
+			// filtered) substitution group at instance time, so a leaf restricting one
+			// member has a language that is a subset. The leaf must actually restrict
+			// the concrete member declaration (NameAndTypeOK against it), not merely
+			// share its name — a derived LOCAL element with a member's name but a
+			// wider type would otherwise falsely accept content the base rejects.
+			// groupRestrictsElement already bounds the group's total emission within
+			// the base element's occurrence (§3.9.6 mainstream interpretation — W3C
+			// elemZ027).
+			if !leafIsSubstMemberOfBaseElement(ctx, leafP, t, beP, schema, version) {
 				return false
 			}
 		case *Wildcard:
@@ -1977,18 +1980,26 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 	return true
 }
 
-// leafIsSubstMemberOfBaseElement reports whether the derived element leaf is an
-// instance-admissible substitution-group member of the base element particle's
-// declaration. A base element particle admits its head plus that whole (concrete,
-// block/abstract/derivation-filtered) substitution group at instance time, so a
-// derived leaf naming a member is a valid name-narrowing restriction of it.
-func leafIsSubstMemberOfBaseElement(leaf *ElementDecl, beP *Particle, schema *Schema) bool {
+// leafIsSubstMemberOfBaseElement reports whether the derived element leaf validly
+// restricts an instance-admissible substitution-group member of the base element
+// particle's declaration. A base element particle admits its head plus that whole
+// (concrete, block/abstract/derivation-filtered) substitution group at instance
+// time, so a leaf restricting one member is a valid name-narrowing restriction of
+// it. The leaf must actually restrict the concrete member declaration
+// (elementRestrictsElement / NameAndTypeOK — same name plus a type/occurrence/
+// fixed/nillable subset), so a derived LOCAL element that merely shares a member's
+// name but widens its type is NOT accepted.
+func leafIsSubstMemberOfBaseElement(ctx context.Context, leafP *Particle, leaf *ElementDecl, beP *Particle, schema *Schema, version Version) bool {
 	be, ok := beP.Term.(*ElementDecl)
 	if !ok {
 		return false
 	}
 	for _, m := range instanceSubstMembers(be, schema) {
-		if m.Name == leaf.Name {
+		if m.Name != leaf.Name {
+			continue
+		}
+		memberP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: m}
+		if elementRestrictsElement(ctx, leafP, leaf, memberP, m, schema, version) {
 			return true
 		}
 	}

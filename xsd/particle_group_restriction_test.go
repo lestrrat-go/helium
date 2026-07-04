@@ -246,4 +246,33 @@ func TestGroupRestrictsElementPointlessness(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	t.Run("rejects local element sharing member name but widening type", func(t *testing.T) {
+		t.Parallel()
+		// The global member m1 is xs:integer; a derived LOCAL element named m1 typed
+		// xs:string is NOT a valid restriction — it would admit <m1>abc</m1>, which
+		// the base (which admits m1 only through the global integer-typed member)
+		// rejects. Matching by name alone would falsely accept this.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="head" type="xs:integer"/>
+  <xs:element name="m1" type="xs:integer" substitutionGroup="t:head"/>
+  <xs:complexType name="base">
+    <xs:sequence><xs:element ref="t:head"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:sequence>
+            <xs:choice>
+              <xs:element name="m1" type="xs:string"/>
+            </xs:choice>
+          </xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }
