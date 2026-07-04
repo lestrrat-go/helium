@@ -804,6 +804,7 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 			IsRef:     true,
 		}
 		c.elemRefs[edecl] = qn
+		c.markChameleonEligible(edecl, elem, ref)
 		c.elemRefSources[edecl] = elemRefSource{elemName: elem.LocalName(), line: elem.Line(), source: c.diagSource()}
 		return &Particle{
 			MinOccurs: minOcc,

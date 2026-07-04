@@ -492,7 +492,7 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 	if td == nil {
 		return nil
 	}
-	nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem, actualDecl)
 	if nilErr != nil {
 		return nilErr
 	}
@@ -731,7 +731,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// Annotate child element with its type for pass-2 identity-constraint evaluation.
 		vc.annotateElement(ctx, child.elem, td, true)
 		if td != nil {
-			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+			nilled, nilErr := vc.checkXsiNil(ctx, child.elem, actualDecl)
 			if nilErr != nil {
 				contentErr = nilErr
 			} else if nilled {
@@ -791,6 +791,14 @@ func effectiveDeclType(decl *ElementDecl, schema *Schema) *TypeDef {
 
 func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl {
 	if edecl == nil || schema == nil || edecl.Block&BlockSubstitution != 0 {
+		return nil
+	}
+	// A substitution group is a property of the GLOBAL head element declaration
+	// (or a ref to it), not of a LOCAL element particle that merely shares the
+	// head's QName. Expand only when this declaration IS the registered global
+	// head, or is a ref (which resolves to the global head); a distinct local
+	// particle admits no substitution members even if it is named like a head.
+	if !edecl.IsRef && schema.elements[edecl.Name] != edecl {
 		return nil
 	}
 	type queuedMember struct {
@@ -1209,7 +1217,7 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 	if td == nil {
 		return nil
 	}
-	nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem, edecl)
 	if nilErr != nil {
 		return nilErr
 	}
