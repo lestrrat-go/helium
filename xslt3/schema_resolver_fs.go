@@ -96,11 +96,18 @@ func (e fatalSchemaLoadError) FatalSchemaLoad() bool { return true }
 // the xslt3 side: it delegates the cross-package conditions (path escape,
 // import-depth overflow, and any [xsd.FatalSchemaLoader]) to [xsd.IsFatalSchemaLoad]
 // — the one source of truth shared with the xsd compiler — and additionally
-// recognizes [ErrResourceTooLarge], the xslt3-package cap sentinel that the
-// top-level schema-location load returns directly (unwrapped, so it is not yet a
-// FatalSchemaLoader at that point).
+// recognizes two xslt3-package sentinels the TOP-LEVEL schema-location load
+// returns directly (unwrapped, so they are not yet a FatalSchemaLoader at that
+// point): [ErrResourceTooLarge], the per-resource cap sentinel, and
+// [errSchemaResolverDenied], the default-deny policy denial ("no URIResolver
+// configured"). A policy denial on the top-level import-schema path must stay
+// fatal — falling through to the precompiled fallback would let a
+// no-resolver-configured schema-location silently compile via a registered
+// ImportSchemas entry, bypassing the secure-by-default policy.
 func isFatalSchemaLoadError(err error) bool {
-	return errors.Is(err, ErrResourceTooLarge) || xsd.IsFatalSchemaLoad(err)
+	return errors.Is(err, ErrResourceTooLarge) ||
+		errors.Is(err, errSchemaResolverDenied) ||
+		xsd.IsFatalSchemaLoad(err)
 }
 
 // resolveSchemaURI resolves a schema-location reference against a base URI.
