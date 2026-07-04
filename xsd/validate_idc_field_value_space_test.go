@@ -1108,6 +1108,144 @@ func TestIDCFieldAnyTypeSubstitutionGroupMember(t *testing.T) {
 	}
 }
 
+// TestIDCFieldNotationDefaultNamespace covers identity-constraint key
+// canonicalization for an xs:NOTATION field. An UNPREFIXED xs:NOTATION value picks
+// up the in-scope DEFAULT namespace (like the schema's declared-notation lookup and
+// the facet comparison paths), so a prefixed `p:jpeg` and an unprefixed `jpeg`
+// under a default namespace urn:p both denote {urn:p}jpeg and COLLIDE for
+// xs:unique/xs:key. A distinct notation (png) stays distinct. Runs for both the
+// xs:unique and xs:key constraint kinds so both route through canonicalAtomicKey.
+func TestIDCFieldNotationDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	// targetNamespace and default namespace are both urn:p, so the unprefixed
+	// enumeration literals jpeg/png name {urn:p}jpeg/{urn:p}png (the declared
+	// notations), and elementFormDefault="qualified" puts the local `item` elements
+	// in urn:p (the selector p:item resolves via the schema's p binding).
+	schemaFor := func(kind string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns="urn:p" targetNamespace="urn:p" elementFormDefault="qualified">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="imageKind">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="jpeg"/>
+      <xs:enumeration value="png"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="imageKind" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:` + kind + ` name="itemKey">
+      <xs:selector xpath="p:item"/>
+      <xs:field xpath="."/>
+    </xs:` + kind + `>
+  </xs:element>
+</xs:schema>`
+	}
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// p:jpeg = {urn:p}jpeg; unprefixed jpeg picks up default ns urn:p =
+			// {urn:p}jpeg. Same canonical value → duplicate.
+			name:     "prefixed and unprefixed notation same default ns collide",
+			instance: `<root xmlns="urn:p" xmlns:p="urn:p"><item>p:jpeg</item><item>jpeg</item></root>`,
+			valid:    false,
+		},
+		{
+			// {urn:p}jpeg vs {urn:p}png — distinct notations.
+			name:     "distinct notations stay distinct",
+			instance: `<root xmlns="urn:p" xmlns:p="urn:p"><item>p:jpeg</item><item>png</item></root>`,
+			valid:    true,
+		},
+	}
+
+	for _, kind := range []string{"unique", "key"} {
+		v := compileValidator(t, schemaFor(kind))
+		for _, tc := range cases {
+			t.Run(kind+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+				require.NoError(t, err)
+
+				var errs string
+				err = validateWithOutput(t, v, doc, &errs)
+				if tc.valid {
+					require.NoError(t, err, "expected valid, got errors: %s", errs)
+					return
+				}
+				require.Error(t, err, "expected validation error")
+			})
+		}
+	}
+}
+
+// TestIDCFieldQNameNoDefaultNamespace verifies the xs:QName IDC path is UNCHANGED
+// by the NOTATION default-namespace resolution: an unprefixed xs:QName VALUE
+// resolves to NO namespace (value-space semantics), NOT the in-scope default. So
+// with a default namespace urn:x in scope, `p:a` = {urn:x}a and unprefixed `a` =
+// {}a are DISTINCT — the contrast with the NOTATION case above, which collides.
+func TestIDCFieldQNameNoDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:x" targetNamespace="urn:x" elementFormDefault="qualified">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="xs:QName" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="p:item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// p:a = {urn:x}a; unprefixed a = {}a (QName value ignores the default ns).
+			// Distinct, so no duplicate.
+			name:     "prefixed and unprefixed qname distinct under default ns",
+			instance: `<root xmlns="urn:x" xmlns:p="urn:x"><item>p:a</item><item>a</item></root>`,
+			valid:    true,
+		},
+		{
+			// Two prefixes bound to the same uri: {urn:x}a both → duplicate.
+			name:     "same uri different prefix qname collide",
+			instance: `<root xmlns="urn:x" xmlns:p="urn:x" xmlns:q="urn:x"><item>p:a</item><item>q:a</item></root>`,
+			valid:    false,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
