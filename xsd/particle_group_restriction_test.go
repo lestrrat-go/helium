@@ -186,4 +186,64 @@ func TestGroupRestrictsElementPointlessness(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	t.Run("accepts substitution-member choice restricting a base element", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence(element ref=head) where head is a substitution-group head
+		// with concrete members m1/m2; a derived choice(m1, m2) restricts the base
+		// element head — the base element admits its whole substitution group at
+		// instance time, so {m1,m2} is a valid name-narrowing subset (W3C elemZ027).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:element name="head" type="xs:string"/>
+  <xs:element name="m1" type="xs:string" substitutionGroup="t:head"/>
+  <xs:element name="m2" type="xs:string" substitutionGroup="t:head"/>
+  <xs:complexType name="base">
+    <xs:sequence><xs:element ref="t:head"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:sequence>
+            <xs:choice>
+              <xs:element ref="t:m1"/>
+              <xs:element ref="t:m2"/>
+            </xs:choice>
+          </xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects non-member element restricting a base element", func(t *testing.T) {
+		t.Parallel()
+		// x is NOT in head's substitution group, so a derived choice re-admitting x
+		// is not a valid restriction of the base element head.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:element name="head" type="xs:string"/>
+  <xs:element name="m1" type="xs:string" substitutionGroup="t:head"/>
+  <xs:element name="x" type="xs:string"/>
+  <xs:complexType name="base">
+    <xs:sequence><xs:element ref="t:head"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:base">
+          <xs:sequence>
+            <xs:choice>
+              <xs:element ref="t:m1"/>
+              <xs:element ref="t:x"/>
+            </xs:choice>
+          </xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }

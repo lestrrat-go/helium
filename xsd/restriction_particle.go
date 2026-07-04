@@ -252,23 +252,33 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			return groupRestrictsWildcard(r, rt, b, schema)
 		case *ElementDecl:
 			// A derived model GROUP restricting a base single ELEMENT. XSD 1.0 §3.9.6
-			// has NO Sequence/Choice/All:Element derivation rule, so this is valid ONLY
-			// when the group is §3.9.6-POINTLESS — it folds (safe occurrence hoisting:
-			// at each level the group's or the single member's {max occurs} is 1) down
-			// to a single element particle that validly restricts the base element. A
-			// genuinely REPEATING group (e.g. sequence maxOccurs="2" of element{1,2},
-			// which emits the element 1..4 times) is NOT pointless and admits content the
-			// base single element does not, so it is rejected. XSD 1.1 keeps the broader
-			// language-inclusion leniency (groupRestrictsElement), backed by the
-			// particleLanguageSubset fallback, so its behavior is unchanged.
-			if version == Version10 {
-				red, reduced := pointlessReduce(r)
-				if !reduced {
-					return false
-				}
-				return particleValidRestriction(ctx, red, b, schema, version)
+			// has no Sequence/Choice/All:Element derivation rule; the mainstream
+			// (Xerces/libxml2/W3C suite) interpretation accepts it when the group's
+			// language is a subset of the base element's.
+			if version == Version11 {
+				return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
 			}
-			return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
+			// XSD 1.0: groupRestrictsElement bounds the group's total EMISSION range
+			// (particleElementRange) within the base element's occurrence and then
+			// requires every emitted leaf to validly restrict the base element
+			// (substitution-group membership included, so a choice of the base
+			// element's substitution members restricts it — W3C elemZ027). That
+			// range check is a min/max interval, so it is HOLE-BLIND: when the base
+			// element is REPEATABLE (MaxOccurs > 1) a derived emission set with a gap
+			// (e.g. {0}∪[2,4] from an emptiable group over a multi-occur member)
+			// passes the interval test yet admits content the base does not. So the
+			// language-inclusion path is used only when the base element is
+			// AT-MOST-ONCE (MaxOccurs == 1), where the interval bound forces the
+			// derived emission into {0,1} and no hole can hide; otherwise fall back
+			// to the conservative §3.9.6-pointless single-element fold.
+			if b.MaxOccurs == 1 {
+				return groupRestrictsElement(ctx, r, rt, b, bt, schema, version)
+			}
+			red, reduced := pointlessReduce(r)
+			if !reduced {
+				return false
+			}
+			return particleValidRestriction(ctx, red, b, schema, version)
 		}
 	}
 	return true
@@ -1940,7 +1950,18 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 		switch t := p.Term.(type) {
 		case *ElementDecl:
 			leafP := &Particle{MinOccurs: 1, MaxOccurs: 1, Term: t}
-			if !particleValidRestriction(ctx, leafP, beP, schema, version) {
+			if particleValidRestriction(ctx, leafP, beP, schema, version) {
+				continue
+			}
+			// A derived leaf that is a substitution-group MEMBER of the base
+			// element is also a valid restriction: the base element particle admits
+			// its whole (instance-admissible, block/abstract/derivation-filtered)
+			// substitution group at instance time, so a leaf naming one member has
+			// language {member}, a subset. groupRestrictsElement already bounds the
+			// group's total emission within the base element's occurrence, so this
+			// only widens the accepted NAMES, never the occurrence (§3.9.6 mainstream
+			// interpretation — W3C elemZ027).
+			if !leafIsSubstMemberOfBaseElement(t, beP, schema) {
 				return false
 			}
 		case *Wildcard:
@@ -1954,6 +1975,24 @@ func groupLeavesRestrictElement(ctx context.Context, rg *ModelGroup, beP *Partic
 		}
 	}
 	return true
+}
+
+// leafIsSubstMemberOfBaseElement reports whether the derived element leaf is an
+// instance-admissible substitution-group member of the base element particle's
+// declaration. A base element particle admits its head plus that whole (concrete,
+// block/abstract/derivation-filtered) substitution group at instance time, so a
+// derived leaf naming a member is a valid name-narrowing restriction of it.
+func leafIsSubstMemberOfBaseElement(leaf *ElementDecl, beP *Particle, schema *Schema) bool {
+	be, ok := beP.Term.(*ElementDecl)
+	if !ok {
+		return false
+	}
+	for _, m := range instanceSubstMembers(be, schema) {
+		if m.Name == leaf.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // particleElementRange computes the total (min, max) number of ELEMENTS a
