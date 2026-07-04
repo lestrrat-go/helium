@@ -30,6 +30,17 @@ var errIncludeDepthExceeded = errors.New("xsd: max include depth exceeded")
 // so the containment violation is visible to callers.
 var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
 
+// errSchemaContentInvalid marks a CONTENT failure of a nested schema
+// (xs:include/xs:import/xs:redefine target): the document was fetched and opened
+// but is not well-formed XML, or its root element is not <xs:schema>. Unlike a
+// fetch/resolution failure — which demotes to a warning because schemaLocation
+// is only a hint (src-include.1 / src-import) — a content failure is a fatal
+// schema error: the located document exists but is invalid. Matched via
+// errors.Is by the fetch-vs-content classifiers ([nestedLoadFailureFatal] and
+// [processImport]) so an EINVAL/network fetch miss stays a warning while a
+// malformed or non-schema target aborts compilation, regardless of the errno.
+var errSchemaContentInvalid = errors.New("xsd: nested schema content is invalid")
+
 // errSchemaTooLarge signals that a nested schema (xs:include/xs:import/
 // xs:redefine target) exceeded [maxNestedSchemaSize] while being read. It is a
 // resource-limit guard, so it is classified fatal by [IsFatalSchemaLoad] and
@@ -237,18 +248,19 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 
 // nestedLoadFailureFatal reports whether an xs:include/xs:redefine load error must
 // abort compilation rather than be demoted to a warning. A schemaLocation is only a
-// hint, so a genuinely-missing target on an explicitly-configured FS is a warning
-// (matching libxml2, which skips it). But three conditions stay FATAL: a
-// security-limit breach ([IsFatalSchemaLoad], e.g. include-depth or byte-cap); a
-// parse or structural failure (anything that is NOT a plain "file not found", e.g. a
-// node-content-size breach during parsing); and a refusal by the default deny-all FS
-// (the secure default surfaces the denial instead of silently handing back a
-// half-assembled schema — a caller who wants host access opts in via Compiler.FS).
+// hint (src-include.1 / src-redefine.1), so a FETCH/RESOLUTION failure — the target
+// cannot be opened or read, for ANY reason (a missing file, an http:// location
+// opened as a filesystem path yielding EINVAL, a network hiccup, ...) — is a warning
+// (matching libxml2, which skips it), classified by error KIND rather than a
+// hardcoded errno. Three conditions stay FATAL: a security-limit breach
+// ([IsFatalSchemaLoad], e.g. include-depth or byte-cap); a CONTENT failure
+// ([errSchemaContentInvalid] — the located document was fetched but is not
+// well-formed XML or its root is not <xs:schema>); and a refusal by the default
+// deny-all FS (the secure default surfaces the denial instead of silently handing
+// back a half-assembled schema — a caller who wants host access opts in via
+// Compiler.FS).
 func (c *compiler) nestedLoadFailureFatal(err error) bool {
-	if IsFatalSchemaLoad(err) {
-		return true
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
+	if IsFatalSchemaLoad(err) || errors.Is(err, errSchemaContentInvalid) {
 		return true
 	}
 	_, denyAll := c.fsys.(iofs.DenyAll)
@@ -358,13 +370,16 @@ func (c *compiler) processImport(ctx context.Context, elem *helium.Element) erro
 	}
 
 	if err := c.loadImport(ctx, loc, ns, elem); err != nil {
-		// Depth-exceeded and baseDir-escape are security limits, not I/O hiccups;
-		// surface them as fatal compilation errors rather than demoting to an I/O
-		// warning. A FatalSchemaLoader load failure (e.g. a resource-limit breach
-		// from the configured FS) is likewise fatal so the cap cannot be silently
-		// defeated for an xs:import target. All conditions route through the one
-		// classifier.
-		if IsFatalSchemaLoad(err) {
+		// schemaLocation is only a hint (src-import), so a FETCH/RESOLUTION failure
+		// (the target cannot be opened/read, for any reason — a missing file, an
+		// http:// location opened as a path yielding EINVAL, ...) is demoted to a
+		// warning and the import skipped. Two kinds stay FATAL, by error KIND not a
+		// hardcoded errno: a security limit ([IsFatalSchemaLoad] — depth-exceeded,
+		// baseDir-escape, or a FatalSchemaLoader resource breach, so the cap cannot
+		// be silently defeated for an xs:import target) and a CONTENT failure
+		// ([errSchemaContentInvalid] — the located document was fetched but is not
+		// well-formed XML or its root is not <xs:schema>).
+		if IsFatalSchemaLoad(err) || errors.Is(err, errSchemaContentInvalid) {
 			return err
 		}
 		// Import failure — report warning if we have a filename.
@@ -445,12 +460,12 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return fmt.Errorf("xsd: failed to parse include %q: %w", location, err)
+		return fmt.Errorf("xsd: failed to parse include %q: %w: %w", location, errSchemaContentInvalid, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
-		return fmt.Errorf("xsd: included document %q is not an xs:schema", location)
+		return fmt.Errorf("xsd: included document %q is not an xs:schema: %w", location, errSchemaContentInvalid)
 	}
 
 	// Conditional inclusion runs per schema document, BEFORE the targetNamespace
@@ -714,12 +729,12 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return fmt.Errorf("xsd: failed to parse redefine %q: %w", location, err)
+		return fmt.Errorf("xsd: failed to parse redefine %q: %w: %w", location, errSchemaContentInvalid, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
-		return fmt.Errorf("xsd: redefined document %q is not an xs:schema", location)
+		return fmt.Errorf("xsd: redefined document %q is not an xs:schema: %w", location, errSchemaContentInvalid)
 	}
 
 	// Conditional inclusion runs per schema document, BEFORE the targetNamespace
@@ -1485,12 +1500,12 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return fmt.Errorf("xsd: failed to parse import %q: %w", location, err)
+		return fmt.Errorf("xsd: failed to parse import %q: %w: %w", location, errSchemaContentInvalid, err)
 	}
 
 	impRoot := findDocumentElement(doc)
 	if impRoot == nil || !isXSDElement(impRoot, elemSchema) {
-		return fmt.Errorf("xsd: imported document %q is not an xs:schema", location)
+		return fmt.Errorf("xsd: imported document %q is not an xs:schema: %w", location, errSchemaContentInvalid)
 	}
 
 	// Compute display filename for the imported schema (for error messages).
