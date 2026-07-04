@@ -793,6 +793,14 @@ func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl 
 	if edecl == nil || schema == nil || edecl.Block&BlockSubstitution != 0 {
 		return nil
 	}
+	// A substitution group is a property of the GLOBAL head element declaration
+	// (or a ref to it), not of a LOCAL element particle that merely shares the
+	// head's QName. Expand only when this declaration IS the registered global
+	// head, or is a ref (which resolves to the global head); a distinct local
+	// particle admits no substitution members even if it is named like a head.
+	if !edecl.IsRef && schema.elements[edecl.Name] != edecl {
+		return nil
+	}
 	type queuedMember struct {
 		member *ElementDecl
 		head   *ElementDecl
