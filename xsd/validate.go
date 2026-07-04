@@ -2781,7 +2781,16 @@ func xsdTypeName(td *TypeDef) string {
 			return "Q{" + cur.Name.NS + "}" + cur.Name.Local
 		}
 		if cur.Name.Local != "" {
-			return cur.Name.Local
+			// No-namespace named ancestor: emit the canonical Q{}local EQName form
+			// (matching the td-itself branch above), not a bare local name. This
+			// changes the emitted annotation / $value type-identity string for the
+			// rare anonymous-type-over-a-no-namespace-named-base case from "local"
+			// to "Q{}local". xsd's own type lookups resolve via annotationParts,
+			// which accepts either form, and the parser-resolved paths already
+			// produced "Q{}local", so xsd11/xsd10 W3C conformance is unchanged
+			// (verified). The canonical form is the correct EQName and matches the
+			// spelling xslt3 SequenceType matching compares against.
+			return "Q{}" + cur.Name.Local
 		}
 	}
 	// Anonymous type with no named ancestor in the base chain: the type
