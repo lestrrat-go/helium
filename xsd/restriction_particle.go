@@ -237,7 +237,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 					return true
 				}
 			}
-			return wildcardRestrictsModelGroup(r, rt, b, bt, schema, version)
+			return wildcardRestrictsModelGroup(ctx, r, rt, b, bt, schema, version)
 		}
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
@@ -613,7 +613,7 @@ func strictWildcardAdmitsNoGlobal(wc *Wildcard, schema *Schema) bool {
 // soundly and conformantly without it. Anything the reduction cannot represent
 // language-exactly — a dead base position, a non-uniform base position, an
 // occurrence-count HOLE — is REJECTED.
-func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema, version Version) bool {
+func wildcardRestrictsModelGroup(ctx context.Context, r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema, version Version) bool {
 	_ = bt // base model group reached via b.Term; kept for call-site symmetry
 	matchesNothing := wildcardMatchesNothing(rt)
 	switch {
@@ -635,7 +635,7 @@ func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *Mod
 	if !coverAdmitsWildcard(red.cover, rt, schema) {
 		return false
 	}
-	return !wildcardReadmitsReservedElement(red.cover, rt, b, schema, version)
+	return !wildcardReadmitsReservedElement(ctx, r, b, schema, version)
 }
 
 // wildcardReadmitsReservedElement enforces XSD 1.1 element-over-wildcard
@@ -644,75 +644,47 @@ func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *Mod
 // all-wildcard child), so its NAME is dropped from the emission profile. But in
 // XSD 1.1 a base child whose name matches an element declaration is governed by
 // that ELEMENT (validated against its type), not by an overlapping wildcard —
-// element precedence. A derived wildcard that admits such a reserved name accepts
-// content the base validates more strictly (e.g. `<e>bad</e>` against a base
+// element precedence. A derived wildcard that re-admits such a reserved name may
+// accept content the base validates more strictly (e.g. `<e>bad</e>` against a base
 // `choice(element e:int, any skip)`), so it is NOT a language subset.
 //
-// It reports whether the derived wildcard rt re-admits any RESERVED base element
-// name (an emitting element declaration plus its instance-admissible
-// substitution-group members) that a LIVE wildcard cover also admits — the case
-// coverAdmitsWildcard just accepted on namespace grounds but that element
-// precedence makes unsound. A reserved name rt EXCLUDES (namespace or notQName) is
-// sound (rt never produces it); a name no live cover admits is already handled by
-// the namespace-subset coverAdmitsWildcard check. Only an UNENFORCING rt (skip, or
-// lax with no matching global) rejects: it never assesses the re-admitted child's
-// type, so nothing recovers the base element's stricter validation. A strict/lax-
-// with-global rt resolves a governing type the DYNAMIC EDC checks against the base
-// local type at validation, so it is left to that runtime check (compile accepts).
-// Element precedence is a 1.1 rule (a 1.0 base overlapping an element with a wildcard
-// is UPA-invalid and never reaches here), so the check is gated to Version11 to keep
-// XSD 1.0 byte-identical.
-func wildcardReadmitsReservedElement(cover []coverBranch, rt *Wildcard, b *Particle, schema *Schema, version Version) bool {
+// It reports whether the derived wildcard particle r re-admits any RESERVED base
+// element declaration (an emitting element plus its instance-admissible
+// substitution-group members) UNSOUNDLY, delegating each declaration to the shared
+// baseAllElementReadmittedByDerivedWildcard / derivedWildcardReadmitsReservedName gate
+// (deferTypeSubstitution=true): an UNENFORCING wildcard (skip, or lax with no matching
+// global) rejects — it never assesses the re-admitted child's type; a strict wildcard
+// with NO global rejects the child at validation (sound — defer); an ENFORCING global
+// (strict, or lax with a matching global) is rejected at COMPILE only when it drops one
+// of the base local's constraints the dynamic EDC does not recover ({type table}, fixed,
+// nillable, block, the asymmetric default, identity constraints —
+// globalDropsLocalConstraint). Type-DEFINITION substitutability of the wildcard-resolved
+// global is left to the runtime dynamic wildcard-EDC, which rejects a type-incompatible
+// child at validation. A reserved name the wildcard EXCLUDES (namespace or notQName) is
+// sound (it never produces it). Element precedence is a 1.1 rule (a 1.0 base overlapping
+// an element with a wildcard is UPA-invalid and never reaches here), so the check is
+// gated to Version11 to keep XSD 1.0 byte-identical.
+func wildcardReadmitsReservedElement(ctx context.Context, r *Particle, b *Particle, schema *Schema, version Version) bool {
 	if version != Version11 {
 		return false
 	}
-	for _, qn := range reservedElementNames(b, schema) {
-		if !wildcardUnenforcingForName(rt, qn, schema) {
-			continue // rt excludes the name, or enforces its type (dynamic EDC covers it)
-		}
-		if coverAdmitsName(cover, qn, schema) {
+	derivedWilds := []*Particle{r}
+	for _, be := range reservedElementDecls(b) {
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version, true) {
 			return true
 		}
 	}
 	return false
 }
 
-// wildcardUnenforcingForName reports whether the wildcard ADMITS qn but never
-// assesses a child's type there (processContents="skip", or "lax" with no global
-// element declaration for qn) — so it recovers no type for a re-admitted element.
-func wildcardUnenforcingForName(wc *Wildcard, qn QName, schema *Schema) bool {
-	if !wildcardAllowsExpandedName(wc, qn.Local, qn.NS, schema, false) {
-		return false
-	}
-	switch wc.ProcessContents {
-	case ProcessSkip:
-		return true
-	case ProcessLax:
-		_, hasGlobal := schema.elements[qn]
-		return !hasGlobal
-	default:
-		return false
-	}
-}
-
-// coverAdmitsName reports whether any base all-wildcard cover branch admits the
-// expanded name qn.
-func coverAdmitsName(cover []coverBranch, qn QName, schema *Schema) bool {
-	for _, br := range cover {
-		if wildcardAllowsExpandedName(br.wc, qn.Local, qn.NS, schema, false) {
-			return true
-		}
-	}
-	return false
-}
-
-// reservedElementNames collects every EMITTING element declaration name reachable
-// in the base particle, plus each declaration's instance-admissible
-// substitution-group members. A non-emitting (prohibited, or under a maxOccurs=0
-// ancestor group) element emits nothing and is never routed to by element
-// precedence, so it is excluded.
-func reservedElementNames(p *Particle, schema *Schema) []QName {
-	var names []QName
+// reservedElementDecls collects every EMITTING element DECLARATION reachable in the
+// base particle. A non-emitting (prohibited, or under a maxOccurs=0 ancestor group)
+// element emits nothing and is never routed to by element precedence, so it is
+// excluded. Substitution-group members are NOT expanded here — the per-declaration
+// re-admission gate (baseAllElementReadmittedByDerivedWildcard) expands them with each
+// member's OWN declaration as the constraining type.
+func reservedElementDecls(p *Particle) []*ElementDecl {
+	var decls []*ElementDecl
 	var walk func(*Particle)
 	walk = func(pp *Particle) {
 		if particleEmitsNothing(pp) {
@@ -720,10 +692,7 @@ func reservedElementNames(p *Particle, schema *Schema) []QName {
 		}
 		switch t := pp.Term.(type) {
 		case *ElementDecl:
-			names = append(names, t.Name)
-			for _, m := range instanceSubstMembers(t, schema) {
-				names = append(names, m.Name)
-			}
+			decls = append(decls, t)
 		case *ModelGroup:
 			for _, child := range t.Particles {
 				walk(child)
@@ -731,7 +700,33 @@ func reservedElementNames(p *Particle, schema *Schema) []QName {
 		}
 	}
 	walk(p)
-	return names
+	return decls
+}
+
+// collectEmittingWildcardParticles returns every EMITTING wildcard-leaf particle
+// reachable in the given particles (descending through model groups), skipping
+// non-emitting (prohibited) particles. Used to gather the derived wildcards that
+// could re-admit a reserved base element name in the recurseOrdered path.
+func collectEmittingWildcardParticles(particles []*Particle) []*Particle {
+	var wilds []*Particle
+	var walk func(*Particle)
+	walk = func(p *Particle) {
+		if particleEmitsNothing(p) {
+			return
+		}
+		switch t := p.Term.(type) {
+		case *Wildcard:
+			wilds = append(wilds, p)
+		case *ModelGroup:
+			for _, child := range t.Particles {
+				walk(child)
+			}
+		}
+	}
+	for _, p := range particles {
+		walk(p)
+	}
+	return wilds
 }
 
 // coverBranch is one pc-tagged namespace contribution of a base group's
@@ -1223,16 +1218,17 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, sch
 		}
 		// XSD 1.1 element-over-wildcard precedence: a base child whose name matches a
 		// SKIPPED emptiable ELEMENT declaration is routed to that element (validated
-		// against its type), not to an overlapping wildcard. If a derived UNENFORCING
-		// wildcard (skip, or lax with no matching global declaration — neither assesses
-		// the child) re-admits that element's name, the derived accepts content the
-		// base validates more strictly and NOTHING recovers the type, so it is not a
-		// language subset — fail-closed reject. A strict/lax-with-global derived
-		// wildcard resolves a governing type the DYNAMIC EDC checks against the base
-		// local type at validation, so it is left to that runtime check (compile
-		// accepts). Gated to Version11 (a 1.0 base overlapping an element with a
-		// wildcard is UPA-invalid), so XSD 1.0 is byte-identical.
-		if version == Version11 && baseElementReadmittedByUnenforcingWildcard(bp, rParticles, schema) {
+		// against its type), not to an overlapping wildcard. A derived wildcard that
+		// re-admits that element's name is only sound when the runtime dynamic EDC
+		// recovers the base local's validation — deferred through the shared
+		// baseElementReadmittedByDerivedWildcard gate: an UNENFORCING wildcard (skip, or
+		// lax with no matching global) rejects; a strict wildcard with no global rejects
+		// the child at validation (sound — defer); an ENFORCING global is rejected at
+		// compile only when it drops a base-local constraint the dynamic EDC does not
+		// recover (globalDropsLocalConstraint) — type-DEFINITION substitutability is left
+		// to the runtime dynamic EDC. Gated to Version11 (a 1.0 base overlapping an
+		// element with a wildcard is UPA-invalid), so XSD 1.0 is byte-identical.
+		if version == Version11 && baseElementReadmittedByDerivedWildcard(ctx, bp, rParticles, schema, version) {
 			return false
 		}
 	}
@@ -1240,41 +1236,27 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, sch
 	return ri == len(rParticles)
 }
 
-// baseElementReadmittedByUnenforcingWildcard reports whether a SKIPPED emptiable
-// base particle contributes an EMITTING element declaration name (or an instance
-// substitution-group member) that an UNENFORCING WILDCARD leaf anywhere in the
-// derived particles re-admits — the XSD 1.1 element-precedence hole the dynamic EDC
-// cannot recover (skip/lax-no-global never assess the re-admitted child's type). A
-// derived wildcard that EXCLUDES every reserved name (namespace or notQName), or one
-// that ENFORCES (strict, or lax with a matching global), is sound here.
-func baseElementReadmittedByUnenforcingWildcard(bp *Particle, rParticles []*Particle, schema *Schema) bool {
-	for _, qn := range reservedElementNames(bp, schema) {
-		for _, rp := range rParticles {
-			if particleUnenforcingWildcardAdmitsName(rp, qn, schema) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// particleUnenforcingWildcardAdmitsName reports whether any UNENFORCING WILDCARD
-// leaf reachable in the particle (skipping non-emitting particles) admits the
-// expanded name qn. A wildcard is unenforcing for qn when it never assesses a
-// child's type there: processContents="skip", or "lax" with no global element
-// declaration for qn (strict, or lax with a global, resolves a governing type).
-func particleUnenforcingWildcardAdmitsName(p *Particle, qn QName, schema *Schema) bool {
-	if particleEmitsNothing(p) {
+// baseElementReadmittedByDerivedWildcard reports whether a SKIPPED emptiable base
+// particle contributes an EMITTING element declaration (or an instance
+// substitution-group member) that a derived WILDCARD leaf anywhere in the derived
+// particles re-admits UNSOUNDLY — the XSD 1.1 element-precedence hazard the dynamic
+// EDC cannot recover. Each reserved base declaration is delegated to the shared
+// baseAllElementReadmittedByDerivedWildcard / derivedWildcardReadmitsReservedName gate
+// (deferTypeSubstitution=true, same as the choice/sequence reduction path): an
+// UNENFORCING wildcard (skip, or lax with no matching global) rejects; a strict wildcard
+// with no global defers (the child is rejected at validation); an ENFORCING global is
+// rejected at compile only when it drops a base-local constraint the dynamic EDC does not
+// recover (globalDropsLocalConstraint) — type-DEFINITION substitutability is left to the
+// runtime dynamic EDC. A derived wildcard that EXCLUDES every reserved name (namespace or
+// notQName) is sound.
+func baseElementReadmittedByDerivedWildcard(ctx context.Context, bp *Particle, rParticles []*Particle, schema *Schema, version Version) bool {
+	derivedWilds := collectEmittingWildcardParticles(rParticles)
+	if len(derivedWilds) == 0 {
 		return false
 	}
-	switch t := p.Term.(type) {
-	case *Wildcard:
-		return wildcardUnenforcingForName(t, qn, schema)
-	case *ModelGroup:
-		for _, child := range t.Particles {
-			if particleUnenforcingWildcardAdmitsName(child, qn, schema) {
-				return true
-			}
+	for _, be := range reservedElementDecls(bp) {
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version, true) {
+			return true
 		}
 	}
 	return false
@@ -1561,7 +1543,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		if !ok {
 			continue
 		}
-		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version) {
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version, false) {
 			return false
 		}
 	}
@@ -1674,19 +1656,27 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 // A derived wildcard that EXCLUDES the name by namespace / notQName never re-admits it,
 // so it is exempt. This mirrors the element-precedence reservation applied to the
 // choice/sequence reduction (wildcardReadmitsReservedElement) and recurseOrdered
-// (baseElementReadmittedByUnenforcingWildcard) paths, reusing instanceSubstMembers so
+// (baseElementReadmittedByDerivedWildcard) paths, reusing instanceSubstMembers so
 // all stay consistent.
-func baseAllElementReadmittedByDerivedWildcard(ctx context.Context, be *ElementDecl, derivedWilds []*Particle, schema *Schema, version Version) bool {
+//
+// deferTypeSubstitution selects whether an enforcing global whose type is NOT validly
+// substitutable for the base declaration is rejected at COMPILE (false — the xs:all
+// spill path) or DEFERRED to the runtime dynamic EDC (true — the choice/sequence
+// reduction and recurseOrdered paths, whose dynamic wildcard-EDC already rejects a
+// type-incompatible wildcard-resolved child at validation). The constraint-drop gate
+// (globalDropsLocalConstraint) — the six properties the dynamic EDC does NOT recover —
+// applies at compile time on EVERY path regardless.
+func baseAllElementReadmittedByDerivedWildcard(ctx context.Context, be *ElementDecl, derivedWilds []*Particle, schema *Schema, version Version, deferTypeSubstitution bool) bool {
 	for _, dw := range derivedWilds {
 		dwc, _ := dw.Term.(*Wildcard)
-		if derivedWildcardReadmitsReservedName(ctx, dwc, be.Name, be, schema, version) {
+		if derivedWildcardReadmitsReservedName(ctx, dwc, be.Name, be, schema, version, deferTypeSubstitution) {
 			return true
 		}
 	}
 	for _, m := range instanceSubstMembers(be, schema) {
 		for _, dw := range derivedWilds {
 			dwc, _ := dw.Term.(*Wildcard)
-			if derivedWildcardReadmitsReservedName(ctx, dwc, m.Name, m, schema, version) {
+			if derivedWildcardReadmitsReservedName(ctx, dwc, m.Name, m, schema, version, deferTypeSubstitution) {
 				return true
 			}
 		}
@@ -1703,18 +1693,19 @@ func baseAllElementReadmittedByDerivedWildcard(ctx context.Context, be *ElementD
 //   - it is a skip wildcard, or a lax wildcard with no global declaration for qn — it
 //     never assesses the re-admitted child's type; OR
 //   - it resolves a GLOBAL declaration whose type does not validly restrict
-//     constraining's (derivedElemNameAndTypeOK), OR that drops one of constraining's
-//     local constraints the DYNAMIC EDC does not recover — {type table}, `fixed`,
-//     `nillable`, identity constraints, `block`, and the asymmetric `default`
-//     (globalDropsLocalConstraint) — so the spilled child, though type-checked via the
-//     global, escapes a constraint the base local imposed.
+//     constraining's (derivedElemNameAndTypeOK — a COMPILE reject only when
+//     deferTypeSubstitution is false; otherwise deferred to the runtime dynamic EDC),
+//     OR that drops one of constraining's local constraints the DYNAMIC EDC does not
+//     recover — {type table}, `fixed`, `nillable`, identity constraints, `block`, and
+//     the asymmetric `default` (globalDropsLocalConstraint) — so the re-admitted child,
+//     though type-checked via the global, escapes a constraint the base local imposed.
 //
 // An ENFORCING wildcard (strict, or lax with a matching global) whose resolved global
 // is a valid restriction of constraining and drops no local constraint is left to the
 // runtime dynamic EDC (returns false — compile defers). A strict wildcard with NO
 // global rejects the child at validation, so it too is sound (returns false). A wildcard
 // that EXCLUDES qn by namespace / notQName never re-admits it (returns false).
-func derivedWildcardReadmitsReservedName(ctx context.Context, dwc *Wildcard, qn QName, constraining *ElementDecl, schema *Schema, version Version) bool {
+func derivedWildcardReadmitsReservedName(ctx context.Context, dwc *Wildcard, qn QName, constraining *ElementDecl, schema *Schema, version Version, deferTypeSubstitution bool) bool {
 	if !wildcardAllowsName(dwc, qn, schema) {
 		return false
 	}
@@ -1727,7 +1718,7 @@ func derivedWildcardReadmitsReservedName(ctx context.Context, dwc *Wildcard, qn 
 		// rejects it at validation (sound — defer).
 		return dwc.ProcessContents == ProcessLax
 	}
-	if !derivedElemNameAndTypeOK(ctx, g, constraining, schema, version) {
+	if !deferTypeSubstitution && !derivedElemNameAndTypeOK(ctx, g, constraining, schema, version) {
 		return true
 	}
 	return globalDropsLocalConstraint(ctx, constraining, g, schema, version) != ""

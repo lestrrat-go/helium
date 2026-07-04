@@ -1428,3 +1428,121 @@ func TestWildcardRestrictsAllLaxGlobalOwnNameDefers(t *testing.T) {
 		"a lax wildcard resolving the same global the base routes to drops no constraint, so the spill defers to the runtime dynamic EDC")
 	require.NotNil(t, schema)
 }
+
+// A base choice(element e, any strict) restricted by a bare derived strict wildcard
+// (the CHOICE/sequence-REDUCTION path, wildcardReadmitsReservedElement) drops the base
+// local element e and re-admits its name through the strict wildcard. In XSD 1.1 the
+// base routes an <e> child to element e (validated against its LOCAL declaration), but
+// the derived wildcard routes it to the GLOBAL e. When that global drops a base-local
+// constraint the runtime dynamic EDC does not recover — a `default` the local lacks, or
+// a `nillable` the local is not — an instance the base rejects validates under the
+// derived type, so the restriction is not a language subset and must be rejected. The
+// overlapping element/wildcard base is UPA-invalid in XSD 1.0, so this is reachable only
+// in 1.1.
+func TestWildcardRestrictsChoiceStrictGlobalDropsLocalConstraintRejects(t *testing.T) {
+	t.Parallel()
+
+	defaultSupplied := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int" default="5"/>
+  <xs:complexType name="base"><xs:sequence><xs:choice><xs:element name="e" type="xs:int"/><xs:any namespace="##any" processContents="strict"/></xs:choice></xs:sequence></xs:complexType>
+  <xs:complexType name="derived"><xs:complexContent><xs:restriction base="base"><xs:sequence><xs:any namespace="##any" processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+
+	nillableSupplied := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int" nillable="true"/>
+  <xs:complexType name="base"><xs:sequence><xs:choice><xs:element name="e" type="xs:int"/><xs:any namespace="##any" processContents="strict"/></xs:choice></xs:sequence></xs:complexType>
+  <xs:complexType name="derived"><xs:complexContent><xs:restriction base="base"><xs:sequence><xs:any namespace="##any" processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"default-supplied", defaultSupplied},
+		{"nillable-supplied", nillableSupplied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"the strict wildcard's global drops a base-local constraint the dynamic EDC does not recover, so the re-admitted child escapes it — not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// The recurseOrdered (flat-SEQUENCE) counterpart: a base sequence(element e minOccurs=0,
+// any strict minOccurs=0) restricted by a bare derived strict wildcard drops the base
+// local element e and re-admits its name through the strict wildcard
+// (baseElementReadmittedByDerivedWildcard). Same soundness gate: a global that drops the
+// base local's `default`/`nillable` (constraints the dynamic EDC does not recover) makes
+// the restriction unsound and it is rejected. 1.1-only (UPA-invalid in 1.0).
+func TestWildcardRestrictsSequenceStrictGlobalDropsLocalConstraintRejects(t *testing.T) {
+	t.Parallel()
+
+	defaultSupplied := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int" default="5"/>
+  <xs:complexType name="base"><xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/><xs:any namespace="##any" processContents="strict" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="derived"><xs:complexContent><xs:restriction base="base"><xs:sequence><xs:any namespace="##any" processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+
+	nillableSupplied := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int" nillable="true"/>
+  <xs:complexType name="base"><xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/><xs:any namespace="##any" processContents="strict" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="derived"><xs:complexContent><xs:restriction base="base"><xs:sequence><xs:any namespace="##any" processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"default-supplied", defaultSupplied},
+		{"nillable-supplied", nillableSupplied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"the strict wildcard's global drops a base-local constraint the dynamic EDC does not recover, so the re-admitted child escapes it — not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// The sound companions: a strict derived wildcard re-admitting a dropped base local
+// element whose GLOBAL is at least as constrained (same type, no `default`, not
+// `nillable`) drops NO constraint the base local imposed, so the re-admitted child is
+// governed identically. The restriction is a valid deferral to the runtime dynamic EDC
+// and must COMPILE — for both the choice-reduction and the recurseOrdered paths — rather
+// than being conservatively over-rejected. 1.1-only (UPA-invalid in 1.0).
+func TestWildcardRestrictsStrictGlobalCompatibleDefers(t *testing.T) {
+	t.Parallel()
+
+	choiceCompatible := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="base"><xs:sequence><xs:choice><xs:element name="e" type="xs:int"/><xs:any namespace="##any" processContents="strict"/></xs:choice></xs:sequence></xs:complexType>
+  <xs:complexType name="derived"><xs:complexContent><xs:restriction base="base"><xs:sequence><xs:any namespace="##any" processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+
+	sequenceCompatible := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="base"><xs:sequence><xs:element name="e" type="xs:int" minOccurs="0"/><xs:any namespace="##any" processContents="strict" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="derived"><xs:complexContent><xs:restriction base="base"><xs:sequence><xs:any namespace="##any" processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"choice-reduction", choiceCompatible},
+		{"recurse-ordered", sequenceCompatible},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.NoError(t, cerr,
+				"a strict wildcard whose global is at least as constrained as the base local drops no constraint, so the re-admission defers to the runtime dynamic EDC")
+			require.NotNil(t, schema)
+		})
+	}
+}
