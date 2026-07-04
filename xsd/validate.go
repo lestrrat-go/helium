@@ -730,8 +730,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return false
 	}
 
-	// Walk the document tree for content model validation.
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	// Walk the document tree for content model validation. A tree cycle
+	// (ErrWalkCycle) leaves the walk partial, so the document is not valid.
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -743,10 +744,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			valid = false
 		}
 		return nil
-	}))
+	})); err != nil {
+		valid = false
+	}
 
 	// Second walk: evaluate identity constraints (xs:key, xs:keyref, xs:unique).
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -772,7 +775,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			}
 		}
 		return nil
-	}))
+	})); err != nil {
+		valid = false
+	}
 
 	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
 	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these

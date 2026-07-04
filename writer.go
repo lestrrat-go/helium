@@ -555,7 +555,17 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	}
 
 	if e, ok := n.(*Element); ok {
+		// A per-list seen guard bounds a corrupt attribute chain: a cyclic
+		// SetNextSibling, or a non-*Attribute successor (which would otherwise
+		// leave attr unchanged and spin), terminates the walk. A normal
+		// properties list is short and acyclic, so this never triggers there.
+		seenAttrs := make(map[*docnode]struct{})
 		for attr := e.properties; attr != nil; {
+			akey := attr.baseDocNode()
+			if _, dup := seenAttrs[akey]; dup {
+				break
+			}
+			seenAttrs[akey] = struct{}{}
 			// The attribute name is emitted verbatim. checkAttributeName
 			// rejects names that would inject raw markup into the start tag.
 			if !d.checkAttributeName(attr.Name()) {
@@ -602,13 +612,16 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 
 	d.writeString(out, ">")
 
-	if child := n.FirstChild(); child != nil {
+	if n.FirstChild() != nil {
 		textOnly := d.format && hasOnlyTextChildren(n)
 		if d.format && !textOnly {
 			d.writeString(out, "\n")
 			d.indent++
 		}
-		for ; child != nil; child = child.NextSibling() {
+		// Children applies the owned-boundary rule and a per-list seen guard, so
+		// a corrupt (cyclic) child list terminates the descent instead of
+		// spinning; this matches the doc-level and attribute loops above.
+		for child := range Children(n) {
 			if d.format && !textOnly {
 				d.writeIndent(out)
 			}

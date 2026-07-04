@@ -243,13 +243,17 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 		}
 	}
 
-	// Walk the document tree and validate each element
-	_ = Walk(doc, NodeWalkerFunc(func(n Node) error {
+	// Walk the document tree and validate each element. A cycle in the tree
+	// (ErrWalkCycle) leaves the walk partial, so the document cannot be
+	// considered valid.
+	if err := Walk(doc, NodeWalkerFunc(func(n Node) error {
 		if elem, ok := AsNode[*Element](n); ok {
 			validateOneElement(ctx, doc, elem, vctx)
 		}
 		return nil
-	}))
+	})); err != nil {
+		vctx.addf(ctx, "document tree traversal failed: %s", err)
+	}
 
 	// Cross-reference check: every IDREF must match an existing ID
 	validateDocumentFinal(ctx, vctx)

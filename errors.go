@@ -41,6 +41,13 @@ var (
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
+	// ErrWalkCycle is returned by Walk when the traversal encounters a
+	// child-pointer cycle — a node reachable from itself through child links.
+	// A well-formed, parent-consistent tree never triggers it; it guards
+	// hand-built or foreign-linked graphs (e.g. an entity reference whose
+	// Entity child links back to the reference) from making Walk loop forever.
+	// Match with errors.Is.
+	ErrWalkCycle = errors.New("cycle detected during tree traversal")
 	// ErrExternalDTDTooLarge is returned when an external DTD subset exceeds
 	// the configured byte cap (set via Parser.MaxExternalDTDBytes), or
 	// MaxExternalDTDSize when no cap is configured. The cap is enforced

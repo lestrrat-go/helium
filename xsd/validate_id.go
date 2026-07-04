@@ -66,7 +66,7 @@ func idOwner(elem *helium.Element, elementContent bool) helium.Node {
 func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Document) bool {
 	col := &idCollector{ids: make(map[string]helium.Node), valid: true}
 
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -136,7 +136,11 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 			vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a))
 		}
 		return nil
-	}))
+	})); err != nil {
+		// A tree cycle (ErrWalkCycle) leaves the walk partial; the document
+		// cannot be certified valid.
+		col.valid = false
+	}
 
 	// Resolve all collected references now that every ID value is known.
 	for _, r := range col.refs {

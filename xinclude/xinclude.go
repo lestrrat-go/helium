@@ -633,7 +633,11 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	targetDoc := inc.OwnerDocument()
 	var copies []helium.Node
 	for _, n := range nodes {
-		if err := p.accountIncludedBytes(uri, subtreeCopyCost(n)); err != nil {
+		cost, costErr := subtreeCopyCost(n)
+		if costErr != nil {
+			return fmt.Errorf("xi:include: %w", costErr)
+		}
+		if err := p.accountIncludedBytes(uri, cost); err != nil {
 			return err
 		}
 		c, copyErr := helium.CopyNode(n, targetDoc)
@@ -875,9 +879,12 @@ const copiedNodeOverhead = 64
 // Without this, a namespace-heavy nested source could stay under the per-include
 // byte cap while xpointer(//a) multiplied copied namespace objects across
 // overlapping subtrees, bypassing the aggregate materialization bound.
-func subtreeCopyCost(n helium.Node) int {
+//
+// A tree cycle in the source (ErrWalkCycle) is propagated so the caller fails
+// the include rather than charging a partial cost and copying a corrupt tree.
+func subtreeCopyCost(n helium.Node) (int, error) {
 	var total int
-	_ = helium.Walk(n, helium.NodeWalkerFunc(func(node helium.Node) error {
+	if err := helium.Walk(n, helium.NodeWalkerFunc(func(node helium.Node) error {
 		total += copiedNodeOverhead
 		switch node.Type() {
 		case helium.ElementNode:
@@ -910,8 +917,10 @@ func subtreeCopyCost(n helium.Node) int {
 			total += len(node.Content())
 		}
 		return nil
-	}))
-	return total
+	})); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 // namespaceCopyCost is the estimated footprint of one copied Namespace object:
