@@ -108,7 +108,7 @@ func (c *compiler) loadResourceBytes(_ context.Context, uri string) ([]byte, err
 // fallback).
 func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error) {
 	if c.resolver == nil {
-		return nil, staticError(errCodeXTSE0165,
+		return nil, staticErrorCause(errCodeXTSE0165, errSchemaResolverDenied,
 			"cannot load schema %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
 	rc, err := c.resolver.Resolve(uri)

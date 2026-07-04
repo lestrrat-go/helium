@@ -50,13 +50,32 @@ func (s schemaResolverFS) Open(name string) (fs.File, error) {
 		// import path (which checks xsd.FatalSchemaLoader) treats it as fatal,
 		// while keeping ErrResourceTooLarge in the chain so callers at the
 		// xslt3 boundary can still errors.Is it.
-		if errors.Is(err, ErrResourceTooLarge) {
+		//
+		// A default-deny POLICY denial ([errSchemaResolverDenied] — no
+		// URIResolver configured, filesystem access is opt-in) must ALSO stay
+		// fatal: unlike a configured resolver that merely lacks the target (a
+		// fetch miss the xsd compiler may demote to a warning, since
+		// schemaLocation is only a hint), a policy denial silently continuing
+		// would hand back a half-assembled schema and mask that host access was
+		// refused. Marking it here routes it through xsd.IsFatalSchemaLoad while
+		// preserving the "no URIResolver configured" message for callers.
+		if errors.Is(err, ErrResourceTooLarge) || errors.Is(err, errSchemaResolverDenied) {
 			err = fatalSchemaLoadError{err}
 		}
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
 }
+
+// errSchemaResolverDenied marks a nested-schema load refused by the compile-time
+// default-deny policy (no URIResolver configured — filesystem access is opt-in).
+// It distinguishes a POLICY DENIAL from a resolver fetch MISS (a configured
+// resolver that simply lacks the target): the former must stay fatal, the latter
+// may be demoted to a warning by the xsd compiler (schemaLocation is only a
+// hint). [schemaResolverFS.Open] tags an error carrying it [fatalSchemaLoadError]
+// so [xsd.IsFatalSchemaLoad] recognizes it while the "no URIResolver configured"
+// message is preserved for callers.
+var errSchemaResolverDenied = errors.New("xslt3: nested-schema load denied by default-deny policy")
 
 // fatalSchemaLoadError marks a schema-load failure that the xsd compiler must
 // treat as fatal rather than demoting to a warning. It satisfies

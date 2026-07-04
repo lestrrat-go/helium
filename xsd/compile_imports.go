@@ -35,11 +35,28 @@ var errSchemaPathEscape = errors.New("xsd: schema location escapes base director
 // but is not well-formed XML, or its root element is not <xs:schema>. Unlike a
 // fetch/resolution failure — which demotes to a warning because schemaLocation
 // is only a hint (src-include.1 / src-import) — a content failure is a fatal
-// schema error: the located document exists but is invalid. Matched via
-// errors.Is by the fetch-vs-content classifiers ([nestedLoadFailureFatal] and
-// [processImport]) so an EINVAL/network fetch miss stays a warning while a
-// malformed or non-schema target aborts compilation, regardless of the errno.
+// schema error: the located document exists but is invalid. It is one of the
+// two explicit tags in the three-way nested-load taxonomy (the other being
+// [errSchemaFetchMiss]); the classifier ([nestedLoadFailureFatal]) is
+// fail-closed, so this tag documents intent and is not strictly required to make
+// a content failure fatal.
 var errSchemaContentInvalid = errors.New("xsd: nested schema content is invalid")
+
+// errSchemaFetchMiss marks a benign FETCH/RESOLUTION failure of a nested schema
+// (xs:include/xs:import/xs:redefine target): the schemaLocation could not be
+// resolved, opened, or read for a non-security reason — a missing file
+// ([fs.ErrNotExist]), an http:// hint opened as a filesystem path yielding
+// EINVAL, a transient network miss. schemaLocation is only a hint (src-include.1
+// / src-import), so a tagged fetch miss is the ONLY nested-load failure the
+// classifiers ([nestedLoadFailureFatal] / [processImport]) demote to a warning
+// and skip. It is applied ONLY by the shared FETCH phase ([fetchNestedSchema]),
+// which withholds the tag from a SECURITY/POLICY denial (path escape, depth or
+// byte-cap breach, a [FatalSchemaLoader] refusal such as xslt3's default-deny
+// "no URIResolver configured" policy, or a refusal from the default deny-all FS)
+// so denials stay fatal. Every error AFTER the fetch phase (malformed XML,
+// non-xs:schema root, or any declaration/redefine/nested-content processing
+// failure) is likewise untagged and therefore fatal.
+var errSchemaFetchMiss = errors.New("xsd: nested schema fetch miss")
 
 // errSchemaTooLarge signals that a nested schema (xs:include/xs:import/
 // xs:redefine target) exceeded [maxNestedSchemaSize] while being read. It is a
@@ -86,6 +103,43 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 		return nil, errSchemaTooLarge
 	}
 	return data, nil
+}
+
+// fetchNestedSchema is the FETCH phase shared by
+// loadInclude/loadRedefine/loadImport: it reads the resolved nested-schema path
+// through the configured [fs.FS] under the byte cap ([readNestedSchema]). A
+// benign fetch/resolution failure is tagged [errSchemaFetchMiss] so the caller's
+// classifier may demote it to a warning (schemaLocation is only a hint); a
+// SECURITY/POLICY denial is returned UNTAGGED so it stays fatal. Routing every
+// load site's fetch failure through this ONE helper is what keeps their
+// fatal-vs-warning classification from diverging, and confines demotion to the
+// fetch phase — any later parse/root-verification/declaration-processing error
+// is never tagged here and is fatal by default.
+func (c *compiler) fetchNestedSchema(path string) ([]byte, error) {
+	data, err := c.readNestedSchema(path)
+	if err == nil {
+		return data, nil
+	}
+	if c.fetchDenialFatal(err) {
+		return nil, err
+	}
+	return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, err)
+}
+
+// fetchDenialFatal reports whether a fetch-phase error is a SECURITY/POLICY
+// denial that must stay fatal rather than be demoted to a fetch-miss warning: a
+// condition [IsFatalSchemaLoad] recognizes (path escape, include/import depth,
+// byte cap, or a [FatalSchemaLoader] refusal — including xslt3's default-deny
+// "no URIResolver configured" policy), or a refusal from the default deny-all FS
+// ([iofs.DenyAll], which returns [fs.ErrNotExist] for every Open — so the errno
+// is indistinguishable from a genuine miss and the FS type, not the error,
+// decides).
+func (c *compiler) fetchDenialFatal(err error) bool {
+	if IsFatalSchemaLoad(err) {
+		return true
+	}
+	_, denyAll := c.fsys.(iofs.DenyAll)
+	return denyAll
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
@@ -246,25 +300,25 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 	return nil
 }
 
-// nestedLoadFailureFatal reports whether an xs:include/xs:redefine load error must
-// abort compilation rather than be demoted to a warning. A schemaLocation is only a
-// hint (src-include.1 / src-redefine.1), so a FETCH/RESOLUTION failure — the target
-// cannot be opened or read, for ANY reason (a missing file, an http:// location
-// opened as a filesystem path yielding EINVAL, a network hiccup, ...) — is a warning
-// (matching libxml2, which skips it), classified by error KIND rather than a
-// hardcoded errno. Three conditions stay FATAL: a security-limit breach
-// ([IsFatalSchemaLoad], e.g. include-depth or byte-cap); a CONTENT failure
-// ([errSchemaContentInvalid] — the located document was fetched but is not
-// well-formed XML or its root is not <xs:schema>); and a refusal by the default
-// deny-all FS (the secure default surfaces the denial instead of silently handing
-// back a half-assembled schema — a caller who wants host access opts in via
-// Compiler.FS).
+// nestedLoadFailureFatal reports whether an xs:include/xs:redefine (and, via
+// [processImport], xs:import) load error must abort compilation rather than be
+// demoted to a warning. It is FAIL-CLOSED and PHASE-AWARE: the ONLY demotable
+// condition is a benign fetch/resolution miss tagged [errSchemaFetchMiss] by the
+// shared FETCH phase ([fetchNestedSchema]) — schemaLocation is only a hint
+// (src-include.1 / src-redefine.1), so a missing or unreadable target is skipped
+// (matching libxml2). Everything else is fatal:
+//
+//   - a SECURITY/POLICY denial (path escape, depth/byte-cap breach, a
+//     [FatalSchemaLoader] refusal such as xslt3's default-deny "no URIResolver"
+//     policy, or a deny-all FS) — the fetch phase withholds the fetch-miss tag
+//     from these, so they never look like a miss;
+//   - a CONTENT failure (malformed XML or a non-xs:schema root —
+//     [errSchemaContentInvalid]);
+//   - ANY post-fetch declaration/redefine/nested-processing failure (untagged,
+//     fatal by the fail-closed default), so a fetched-but-invalid schema (e.g. a
+//     complexType missing its @name) is never silently downgraded to a warning.
 func (c *compiler) nestedLoadFailureFatal(err error) bool {
-	if IsFatalSchemaLoad(err) || errors.Is(err, errSchemaContentInvalid) {
-		return true
-	}
-	_, denyAll := c.fsys.(iofs.DenyAll)
-	return denyAll
+	return !errors.Is(err, errSchemaFetchMiss)
 }
 
 // reportMissingSchemaLocation reports the schema-representation error for an
@@ -370,16 +424,15 @@ func (c *compiler) processImport(ctx context.Context, elem *helium.Element) erro
 	}
 
 	if err := c.loadImport(ctx, loc, ns, elem); err != nil {
-		// schemaLocation is only a hint (src-import), so a FETCH/RESOLUTION failure
-		// (the target cannot be opened/read, for any reason — a missing file, an
-		// http:// location opened as a path yielding EINVAL, ...) is demoted to a
-		// warning and the import skipped. Two kinds stay FATAL, by error KIND not a
-		// hardcoded errno: a security limit ([IsFatalSchemaLoad] — depth-exceeded,
-		// baseDir-escape, or a FatalSchemaLoader resource breach, so the cap cannot
-		// be silently defeated for an xs:import target) and a CONTENT failure
-		// ([errSchemaContentInvalid] — the located document was fetched but is not
-		// well-formed XML or its root is not <xs:schema>).
-		if IsFatalSchemaLoad(err) || errors.Is(err, errSchemaContentInvalid) {
+		// schemaLocation is only a hint (src-import), so a benign FETCH/RESOLUTION
+		// miss (a missing file, an http:// location opened as a path yielding
+		// EINVAL, ...) is demoted to a warning and the import skipped. The shared
+		// fail-closed classifier keeps every other outcome FATAL — a
+		// security/policy denial (the cap/deny-all cannot be silently defeated for
+		// an xs:import target), a CONTENT failure (malformed XML / non-xs:schema
+		// root), and any post-fetch declaration/nested-processing failure — so it
+		// cannot diverge from the include/redefine path.
+		if c.nestedLoadFailureFatal(err) {
 			return err
 		}
 		// Import failure — report warning if we have a filename.
@@ -443,7 +496,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	}
 	c.includeVisited[path] = struct{}{}
 
-	data, err := c.readNestedSchema(path)
+	data, err := c.fetchNestedSchema(path)
 	if err != nil {
 		// The read attempt failed, but the loaded-set marker was added above
 		// (before the read, so a self-referential include cannot recurse).
@@ -716,7 +769,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	}
 	c.includeVisited[path] = struct{}{}
 
-	data, err := c.readNestedSchema(path)
+	data, err := c.fetchNestedSchema(path)
 	if err != nil {
 		// Roll back the loaded-set marker added above (see loadInclude): a
 		// missing redefine target demoted to a warning must not leave the path
@@ -1493,7 +1546,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	c.importActive[path] = ns
 	defer delete(c.importActive, path)
 
-	data, err := c.readNestedSchema(path)
+	data, err := c.fetchNestedSchema(path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
@@ -1710,22 +1763,16 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	}
 
 	// Process includes/imports in the imported schema (but skip back-references).
+	// impC.processIncludes has ALREADY demoted every benign nested fetch miss to
+	// a warning internally (via its own nestedLoadFailureFatal classifier) and
+	// returns non-nil ONLY for a fatal condition — a security/policy denial, a
+	// content failure (malformed XML / non-xs:schema root), or a post-fetch
+	// declaration/redefine/nested-processing failure of a nested target (e.g. a
+	// fetched included schema whose top-level complexType is missing its @name).
+	// So the error is propagated unconditionally; downgrading it here would let a
+	// fetched-but-invalid nested schema pass as a warning.
 	if err := impC.processIncludes(ctx, impRoot); err != nil {
-		// Depth-exceeded errors propagate so a hostile import cycle
-		// is reported to the caller rather than being silently truncated.
-		// A baseDir-escape is a security limit, fatal exactly like in the
-		// outer import path, so a nested escaping schemaLocation cannot be
-		// swallowed as an I/O warning. A FatalSchemaLoader load failure
-		// (e.g. a resource-limit breach from the configured FS) propagates
-		// for the same reason: the cap must not be silently defeated for a
-		// nested xs:import target. All three conditions route through the
-		// one classifier.
-		if IsFatalSchemaLoad(err) {
-			return err
-		}
-		// Other errors in nested processing are non-fatal — the import
-		// loader treats failure to load referenced schemas as warnings.
-		_ = err
+		return err
 	}
 
 	// Propagate sub-compiler diagnostics (same rule as the early-return paths).
