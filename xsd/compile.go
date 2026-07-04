@@ -59,7 +59,11 @@ type compiler struct {
 	// whose base is such a placeholder — the unresolved ref was already reported,
 	// so the base kind is unknown and any further diagnostic would be spurious.
 	recoveryBaseTypes map[*TypeDef]bool
-	elemRefs          map[*ElementDecl]QName
+	// reportedInvalidQName dedups invalid-QName diagnostics (reportInvalidQNameValue)
+	// keyed by (source, line, local name, value), so an attribute validated at more
+	// than one point (checkAttributeUse AND resolveQName) is reported only once.
+	reportedInvalidQName map[string]struct{}
+	elemRefs             map[*ElementDecl]QName
 	// unresolved xs:alternative (conditional type assignment) @type references,
 	// resolved in resolveRefs. A slice (not a map) so nil-append works without
 	// per-compiler initialization.

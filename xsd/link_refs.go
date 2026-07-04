@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -3198,6 +3200,16 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 	// leading/trailing (and internal) whitespace is discarded before prefix
 	// resolution — e.g. base="    xsd:string " resolves to xsd:string.
 	ref = normalizeWhiteSpace(ref, "collapse")
+	// After collapsing, the value must be a lexically valid xs:QName. A value that
+	// STILL contains whitespace (e.g. base="a b", two tokens) or is otherwise
+	// malformed (a leading colon like ":u") is NOT a valid QName and must be a
+	// fatal schema error — not routed into component lookup as a bogus local name.
+	// reportInvalidQNameValue dedups, so a caller that already validated the same
+	// value (checkAttributeUse) does not double-report.
+	if ref != "" && !xmlchar.IsValidQName(ref) {
+		c.reportInvalidQNameValue(ctx, elem, ref)
+		return QName{Local: ref, NS: c.schema.targetNamespace}
+	}
 	local := ref
 	ns := c.schema.targetNamespace
 
@@ -3269,6 +3281,18 @@ func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Ele
 	if c.filename == "" {
 		return
 	}
+	// A QName-valued attribute is validated at more than one point (e.g.
+	// checkAttributeUse AND resolveQName), so dedup identical diagnostics by
+	// (source, line, local name, value) to avoid emitting the same invalid-QName
+	// error twice for one attribute.
+	key := c.diagSource() + "\x00" + strconv.Itoa(elem.Line()) + "\x00" + elem.LocalName() + "\x00" + ref
+	if c.reportedInvalidQName == nil {
+		c.reportedInvalidQName = map[string]struct{}{}
+	}
+	if _, seen := c.reportedInvalidQName[key]; seen {
+		return
+	}
+	c.reportedInvalidQName[key] = struct{}{}
 	msg := fmt.Sprintf("The QName value '%s' is not a valid QName.", ref)
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))

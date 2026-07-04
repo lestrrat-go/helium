@@ -730,7 +730,10 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element) error {
 	c.checkGlobalElement(ctx, elem)
-	name := getAttr(elem, attrName)
+	// xs:element/@name is xs:NCName (whiteSpace fixed "collapse"), so the STORED
+	// declaration name is the collapsed value — a ref/instance to the trimmed name
+	// (e.g. name="sub2-elem ") then resolves against the registered {tns}sub2-elem.
+	name := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
 	if name == "" {
 		// Still register with a placeholder name to continue parsing.
 		return nil
@@ -809,7 +812,9 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 		}, nil
 	}
 
-	name := getAttr(elem, attrName)
+	// xs:element/@name is xs:NCName (whiteSpace fixed "collapse"), so the STORED
+	// declaration name is the collapsed value, exactly as for global declarations.
+	name := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
 	if name == "" {
 		if c.version != Version11 || !hasAttr(elem, attrTargetNamespace) {
 			return nil, fmt.Errorf("xsd: local element missing name")

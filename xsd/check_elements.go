@@ -732,8 +732,14 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		case isGlobalAttributeDecl(elem):
 			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 				"The attribute 'ref' is not allowed."))
-		case !xmlchar.IsValidQName(ref):
-			c.reportInvalidQNameValue(ctx, elem, ref)
+		default:
+			// xs:attribute/@ref is an xs:QName (whiteSpace fixed "collapse"), so
+			// validate the COLLAPSED value — a padded ref=" p:a " must not be rejected
+			// — and reject one still not a valid QName after collapsing (internal
+			// whitespace, a leading colon, …).
+			if cref := normalizeWhiteSpace(ref, "collapse"); !xmlchar.IsValidQName(cref) {
+				c.reportInvalidQNameValue(ctx, elem, cref)
+			}
 		}
 	}
 
@@ -867,8 +873,13 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		// unprefixed reference. (Version-INDEPENDENT — enforced in 1.0 and 1.1. A
 		// syntactically valid @type that resolves to a non-simple-type component is
 		// a separate, resolution-time check.)
-		if t := getAttr(elem, attrType); t != "" && !xmlchar.IsValidQName(t) {
-			c.reportInvalidQNameValue(ctx, elem, t)
+		if t := getAttr(elem, attrType); t != "" {
+			// xs:attribute/@type is an xs:QName (whiteSpace fixed "collapse"): validate
+			// the COLLAPSED value so a padded type=" xs:string " is accepted, and reject
+			// one still malformed after collapsing.
+			if ct := normalizeWhiteSpace(t, "collapse"); !xmlchar.IsValidQName(ct) {
+				c.reportInvalidQNameValue(ctx, elem, ct)
+			}
 		}
 
 		// type and inline simpleType are mutually exclusive.
