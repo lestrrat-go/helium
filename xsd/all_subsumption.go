@@ -160,11 +160,13 @@ func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl
 	// type through the substitution-group chain.
 	rtType := effectiveDeclType(rt, schema)
 	conType := effectiveDeclType(constraining, schema)
-	// Use the BUILT-IN-AWARE derivation predicate: the 1.0 built-in simple types
-	// are NOT BaseType-linked, so a plain isDerivedFrom misses e.g. xs:int derived
-	// from xs:integer and would false-reject a valid all-restriction. This matches
-	// how substitutability is judged elsewhere (substitution-group affiliation / CTA).
-	if rtType != nil && conType != nil && !strictBuiltinAwareDerivedFrom(rtType, conType) {
+	// The derived element's type must validly RESTRICT the constraining base
+	// member's type — the SAME NameAndTypeOK gate the direct element:element path
+	// (elementRestrictsElement) applies: built-in-aware derived-from, no EXTENSION
+	// step (clause 3.2.5.2), and no base-type-@block-forbidden derivation
+	// (cvc-elt.4.3). Without this, an xs:all element retyped to an extension-derived
+	// type — rejected as an xs:sequence restriction — would compile.
+	if !elementTypeValidlyRestricts(rtType, conType, version) {
 		return false
 	}
 	if !constraining.Nillable && rt.Nillable {
