@@ -1635,11 +1635,36 @@ func registerBuiltinTypes(s *Schema, version Version) {
 				ProcessContents: ProcessLax,
 			}
 		}
+		td.Facets = intrinsicBuiltinFacets(name)
 		s.types[qn] = td
 	}
 	if version == Version11 {
 		registerBuiltinTypes11(s)
 	}
+}
+
+// intrinsicBuiltinFacets returns the spec-mandated INTRINSIC facets a built-in
+// datatype carries in its own {facets} — the ones the schema-for-schemas records
+// directly on the datatype rather than deriving them from a lexical/value space.
+// They are registered on the built-in TypeDef so the facet-restriction checks
+// (baseFacets/effectiveInheritedRangeBounds and the inherited-length consistency)
+// see them when a user type restricts the built-in; instance validation already
+// enforces the same bounds through the value space (an empty NMTOKENS list and a
+// positiveInteger < 1 are rejected before the facet pass runs), so applying the
+// facet at validation time is redundant and byte-identical. Version-independent.
+func intrinsicBuiltinFacets(local string) *FacetSet {
+	switch local {
+	case typeNMTokens, typeIDRefs, typeEntities:
+		// xs:NMTOKENS/xs:IDREFS/xs:ENTITIES have intrinsic minLength=1
+		// (Part 2 §4.3.2) — they are lists of at least one item.
+		one := 1
+		return &FacetSet{MinLength: &one}
+	case lexicon.TypePositiveInteger:
+		// xs:positiveInteger has intrinsic minInclusive=1 (Part 2 §3.3.25).
+		v := "1"
+		return &FacetSet{MinInclusive: &v}
+	}
+	return nil
 }
 
 // registerBuiltinTypes11 registers the XSD 1.1-only built-in datatypes. They are
