@@ -347,6 +347,16 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		if !ok {
 			return false
 		}
+		// NameAndTypeOK clause 3.2.5.2 (§3.9.6, version-INDEPENDENT): R's type must
+		// be validly derived from B's type given the DISALLOWED subset {extension,
+		// list, union} — i.e. by RESTRICTION only (or be identical). A type that
+		// reaches B's type through an EXTENSION step is NOT a valid restriction of
+		// B's element, even though it is derived from it (W3C particlesIj008). This
+		// is unconditional (independent of any @block), so it is a separate gate from
+		// the type-@block cvc-elt.4.3 check below.
+		if isDerivationBlocked(rt.Type, bt.Type, BlockExtension) {
+			return false
+		}
 		// The derived element's type must not reach the base element's type by a
 		// derivation method the base element TYPE's {prohibited substitutions} blocks
 		// (§3.9.6 NameAndTypeOK / cvc-elt.4.3): a restriction cannot change an
