@@ -293,7 +293,14 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				continue
 			}
 			if err := c.loadOverride(ctx, loc, elem); err != nil {
-				return err
+				// Same taxonomy as xs:include/xs:redefine above: a genuine fetch miss
+				// of the override target (tagged errSchemaFetchMiss by the shared fetch
+				// phase) is a schemaLocation-hint miss demoted to a warning; a content
+				// or policy/security failure is fatal.
+				if c.nestedLoadFailureFatal(err) {
+					return err
+				}
+				c.reportSchemaLoadWarning(ctx, elem, elemOverride, "override", loc)
 			}
 		}
 	}
@@ -301,8 +308,9 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 }
 
 // nestedLoadFailureFatal reports whether an xs:include/xs:redefine (and, via
-// [processImport], xs:import) load error must abort compilation rather than be
-// demoted to a warning. It is FAIL-CLOSED and PHASE-AWARE: the ONLY demotable
+// [processImport], xs:import; and, via [loadOverride]/[demoteNestedOverrideLoad],
+// xs:override) load error must abort compilation rather than be demoted to a
+// warning. It is FAIL-CLOSED and PHASE-AWARE: the ONLY demotable
 // condition is a benign fetch/resolution miss tagged [errSchemaFetchMiss] by the
 // shared FETCH phase ([fetchNestedSchema]) — schemaLocation is only a hint
 // (src-include.1 / src-redefine.1), so a missing or unreadable target is skipped

@@ -63,6 +63,18 @@ func compileSchemaFromFS(t *testing.T, fsys fs.FS) error {
 	return cerr
 }
 
+// compileSchemaFromFSVersion11 is compileSchemaFromFS at XSD 1.1, needed for the
+// xs:override taxonomy (xs:override is a 1.1-only construct).
+func compileSchemaFromFSVersion11(t *testing.T, fsys fs.FS) error {
+	t.Helper()
+	data, err := fs.ReadFile(fsys, taxMainXSD)
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
+	require.NoError(t, err)
+	_, cerr := xsd.NewCompiler().FS(fsys).Version(xsd.Version11).Compile(t.Context(), doc)
+	return cerr
+}
+
 // TestNestedFetchMissIsWarning verifies that a genuinely-missing nested target
 // (the schemaLocation hint resolves to nothing) is demoted to a warning: the
 // main schema — which does not depend on the missing target's declarations —
@@ -225,4 +237,103 @@ func TestNestedPolicyDenialIsFatal(t *testing.T) {
 			require.ErrorIs(t, cerr, fs.ErrNotExist)
 		})
 	}
+}
+
+// The xs:override subsystem (XSD 1.1) applies the SAME three-way load taxonomy as
+// xs:include/xs:redefine/xs:import: a fetch miss of the override TARGET — or of an
+// xs:include/xs:override/xs:redefine nested INSIDE the overridden document — is a
+// schemaLocation-hint miss demoted to a warning; a content or policy failure is
+// fatal.
+
+// overrideMainWithFooChild is a top-level overriding schema (no targetNamespace)
+// whose xs:override points at loc and carries one replacement child. The root
+// element does not depend on the override, so a demoted-to-warning miss still
+// compiles.
+func overrideMainWithFooChild(loc string) string {
+	return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:override schemaLocation="` + loc + `">
+    <xs:element name="foo" type="xs:string"/>
+  </xs:override>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+}
+
+// TestNestedOverrideTargetFetchMissIsWarning: a top-level xs:override whose TARGET
+// document is absent is a hint miss demoted to a warning (the overriding schema
+// still compiles).
+func TestNestedOverrideTargetFetchMissIsWarning(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{taxMainXSD: &fstest.MapFile{Data: []byte(overrideMainWithFooChild("absent.xsd"))}}
+	require.NoError(t, compileSchemaFromFSVersion11(t, fsys),
+		"a missing xs:override target is a hint miss and must be demoted to a warning")
+}
+
+// TestNestedRedefineInOverrideFetchMissIsWarning pins the specific corner: an
+// xs:redefine nested inside an overridden document whose redefine target is absent
+// must be demoted to a warning, not made fatal by the override transform.
+func TestNestedRedefineInOverrideFetchMissIsWarning(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		taxMainXSD: &fstest.MapFile{Data: []byte(overrideMainWithFooChild("nested.xsd"))},
+		// The override target is present but carries an xs:redefine to an absent
+		// document. Its foo declaration lets the override child match a component.
+		taxNestedXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="absent.xsd"/>
+  <xs:element name="foo" type="xs:string"/>
+</xs:schema>`)},
+	}
+	require.NoError(t, compileSchemaFromFSVersion11(t, fsys),
+		"a missing xs:redefine target nested inside an overridden document is a hint miss and must warn")
+}
+
+// TestNestedOverrideTargetContentInvalidIsFatal: a fetched-but-invalid override
+// target (malformed XML, a non-xs:schema root, or a well-formed schema that fails
+// a construction rule) is fatal, never demoted to a warning.
+func TestNestedOverrideTargetContentInvalidIsFatal(t *testing.T) {
+	t.Parallel()
+	contents := map[string]string{
+		"malformed-xml":      nestedMalformedSchema,
+		"non-xs:schema-root": nestedNonSchemaRoot,
+		"missing-name":       nestedContentInvalidSchema,
+	}
+	for cname, nested := range contents {
+		t.Run(cname, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{
+				taxMainXSD:   &fstest.MapFile{Data: []byte(overrideMainWithFooChild("nested.xsd"))},
+				taxNestedXSD: &fstest.MapFile{Data: []byte(nested)},
+			}
+			require.Error(t, compileSchemaFromFSVersion11(t, fsys),
+				"a fetched-but-invalid xs:override target (%s) must abort compilation, not warn", cname)
+		})
+	}
+}
+
+// TestNestedRedefineInOverrideContentInvalidIsFatal: an xs:redefine nested inside
+// an overridden document whose target is well-formed-but-invalid content is fatal.
+func TestNestedRedefineInOverrideContentInvalidIsFatal(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		taxMainXSD: &fstest.MapFile{Data: []byte(overrideMainWithFooChild("nested.xsd"))},
+		taxNestedXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="inc.xsd"/>
+  <xs:element name="foo" type="xs:string"/>
+</xs:schema>`)},
+		taxIncXSD: &fstest.MapFile{Data: []byte(nestedContentInvalidSchema)},
+	}
+	require.Error(t, compileSchemaFromFSVersion11(t, fsys),
+		"a content-invalid xs:redefine target nested inside an overridden document must abort compilation")
+}
+
+// TestNestedOverrideTargetPolicyDenialIsFatal: the default deny-all FS makes an
+// xs:override target load fatal — a policy denial must never be demoted to a
+// fetch-miss warning.
+func TestNestedOverrideTargetPolicyDenialIsFatal(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(overrideMainWithFooChild("nested.xsd")))
+	require.NoError(t, err)
+	// No .FS() call: the compiler's default fsys is the deny-all FS.
+	_, cerr := xsd.NewCompiler().BaseDir(".").Version(xsd.Version11).Compile(t.Context(), doc)
+	require.Error(t, cerr, "an xs:override target denied by the default deny-all FS must abort compilation, not warn")
+	require.ErrorIs(t, cerr, fs.ErrNotExist)
 }

@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -400,19 +401,31 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	c.overrideVisited[vkey] = struct{}{}
 	c.overridePaths[path] = struct{}{}
 
-	data, err := c.readNestedSchema(path)
+	data, err := c.fetchNestedSchema(path)
 	if err != nil {
+		// A genuine fetch/resolution miss is tagged [errSchemaFetchMiss] so the
+		// caller ([loadOverride]/[overrideProcessNested], via [nestedLoadFailureFatal])
+		// demotes it to the standard skip warning, matching the xs:include/xs:redefine
+		// hint semantics. Roll back the visited/path markers set above so a later
+		// composition of the same location is not spuriously treated as a cycle or an
+		// include+override conflict (mirrors loadRedefine's rollback). A content or
+		// policy failure keeps its own (untagged/security) classification and stays
+		// fatal.
+		if errors.Is(err, errSchemaFetchMiss) {
+			delete(c.overrideVisited, vkey)
+			delete(c.overridePaths, path)
+		}
 		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}
 
 	doc, err := c.parse(ctx, data)
 	if err != nil {
-		return matched, fmt.Errorf("xsd: failed to parse override %q: %w", location, err)
+		return matched, fmt.Errorf("xsd: failed to parse override %q: %w: %w", location, errSchemaContentInvalid, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
-		return matched, fmt.Errorf("xsd: overridden document %q is not an xs:schema", location)
+		return matched, fmt.Errorf("xsd: overridden document %q is not an xs:schema: %w", location, errSchemaContentInvalid)
 	}
 
 	// Conditional inclusion runs per document, before the targetNamespace check.
@@ -646,9 +659,14 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			}
 			// An xs:include inside an overridden document is itself transformed by
 			// the override: load it as an override target carrying the same active
-			// set. Every matched key is (by construction) in the inherited set.
-			var m map[overrideKey]overrideMatchCtx
-			m, err = c.overrideLoadTarget(ctx, loc, elem, active)
+			// set. Every matched key is (by construction) in the inherited set. A
+			// benign fetch miss is demoted to a warning (same taxonomy as a top-level
+			// xs:include); a content/policy failure aborts.
+			m, lerr := c.overrideLoadTarget(ctx, loc, elem, active)
+			if lerr != nil {
+				err = c.demoteNestedOverrideLoad(ctx, lerr, elem, elemInclude, "include", loc)
+				continue
+			}
 			maps.Copy(nestedMatched, m)
 		case isXSDElement(elem, elemOverride):
 			loc := getAttr(elem, attrSchemaLocation)
@@ -663,10 +681,10 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			// sibling target's suppression set.
 			locals := c.collectOverrideChildren(ctx, elem, active)
 			childActive := activeFromEntries(active, locals)
-			var m map[overrideKey]overrideMatchCtx
-			m, err = c.overrideLoadTarget(ctx, loc, elem, childActive)
-			if err != nil {
-				break
+			m, lerr := c.overrideLoadTarget(ctx, loc, elem, childActive)
+			if lerr != nil {
+				err = c.demoteNestedOverrideLoad(ctx, lerr, elem, elemOverride, "override", loc)
+				continue
 			}
 			// Register THIS override's own matched children NOW, while the declaring
 			// document's context (form/block/final defaults, xpathDefaultNamespace,
@@ -696,7 +714,11 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 			if loc == "" {
 				continue
 			}
-			err = c.loadRedefine(ctx, loc, elem)
+			// loadRedefine tags a genuine fetch miss with errSchemaFetchMiss; demote
+			// it to a warning here (same taxonomy as a top-level xs:redefine) rather
+			// than aborting the whole override transform, while a content/policy
+			// failure stays fatal.
+			err = c.demoteNestedOverrideLoad(ctx, c.loadRedefine(ctx, loc, elem), elem, elemRedefine, "redefine", loc)
 		}
 	}
 
@@ -704,4 +726,23 @@ func (c *compiler) overrideProcessNested(ctx context.Context, incRoot *helium.El
 	c.baseDir = savedBaseDir
 	c.filename = savedFilename
 	return nestedMatched, err
+}
+
+// demoteNestedOverrideLoad classifies a load failure encountered while
+// transforming an overridden document's own composition children (an xs:include /
+// xs:override target loaded via [overrideLoadTarget], or an xs:redefine loaded via
+// [loadRedefine]). It applies the SAME three-way taxonomy as the top-level
+// [processIncludes] loop: a benign fetch/resolution miss tagged [errSchemaFetchMiss]
+// is demoted to the standard skip warning and nil is returned so the transform
+// continues; a content ([errSchemaContentInvalid]) or policy/security failure is
+// returned unchanged for the caller to abort. A nil err is a no-op.
+func (c *compiler) demoteNestedOverrideLoad(ctx context.Context, err error, elem *helium.Element, elemKind, verb, loc string) error {
+	if err == nil {
+		return nil
+	}
+	if c.nestedLoadFailureFatal(err) {
+		return err
+	}
+	c.reportSchemaLoadWarning(ctx, elem, elemKind, verb, loc)
+	return nil
 }
