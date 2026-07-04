@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sales>
+  <region code="NA" name="North America"/>
+  <region code="EU" name="Europe"/>
+  <region code="APAC" name="Asia Pacific"/>
+  <sale region="NA" amount="1200.00"/>
+  <sale region="EU" amount="850.50"/>
+  <sale region="NA" amount="640.25"/>
+  <sale region="APAC" amount="300.00"/>
+  <sale region="EU" amount="1290.75"/>
+</sales>

@@ -74,7 +74,11 @@ type deepCopier struct {
 // is the user state for src.
 func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[string]*Namespace, parentState any) error {
 	srcElem, _ := AsNode[*Element](src)
-	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
+	// src is always a document or element, whose children it owns, so Children's
+	// owned-boundary advance equals a raw NextSibling walk here while adding a
+	// per-list seen guard, so a corrupt (cyclic) source child list terminates the
+	// copy instead of spinning.
+	for c := range Children(src) {
 		if c.Type() == DTDNode {
 			continue
 		}
@@ -304,10 +308,15 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 	return childScope, nil
 }
 
-// copyAttributes copies src's attributes onto elem using the value-parsing
-// setters (SetAttribute/SetAttributeNS) so the copy is byte-for-byte identical,
-// including entity-reference handling. This loop is identical across all copy
-// sites.
+// copyAttributes copies src's attributes onto elem using the LITERAL setters
+// (SetLiteralAttribute/SetLiteralAttributeNS): a.Value() is the parser's
+// already-resolved value, so re-parsing it (SetAttribute/SetAttributeNS runs
+// CreateAttribute, which interprets entity references) would choke on a bare
+// '&' or '<' that was originally an entity (e.g. an href value carrying
+// '&amp;'), and silently double-resolve a value like '&amp;amp;'. Storing the
+// resolved value literally serializes byte-for-byte identically (the serializer
+// re-escapes '&'/'<') while never re-interpreting it. This loop is identical
+// across all copy sites.
 func (dc *deepCopier) copyAttributes(src, elem *Element) error {
 	for _, a := range src.Attributes() {
 		if a.URI() != "" {
@@ -315,10 +324,10 @@ func (dc *deepCopier) copyAttributes(src, elem *Element) error {
 			if nsErr != nil {
 				return nsErr
 			}
-			if _, err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+			if err := elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return err
 			}
-		} else if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+		} else if err := elem.SetLiteralAttribute(a.Name(), a.Value()); err != nil {
 			return err
 		}
 		// Preserve the source attribute's line. SetAttribute* returns the element,

@@ -299,6 +299,19 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		if !ok {
 			return false
 		}
+		// The derived element's type must not reach the base element's type by a
+		// derivation method the base element TYPE's {prohibited substitutions} blocks
+		// (§3.9.6 NameAndTypeOK / cvc-elt.4.3): a restriction cannot change an
+		// element's governing type by a type-blocked derivation. Only the base TYPE's
+		// block participates in THIS check (elemBlock 0); the base element
+		// declaration's OWN @block is enforced separately by the element-vs-element
+		// {disallowed substitutions} SUPERSET rule below. Folding the base element's
+		// @block into this type-derivation gate (passing bt.Block) over-rejects valid
+		// restrictions — W3C msMeta ComplexType ctI038/ctI040/ctI042/ctI044 — so it is
+		// deliberately excluded here. Nil-safe via the shared helper.
+		if typeDerivationBlocked(rt.Type, bt.Type, 0) {
+			return false
+		}
 	}
 	// XSD 1.1 Particle Valid (Restriction) clause 4.6: the derived and base element
 	// declarations' {type table}s must be both absent or both present and

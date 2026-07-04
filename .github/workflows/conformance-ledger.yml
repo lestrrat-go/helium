@@ -1,0 +1,62 @@
+name: Conformance Ledger
+
+# Fast, fixture-free drift-check for the checked-in XSLT 3.0 conformance skip
+# ledger (helium-w3c-tests expectations/xslt30-skip-ledger.json +
+# xslt30-skip-counts.json). It regenerates the ledger in memory from the real
+# skip sources and fails on any of the five drift conditions documented on
+# TestXSLT30SkipLedger. It does NOT clone the ~215M upstream fixtures and does
+# not run any transform, so it is safe to run on every PR (unlike the heavy
+# conformance.yml suite).
+#
+# Known limitation: this check runs on helium PRs against helium-w3c-tests@main.
+# By project policy CI lives in helium, not helium-w3c-tests, so a helium-w3c-tests
+# PR that edits a skip source (the w3cImplicitSkips map, expectations/xslt30.json,
+# a generated Skip field, or the slow-test lists) without regenerating the ledger
+# is NOT gated on that PR — the drift surfaces on the next helium PR instead.
+# Contributors editing skip sources in helium-w3c-tests must run
+# `go test ./xslt3 -run TestXSLT30SkipLedger -update-ledger` (or `go generate ./xslt3`)
+# and commit the regenerated ledger alongside the change.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tests_ref:
+        description: helium-w3c-tests ref to check the ledger against
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # helium at the triggering ref (the code under test), as a sibling of the
+      # harness so helium-w3c-tests' `replace => ../helium` resolves.
+      - name: Check out helium (code under test)
+        uses: actions/checkout@v7
+        with:
+          path: helium
+
+      - name: Check out helium-w3c-tests (skip ledger + drift-check)
+        uses: actions/checkout@v7
+        with:
+          repository: lestrrat-go/helium-w3c-tests
+          ref: ${{ inputs.tests_ref || 'main' }}
+          path: helium-w3c-tests
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: helium/go.mod
+          cache-dependency-path: helium-w3c-tests/go.sum
+
+      # No `w3cgen fetch` step: the ledger drift-check reads only the generated
+      # in-memory case tables and expectations/xslt30.json, never the fixtures.
+      - name: Check skip ledger for drift
+        working-directory: helium-w3c-tests
+        run: go test ./xslt3 -run TestXSLT30SkipLedger -v

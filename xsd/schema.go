@@ -313,9 +313,17 @@ type TypeDef struct {
 	MemberTypes  []*TypeDef // for union types: the member type definitions
 	Abstract     bool
 	Final        FinalFlags
-	FinalSet     bool         // true if final was explicitly set (even to empty)
-	Assertions   []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
-	OpenContent  *OpenContent // XSD 1.1 xs:openContent (nil = none)
+	FinalSet     bool // true if final was explicitly set (even to empty)
+	// Block is the complex type's {prohibited substitutions} — the @block value
+	// (blockDefault-folded) masked to {extension, restriction}. Consulted by
+	// cvc-elt.4.3 (isDerivationBlocked): an xsi:type-selected local type must be
+	// validly derived from the declared type given the UNION of the element
+	// declaration's {disallowed substitutions} and this type's {prohibited
+	// substitutions}. Version-independent.
+	Block       BlockFlags
+	BlockSet    bool         // true if block was explicitly set (even to empty)
+	Assertions  []*Assertion // XSD 1.1 xs:assert constraints declared directly on this type
+	OpenContent *OpenContent // XSD 1.1 xs:openContent (nil = none)
 	// ContentSimpleType is the effective simple type that constrains the text
 	// content of a complexType with simpleContent derived by RESTRICTION (XSD 1.1):
 	// either the nested <xs:simpleType> or a synthesized restriction of the base

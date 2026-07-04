@@ -730,8 +730,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return false
 	}
 
-	// Walk the document tree for content model validation.
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	// Walk the document tree for content model validation. A tree cycle
+	// (ErrWalkCycle) leaves the walk partial, so the document is not valid.
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -743,10 +744,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			valid = false
 		}
 		return nil
-	}))
+	})); err != nil {
+		valid = false
+	}
 
 	// Second walk: evaluate identity constraints (xs:key, xs:keyref, xs:unique).
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -772,7 +775,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			}
 		}
 		return nil
-	}))
+	})); err != nil {
+		valid = false
+	}
 
 	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
 	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these
@@ -859,8 +864,10 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// declared type — otherwise a blocked narrowing whose value is also valid under
 	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
 	// block="restriction") would be wrongly accepted. This mirrors the per-child
-	// match sites, which already treat a blocked xsi:type as a content error.
-	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
+	// match sites, which already treat a blocked xsi:type as a content error. The
+	// blocked set unions the element declaration's block with the declared type's
+	// {prohibited substitutions} (cvc-elt.4.3).
+	if td != declType && typeDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("blocked xsi:type")
@@ -949,6 +956,19 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 	vc.edcType = td
 	defer func() { vc.edcType = prevEDC }()
 
+	// cvc-elt.5.2.2: a FIXED value constraint on an element whose content type is
+	// MIXED forbids element children (5.2.2.1) and requires the ·initial value·
+	// (the concatenation of the element's direct character-data children, element
+	// descendants removed) to equal the fixed value as a string (5.2.2.2.2). This
+	// is a string comparison, not a typed value-space comparison. An empty element
+	// (no element and no character children) is clause 5.1 — the fixed value is
+	// assigned as the element's value — so it is left valid. Version-independent.
+	if td.ContentType == ContentTypeMixed && edecl != nil && edecl.Fixed != nil {
+		if err := vc.validateMixedFixed(ctx, elem, edecl); err != nil {
+			return err
+		}
+	}
+
 	switch td.ContentType {
 	case ContentTypeEmpty:
 		// XSD 1.1 §3.4.2.3.3: an empty explicit content type plus effective open
@@ -1024,6 +1044,45 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 	return nil
 }
 
+// validateMixedFixed enforces cvc-elt.5.2.2 for an element whose content type is
+// MIXED and whose declaration carries a FIXED value constraint. The caller has
+// already checked that edecl.Fixed is non-nil. A completely empty element (no
+// element and no character children) is clause 5.1 and is left valid — the fixed
+// value is simply assigned. Otherwise 5.2.2.1 forbids element children and
+// 5.2.2.2.2 requires the initial value (direct character data) to equal the fixed
+// value as a string.
+func (vc *validationContext) validateMixedFixed(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
+	initial, hasChar, hasElem, invalid := mixedInitialValue(elem, *edecl.Fixed)
+	// Fail closed: a cyclic entity graph makes the initial value indeterminate
+	// and can never represent a valid fixed value.
+	if invalid {
+		msg := fmt.Sprintf("The element content could not be evaluated against the fixed value constraint '%s' (cyclic entity expansion).", *edecl.Fixed)
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return fmt.Errorf("fixed value constraint")
+	}
+	// Clause 5.1: neither element nor character children — the fixed value is
+	// assigned, so the element is valid. A present-but-empty character node
+	// (hasChar true, initial "") is NOT clause-5.1 empty: it is character
+	// content that must match the fixed value.
+	if !hasElem && !hasChar {
+		return nil
+	}
+	// Clause 5.2.2.1: a fixed value constraint forbids element children.
+	if hasElem {
+		msg := fmt.Sprintf("Element children are not allowed because the element declaration has a fixed value constraint '%s'.", *edecl.Fixed)
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return fmt.Errorf("fixed value constraint")
+	}
+	// Clause 5.2.2.2.2: the initial value of a mixed-content element must equal
+	// the fixed value (string comparison of the canonical lexical representation).
+	if initial != *edecl.Fixed {
+		msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", initial, *edecl.Fixed)
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return fmt.Errorf("fixed value constraint")
+	}
+	return nil
+}
+
 // assessLaxElement performs XSD lax assessment of an element that matched a
 // processContents="lax" wildcard (or is a child of an xs:anyType element) and has
 // NO element declaration. Per XSD lax: if a governing type can be found — here via
@@ -1095,8 +1154,9 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 			continue
 		}
 		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-		// for a global element assessed through xs:anyType too.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+		// for a global element assessed through xs:anyType too. The blocked set unions
+		// the element declaration's block with the declared type's block.
+		if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
 				"The xsi:type definition is blocked by the element declaration.")
 			contentErr = fmt.Errorf("blocked xsi:type")
@@ -2181,6 +2241,278 @@ func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 		return edecl
 	}
 	return nil
+}
+
+// mixedContentScan accumulates the classification of a mixed-content element's
+// content used by cvc-elt.5.2.2: the ·initial value· (the concatenation, in
+// document order, of direct character data), whether any character content is
+// present, and whether any element content is present.
+type mixedContentScan struct {
+	initial []byte
+	hasChar bool
+	hasElem bool
+	// budget caps len(initial). It is always at least one byte longer than the
+	// fixed value being compared against, so truncation can only occur when the
+	// true initial value is already longer than the fixed value — a guaranteed
+	// mismatch — and never changes the outcome of the equality check. The cap
+	// is what bounds total memory on an adversarial entity graph (a
+	// billion-laughs DAG doubles its expansion per level).
+	budget int
+	// memo caches the contribution of each entity reference / entity node so a
+	// node referenced twice replays its cached contribution instead of being
+	// re-walked (linear time on shared-expansion DAGs) or dropped (the initial
+	// value of "&e;&e;" must contain e's replacement twice). A nil entry marks
+	// a node whose contribution is still being computed: reaching it again is a
+	// cyclic back-edge (constructible through the public DOM API) and
+	// contributes nothing, so the walk always terminates.
+	memo map[helium.Node]*entityContribution
+	// invalid marks the initial value as indeterminate: the entity graph is
+	// cyclic, so its expansion cannot be materialized reliably. The mixed-fixed
+	// check then fails CLOSED (a cyclic entity graph can never represent a valid
+	// fixed value) rather than silently dropping the un-scanned content and
+	// admitting an invalid element. A deep-but-finite acyclic expansion is NOT
+	// invalid — it is scanned in full (the iterative walk has no depth cap).
+	invalid bool
+}
+
+// entityContribution is the memoized effect of one entity reference / entity
+// node on the mixed-content scan. The character data its expansion contributes
+// is recorded as a [start, start+length) SPAN into the scan's single `initial`
+// arena — never a copied slice — so memoizing N entities costs O(N) small
+// structs plus the one budget-bounded arena, not O(N * budget) of cloned text.
+// The arena is preallocated to the budget and never grows past it, so a span
+// stays valid for the whole scan. hasChar/hasElem are the flags the expansion
+// sets.
+type entityContribution struct {
+	start   int
+	length  int
+	hasChar bool
+	hasElem bool
+}
+
+// scanFrame is one work item on the iterative scan stack: either a node to
+// classify (ent == nil) or an entity whose expansion has been fully scanned and
+// must now be memoized and have its flags merged back (ent != nil).
+type scanFrame struct {
+	node                 helium.Node // node to classify (nil on a finalize frame)
+	ent                  helium.Node // entity to finalize (nil on a classify frame)
+	start                int         // finalize: index in initial where ent's contribution began
+	savedChar, savedElem bool        // finalize: outer flags to restore/merge
+}
+
+// scan classifies parent's mixed content by document-order iterative DFS,
+// classifying each descendant node kind:
+//   - TextNode / CDATASectionNode: character content — contributes to the
+//     initial value and sets hasChar (even for a zero-length text node).
+//   - ElementNode: element content — sets hasElem.
+//   - EntityRefNode / EntityNode: a direct entity reference is character
+//     content, not an element child. Its EXPANSION (reached through the
+//     intermediate EntityNode) may contain element and/or character nodes, so it
+//     is walked — an entity whose replacement text contains an element therefore
+//     hits clause 5.2.2.1, and its character data contributes to the initial
+//     value. When there is NO materialized child at all (an Entity node whose
+//     replacement text lives only in Content()), the Content() string is used as
+//     character content instead.
+//   - CommentNode / ProcessingInstructionNode: neither character nor element
+//     content per the spec — ignored (not part of the initial value, not an
+//     element child).
+//
+// The walk enumerates each node's OWN children (ownedNext), so a shared Entity
+// node's DTD sibling declarations are never spilled into the initial value. It
+// is ITERATIVE (an explicit stack, no recursion) so a deep — but finite —
+// entity chain cannot overflow the goroutine stack and is scanned in full (no
+// depth cap, hence no over-rejection of valid deep content). It is memoized
+// (each entity node's contribution is computed once and REPLAYED for a duplicate
+// reference, keeping a shared-expansion DAG linear), and FAILS CLOSED (marks the
+// scan invalid) only on a genuine cyclic back-edge — where the initial value is
+// ill-defined — so a cyclic entity graph terminates and can never admit an
+// invalid element by silently dropping content.
+func (s *mixedContentScan) scan(parent helium.Node) {
+	s.memo = make(map[helium.Node]*entityContribution)
+	var stack []scanFrame
+	s.pushOwnedChildren(&stack, parent)
+	for len(stack) > 0 {
+		f := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if f.ent != nil {
+			// Finalize: record ent's own contribution, then merge its flags into
+			// the enclosing scope. Everything between ent's begin and this frame
+			// was ent's subtree (the stack kept siblings below this frame).
+			s.memo[f.ent] = &entityContribution{
+				start:   f.start,
+				length:  len(s.initial) - f.start,
+				hasChar: s.hasChar,
+				hasElem: s.hasElem,
+			}
+			s.hasChar = s.hasChar || f.savedChar
+			s.hasElem = s.hasElem || f.savedElem
+			continue
+		}
+
+		switch f.node.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			s.appendInitial(f.node.Content())
+			s.hasChar = true
+		case helium.ElementNode:
+			s.hasElem = true
+		case helium.EntityRefNode, helium.EntityNode:
+			s.beginEntity(&stack, f.node)
+		}
+	}
+}
+
+// pushOwnedChildren pushes parent's OWN children onto the scan stack in reverse
+// document order (so they pop in document order). ownedNext stops at a
+// foreign-owned child's siblings, so a shared Entity node's DTD sibling
+// declarations are not enqueued.
+//
+// The sibling walk is cycle-guarded: a well-formed child list visits each node
+// once, so a repeat means the NextSibling chain has been corrupted into a cycle
+// (only constructible through the low-level node primitives, not AddChild — see
+// TestMixedFixedCyclicEntityRejectedByAddChild). Rather than spin forever it
+// stops at the back-edge and marks the scan invalid, so the fixed-value check
+// fails closed on a corrupted DOM exactly as it does on a cyclic entity graph.
+func (s *mixedContentScan) pushOwnedChildren(stack *[]scanFrame, parent helium.Node) {
+	var kids []helium.Node
+	seen := make(map[helium.Node]struct{})
+	for child := parent.FirstChild(); child != nil; child = ownedNext(parent, child) {
+		if _, dup := seen[child]; dup {
+			s.invalid = true
+			break
+		}
+		seen[child] = struct{}{}
+		kids = append(kids, child)
+	}
+	for _, child := range slices.Backward(kids) {
+		*stack = append(*stack, scanFrame{node: child})
+	}
+}
+
+// beginEntity begins classifying an entity reference / entity node. A node
+// already in the memo replays its cached contribution (a completed entry) or
+// fails the scan closed (a nil, in-progress entry — a cyclic back-edge). A fresh
+// node is marked in-progress; a node with a materialized child subtree pushes a
+// finalize frame and its children (so the subtree is scanned before the entity
+// is memoized), while a childless entity contributes its Content() and is
+// memoized immediately.
+func (s *mixedContentScan) beginEntity(stack *[]scanFrame, ent helium.Node) {
+	if contrib, seen := s.memo[ent]; seen {
+		if contrib != nil {
+			s.applyContribution(contrib)
+			return
+		}
+		// A nil entry is IN-PROGRESS: reaching it again is a cyclic back-edge
+		// (constructible through the public DOM API; XML forbids recursive
+		// entities, so a parsed document never hits this). The initial value is
+		// then ill-defined — fail closed.
+		s.invalid = true
+		return
+	}
+	// Mark in-progress so a cyclic back-edge to this node terminates.
+	s.memo[ent] = nil
+
+	savedChar, savedElem := s.hasChar, s.hasElem
+	s.hasChar, s.hasElem = false, false
+	start := len(s.initial)
+
+	if entityHasExpansion(ent) {
+		*stack = append(*stack, scanFrame{ent: ent, start: start, savedChar: savedChar, savedElem: savedElem})
+		s.pushOwnedChildren(stack, ent)
+		return
+	}
+
+	// Childless entity: replacement text lives only in Content().
+	if content := ent.Content(); len(content) > 0 {
+		s.appendInitial(content)
+		s.hasChar = true
+	}
+	s.memo[ent] = &entityContribution{
+		start:   start,
+		length:  len(s.initial) - start,
+		hasChar: s.hasChar,
+		hasElem: s.hasElem,
+	}
+	s.hasChar = s.hasChar || savedChar
+	s.hasElem = s.hasElem || savedElem
+}
+
+// ownedNext returns the next sibling of child within parent's child list, or nil
+// when child is foreign-owned (its parent pointer is not parent). A foreign
+// child's sibling pointers belong to another list — an entity reference's Entity
+// child is owned by the DTD — so they must not be followed out of parent's
+// children. child itself (the FirstChild) is always visited by the caller; only
+// the advance to its next sibling is gated.
+func ownedNext(parent, child helium.Node) helium.Node {
+	if p := child.Parent(); p == nil || p != parent {
+		return nil
+	}
+	return child.NextSibling()
+}
+
+// appendInitial appends character data to the initial value, truncating at the
+// scan budget. Truncation is semantics-preserving for the fixed-value equality
+// check: it fires only once the accumulated value is longer than the fixed
+// value (budget > len(fixed)), which is already a mismatch.
+func (s *mixedContentScan) appendInitial(b []byte) {
+	if room := s.budget - len(s.initial); len(b) > room {
+		b = b[:room]
+	}
+	s.initial = append(s.initial, b...)
+}
+
+// applyContribution replays a memoized entity contribution into the scan by
+// re-appending its recorded span of the initial arena. The span lies within the
+// already-written prefix and the arena never reallocates (cap == budget), so the
+// re-append copies from an earlier region into the current tail — non-overlapping
+// (the write cursor is at or past the span's end) and stable.
+func (s *mixedContentScan) applyContribution(c *entityContribution) {
+	s.appendInitial(s.initial[c.start : c.start+c.length])
+	s.hasChar = s.hasChar || c.hasChar
+	s.hasElem = s.hasElem || c.hasElem
+}
+
+// entityHasExpansion reports whether an entity reference / entity node carries a
+// materialized replacement subtree — ANY direct child. When it does the subtree
+// is authoritative and is walked (scanChildren ignores comment/PI children, so
+// an expansion of only comments/PIs correctly contributes no character content);
+// when there is no child at all the node's Content() string is the replacement
+// text. Testing for any child (not only element/character kinds) is what keeps a
+// comment/PI-only expansion from wrongly falling back to Content() and being
+// treated as literal character data.
+func entityHasExpansion(ent helium.Node) bool {
+	return ent.FirstChild() != nil
+}
+
+// mixedInitialValue returns the ·initial value· of a mixed-content element per
+// cvc-elt.5.2.2.2.2 (the concatenation of its direct character data), whether it
+// has any character content, and whether it has any element content. Entity
+// references are decomposed into their expansion so entity-borne element and
+// character content are attributed correctly. See mixedContentScan.scan.
+//
+// fixed is the fixed value the caller compares the initial value against; it
+// sizes the accumulation budget so truncation can never fire on a value that
+// could still equal fixed (see mixedContentScan.budget).
+//
+// invalid is true when the entity graph is cyclic, so the initial value could
+// not be materialized reliably; the caller must then fail closed (see
+// mixedContentScan.invalid). A deep-but-finite acyclic expansion is scanned in
+// full and is not invalid.
+func mixedInitialValue(elem *helium.Element, fixed string) (initial string, hasChar, hasElem, invalid bool) {
+	if elem == nil {
+		return "", false, false, false
+	}
+	// The budget is one byte past the fixed value: the initial value can only
+	// equal fixed if it is no longer than fixed, so accumulating one extra byte
+	// is enough to detect every mismatch (a longer value is a mismatch by
+	// length). Capping here — rather than at a large fixed floor — is what bounds
+	// the scan's memory to O(budget) on an adversarial exponential-expansion
+	// entity graph. The arena is preallocated to the budget so memoized
+	// contribution spans stay valid (it never reallocates).
+	budget := len(fixed) + 1
+	s := mixedContentScan{budget: budget, initial: make([]byte, 0, budget)}
+	s.scan(elem)
+	return string(s.initial), s.hasChar, s.hasElem, s.invalid
 }
 
 // elemTextContent returns the concatenated text content of an element,

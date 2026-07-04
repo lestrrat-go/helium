@@ -900,8 +900,10 @@ var unicodeBlocks = map[string]string{
 	"SupplementaryPrivateUseArea-A":        `\x{F0000}-\x{FFFFD}`,
 	"SupplementaryPrivateUseArea-B":        `\x{100000}-\x{10FFFD}`,
 	"Tags":                                 `\x{E0000}-\x{E007F}`,
-	// Composite block: union of PrivateUseArea + SupplementaryPrivateUseArea-A + SupplementaryPrivateUseArea-B
-	"PrivateUse": `\x{E000}-\x{F8FF}\x{F0000}-\x{FFFFD}\x{100000}-\x{10FFFD}`,
+	// The "Private Use" block is the BMP Private Use Area U+E000-U+F8FF. The
+	// supplementary planes are the separate SupplementaryPrivateUseArea-A/-B
+	// blocks, so \p{IsPrivateUse} must NOT match them.
+	"PrivateUse": `\x{E000}-\x{F8FF}`,
 }
 
 // validateXPathRegex checks for patterns that Go's regexp accepts but
@@ -1499,8 +1501,11 @@ func checkXSD10ClassRanges(runes []rune, start, end int) error {
 		}
 		if c == '-' {
 			// A '-' is literal at the group start, immediately before the
-			// closing ']' (i+1 == end), or as the '-[' subtraction operator.
-			if i == contentStart || i+1 >= end || runes[i+1] == '[' {
+			// closing ']' (i+1 == end), as the '-[' subtraction operator, or
+			// as a literal member directly abutting the '-[' subtraction (the
+			// first '-' of "--[", e.g. [a-z--[b-z]]).
+			if i == contentStart || i+1 >= end || runes[i+1] == '[' ||
+				(runes[i+1] == '-' && i+2 < end && runes[i+2] == '[') {
 				prevRangeEnd = false
 				i++
 				continue

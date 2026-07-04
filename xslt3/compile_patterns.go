@@ -1911,6 +1911,10 @@ func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3
 // given node test, in document order.
 func collectDescendants(ctx context.Context, ec *execContext, test xpath3.NodeTest, root helium.Node) []helium.Node {
 	var result []helium.Node
+	// collectDescendants has no error channel; a tree cycle (ErrWalkCycle) ends
+	// the walk over the traversable portion, degrading to the descendants found
+	// before the cycle rather than spinning. Parser-built and result trees are
+	// acyclic, so this arises only on a hand-corrupted tree.
 	_ = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n == root {
 			return nil // skip the root itself

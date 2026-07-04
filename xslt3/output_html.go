@@ -190,6 +190,8 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 	var sharedNS *helium.Namespace
 	rootDone := false
 
+	// The result tree is freshly built via guarded AddChild, so it is acyclic
+	// and Walk cannot return ErrWalkCycle here; the error is safely ignored.
 	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {
@@ -243,6 +245,8 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 // in the SVG or MathML namespace gets a default xmlns declaration for its own
 // namespace, so it serializes as e.g. <svg xmlns="..."> instead of <s:svg>.
 func normalizeForeignNamespaces(doc *helium.Document) {
+	// The result tree is freshly built via guarded AddChild, so it is acyclic
+	// and Walk cannot return ErrWalkCycle here; the error is safely ignored.
 	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {

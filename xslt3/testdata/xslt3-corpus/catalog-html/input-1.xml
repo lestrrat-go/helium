@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <category id="fruit" name="Fruit">
+    <product sku="A-1"><name>Apple</name><price>1.50</price></product>
+    <product sku="A-2"><name>Banana</name><price>0.75</price></product>
+  </category>
+  <category id="dairy" name="Dairy">
+    <product sku="D-1"><name>Whole Milk</name><price>2.30</price></product>
+  </category>
+</catalog>

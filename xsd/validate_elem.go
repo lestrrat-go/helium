@@ -476,8 +476,10 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 		return xsiErr
 	}
 	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-	// here just like at matchElementParticle/root.
-	if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+	// here just like at matchElementParticle/root. The blocked set is the UNION of
+	// the element declaration's block and the declared type's {prohibited
+	// substitutions}.
+	if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
@@ -712,8 +714,9 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			contentErr = xsiErr
 			continue
 		}
-		// Check block flags against xsi:type derivation.
-		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
+		// Check block flags against xsi:type derivation (cvc-elt.4.3): the union of
+		// the element declaration's block and the declared type's block.
+		if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
 			msg := "The xsi:type definition is blocked by the element declaration."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("blocked xsi:type")
@@ -813,10 +816,16 @@ func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl 
 		}
 		memberType := effectiveDeclType(member, schema)
 		curHeadType := effectiveDeclType(item.head, schema)
-		if isDerivationBlocked(memberType, curHeadType, item.head.Block) {
+		// The head's EFFECTIVE {disallowed substitutions} unions the head element's
+		// block with its declared TYPE's {prohibited substitutions} (Substitution
+		// Group OK / cvc-elt.4.3), so a member reached by a derivation method the
+		// intermediate OR original head's TYPE blocks is not admitted; the
+		// substitution-specific walk also honors any INTERMEDIATE type's block on the
+		// member's derivation chain.
+		if substTypeDerivationBlocked(memberType, curHeadType, item.head.Block) {
 			continue
 		}
-		if isDerivationBlocked(memberType, headType, edecl.Block) {
+		if substTypeDerivationBlocked(memberType, headType, edecl.Block) {
 			continue
 		}
 		seen[member.Name] = struct{}{}
@@ -1182,8 +1191,9 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		return xsiErr
 	}
 	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced for
-	// a strict wildcard-matched global element too.
-	if td != declType && declType != nil && isDerivationBlocked(td, declType, edecl.Block) {
+	// a strict wildcard-matched global element too. The blocked set unions the
+	// element declaration's block with the declared type's {prohibited substitutions}.
+	if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
 		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
@@ -1216,7 +1226,17 @@ func (vc *validationContext) validateWildcardElementConsistent(ctx context.Conte
 	qn := QName{Local: child.name, NS: child.ns}
 	for _, decl := range vc.edcLocalDecls(mg, qn) {
 		localType := effectiveDeclType(decl, vc.schema)
-		if localType == nil || isValidlySubstitutable(governing, localType) {
+		if localType == nil {
+			continue
+		}
+		// The wildcard's governing type must be substitutable for the base-local
+		// declared type AND not blocked by the EFFECTIVE {disallowed substitutions}
+		// — the UNION of the element declaration's block and its declared TYPE's
+		// {prohibited substitutions} (cvc-elt.4.3, via the shared helper) — so a
+		// derivation the base-local's TYPE blocks cannot be re-admitted through the
+		// wildcard.
+		if isValidlySubstitutable(governing, localType) &&
+			!typeDerivationBlocked(governing, localType, decl.Block) {
 			continue
 		}
 		msg := fmt.Sprintf("The wildcard-matched element's governing type definition is not validly substitutable for the locally declared type definition of element '%s'.", child.displayName)
@@ -1441,6 +1461,30 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 	return false
 }
 
+// prohibitedSubstitutions returns the type's {prohibited substitutions} (block),
+// or the empty set when the type is nil. cvc-elt.4.3 unions this with the element
+// declaration's {disallowed substitutions} when checking an xsi:type derivation.
+func (td *TypeDef) prohibitedSubstitutions() BlockFlags {
+	if td == nil {
+		return 0
+	}
+	return td.Block
+}
+
+// typeDerivationBlocked reports whether deriving `derived` from `base` uses a
+// method forbidden by the EFFECTIVE {disallowed substitutions}: the UNION of the
+// supplied element-declaration block `elemBlock` and the BASE TYPE's {prohibited
+// substitutions}, masked to the derivation bits (extension/restriction). Both
+// cvc-elt.4.3 (xsi:type / CTA) and Substitution Group OK use this union, so a
+// derivation blocked by the base TYPE's @block is caught even when the referring
+// element declaration carries no block. Nil-safe throughout (prohibitedSubstitutions
+// and isDerivationBlocked both handle nil), so it doubles as the single shared
+// derivation-block gate at every substitutability site.
+func typeDerivationBlocked(derived, base *TypeDef, elemBlock BlockFlags) bool {
+	const derivBits = BlockExtension | BlockRestriction
+	return isDerivationBlocked(derived, base, (elemBlock|base.prohibitedSubstitutions())&derivBits)
+}
+
 // isDerivationBlocked walks the BaseType chain from derived to base and returns
 // true if any step uses a derivation method blocked by the given BlockFlags.
 func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
@@ -1479,6 +1523,43 @@ func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
 	if td != base && blocked&BlockRestriction != 0 && isBuiltinSimpleType(base) {
 		db := builtinBaseLocal(derived)
 		if db != base.Name.Local && builtinSimpleDerivedFrom(db, base.Name.Local) {
+			return true
+		}
+	}
+	return false
+}
+
+// substTypeDerivationBlocked reports whether admitting `derived` as a substitution
+// for a head declaration whose effective type is `base` is blocked. It layers the
+// substitution-group-specific rule on top of typeDerivationBlocked (which handles
+// the head element's block unioned with the BASE type's {prohibited substitutions}):
+// per Substitution Group OK (Transitive) §3.3.6.3, the {prohibited substitutions} of
+// every INTERMEDIATE type definition in the derivation chain also block a step using
+// the forbidden method. So a chain Base <- Mid(block="extension") <- Leaf is not
+// substitutable for a head of type Base even though neither Base nor the head element
+// blocks extension — Mid does. Only the substitution-group path considers
+// intermediate-type blocks; xsi:type and CTA use typeDerivationBlocked directly (they
+// key on the selected/base type's block, not every intermediate's).
+func substTypeDerivationBlocked(derived, base *TypeDef, elemBlock BlockFlags) bool {
+	if derived == nil || base == nil {
+		return false
+	}
+	if typeDerivationBlocked(derived, base, elemBlock) {
+		return true
+	}
+	// For every INTERMEDIATE base type `mid` strictly between derived and base, the
+	// substitution is blocked if the FULL derivation from derived DOWN TO mid uses any
+	// method mid's {prohibited substitutions} forbids — not merely the single child
+	// step into mid. A blocked method may occur ANYWHERE in the derived..mid suffix:
+	// e.g. Base <- Mid(block="extension") <- R(restriction) <- Leaf(extension) is
+	// blocked because Leaf..Mid includes Leaf's extension step even though the direct
+	// step into Mid (R's) is a restriction. isDerivationBlocked walks the derived..mid
+	// suffix and returns true iff the given mask intersects the set of methods used
+	// along it, giving exactly that whole-suffix semantics. The final `base` is already
+	// covered by typeDerivationBlocked's base-type union above.
+	const derivBits = BlockExtension | BlockRestriction
+	for mid := derived.BaseType; mid != nil && mid != base; mid = mid.BaseType {
+		if isDerivationBlocked(derived, mid, mid.prohibitedSubstitutions()&derivBits) {
 			return true
 		}
 	}

@@ -224,13 +224,50 @@ func TestXSD10CharClassRangeAfterRange(t *testing.T) {
 	})
 
 	t.Run("xsd10 still accepts ordinary multi-range classes", func(t *testing.T) {
-		for _, pat := range []string{`[a-z0-9]`, `[a-z-]`, `[-a-z]`, `[a-c-[b]]`, `[abc-]`, `[+-/]`, `[!-~-]`, `[0-9a-fA-F]`} {
+		for _, pat := range []string{`[a-z0-9]`, `[a-z-]`, `[-a-z]`, `[a-c-[b]]`, `[a-z--[b-z]]`, `[abc-]`, `[+-/]`, `[!-~-]`, `[0-9a-fA-F]`} {
 			t.Run(pat, func(t *testing.T) {
 				_, err := xsdregex.Compile(pat + "*")
 				require.NoError(t, err, "pattern %q must still compile in XSD 1.0", pat)
 			})
 		}
 	})
+}
+
+func TestPrivateUseBlockBMPOnly(t *testing.T) {
+	// \p{IsPrivateUse} is the BMP Private Use Area U+E000-U+F8FF only. The two
+	// supplementary Private Use planes are the separate
+	// SupplementaryPrivateUseArea-A/-B blocks and must NOT be matched by
+	// \p{IsPrivateUse}. This block table is shared by XSD, Relax NG and XPath, so
+	// lock the boundary down (both bare and inside a character class).
+	bmpLo, bmpHi := string(rune(0xE000)), string(rune(0xF8FF))
+	suppA, suppB := string(rune(0xF0000)), string(rune(0x10FFFD))
+
+	for _, tc := range []struct {
+		name    string
+		pattern string
+		input   string
+		want    bool
+	}{
+		{"bmp-low-matches", `\p{IsPrivateUse}`, bmpLo, true},
+		{"bmp-high-matches", `\p{IsPrivateUse}`, bmpHi, true},
+		{"supp-a-not-matched", `\p{IsPrivateUse}`, suppA, false},
+		{"supp-b-not-matched", `\p{IsPrivateUse}`, suppB, false},
+		{"class-bmp-matches", `[\p{IsPrivateUse}]`, bmpLo, true},
+		{"class-supp-a-not-matched", `[\p{IsPrivateUse}]`, suppA, false},
+		{"supp-a-block-still-matches", `\p{IsSupplementaryPrivateUseArea-A}`, suppA, true},
+		{"supp-b-block-still-matches", `\p{IsSupplementaryPrivateUseArea-B}`, suppB, true},
+		{"neg-bmp-not-matched", `\P{IsPrivateUse}`, bmpLo, false},
+		{"neg-supp-a-matched", `\P{IsPrivateUse}`, suppA, true},
+		{"neg-class-bmp-not-matched", `[^\p{IsPrivateUse}]`, bmpHi, false},
+		{"neg-class-supp-b-matched", `[^\p{IsPrivateUse}]`, suppB, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			re, err := xsdregex.Compile(tc.pattern)
+			require.NoError(t, err, "pattern %q must compile", tc.pattern)
+			require.Equal(t, tc.want, re.MatchString(tc.input),
+				"pattern %q on U+%04X", tc.pattern, []rune(tc.input)[0])
+		})
+	}
 }
 
 func TestDefaultMatchTimeoutAccessors(t *testing.T) {

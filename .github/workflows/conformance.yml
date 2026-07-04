@@ -3,7 +3,8 @@ name: Conformance
 # Runs the heavyweight W3C conformance suites on demand against this helium ref.
 # These are not run on ordinary pushes/PRs because they clone large upstream
 # fixture sets and, with the performance-gated slow tests enabled, can take many
-# minutes.
+# minutes. The actual checkout/fetch/run logic lives in the reusable
+# conformance-run.yml, shared with the release-gating slow xslt30 run.
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +21,10 @@ on:
         description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
         type: boolean
         default: false
+      harness_ref:
+        description: helium-w3c-tests (harness) git ref to pin (commit/tag/branch); use for an audit/release run. Nightly stays on main.
+        type: string
+        default: main
   # Nightly full run of the XSLT 3.0 suite with slow tests enabled.
   schedule:
     - cron: "0 6 * * *"
@@ -29,69 +34,12 @@ permissions:
 
 jobs:
   conformance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
+    uses: ./.github/workflows/conformance-run.yml
+    with:
       # For a scheduled run there are no inputs: default to the xslt30 suite
       # with slow tests on. For a manual run, honor the dispatch inputs.
-      SUITE: ${{ inputs.suite || 'xslt30' }}
-      # HELIUM_SLOW_TESTS is treated as "enabled" whenever it is non-empty, so
-      # it must be left EMPTY (never "0") when slow tests are off.
-      HELIUM_SLOW_TESTS: ${{ (github.event_name == 'schedule' || inputs.slow) && '1' || '' }}
-    steps:
-      # Check out this helium repo at the triggering ref (the code under test).
-      # No repository:/ref: so it uses the branch the workflow_dispatch runs
-      # against.
-      - name: Check out helium (code under test)
-        uses: actions/checkout@v4
-        with:
-          path: helium
-
-      # The conformance harness lives in helium-w3c-tests, whose go.mod uses
-      # `replace github.com/lestrrat-go/helium => ../helium`, so the helium
-      # checkout above must sit as a sibling directory next to it.
-      - name: Check out helium-w3c-tests (sibling harness)
-        uses: actions/checkout@v4
-        with:
-          repository: lestrrat-go/helium-w3c-tests
-          ref: main
-          path: helium-w3c-tests
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: helium/go.mod
-          cache-dependency-path: helium-w3c-tests/go.sum
-
-      # The xsd10 run reuses the xsd11 upstream source checkout; only qt3,
-      # xslt30 and xsd11 are fetchable suite names.
-      - name: Resolve fetch suite
-        working-directory: helium-w3c-tests
-        run: |
-          case "$SUITE" in
-            xsd10) echo "FETCH_SUITE=xsd11" >> "$GITHUB_ENV" ;;
-            *)     echo "FETCH_SUITE=$SUITE" >> "$GITHUB_ENV" ;;
-          esac
-
-      - name: Fetch pinned suite fixtures
-        working-directory: helium-w3c-tests
-        run: go run ./cmd/w3cgen fetch "$FETCH_SUITE"
-
-      - name: Run conformance suite
-        working-directory: helium-w3c-tests
-        run: |
-          mkdir -p test-results
-          go run ./cmd/w3ctest \
-            -out "test-results/${SUITE}-junit.xml" \
-            -summary "test-results/${SUITE}-summary.md" \
-            "$SUITE"
-
-      - name: Upload conformance results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.SUITE }}-conformance-results
-          path: |
-            helium-w3c-tests/test-results/*-junit.xml
-            helium-w3c-tests/test-results/*-summary.md
-          if-no-files-found: warn
+      suite: ${{ inputs.suite || 'xslt30' }}
+      slow: ${{ github.event_name == 'schedule' || inputs.slow || false }}
+      # Nightly/scheduled has no inputs, so this resolves to main; a manual run
+      # may pin an exact harness commit/tag for a reproducible audit run.
+      harness_ref: ${{ inputs.harness_ref || 'main' }}

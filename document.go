@@ -258,8 +258,13 @@ func (d *Document) Replace(_ ...Node) error {
 }
 
 // DocumentElement returns the root element of the document, or nil if none exists.
+//
+// The child scan goes through Children, so it applies the owned-boundary rule
+// and a per-list seen guard: a corrupt document child list (a cyclic sibling
+// pointer before the root) terminates the scan instead of hanging, which would
+// otherwise stall DTD/XSD validation before the traversal cycle guards run.
 func (d *Document) DocumentElement() *Element {
-	for n := d.firstChild; n != nil; n = n.NextSibling() {
+	for n := range Children(d) {
 		if elem, ok := AsNode[*Element](n); ok {
 			return elem
 		}
@@ -285,10 +290,13 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 
 	// Do NOT link root to d here. Let AddChild/Replace perform the linking AFTER
 	// their cycle/self preflight so a rejected insertion leaves the candidate and
-	// the tree untouched.
+	// the tree untouched. The scan goes through Children so a corrupt document
+	// child list (a cyclic sibling pointer before the root) terminates instead of
+	// hanging.
 	var old Node
-	for old = d.firstChild; old != nil; old = old.NextSibling() {
-		if old.Type() == ElementNode {
+	for n := range Children(d) {
+		if n.Type() == ElementNode {
+			old = n
 			break
 		}
 	}
@@ -461,9 +469,10 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 	cur.doc = d
 
 	// Insert before the root element (matching libxml2's xmlCreateIntSubset).
-	// If no children exist yet, just append.
+	// If no children exist yet, just append. The scan goes through Children so a
+	// corrupt document child list terminates instead of hanging.
 	var root Node
-	for c := d.firstChild; c != nil; c = c.NextSibling() {
+	for c := range Children(d) {
 		if c.Type() == ElementNode {
 			root = c
 			break
@@ -960,7 +969,12 @@ func (d *Document) GetElementByID(id string) *Element {
 		return d.ids[id]
 	}
 
-	// Fallback: O(n) tree walk for documents not built via parser.
+	// Fallback: O(n) tree walk for documents not built via parser. The walk
+	// error is a best-effort signal only: the walker returns a sentinel error
+	// to stop early once the id is found, and a Walk-detected tree cycle
+	// (ErrWalkCycle) simply ends the search over the traversable portion — a
+	// lookup has no error channel, so it degrades to returning any match found
+	// before the cycle (nil if none), never spinning.
 	var found *Element
 	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
 		elem, ok := AsNode[*Element](n)
