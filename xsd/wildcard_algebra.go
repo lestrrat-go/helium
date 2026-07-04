@@ -47,6 +47,16 @@ func wildcardConstraint(wc *Wildcard) wcConstraint {
 	}
 }
 
+// wildcardMatchesNothing reports whether a wildcard's namespace constraint admits
+// NO namespace at all — a positive (non-negated) constraint with an empty set,
+// e.g. `namespace=""`. Such a wildcard matches no expanded name, so its language
+// is empty. (A negated constraint always admits infinitely many namespaces, and a
+// non-empty positive set admits its members, so both are emitting.)
+func wildcardMatchesNothing(wc *Wildcard) bool {
+	c := wildcardConstraint(wc)
+	return !c.neg && len(c.set) == 0
+}
+
 func sliceToSet(in []string) map[string]struct{} {
 	s := make(map[string]struct{}, len(in))
 	for _, v := range in {

@@ -79,43 +79,17 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 	if td == nil || !td.IsComplex || td.ContentType == ContentTypeSimple {
 		return
 	}
-
-	// Effective (locally specified, default-folded) open content.
-	var eff *OpenContent
-	if td.openContentExplicit {
-		eff = td.OpenContent // nil for mode="none"
-	} else if td.pendingDefaultOpenContent != nil {
-		def := td.pendingDefaultOpenContent
-		if def.AppliesToEmpty || !contentTypeEmptyForOpenContent(td) {
-			eff = &OpenContent{Mode: def.Mode, Wildcard: def.Wildcard}
-		}
-	}
-
-	// Materialize ##definedSibling SiblingNames on the local effective open content
-	// BEFORE any extension union or restriction check, so the union/check carries the
-	// finite sibling exclusions (the base operand is already materialized base-first).
-	eff = c.materializeOpenContentSiblings(eff, td)
+	eff := c.localEffectiveOpenContent(td)
 
 	if td.Derivation == DerivationExtension && td.BaseType != nil {
 		baseOC := td.BaseType.OpenContent
-		switch {
-		case eff == nil:
-			td.OpenContent = baseOC // inherit base (§3.4.2.2 4.1)
-		case baseOC == nil:
-			td.OpenContent = eff // §3.4.2.2 4.2
-		default:
-			// §3.4.6.2 1.4.3.2.2.2: an extension may not relax a base 'interleave'
-			// open content to 'suffix'.
-			if baseOC.Mode == OpenContentInterleave && eff.Mode == OpenContentSuffix {
-				c.reportOpenContentTypeError(ctx, td,
-					"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'.")
-			}
-			mode := eff.Mode
-			if baseOC.Mode == OpenContentInterleave {
-				mode = OpenContentInterleave
-			}
-			td.OpenContent = &OpenContent{Mode: mode, Wildcard: wildcardUnion(baseOC.Wildcard, eff.Wildcard, c.version)}
+		// §3.4.6.2 1.4.3.2.2.2: an extension may not relax a base 'interleave' open
+		// content to 'suffix'.
+		if baseOC != nil && eff != nil && baseOC.Mode == OpenContentInterleave && eff.Mode == OpenContentSuffix {
+			c.reportOpenContentTypeError(ctx, td,
+				"The open content mode 'suffix' is not a valid extension of base open content mode 'interleave'.")
 		}
+		td.OpenContent = mergeExtensionOpenContent(baseOC, eff, c.version)
 		return
 	}
 
@@ -126,6 +100,72 @@ func (c *compiler) computeEffectiveOpenContent(ctx context.Context, td *TypeDef)
 		c.checkOpenContentDropsBaseWildcard(ctx, td, eff)
 		c.checkDerivedWildcardReadmitsBaseOpen(ctx, td)
 	}
+}
+
+// localEffectiveOpenContent computes a complex type's LOCALLY specified,
+// default-folded {open content} — the explicit <xs:openContent> (nil for
+// mode="none") or, absent that, the per-document <xs:defaultOpenContent> (applied
+// unless the effective content type is empty and appliesToEmpty is false) — with
+// ##definedSibling SiblingNames materialized. It does NOT fold in the base's open
+// content (extension inherit/merge is mergeExtensionOpenContent's job). Shared by
+// computeEffectiveOpenContent and the read-only effectiveOpenContentReadonly so the
+// two cannot diverge.
+func (c *compiler) localEffectiveOpenContent(td *TypeDef) *OpenContent {
+	var eff *OpenContent
+	if td.openContentExplicit {
+		eff = td.OpenContent // nil for mode="none"
+	} else if td.pendingDefaultOpenContent != nil {
+		def := td.pendingDefaultOpenContent
+		if def.AppliesToEmpty || !contentTypeEmptyForOpenContent(td) {
+			eff = &OpenContent{Mode: def.Mode, Wildcard: def.Wildcard}
+		}
+	}
+	// Materialize ##definedSibling SiblingNames on the local effective open content
+	// BEFORE any extension union or restriction check, so the union/check carries the
+	// finite sibling exclusions (the base operand is already materialized base-first).
+	return c.materializeOpenContentSiblings(eff, td)
+}
+
+// mergeExtensionOpenContent combines an EXTENSION's base and own local open content
+// (§3.4.2.2 clause 4): a nil local inherits the base (4.1), a nil base keeps the
+// local (4.2), and otherwise the wildcards union with a base 'interleave' mode
+// winning. It is a PURE value function — it does not emit the
+// suffix-extends-interleave diagnostic (the caller keeps that inline) — so it is
+// reused by the read-only resolver.
+func mergeExtensionOpenContent(baseOC, eff *OpenContent, version Version) *OpenContent {
+	switch {
+	case eff == nil:
+		return baseOC
+	case baseOC == nil:
+		return eff
+	default:
+		mode := eff.Mode
+		if baseOC.Mode == OpenContentInterleave {
+			mode = OpenContentInterleave
+		}
+		return &OpenContent{Mode: mode, Wildcard: wildcardUnion(baseOC.Wildcard, eff.Wildcard, version)}
+	}
+}
+
+// effectiveOpenContentReadonly computes a complex type's effective {open content}
+// WITHOUT writing td.OpenContent or emitting diagnostics, mirroring
+// computeEffectiveOpenContent exactly (via the shared helpers). checkRestrictionParticles
+// needs a BASE type's effective open content but runs BEFORE resolveOpenContent has
+// populated td.OpenContent — an extension base's field still holds its pre-merge
+// local value — so it recomputes here. Cycle-guarded via seen.
+func (c *compiler) effectiveOpenContentReadonly(td *TypeDef, seen map[*TypeDef]bool) *OpenContent {
+	if td == nil || !td.IsComplex || td.ContentType == ContentTypeSimple {
+		return nil
+	}
+	if seen[td] {
+		return nil
+	}
+	seen[td] = true
+	eff := c.localEffectiveOpenContent(td)
+	if td.Derivation == DerivationExtension && td.BaseType != nil {
+		return mergeExtensionOpenContent(c.effectiveOpenContentReadonly(td.BaseType, seen), eff, c.version)
+	}
+	return eff
 }
 
 // checkDerivedWildcardReadmitsBaseOpen guards QUADRANT B of the restriction
@@ -161,17 +201,23 @@ func (c *compiler) checkDerivedWildcardReadmitsBaseOpen(ctx context.Context, td 
 		if !constraintsIntersect(wildcardConstraint(dw.wc), openCon) {
 			continue // the derived declared wildcard does not touch the base open content's namespace
 		}
-		// Exempt a derived declared wildcard that validly RESTRICTS a base DECLARED
-		// wildcard — that interaction is quadrant D (restriction_particle.go).
-		exempt := false
+		// A derived declared wildcard that validly RESTRICTS a base DECLARED wildcard is
+		// quadrant D (restriction_particle.go) up to that base wildcard's OCCURRENCE
+		// CAPACITY. Attribution goes to the declared wildcards first, and the EXCESS
+		// beyond the aggregate base declared-wildcard capacity spills into the base OPEN
+		// content — so exempt dw ONLY when its whole capacity fits: sum the effMax of the
+		// base declared wildcards dw validly restricts (namespace subset, processContents
+		// at least as strong), and require that aggregate to COVER dw's effMax. When the
+		// derived capacity exceeds it, dw touches the base open content and must satisfy
+		// the open-content restriction below (namespace/pc/order), not be blanket-exempt.
+		baseDeclCap := 0
 		for _, bw := range baseWCs {
 			if wildcardConstraintSubset(dw.wc, bw.wc, c.schema, false) &&
 				processContentsStrength(dw.wc.ProcessContents) >= processContentsStrength(bw.wc.ProcessContents) {
-				exempt = true
-				break
+				baseDeclCap = maxOccursAdd(baseDeclCap, bw.effMax)
 			}
 		}
-		if exempt {
+		if occursCovers(baseDeclCap, dw.effMax) {
 			continue
 		}
 		// The derived declared wildcard re-admits the base OPEN content's language.
@@ -459,7 +505,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			// true LOCAL decls that can diverge.)
 			if global, ok := c.schema.elements[bn]; ok {
 				for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-					if msg := c.globalDropsLocalConstraint(ctx, baseLocal, global); msg != "" {
+					if msg := globalDropsLocalConstraint(ctx, baseLocal, global, c.schema, c.version); msg != "" {
 						c.reportOpenContentTypeError(ctx, td,
 							"The restriction drops the base type's local element declaration '"+bn.Local+
 								"' and re-admits it through an open-content wildcard governed by the global declaration, which "+msg+".")
@@ -493,7 +539,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 				// here means no spill, so it is safe and the loop simply does not run.)
 				if global, ok := c.schema.elements[bn]; ok {
 					for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-						if msg := c.globalDropsLocalConstraint(ctx, baseLocal, global); msg != "" {
+						if msg := globalDropsLocalConstraint(ctx, baseLocal, global, c.schema, c.version); msg != "" {
 							c.reportOpenContentTypeError(ctx, td,
 								"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
 									"' below the base's; the excess spills into the enforcing interleave open content governed by the global declaration, which "+msg+".")
@@ -513,8 +559,12 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 // the asymmetric `default` direction — so re-admitting the name via the global would
 // accept content the base local rejected. Returns "" when the global is
 // constraint-compatible. Fail-closed: any constraint that cannot be shown at-least-as-
-// restrictive is treated as lost. Used by BOTH the dropped-local and kept-narrowed call
-// sites (a kept local that narrows maxOccurs spills excess to the global identically).
+// restrictive is treated as lost. Used by the open-content dropped-local and
+// kept-narrowed call sites (a kept local that narrows maxOccurs spills excess to the
+// global identically) AND by the xs:all wildcard-spill path
+// (baseAllElementReadmittedByDerivedWildcard), which faces the same hole when a
+// dropped/narrowed base element re-admitted through an enforcing derived wildcard is
+// governed by a global.
 //
 //   - type table: a base local CTA {type table} NOT EQUIVALENT to the global's
 //     (typeTablesConsistent, absent-both = equivalent) lets the global attribute the
@@ -542,7 +592,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 //     GLOBAL default the local LACKS (or a VALUE-SPACE-DIFFERENT one, DefaultNS-aware) IS
 //     unsound: an empty <e/> re-admitted via the global gets the global's default
 //     substituted, making an otherwise type-invalid empty element valid.
-func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global *ElementDecl) string {
+func globalDropsLocalConstraint(ctx context.Context, local, global *ElementDecl, schema *Schema, version Version) string {
 	if local == nil || global == nil {
 		return ""
 	}
@@ -550,7 +600,7 @@ func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global
 		return "has a conditional-type-assignment {type table} that differs from the base declaration's"
 	}
 	if local.Fixed != nil {
-		if global.Fixed == nil || !fixedValueMatches(ctx, *local.Fixed, *global.Fixed, local.Type, local.FixedNS, global.FixedNS, c.schema, c.version) {
+		if global.Fixed == nil || !fixedValueMatches(ctx, *local.Fixed, *global.Fixed, local.Type, local.FixedNS, global.FixedNS, schema, version) {
 			return "does not impose the base declaration's fixed value"
 		}
 	}
@@ -563,12 +613,12 @@ func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global
 	// is handled by the name-admission / substitution-closure logic, not this same-name
 	// global-constraint check.
 	const derivBits = BlockExtension | BlockRestriction
-	localBlocked := (local.Block | effectiveDeclType(local, c.schema).prohibitedSubstitutions()) & derivBits
-	globalBlocked := (global.Block | effectiveDeclType(global, c.schema).prohibitedSubstitutions()) & derivBits
+	localBlocked := (local.Block | effectiveDeclType(local, schema).prohibitedSubstitutions()) & derivBits
+	globalBlocked := (global.Block | effectiveDeclType(global, schema).prohibitedSubstitutions()) & derivBits
 	if localBlocked&^globalBlocked != 0 {
 		return "does not block every derivation the base declaration's 'block' forbade"
 	}
-	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, c.schema, c.version)) {
+	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, schema, version)) {
 		return "supplies a 'default' the base declaration does not, so it would accept an empty element the base rejected"
 	}
 	for _, lc := range local.IDCs {

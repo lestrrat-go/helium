@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"maps"
 	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -89,6 +90,18 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	derivedP := &Particle{MinOccurs: derivedMG.MinOccurs, MaxOccurs: derivedMG.MaxOccurs, Term: derivedMG}
 	baseP := &Particle{MinOccurs: baseMG.MinOccurs, MaxOccurs: baseMG.MaxOccurs, Term: baseMG}
 
+	// XSD 1.1: thread the BASE type's EFFECTIVE {open content} into the check so the
+	// deep wildcard-restricts-model-group decision can tell whether a derived declared
+	// wildcard's children are governed as the base's OPEN content (delegating that
+	// interaction to the §3.4.6.4 quadrant-B guard, checkDerivedWildcardReadmitsBaseOpen)
+	// rather than the base declared model group. Recomputed read-only because
+	// resolveOpenContent has not yet populated base.OpenContent.
+	if c.version == Version11 {
+		if baseOC := c.effectiveOpenContentReadonly(base, map[*TypeDef]bool{}); baseOC != nil && baseOC.Wildcard != nil {
+			ctx = withBaseOpenContent(ctx, baseOC)
+		}
+	}
+
 	if particleValidRestriction(ctx, derivedP, baseP, c.schema, c.version) {
 		return
 	}
@@ -116,6 +129,22 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 	baseQualified := "'{" + base.Name.NS + "}" + base.Name.Local + "'"
 	msg := "The content model is not a valid restriction of the content model of the base complex type definition " + baseQualified + "."
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
+}
+
+// baseOpenContentKey carries (in ctx) the BASE type's effective {open content} for
+// the current restriction check, so the deep wildcard-restricts-model-group decision
+// can tell whether a derived declared wildcard's children are governed as the base's
+// OPEN content (and thus by the §3.4.6.4 quadrant-B guard) rather than the base
+// declared model group. Nil/absent means the base carries no open content.
+type baseOpenContentKey struct{}
+
+func withBaseOpenContent(ctx context.Context, oc *OpenContent) context.Context {
+	return context.WithValue(ctx, baseOpenContentKey{}, oc)
+}
+
+func baseOpenContentFromContext(ctx context.Context) *OpenContent {
+	oc, _ := ctx.Value(baseOpenContentKey{}).(*OpenContent)
+	return oc
 }
 
 // particleValidRestriction reports whether the restriction particle r is a valid
@@ -161,8 +190,54 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// clear violation.
 			return false
 		case *ModelGroup:
-			// NSRecurseCheckCardinality — conservatively accept.
-			return true
+			// §3.9.6 (Particle Valid (Restriction)) has NO derivation rule for a
+			// WILDCARD restricting a base MODEL GROUP. A restriction is valid only when
+			// L(derived) ⊆ L(base), so this case is SOUND / fail-closed: it accepts
+			// ONLY the sub-cases it can rigorously prove. This is version-INDEPENDENT —
+			// the particleLanguageSubset fallback (Version11-only) cannot model a
+			// derived wildcard, so it never proves anything here; deciding directly is
+			// the only sound option.
+			//
+			// EXCEPTION (XSD 1.1 open content): a child matching the derived declared
+			// wildcard may be governed as the BASE's OPEN content rather than by the base
+			// declared model group — but ONLY when all hold:
+			//   1. the base model group at this position is EMPTIABLE (skippable), so a
+			//      document that drops it entirely and supplies only wildcard-matched
+			//      (open-content) children is still valid against the base;
+			//   2. the derived wildcard's namespace is a SUBSET of the base open-content
+			//      wildcard, so every name it admits actually lands in the open-content
+			//      region (a name outside it is admitted by NEITHER the emptiable base
+			//      model nor the open content → not a subset); and
+			//   3. the ORDERING the base open content imposes is preserved:
+			//      - INTERLEAVE imposes NO ordering, so an open-content-governed child may
+			//        appear anywhere; a derived declared wildcard at ANY position keeps the
+			//        language a subset — always OK.
+			//      - SUFFIX requires open-content children to TRAIL every declared element,
+			//        but a derived declared wildcard occupies a NON-trailing position in
+			//        this recursion (it is mapped against a base model-group particle, not
+			//        the trailing region), so a child it admits could appear BEFORE required
+			//        declared content the base forces to come first — the suffix ordering is
+			//        not preserved. So a SUFFIX base is delegated only when the derived
+			//        wildcard is PROVEN to admit NOTHING, i.e. a STRICT wildcard resolving no
+			//        globally-declared element (its language is empty, so no non-trailing
+			//        child can arise). Otherwise fail closed. (The ε/∅-NAMESPACE cases are
+			//        decided by wildcardRestrictsModelGroup below.)
+			// When all hold, the §3.4.6.4 quadrant-B guard
+			// (checkDerivedWildcardReadmitsBaseOpen) enforces the remaining soundness —
+			// processContents at least as strong — so delegate to it rather than
+			// double-reject here. A NON-emptiable base group (its required content is
+			// dropped), a wildcard reaching outside the base open content, or a suffix base
+			// whose derived wildcard can admit a child is NOT covered: fall through to the
+			// sound wildcardRestrictsModelGroup decision.
+			if version == Version11 {
+				if baseOC := baseOpenContentFromContext(ctx); baseOC != nil && baseOC.Wildcard != nil &&
+					particleEmptiable(b) &&
+					wildcardConstraintSubset(rt, baseOC.Wildcard, schema, false) &&
+					(baseOC.Mode == OpenContentInterleave || strictWildcardAdmitsNoGlobal(rt, schema)) {
+					return true
+				}
+			}
+			return wildcardRestrictsModelGroup(ctx, r, rt, b, bt, schema, version)
 		}
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
@@ -343,7 +418,13 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		if !occurrenceEmptiableRestriction(r, b, version) {
 			return false
 		}
-		return recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, schema, version)
+		if !recurseChoiceUnordered(ctx, rg.Particles, bg.Particles, schema, version) {
+			return false
+		}
+		if version == Version11 && choiceReadmitsBaseElementUnsoundly(ctx, bg, rg, schema, version) {
+			return false
+		}
+		return true
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorChoice:
 		// MapAndSum (XSD §3.9.6): a derived SEQUENCE restricting a base CHOICE. Every
 		// member of the derived sequence must be a valid restriction of SOME branch
@@ -372,6 +453,12 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 			}) {
 				return false
 			}
+		}
+		// Element-over-wildcard precedence (as in recurseChoiceUnordered): a derived
+		// sequence that drops a base choice element branch but carries a wildcard member
+		// re-admitting its name loses the base element's validation.
+		if version == Version11 && choiceReadmitsBaseElementUnsoundly(ctx, bg, rg, schema, version) {
+			return false
 		}
 		return true
 	default:
@@ -477,6 +564,560 @@ func reduceSingletonGroup(p *Particle) *Particle {
 			MaxOccurs: mulOccurs(p.MaxOccurs, only.MaxOccurs),
 			Term:      only.Term,
 		}
+	}
+}
+
+// strictWildcardAdmitsNoGlobal reports whether a STRICT wildcard resolves NO child at
+// validation time. Strict processContents accepts only an element with a matching
+// GLOBAL element declaration, so a strict wildcard that admits (by namespace/notQName)
+// no globally-declared element's expanded name matches nothing — its language is empty.
+// Non-strict wildcards (skip/lax) accept unvalidated / laxly-assessed children, so this
+// returns false for them (they can admit a child even with no matching global). Used to
+// let a SUFFIX open-content delegation accept a derived declared wildcard proven to
+// contribute no (non-trailing) child.
+func strictWildcardAdmitsNoGlobal(wc *Wildcard, schema *Schema) bool {
+	if wc.ProcessContents != ProcessStrict {
+		return false
+	}
+	for qn := range schema.elements {
+		if wildcardAllowsExpandedName(wc, qn.Local, qn.NS, schema, false) {
+			return false
+		}
+	}
+	return true
+}
+
+// wildcardRestrictsModelGroup decides the §3.9.6 WILDCARD-restricting-MODEL-GROUP
+// case SOUNDLY (fail-closed): it returns true only when it can PROVE
+// L(derived wildcard particle r) ⊆ L(base model group b). §3.9.6 provides no
+// derivation rule for this shape, so an accept is justified only by a language
+// argument.
+//
+// The derived side is a SINGLE uniform wildcard rt with occurrence
+// [r.MinOccurs, r.MaxOccurs]; its language is the set of sequences of any length in
+// that interval whose every child is a name rt admits, each validated at rt's
+// processContents. For the base to be a superset it must, for every such child
+// count k, accept a length-k sequence of ARBITRARY rt-admitted names ("all-wildcard"
+// documents). reduceWildcardOnlyParticle computes the base's ALL-WILDCARD emission
+// profile: a CONTIGUOUS count interval [lo, hi] plus a SET of pc-tagged namespace
+// "cover" branches such that at every emitted position the base can independently
+// admit any name in the union of the covering branches (a choice contributes a set
+// of branches; a required element makes the position "dead" — no all-wildcard
+// document — and an optional element contributes ε). The derived wildcard is a valid
+// restriction iff:
+//
+//   - EMPTY language {}: a derived wildcard whose NAMESPACE constraint admits no name
+//     (namespace="") yet must occur (min>0) is unsatisfiable, so L(derived)=∅ ⊆ every
+//     base.
+//   - {ε} language: a prohibited (maxOccurs=0) or matchesNothing-with-min0 derived
+//     particle matches only ε; {ε} ⊆ L(base) iff the base is emptiable.
+//   - otherwise the base reduces (no dead position, no occurrence HOLE) to
+//     [lo, hi] + cover, the derived occurrence is within [lo, hi], AND rt's admitted
+//     names are covered by the base branches whose processContents is no STRICTER
+//     than rt's (a base branch stricter than rt would reject content rt admits, so
+//     the derived would not be a subset).
+//
+// A STRICT wildcard resolving no globally-declared name (strictWildcardAdmitsNoGlobal)
+// is ALSO empty-language and is DELIBERATELY not treated as such here: it is the common
+// case in a globals-free schema (diverting every strict wildcard away from the sound
+// reduction path), and accepting it over an element group would diverge from the
+// §3.9.6 syntactic reject (W3C particlesHa163). The reduction below decides those cases
+// soundly and conformantly without it. Anything the reduction cannot represent
+// language-exactly — a dead base position, a non-uniform base position, an
+// occurrence-count HOLE — is REJECTED.
+func wildcardRestrictsModelGroup(ctx context.Context, r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema, version Version) bool {
+	_ = bt // base model group reached via b.Term; kept for call-site symmetry
+	matchesNothing := wildcardMatchesNothing(rt)
+	switch {
+	case matchesNothing && r.MinOccurs > 0:
+		return true
+	case r.MaxOccurs == 0 || matchesNothing:
+		return particleEmptiable(b)
+	}
+	// Reduce the base to its ALL-WILDCARD emission profile. A dead base (a required
+	// element on every path) has no all-wildcard document, so an emitting derived
+	// wildcard cannot be a subset; a non-representable shape fails closed.
+	red, ok := reduceWildcardOnlyParticle(b)
+	if !ok || red.dead || len(red.cover) == 0 {
+		return false
+	}
+	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, red.lo, red.hi) {
+		return false
+	}
+	if !coverAdmitsWildcard(red.cover, rt, schema) {
+		return false
+	}
+	return !wildcardReadmitsReservedElement(ctx, r, b, schema, version)
+}
+
+// wildcardReadmitsReservedElement enforces XSD 1.1 element-over-wildcard
+// precedence against the reduction's element ERASURE. reduceWildcardOnlyParticle
+// treats an optional/prohibited/dead element declaration as ε (it emits no
+// all-wildcard child), so its NAME is dropped from the emission profile. But in
+// XSD 1.1 a base child whose name matches an element declaration is governed by
+// that ELEMENT (validated against its type), not by an overlapping wildcard —
+// element precedence. A derived wildcard that re-admits such a reserved name may
+// accept content the base validates more strictly (e.g. `<e>bad</e>` against a base
+// `choice(element e:int, any skip)`), so it is NOT a language subset.
+//
+// It reports whether the derived wildcard particle r re-admits any RESERVED base
+// element declaration (an emitting element plus its instance-admissible
+// substitution-group members) UNSOUNDLY, delegating each declaration to the shared
+// baseAllElementReadmittedByDerivedWildcard / derivedWildcardReadmitsReservedName gate
+// (deferTypeSubstitution=true): an UNENFORCING wildcard (skip, or lax with no matching
+// global) rejects — it never assesses the re-admitted child's type; a strict wildcard
+// with NO global rejects the child at validation (sound — defer); an ENFORCING global
+// (strict, or lax with a matching global) is rejected at COMPILE only when it drops one
+// of the base local's constraints the dynamic EDC does not recover ({type table}, fixed,
+// nillable, block, the asymmetric default, identity constraints —
+// globalDropsLocalConstraint). Type-DEFINITION substitutability of the wildcard-resolved
+// global is left to the runtime dynamic wildcard-EDC, which rejects a type-incompatible
+// child at validation. A reserved name the wildcard EXCLUDES (namespace or notQName) is
+// sound (it never produces it). Element precedence is a 1.1 rule (a 1.0 base overlapping
+// an element with a wildcard is UPA-invalid and never reaches here), so the check is
+// gated to Version11 to keep XSD 1.0 byte-identical.
+func wildcardReadmitsReservedElement(ctx context.Context, r *Particle, b *Particle, schema *Schema, version Version) bool {
+	if version != Version11 {
+		return false
+	}
+	derivedWilds := []*Particle{r}
+	for _, be := range reservedElementDecls(b) {
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version, true) {
+			return true
+		}
+	}
+	return false
+}
+
+// reservedElementDecls collects every EMITTING element DECLARATION reachable in the
+// base particle. A non-emitting (prohibited, or under a maxOccurs=0 ancestor group)
+// element emits nothing and is never routed to by element precedence, so it is
+// excluded. Substitution-group members are NOT expanded here — the per-declaration
+// re-admission gate (baseAllElementReadmittedByDerivedWildcard) expands them with each
+// member's OWN declaration as the constraining type.
+func reservedElementDecls(p *Particle) []*ElementDecl {
+	var decls []*ElementDecl
+	var walk func(*Particle)
+	walk = func(pp *Particle) {
+		if particleEmitsNothing(pp) {
+			return
+		}
+		switch t := pp.Term.(type) {
+		case *ElementDecl:
+			decls = append(decls, t)
+		case *ModelGroup:
+			for _, child := range t.Particles {
+				walk(child)
+			}
+		}
+	}
+	walk(p)
+	return decls
+}
+
+// collectEmittingWildcardParticles returns every EMITTING wildcard-leaf particle
+// reachable in the given particles (descending through model groups), skipping
+// non-emitting (prohibited) particles. Used to gather the derived wildcards that
+// could re-admit a reserved base element name in the recurseOrdered path.
+func collectEmittingWildcardParticles(particles []*Particle) []*Particle {
+	var wilds []*Particle
+	var walk func(*Particle)
+	walk = func(p *Particle) {
+		if particleEmitsNothing(p) {
+			return
+		}
+		switch t := p.Term.(type) {
+		case *Wildcard:
+			wilds = append(wilds, p)
+		case *ModelGroup:
+			for _, child := range t.Particles {
+				walk(child)
+			}
+		}
+	}
+	for _, p := range particles {
+		walk(p)
+	}
+	return wilds
+}
+
+// coverBranch is one pc-tagged namespace contribution of a base group's
+// all-wildcard emission: at a position governed by this branch the base admits any
+// name in con, validated at pc. wc is the source wildcard, retained so the
+// single-branch coverage check can use the full notQName/##defined-aware subset.
+type coverBranch struct {
+	wc  *Wildcard
+	con wcConstraint
+	pc  ProcessContentsKind
+}
+
+// wildcardOnlyReduction is the ALL-WILDCARD emission profile of a base particle: a
+// CONTIGUOUS occurrence-count interval [lo, hi] (hi == -1 means unbounded) plus the
+// SET of cover branches admissible at each emitted position. An empty cover with
+// [0,0] is the ε-only reduction (the particle emits no wildcard children). dead=true
+// marks a particle with NO all-wildcard document (a required element declaration on
+// every path); the caller rejects an emitting derived wildcard against it.
+type wildcardOnlyReduction struct {
+	dead   bool
+	cover  []coverBranch
+	lo, hi int
+}
+
+// reduceWildcardOnlyParticle computes the all-wildcard emission profile of a base
+// particle. It is SOUND and fail-closed: it returns ok=false whenever it cannot
+// PROVE the profile is language-exact (a non-uniform position, or an occurrence
+// combination that would introduce a count HOLE). An element declaration is handled
+// rather than excluded: an emptiable (minOccurs=0) element contributes ε (an
+// all-wildcard document emits zero of it), while a required (minOccurs>=1) element
+// makes the position dead.
+func reduceWildcardOnlyParticle(p *Particle) (wildcardOnlyReduction, bool) {
+	if particleEmitsNothing(p) {
+		// A prohibited/non-emitting particle contributes only the empty string.
+		return wildcardOnlyReduction{lo: 0, hi: 0}, true
+	}
+	switch t := p.Term.(type) {
+	case *Wildcard:
+		if wildcardMatchesNothing(t) {
+			// A matchesNothing wildcard is an ∅/ε edge case; the caller handles those
+			// before reduction, so bail conservatively here.
+			return wildcardOnlyReduction{}, false
+		}
+		return wildcardOnlyReduction{
+			cover: []coverBranch{{wc: t, con: wildcardConstraint(t), pc: t.ProcessContents}},
+			lo:    p.MinOccurs,
+			hi:    p.MaxOccurs,
+		}, true
+	case *ElementDecl:
+		if p.MinOccurs == 0 {
+			// An optional element: an all-wildcard document emits zero of it (ε).
+			return wildcardOnlyReduction{lo: 0, hi: 0}, true
+		}
+		// A required element: every document through this position carries it, so
+		// there is no all-wildcard document here.
+		return wildcardOnlyReduction{dead: true}, true
+	case *ModelGroup:
+		body, ok := reduceWildcardOnlyGroupBody(t)
+		if !ok {
+			return wildcardOnlyReduction{}, false
+		}
+		if body.dead {
+			// An optional group over a dead body can be skipped entirely (ε); a
+			// required group forces the dead body, so the position stays dead.
+			if p.MinOccurs == 0 {
+				return wildcardOnlyReduction{lo: 0, hi: 0}, true
+			}
+			return wildcardOnlyReduction{dead: true}, true
+		}
+		return applyOccReduction(body, p.MinOccurs, p.MaxOccurs)
+	}
+	return wildcardOnlyReduction{}, false
+}
+
+// reduceWildcardOnlyGroupBody combines a model group's members into one all-wildcard
+// profile (BEFORE the group's own occurrence is applied): a sequence/all SUMS member
+// profiles (all members contribute at distinct positions, so they must share one
+// cover); a choice UNIONS the profiles of its non-dead branches. A sequence with a
+// dead member is dead; a choice all of whose branches are dead is dead.
+func reduceWildcardOnlyGroupBody(g *ModelGroup) (wildcardOnlyReduction, bool) {
+	if g.Compositor == CompositorChoice {
+		acc := wildcardOnlyReduction{}
+		hasLive := false
+		for _, child := range g.Particles {
+			m, ok := reduceWildcardOnlyParticle(child)
+			if !ok {
+				return wildcardOnlyReduction{}, false
+			}
+			if m.dead {
+				// A choice can avoid a dead branch, so it is excluded from the
+				// all-wildcard union rather than killing the whole choice.
+				continue
+			}
+			if !hasLive {
+				acc = m
+				hasLive = true
+				continue
+			}
+			merged, ok := unionReduction(acc, m)
+			if !ok {
+				return wildcardOnlyReduction{}, false
+			}
+			acc = merged
+		}
+		if !hasLive {
+			return wildcardOnlyReduction{dead: true}, true
+		}
+		return acc, true
+	}
+	// sequence / all: SUM member intervals (a Minkowski sum of contiguous integer
+	// intervals stays contiguous, so no gap can arise here).
+	acc := wildcardOnlyReduction{lo: 0, hi: 0}
+	for _, child := range g.Particles {
+		m, ok := reduceWildcardOnlyParticle(child)
+		if !ok {
+			return wildcardOnlyReduction{}, false
+		}
+		if m.dead {
+			// A required member of a sequence/all forces an element at every
+			// document, so no all-wildcard document exists.
+			return wildcardOnlyReduction{dead: true}, true
+		}
+		cover, ok := mergeSequenceCovers(acc.cover, m.cover)
+		if !ok {
+			return wildcardOnlyReduction{}, false
+		}
+		acc = wildcardOnlyReduction{cover: cover, lo: acc.lo + m.lo, hi: addOccursMax(acc.hi, m.hi)}
+	}
+	return acc, true
+}
+
+// unionReduction unions two CHOICE-branch profiles (each already non-dead). The
+// count intervals union (contiguously, else bail); the covers combine via
+// unionCovers, which enforces the per-position uniformity soundness guard.
+func unionReduction(a, b wildcardOnlyReduction) (wildcardOnlyReduction, bool) {
+	cover, ok := unionCovers(a, b)
+	if !ok {
+		return wildcardOnlyReduction{}, false
+	}
+	lo, hi, ok := unionInterval(a.lo, a.hi, b.lo, b.hi)
+	if !ok {
+		return wildcardOnlyReduction{}, false
+	}
+	return wildcardOnlyReduction{cover: cover, lo: lo, hi: hi}, true
+}
+
+// applyOccReduction folds a group's own occurrence [gmin, gmax] over an already
+// contiguous body reduction. It preserves language-exactness only when the result
+// stays a CONTIGUOUS interval; a folding that would introduce a HOLE (e.g. a body
+// that emits exactly 2 repeated 1..∞ times → {2,4,6,…}) bails. The cover is
+// position-uniform, so repeating the body does not change it.
+func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnlyReduction, bool) {
+	if gmax == 0 || len(body.cover) == 0 {
+		// Prohibited group, or an ε-only body: emits only the empty string.
+		return wildcardOnlyReduction{lo: 0, hi: 0}, true
+	}
+	switch {
+	case gmin == gmax:
+		// A fixed number of copies of a contiguous body stays contiguous.
+		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: mulOccurs(gmin, body.hi)}, true
+	case body.hi == -1:
+		// Each copy already spans to ∞. With gmin >= 1 the smallest copy count
+		// reaches [gmin*lo, ∞) and every larger count is a subset, so the union is
+		// [gmin*lo, ∞) — contiguous. With gmin == 0 the count set is
+		// {0} ∪ [body.lo, ∞): contiguous only when body.lo <= 1 (0 abuts 1). A
+		// body.lo > 1 leaves a HOLE at 1..body.lo-1 (e.g. group{0,1} over any{2,∞}
+		// emits {0} ∪ [2,∞), never exactly 1), so the reduction is not language-exact
+		// and must fail closed — otherwise a derived any{1,1} is wrongly accepted.
+		if gmin == 0 && body.lo > 1 {
+			return wildcardOnlyReduction{}, false
+		}
+		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: -1}, true
+	case body.lo == 0:
+		// Every copy count includes 0, so the union is [0, gmax*hi] — contiguous.
+		return wildcardOnlyReduction{cover: body.cover, lo: 0, hi: mulOccurs(gmax, body.hi)}, true
+	default:
+		// body.lo >= 1, finite body.hi, gmin < gmax. The union of consecutive copy
+		// intervals [k*lo, k*hi] is gap-free iff each abuts the next:
+		// k*hi + 1 >= (k+1)*lo. With hi >= lo this is monotone non-decreasing in k,
+		// so checking the smallest copy count gmin suffices.
+		if gmin*body.hi+1 < (gmin+1)*body.lo {
+			return wildcardOnlyReduction{}, false
+		}
+		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: mulOccurs(gmax, body.hi)}, true
+	}
+}
+
+// addOccursMax adds two maxOccurs values, treating -1 as unbounded.
+func addOccursMax(a, b int) int {
+	if a == -1 || b == -1 {
+		return -1
+	}
+	return a + b
+}
+
+// unionInterval merges two contiguous occurrence intervals into one, reporting
+// whether the union stays contiguous (the intervals overlap or are adjacent). -1
+// is unbounded.
+func unionInterval(alo, ahi, blo, bhi int) (int, int, bool) {
+	if alo > blo {
+		alo, ahi, blo, bhi = blo, bhi, alo, ahi
+	}
+	// [alo, ahi] is the lower interval. It must reach (adjacently) into [blo, bhi].
+	if ahi != -1 && ahi+1 < blo {
+		return 0, 0, false
+	}
+	if ahi == -1 || bhi == -1 {
+		return alo, -1, true
+	}
+	return alo, max(ahi, bhi), true
+}
+
+// mergeSequenceCovers combines the covers of two SEQUENCE/ALL members. Because the
+// members occupy DIFFERENT positions of the same document, every position must admit
+// the SAME name-set for a single uniform derived wildcard to cover them: an empty
+// (ε) cover adopts the other, otherwise both must be a SINGLE branch over the SAME
+// namespace constraint (the merged branch keeps the STRICTER processContents, since
+// the derived wildcard must satisfy the strictest position it covers). A
+// multi-branch (choice-derived) member inside a sequence with another non-ε member,
+// or two members over different namespaces, is not position-uniform and fails closed.
+func mergeSequenceCovers(a, b []coverBranch) ([]coverBranch, bool) {
+	if len(a) == 0 {
+		return b, true
+	}
+	if len(b) == 0 {
+		return a, true
+	}
+	if len(a) != 1 || len(b) != 1 || !sameConstraint(a[0].con, b[0].con) {
+		return nil, false
+	}
+	// A sequence is CONJUNCTIVE — every position of the merged run must hold. Two
+	// members whose namespace matches but whose name-level 1.1 exclusions
+	// (notQName/##defined) differ have DIFFERENT admitted name-sets per position, so
+	// collapsing them to one branch would silently drop an exclusion. Fail closed
+	// unless neither member carries a name-level exclusion (then the shared namespace
+	// constraint fully describes both positions).
+	if coverBranchHasNameFields(a[0]) || coverBranchHasNameFields(b[0]) {
+		return nil, false
+	}
+	stronger := a[0]
+	if processContentsStrength(b[0].pc) > processContentsStrength(a[0].pc) {
+		stronger = b[0]
+	}
+	return []coverBranch{stronger}, true
+}
+
+// coverBranchHasNameFields reports whether a cover branch's source wildcard carries a
+// NAME-level 1.1 exclusion (notQName / ##defined / ##definedSibling) that the
+// namespace-only wcConstraint does not capture.
+func coverBranchHasNameFields(br coverBranch) bool {
+	return len(br.wc.NotQName) > 0 || br.wc.NotQNameDefined || br.wc.NotQNameDefinedSibling || len(br.wc.SiblingNames) > 0
+}
+
+// unionCovers combines the covers of two CHOICE branches. A choice picks one branch
+// per document, so its all-wildcard positions may independently be any of the
+// branches' names ONLY when the combination stays position-uniform: if the two
+// covers are IDENTICAL (same (constraint, processContents) branches) the union is
+// themselves at any occurrence; otherwise the profiles differ per branch, so each
+// side must emit AT MOST ONE child (hi in {0,1}) — a multi-child run would force a
+// same-branch namespace/pc block that the uniform union wildcard cannot express.
+// The result is the deduplicated union of the branch sets, preserving each branch's
+// own processContents (the choice offers ALL of them at each position).
+func unionCovers(a, b wildcardOnlyReduction) ([]coverBranch, bool) {
+	if len(a.cover) == 0 {
+		return b.cover, true
+	}
+	if len(b.cover) == 0 {
+		return a.cover, true
+	}
+	if !coversIdentical(a.cover, b.cover) {
+		if a.hi == -1 || a.hi > 1 || b.hi == -1 || b.hi > 1 {
+			return nil, false
+		}
+	}
+	out := append([]coverBranch(nil), a.cover...)
+	for _, y := range b.cover {
+		dup := false
+		for _, x := range out {
+			if x.pc == y.pc && sameConstraint(x.con, y.con) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, y)
+		}
+	}
+	return out, true
+}
+
+// coversIdentical reports whether two covers describe the SAME set of
+// (namespace-constraint, processContents) branches, order-independently.
+func coversIdentical(a, b []coverBranch) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	used := make([]bool, len(b))
+	for _, x := range a {
+		found := false
+		for j, y := range b {
+			if !used[j] && x.pc == y.pc && sameConstraint(x.con, y.con) {
+				used[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// coverAdmitsWildcard reports whether the derived wildcard rt's language is covered
+// by a base all-wildcard cover: rt's admitted names must all fall in the union of
+// the cover branches whose processContents is NO STRICTER than rt's (a stricter base
+// branch would reject content rt admits at that name, so the derived would not be a
+// subset). A single covering branch uses the full notQName/##defined-aware wildcard
+// subset; multiple covering branches fall back to the namespace-constraint union and
+// fail closed if any carries a name-level 1.1 exclusion (which the union cannot
+// represent soundly). rt's own name-level exclusions only NARROW it, so ignoring
+// them there stays conservative.
+func coverAdmitsWildcard(cover []coverBranch, rt *Wildcard, schema *Schema) bool {
+	wStrength := processContentsStrength(rt.ProcessContents)
+	var covering []coverBranch
+	for _, br := range cover {
+		if processContentsStrength(br.pc) <= wStrength {
+			covering = append(covering, br)
+		}
+	}
+	if len(covering) == 0 {
+		return false
+	}
+	if len(covering) == 1 {
+		return wildcardConstraintSubset(rt, covering[0].wc, schema, false)
+	}
+	union := wcConstraint{set: map[string]struct{}{}}
+	for _, br := range covering {
+		if coverBranchHasNameFields(br) {
+			return false
+		}
+		union = constraintUnion(union, br.con)
+	}
+	return constraintSubset(wildcardConstraint(rt), union)
+}
+
+// sameConstraint reports whether two normalized namespace constraints admit exactly
+// the same set of namespaces.
+func sameConstraint(a, b wcConstraint) bool {
+	return a.neg == b.neg && maps.Equal(a.set, b.set)
+}
+
+// constraintSubset reports whether every namespace sub admits is also admitted by
+// super (a pure namespace-set subset, ignoring name-level exclusions).
+func constraintSubset(sub, super wcConstraint) bool {
+	switch {
+	case !super.neg && sub.neg:
+		return false
+	case !super.neg && !sub.neg:
+		for ns := range sub.set {
+			if _, ok := super.set[ns]; !ok {
+				return false
+			}
+		}
+		return true
+	case super.neg && !sub.neg:
+		for ns := range sub.set {
+			if _, ok := super.set[ns]; ok {
+				return false
+			}
+		}
+		return true
+	default: // both negated
+		for ns := range super.set {
+			if _, ok := sub.set[ns]; !ok {
+				return false
+			}
+		}
+		return true
 	}
 }
 
@@ -587,9 +1228,50 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, sch
 		if !particleEmptiable(bp) {
 			return false
 		}
+		// XSD 1.1 element-over-wildcard precedence: a base child whose name matches a
+		// SKIPPED emptiable ELEMENT declaration is routed to that element (validated
+		// against its type), not to an overlapping wildcard. A derived wildcard that
+		// re-admits that element's name is only sound when the runtime dynamic EDC
+		// recovers the base local's validation — deferred through the shared
+		// baseElementReadmittedByDerivedWildcard gate: an UNENFORCING wildcard (skip, or
+		// lax with no matching global) rejects; a strict wildcard with no global rejects
+		// the child at validation (sound — defer); an ENFORCING global is rejected at
+		// compile only when it drops a base-local constraint the dynamic EDC does not
+		// recover (globalDropsLocalConstraint) — type-DEFINITION substitutability is left
+		// to the runtime dynamic EDC. Gated to Version11 (a 1.0 base overlapping an
+		// element with a wildcard is UPA-invalid), so XSD 1.0 is byte-identical.
+		if version == Version11 && baseElementReadmittedByDerivedWildcard(ctx, bp, rParticles, schema, version) {
+			return false
+		}
 	}
 	// Every derived particle must have been consumed by some base particle.
 	return ri == len(rParticles)
+}
+
+// baseElementReadmittedByDerivedWildcard reports whether a SKIPPED emptiable base
+// particle contributes an EMITTING element declaration (or an instance
+// substitution-group member) that a derived WILDCARD leaf anywhere in the derived
+// particles re-admits UNSOUNDLY — the XSD 1.1 element-precedence hazard the dynamic
+// EDC cannot recover. Each reserved base declaration is delegated to the shared
+// baseAllElementReadmittedByDerivedWildcard / derivedWildcardReadmitsReservedName gate
+// (deferTypeSubstitution=true, same as the choice/sequence reduction path): an
+// UNENFORCING wildcard (skip, or lax with no matching global) rejects; a strict wildcard
+// with no global defers (the child is rejected at validation); an ENFORCING global is
+// rejected at compile only when it drops a base-local constraint the dynamic EDC does not
+// recover (globalDropsLocalConstraint) — type-DEFINITION substitutability is left to the
+// runtime dynamic EDC. A derived wildcard that EXCLUDES every reserved name (namespace or
+// notQName) is sound.
+func baseElementReadmittedByDerivedWildcard(ctx context.Context, bp *Particle, rParticles []*Particle, schema *Schema, version Version) bool {
+	derivedWilds := collectEmittingWildcardParticles(rParticles)
+	if len(derivedWilds) == 0 {
+		return false
+	}
+	for _, be := range reservedElementDecls(bp) {
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version, true) {
+			return true
+		}
+	}
+	return false
 }
 
 // particleEmitsNothing reports whether a particle can never emit any element
@@ -640,6 +1322,110 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 		}
 	}
 	return true
+}
+
+// choiceReadmitsBaseElementUnsoundly reports whether a derived model group restricting a
+// base CHOICE re-admits, through a derived WILDCARD, a base element branch (or its
+// substitution members) UNSOUNDLY — the element-over-wildcard-precedence hazard: a base
+// choice routes a child whose name matches an element branch to that branch (validated
+// against its type), even when a sibling wildcard branch would also admit it.
+//
+// A base element name n is protected (no re-admission) exactly when the DERIVED cannot route
+// an n-named child to a wildcard — a REACHABILITY property (nameSpillableToWildcard), NOT a
+// compositor or occurrence-count test: neither "the derived declares n" nor "the derived
+// element occurrence covers the base" is sufficient, because a wildcard reachable after an
+// element in a sequence (even one nested inside a derived choice branch) still receives the
+// overflow. A name that IS spillable to a wildcard is delegated to the shared
+// derivedWildcardReadmitsReservedName gate (deferTypeSubstitution=true — the runtime dynamic
+// EDC recovers type-DEFINITION substitutability; only an UNENFORCING wildcard, or an enforcing
+// global that drops a base-local constraint the EDC cannot recover, rejects at compile). A
+// derived wildcard that EXCLUDES a name never re-admits it. Gated to Version11.
+func choiceReadmitsBaseElementUnsoundly(ctx context.Context, baseGroup, derivedGroup *ModelGroup, schema *Schema, version Version) bool {
+	derivedWilds := collectEmittingWildcardParticles(derivedGroup.Particles)
+	if len(derivedWilds) == 0 {
+		return false
+	}
+	for _, bp := range baseGroup.Particles {
+		for _, be := range reservedElementDecls(bp) {
+			if nameSpillableToWildcard(derivedGroup, be.Name, schema) &&
+				anyDerivedWildcardReadmits(ctx, derivedWilds, be.Name, be, schema, version) {
+				return true
+			}
+			for _, m := range instanceSubstMembers(be, schema) {
+				if nameSpillableToWildcard(derivedGroup, m.Name, schema) &&
+					anyDerivedWildcardReadmits(ctx, derivedWilds, m.Name, m, schema, version) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// nameSpillableToWildcard reports whether the derived model group can route an n-named child
+// to a WILDCARD (rather than to an element) — the condition under which a base element name n
+// is re-admitted through that wildcard, losing the base element's validation. It is a
+// REACHABILITY test, not a compositor or occurrence-count test: element precedence steals an
+// n-named child from a wildcard ONLY when the wildcard is a DIRECT alternative of a same-level
+// xs:choice whose sibling is an element admitting n (each n-child selects the element branch,
+// commit-no-fallback, regardless of occurrence). A wildcard admitting n in ANY other position
+// — an xs:sequence/xs:all member (an element earlier in the sequence overflows its bounded
+// occurrence into the wildcard), a nested group, or an xs:choice branch with no
+// element-admitting-n sibling (a differently-headed branch can still route a trailing n-child
+// to the wildcard) — CAN receive an n-child, so n is spillable. Recurses through nested groups.
+func nameSpillableToWildcard(mg *ModelGroup, n QName, schema *Schema) bool {
+	for _, p := range mg.Particles {
+		switch t := p.Term.(type) {
+		case *Wildcard:
+			if !wildcardAllowsName(t, n, schema) {
+				continue
+			}
+			// This wildcard admits n. It cannot receive an n-child only when it is a
+			// choice alternative competing with an element admitting n (precedence wins).
+			if mg.Compositor == CompositorChoice && choiceHasElementAdmitting(mg, n, schema) {
+				continue
+			}
+			return true
+		case *ModelGroup:
+			if nameSpillableToWildcard(t, n, schema) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// choiceHasElementAdmitting reports whether the model group has an emitting element particle
+// that admits name n (its own name or a substitution member) — the sibling that lets element
+// precedence steal n from a competing wildcard alternative.
+//
+// This recognizes only a DIRECT element-particle sibling, not a group sibling that is
+// element-first for n (e.g. an xs:sequence whose first term is an element admitting n). Runtime
+// precedence (particleConsumesViaElement) also blocks the wildcard in that case, so a
+// restriction like choice(sequence(e), any) of choice(e, any) is CONSERVATIVELY over-rejected —
+// a fail-closed gap that rejects a valid restriction, never accepts an invalid one. Widening it
+// would require compile-time first-consumer-by-name analysis; it is not worth the complexity for
+// a shape no W3C conformance case exercises.
+func choiceHasElementAdmitting(mg *ModelGroup, n QName, schema *Schema) bool {
+	for _, p := range mg.Particles {
+		ed, ok := p.Term.(*ElementDecl)
+		if ok && p.MaxOccurs != 0 && elementDeclAdmitsName(ed, n, schema) {
+			return true
+		}
+	}
+	return false
+}
+
+// anyDerivedWildcardReadmits reports whether any wildcard in derivedWilds re-admits the
+// reserved name qn (governed by constraining) UNSOUNDLY, per the shared per-wildcard gate.
+func anyDerivedWildcardReadmits(ctx context.Context, derivedWilds []*Particle, qn QName, constraining *ElementDecl, schema *Schema, version Version) bool {
+	for _, dw := range derivedWilds {
+		dwc, _ := dw.Term.(*Wildcard)
+		if derivedWildcardReadmitsReservedName(ctx, dwc, qn, constraining, schema, version, true) {
+			return true
+		}
+	}
+	return false
 }
 
 // recurseAll handles all→all: every derived particle must restrict a DISTINCT
@@ -822,29 +1608,49 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		}
 	}
 
-	// A base element the derived side DROPS (no derived particle maps to it,
-	// sumMax==0) but whose NAME a derived wildcard re-admits is an invalid
-	// restriction: in the base the name is governed by the dropped element's own
-	// (specific) type, while in the derived it is governed by the wildcard. A lax
-	// or skip wildcard, or a strict wildcard resolving to a GLOBAL element whose
-	// type does not validly restrict the dropped base element's, lets the derived
-	// type ACCEPT content for that name the base type REJECTS — so the derived is
-	// not a valid restriction. (wild069: base all{e:union(date,time), …} dropped to
-	// all{…, any ##local lax}, with a global <e type="xs:duration"> the lax wildcard
-	// admits — zang accepts <e>duration</e> that zing rejects.)
+	// A base element whose OCCURRENCES the derived side does not fully cover, but
+	// whose NAME a derived wildcard re-admits, is an invalid restriction: in the base
+	// those occurrences are governed by the element's own (specific) type, while in
+	// the derived the uncovered ones spill to the wildcard. A lax or skip wildcard, or
+	// a strict wildcard resolving to a GLOBAL element whose type does not validly
+	// restrict the base element's, lets the derived type ACCEPT content for that name
+	// the base type REJECTS — so the derived is not a valid restriction. (wild069:
+	// base all{e:union(date,time), …} dropped to all{…, any ##local lax}, with a
+	// global <e type="xs:duration"> the lax wildcard admits — zang accepts
+	// <e>duration</e> that zing rejects.)
 	//
-	// SCOPING: only DROPPED base elements are checked. A base element the derived
-	// KEEPS (sumMax>0, also admitted by the same ##local/##targetNamespace wildcard,
-	// e.g. f here) is governed by its own derived declaration, not the wildcard, so
-	// it must be skipped — otherwise every all-with-wildcard restriction whose
-	// wildcard namespace covers a kept element would be false-rejected.
+	// This covers BOTH the DROPPED case (no derived particle maps to the base
+	// element, sumMax==0, so ALL its occurrences spill) and the NARROWED case (the
+	// derived KEEPS the element but with a smaller maxOccurs, so only the EXCESS base
+	// occurrences beyond the derived's cap spill — the matcher fills the element
+	// budget first, then routes further same-named children to the wildcard). The
+	// gate is occurrence COVERAGE: when the derived-covered max (sumMax[i]) covers the
+	// base's effective max, no occurrence spills and the element is governed entirely
+	// by its own derived declaration, so it is skipped — otherwise every
+	// all-with-wildcard restriction whose wildcard namespace covers a fully-covered
+	// element would be false-rejected. occurrenceValidRestriction above already
+	// guarantees sumMax[i] <= base max, so the only uncovered cases are sumMax below
+	// the base max (bounded) or a bounded derived under an unbounded base.
 	//
-	// EXEMPTION: a STRICT derived wildcard resolving to a GLOBAL element whose type
-	// validly restricts the dropped base element (derivedElemNameAndTypeOK) keeps the
-	// content within the base type, so it is a valid restriction.
+	// EXEMPTION: an ENFORCING derived wildcard (strict, or lax with a matching global)
+	// resolves a GLOBAL element the DYNAMIC EDC type-checks against the base local type
+	// at validation, so the spill is left to that runtime check — BUT only when the
+	// global is a valid restriction of the base element (derivedElemNameAndTypeOK) and
+	// does not DROP one of the base local's constraints the dynamic EDC does NOT recover
+	// ({type table}, fixed, nillable, identity constraints, block, default —
+	// globalDropsLocalConstraint). A global that drops such a constraint (e.g. a base
+	// local block="extension" re-admitted through a no-block global) lets the derived
+	// accept content the base rejects, so it is rejected here. A strict wildcard with NO
+	// global rejects the spilled child at validation, so it too is deferred.
+	//
+	// SUBSTITUTION MEMBERS: the base also routes an instance-admissible
+	// substitution-group member of the base element to that element (validated against
+	// the member's type via the substitution group), so a derived wildcard that
+	// unsoundly re-admits a member name accepts content the base validates more strictly
+	// — checked alongside the own name with the same globalDropsLocalConstraint gate.
 	for i, bp := range baseElems {
-		if sumMax[i] != 0 {
-			continue // kept in the derived — governed by its derived declaration
+		if occursCovers(sumMax[i], bp.MaxOccurs) {
+			continue // occurrences fully covered — no spill to a wildcard
 		}
 		if particleEmitsNothing(bp) {
 			continue // prohibited base element — admits no content to lose
@@ -853,16 +1659,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		if !ok {
 			continue
 		}
-		for _, dw := range derivedWilds {
-			dwc, _ := dw.Term.(*Wildcard)
-			if !wildcardAllowsName(dwc, be.Name, schema) {
-				continue
-			}
-			if dwc.ProcessContents == ProcessStrict {
-				if g, found := schema.elements[be.Name]; found && derivedElemNameAndTypeOK(ctx, g, be, schema, version) {
-					continue
-				}
-			}
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version, false) {
 			return false
 		}
 	}
@@ -958,6 +1755,89 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		return false
 	}
 	return true
+}
+
+// baseAllElementReadmittedByDerivedWildcard reports whether a base xs:all element
+// whose occurrences the derived side does not fully cover has its spilled content
+// re-admitted by a derived wildcard that fails to govern it as strictly as the base.
+// The base routes the element's OWN name AND every instance-admissible substitution-
+// group member of it to this element particle (validated against the element's /
+// member's specific type). The uncovered (dropped or excess) occurrences spill to a
+// derived wildcard, so the restriction is UNSOUND when a derived wildcard re-admits the
+// element's OWN name or one of its substitution-member names via
+// derivedWildcardReadmitsReservedName — a skip wildcard, a lax wildcard with no global,
+// or an ENFORCING wildcard whose resolved global is not a valid restriction of the base
+// declaration / drops one of its local constraints the dynamic EDC does not recover.
+//
+// A derived wildcard that EXCLUDES the name by namespace / notQName never re-admits it,
+// so it is exempt. This mirrors the element-precedence reservation applied to the
+// choice/sequence reduction (wildcardReadmitsReservedElement) and recurseOrdered
+// (baseElementReadmittedByDerivedWildcard) paths, reusing instanceSubstMembers so
+// all stay consistent.
+//
+// deferTypeSubstitution selects whether an enforcing global whose type is NOT validly
+// substitutable for the base declaration is rejected at COMPILE (false — the xs:all
+// spill path) or DEFERRED to the runtime dynamic EDC (true — the choice/sequence
+// reduction and recurseOrdered paths, whose dynamic wildcard-EDC already rejects a
+// type-incompatible wildcard-resolved child at validation). The constraint-drop gate
+// (globalDropsLocalConstraint) — the six properties the dynamic EDC does NOT recover —
+// applies at compile time on EVERY path regardless.
+func baseAllElementReadmittedByDerivedWildcard(ctx context.Context, be *ElementDecl, derivedWilds []*Particle, schema *Schema, version Version, deferTypeSubstitution bool) bool {
+	for _, dw := range derivedWilds {
+		dwc, _ := dw.Term.(*Wildcard)
+		if derivedWildcardReadmitsReservedName(ctx, dwc, be.Name, be, schema, version, deferTypeSubstitution) {
+			return true
+		}
+	}
+	for _, m := range instanceSubstMembers(be, schema) {
+		for _, dw := range derivedWilds {
+			dwc, _ := dw.Term.(*Wildcard)
+			if derivedWildcardReadmitsReservedName(ctx, dwc, m.Name, m, schema, version, deferTypeSubstitution) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// derivedWildcardReadmitsReservedName reports whether a derived wildcard dwc re-admits
+// the reserved name qn UNSOUNDLY, i.e. the base validates a qn-named child against the
+// specific type of constraining (the base element declaration or one of its
+// substitution members) but the derived wildcard would accept content that type
+// rejects. The wildcard re-admits unsoundly when it admits qn AND:
+//
+//   - it is a skip wildcard, or a lax wildcard with no global declaration for qn — it
+//     never assesses the re-admitted child's type; OR
+//   - it resolves a GLOBAL declaration whose type does not validly restrict
+//     constraining's (derivedElemNameAndTypeOK — a COMPILE reject only when
+//     deferTypeSubstitution is false; otherwise deferred to the runtime dynamic EDC),
+//     OR that drops one of constraining's local constraints the DYNAMIC EDC does not
+//     recover — {type table}, `fixed`, `nillable`, identity constraints, `block`, and
+//     the asymmetric `default` (globalDropsLocalConstraint) — so the re-admitted child,
+//     though type-checked via the global, escapes a constraint the base local imposed.
+//
+// An ENFORCING wildcard (strict, or lax with a matching global) whose resolved global
+// is a valid restriction of constraining and drops no local constraint is left to the
+// runtime dynamic EDC (returns false — compile defers). A strict wildcard with NO
+// global rejects the child at validation, so it too is sound (returns false). A wildcard
+// that EXCLUDES qn by namespace / notQName never re-admits it (returns false).
+func derivedWildcardReadmitsReservedName(ctx context.Context, dwc *Wildcard, qn QName, constraining *ElementDecl, schema *Schema, version Version, deferTypeSubstitution bool) bool {
+	if !wildcardAllowsName(dwc, qn, schema) {
+		return false
+	}
+	if dwc.ProcessContents == ProcessSkip {
+		return true
+	}
+	g, found := schema.elements[qn]
+	if !found {
+		// lax with no global never assesses the child (unsound); strict with no global
+		// rejects it at validation (sound — defer).
+		return dwc.ProcessContents == ProcessLax
+	}
+	if !deferTypeSubstitution && !derivedElemNameAndTypeOK(ctx, g, constraining, schema, version) {
+		return true
+	}
+	return globalDropsLocalConstraint(ctx, constraining, g, schema, version) != ""
 }
 
 // baseWildcardExclusive reports whether base wildcard bw is the only base
