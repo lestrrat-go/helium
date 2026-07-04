@@ -1398,6 +1398,14 @@ func nameSpillableToWildcard(mg *ModelGroup, n QName, schema *Schema) bool {
 // choiceHasElementAdmitting reports whether the model group has an emitting element particle
 // that admits name n (its own name or a substitution member) — the sibling that lets element
 // precedence steal n from a competing wildcard alternative.
+//
+// This recognizes only a DIRECT element-particle sibling, not a group sibling that is
+// element-first for n (e.g. an xs:sequence whose first term is an element admitting n). Runtime
+// precedence (particleConsumesViaElement) also blocks the wildcard in that case, so a
+// restriction like choice(sequence(e), any) of choice(e, any) is CONSERVATIVELY over-rejected —
+// a fail-closed gap that rejects a valid restriction, never accepts an invalid one. Widening it
+// would require compile-time first-consumer-by-name analysis; it is not worth the complexity for
+// a shape no W3C conformance case exercises.
 func choiceHasElementAdmitting(mg *ModelGroup, n QName, schema *Schema) bool {
 	for _, p := range mg.Particles {
 		ed, ok := p.Term.(*ElementDecl)
