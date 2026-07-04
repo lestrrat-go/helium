@@ -282,8 +282,12 @@ func TestComplexTypeBlock_CTAAlternative(t *testing.T) {
 // restriction that redeclares a base element with a type reached from the base
 // element's type by a derivation the BASE TYPE's {prohibited substitutions} blocks
 // must be rejected (cvc-elt.4.3 / NameAndTypeOK). Here the derived redeclaration
-// changes element x's type from XBase to an extension XExt; when XBase carries
-// block="extension" the restriction is invalid, otherwise it is accepted.
+// changes element x's type from XBase to a RESTRICTION XRes; when XBase carries
+// block="restriction" the retyping is invalid, otherwise it is accepted. A
+// restriction (not extension) retyping is used because NameAndTypeOK clause
+// 3.2.5.2 disallows an EXTENSION retyping unconditionally (subset
+// {extension, list, union}) — that case is invalid regardless of @block, so only a
+// restriction retyping can exhibit the @block distinction at this site.
 // Version-independent (elementRestrictsElement runs in both 1.0 and 1.1).
 func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
 	schemaFor := func(block string) string {
@@ -293,11 +297,11 @@ func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
   <xs:complexType name="XBase" ` + block + `>
     <xs:sequence><xs:element name="p" type="xs:string"/></xs:sequence>
   </xs:complexType>
-  <xs:complexType name="XExt">
+  <xs:complexType name="XRes">
     <xs:complexContent>
-      <xs:extension base="t:XBase">
-        <xs:sequence><xs:element name="q" type="xs:string"/></xs:sequence>
-      </xs:extension>
+      <xs:restriction base="t:XBase">
+        <xs:sequence><xs:element name="p" type="xs:string"/></xs:sequence>
+      </xs:restriction>
     </xs:complexContent>
   </xs:complexType>
   <xs:complexType name="ContBase">
@@ -306,7 +310,7 @@ func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
   <xs:complexType name="ContDer">
     <xs:complexContent>
       <xs:restriction base="t:ContBase">
-        <xs:sequence><xs:element name="x" type="t:XExt"/></xs:sequence>
+        <xs:sequence><xs:element name="x" type="t:XRes"/></xs:sequence>
       </xs:restriction>
     </xs:complexContent>
   </xs:complexType>
@@ -315,8 +319,8 @@ func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
 	}
 
 	t.Run("xsd11", func(t *testing.T) {
-		t.Run("base TYPE block=extension rejects retyping restriction", func(t *testing.T) {
-			_, _, cerr := compileV11(t, schemaFor(`block="extension"`))
+		t.Run("base TYPE block=restriction rejects retyping restriction", func(t *testing.T) {
+			_, _, cerr := compileV11(t, schemaFor(`block="restriction"`))
 			require.Error(t, cerr)
 		})
 		t.Run("no base TYPE block accepts retyping restriction", func(t *testing.T) {
@@ -325,8 +329,8 @@ func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
 		})
 	})
 	t.Run("xsd10", func(t *testing.T) {
-		t.Run("base TYPE block=extension rejects retyping restriction", func(t *testing.T) {
-			_, cerr := compileV10(t, schemaFor(`block="extension"`))
+		t.Run("base TYPE block=restriction rejects retyping restriction", func(t *testing.T) {
+			_, cerr := compileV10(t, schemaFor(`block="restriction"`))
 			require.Error(t, cerr)
 		})
 		t.Run("no base TYPE block accepts retyping restriction", func(t *testing.T) {
