@@ -387,8 +387,13 @@ func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName]
 			byName[term.Name] = append(byName[term.Name], term)
 			// Fold in the term's transitive substitution-group members: a head's
 			// particle implicitly contains its members (and their members), so each
-			// is effectively present in this content model under its own name.
-			c.foldSubstitutionMembers(term, byName)
+			// is effectively present in this content model under its own name. This
+			// applies only when the particle IS the global head declaration or a ref
+			// to it — a distinct LOCAL element particle merely sharing a head's QName
+			// admits no substitution members.
+			if term.IsRef || c.schema.elements[term.Name] == term {
+				c.foldSubstitutionMembers(term, byName)
+			}
 		case *ModelGroup:
 			c.collectContentModelElements(term, byName, visited)
 		}

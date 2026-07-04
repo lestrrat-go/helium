@@ -882,7 +882,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	vc.annotateElement(ctx, elem, td, true)
 	vc.recordElemDecl(elem, edecl)
 
-	nilled, err := vc.checkXsiNil(ctx, elem)
+	nilled, err := vc.checkXsiNil(ctx, elem, edecl)
 	if err != nil {
 		return err
 	}
@@ -1110,7 +1110,7 @@ func (vc *validationContext) assessLaxElement(ctx context.Context, ce *helium.El
 	if actual == nil {
 		return nil
 	}
-	if _, nilErr := vc.checkXsiNil(ctx, ce); nilErr != nil {
+	if _, nilErr := vc.checkXsiNil(ctx, ce, nil); nilErr != nil {
 		return nilErr
 	}
 	return vc.validateElementContent(ctx, ce, nil, actual)
@@ -1172,7 +1172,7 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		if td == nil {
 			continue
 		}
-		nilled, nilErr := vc.checkXsiNil(ctx, ce)
+		nilled, nilErr := vc.checkXsiNil(ctx, ce, edecl)
 		if nilErr != nil {
 			contentErr = nilErr
 			continue
@@ -2534,7 +2534,15 @@ func elemTextContent(elem *helium.Element) string {
 // is an invalid xs:boolean value: a validity error is reported and a non-nil
 // error is returned so the element is not silently validated as ordinary
 // content.
-func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Element) (bool, error) {
+//
+// edecl is the governing element declaration (nil for an undeclared/laxly
+// assessed element). Per cvc-elt.3.1 a non-nillable declaration must carry NO
+// xsi:nil attribute AT ALL — including xsi:nil="false"/"0" — so a present
+// xsi:nil="false"/"0" on a non-nillable declaration is a validity error even
+// though it does not nil the element. (The xsi:nil="true"/"1" case reaches
+// validateNilledElement, which reports the same non-nillable error.) An
+// undeclared element (edecl nil) imposes no nillable constraint.
+func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Element, edecl *ElementDecl) (bool, error) {
 	for _, a := range elem.Attributes() {
 		if a.URI() != lexicon.NamespaceXSI || a.LocalName() != attrNil {
 			continue
@@ -2544,6 +2552,11 @@ func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Eleme
 		case "true", "1":
 			return true, nil
 		case "false", "0":
+			if edecl != nil && !edecl.Nillable {
+				vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+					"Element is not nillable.")
+				return false, fmt.Errorf("element not nillable")
+			}
 			return false, nil
 		}
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
