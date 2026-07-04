@@ -1,6 +1,7 @@
 package xsdregex_test
 
 import (
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -43,6 +44,34 @@ func TestCaretDollarModeDistinction(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, re.MatchString("^a$"), "xs:pattern ^a$ matches literal ^a$")
 		require.False(t, re.MatchString("a"), "xs:pattern ^a$ does not match bare a")
+	})
+}
+
+// TestNameCharU0346FlavorDistinction pins the second flavor divergence in this
+// shared translator: the \c (XML NameChar) escape. Every XSD xs:pattern facet —
+// 1.0 or 1.1 (Compile / CompileVersion) — follows the XML 1.0 5th-edition NameChar
+// definition, which INCLUDES the combining mark U+0346 (W3C regex test reZ006i /
+// bug 13606). The older XPath-2.0 flavor (Translate, used by fn:matches and the
+// regex-syntax-xslt20 QT3 suite) keeps the pre-5th-edition carve-out that EXCLUDES
+// U+0346. So the same pattern must classify U+0346 differently across the two.
+func TestNameCharU0346FlavorDistinction(t *testing.T) {
+	const u0346 = "͆" // COMBINING KAVYKA ABOVE RIGHT (Mn), a NameChar since XML 1.0 5th ed.
+
+	t.Run("xsd pattern facet includes U+0346", func(t *testing.T) {
+		re10, err := xsdregex.Compile(`[\c]`)
+		require.NoError(t, err)
+		require.True(t, re10.MatchString(u0346), "XSD 1.0 xs:pattern [\\c] matches U+0346")
+
+		re11, err := xsdregex.CompileVersion(`[\c]`, true)
+		require.NoError(t, err)
+		require.True(t, re11.MatchString(u0346), "XSD 1.1 xs:pattern [\\c] matches U+0346")
+	})
+
+	t.Run("xpath flavor keeps the carve-out", func(t *testing.T) {
+		out, err := xsdregex.Translate(`[\c]`, false, false)
+		require.NoError(t, err)
+		anchored := regexp.MustCompile("^(?:" + out + ")$")
+		require.False(t, anchored.MatchString(u0346), "XPath Translate [\\c] excludes U+0346")
 	})
 }
 

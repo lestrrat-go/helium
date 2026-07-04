@@ -118,7 +118,7 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern, xsd11 b
 				i += 2
 				continue
 			case 'c':
-				if xsd11 {
+				if xsd11 || xsdPattern {
 					b.WriteString(xpathRegexNameCharClass11)
 				} else {
 					b.WriteString(xpathRegexNameCharClass)
@@ -126,7 +126,7 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern, xsd11 b
 				i += 2
 				continue
 			case 'C':
-				if xsd11 {
+				if xsd11 || xsdPattern {
 					b.WriteString(xpathRegexNameCharClassNeg11)
 				} else {
 					b.WriteString(xpathRegexNameCharClassNeg)
@@ -167,7 +167,7 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern, xsd11 b
 
 		// Handle character class subtraction: [base-[subtract]]
 		if r == '[' {
-			cls, consumed, err := translateCharClass(runes, i, xsd11)
+			cls, consumed, err := translateCharClass(runes, i, xsdPattern, xsd11)
 			if err != nil {
 				return "", err
 			}
@@ -222,7 +222,7 @@ func findClosingBrace(runes []rune, start int) int {
 
 // translateCharClass translates a character class, handling subtraction.
 // Returns the translated class and the number of runes consumed.
-func translateCharClass(runes []rune, start int, xsd11 bool) (string, int, error) {
+func translateCharClass(runes []rune, start int, xsdPattern, xsd11 bool) (string, int, error) {
 	// Find the matching close bracket, handling nesting
 	depth := 0
 	i := start
@@ -235,7 +235,7 @@ func translateCharClass(runes []rune, start int, xsd11 bool) (string, int, error
 			if depth == 0 {
 				// We have the full character class from start to i (inclusive)
 				content := runes[start : i+1]
-				result, err := processCharClass(content, xsd11)
+				result, err := processCharClass(content, xsdPattern, xsd11)
 				if err != nil {
 					return "", 0, err
 				}
@@ -252,7 +252,7 @@ func translateCharClass(runes []rune, start int, xsd11 bool) (string, int, error
 
 // processCharClass processes a character class, expanding subtraction and
 // translating embedded \p{} and \i/\c escapes.
-func processCharClass(runes []rune, xsd11 bool) (string, error) {
+func processCharClass(runes []rune, xsdPattern, xsd11 bool) (string, error) {
 	s := string(runes)
 	if err := validateXPathCharClassStructure(s); err != nil {
 		return "", err
@@ -263,7 +263,7 @@ func processCharClass(runes []rune, xsd11 bool) (string, error) {
 	// Character class subtraction [base-[subtract]] is not supported by Go's RE2.
 	// Pass through as-is — Go will interpret it differently but many tests still
 	// pass because Go's (incorrect) interpretation gives the expected result.
-	result, err := translateClassContent(s, xsd11)
+	result, err := translateClassContent(s, xsdPattern, xsd11)
 	if err != nil {
 		return "", err
 	}
@@ -387,7 +387,7 @@ func validateXPathCharClassSubtraction(class string) error {
 }
 
 // translateClassContent translates \p{}, \i, \c escapes inside a character class.
-func translateClassContent(s string, xsd11 bool) (string, error) {
+func translateClassContent(s string, xsdPattern, xsd11 bool) (string, error) {
 	var b strings.Builder
 	runes := []rune(s)
 	for i := 0; i < len(runes); i++ {
@@ -424,7 +424,7 @@ func translateClassContent(s string, xsd11 bool) (string, error) {
 				i++
 				continue
 			case 'c':
-				if xsd11 {
+				if xsd11 || xsdPattern {
 					b.WriteString(xmlNameCharRange)
 				} else {
 					b.WriteString(xpathRegexNameCharRange)
@@ -432,7 +432,7 @@ func translateClassContent(s string, xsd11 bool) (string, error) {
 				i++
 				continue
 			case 'C':
-				if xsd11 {
+				if xsd11 || xsdPattern {
 					b.WriteString(xpathRegexNameCharRangeNeg11)
 				} else {
 					b.WriteString(xpathRegexNameCharRangeNeg)
@@ -1581,9 +1581,13 @@ func Compile(pattern string) (*Regexp, error) {
 
 // CompileVersion is Compile with an XSD 1.1 toggle. In XSD 1.1 mode an
 // unrecognized \p{Is...} block name is accepted (matching every character) per
-// XSD 1.1 test bug 13670, and \c/\C admit the full XML 1.1 / XML 1.0 5th edition
-// NameChar combining range (U+0300–U+036F, including U+0346). With xsd11=false
-// the XSD 1.0 / XPath 2.0 behavior is byte-identical to Compile's original.
+// XSD 1.1 test bug 13670. Both versions of the XSD pattern-facet path admit the
+// full XML 1.1 / XML 1.0 5th edition NameChar combining range (U+0300–U+036F,
+// including U+0346) for \c/\C: the U+0346 carve-out belongs to the older
+// XPath-2.0 flavor only (xpath3's Translate, xsdPattern=false), and every XSD
+// pattern facet — 1.0 or 1.1 — follows the 5th-edition NameChar definition (test
+// bug 13606). With xsd11=false the rest of the XSD 1.0 behavior is byte-identical
+// to Compile's original.
 func CompileVersion(pattern string, xsd11 bool) (*Regexp, error) {
 	// Enforce the XSD/XPath regex grammar up front, independent of which engine
 	// compiles the pattern. RE2 happens to reject some non-XSD constructs (e.g.
