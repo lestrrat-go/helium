@@ -462,6 +462,74 @@ func TestIDCFieldClassificationMatrix(t *testing.T) {
 			instance: `<root><wrap><inner a="x"/></wrap><wrap><inner a="y"/></wrap></root>`,
 			v11valid: true, v10valid: false,
 		},
+		{
+			// MULTI-NODE, all SKIPPED: field "*" selects TWO skip-content children.
+			// §3.11.4 drops both (no value), so the UNIQUE field is absent and the
+			// entry drops out → valid in 1.1. In 1.0 an unassessed node is a
+			// VIOLATION, so the multi-node field is rejected (not the cardinality
+			// error — the first node already fails the simple-type requirement).
+			name: "field selects two skipped nodes",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType><xs:sequence>
+      <xs:element name="item" maxOccurs="unbounded">
+        <xs:complexType><xs:sequence>
+          <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence></xs:complexType>
+      </xs:element>
+    </xs:sequence></xs:complexType>
+    <xs:unique name="itemKey"><xs:selector xpath="item"/><xs:field xpath="*"/></xs:unique>
+  </xs:element>
+</xs:schema>`,
+			instance: `<root><item><g>1</g><h>2</h></item><item><g>3</g><h>4</h></item></root>`,
+			v11valid: true, v10valid: false,
+		},
+		{
+			// MULTI-NODE, ONE GOVERNED + ONE SKIPPED: field "*" selects a declared
+			// simple <k> (GOVERNED) and a skip-content sibling (SKIPPED). §3.11.4
+			// drops the skipped node, leaving exactly one governed node whose value
+			// is the field value — a KEY host with distinct <k> makes it observable
+			// (a wrongly-absent field would be keyMissing). Valid in 1.1. In 1.0 the
+			// skip-content node is a VIOLATION → rejected.
+			name: "field selects one governed and one skipped",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType><xs:sequence>
+      <xs:element name="item" maxOccurs="unbounded">
+        <xs:complexType><xs:sequence>
+          <xs:element name="k" type="xs:integer"/>
+          <xs:any processContents="skip" minOccurs="0"/>
+        </xs:sequence></xs:complexType>
+      </xs:element>
+    </xs:sequence></xs:complexType>
+    <xs:key name="itemKey"><xs:selector xpath="item"/><xs:field xpath="*"/></xs:key>
+  </xs:element>
+</xs:schema>`,
+			instance: `<root><item><k>1</k><extra>a</extra></item><item><k>2</k><extra>b</extra></item></root>`,
+			v11valid: true, v10valid: false,
+		},
+		{
+			// MULTI-NODE, TWO GOVERNED: field "*" selects two declared simple
+			// elements, both GOVERNED. After dropping skipped nodes (none) more than
+			// one governed node remains — the genuine cardinality error (a node-set
+			// with more than one member), invalid in BOTH versions.
+			name: "field selects two governed nodes",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType><xs:sequence>
+      <xs:element name="item" maxOccurs="unbounded">
+        <xs:complexType><xs:sequence>
+          <xs:element name="k" type="xs:integer"/>
+          <xs:element name="j" type="xs:integer"/>
+        </xs:sequence></xs:complexType>
+      </xs:element>
+    </xs:sequence></xs:complexType>
+    <xs:unique name="itemKey"><xs:selector xpath="item"/><xs:field xpath="*"/></xs:unique>
+  </xs:element>
+</xs:schema>`,
+			instance: `<root><item><k>1</k><j>2</j></item></root>`,
+			v11valid: false, v10valid: false,
+		},
 	}
 
 	for _, tc := range cases {
