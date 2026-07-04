@@ -310,6 +310,17 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					allPresent = false
 				} else {
 					fieldNode = fieldResult.NodeSet[0]
+					// XSD 1.1 (§3.11.4): a field node inside a
+					// processContents="skip" wildcard-matched subtree is UNASSESSED
+					// and carries no type annotation, so it contributes NO value
+					// rather than failing the simple-type requirement. Treat it like
+					// the empty node-set for this field. In XSD 1.0 there is no such
+					// relaxation (skipContentNodes is empty), so the unassessed node
+					// still flows into the simple-type check below and is rejected.
+					if _, skip := vc.skipContentNodes[fieldNode]; skip {
+						allPresent = false
+						continue
+					}
 					value = nodeStringValue(fieldNode)
 				}
 			case xpath1.StringResult:
@@ -332,7 +343,9 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			// node-set or to a single node with a SIMPLE type. A field pointing at
 			// a complex-typed element, or at an attribute admitted only by a
 			// lax/skip anyAttribute wildcard (which is not schema-assessed and so
-			// carries no type), is a validity error. Version-independent.
+			// carries no type), is a validity error. An XSD 1.1 skip-content
+			// ELEMENT field node was already handled above (it contributes no
+			// value); in XSD 1.0 such a node reaches here and is rejected.
 			if fieldNode != nil && !vc.fieldNodeSimpleTyped(fieldNode, fieldTD, elem, edecl, schema) {
 				if entry.elem != nil {
 					idcName := idcDisplayName(idc, vc.schema)
