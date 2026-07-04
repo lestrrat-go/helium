@@ -68,15 +68,19 @@ var lengthApplicableTypes = map[string]struct{}{
 }
 
 // LengthApplicable reports whether the length facets (length, minLength,
-// maxLength) are applicable to builtinLocal's atomic value space. Callers gating
+// maxLength) may be DECLARED on builtinLocal's atomic value space. Callers gating
 // on this keep the length facets off the numeric/decimal family, boolean, float,
 // double and the date/time/duration family, where XSD declares them inapplicable.
 //
-// On the applicable types — including xs:QName and xs:NOTATION — the length
-// facets are CONSTRAINING (XSD 1.0 / libxml2 parity): a value whose length (rune
-// count for the string family / QName / NOTATION / anyURI, octet count for the
-// binary types) violates the bound is rejected, the same way the xsd package
-// enforces it (see xsd's facetLength). This keeps relaxng and xsd consistent.
+// Applicability (may the facet be declared) is a SEPARATE question from whether it
+// CONSTRAINS a value. xs:QName and xs:NOTATION are in the applicable set — a schema
+// may declare xs:length on them — but per XSD Part 2 (W3C errata bug 4009) their
+// length is undefined, so the facet is vacuously satisfied and the xsd package does
+// NOT reject an out-of-length QName/NOTATION value (see xsd's checkFacets). relaxng,
+// whose datatype library predates the errata, still enforces the bound on
+// QName/NOTATION (see relaxng's facetLength), so the two paths intentionally diverge
+// there. On the string family / anyURI (rune count) and the binary types (octet
+// count) both paths enforce the bound.
 func LengthApplicable(builtinLocal string) bool {
 	_, ok := lengthApplicableTypes[builtinLocal]
 	return ok

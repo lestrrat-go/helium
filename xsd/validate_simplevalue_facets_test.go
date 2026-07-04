@@ -1416,3 +1416,30 @@ func TestNestedUnionRangeFacetRejectedAtCompile(t *testing.T) {
 		require.Contains(t, compileSchemaErrors(t, schemaXML), "The facet 'minInclusive' is not allowed.")
 	})
 }
+
+// TestQNameLengthFacetVacuous verifies XSD Part 2 (W3C errata bug 4009): the
+// length/minLength/maxLength facets are vacuously satisfied on xs:QName (and
+// xs:NOTATION) — their length is undefined — so a value whose lexical rune count
+// differs from the declared bound is still VALID. A bare (unbound-prefix) QName
+// value is used so only the length facet is in question.
+func TestQNameLengthFacetVacuous(t *testing.T) {
+	t.Parallel()
+
+	// length is mutually exclusive with minLength/maxLength, so use minLength +
+	// maxLength together (a valid combination) to exercise both bounds at once.
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qname45">
+    <xs:restriction base="xs:QName">
+      <xs:minLength value="4"/>
+      <xs:maxLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="qname45"/>
+</xs:schema>`
+
+	// value "a" is length 1 — outside minLength=4 / maxLength=5, yet valid because
+	// the length facets do not constrain a QName.
+	errs, err := validateInstance(t, schema, `<root>a</root>`)
+	require.NoError(t, err, "QName length facets must be vacuous (errata 4009); errors: %s", errs)
+	require.Empty(t, errs)
+}

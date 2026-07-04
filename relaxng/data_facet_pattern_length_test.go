@@ -95,13 +95,13 @@ func TestDataLengthFacetApplicability(t *testing.T) {
 	})
 }
 
-// TestDataLengthFacetQNameEnforced covers RNG-104+105 r4: the length facets
-// (length, minLength, maxLength) on xs:QName and xs:NOTATION are CONSTRAINING
-// (XSD 1.0 / libxml2 parity, matching the shared xsd validator's facetLength), not
-// a no-op. A value whose rune count violates the bound is REJECTED exactly as the
-// xsd package rejects it, while an in-bounds value is accepted, the bound is still
-// compile-validated as an xs:nonNegativeInteger, and string-type enforcement is
-// unaffected.
+// TestDataLengthFacetQNameEnforced covers RNG-104+105 r4: RELAX NG's datatype
+// library treats the length facets (length, minLength, maxLength) on xs:QName and
+// xs:NOTATION as CONSTRAINING (predating W3C Schema errata 4009), not a no-op — a
+// value whose rune count violates the bound is REJECTED. This intentionally DIVERGES
+// from the xsd validator, which treats those facets as vacuous on QName/NOTATION per
+// errata 4009. An in-bounds value is accepted, the bound is still compile-validated
+// as an xs:nonNegativeInteger, and string-type enforcement is unaffected.
 func TestDataLengthFacetQNameEnforced(t *testing.T) {
 	t.Parallel()
 
@@ -115,10 +115,12 @@ func TestDataLengthFacetQNameEnforced(t *testing.T) {
 
 	t.Run("maxLength constrains a QName", func(t *testing.T) {
 		t.Parallel()
-		// "abc" is a 3-rune lexically valid QName; maxLength="1" rejects it, the same
-		// way the xsd validator rejects an out-of-space QName length facet.
+		// "abc" is a 3-rune lexically valid QName; RELAX NG's datatype library
+		// (pre-errata-4009) treats maxLength="1" as constraining and rejects it. The
+		// xsd validator instead treats QName length facets as vacuous (errata 4009),
+		// so this is a deliberate RELAX-NG-vs-XSD divergence.
 		require.Error(t, validateWith(t, mk("QName", "maxLength", "1"), `<r>abc</r>`),
-			`maxLength on xs:QName must reject a longer value (XSD 1.0 parity)`)
+			`RELAX NG maxLength on xs:QName rejects a longer value (pre-errata-4009 enforcement)`)
 	})
 
 	t.Run("maxLength accepts an in-bounds QName", func(t *testing.T) {
