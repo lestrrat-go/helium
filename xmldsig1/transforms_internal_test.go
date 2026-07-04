@@ -206,6 +206,75 @@ func TestCanonicalizeSubtreeKeepsNamespaceDecls(t *testing.T) {
 	})
 }
 
+// dtdEntityDecl returns the DTD entity-declaration node named name, or nil.
+func dtdEntityDecl(doc *helium.Document, name string) helium.Node {
+	for c := range helium.Children(doc) {
+		if c.Type() != helium.DTDNode && c.Type() != helium.DocumentTypeNode {
+			continue
+		}
+		for d := range helium.Children(c) {
+			if d.Type() == helium.EntityNode && d.Name() == name {
+				return d
+			}
+		}
+	}
+	return nil
+}
+
+// TestCollectSubtreeNodesNoDTDSpill guards the owned-boundary child enumeration
+// in collectSubtreeNodes. An EntityRefNode's child is the shared Entity node
+// owned by the DTD, whose sibling pointers thread into the DTD's declaration
+// list. A raw FirstChild / NextSibling recursion escapes into those sibling
+// declarations and pulls foreign DTD-declaration nodes into the c14n node set.
+// collectSubtreeNodes enumerates via helium.Children — the same primitive the
+// c14n canonicalizer uses to walk element children and expand an entity
+// reference — so the node set holds only the owned subtree.
+//
+// The signed subtree references &foo; (the FIRST declaration); under the buggy
+// recursion the following sibling declaration &bar; leaked into the node set.
+func TestCollectSubtreeNodesNoDTDSpill(t *testing.T) {
+	const xml = "<?xml version=\"1.0\"?>\n" +
+		"<!DOCTYPE doc [\n" +
+		"<!ENTITY foo \"FOO\">\n" +
+		"<!ENTITY bar \"BAR\">\n" +
+		"]>\n" +
+		"<doc><target Id=\"x\"><child>pre &foo; post</child></target></doc>"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	target, err := resolveReference(doc, "#x")
+	require.NoError(t, err)
+
+	set := make(map[helium.Node]bool)
+	for _, n := range collectSubtreeNodes(target) {
+		set[n] = true
+	}
+
+	// Sanity: the owned subtree element is collected.
+	require.True(t, set[helium.Node(target)], "the target subtree element must be collected")
+
+	// The un-referenced sibling declaration bar must NOT leak into the node set.
+	barDecl := dtdEntityDecl(doc, "bar")
+	require.NotNil(t, barDecl, "bar entity declaration should exist in the DTD")
+	require.False(t, set[barDecl],
+		"un-referenced sibling entity declaration bar must not spill into the c14n node set")
+}
+
+// TestCanonicalizeSubtreeEntityFreeUnchanged locks the byte-identical invariant:
+// an entity-free signed subtree canonicalizes to the same W3C bytes as before
+// the owned-boundary enumeration change.
+func TestCanonicalizeSubtreeEntityFreeUnchanged(t *testing.T) {
+	const xml = `<doc><target Id="x"><child>v</child></target></doc>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	target, err := resolveReference(doc, "#x")
+	require.NoError(t, err)
+
+	out, err := canonicalizeSubtree(C14N10, target, nil)
+	require.NoError(t, err)
+	require.Equal(t, `<target Id="x"><child>v</child></target>`, string(out))
+}
+
 // TestCanonicalizeEnvelopedMatchesDetach is the byte-equivalence contract for
 // the clone-based enveloped transform: the canonical bytes produced by cloning
 // the document and omitting the Signature from the copy MUST equal the bytes

@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"slices"
 	"sort"
 	"sync"
 
@@ -167,6 +168,9 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, positions map[helium.Node]int
 
 	stack := make([]helium.Node, 0, 256)
 	stack = append(stack, cur)
+	// childBuf is reused across stack iterations to collect a node's owned
+	// children before pushing them in reverse.
+	var childBuf []helium.Node
 	for len(stack) > 0 {
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -183,9 +187,21 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, positions map[helium.Node]int
 			})
 		}
 
-		// Push children in reverse (right-to-left) so left-most is processed first.
-		// Use LastChild + PrevSibling to avoid allocating a temporary slice.
-		for child := n.LastChild(); child != nil; child = child.PrevSibling() {
+		// Enumerate n's OWNED children via helium.Children, which stops at a
+		// foreign-owned child (an entity reference's shared Entity node is owned
+		// by the DTD, and its sibling pointers thread into the DTD's declaration
+		// list) and is cycle-safe. A raw LastChild/PrevSibling walk would escape
+		// into the DTD's declarations and assign them spurious document-order
+		// positions. This mirrors axisChild, which also enumerates via
+		// helium.Children, so entity-declaration and DTD nodes stay out of the
+		// order index. helium.Children iterates forward, so buffer the children
+		// and push them right-to-left so the left-most is processed first;
+		// entity-free documents get byte-identical positions.
+		childBuf = childBuf[:0]
+		for child := range helium.Children(n) {
+			childBuf = append(childBuf, child)
+		}
+		for _, child := range slices.Backward(childBuf) {
 			stack = append(stack, child)
 		}
 	}
