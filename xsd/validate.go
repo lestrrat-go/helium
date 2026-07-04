@@ -2781,7 +2781,12 @@ func xsdTypeName(td *TypeDef) string {
 			return "Q{" + cur.Name.NS + "}" + cur.Name.Local
 		}
 		if cur.Name.Local != "" {
-			return cur.Name.Local
+			// No-namespace named ancestor: emit the canonical Q{}local EQName
+			// form (matching the td-itself branch above), not a bare local name.
+			// annotationParts normalizes both, so xsd behavior is unchanged, but
+			// the consistent spelling matters to callers that compare the result
+			// string directly (e.g. xslt3 SequenceType matching).
+			return "Q{}" + cur.Name.Local
 		}
 	}
 	// Anonymous type with no named ancestor in the base chain: the type
