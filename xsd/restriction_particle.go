@@ -304,6 +304,54 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 	return true
 }
 
+// elementTypeValidlyRestricts reports whether a derived element's type rtType
+// validly restricts a base element's type btType per NameAndTypeOK (§3.9.6,
+// version-INDEPENDENT). It is the ONE gate every element-type-restriction site
+// shares (the direct element:element path, the xs:all occurrence-counting path,
+// and — transitively — the substitution-member and language-inclusion paths that
+// route through elementRestrictsElement):
+//
+//	(a) rtType is derived from btType (BUILT-IN-AWARE via
+//	    strictBuiltinAwareDerivedFrom — the 1.0 built-ins are not BaseType-linked,
+//	    so e.g. derived xs:int validly restricts base xs:integer; plus, in XSD 1.1,
+//	    the union-member path where btType is a union and rtType derives from one of
+//	    its transitive members);
+//	(b) the derivation reaches btType by RESTRICTION only (clause 3.2.5.2,
+//	    disallowed subset {extension, list, union}): the EXTENSION step is rejected
+//	    (W3C particlesIj008). The list/union arm is deliberately NOT blocked — a
+//	    list/union derived from xs:anySimpleType is UNCONDITIONALLY valid (Type
+//	    Derivation OK (Simple) §3.16.3 clause 2.2.3; W3C stZ067/stZ068/stZ069,
+//	    particlesIk014/Ik017/Ik018 are expected-VALID), so blocking it would
+//	    over-reject a base element typed xs:anySimpleType/xs:anyType validly retyped
+//	    to a list/union; and
+//	(c) the derivation is not blocked by btType's own {prohibited substitutions}
+//	    (cvc-elt.4.3) — a restriction may not change the governing type by a
+//	    type-@block-forbidden derivation. Only the base TYPE's block participates
+//	    (elemBlock 0); the base element declaration's OWN @block is enforced by the
+//	    {disallowed substitutions} superset rule at each element-level caller.
+//
+// When either type is unresolved (nil), it accepts conservatively — matching the
+// long-standing per-site "skip the derivation check on a nil type" behavior.
+func elementTypeValidlyRestricts(rtType, btType *TypeDef, version Version) bool {
+	if rtType == nil || btType == nil {
+		return true
+	}
+	ok := strictBuiltinAwareDerivedFrom(rtType, btType)
+	if !ok && version == Version11 {
+		ok = isXsiTypeDerivedFromDeclared(rtType, btType)
+	}
+	if !ok {
+		return false
+	}
+	if isDerivationBlocked(rtType, btType, BlockExtension) {
+		return false
+	}
+	if typeDerivationBlocked(rtType, btType, 0) {
+		return false
+	}
+	return true
+}
+
 // elementRestrictsElement checks the element-to-element (NameAndTypeOK) case:
 // same expanded name, occurrence range subset, and the derived element's type is
 // derived from (or equal to) the base element's type. nillable/fixed tightening
@@ -329,54 +377,12 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 		return false
 	}
-	// Type derivation: the derived element's type must be the same as, or derived
-	// from, the base element's type. When either type is unresolved, accept
-	// conservatively. The check is BUILT-IN-AWARE (strictBuiltinAwareDerivedFrom,
-	// as in all_subsumption.go's NameAndTypeOK): the 1.0 built-in simple types are
-	// not BaseType-linked, so a plain isDerivedFrom would miss e.g. derived xs:int
-	// restricting base xs:integer — a valid, version-independent restriction. In
-	// XSD 1.1, when the base element's type is a union, a derived type validly
-	// derived from one of the union's (transitive) members is also a valid
-	// restriction (member substitutability), so the union-aware predicate is tried
-	// too.
-	if rt.Type != nil && bt.Type != nil {
-		ok := strictBuiltinAwareDerivedFrom(rt.Type, bt.Type)
-		if !ok && version == Version11 {
-			ok = isXsiTypeDerivedFromDeclared(rt.Type, bt.Type)
-		}
-		if !ok {
-			return false
-		}
-		// NameAndTypeOK clause 3.2.5.2 (§3.9.6, version-INDEPENDENT): R's type must
-		// be validly derived from B's type given the disallowed subset {extension,
-		// list, union}. In practice only the EXTENSION step is a reachable violation
-		// here: a type reaching B's type through an extension step is not a valid
-		// restriction of B's element even though it is derived from it (W3C
-		// particlesIj008). We deliberately do NOT block the list/union arm — Type
-		// Derivation OK (Simple) §3.16.3 clause 2.2.3 UNCONDITIONALLY allows a list-
-		// or union-variety type to be derived from xs:anySimpleType, so a base
-		// element typed xs:anySimpleType/xs:anyType validly retyped to a list/union
-		// in a complexContent restriction is legal (W3C stZ067/stZ068/stZ069,
-		// particlesIk014/Ik017/Ik018 are all expected-VALID); blocking list/union
-		// would over-reject those. The check is unconditional (independent of any
-		// @block), so it is a separate gate from the type-@block cvc-elt.4.3 check
-		// below.
-		if isDerivationBlocked(rt.Type, bt.Type, BlockExtension) {
-			return false
-		}
-		// The derived element's type must not reach the base element's type by a
-		// derivation method the base element TYPE's {prohibited substitutions} blocks
-		// (§3.9.6 NameAndTypeOK / cvc-elt.4.3): a restriction cannot change an
-		// element's governing type by a type-blocked derivation. Only the base TYPE's
-		// block participates in THIS check (elemBlock 0); the base element
-		// declaration's OWN @block is enforced separately by the element-vs-element
-		// {disallowed substitutions} SUPERSET rule below. Folding the base element's
-		// @block into this type-derivation gate (passing bt.Block) over-rejects valid
-		// restrictions — W3C msMeta ComplexType ctI038/ctI040/ctI042/ctI044 — so it is
-		// deliberately excluded here. Nil-safe via the shared helper.
-		if typeDerivationBlocked(rt.Type, bt.Type, 0) {
-			return false
-		}
+	// Type derivation: the derived element's type must validly RESTRICT the base
+	// element's type (NameAndTypeOK — built-in-aware derived-from, no extension step,
+	// no base-type-@block-forbidden method). Shared with the xs:all counting path
+	// and the substitution-member/language-inclusion paths via elementTypeValidlyRestricts.
+	if !elementTypeValidlyRestricts(rt.Type, bt.Type, version) {
+		return false
 	}
 	// XSD 1.1 Particle Valid (Restriction) clause 4.6: the derived and base element
 	// declarations' {type table}s must be both absent or both present and
