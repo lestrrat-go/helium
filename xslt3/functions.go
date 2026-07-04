@@ -564,9 +564,17 @@ func (ec *execContext) injectedParser() *helium.Parser {
 func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {
 	rc, err := r.ResolveURI(uri)
 	if err != nil {
-		return nil, err
+		// The reader could not be OBTAINED — a resolution-phase miss. Tag it so a
+		// schema loader may demote it ([isDemotableSchemaMiss]); a
+		// permission/cap/multi-error cause still wins via isFatalSchemaLoadError.
+		// The tag is transparent to non-schema callers (message + unwrap chain
+		// preserved).
+		return nil, markResolutionMiss(err)
 	}
 	defer func() { _ = rc.Close() }()
+	// A read failure here is POST-OPEN (the reader WAS obtained): return it
+	// UNTAGGED so it is FATAL by the positive-tag partition, never a demotable
+	// miss.
 	return readResourceBounded(rc, limit)
 }
 
@@ -647,12 +655,24 @@ func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string, limit 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		// A transport/connection error (DNS, connection refused, timeout) is
+		// ambiguous — NOT a confirmed not-found — so it stays UNTAGGED and is
+		// therefore FATAL by the positive-tag partition (fail-closed).
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
+		// A definite NOT-FOUND (404/410) is a resolution miss a schema loader may
+		// demote. Every OTHER non-2xx (401/403/5xx/…) is UNTAGGED and therefore
+		// FATAL — an authoritative-but-unavailable/forbidden schema-location must
+		// never be silently demoted.
+		httpErr := fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+			return nil, markResolutionMiss(httpErr)
+		}
+		return nil, httpErr
 	}
+	// A read failure here is POST-OPEN (status was 2xx): UNTAGGED, so FATAL.
 	return readResourceBounded(resp.Body, limit)
 }
 

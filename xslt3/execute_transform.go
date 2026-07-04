@@ -325,19 +325,20 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	runtimeSchemas := collectPackageSchemas(ss)
 	if effectiveSource != nil {
 		sourceSchemas, schemaErr := ec.loadSchemasFromSchemaLocation(ctx, effectiveSource)
-		// A source schema-location load applies the SAME fetch/content/denial
-		// taxonomy as the top-level import-schema path (compileImportSchema) and the
-		// nested xsd loaders. Only a genuine FETCH MISS (an unresolvable
-		// schemaLocation hint) is demotable under lax/default validation
-		// (best-effort: the source is simply not validated). A CONTENT error
-		// (fetched but malformed XML / invalid XSD — isSchemaContentError) or a
-		// FATAL load (policy/no-resolver denial, resource-cap breach, path escape,
-		// import-depth overflow — isFatalSchemaLoadError) is fatal even under lax:
-		// masking a broken or policy-denied authoritative schema would silently
-		// skip validation the instance requested. Strict validation stays fatal on
-		// any load failure.
+		// A source schema-location load applies the SAME positive-tag discipline as
+		// the top-level import-schema path (compileImportSchema) and the nested xsd
+		// loaders. Under lax/default validation the transform proceeds ONLY when the
+		// load error is a CONFIRMED benign resolution miss ([isDemotableSchemaMiss] —
+		// an unresolvable schemaLocation / HTTP 404, best-effort: the source is
+		// simply not validated). EVERYTHING else is fatal even under lax — a CONTENT
+		// error (fetched but malformed XML / invalid XSD), a post-open read failure,
+		// an HTTP 401/403/5xx, or a FATAL load (policy/no-resolver denial,
+		// resource-cap breach, path escape, import-depth overflow,
+		// permission/multi-error) — since masking a broken or policy-denied
+		// authoritative schema would silently skip validation the instance
+		// requested. Strict validation stays fatal on any load failure.
 		if schemaErr != nil && (ss.defaultValidation == validationStrict ||
-			isFatalSchemaLoadError(schemaErr) || isSchemaContentError(schemaErr)) {
+			!isDemotableSchemaMiss(schemaErr)) {
 			return nil, schemaErr
 		}
 		runtimeSchemas = mergeRuntimeSchemas(runtimeSchemas, sourceSchemas)

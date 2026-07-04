@@ -125,10 +125,18 @@ func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error
 	}
 	rc, err := c.resolver.Resolve(uri)
 	if err != nil {
-		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
+		// The reader could not be OBTAINED — a resolution-phase miss. Tag it
+		// [errSchemaResolutionMiss] (the ONLY demotable classification) so the
+		// top-level import-schema path may fall back to a precompiled entry; a
+		// permission/cap/multi-error cause still wins via isFatalSchemaLoadError.
+		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, markResolutionMiss(err))
 	}
 	data, err := readCloserToBytes(rc, c.maxResourceBytes)
 	if err != nil {
+		// The reader WAS obtained, then Read failed — a POST-OPEN read failure,
+		// NOT a resolution miss (mirroring the xsd errNestedSchemaReadAfterOpen
+		// discipline). Return it UNTAGGED so it is FATAL by the positive-tag
+		// partition (isDemotableSchemaMiss is false), never demoted.
 		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
 	}
 	return data, nil
@@ -225,24 +233,21 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 
 		schema, err := c.compileSchemaFromURI(ctx, uri)
 		if err != nil {
-			// Only a genuine FETCH MISS (the schema-location could not be
-			// fetched — an unresolvable location hint) may fall back to a
-			// pre-compiled import schema registered for the namespace. Every
-			// other outcome fails closed, on the SAME taxonomy as the nested
-			// path:
-			//   - a FATAL load (resource-cap breach, path escape, import-depth
-			//     overflow, or a policy/no-resolver denial) — isFatalSchemaLoadError;
-			//   - a CONTENT error (the bytes WERE fetched but were malformed XML
-			//     or invalid XSD) — isSchemaContentError.
-			// Masking either with the precompiled fallback would let an
-			// over-cap / path-traversal / broken-but-authoritative
-			// schema-location silently succeed via a registered ImportSchemas
-			// entry. Decided BEFORE findImportSchema so no fatal/content load
-			// can fall through to the precompiled-schema path.
-			if isFatalSchemaLoadError(err) || isSchemaContentError(err) {
+			// POSITIVE-TAG discipline (mirrors the xsd nested classifier): ONLY a
+			// CONFIRMED benign resolution miss ([isDemotableSchemaMiss] — the
+			// schema-location could not be resolved / HTTP 404) may fall back to a
+			// pre-compiled import schema registered for the namespace. EVERYTHING
+			// else fails closed — a post-open read failure, an HTTP 401/403/5xx, a
+			// FATAL load (resource-cap breach, path escape, import-depth overflow,
+			// policy/no-resolver denial, permission/multi-error), a CONTENT error
+			// (fetched but malformed XML / invalid XSD), or any untagged/ambiguous
+			// error — since masking any of those with the precompiled fallback
+			// would let a broken/denied authoritative schema-location silently
+			// succeed via a registered ImportSchemas entry.
+			if !isDemotableSchemaMiss(err) {
 				return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 			}
-			// Genuine fetch miss — try pre-compiled import schemas by namespace.
+			// Confirmed fetch miss — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
 				if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
 					c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)

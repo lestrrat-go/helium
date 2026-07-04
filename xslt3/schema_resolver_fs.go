@@ -81,22 +81,64 @@ var errSchemaResolverDenied = errors.New("xslt3: nested-schema load denied by de
 // bytes were successfully fetched — a malformed XML parse error, or an invalid
 // XSD / schema-construction failure reported by the xsd compiler. It is the
 // phase boundary of a schema load: the fetch phase ([compiler.loadSchemaBytes])
-// returns its errors UNTAGGED (a genuine fetch miss the top-level import-schema
-// path may fall back on), while every post-fetch return from
-// [compiler.compileSchemaFromURI] carries this sentinel. The top-level fallback
-// consults [isSchemaContentError] so a fetched-but-invalid schema-location is
-// fatal (not masked by a matching precompiled ImportSchemas entry) exactly like
-// the nested path — one consistent fetch-miss / content / denial taxonomy.
+// tags ONLY a confirmed resolution miss [errSchemaResolutionMiss] (the sole
+// demotable outcome), while every post-fetch return from
+// [compiler.compileSchemaFromURI] carries this sentinel. A content-tagged error
+// is NOT a resolution miss, so the positive-tag partition ([isDemotableSchemaMiss]
+// is false) keeps it fatal — a fetched-but-invalid schema-location is never
+// masked by a matching precompiled ImportSchemas entry, exactly like the nested
+// path.
 var errSchemaContentInvalid = errors.New("xslt3: schema content invalid")
 
-// isSchemaContentError reports whether err (or anything in its chain) is a
-// post-fetch content error tagged with [errSchemaContentInvalid] — the bytes
-// loaded but were unusable (malformed XML or invalid XSD). Such an error must
-// never be papered over by the precompiled-schema fallback: the schema-location
-// was reachable, so masking it would silently swap an authoritative-but-broken
-// schema for a precompiled one.
-func isSchemaContentError(err error) bool {
-	return errors.Is(err, errSchemaContentInvalid)
+// errSchemaResolutionMiss is the POSITIVE tag the xslt3 schema loaders apply at
+// the ONE place a fetch outcome is a CONFIRMED benign RESOLUTION miss: the
+// resolver could not produce a reader for the target ([compiler.loadSchemaBytes]'s
+// Resolve failure / [fetchViaResolver]'s ResolveURI failure), or an HTTP fetch
+// returned a definite NOT-FOUND status (404/410). It mirrors the xsd side's
+// errSchemaFetchMiss: schemaLocation is only a hint, so ONLY a confirmed
+// resolution miss may be demoted (a source-document schema skipped under lax, or
+// a top-level import-schema falling back to a precompiled entry). Every OTHER
+// fetch failure — a reader obtained then failing during Read (post-open), an
+// HTTP 401/403/5xx/other-non-2xx, a connection/transport error, or any
+// untagged/ambiguous error — is NOT tagged and is therefore FATAL, mirroring the
+// xsd notDemotable/errNestedSchemaReadAfterOpen discipline (fail-closed).
+var errSchemaResolutionMiss = errors.New("xslt3: schema resolution miss")
+
+// schemaResolutionMissError wraps a benign resolution-miss cause so it satisfies
+// errors.Is(_, errSchemaResolutionMiss) WITHOUT forming a multi-error: it keeps a
+// SINGLE Unwrap() chain to the cause (so errors.Is(_, fs.ErrNotExist) etc. still
+// traverse and the message is preserved) and reports itself as the tag via Is.
+// A [fmt.Errorf] "%w: %w" (two verbs) would instead produce an Unwrap() []error
+// that [isFatalSchemaLoadError]'s multi-error guard treats as fatal — defeating
+// the demotion — so the tag is applied through this single-chain wrapper.
+type schemaResolutionMissError struct{ cause error }
+
+func (e schemaResolutionMissError) Error() string { return e.cause.Error() }
+
+func (e schemaResolutionMissError) Unwrap() error { return e.cause }
+
+func (schemaResolutionMissError) Is(target error) bool { return target == errSchemaResolutionMiss }
+
+// markResolutionMiss tags err as a confirmed benign resolution miss (see
+// [errSchemaResolutionMiss]) while preserving its message and unwrap chain. A nil
+// err is returned unchanged.
+func markResolutionMiss(err error) error {
+	if err == nil {
+		return nil
+	}
+	return schemaResolutionMissError{err}
+}
+
+// isDemotableSchemaMiss reports whether err is a CONFIRMED benign schema
+// resolution miss that may be demoted — the SOLE demotable classification on the
+// xslt3 side, the positive-tag counterpart of the xsd compiler's nestedFetchMiss.
+// It requires the POSITIVE [errSchemaResolutionMiss] tag AND that err is not
+// otherwise fatal ([isFatalSchemaLoadError] — a permission/multi-error/cap/policy
+// cause overrides the tag). Together with [isFatalSchemaLoadError] it PARTITIONS
+// the space: anything not positively demotable (a post-open read failure, an
+// HTTP 401/403/5xx, an untagged/ambiguous error, a content error) is fatal.
+func isDemotableSchemaMiss(err error) bool {
+	return errors.Is(err, errSchemaResolutionMiss) && !isFatalSchemaLoadError(err)
 }
 
 // fatalSchemaLoadError marks a schema-load failure that the xsd compiler must

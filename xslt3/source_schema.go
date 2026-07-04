@@ -97,15 +97,16 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 				return schemas, fmt.Errorf("load source schema %q: %w: %w", uri, errSchemaResolverDenied, err)
 			}
 			wrapped := fmt.Errorf("load source schema %q: %w", uri, err)
-			// A resource-cap breach (ErrResourceTooLarge) or any other fatal load
-			// condition survives in the chain and stays fatal — return eagerly so a
-			// later entry cannot mask it.
-			if isFatalSchemaLoadError(wrapped) {
+			// POSITIVE-TAG discipline (mirrors the xsd nested classifier): ONLY a
+			// CONFIRMED benign resolution miss ([isDemotableSchemaMiss] — an
+			// unresolvable schemaLocation / HTTP 404) is demotable under lax and is
+			// recorded (FIRST only) without short-circuiting the aggregating loop.
+			// EVERYTHING else — a post-open read failure, an HTTP 401/403/5xx, a
+			// resource-cap breach, a permission/multi-error, or any untagged/ambiguous
+			// error — is FATAL and returns EAGERLY so a later entry cannot mask it.
+			if !isDemotableSchemaMiss(wrapped) {
 				return schemas, wrapped
 			}
-			// A genuine FETCH MISS (schemaLocation is only a hint) is demotable under
-			// lax. Record the FIRST one but DO NOT short-circuit: a later entry may be
-			// a content/policy error that must stay fatal, or a valid schema.
 			if firstMiss == nil {
 				firstMiss = wrapped
 			}
