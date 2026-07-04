@@ -247,9 +247,31 @@ func (vc *validationContext) btBodyReach(ctx context.Context, m *btMemo, mg *Mod
 		}
 		return cur
 	case CompositorChoice:
-		out := make([]int, 0, len(mg.Particles))
+		// XSD 1.1 element-over-wildcard precedence, COMMIT-NO-FALLBACK (mirrors
+		// tryMatchChoice/matchChoice): when ANY branch is an element-first consumer
+		// for the current child, the choice MUST consume that child through an
+		// element-first branch and may NOT fall back to a wildcard (or other
+		// non-element-first) branch — even if the chosen branch then fails to fully
+		// match. So only element-first branches contribute reachability for this
+		// position; a wildcard branch that would re-admit the child is NOT eligible.
+		// This prevents accepting an instance the greedy matcher (correctly) rejects
+		// by committing to an element branch that later fails.
+		var elemFirst []*Particle
+		if vc.version == Version11 && pos < len(children) {
+			child := children[pos]
+			for _, part := range mg.Particles {
+				if particleConsumesViaElement(part, child, vc.schema) {
+					elemFirst = append(elemFirst, part)
+				}
+			}
+		}
+		branches := mg.Particles
+		if len(elemFirst) > 0 {
+			branches = elemFirst
+		}
+		out := make([]int, 0, len(branches))
 		seen := make(map[int]struct{})
-		for _, part := range mg.Particles {
+		for _, part := range branches {
 			for _, e := range vc.btReachParticle(ctx, m, part, children, pos) {
 				out = addUnique(out, seen, e)
 			}
