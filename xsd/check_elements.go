@@ -660,12 +660,16 @@ func (c *compiler) localElementUnderNonAnyTypeRestriction(ctx context.Context, e
 		if !isXSDElement(pe, elemRestriction) || !isContentDerivationRestriction(pe) {
 			continue
 		}
-		base := getAttr(pe, attrBase)
-		if base == "" {
+		// @base is an xs:QName: gate on PRESENCE and route the value through the QName
+		// chokepoint so a PRESENT-but-empty base="" behaves like the whitespace-only
+		// base="   " — both collapse to the invalidQName sentinel, whose invalid-QName
+		// diagnostic already fired, so this secondary targetNamespace check does not
+		// emit its own error (isInvalidQName → suppress).
+		if !hasAttr(pe, attrBase) {
 			return false
 		}
-		qn := c.resolveQName(ctx, pe, attrBase, base)
-		return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
+		qn := c.resolveQName(ctx, pe, attrBase, getAttr(pe, attrBase))
+		return isInvalidQName(qn) || qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 	}
 	return false
 }
@@ -998,12 +1002,16 @@ func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context,
 	if !ok || !isXSDElement(parent, elemRestriction) || !isContentDerivationRestriction(parent) {
 		return false
 	}
-	base := getAttr(parent, attrBase)
-	if base == "" {
+	// @base is an xs:QName: gate on PRESENCE and route the value through the QName
+	// chokepoint so a PRESENT-but-empty base="" behaves like the whitespace-only
+	// base="   " — both collapse to the invalidQName sentinel, whose invalid-QName
+	// diagnostic already fired, so this secondary targetNamespace check does not
+	// emit its own error (isInvalidQName → suppress).
+	if !hasAttr(parent, attrBase) {
 		return false
 	}
-	qn := c.resolveQName(ctx, parent, attrBase, base)
-	return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
+	qn := c.resolveQName(ctx, parent, attrBase, getAttr(parent, attrBase))
+	return isInvalidQName(qn) || qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 }
 
 func isContentDerivationRestriction(elem *helium.Element) bool {

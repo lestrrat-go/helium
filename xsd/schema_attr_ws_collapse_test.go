@@ -529,4 +529,64 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 				"version=%v: a present-empty override ref must not produce a follow-on unresolved error; got: %s", v, errs)
 		}
 	})
+
+	// The local-targetNamespace inspection helpers (localElementUnderNonAnyType-
+	// Restriction / localAttributeUnderNonAnyTypeRestriction) route the restriction
+	// @base through the QName chokepoint, so a PRESENT-but-empty base="" behaves like
+	// the whitespace-only base="   ": both collapse to the invalidQName sentinel, whose
+	// invalid-QName diagnostic already fired. A restriction with base="" plus a local
+	// element/attribute targetNamespace thus emits EXACTLY the one invalid-QName error
+	// and NO spurious "must appear in a restriction of a type other than xs:anyType"
+	// secondary diagnostic. XSD 1.1 only (targetNamespace on a local declaration is a
+	// 1.1 construct).
+	baseEmptyLocalTargetNS := []struct {
+		name   string
+		schema string
+	}{
+		{"complexContent-element-empty", `<xs:complexType name="ct"><xs:complexContent><xs:restriction base=""><xs:sequence><xs:element name="c" type="xs:string" targetNamespace="urn:x"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"complexContent-element-ws", `<xs:complexType name="ct"><xs:complexContent><xs:restriction base="   "><xs:sequence><xs:element name="c" type="xs:string" targetNamespace="urn:x"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"simpleContent-attribute-empty", `<xs:complexType name="ct"><xs:simpleContent><xs:restriction base=""><xs:attribute name="a" type="xs:string" targetNamespace="urn:x"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent-attribute-ws", `<xs:complexType name="ct"><xs:simpleContent><xs:restriction base="   "><xs:attribute name="a" type="xs:string" targetNamespace="urn:x"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+	}
+	for _, tc := range baseEmptyLocalTargetNS {
+		t.Run("base-empty-local-targetns-no-secondary/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			schema, errs, cerr := compileWith(t, xsd.Version11, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "present-empty @base must reject")
+			require.Nil(t, schema)
+			require.Equal(t, 1, strings.Count(errs, "is not a valid QName"),
+				"exactly one invalid-QName diagnostic; got: %s", errs)
+			require.NotContains(t, errs, "must appear in a restriction of a type other than xs:anyType",
+				"a present-empty/whitespace-only @base must not fire the secondary targetNamespace diagnostic; got: %s", errs)
+		})
+	}
+
+	// The XSD 1.1 @substitutionGroup LIST branch filters invalidQName tokens exactly
+	// like the 1.0 scalar branch, so a non-empty MALFORMED token (":bad") installs NO
+	// spurious head: it yields exactly one invalid-QName diagnostic and no follow-on,
+	// and a valid head listed alongside it is unaffected. 1.1 only (the list form is
+	// 1.1; 1.0 takes a single scalar QName).
+	substGroupInvalidToken := []struct {
+		name   string
+		schema string
+	}{
+		{"single-invalid", `<xs:element name="member" type="xs:string" substitutionGroup=":bad"/>`},
+		{"valid-plus-invalid", `<xs:element name="head" type="xs:string"/><xs:element name="member" type="xs:string" substitutionGroup="head :bad"/>`},
+	}
+	for _, tc := range substGroupInvalidToken {
+		t.Run("substitutiongroup-invalid-token-no-head/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			schema, errs, cerr := compileWith(t, xsd.Version11, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "malformed substitutionGroup token must reject")
+			require.Nil(t, schema)
+			require.Equal(t, 1, strings.Count(errs, "is not a valid QName"),
+				"exactly one invalid-QName diagnostic for the malformed token; got: %s", errs)
+			require.NotContains(t, errs, "does not resolve",
+				"an invalid substitutionGroup token installs no head and produces no follow-on; got: %s", errs)
+			require.NotContains(t, errs, "not validly substitutable",
+				"a filtered sentinel head must not reach the affiliation check; got: %s", errs)
+		})
+	}
 }

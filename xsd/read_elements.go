@@ -666,6 +666,12 @@ func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *heli
 	heads := make([]QName, 0, len(tokens))
 	seen := make(map[QName]struct{}, len(tokens))
 	for _, qn := range tokens {
+		// An invalid token (a present-empty/whitespace-only value's invalidQName
+		// sentinel, or a malformed member) installs NO head — its invalid-QName
+		// diagnostic already fired, matching the XSD 1.0 scalar branch above.
+		if isInvalidQName(qn) {
+			continue
+		}
 		if _, ok := seen[qn]; ok {
 			continue
 		}
