@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -324,6 +325,7 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 	t.Parallel()
 
 	const nestedPath = "nested.xsd"
+	const opOpen = "open" // the resolution/open op a well-behaved FS labels a miss with
 
 	compile := func(t *testing.T, readErr error) error {
 		t.Helper()
@@ -340,7 +342,7 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 	t.Run("open-op-not-exist warns", func(t *testing.T) {
 		t.Parallel()
 		// The canonical resolution miss a real FS returns for a missing file.
-		err := compile(t, &fs.PathError{Op: "open", Path: nestedPath, Err: fs.ErrNotExist})
+		err := compile(t, &fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrNotExist})
 		require.NoError(t, err, "a *fs.PathError{Op:\"open\", Err: fs.ErrNotExist} is a resolution miss and must be demoted to a skipped fetch-miss")
 	})
 
@@ -365,7 +367,7 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 		// syscall.ENOENT Err. It satisfies fs.ErrNotExist under errors.Is but is NOT the
 		// fs.ErrNotExist sentinel by ==. Op:"open" is the resolution phase, so it is a
 		// canonical miss and must be demoted.
-		err := compile(t, &fs.PathError{Op: "open", Path: nestedPath, Err: syscall.ENOENT})
+		err := compile(t, &fs.PathError{Op: opOpen, Path: nestedPath, Err: syscall.ENOENT})
 		require.NoError(t, err, "a *fs.PathError{Op:\"open\", Err: syscall.ENOENT} is a real os.DirFS resolution miss and must be demoted to a skipped fetch-miss")
 	})
 
@@ -377,7 +379,7 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 		// lying FS that reports Op:"open" for a post-read failure is out of fs convention
 		// and beyond reasonable defense — the load-bearing guard is the Op, not the Err
 		// exactness.
-		err := compile(t, &fs.PathError{Op: "open", Path: nestedPath, Err: fmt.Errorf("context: %w", fs.ErrNotExist)})
+		err := compile(t, &fs.PathError{Op: opOpen, Path: nestedPath, Err: fmt.Errorf("context: %w", fs.ErrNotExist)})
 		require.NoError(t, err, "a *fs.PathError{Op:\"open\"} whose Err satisfies fs.ErrNotExist is a resolution miss and must be demoted")
 	})
 
@@ -386,5 +388,32 @@ func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
 		// The bare sentinel (no PathError envelope) is still a canonical miss.
 		err := compile(t, fs.ErrNotExist)
 		require.NoError(t, err, "the bare fs.ErrNotExist sentinel from the fallback must be demoted to a skipped fetch-miss")
+	})
+
+	t.Run("joined-open-permission-and-notexist fatal", func(t *testing.T) {
+		t.Parallel()
+		// A JOINED error whose Op:"open" PathError actually reports a PERMISSION denial,
+		// with a bare fs.ErrNotExist joined ALONGSIDE. errors.Is(err, fs.ErrNotExist)
+		// is true on the whole tree (the sibling sentinel), and the selected PathError's
+		// Op is "open", so a whole-tree classifier would wrongly demote the denial. The
+		// selected PathError's OWN Err is fs.ErrPermission, not a miss, so it stays fatal.
+		err := compile(t, errors.Join(
+			&fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrPermission},
+			fs.ErrNotExist,
+		))
+		require.Error(t, err, "a joined open-permission denial must not be demoted just because fs.ErrNotExist is joined alongside")
+	})
+
+	t.Run("joined-notexist-open-and-permission fatal", func(t *testing.T) {
+		t.Parallel()
+		// The mirror image: a benign Op:"open"/ErrNotExist PathError joined ALONGSIDE a
+		// bare fs.ErrPermission. errors.As selects the benign PathError, so the primary
+		// pe.Err check alone would demote; the whole-tree fs.ErrPermission guard keeps it
+		// fatal so a permission error joined anywhere in the chain is never masked.
+		err := compile(t, errors.Join(
+			&fs.PathError{Op: opOpen, Path: nestedPath, Err: fs.ErrNotExist},
+			fs.ErrPermission,
+		))
+		require.Error(t, err, "a permission error joined alongside a benign miss must not be demoted")
 	})
 }

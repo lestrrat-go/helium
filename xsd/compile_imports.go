@@ -185,35 +185,47 @@ func isBenignResolutionMiss(err error) bool {
 //   - the bare [fs.ErrNotExist] sentinel (err == fs.ErrNotExist), or
 //   - a [*fs.PathError] (reachable through wrapping via [errors.As]) whose Op is
 //     exactly "open" — the resolution/open operation, NOT "read"/"stat"/any other
-//     op, which are post-open failures — and whose Err satisfies fs.ErrNotExist
-//     under [errors.Is].
+//     op, which are post-open failures — and whose OWN [fs.PathError.Err] cause
+//     satisfies fs.ErrNotExist under [errors.Is].
 //
 // The Op=="open" guard is the load-bearing phase discriminator: a failed Open IS the
 // resolution phase, so an "open" PathError denotes non-existence at resolution and can
-// never be a post-resolution read failure. The Err test is errors.Is (not an exact
-// ==) so a real errno like syscall.ENOENT — what [os.DirFS] returns for a missing
-// file, satisfying fs.ErrNotExist yet NOT the fs.ErrNotExist sentinel by == — is
-// correctly accepted, while a *fs.PathError{Op:"read", Err: fs.ErrNotExist}/{Op:"stat",
+// never be a post-resolution read failure. The membership test is on the SELECTED
+// PathError's OWN cause (errors.Is(pe.Err, fs.ErrNotExist)), NOT on the whole error
+// tree (errors.Is(err, fs.ErrNotExist)): a JOINED error such as
+// errors.Join(&fs.PathError{Op:"open", Err: fs.ErrPermission}, fs.ErrNotExist)
+// satisfies fs.ErrNotExist on the whole tree (the bare sentinel is a sibling) while its
+// Op=="open" PathError actually reports a PERMISSION denial — a whole-tree test would
+// wrongly demote that denial to a warning. Testing pe.Err keeps the classification
+// tied to the resolution PathError's real cause. The Err test is errors.Is (not an
+// exact ==) so a real errno like syscall.ENOENT — what [os.DirFS] returns for a
+// missing file, satisfying fs.ErrNotExist yet NOT the fs.ErrNotExist sentinel by == —
+// is correctly accepted, while a *fs.PathError{Op:"read", Err: fs.ErrNotExist}/{Op:"stat",
 // …} (a POST-resolution failure that merely reports the ErrNotExist errno) is still
 // REJECTED, so it stays UNTAGGED and therefore FATAL (fail-closed).
 //
+// Belt-and-suspenders: [errors.As] selects the FIRST *fs.PathError in the tree, so a
+// benign Op=="open"/ErrNotExist PathError joined ALONGSIDE a fatal permission or
+// resource/policy error could still be reached. A whole-tree fs.ErrPermission or
+// [IsFatalSchemaLoad] match therefore rejects regardless of the selected PathError, so
+// a fatal error joined anywhere in the chain is never demoted.
+//
 // Everything else — a message-wrapped fs.ErrNotExist that is NOT a *fs.PathError
-// (fmt.Errorf("...: %w", …)), a non-"open" Op, or an err that does not satisfy
-// fs.ErrNotExist at all — is REJECTED. This is the last classifiable edge for the
-// inherently-atomic fs.ReadFile fallback in [readNestedSchema]: beyond it an FS would
-// have to lie about its Op, violating fs conventions.
+// (fmt.Errorf("...: %w", …)), a non-"open" Op, or an err whose selected PathError does
+// not satisfy fs.ErrNotExist at all — is REJECTED. This is the last classifiable edge
+// for the inherently-atomic fs.ReadFile fallback in [readNestedSchema].
 func isDirectNotExist(err error) bool {
 	if err == fs.ErrNotExist {
 		return true
 	}
-	if !errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, fs.ErrPermission) || IsFatalSchemaLoad(err) {
 		return false
 	}
 	var pe *fs.PathError
 	if !errors.As(err, &pe) {
 		return false
 	}
-	return pe.Op == "open"
+	return pe.Op == "open" && errors.Is(pe.Err, fs.ErrNotExist)
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
