@@ -77,7 +77,17 @@ type docnode struct {
 type node struct {
 	docnode
 	// private    interface{}
-	content    []byte
+	content []byte
+	// properties is the head of the element's attribute chain, linked through
+	// each Attribute's next pointer. It is built exclusively through the guarded
+	// property-splice (Element.addProperty) and Attribute.AddSibling paths, which
+	// reject self/cycle insertion and never install a foreign link, so a
+	// well-formed chain is a short, self-owned, acyclic list. The hot
+	// attribute-lookup walks (Element.addProperty / HasAttribute / Attributes /
+	// ForEachAttribute) therefore traverse it with a plain NextAttribute loop and
+	// no per-list cycle guard. Whole-tree walks that may be handed an
+	// externally-corrupted chain (setTreeDoc, the serializer) do carry a cheap
+	// per-list seen guard.
 	properties *Attribute
 	ns         *Namespace
 	nsDefs     []*Namespace
@@ -184,15 +194,27 @@ func (n docnode) Parent() Node {
 // between children with the owned-boundary rule (nextOwnedChild): a foreign
 // child — an entity reference's shared Entity child, owned by the DTD, whose
 // sibling pointers belong to the DTD declaration list — ends the aggregation
-// instead of spilling into another list's siblings, and a per-call seen set
+// instead of spilling into another list's siblings, and a per-list seen set
 // stops a cyclic sibling pointer from looping forever. The receiver is a pointer
-// so it is the real owning node against which child ownership is checked. Each
-// child's own Content() aggregates its subtree; that recursion cannot loop for
-// graphs built through the guarded insertion API — an Entity's Content() is its
-// stored text, not a child aggregation, so any cycle routed through an entity
-// terminates there.
+// so it is the real owning node against which child ownership is checked. The
+// recursion into a container child's own subtree carries an ACTIVE-PATH set, so
+// a pure child-pointer cycle (element -> element -> ... -> element, not routed
+// through an Entity's terminating stored-text Content) terminates on the
+// back-edge instead of recursing forever.
 func (n *docnode) Content() []byte {
 	b := bytes.Buffer{}
+	aggregateOwnedContent(n, &b, map[*docnode]struct{}{n: {}})
+	return b.Bytes()
+}
+
+// aggregateOwnedContent appends the concatenated content of n's own children to
+// b. onPath is the set of container docnodes currently being aggregated (n
+// inclusive): a child already on that path is a back-edge (a child-pointer
+// cycle) and is skipped so the recursion terminates. onPath is an ACTIVE-PATH
+// set, not a global visited set, so a shared DAG node reached on a different
+// path is still re-aggregated per occurrence. A per-list seen set independently
+// bounds a cyclic sibling pointer within one child list.
+func aggregateOwnedContent(n *docnode, b *bytes.Buffer, onPath map[*docnode]struct{}) {
 	seen := make(map[*docnode]struct{})
 	for child := n.firstChild; child != nil; child = nextOwnedChild(n, child) {
 		cdn := child.baseDocNode()
@@ -200,9 +222,36 @@ func (n *docnode) Content() []byte {
 			break
 		}
 		seen[cdn] = struct{}{}
+		if _, active := onPath[cdn]; active {
+			continue
+		}
+		// A leaf child (Text/Comment/CDATA/PI/Entity/NS wrapper) overrides
+		// Content() with self-contained text that cannot loop, so call it
+		// directly. Any other node aggregates its own children through this same
+		// docnode path, so recurse under the active-path guard.
+		if aggregatesOwnContent(child) {
+			onPath[cdn] = struct{}{}
+			aggregateOwnedContent(cdn, b, onPath)
+			delete(onPath, cdn)
+			continue
+		}
 		_, _ = b.Write(child.Content())
 	}
-	return b.Bytes()
+}
+
+// aggregatesOwnContent reports whether n's Content() is the child-aggregating
+// docnode implementation (a container) rather than a self-contained leaf
+// override. The leaf types enumerated here store their text directly and their
+// Content() cannot recurse; every other node type — including any future
+// container — aggregates its children and must be recursed under the
+// active-path cycle guard.
+func aggregatesOwnContent(n Node) bool {
+	switch n.(type) {
+	case *Text, *Comment, *CDATASection, *ProcessingInstruction, *Entity, *NamespaceNodeWrapper:
+		return false
+	default:
+		return true
+	}
 }
 
 // rawContentNode is implemented by leaf nodes (Text, Comment, CDATASection)
@@ -331,17 +380,14 @@ func Walk(n Node, w NodeWalker) error {
 }
 
 // nextWalkSibling advances child to the next sibling within owner's own child
-// list, applying the owned-boundary rule and stopping on an immediate
-// self-referential sibling pointer (child.next == child) so a corrupted sibling
-// link cannot make the traversal spin. A longer sibling cycle (a -> b -> a) is
-// broken by the caller's per-frame seenChildren set, which returns ErrWalkCycle
-// when a child repeats within one sibling list.
+// list, applying the owned-boundary rule. It does NOT special-case a
+// self-referential sibling pointer (child.next == child): the duplicate flows
+// back to the caller so the per-frame seenChildren set detects it and Walk
+// returns ErrWalkCycle, exactly as it does for a longer sibling cycle
+// (a -> b -> a). Silently terminating the self-loop here would instead let Walk
+// report SUCCESS on a corrupt one-node sibling cycle.
 func nextWalkSibling(owner Node, child Node) Node {
-	next := nextOwnedChild(owner.baseDocNode(), child)
-	if next == child {
-		return nil
-	}
-	return next
+	return nextOwnedChild(owner.baseDocNode(), child)
 }
 
 func (n docnode) LocalName() string {
@@ -972,7 +1018,17 @@ func setListDoc(n Node, doc *Document) {
 		return
 	}
 
+	// A per-list seen guard bounds a cyclic sibling pointer: the OwnerDocument
+	// early-continue below does NOT terminate a 2-cycle (a -> b -> a) once both
+	// nodes already carry doc, so without this the walk would spin. Child-pointer
+	// cycles are already broken by setTreeDoc's "already owns doc" early return.
+	seen := make(map[*docnode]struct{})
 	for cur := n; cur != nil; cur = cur.NextSibling() {
+		cdn := cur.baseDocNode()
+		if _, dup := seen[cdn]; dup {
+			break
+		}
+		seen[cdn] = struct{}{}
 		if cur.OwnerDocument() == doc {
 			continue
 		}
@@ -998,7 +1054,15 @@ func setTreeDoc(n MutableNode, doc *Document) {
 	}
 
 	if e, ok := AsNode[*Element](n); ok {
+		// A per-list seen guard bounds a cyclic attribute chain (a low-level
+		// SetNextSibling misuse); a normal properties list is short and acyclic.
+		seenAttrs := make(map[*docnode]struct{})
 		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
+			pdn := prop.baseDocNode()
+			if _, dup := seenAttrs[pdn]; dup {
+				break
+			}
+			seenAttrs[pdn] = struct{}{}
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {

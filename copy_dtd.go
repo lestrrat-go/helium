@@ -68,7 +68,10 @@ func CopyExtSubset(src, dst *Document) {
 // (external subset), which differ only in how dstDTD is allocated and where it
 // is attached.
 func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
-	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
+	// The DTD owns its declaration children, so Children's owned-boundary advance
+	// equals a raw NextSibling walk here while adding a per-list seen guard, so a
+	// corrupt (cyclic) declaration list terminates instead of spinning.
+	for c := range Children(src) {
 		switch c.Type() {
 		case EntityNode:
 			if ent, ok := AsNode[*Entity](c); ok {

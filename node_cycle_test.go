@@ -176,6 +176,27 @@ func TestContentTerminatesOnCyclicSiblingList(t *testing.T) {
 		"Content must terminate on a cyclic sibling list instead of looping forever")
 }
 
+// TestWalkRejectsSelfSiblingLoop verifies Walk returns ErrWalkCycle (rather than
+// reporting SUCCESS) on a corrupt ONE-node sibling self-loop: a single child
+// whose next pointer points at itself (c.next == c). nextWalkSibling must NOT
+// silently terminate the self-loop — the duplicate flows back to the per-frame
+// seenChildren set, which detects it, exactly as for a longer sibling cycle.
+func TestWalkRejectsSelfSiblingLoop(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	parent := doc.CreateElement("parent")
+	c := doc.CreateElement("c")
+	require.NoError(t, parent.AddChild(c))
+
+	// Corrupt the sibling list into a one-node self-loop: c.next = c.
+	c.SetNextSibling(c)
+
+	err := helium.Walk(parent, helium.NodeWalkerFunc(func(helium.Node) error { return nil }))
+	require.ErrorIs(t, err, helium.ErrWalkCycle,
+		"Walk must return ErrWalkCycle on a one-node sibling self-loop, not report success")
+}
+
 // TestWalkVisitsSharedEntityDAGTwice guards the requirement that Walk does not
 // switch to a global visited set: two references to the same entity form a DAG
 // where the shared Entity node is reached on two different paths, and Walk must

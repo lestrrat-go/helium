@@ -98,6 +98,31 @@ func TestWalkRejectsEntityChildCycle(t *testing.T) {
 		"Walk must detect the child-pointer cycle and return ErrWalkCycle instead of hanging")
 }
 
+// TestContentTerminatesOnChildPointerCycle verifies the aggregating Content()
+// terminates on a pure child-pointer cycle NOT routed through a terminating
+// Entity: a -> b -> a, built with the low-level link primitives that bypass the
+// guarded AddChild. Without the active-path guard the container recursion would
+// recurse forever (stack overflow); with it, the back-edge into a (already on
+// the active path) is skipped and the sibling text is still aggregated.
+func TestContentTerminatesOnChildPointerCycle(t *testing.T) {
+	doc := NewDefaultDocument()
+	a := doc.CreateElement("a")
+	txt := doc.CreateText([]byte("x"))
+	b := doc.CreateElement("b")
+	require.NoError(t, a.AddChild(txt))
+	require.NoError(t, a.AddChild(b))
+
+	// Close a child-pointer cycle a -> b -> a: b's only child is a (parent link
+	// included so it is a genuine owned child, invisible to the owned-boundary
+	// advance and caught only by the active-path guard).
+	setFirstChild(b, a)
+	setLastChild(b, a)
+	a.SetParent(b)
+
+	require.Equal(t, []byte("x"), a.Content(),
+		"Content must terminate on the child-pointer back-edge and still aggregate the text sibling")
+}
+
 // TestWalkRejectsSiblingCycle verifies Walk terminates (rather than spinning
 // forever) on a sibling cycle LONGER than one node: a parent whose two children
 // form a 2-cycle a -> b -> a. The active-path guard alone does not catch this —
