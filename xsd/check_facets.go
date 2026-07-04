@@ -96,7 +96,7 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 			c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
 		}
 		c.checkEnumValueAgainstBase(ctx, td, fs, line, component)
-		c.checkFacetMutualExclusion(ctx, fs, line, component)
+		c.checkFacetMutualExclusion(ctx, td, fs, line, component)
 		c.checkFacetSameTypeConsistency(ctx, td, fs, line, component)
 		c.checkFacetBaseRestriction(ctx, td, fs, line, component)
 	}
@@ -1213,8 +1213,8 @@ func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
 
 // checkFacetMutualExclusion checks that mutually exclusive facets are not
 // both specified on the same type definition.
-func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, line int, component string) {
-	if fs.Length != nil && (fs.MinLength != nil || fs.MaxLength != nil) {
+func (c *compiler) checkFacetMutualExclusion(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	if fs.Length != nil && lengthConflictsWithMinMax(td, fs) {
 		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for both 'length' and either of 'minLength' or 'maxLength' to be specified on the same type definition."))
 	}
@@ -1226,6 +1226,88 @@ func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, 
 		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for both 'minInclusive' and 'minExclusive' to be specified."))
 	}
+}
+
+// lengthConflictsWithMinMax reports whether a length facet co-occurring with a
+// minLength/maxLength facet declared on THIS restriction step is a schema error.
+// Per the schema component constraint "length and minLength or maxLength"
+// (Part 2 §4.3.1.4, W3C bug 6446), length may co-occur with minLength/maxLength
+// ONLY when the min/maxLength is genuinely INHERITED — its effective value comes
+// from a proper ancestor — AND this step merely RESTATES that same value rather
+// than introducing a fresh, tighter bound alongside length, AND the value is
+// consistent with length (minLength <= length <= maxLength). So a restriction of
+// xs:IDREFS (intrinsic minLength=1) to length=5,minLength=1 is permitted (own
+// minLength 1 == inherited 1), while length=5 with a fresh minLength=2 (own 2 !=
+// inherited 1), or a base maxLength=10 restated as length=5,maxLength=8 (own 8 !=
+// inherited 10), is an error. The own value is td's OWN-step facet; the inherited
+// value is taken over PROPER ancestors only (baseChain(td.BaseType) excludes td),
+// so the own-vs-inherited comparison distinguishes a restatement from a fresh
+// bound without needing separate facet-source tracking.
+func lengthConflictsWithMinMax(td *TypeDef, fs *FacetSet) bool {
+	if fs.MinLength != nil {
+		im := effectiveInheritedMinLength(td)
+		if im == nil || *fs.MinLength != *im || *fs.MinLength > *fs.Length {
+			return true
+		}
+	}
+	if fs.MaxLength != nil {
+		im := effectiveInheritedMaxLength(td)
+		if im == nil || *fs.MaxLength != *im || *fs.MaxLength < *fs.Length {
+			return true
+		}
+	}
+	return false
+}
+
+// effectiveInheritedMinLength returns the strongest (largest) minLength declared
+// by an ancestor in td's base chain, or nil when none applies.
+func effectiveInheritedMinLength(td *TypeDef) *int {
+	if td == nil || td.BaseType == nil {
+		return nil
+	}
+	var best *int
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets == nil || cur.Facets.MinLength == nil {
+			continue
+		}
+		if best == nil || *cur.Facets.MinLength > *best {
+			best = cur.Facets.MinLength
+		}
+	}
+	return best
+}
+
+// effectiveInheritedMaxLength returns the strongest (smallest) maxLength declared
+// by an ancestor in td's base chain, or nil when none applies.
+func effectiveInheritedMaxLength(td *TypeDef) *int {
+	if td == nil || td.BaseType == nil {
+		return nil
+	}
+	var best *int
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets == nil || cur.Facets.MaxLength == nil {
+			continue
+		}
+		if best == nil || *cur.Facets.MaxLength < *best {
+			best = cur.Facets.MaxLength
+		}
+	}
+	return best
+}
+
+// effectiveInheritedLength returns a length facet declared by an ancestor in td's
+// base chain (length is an exact count, so any inherited length is equivalent),
+// or nil when none applies.
+func effectiveInheritedLength(td *TypeDef) *int {
+	if td == nil || td.BaseType == nil {
+		return nil
+	}
+	for cur := range baseChain(td.BaseType) {
+		if cur.Facets != nil && cur.Facets.Length != nil {
+			return cur.Facets.Length
+		}
+	}
+	return nil
 }
 
 // checkFacetSameTypeConsistency checks consistency of facets within the same type.
@@ -1337,6 +1419,76 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	}
 }
 
+// checkLengthFacetRestriction enforces the length-family (length/minLength/
+// maxLength) restriction and cross-consistency constraints (Part 2 §4.3.1/§4.3.2)
+// against the EFFECTIVE inherited bounds computed over the WHOLE base chain (td
+// excluded): the tightest inherited minLength (max), maxLength (min), and any
+// inherited length. Using the whole chain — not just the nearest ancestor's facet
+// set that baseFacets returns — means an intermediate restriction carrying only
+// unrelated facets (a pattern, say) cannot HIDE an inherited bound. Scoped to the
+// length-applicable varieties (a list, or a length-applicable atomic primitive);
+// on any other type the length facets are inapplicable and already reported by
+// checkFacetApplicability, so comparing them here would add a spurious error.
+//
+// Every cross-consistency comparison pairs a DERIVED (own) facet against an
+// INHERITED bound, so it never double-reports the own-vs-own cases already covered
+// by checkFacetMutualExclusion (length + own min/max on the same step) and
+// checkFacetSameTypeConsistency (own minLength > own maxLength).
+func (c *compiler) checkLengthFacetRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	if fs.Length == nil && fs.MinLength == nil && fs.MaxLength == nil {
+		return
+	}
+	variety := resolveVariety(td)
+	_, lengthApplicable := lengthApplicableTypes[builtinBaseLocal(td)]
+	if variety != TypeVarietyList && (variety != TypeVarietyAtomic || !lengthApplicable) {
+		return
+	}
+
+	inhMin := effectiveInheritedMinLength(td)
+	inhMax := effectiveInheritedMaxLength(td)
+	inhLen := effectiveInheritedLength(td)
+
+	// Narrowing: a derived bound may not loosen the effective inherited one.
+	if fs.MinLength != nil && inhMin != nil && *fs.MinLength < *inhMin {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'minLength' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.MinLength, *inhMin)))
+	}
+	if fs.MaxLength != nil && inhMax != nil && *fs.MaxLength > *inhMax {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'maxLength' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.MaxLength, *inhMax)))
+	}
+	if fs.Length != nil && inhLen != nil && *fs.Length != *inhLen {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'length' value '%d' does not match the 'length' value of the base type '%d'.", *fs.Length, *inhLen)))
+	}
+
+	// Cross-consistency: minLength <= maxLength, and minLength <= length <= maxLength.
+	if fs.MinLength != nil && inhMax != nil && *fs.MinLength > *inhMax {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'minLength' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.MinLength, *inhMax)))
+	}
+	if fs.MaxLength != nil && inhMin != nil && *fs.MaxLength < *inhMin {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'maxLength' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.MaxLength, *inhMin)))
+	}
+	if fs.MinLength != nil && inhLen != nil && *fs.MinLength > *inhLen {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'minLength' value '%d' is greater than the 'length' value of the base type '%d'.", *fs.MinLength, *inhLen)))
+	}
+	if fs.MaxLength != nil && inhLen != nil && *fs.MaxLength < *inhLen {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'maxLength' value '%d' is less than the 'length' value of the base type '%d'.", *fs.MaxLength, *inhLen)))
+	}
+	if fs.Length != nil && inhMin != nil && *fs.Length < *inhMin {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'length' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.Length, *inhMin)))
+	}
+	if fs.Length != nil && inhMax != nil && *fs.Length > *inhMax {
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'length' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.Length, *inhMax)))
+	}
+}
+
 // checkFacetBaseRestriction checks that facet values properly narrow (not widen)
 // the base type's facets.
 func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
@@ -1348,19 +1500,9 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 		return
 	}
 
-	// Length facets.
-	if fs.MinLength != nil && base.MinLength != nil && *fs.MinLength < *base.MinLength {
-		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'minLength' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.MinLength, *base.MinLength)))
-	}
-	if fs.MaxLength != nil && base.MaxLength != nil && *fs.MaxLength > *base.MaxLength {
-		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'maxLength' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.MaxLength, *base.MaxLength)))
-	}
-	if fs.Length != nil && base.Length != nil && *fs.Length != *base.Length {
-		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'length' value '%d' does not match the 'length' value of the base type '%d'.", *fs.Length, *base.Length)))
-	}
+	// Length facets (length/minLength/maxLength) narrowing + cross-consistency
+	// against the EFFECTIVE inherited bounds over the WHOLE base chain.
+	c.checkLengthFacetRestriction(ctx, td, fs, line, component)
 
 	// Digit facets.
 	if fs.TotalDigits != nil && base.TotalDigits != nil && *fs.TotalDigits > *base.TotalDigits {
