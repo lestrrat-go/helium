@@ -1330,40 +1330,29 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 // choice routes a child whose name matches an element branch to that branch (validated
 // against its type), even when a sibling wildcard branch would also admit it.
 //
-// A base element name is EXEMPT (no re-admission) when the derived cannot route a
-// same-named child to a wildcard — but that condition DIFFERS by derived compositor:
-//   - derived CHOICE: element precedence in the derived routes EVERY same-named child to
-//     its element branch (commit-no-fallback), regardless of occurrence, so declaring the
-//     name as a derived element is sufficient (nameExemptByChoice).
-//   - derived SEQUENCE: the derived element is positional and bounded, so occurrences of
-//     the name BEYOND the derived element's coverage spill to a later wildcard member. The
-//     name is exempt only when the derived element coverage COVERS the base's maximum
-//     occurrences of that name (occursCovers over maxOccursForName, which folds
-//     substitution members) — otherwise the excess spills and must be gated.
-//
-// A non-exempt dropped/narrowed name is delegated to the shared
-// derivedWildcardReadmitsReservedName gate (deferTypeSubstitution=true — the runtime
-// dynamic EDC recovers type-DEFINITION substitutability; only an UNENFORCING wildcard, or an
-// enforcing global that drops a base-local constraint the EDC cannot recover, rejects at
-// compile). A derived wildcard that EXCLUDES a name never re-admits it. Gated to Version11.
+// A base element name n is protected (no re-admission) exactly when the DERIVED cannot route
+// an n-named child to a wildcard — a REACHABILITY property (nameSpillableToWildcard), NOT a
+// compositor or occurrence-count test: neither "the derived declares n" nor "the derived
+// element occurrence covers the base" is sufficient, because a wildcard reachable after an
+// element in a sequence (even one nested inside a derived choice branch) still receives the
+// overflow. A name that IS spillable to a wildcard is delegated to the shared
+// derivedWildcardReadmitsReservedName gate (deferTypeSubstitution=true — the runtime dynamic
+// EDC recovers type-DEFINITION substitutability; only an UNENFORCING wildcard, or an enforcing
+// global that drops a base-local constraint the EDC cannot recover, rejects at compile). A
+// derived wildcard that EXCLUDES a name never re-admits it. Gated to Version11.
 func choiceReadmitsBaseElementUnsoundly(ctx context.Context, baseGroup, derivedGroup *ModelGroup, schema *Schema, version Version) bool {
 	derivedWilds := collectEmittingWildcardParticles(derivedGroup.Particles)
 	if len(derivedWilds) == 0 {
 		return false
 	}
-	var derivedNames map[QName]bool
-	orderedSpill := derivedGroup.Compositor != CompositorChoice
-	if !orderedSpill {
-		derivedNames = collectEmittingModelElementNames(derivedGroup, schema)
-	}
 	for _, bp := range baseGroup.Particles {
 		for _, be := range reservedElementDecls(bp) {
-			if !choiceNameExempt(be.Name, orderedSpill, derivedNames, baseGroup, derivedGroup, schema) &&
+			if nameSpillableToWildcard(derivedGroup, be.Name, schema) &&
 				anyDerivedWildcardReadmits(ctx, derivedWilds, be.Name, be, schema, version) {
 				return true
 			}
 			for _, m := range instanceSubstMembers(be, schema) {
-				if !choiceNameExempt(m.Name, orderedSpill, derivedNames, baseGroup, derivedGroup, schema) &&
+				if nameSpillableToWildcard(derivedGroup, m.Name, schema) &&
 					anyDerivedWildcardReadmits(ctx, derivedWilds, m.Name, m, schema, version) {
 					return true
 				}
@@ -1373,17 +1362,50 @@ func choiceReadmitsBaseElementUnsoundly(ctx context.Context, baseGroup, derivedG
 	return false
 }
 
-// choiceNameExempt reports whether the derived model group protects every same-named child
-// from wildcard re-admission (so name n needs no gate). For a derived CHOICE, declaring n as
-// an emitting element suffices (element precedence, no positional spill). For a derived
-// SEQUENCE, the derived element coverage must cover the base's maximum occurrences of n, else
-// the excess spills to a wildcard member (maxOccursForName folds substitution members, so a
-// head element covering a member counts).
-func choiceNameExempt(n QName, orderedSpill bool, derivedNames map[QName]bool, baseGroup, derivedGroup *ModelGroup, schema *Schema) bool {
-	if !orderedSpill {
-		return derivedNames[n]
+// nameSpillableToWildcard reports whether the derived model group can route an n-named child
+// to a WILDCARD (rather than to an element) — the condition under which a base element name n
+// is re-admitted through that wildcard, losing the base element's validation. It is a
+// REACHABILITY test, not a compositor or occurrence-count test: element precedence steals an
+// n-named child from a wildcard ONLY when the wildcard is a DIRECT alternative of a same-level
+// xs:choice whose sibling is an element admitting n (each n-child selects the element branch,
+// commit-no-fallback, regardless of occurrence). A wildcard admitting n in ANY other position
+// — an xs:sequence/xs:all member (an element earlier in the sequence overflows its bounded
+// occurrence into the wildcard), a nested group, or an xs:choice branch with no
+// element-admitting-n sibling (a differently-headed branch can still route a trailing n-child
+// to the wildcard) — CAN receive an n-child, so n is spillable. Recurses through nested groups.
+func nameSpillableToWildcard(mg *ModelGroup, n QName, schema *Schema) bool {
+	for _, p := range mg.Particles {
+		switch t := p.Term.(type) {
+		case *Wildcard:
+			if !wildcardAllowsName(t, n, schema) {
+				continue
+			}
+			// This wildcard admits n. It cannot receive an n-child only when it is a
+			// choice alternative competing with an element admitting n (precedence wins).
+			if mg.Compositor == CompositorChoice && choiceHasElementAdmitting(mg, n, schema) {
+				continue
+			}
+			return true
+		case *ModelGroup:
+			if nameSpillableToWildcard(t, n, schema) {
+				return true
+			}
+		}
 	}
-	return occursCovers(maxOccursForName(derivedGroup, n, schema), maxOccursForName(baseGroup, n, schema))
+	return false
+}
+
+// choiceHasElementAdmitting reports whether the model group has an emitting element particle
+// that admits name n (its own name or a substitution member) — the sibling that lets element
+// precedence steal n from a competing wildcard alternative.
+func choiceHasElementAdmitting(mg *ModelGroup, n QName, schema *Schema) bool {
+	for _, p := range mg.Particles {
+		ed, ok := p.Term.(*ElementDecl)
+		if ok && p.MaxOccurs != 0 && elementDeclAdmitsName(ed, n, schema) {
+			return true
+		}
+	}
+	return false
 }
 
 // anyDerivedWildcardReadmits reports whether any wildcard in derivedWilds re-admits the

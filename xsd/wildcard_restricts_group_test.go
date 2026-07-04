@@ -1127,6 +1127,45 @@ func TestWildcardRestrictsChoiceDispatchSound(t *testing.T) {
 // the wildcard — so `<e>1</e><e>bad</e>` validates under the derived while the base rejects it.
 // Reject. (For a derived CHOICE, precedence routes EVERY same-named child to the element branch
 // regardless of occurrence, so the identical `choice maxOccurs="2"` restriction stays sound.)
+// The wildcard-spill hazard is a REACHABILITY property, not a compositor/occurrence one: a
+// derived CHOICE can DECLARE the element name (so a name-only exemption would clear it) while a
+// NESTED SEQUENCE branch still routes a later same-named child to a wildcard. Base
+// `choice maxOccurs="2"(e:int | any skip)`, derived `choice(sequence(e:int, any skip))`: the
+// derived declares `e`, but the sequence branch matches the first `<e>` as the element and
+// spills the second to the skip wildcard, so `<e>1</e><e>bad</e>` validates under the derived
+// while the base rejects it. The gate must key on whether a same-named child can REACH a
+// wildcard (nameSpillableToWildcard), so this rejects; the flat identical restriction (wildcard
+// a direct choice-alternative of the element, precedence-blocked) still compiles.
+func TestWildcardRestrictsNestedSequenceInChoice(t *testing.T) {
+	t.Parallel()
+
+	nested := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:choice maxOccurs="2">
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:choice maxOccurs="2">
+          <xs:sequence>
+            <xs:element name="e" type="xs:int"/>
+            <xs:any namespace="##any" processContents="skip"/>
+          </xs:sequence>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, nested)
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+		"a wildcard reachable after an element inside a nested sequence branch receives the overflow, so declaring the element name does not protect it")
+	require.Nil(t, schema)
+}
+
 func TestWildcardRestrictsSequenceChoiceOrderedSpill(t *testing.T) {
 	t.Parallel()
 
