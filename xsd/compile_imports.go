@@ -169,13 +169,44 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 	return data, nil
 }
 
+// notDemotable is the shared veto BOTH demotion predicates — [isBenignResolutionMiss]
+// (the Open path) and [isDirectNotExist] (the fs.ReadFile fallback) — consult FIRST,
+// so the "may this nested-load failure be demoted to a warning?" decision cannot
+// diverge between the two sites. It reports whether err is DISQUALIFIED from any
+// resolution-miss demotion regardless of its errno, because it:
+//   - is (or wraps, anywhere in its LINEAR unwrap chain) a MULTI-ERROR
+//     ([errors.Join] / any Unwrap() []error) — a single file-open never legitimately
+//     produces one, and a join defeats errors.Is/errors.As first-match selection, so a
+//     benign sibling could mask a fatal (permission/read) sibling ([containsMultiError]);
+//   - satisfies fs.ErrPermission anywhere in its chain — a permission denial is not a
+//     resolution miss; or
+//   - is a fatal schema-load condition ([IsFatalSchemaLoad]).
+//
+// A predicate that passes this veto then applies its own PHASE-appropriate accept: the
+// Open path admits the broad benign errno set (a FAILED Open IS the resolution phase),
+// the atomic-fs.ReadFile fallback admits only the stricter canonical "file not found"
+// shape. Because both route through this one guard, [errors.Join] of a permission and a
+// benign miss — or any permission/fatal anywhere in the tree — is FATAL at EITHER site.
+func notDemotable(err error) bool {
+	return containsMultiError(err) || errors.Is(err, fs.ErrPermission) || IsFatalSchemaLoad(err)
+}
+
 // isBenignResolutionMiss reports whether err is a benign schemaLocation
 // RESOLUTION miss — a missing file ([fs.ErrNotExist]) or an unresolvable location
 // hint ([fs.ErrInvalid], e.g. an http:// URL opened as a filesystem path). It
 // gates the whitelist ONLY inside [readNestedSchema], where a benign miss is then
 // wrapped in [errNestedFetchMiss]; downstream classification keys on that tag, not
 // on the errno, so this predicate is never consulted after the resolution phase.
+//
+// The shared [notDemotable] veto is applied FIRST — the SAME veto [isDirectNotExist]
+// uses — so a MULTI-ERROR ([errors.Join]), an fs.ErrPermission anywhere in the chain,
+// or a fatal schema-load condition is NEVER demoted even when it ALSO wraps a benign
+// fs.ErrNotExist/fs.ErrInvalid errno. A failed Open IS the resolution phase, so only
+// after that veto is the broad benign errno set an accept.
 func isBenignResolutionMiss(err error) bool {
+	if notDemotable(err) {
+		return false
+	}
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid)
 }
 
@@ -189,17 +220,20 @@ func isBenignResolutionMiss(err error) bool {
 //     op, which are post-open failures — and whose OWN [fs.PathError.Err] cause
 //     satisfies fs.ErrNotExist under [errors.Is].
 //
-// A MULTI-ERROR ([errors.Join] / any error implementing Unwrap() []error, anywhere in
-// the linear unwrap chain) is REJECTED OUTRIGHT before any other test. A real
-// filesystem never reports a single file-open through a joined error: a multi-error
-// bundles multiple independent failures, which is inherently suspicious for a
-// resolution miss AND defeats errors.As's first-match selection — errors.As would
-// pick a benign Op=="open"/ErrNotExist sibling and ignore a fatal (read/permission)
-// PathError joined alongside. Rejecting the whole multi-error class up front keeps
-// every errors.Join shape FATAL and makes the subsequent errors.As on a single chain
-// unambiguous (there is exactly one PathError to select). A genuine [os.DirFS] /
-// [fstest.MapFS] miss returns a SINGLE *fs.PathError{Op:"open", Err: syscall.ENOENT}
-// — not a Join — so it is still accepted and WARNS.
+// The shared [notDemotable] veto — a MULTI-ERROR ([errors.Join] / any error implementing
+// Unwrap() []error, anywhere in the linear unwrap chain), an fs.ErrPermission anywhere in
+// the chain, or a fatal schema-load condition — is applied FIRST, before any other test.
+// A real filesystem never reports a single file-open through a joined error: a
+// multi-error bundles multiple independent failures, which is inherently suspicious for a
+// resolution miss AND defeats errors.As's first-match selection — errors.As would pick a
+// benign Op=="open"/ErrNotExist sibling and ignore a fatal (read/permission) PathError
+// joined alongside. Rejecting the whole multi-error class up front keeps every
+// errors.Join shape FATAL and makes the subsequent errors.As on a single chain
+// unambiguous (there is exactly one PathError to select). The same veto keeps a
+// whole-chain fs.ErrPermission / [IsFatalSchemaLoad] cause FATAL. This is the SAME guard
+// [isBenignResolutionMiss] consults, so the Open path and this fallback cannot diverge. A
+// genuine [os.DirFS] / [fstest.MapFS] miss returns a SINGLE *fs.PathError{Op:"open",
+// Err: syscall.ENOENT} — not a Join — so it is still accepted and WARNS.
 //
 // The Op=="open" guard is the load-bearing phase discriminator: a failed Open IS the
 // resolution phase, so an "open" PathError denotes non-existence at resolution and can
@@ -209,23 +243,18 @@ func isBenignResolutionMiss(err error) bool {
 // file, satisfying fs.ErrNotExist yet NOT the fs.ErrNotExist sentinel by == — is
 // correctly accepted, while a *fs.PathError{Op:"read", Err: fs.ErrNotExist}/{Op:"stat",
 // …} (a POST-resolution failure that merely reports the ErrNotExist errno) is still
-// REJECTED, so it stays UNTAGGED and therefore FATAL (fail-closed). The whole-chain
-// fs.ErrPermission / [IsFatalSchemaLoad] veto is retained as defense in depth for a
-// fatal cause reached through the accepted single chain.
+// REJECTED, so it stays UNTAGGED and therefore FATAL (fail-closed).
 //
 // Everything else — a message-wrapped fs.ErrNotExist that is NOT a *fs.PathError
 // (fmt.Errorf("...: %w", …)), a non-"open" Op, or an err whose selected PathError does
 // not satisfy fs.ErrNotExist at all — is REJECTED. This is the last classifiable edge
 // for the inherently-atomic fs.ReadFile fallback in [readNestedSchema].
 func isDirectNotExist(err error) bool {
-	if containsMultiError(err) {
+	if notDemotable(err) {
 		return false
 	}
 	if err == fs.ErrNotExist {
 		return true
-	}
-	if errors.Is(err, fs.ErrPermission) || IsFatalSchemaLoad(err) {
-		return false
 	}
 	var pe *fs.PathError
 	if !errors.As(err, &pe) {

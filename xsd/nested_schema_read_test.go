@@ -194,6 +194,62 @@ func TestNestedIncludeOpenMissWarns(t *testing.T) {
 	}
 }
 
+// TestNestedIncludeOpenJoinedPermissionMissIsFatal verifies the OPEN-path half of
+// the shared demotion guard: an Open error that is an errors.Join of a permission
+// denial AND a benign fs.ErrNotExist must NOT be demoted to a warning at the Open
+// resolution phase, exactly as the fs.ReadFile fallback rejects the same shape. Both
+// join operands would, in isolation, be benign-or-selectable — errors.Is(err,
+// fs.ErrNotExist) is true on the whole tree — but the shared notDemotable veto rejects
+// the multi-error class outright. Covered both when the FS is Open-only and when it
+// also implements ReadFileFS whose ReadFile would return a benign miss.
+func TestNestedIncludeOpenJoinedPermissionMissIsFatal(t *testing.T) {
+	t.Parallel()
+
+	joined := errors.Join(fs.ErrPermission, fs.ErrNotExist)
+
+	t.Run("open-only", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+		require.NoError(t, err)
+
+		_, err = xsd.NewCompiler().FS(openMissSchemaFS{joined}).BaseDir(".").Compile(t.Context(), doc)
+		require.Error(t, err, "a joined permission+notexist Open error must abort, not be demoted")
+	})
+
+	t.Run("with-readfilefs", func(t *testing.T) {
+		t.Parallel()
+		for _, readErr := range []error{fs.ErrNotExist, fs.ErrInvalid} {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+			require.NoError(t, err)
+
+			_, err = xsd.NewCompiler().
+				FS(openErrReadFileFS{openErr: joined, readErr: readErr}).
+				BaseDir(".").Compile(t.Context(), doc)
+			require.Error(t, err, "a joined permission+notexist Open error must abort even when ReadFile returns a benign miss (%v)", readErr)
+		}
+	})
+}
+
+// TestNestedIncludeOpenSingleMissWarnsWithReadFileFS verifies the complementary
+// sound case for the OPEN path: a GENUINE single benign Open miss (fs.ErrNotExist /
+// fs.ErrInvalid, no join, no permission) whose ReadFileFS fallback confirms the miss
+// still WARNS (skipped, compilation succeeds) — the shared guard does not over-reject
+// a legitimate single-error resolution miss. (The Open-only single-miss case is
+// TestNestedIncludeOpenMissWarns.)
+func TestNestedIncludeOpenSingleMissWarnsWithReadFileFS(t *testing.T) {
+	t.Parallel()
+
+	for _, openErr := range []error{fs.ErrNotExist, fs.ErrInvalid} {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+		require.NoError(t, err)
+
+		_, err = xsd.NewCompiler().
+			FS(openErrReadFileFS{openErr: openErr, readErr: fs.ErrNotExist}).
+			BaseDir(".").Compile(t.Context(), doc)
+		require.NoError(t, err, "a single benign Open miss (%v) confirmed by the ReadFile fallback must be a skipped fetch-miss", openErr)
+	}
+}
+
 // TestNestedIncludeFatalOpenNotMaskedByReadFile verifies that a FATAL open error
 // (a FatalSchemaLoader resource/policy denial) is returned fatal even when the
 // ReadFileFS fallback would return a benign fs.ErrNotExist/fs.ErrInvalid: the
