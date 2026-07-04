@@ -95,12 +95,14 @@ type validateConfig struct {
 	errorHandler   helium.ErrorHandler
 	annotations    *TypeAnnotations
 	nilledElements *NilledElements
-	// skipDatatypeIntegrity, when true, suppresses the document-wide xs:ID /
-	// xs:IDREF / xs:IDREFS and xs:ENTITY / xs:ENTITIES value-space integrity
-	// walks (both XSD 1.1-only). Content-model, type, and identity-constraint
-	// (xs:key/unique/keyref) validation are unaffected. It exists for callers
-	// that validate an element/subtree as a fragment and apply document-scope
-	// ID/IDREF integrity themselves at the correct scope (e.g. xslt3).
+	// skipDatatypeIntegrity, when true, suppresses the document-wide
+	// value-space integrity walks: the xs:ID / xs:IDREF / xs:IDREFS
+	// uniqueness+referential-integrity walk (version-independent — runs in both
+	// XSD 1.0 and 1.1) and the xs:ENTITY / xs:ENTITIES walk (XSD 1.1-only).
+	// Content-model, type, and identity-constraint (xs:key/unique/keyref)
+	// validation are unaffected. It exists for callers that validate an
+	// element/subtree as a fragment and apply document-scope ID/IDREF integrity
+	// themselves at the correct scope (e.g. xslt3).
 	skipDatatypeIntegrity bool
 }
 
@@ -370,10 +372,12 @@ func (v Validator) NilledElements(ne *NilledElements) Validator {
 
 // SkipDatatypeIntegrityChecks controls whether the document-wide xs:ID /
 // xs:IDREF / xs:IDREFS uniqueness+referential-integrity walk and the xs:ENTITY /
-// xs:ENTITIES value-space walk run. Both are XSD 1.1-only; in XSD 1.0 they never
-// run and this option has no effect.
+// xs:ENTITIES value-space walk run. The ID/IDREF/IDREFS walk is
+// version-independent (cvc-id) and runs in both XSD 1.0 and 1.1; the
+// xs:ENTITY / xs:ENTITIES walk is XSD 1.1-only. So in XSD 1.0 this option
+// suppresses the ID/IDREF/IDREFS walk (the ENTITY walk never runs there).
 //
-// When enabled, those two document-scoped datatype-integrity walks are skipped.
+// When enabled, those document-scoped datatype-integrity walks are skipped.
 // Content-model validation, simple/complex type validation, and the
 // xs:key/xs:unique/xs:keyref identity-constraint walk are unaffected.
 //

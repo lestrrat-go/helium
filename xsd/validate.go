@@ -801,12 +801,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		valid = false
 	}
 
-	// Third walk: XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS validation.
-	// Gated to 1.1 so XSD 1.0 stays byte-identical (helium does not enforce these
-	// datatype constraints in 1.0, and the libxml2-compat goldens depend on that).
-	// A fragment-validating caller (cfg.skipDatatypeIntegrity) opts out because it
+	// Third walk: document-wide xs:ID / xs:IDREF / xs:IDREFS validation (cvc-id,
+	// §3.3.4/§3.3.11). This is a VERSION-INDEPENDENT XSD rule — ID uniqueness and
+	// IDREF referential integrity are enforced in both 1.0 and 1.1; only the
+	// multiple-IDs-per-element relaxation (recordID) is 1.1-specific. A
+	// fragment-validating caller (cfg.skipDatatypeIntegrity) opts out because it
 	// applies document-scope ID/IDREF integrity itself at the correct scope.
-	if vc.version == Version11 && !cfg.skipDatatypeIntegrity {
+	if !cfg.skipDatatypeIntegrity {
 		if !vc.validateIDIDREF(ctx, doc) {
 			valid = false
 		}
