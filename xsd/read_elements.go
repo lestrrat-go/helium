@@ -598,7 +598,7 @@ func parseSchemaBool(raw string) (bool, bool) {
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
 	typeRef := getAttr(elem, attrType)
 	if typeRef != "" {
-		qn := c.resolveQName(ctx, elem, typeRef)
+		qn := c.resolveQName(ctx, elem, attrType, typeRef)
 		c.elemRefs[decl] = qn
 		c.markChameleonEligible(decl, elem, typeRef)
 		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line(), source: c.diagSource()}
@@ -644,13 +644,13 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 
 func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element, raw string) []QName {
 	if c.version != Version11 {
-		return []QName{c.resolveQName(ctx, elem, raw)}
+		return []QName{c.resolveQName(ctx, elem, attrSubstitutionGroup, raw)}
 	}
 	tokens := splitSpace(raw)
 	heads := make([]QName, 0, len(tokens))
 	seen := make(map[QName]struct{}, len(tokens))
 	for _, token := range tokens {
-		qn := c.resolveQName(ctx, elem, token)
+		qn := c.resolveQName(ctx, elem, attrSubstitutionGroup, token)
 		if _, ok := seen[qn]; ok {
 			continue
 		}
@@ -663,7 +663,7 @@ func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *heli
 func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Element, opts attrUseReadOptions) *AttrUse {
 	au := &AttrUse{Name: opts.name}
 	if typeRef := getAttr(elem, attrType); typeRef != "" {
-		au.TypeName = c.resolveQName(ctx, elem, typeRef)
+		au.TypeName = c.resolveQName(ctx, elem, attrType, typeRef)
 	} else {
 		// No type attribute: look for an inline anonymous <xs:simpleType>.
 		// (type and inline simpleType are mutually exclusive, enforced by
@@ -796,7 +796,7 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 
 	// Handle element references (ref="...").
 	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(ctx, elem, ref)
+		qn := c.resolveQName(ctx, elem, attrRef, ref)
 		edecl := &ElementDecl{
 			Name:      qn,
 			MinOccurs: minOcc,
@@ -860,7 +860,7 @@ func (c *compiler) parseAnyAttribute(ctx context.Context, elem *helium.Element) 
 
 func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Element) {
 	c.checkAttributeUse(ctx, elem)
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return
 	}
@@ -902,7 +902,7 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 	c.checkAttributeUse(ctx, elem)
 	// Handle attribute references (ref="...").
 	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(ctx, elem, ref)
+		qn := c.resolveQName(ctx, elem, attrRef, ref)
 		au := &AttrUse{Name: qn}
 		switch getAttr(elem, attrUse) {
 		case attrValRequired:
@@ -959,7 +959,7 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		return au
 	}
 
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	return c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
 		name:       QName{Local: name, NS: c.localAttributeNamespace(elem)},
 		includeUse: true,
@@ -998,7 +998,7 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	// Detect the @ref form by PRESENCE, not value: getAttr cannot tell an absent
 	// attribute from an empty one, so a literal ref="" must be recognized as the
 	// (invalid) ref form rather than silently treated as absent and dropped.
@@ -1034,7 +1034,12 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			source = c.filename
 		}
 		xsdElem := idcKindName(kind)
-		ref := getAttr(elem, attrRef)
+		// xs:key/@ref (and unique/keyref) is an xs:QName (whiteSpace fixed
+		// "collapse"), so collapse at the read point: the stored ConstraintRef and
+		// the validateQName check in resolveIDCNameQName both see the collapsed value,
+		// and a padded ref=" k " resolves instead of failing on a whitespace-padded
+		// prefix.
+		ref := collapsedAttr(elem, attrRef)
 		// An empty @ref names no constraint and is a fatal schema error; drop the
 		// constraint so resolveConstraintRefs does not also report it as unknown.
 		if ref == "" {
@@ -1105,7 +1110,11 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			"The attribute 'refer' is not allowed.")
 	}
 	if kind == IDCKeyRef {
-		idc.Refer = getAttr(elem, attrRefer)
+		// xs:keyref/@refer is an xs:QName (whiteSpace fixed "collapse"), so collapse
+		// at the read point: the stored Refer and the validateQName check in
+		// resolveIDCReferQName both see the collapsed value, so a padded
+		// refer=" k " resolves instead of failing on a whitespace-padded prefix.
+		idc.Refer = collapsedAttr(elem, attrRefer)
 		// @refer is a QName; resolve it namespace-aware against the constraint
 		// element's in-scope namespaces. An empty refer or an unbound prefix is a
 		// fatal schema error (reported later by checkKeyRefRefers, which also
@@ -1373,7 +1382,7 @@ func (c *compiler) resolveIDCNameQName(ctx context.Context, elem *helium.Element
 	// as an unprefixed/default-namespace reference (strings.Cut would yield an
 	// empty prefix that bypasses the unbound-prefix check below).
 	if err := validateQName(ref); err != nil {
-		c.reportInvalidQNameValue(ctx, elem, ref)
+		c.reportInvalidQNameValue(ctx, elem, attrRef, ref)
 		return QName{}, true
 	}
 	if prefix, local, found := strings.Cut(ref, ":"); found {

@@ -983,7 +983,7 @@ func (c *compiler) resolveSchemaDefaultAttributes(ctx context.Context, root *hel
 		source:    c.diagSource(),
 	}
 	if !xmlchar.IsValidQName(ref) {
-		c.reportInvalidQNameValue(ctx, root, ref)
+		c.reportInvalidQNameValue(ctx, root, attrDefaultAttributes, ref)
 		return QName{}, false, attrGroupRefUseSource{}
 	}
 	qn := QName{Local: ref, NS: c.schema.targetNamespace}
@@ -1362,7 +1362,7 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 		case isXSDElement(elem, elemAttribute):
 			c.parseGlobalAttribute(ctx, elem)
 		case isXSDElement(elem, elemNotation):
-			if name := getAttr(elem, attrName); name != "" {
+			if name := collapsedAttr(elem, attrName); name != "" {
 				c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
 			}
 		}
@@ -1425,6 +1425,23 @@ func getAttr(elem *helium.Element, name string) string {
 		return ""
 	}
 	return attr.Value()
+}
+
+// collapsedAttr reads an unqualified schema attribute and whitespace-COLLAPSES
+// its value (leading/trailing trimmed, internal whitespace runs folded to a
+// single space, per the whiteSpace facet fixed "collapse" on xs:token — the base
+// of xs:NCName and xs:QName). It is the canonical read point for every
+// NCName-valued (@name) and QName-valued (@base/@type/@ref/@refer/@itemType/
+// @substitutionGroup/@memberTypes) schema attribute, so the STORED, VALIDATED, and
+// RESOLVED value is the collapsed one — a padded-but-valid value (name="a ",
+// base=" p:a ") is accepted while an internal-whitespace value (name="a b") stays
+// invalid after collapsing and is rejected by the downstream NCName/QName check.
+// QName resolution funnels through resolveQName, which collapses again (idempotent)
+// and validates; the multi-token list attributes (@substitutionGroup/@memberTypes)
+// split on whitespace and resolve each token, so this helper covers the scalar and
+// per-token cases uniformly.
+func collapsedAttr(elem *helium.Element, name string) string {
+	return normalizeWhiteSpace(getAttr(elem, name), "collapse")
 }
 
 // getAttrNS reads an attribute by namespace URI and local name, returning "" if

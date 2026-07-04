@@ -102,17 +102,15 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	// Content-model ordering: annotation must be the first child (§3.3.2).
 	c.checkElementContentOrder(ctx, elem)
 
-	// name is required for global elements.
+	// name is required for global elements. Presence is detected on the RAW value
+	// (an absent or literally-empty name), while the NCName test runs on the
+	// COLLAPSED value (xs:element/@name is xs:NCName, whiteSpace fixed "collapse"):
+	// a padded name="sub2-elem " is valid, a whitespace-only name collapses to
+	// empty and is an invalid NCName, and an internal-whitespace name="a b" fails.
 	if name == "" {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."))
 	} else if !xmlchar.IsValidNCName(normalizeWhiteSpace(name, "collapse")) {
-		// The {name} of an element declaration must be an NCName (XSD
-		// Structures §3.3.2; xsd:element/@name is of type xs:NCName, whose
-		// whiteSpace facet is fixed "collapse"). The value is collapsed before
-		// the NCName test, so name="sub2-elem " is valid. A value that is
-		// empty-after-collapse, starts with a non-name character, or contains a
-		// colon (a QName, not an NCName) is a schema-representation error.
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
 			"The value '"+name+"' is not a valid 'NCName'."))
 	}
@@ -666,7 +664,7 @@ func (c *compiler) localElementUnderNonAnyTypeRestriction(ctx context.Context, e
 		if base == "" {
 			return false
 		}
-		qn := c.resolveQName(ctx, pe, base)
+		qn := c.resolveQName(ctx, pe, attrBase, base)
 		return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 	}
 	return false
@@ -677,7 +675,10 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 	if c.filename == "" {
 		return
 	}
-	ref := getAttr(elem, attrRef)
+	// xs:attribute/@ref is an xs:QName (whiteSpace fixed "collapse"): read it
+	// collapsed so the whole function (presence dispatch, QName validity) sees the
+	// same value the store/resolution does.
+	ref := collapsedAttr(elem, attrRef)
 	line := elem.Line()
 	local := elem.LocalName()
 
@@ -733,12 +734,11 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 				"The attribute 'ref' is not allowed."))
 		default:
-			// xs:attribute/@ref is an xs:QName (whiteSpace fixed "collapse"), so
-			// validate the COLLAPSED value — a padded ref=" p:a " must not be rejected
-			// — and reject one still not a valid QName after collapsing (internal
-			// whitespace, a leading colon, …).
-			if cref := normalizeWhiteSpace(ref, "collapse"); !xmlchar.IsValidQName(cref) {
-				c.reportInvalidQNameValue(ctx, elem, cref)
+			// ref is already collapsed (collapsedAttr): reject a value still not a
+			// valid QName after collapsing (empty, internal whitespace, a leading
+			// colon, …); a padded ref=" p:a " is accepted.
+			if !xmlchar.IsValidQName(ref) {
+				c.reportInvalidQNameValue(ctx, elem, attrRef, ref)
 			}
 		}
 	}
@@ -805,17 +805,17 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		// Version-INDEPENDENT schema-representation rule (enforced in 1.0 and 1.1).
 		c.checkAttributeChildren(ctx, elem)
 
-		// Attribute name must not be "xmlns".
-		if getAttr(elem, attrName) == lexicon.PrefixXMLNS {
+		// xs:attribute/@name is xs:NCName (whiteSpace fixed "collapse"): read the
+		// collapsed value — the same one parseAttributeUse/parseGlobalAttribute
+		// registers — so the xmlns and NCName checks agree with storage. A padded
+		// name="a " is valid; an internal-whitespace name="a b" fails NCName.
+		cname := collapsedAttr(elem, attrName)
+		if cname == lexicon.PrefixXMLNS {
 			c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
 				"The value of the attribute must not match 'xmlns'."))
-		} else if name := getAttr(elem, attrName); hasAttr(elem, attrName) && !xmlchar.IsValidNCName(name) {
-			// The {name} of an attribute declaration must be an NCName (XSD
-			// Structures §3.2.2; xsd:attribute/@name is of type xs:NCName). A
-			// value that is empty, starts with a non-name character, or contains
-			// a colon (a QName, not an NCName) is a schema-representation error.
+		} else if hasAttr(elem, attrName) && !xmlchar.IsValidNCName(cname) {
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", "name",
-				"The value '"+name+"' is not a valid 'NCName'."))
+				"The value '"+cname+"' is not a valid 'NCName'."))
 		}
 
 		// Schema Representation Constraint on the `form` attribute of
@@ -873,12 +873,12 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		// unprefixed reference. (Version-INDEPENDENT — enforced in 1.0 and 1.1. A
 		// syntactically valid @type that resolves to a non-simple-type component is
 		// a separate, resolution-time check.)
-		if t := getAttr(elem, attrType); t != "" {
+		if ct := collapsedAttr(elem, attrType); ct != "" {
 			// xs:attribute/@type is an xs:QName (whiteSpace fixed "collapse"): validate
 			// the COLLAPSED value so a padded type=" xs:string " is accepted, and reject
 			// one still malformed after collapsing.
-			if ct := normalizeWhiteSpace(t, "collapse"); !xmlchar.IsValidQName(ct) {
-				c.reportInvalidQNameValue(ctx, elem, ct)
+			if !xmlchar.IsValidQName(ct) {
+				c.reportInvalidQNameValue(ctx, elem, attrType, ct)
 			}
 		}
 
@@ -1002,7 +1002,7 @@ func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context,
 	if base == "" {
 		return false
 	}
-	qn := c.resolveQName(ctx, parent, base)
+	qn := c.resolveQName(ctx, parent, attrBase, base)
 	return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 }
 

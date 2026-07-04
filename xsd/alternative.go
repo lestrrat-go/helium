@@ -130,7 +130,7 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 			}
 			return nil
 		}
-		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
+		alt.TypeName = c.resolveQName(ctx, elem, attrType, typeRef)
 		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
 			alt:               alt,
 			qn:                alt.TypeName,

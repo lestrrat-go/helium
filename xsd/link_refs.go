@@ -3192,13 +3192,17 @@ func (c *compiler) markChameleonEligible(owner any, elem *helium.Element, ref st
 	}
 }
 
-// resolveQName resolves a prefixed name (like "xsd:string") to a QName
-// using the namespace declarations in scope on the given element.
-func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName {
-	// A QName-valued schema attribute (@base/@type/@ref/@itemType/@memberType)
-	// has value space xs:QName, whose whiteSpace facet is fixed "collapse", so
-	// leading/trailing (and internal) whitespace is discarded before prefix
-	// resolution — e.g. base="    xsd:string " resolves to xsd:string.
+// resolveQName resolves a prefixed name (like "xsd:string") to a QName using the
+// namespace declarations in scope on the given element. attrName is the schema
+// attribute the value came from (@base/@type/@ref/@itemType/@substitutionGroup/a
+// @memberTypes token, …); it keys the invalid-QName dedup so distinct attributes
+// on one element are each reported.
+func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrName, ref string) QName {
+	// A QName-valued schema attribute has value space xs:QName, whose whiteSpace
+	// facet is fixed "collapse", so leading/trailing (and internal) whitespace is
+	// discarded before prefix resolution — e.g. base="    xsd:string " resolves to
+	// xsd:string. (Collapse is idempotent, so callers reading via collapsedAttr are
+	// unaffected.)
 	ref = normalizeWhiteSpace(ref, "collapse")
 	// After collapsing, the value must be a lexically valid xs:QName. A value that
 	// STILL contains whitespace (e.g. base="a b", two tokens) or is otherwise
@@ -3207,7 +3211,7 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 	// reportInvalidQNameValue dedups, so a caller that already validated the same
 	// value (checkAttributeUse) does not double-report.
 	if ref != "" && !xmlchar.IsValidQName(ref) {
-		c.reportInvalidQNameValue(ctx, elem, ref)
+		c.reportInvalidQNameValue(ctx, elem, attrName, ref)
 		return QName{Local: ref, NS: c.schema.targetNamespace}
 	}
 	local := ref
@@ -3273,19 +3277,24 @@ func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.El
 }
 
 // reportInvalidQNameValue emits a fatal schema-compilation error for a
-// QName-valued attribute whose value is not a lexically valid xs:QName (e.g. a
-// leading colon like ":u"). Without this such a value would slip past the
-// prefix-resolution path (strings.Cut yields an empty prefix that bypasses the
-// unbound-prefix check) and resolve as an unprefixed reference.
-func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, ref string) {
+// QName-valued attribute (attrName, e.g. "type"/"ref"/"base") whose value is not
+// a lexically valid xs:QName (e.g. a leading colon like ":u"). Without this such a
+// value would slip past the prefix-resolution path (strings.Cut yields an empty
+// prefix that bypasses the unbound-prefix check) and resolve as an unprefixed
+// reference.
+func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, attrName, ref string) {
 	if c.filename == "" {
 		return
 	}
-	// A QName-valued attribute is validated at more than one point (e.g.
-	// checkAttributeUse AND resolveQName), so dedup identical diagnostics by
-	// (source, line, local name, value) to avoid emitting the same invalid-QName
-	// error twice for one attribute.
-	key := c.diagSource() + "\x00" + strconv.Itoa(elem.Line()) + "\x00" + elem.LocalName() + "\x00" + ref
+	// One attribute may be validated at more than one point (e.g. checkAttributeUse
+	// AND resolveQName), so dedup identical diagnostics by (source, line, element
+	// local name, ATTRIBUTE name, value) to avoid emitting the same invalid-QName
+	// error twice. The ATTRIBUTE name is part of the key so two DIFFERENT
+	// QName-valued attributes on the SAME one-line element carrying the SAME invalid
+	// value (e.g. substitutionGroup=":bad" type=":bad") each report, and neither is
+	// silently suppressed (which would otherwise leave a follow-on bogus-lookup
+	// diagnostic to replace the clear invalid-QName error).
+	key := c.diagSource() + "\x00" + strconv.Itoa(elem.Line()) + "\x00" + elem.LocalName() + "\x00" + attrName + "\x00" + ref
 	if c.reportedInvalidQName == nil {
 		c.reportedInvalidQName = map[string]struct{}{}
 	}

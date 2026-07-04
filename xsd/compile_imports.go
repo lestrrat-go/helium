@@ -1166,7 +1166,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 		case isXSDElement(elem, elemAnnotation):
 			// skip
 		case isXSDElement(elem, elemComplexType):
-			name := getAttr(elem, attrName)
+			name := collapsedAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -1199,7 +1199,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemSimpleType):
-			name := getAttr(elem, attrName)
+			name := collapsedAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -1226,7 +1226,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemGroup):
-			name := getAttr(elem, attrName)
+			name := collapsedAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -1298,7 +1298,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				}
 			}
 		case isXSDElement(elem, elemAttributeGroup):
-			name := getAttr(elem, attrName)
+			name := collapsedAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -1379,7 +1379,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 						continue
 					}
 					if ref := getAttr(gce, attrRef); ref != "" {
-						refQN := c.resolveQName(ctx, gce, ref)
+						refQN := c.resolveQName(ctx, gce, attrRef, ref)
 						switch refQN {
 						case qn:
 							// A self-reference resolves to the Phase-A group content,

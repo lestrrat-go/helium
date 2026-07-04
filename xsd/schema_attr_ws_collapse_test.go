@@ -2,6 +2,7 @@ package xsd_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xsd"
@@ -91,6 +92,59 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
     <xs:list itemType=" xs:int "/>
   </xs:simpleType>`,
 		},
+		{
+			"union-memberTypes",
+			`<xs:simpleType name="u">
+    <xs:union memberTypes=" xs:int   xs:string "/>
+  </xs:simpleType>`,
+		},
+		// A padded @name on each NAMED component is REGISTERED collapsed — proven by a
+		// reference to the trimmed name resolving. If the trailing space survived, the
+		// ref would dangle and compilation would fail.
+		{
+			"simpleType-name-registered",
+			`<xs:simpleType name="st ">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:element name="e" type="st"/>`,
+		},
+		{
+			"complexType-name-registered",
+			`<xs:complexType name="ct ">
+    <xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="e" type="ct"/>`,
+		},
+		{
+			"group-name-registered",
+			`<xs:group name="g ">
+    <xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
+  </xs:group>
+  <xs:element name="e">
+    <xs:complexType><xs:group ref="g"/></xs:complexType>
+  </xs:element>`,
+		},
+		{
+			"attributeGroup-name-registered",
+			`<xs:attributeGroup name="ag ">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:element name="e">
+    <xs:complexType><xs:attributeGroup ref="ag"/></xs:complexType>
+  </xs:element>`,
+		},
+		{
+			"global-attribute-name-registered",
+			`<xs:attribute name="ga " type="xs:string"/>
+  <xs:element name="e">
+    <xs:complexType><xs:attribute ref="ga"/></xs:complexType>
+  </xs:element>`,
+		},
+		{
+			"substitutionGroup-padded",
+			`<xs:element name="head" type="xs:string"/>
+  <xs:element name="member" type="xs:string" substitutionGroup=" head "/>`,
+		},
 	}
 	for _, tc := range validQName {
 		t.Run("padded-qname-resolves/"+tc.name, func(t *testing.T) {
@@ -149,6 +203,41 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 			`<xs:element name="e" type="a b"/>`,
 			"'a b' is not a valid QName",
 		},
+		{
+			"simpleType-name",
+			`<xs:simpleType name="a b">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>`,
+			"is not a valid 'xs:NCName'",
+		},
+		{
+			"complexType-name",
+			`<xs:complexType name="a b">
+    <xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
+  </xs:complexType>`,
+			"is not a valid 'xs:NCName'",
+		},
+		{
+			"group-name",
+			`<xs:group name="a b">
+    <xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
+  </xs:group>`,
+			"is not a valid 'xs:NCName'",
+		},
+		{
+			"attributeGroup-name",
+			`<xs:attributeGroup name="a b">
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:attributeGroup>`,
+			"is not a valid 'xs:NCName'",
+		},
+		{
+			"union-memberTypes",
+			`<xs:simpleType name="u">
+    <xs:union memberTypes="a:b:c"/>
+  </xs:simpleType>`,
+			"is not a valid QName",
+		},
 	}
 	for _, tc := range rejectInternalWS {
 		t.Run("internal-whitespace-rejected/"+tc.name, func(t *testing.T) {
@@ -164,4 +253,61 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 			}
 		})
 	}
+
+	// xs:keyref/@refer is an xs:QName: a padded refer=" k " collapses at the read
+	// point and resolves to the key "k" (a schema that compiles clean), while an
+	// internal-whitespace refer="a b" stays an invalid QName and is rejected.
+	const keyrefSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType><xs:attribute name="id" type="xs:string"/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="k">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="@id"/>
+    </xs:key>
+    <xs:keyref name="kr" refer="%s">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="@id"/>
+    </xs:keyref>
+  </xs:element>
+</xs:schema>`
+	t.Run("keyref-refer-padded-resolves", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := fmt.Sprintf(keyrefSchema, " k ")
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			_, errs, cerr := compileWith(t, v, schemaXML)
+			require.NoError(t, cerr, "version=%v must accept padded @refer resolving to key: %s", v, errs)
+		}
+	})
+	t.Run("keyref-refer-internal-whitespace-rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := fmt.Sprintf(keyrefSchema, "a b")
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			schema, errs, cerr := compileWith(t, v, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v must reject internal-whitespace @refer", v)
+			require.Nil(t, schema)
+			require.Contains(t, errs, "not a valid QName", "version=%v", v)
+		}
+	})
+
+	// The invalid-QName dedup keys on the ATTRIBUTE name, so two DIFFERENT
+	// QName-valued attributes on the SAME one-line element carrying the SAME invalid
+	// value each report — neither is suppressed by the other. Both @type and
+	// @substitutionGroup here resolve through resolveQName; before the fix the shared
+	// (element, value) key collapsed the two diagnostics into one.
+	t.Run("dedup-per-attribute/two-invalid-qnames-one-line", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type=":bad" substitutionGroup=":bad"/></xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			_, errs, cerr := compileWith(t, v, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+			require.GreaterOrEqual(t, strings.Count(errs, "is not a valid QName"), 2,
+				"version=%v: each invalid-QName attribute must report; got: %s", v, errs)
+		}
+	})
 }

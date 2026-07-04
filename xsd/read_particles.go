@@ -10,7 +10,7 @@ import (
 )
 
 func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named group missing name")
 	}
@@ -126,7 +126,7 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 }
 
 func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named attributeGroup missing name")
 	}
@@ -279,7 +279,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			}
 			if hasAttr(ce, attrRef) {
 				ref := getAttr(ce, attrRef)
-				refQN := c.resolveQName(ctx, ce, ref)
+				refQN := c.resolveQName(ctx, ce, attrRef, ref)
 				if ref != "" && refQN == qn {
 					// XSD 1.1 permits circular attribute group definitions (W3C bug
 					// 15795 / attgC010-C031): a direct self-reference contributes
@@ -586,7 +586,7 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 					MinOccurs: placeholderMin,
 					MaxOccurs: placeholderMax,
 				}
-				qn := c.resolveQName(ctx, ce, ref)
+				qn := c.resolveQName(ctx, ce, attrRef, ref)
 				c.groupRefs[placeholder] = qn
 				// Nested reference: this group ref is contained inside another
 				// model group (xs:sequence/xs:choice/xs:all), so a resolved 'all'

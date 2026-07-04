@@ -12,7 +12,7 @@ import (
 )
 
 func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named complexType missing name")
 	}
@@ -63,7 +63,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 }
 
 func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named simpleType missing name")
 	}
@@ -288,7 +288,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
-				qn := c.resolveQName(ctx, ce, ref)
+				qn := c.resolveQName(ctx, ce, attrRef, ref)
 				c.groupRefs[placeholder] = qn
 				// Direct reference: this group ref is the sole top-level particle
 				// of the complex type's content, so a resolved 'all' model group
@@ -397,7 +397,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			}
 			c.checkAttrGroupRef(ctx, ce)
 			if hasAttr(ce, attrRef) {
-				qn := c.resolveQName(ctx, ce, getAttr(ce, attrRef))
+				qn := c.resolveQName(ctx, ce, attrRef, getAttr(ce, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ce.Line(),
 					elemLocal: ce.LocalName(),
@@ -613,7 +613,7 @@ func (c *compiler) recordDerivationBaseRef(ctx context.Context, elem *helium.Ele
 	if baseRef == "" {
 		return
 	}
-	qn := c.resolveQName(ctx, elem, baseRef)
+	qn := c.resolveQName(ctx, elem, attrBase, baseRef)
 	c.typeRefs[td] = qn
 	c.markChameleonEligible(td, elem, baseRef)
 }
@@ -729,7 +729,7 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
-				qn := c.resolveQName(ctx, ce, ref)
+				qn := c.resolveQName(ctx, ce, attrRef, ref)
 				c.groupRefs[placeholder] = qn
 				// Direct reference: this group ref is the sole top-level particle
 				// of the derived type's content, so a resolved 'all' model group
@@ -784,7 +784,7 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 			}
 			c.checkAttrGroupRef(ctx, ce)
 			if hasAttr(ce, attrRef) {
-				qn := c.resolveQName(ctx, ce, getAttr(ce, attrRef))
+				qn := c.resolveQName(ctx, ce, attrRef, getAttr(ce, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ce.Line(),
 					elemLocal: ce.LocalName(),
@@ -851,7 +851,7 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *helium.Element, td *TypeDef, kind DerivationKind) {
 	baseRef := getAttr(ce, attrBase)
 	if baseRef != "" {
-		qn := c.resolveQName(ctx, ce, baseRef)
+		qn := c.resolveQName(ctx, ce, attrBase, baseRef)
 		c.typeRefs[td] = qn
 		c.markChameleonEligible(td, ce, baseRef)
 	}
@@ -1012,7 +1012,7 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			}
 			c.checkAttrGroupRef(ctx, ae)
 			if hasAttr(ae, attrRef) {
-				qn := c.resolveQName(ctx, ae, getAttr(ae, attrRef))
+				qn := c.resolveQName(ctx, ae, attrRef, getAttr(ae, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ae.Line(),
 					elemLocal: ae.LocalName(),
@@ -1218,7 +1218,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			baseRef := getAttr(ce, attrBase)
 			if baseRef != "" {
-				qn := c.resolveQName(ctx, ce, baseRef)
+				qn := c.resolveQName(ctx, ce, attrBase, baseRef)
 				c.typeRefs[td] = qn
 				c.markChameleonEligible(td, ce, baseRef)
 			} else {
@@ -1248,7 +1248,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 			td.Variety = TypeVarietyList
 			itemRef := getAttr(ce, attrItemType)
 			if itemRef != "" {
-				qn := c.resolveQName(ctx, ce, itemRef)
+				qn := c.resolveQName(ctx, ce, attrItemType, itemRef)
 				c.itemTypeRefs[td] = qn
 				c.markChameleonEligible(td, ce, itemRef)
 			} else {
@@ -1277,7 +1277,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 			// Parse memberTypes attribute (space-separated QNames).
 			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
 				for _, ref := range splitSpace(memberTypesAttr) {
-					qn := c.resolveQName(ctx, ce, ref)
+					qn := c.resolveQName(ctx, ce, attrMemberTypes, ref)
 					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
 						owner:             td,
 						name:              qn,

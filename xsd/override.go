@@ -113,7 +113,7 @@ func (c *compiler) applySchemaDefaultAttrs(s schemaDefaultAttrsState) {
 // second result is false for an element that is not a named top-level component
 // (annotation, include, import, override, redefine, an unnamed declaration).
 func (c *compiler) overrideChildKey(elem *helium.Element) (overrideKey, bool) {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return overrideKey{}, false
 	}
@@ -297,7 +297,7 @@ func (c *compiler) registerOverrideChild(ctx context.Context, key overrideKey, e
 // collectNotation records an <xs:notation>'s name in c.notations (in the current
 // document's target namespace), matching parseSchemaChildren's notation handling.
 func (c *compiler) collectNotation(elem *helium.Element) {
-	if name := getAttr(elem, attrName); name != "" {
+	if name := collapsedAttr(elem, attrName); name != "" {
 		c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
 	}
 }
