@@ -1302,3 +1302,129 @@ func TestWildcardRestrictsAllElementNarrowedSoundCompiles(t *testing.T) {
 		})
 	}
 }
+
+// A base xs:all element whose occurrences spill to an ENFORCING (strict/lax-with-global)
+// derived wildcard is left to the runtime dynamic EDC ONLY when the resolved GLOBAL is at
+// least as constrained as the base LOCAL on the properties the dynamic EDC does NOT
+// enforce ({type table}, fixed, nillable, identity constraints, block, default). When the
+// global DROPS such a constraint, the spilled child — though type-checked via the global —
+// escapes a constraint the base local imposed, so the derived accepts content the base
+// rejects: NOT a language subset. derivedElemNameAndTypeOK alone (type/nillable/fixed)
+// misses these, so the guard must also consult globalDropsLocalConstraint.
+//
+//   - block: base local <e block="extension"> narrowed beside a strict ##any that
+//     resolves a NO-block global <e>. The spilled second <e> is governed by the global,
+//     so an xsi:type EXTENSION the base local blocks is admitted. REJECT.
+//   - default: base local <e:int> (no default) narrowed beside a strict ##any that
+//     resolves a global <e:int default="5">. The global substitutes a default for an
+//     empty spilled <e/> the base local rejects. REJECT.
+//
+// The overlapping element/wildcard base is UPA-invalid in XSD 1.0, so this is reachable
+// only in 1.1.
+func TestWildcardRestrictsAllStrictGlobalDropsLocalConstraintRejects(t *testing.T) {
+	t.Parallel()
+
+	blockDropped := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="BaseT">
+    <xs:sequence>
+      <xs:element name="v" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ExtT">
+    <xs:complexContent>
+      <xs:extension base="BaseT">
+        <xs:sequence><xs:element name="extra" type="xs:string" minOccurs="0"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="BaseT"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element name="e" type="BaseT" block="extension" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="strict"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element name="e" type="BaseT" block="extension" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" processContents="strict"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	defaultSupplied := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int" default="5"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="strict"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" processContents="strict"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"block-dropped", blockDropped},
+		{"default-supplied", defaultSupplied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"the strict wildcard's global drops a base-local constraint the dynamic EDC does not recover, so the spilled child escapes it — not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// The sound companion of the enforcing-wildcard guard: a base xs:all element narrowed
+// beside a LAX derived wildcard that resolves the SAME global the base routes to (a
+// ref-to-global element re-admitted through a lax ##any whose global is that element) is
+// left to the runtime dynamic EDC. The global is identical to the base declaration, so it
+// drops no constraint, so the restriction is a valid deferral — it COMPILES rather than
+// being conservatively over-rejected. The overlapping element/wildcard base is UPA-invalid
+// in XSD 1.0, so this is reachable only in 1.1.
+func TestWildcardRestrictsAllLaxGlobalOwnNameDefers(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="e" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="lax"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element ref="e" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" processContents="lax"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.NoError(t, cerr,
+		"a lax wildcard resolving the same global the base routes to drops no constraint, so the spill defers to the runtime dynamic EDC")
+	require.NotNil(t, schema)
+}

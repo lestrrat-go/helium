@@ -505,7 +505,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 			// true LOCAL decls that can diverge.)
 			if global, ok := c.schema.elements[bn]; ok {
 				for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-					if msg := c.globalDropsLocalConstraint(ctx, baseLocal, global); msg != "" {
+					if msg := globalDropsLocalConstraint(ctx, baseLocal, global, c.schema, c.version); msg != "" {
 						c.reportOpenContentTypeError(ctx, td,
 							"The restriction drops the base type's local element declaration '"+bn.Local+
 								"' and re-admits it through an open-content wildcard governed by the global declaration, which "+msg+".")
@@ -539,7 +539,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 				// here means no spill, so it is safe and the loop simply does not run.)
 				if global, ok := c.schema.elements[bn]; ok {
 					for _, baseLocal := range localElementDeclsByName(td.BaseType.ContentModel, bn) {
-						if msg := c.globalDropsLocalConstraint(ctx, baseLocal, global); msg != "" {
+						if msg := globalDropsLocalConstraint(ctx, baseLocal, global, c.schema, c.version); msg != "" {
 							c.reportOpenContentTypeError(ctx, td,
 								"The restriction narrows the maxOccurs of the kept element '"+bn.Local+
 									"' below the base's; the excess spills into the enforcing interleave open content governed by the global declaration, which "+msg+".")
@@ -559,8 +559,12 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 // the asymmetric `default` direction — so re-admitting the name via the global would
 // accept content the base local rejected. Returns "" when the global is
 // constraint-compatible. Fail-closed: any constraint that cannot be shown at-least-as-
-// restrictive is treated as lost. Used by BOTH the dropped-local and kept-narrowed call
-// sites (a kept local that narrows maxOccurs spills excess to the global identically).
+// restrictive is treated as lost. Used by the open-content dropped-local and
+// kept-narrowed call sites (a kept local that narrows maxOccurs spills excess to the
+// global identically) AND by the xs:all wildcard-spill path
+// (baseAllElementReadmittedByDerivedWildcard), which faces the same hole when a
+// dropped/narrowed base element re-admitted through an enforcing derived wildcard is
+// governed by a global.
 //
 //   - type table: a base local CTA {type table} NOT EQUIVALENT to the global's
 //     (typeTablesConsistent, absent-both = equivalent) lets the global attribute the
@@ -585,7 +589,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 //     GLOBAL default the local LACKS (or a VALUE-SPACE-DIFFERENT one, DefaultNS-aware) IS
 //     unsound: an empty <e/> re-admitted via the global gets the global's default
 //     substituted, making an otherwise type-invalid empty element valid.
-func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global *ElementDecl) string {
+func globalDropsLocalConstraint(ctx context.Context, local, global *ElementDecl, schema *Schema, version Version) string {
 	if local == nil || global == nil {
 		return ""
 	}
@@ -593,7 +597,7 @@ func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global
 		return "has a conditional-type-assignment {type table} that differs from the base declaration's"
 	}
 	if local.Fixed != nil {
-		if global.Fixed == nil || !fixedValueMatches(ctx, *local.Fixed, *global.Fixed, local.Type, local.FixedNS, global.FixedNS, c.schema, c.version) {
+		if global.Fixed == nil || !fixedValueMatches(ctx, *local.Fixed, *global.Fixed, local.Type, local.FixedNS, global.FixedNS, schema, version) {
 			return "does not impose the base declaration's fixed value"
 		}
 	}
@@ -603,7 +607,7 @@ func (c *compiler) globalDropsLocalConstraint(ctx context.Context, local, global
 	if local.Block&^global.Block != 0 {
 		return "does not block every derivation/substitution the base declaration's 'block' forbade"
 	}
-	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, c.schema, c.version)) {
+	if global.Default != nil && (local.Default == nil || !fixedValueMatches(ctx, *local.Default, *global.Default, local.Type, local.DefaultNS, global.DefaultNS, schema, version)) {
 		return "supplies a 'default' the base declaration does not, so it would accept an empty element the base rejected"
 	}
 	for _, lc := range local.IDCs {
