@@ -290,3 +290,65 @@ func TestNestedIncludeReadFileFallbackNotExistWarns(t *testing.T) {
 		require.NoError(t, err, "a canonical fs.ErrNotExist from the fallback (open=%v) must be a skipped fetch-miss", openErr)
 	}
 }
+
+// TestNestedIncludeReadFileFallbackPathErrorOp verifies the Op discrimination of
+// the fs.ReadFile fallback classifier: a *fs.PathError reporting fs.ErrNotExist is
+// a resolution miss (demoted, WARN) ONLY when its Op is exactly "open" — the
+// resolution/open operation. A *fs.PathError{Op:"read", Err: fs.ErrNotExist} is a
+// POST-resolution read failure that merely happens to report the ErrNotExist errno,
+// so it is phase-UNCLASSIFIABLE and stays FATAL. This is the shape fs.ReadFile
+// itself returns from real FSes (fstest.MapFS / os.DirFS surface Op:"open"), so the
+// Op check is sound: a well-behaved FS labels a resolution miss "open" and a
+// post-open failure something else.
+func TestNestedIncludeReadFileFallbackPathErrorOp(t *testing.T) {
+	t.Parallel()
+
+	compile := func(t *testing.T, readErr error) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().
+			// A benign Open miss forces the ReadFileFS fallback, whose ReadFile
+			// returns the chosen *fs.PathError.
+			FS(openErrReadFileFS{openErr: fs.ErrNotExist, readErr: readErr}).
+			BaseDir(".").Compile(t.Context(), doc)
+		return err
+	}
+
+	t.Run("open-op-not-exist warns", func(t *testing.T) {
+		t.Parallel()
+		// The canonical resolution miss a real FS returns for a missing file.
+		err := compile(t, &fs.PathError{Op: "open", Path: "nested.xsd", Err: fs.ErrNotExist})
+		require.NoError(t, err, "a *fs.PathError{Op:\"open\", Err: fs.ErrNotExist} is a resolution miss and must be demoted to a skipped fetch-miss")
+	})
+
+	t.Run("read-op-not-exist fatal", func(t *testing.T) {
+		t.Parallel()
+		// A post-open read failure that happens to carry the ErrNotExist errno: it
+		// resolved and opened, so it must NOT masquerade as a resolution miss.
+		err := compile(t, &fs.PathError{Op: "read", Path: "nested.xsd", Err: fs.ErrNotExist})
+		require.Error(t, err, "a *fs.PathError{Op:\"read\", Err: fs.ErrNotExist} is a post-resolution read failure and must abort compilation, not be demoted")
+	})
+
+	t.Run("stat-op-not-exist fatal", func(t *testing.T) {
+		t.Parallel()
+		// Any non-open op is likewise not a resolution/open miss.
+		err := compile(t, &fs.PathError{Op: "stat", Path: "nested.xsd", Err: fs.ErrNotExist})
+		require.Error(t, err, "a *fs.PathError with a non-open Op must not be demoted")
+	})
+
+	t.Run("open-op-wrapped-err fatal", func(t *testing.T) {
+		t.Parallel()
+		// Op is "open" but the PathError.Err WRAPS ErrNotExist with extra context
+		// rather than being the bare sentinel: not canonical, so fatal.
+		err := compile(t, &fs.PathError{Op: "open", Path: "nested.xsd", Err: fmt.Errorf("context: %w", fs.ErrNotExist)})
+		require.Error(t, err, "a *fs.PathError whose Err wraps ErrNotExist (not the bare sentinel) must not be demoted")
+	})
+
+	t.Run("bare-sentinel warns", func(t *testing.T) {
+		t.Parallel()
+		// The bare sentinel (no PathError envelope) is still a canonical miss.
+		err := compile(t, fs.ErrNotExist)
+		require.NoError(t, err, "the bare fs.ErrNotExist sentinel from the fallback must be demoted to a skipped fetch-miss")
+	})
+}

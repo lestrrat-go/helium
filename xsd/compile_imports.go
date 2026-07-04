@@ -134,13 +134,14 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 			// so its errors are mostly phase-UNCLASSIFIABLE: a ReadFileFS whose ReadFile
 			// RESOLVES the file but then fails mid-READ returns an errno indistinguishable
 			// from a genuine miss. So the fallback demotes ONLY a CANONICAL filesystem
-			// "file not found" ([isDirectNotExist]: the bare fs.ErrNotExist sentinel or a
-			// top-level *fs.PathError wrapping it) — the one shape that unambiguously
-			// denotes NON-EXISTENCE at resolution and can never be a post-resolution read
-			// failure (a read failure never reports ErrNotExist). EVERY other fallback
-			// error — fs.ErrInvalid, a custom message wrap (even one wrapping
-			// fs.ErrNotExist), anything else — is UNCLASSIFIABLE and returned UNTAGGED,
-			// so it stays FATAL (fail-closed).
+			// "file not found" at the RESOLUTION/OPEN phase ([isDirectNotExist]: the bare
+			// fs.ErrNotExist sentinel or a top-level *fs.PathError with Op=="open" and the
+			// UNWRAPPED fs.ErrNotExist sentinel) — the one shape that unambiguously denotes
+			// NON-EXISTENCE at resolution and can never be a post-resolution read failure.
+			// EVERY other fallback error — fs.ErrInvalid, a custom message wrap (even one
+			// wrapping fs.ErrNotExist), a *fs.PathError with a non-open Op (e.g.
+			// {Op:"read", Err: fs.ErrNotExist}, a post-open read failure), anything else —
+			// is UNCLASSIFIABLE and returned UNTAGGED, so it stays FATAL (fail-closed).
 			if !isDirectNotExist(rfErr) {
 				return nil, rfErr //nolint:wrapcheck // unclassifiable fallback error; fail closed
 			}
@@ -176,23 +177,31 @@ func isBenignResolutionMiss(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid)
 }
 
-// isDirectNotExist reports whether err is a CANONICAL filesystem "file not found":
-// the bare [fs.ErrNotExist] sentinel or a top-level [*fs.PathError] whose Err chain
-// is fs.ErrNotExist (the shape Open/ReadFile return for a genuine miss). It
-// DELIBERATELY does NOT walk arbitrary wrappers — a fmt.Errorf("...: %w", err)
-// annotation is EXTRA, non-canonical context, so it is NOT a direct miss — so a
-// post-resolution read failure dressed up with a benign errno cannot masquerade as a
-// resolution miss. Used ONLY to classify the ATOMIC fs.ReadFile fallback in
-// [readNestedSchema], whose errors are otherwise phase-unclassifiable; ErrNotExist is
-// the one errno that unambiguously denotes non-existence and never a read failure.
+// isDirectNotExist reports whether err is a CANONICAL filesystem "file not found"
+// at the RESOLUTION/OPEN phase — the one shape that unambiguously denotes
+// non-existence and can never be a post-resolution read failure. It accepts ONLY:
+//   - the bare [fs.ErrNotExist] sentinel (err == fs.ErrNotExist), or
+//   - a top-level [*fs.PathError] whose Op is exactly "open" (the resolution/open
+//     operation — NOT "read"/"stat"/any other op, which are post-open failures) AND
+//     whose Err is the UNWRAPPED fs.ErrNotExist sentinel (an Err that itself wraps
+//     ErrNotExist with extra context is not canonical).
+//
+// Everything else — a message-wrapped fs.ErrNotExist (fmt.Errorf("...: %w", …)), a
+// *fs.PathError with a non-open Op such as {Op:"read", Err: fs.ErrNotExist} (a
+// POST-resolution read failure that happens to report the ErrNotExist errno), or a
+// PathError.Err that merely wraps the sentinel — is REJECTED, so it stays UNTAGGED
+// and therefore FATAL (fail-closed). This is the last classifiable edge for the
+// inherently-atomic fs.ReadFile fallback in [readNestedSchema]: beyond it an FS would
+// have to lie about its Op, violating fs conventions.
 func isDirectNotExist(err error) bool {
 	if err == fs.ErrNotExist {
 		return true
 	}
-	if pe, ok := err.(*fs.PathError); ok {
-		return errors.Is(pe.Err, fs.ErrNotExist)
+	pe, ok := err.(*fs.PathError)
+	if !ok {
+		return false
 	}
-	return false
+	return pe.Op == "open" && pe.Err == fs.ErrNotExist
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
