@@ -590,3 +590,121 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckElementsRepresentationGateSymmetry closes the check_elements.go
+// representation-gate axis: every structural gate that keys on a QName/NCName-valued
+// companion attribute (a with-ref prohibition, an inline-type mutual-exclusion, or
+// the ref/name dispatch) is symmetric between a PRESENT-but-collapse-empty value —
+// the literal "" AND the whitespace-only "   " (xs:QName/xs:NCName both fix
+// whiteSpace "collapse") — each of which emits EXACTLY the one invalid-QName /
+// invalid-NCName value diagnostic with NO spurious structural/companion/
+// mutual-exclusion/prohibition follow-on. A genuinely-present two-valid-attribute
+// mutual-exclusion/prohibition still fires. Version-INDEPENDENT (the gates live in
+// checkGlobalElement/checkLocalElement/checkAttributeUse, ungated on version).
+func TestCheckElementsRepresentationGateSymmetry(t *testing.T) {
+	t.Parallel()
+
+	const wantQName = "is not a valid QName"
+	const wantNCName = "is not a valid 'NCName'"
+	const wantMutEx = "mutually exclusive"
+
+	// A collapse-empty companion (""/whitespace-only) must emit EXACTLY the one
+	// value diagnostic (wantValue) and NONE of the structural secondaries (notWant).
+	// The %s is the companion value. wantOther is the OTHER value message (asserted
+	// absent) so a QName case can't leak an NCName diagnostic and vice versa.
+	symmetric := []struct {
+		name      string
+		schema    string
+		wantValue string
+		wantOther string
+		notWant   []string
+	}{
+		// gate 119 — global element @ref prohibition.
+		{"global-elem-ref", `<xs:element name="e" type="xs:string" ref="%s"/>`,
+			wantQName, wantNCName, []string{"attribute 'ref' is not allowed"}},
+		// gate 165 — global element @type + inline complexType mutual-exclusion.
+		{"global-elem-type-inline", `<xs:element name="e" type="%s"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`,
+			wantQName, wantNCName, []string{wantMutEx}},
+		// gate 441 — local element @ref dispatch with name+type companions present.
+		{"local-elem-ref-dispatch", `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="%s" name="x" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
+			wantQName, wantNCName, []string{wantMutEx, "Only the attributes"}},
+		// gate 484 — local element @ref + @name mutual-exclusion (NCName companion).
+		{"local-elem-ref-name", `<xs:element name="c" type="xs:string"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="c" name="%s"/></xs:sequence></xs:complexType></xs:element>`,
+			wantNCName, wantQName, []string{wantMutEx}},
+		// gate 601 — local element @type + inline complexType mutual-exclusion.
+		{"local-elem-type-inline", `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="x" type="%s"><xs:complexType><xs:sequence/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			wantQName, wantNCName, []string{wantMutEx}},
+		// gate 752 — attribute @name + @ref prohibition (NCName companion).
+		{"attr-ref-name", `<xs:attribute name="ga" type="xs:string"/><xs:element name="e"><xs:complexType><xs:attribute ref="ga" name="%s"/></xs:complexType></xs:element>`,
+			wantNCName, wantQName, []string{"attribute 'name' is not allowed"}},
+		// gate 758 — attribute @type + @ref prohibition (no store site validates the
+		// ref-branch @type, so the gate is the SOLE reporter of the invalid QName).
+		{"attr-ref-type", `<xs:attribute name="ga" type="xs:string"/><xs:element name="e"><xs:complexType><xs:attribute ref="ga" type="%s"/></xs:complexType></xs:element>`,
+			wantQName, wantNCName, []string{"attribute 'type' is not allowed"}},
+		// gate 890 — attribute @type + inline simpleType mutual-exclusion.
+		{"attr-type-inline", `<xs:element name="e"><xs:complexType><xs:attribute name="a" type="%s"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
+			wantQName, wantNCName, []string{wantMutEx}},
+	}
+	for _, tc := range symmetric {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
+				t.Parallel()
+				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
+					fmt.Sprintf(tc.schema, val.v))
+				for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+					schema, errs, cerr := compileWith(t, v, schemaXML)
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: %s", v, errs)
+					require.Nil(t, schema)
+					require.Equal(t, 1, strings.Count(errs, tc.wantValue),
+						"version=%v: exactly one %q diagnostic; got: %s", v, tc.wantValue, errs)
+					require.Equal(t, 0, strings.Count(errs, tc.wantOther),
+						"version=%v: must not emit the other value diagnostic %q; got: %s", v, tc.wantOther, errs)
+					for _, nw := range tc.notWant {
+						require.NotContains(t, errs, nw,
+							"version=%v: no spurious structural secondary %q; got: %s", v, nw, errs)
+					}
+				}
+			})
+		}
+	}
+
+	// A genuinely-present two-valid-attribute companion still fires its structural
+	// gate — the symmetry fix suppresses only the collapse-empty cell, never a real
+	// mutual-exclusion/prohibition between two present valid attributes.
+	twoValid := []struct {
+		name   string
+		schema string
+		want   string
+	}{
+		{"global-elem-ref", `<xs:element name="e" type="xs:string" ref="foo"/>`,
+			"attribute 'ref' is not allowed"},
+		{"global-elem-type-inline", `<xs:element name="e" type="xs:string"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`,
+			wantMutEx},
+		{"local-elem-ref-name", `<xs:element name="c" type="xs:string"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="c" name="x"/></xs:sequence></xs:complexType></xs:element>`,
+			"The attributes 'ref' and 'name' are mutually exclusive"},
+		{"local-elem-type-inline", `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="x" type="xs:string"><xs:complexType><xs:sequence/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			wantMutEx},
+		{"attr-ref-name", `<xs:attribute name="ga" type="xs:string"/><xs:element name="e"><xs:complexType><xs:attribute ref="ga" name="x"/></xs:complexType></xs:element>`,
+			"The attribute 'name' is not allowed"},
+		{"attr-ref-type", `<xs:attribute name="ga" type="xs:string"/><xs:element name="e"><xs:complexType><xs:attribute ref="ga" type="xs:string"/></xs:complexType></xs:element>`,
+			"The attribute 'type' is not allowed"},
+		{"attr-type-inline", `<xs:element name="e"><xs:complexType><xs:attribute name="a" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
+			wantMutEx},
+	}
+	for _, tc := range twoValid {
+		t.Run("two-valid-still-fires/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+				require.Contains(t, errs, tc.want,
+					"version=%v: a genuine two-valid-attribute rule must still fire; got: %s", v, errs)
+				require.NotContains(t, errs, wantQName,
+					"version=%v: a valid companion is not an invalid QName; got: %s", v, errs)
+				require.NotContains(t, errs, wantNCName,
+					"version=%v: a valid companion is not an invalid NCName; got: %s", v, errs)
+			}
+		})
+	}
+}
