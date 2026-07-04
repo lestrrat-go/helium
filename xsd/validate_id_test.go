@@ -147,14 +147,46 @@ func TestValidateIDIDREF(t *testing.T) {
 		require.Error(t, compileValidate(t, xsd.Version10, idrefSchema, `<root><a id="x"/><a ref="y"/></root>`))
 	})
 
-	t.Run("XSD 1.0 has no multiple-ID-per-element relaxation", func(t *testing.T) {
+	t.Run("XSD 1.0 rejects same-owner same-value ID recurrence", func(t *testing.T) {
 		t.Parallel()
-		// Two <id> children of one parent share a value. XSD 1.1 accepts this (they
-		// identify the SAME element); XSD 1.0 has no such relaxation, so it is a
-		// duplicate.
+		// Two <id> element-content children of one <node> share a value (both
+		// identify the same parent element). XSD 1.1 accepts this (the multiple-ID
+		// relaxation); XSD 1.0 has no such relaxation, so it is a duplicate (W3C
+		// elemZ016 / idconstrdefs00301m2_n).
 		inst := `<root><node><id>zzz</id><id>zzz</id></node></root>`
 		require.NoError(t, compileValidate(t, xsd.Version11, elemIDSchema, inst))
 		require.Error(t, compileValidate(t, xsd.Version10, elemIDSchema, inst))
+	})
+
+	t.Run("XSD 1.0 rejects same value across two distinct elements", func(t *testing.T) {
+		t.Parallel()
+		// Distinct owner elements (two separate <node>s) with the same value are a
+		// uniqueness violation in BOTH versions.
+		inst := `<root><node><id>zzz</id></node><node><id>zzz</id></node></root>`
+		require.Error(t, compileValidate(t, xsd.Version10, elemIDSchema, inst))
+		require.Error(t, compileValidate(t, xsd.Version11, elemIDSchema, inst))
+	})
+
+	// A complex type admitting two global xs:ID attributes on one element via
+	// anyAttribute. XSD 1.0 caps an element at one ID-typed attribute; XSD 1.1
+	// removed the cap.
+	const twoIDAttrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:anyAttribute processContents="strict"/>
+  </xs:complexType>
+  <xs:element name="doc" type="base"/>
+  <xs:attribute name="a" type="xs:ID"/>
+  <xs:attribute name="b" type="xs:ID"/>
+</xs:schema>`
+
+	t.Run("XSD 1.0 caps one ID-typed attribute per element", func(t *testing.T) {
+		t.Parallel()
+		// Two DISTINCT-valued ID attributes on one element: rejected in 1.0 (the
+		// one-ID-per-element cardinality rule, W3C attZ014a/attZ014b), accepted in
+		// 1.1. Values differ, so this is the cardinality rule, not value-uniqueness.
+		inst := `<doc a="x" b="y"/>`
+		require.Error(t, compileValidate(t, xsd.Version10, twoIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, twoIDAttrSchema, inst))
 	})
 }
 

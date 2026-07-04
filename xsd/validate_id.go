@@ -242,10 +242,12 @@ func (vc *validationContext) recordID(ctx context.Context, col *idCollector, tok
 	prev, seen := col.ids[tok]
 	if seen {
 		// XSD 1.1 relaxation: the same ID value may recur as long as every
-		// occurrence identifies the SAME element (e.g. two ID attributes of one
-		// element, or two <id> children of one parent). XSD 1.0 has no such
-		// relaxation — an ID value must be unique across the whole document (at
-		// most one ID per element), so a repeat is always a duplicate.
+		// occurrence identifies the SAME element (two ID attributes of one element,
+		// or two ID element-content children of one parent). XSD 1.0 has NO such
+		// relaxation — every distinct ID-bearing item must have a unique value, so a
+		// repeat is a duplicate even on the same owner (W3C elemZ016 / idconstrdefs
+		// 00301m2_n: two same-value xs:ID children of one parent are invalid in 1.0,
+		// valid in 1.1). Gated on Version11.
 		if vc.version == Version11 && prev == owner {
 			return
 		}
