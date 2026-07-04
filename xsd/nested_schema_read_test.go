@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"testing"
@@ -46,11 +47,16 @@ type openFatalReadFileFS struct{ readErr error }
 func (openFatalReadFileFS) Open(string) (fs.File, error)      { return nil, fatalOpenError{} }
 func (f openFatalReadFileFS) ReadFile(string) ([]byte, error) { return nil, f.readErr }
 
-// openErrReadFileFS fails at Open with a chosen (non-sentinel, non-fatal) error
-// and ALSO implements ReadFileFS, whose ReadFile returns a chosen error. It models
-// a ReadFileFS-backed FS whose Open is unsupported/denied: a NON-BENIGN Open error
-// (e.g. fs.ErrPermission) must NOT be demoted by falling through to a benign
-// ReadFile miss — the WHITELIST admits only fs.ErrNotExist/fs.ErrInvalid at Open.
+// openErrReadFileFS fails at Open with a chosen error and ALSO implements
+// ReadFileFS, whose ReadFile returns a chosen error. It models a ReadFileFS-backed
+// FS whose Open is unsupported/denied. Three invariants ride on it: a NON-BENIGN
+// Open error (e.g. fs.ErrPermission) must not be demoted by falling through to a
+// benign ReadFile miss (the Open WHITELIST admits only fs.ErrNotExist/fs.ErrInvalid);
+// a benign Open miss whose ReadFile fallback reports a CANONICAL fs.ErrNotExist is a
+// confirmed miss and demoted; but a benign Open miss whose fallback reports anything
+// ELSE (fs.ErrInvalid, a message-wrapped errno) is phase-unclassifiable and stays
+// FATAL, since the atomic fs.ReadFile cannot distinguish a genuine miss from a
+// post-resolution read failure.
 type openErrReadFileFS struct {
 	openErr error
 	readErr error
@@ -231,4 +237,56 @@ func TestNestedIncludePermissionOpenNotDemoted(t *testing.T) {
 			require.Error(t, err, "fs.ErrPermission at Open must abort even when ReadFile returns a benign miss (%v)", readErr)
 		}
 	})
+}
+
+// TestNestedIncludeReadFileFallbackErrorIsFatal verifies the reviewer's repro: a
+// benign Open miss that falls through to the fs.ReadFile fallback, whose ReadFile
+// then ERRORS with anything OTHER than a canonical "file not found" — an
+// fs.ErrInvalid, OR a message-WRAPPED errno (even one wrapping fs.ErrNotExist/
+// fs.ErrInvalid) — is FATAL, never demoted. fs.ReadFile is atomic, so such an error
+// is phase-unclassifiable (a post-resolution read failure is indistinguishable from
+// a miss); the fallback error is therefore returned UNTAGGED and stays fatal. Only a
+// CANONICAL fs.ErrNotExist from the fallback (a genuine miss) is demotable.
+func TestNestedIncludeReadFileFallbackErrorIsFatal(t *testing.T) {
+	t.Parallel()
+
+	for _, openErr := range []error{fs.ErrInvalid, fs.ErrNotExist} {
+		for _, readErr := range []error{
+			// fs.ErrInvalid is not a "not found" errno at all.
+			fs.ErrInvalid,
+			// A message wrap carries EXTRA, non-canonical context — even wrapping the
+			// ErrNotExist sentinel it is a post-resolution annotation, not a direct miss.
+			fmt.Errorf("post-resolution read failed: %w", fs.ErrInvalid),
+			fmt.Errorf("post-resolution read failed: %w", fs.ErrNotExist),
+		} {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+			require.NoError(t, err)
+
+			_, err = xsd.NewCompiler().
+				FS(openErrReadFileFS{openErr: openErr, readErr: readErr}).
+				BaseDir(".").Compile(t.Context(), doc)
+			require.Error(t, err, "unclassifiable ReadFile-fallback error (open=%v, read=%v) must abort, not be demoted", openErr, readErr)
+		}
+	}
+}
+
+// TestNestedIncludeReadFileFallbackNotExistWarns verifies the complementary sound
+// case: a benign Open miss whose fs.ReadFile fallback then reports a CANONICAL
+// "file not found" (the bare fs.ErrNotExist sentinel) is DEMOTED (skipped,
+// compilation succeeds) — a genuine miss confirmed by the fallback, the resolution
+// phase, so it warns like any missing schemaLocation hint. (A *fs.PathError-wrapped
+// fs.ErrNotExist — what fstest.MapFS / os.DirFS return — is covered by the MapFS
+// missing-include tests.)
+func TestNestedIncludeReadFileFallbackNotExistWarns(t *testing.T) {
+	t.Parallel()
+
+	for _, openErr := range []error{fs.ErrInvalid, fs.ErrNotExist} {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+		require.NoError(t, err)
+
+		_, err = xsd.NewCompiler().
+			FS(openErrReadFileFS{openErr: openErr, readErr: fs.ErrNotExist}).
+			BaseDir(".").Compile(t.Context(), doc)
+		require.NoError(t, err, "a canonical fs.ErrNotExist from the fallback (open=%v) must be a skipped fetch-miss", openErr)
+	}
 }

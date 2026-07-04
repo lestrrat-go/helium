@@ -55,9 +55,11 @@ var errNestedSchemaReadAfterOpen = errors.New("xsd: nested schema read failed af
 // [readNestedSchema]'s benign RESOLUTION-phase misses — to the only nested-load
 // failures that may be demoted to a warning. [nestedFetchMiss] keys on this tag
 // ALONE, never on a raw [fs.ErrNotExist]/[fs.ErrInvalid] errno. schemaLocation is
-// only a hint, so a target that cannot be RESOLVED (Open/ReadFile reporting a
-// benign missing/unresolvable errno) is skipped; but the same errno arising in a
-// LATER phase — content parsing, an external-entity read, a non-xs:schema root —
+// only a hint, so a target that cannot be RESOLVED — a FAILED Open reporting a
+// benign missing/unresolvable errno, or an atomic fs.ReadFile fallback reporting a
+// CANONICAL "file not found" — is skipped; but the same errno arising in a
+// LATER/unclassifiable phase — a post-Open read, a message-wrapped fs.ReadFile
+// fallback error, content parsing, an external-entity read, a non-xs:schema root —
 // carries no tag, so it stays FATAL. Making the demotable decision a single
 // positive tag means no downstream error can masquerade as a resolution miss,
 // however its errno chain reads. The wrapped error chain is preserved for
@@ -78,17 +80,28 @@ const maxNestedSchemaSize = 10 << 20 // 10 MiB
 // bounded while reading (iolimit reads one extra byte so a source that
 // under-reports its size is still caught).
 //
-// Demotion to a warning is by POSITIVE TAG, applied HERE and ONLY here: a benign
-// RESOLUTION miss — [fs.ErrNotExist] or [fs.ErrInvalid] from Open (or from the
-// fs.ReadFile fallback used for a ReadFileFS-only FS whose Open is unsupported) —
-// is wrapped in [errNestedFetchMiss], the sole tag [nestedFetchMiss] demotes.
-// EVERY other Open error is FATAL and returned UNTAGGED: a resource/policy denial
-// ([IsFatalSchemaLoad]), the default deny-all FS ([iofs.DenyAll]), a permission
-// denial ([fs.ErrPermission]), an outside-root policy error, or any other/ambiguous
-// errno. A POST-OPEN read failure is wrapped in [errNestedSchemaReadAfterOpen]
-// (fatal, untagged). The cap breach is [errSchemaTooLarge] (fatal). Because the tag
-// is applied only at the resolution phase, a downstream CONTENT/parse error whose
-// chain happens to contain fs.ErrInvalid/fs.ErrNotExist is NOT tagged and stays
+// Demotion to a warning is by POSITIVE TAG. A benign miss ([fs.ErrNotExist] or
+// [fs.ErrInvalid]) from a FAILED Open with NO ReadFileFS fallback is wrapped in
+// [errNestedFetchMiss], the sole tag [nestedFetchMiss] demotes — a FAILED Open is by
+// definition the resolution phase. EVERY other Open error is FATAL and returned
+// UNTAGGED: a resource/policy denial ([IsFatalSchemaLoad]), the default deny-all FS
+// ([iofs.DenyAll]), a permission denial ([fs.ErrPermission]), an outside-root policy
+// error, or any other/ambiguous errno.
+//
+// The [fs.ReadFileFS] fallback (retried when Open reports a benign miss) may SERVE
+// THE BYTES (a ReadFileFS-only FS whose Open is unsupported). Because fs.ReadFile is
+// ATOMIC (open+read+close in one call), its errors are mostly phase-UNCLASSIFIABLE —
+// a post-resolution read failure is indistinguishable from a genuine miss — so a
+// fallback error is DEMOTED only when it is a CANONICAL "file not found"
+// ([isDirectNotExist]: the bare fs.ErrNotExist sentinel or a top-level *fs.PathError
+// wrapping it, the one shape that can never be a read failure). EVERY other fallback
+// error — fs.ErrInvalid, a message-wrapped errno (even one wrapping fs.ErrNotExist),
+// anything else — is returned UNTAGGED and stays FATAL (fail-closed).
+//
+// A POST-OPEN read failure is wrapped in [errNestedSchemaReadAfterOpen] (fatal,
+// untagged). The cap breach is [errSchemaTooLarge] (fatal). Because the tag is
+// applied only at the FAILED-Open resolution phase, a downstream CONTENT/parse error
+// whose chain happens to contain fs.ErrInvalid/fs.ErrNotExist is NOT tagged and stays
 // fatal.
 func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 	f, openErr := c.fsys.Open(path)
@@ -105,8 +118,9 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 		if !isBenignResolutionMiss(openErr) {
 			return nil, openErr //nolint:wrapcheck // non-benign open error is fatal, not a miss
 		}
-		// Benign open miss. A ReadFileFS may still serve the bytes even when its Open
-		// is unsupported, so retry through fs.ReadFile for that FS kind only (a plain
+		// Benign open miss. A ReadFileFS may still SERVE THE BYTES even when its Open is
+		// unsupported (a ReadFileFS-only FS whose Open returns fs.ErrNotExist/
+		// fs.ErrInvalid), so retry through fs.ReadFile for that FS kind only (a plain
 		// fs.FS's fs.ReadFile would merely re-Open and reproduce the identical miss).
 		if _, ok := c.fsys.(fs.ReadFileFS); ok {
 			data, rfErr := fs.ReadFile(c.fsys, path)
@@ -116,15 +130,25 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 				}
 				return data, nil
 			}
-			// The fallback also failed. A NON-BENIGN fallback error stays fatal and
-			// UNTAGGED; a benign one is a confirmed resolution miss — TAG it.
-			if !isBenignResolutionMiss(rfErr) {
-				return nil, rfErr //nolint:wrapcheck // non-benign fallback error is fatal, not a miss
+			// The fallback errored. fs.ReadFile is ATOMIC (open+read+close in one call),
+			// so its errors are mostly phase-UNCLASSIFIABLE: a ReadFileFS whose ReadFile
+			// RESOLVES the file but then fails mid-READ returns an errno indistinguishable
+			// from a genuine miss. So the fallback demotes ONLY a CANONICAL filesystem
+			// "file not found" ([isDirectNotExist]: the bare fs.ErrNotExist sentinel or a
+			// top-level *fs.PathError wrapping it) — the one shape that unambiguously
+			// denotes NON-EXISTENCE at resolution and can never be a post-resolution read
+			// failure (a read failure never reports ErrNotExist). EVERY other fallback
+			// error — fs.ErrInvalid, a custom message wrap (even one wrapping
+			// fs.ErrNotExist), anything else — is UNCLASSIFIABLE and returned UNTAGGED,
+			// so it stays FATAL (fail-closed).
+			if !isDirectNotExist(rfErr) {
+				return nil, rfErr //nolint:wrapcheck // unclassifiable fallback error; fail closed
 			}
 			return nil, fmt.Errorf("%w: %w", errNestedFetchMiss, rfErr)
 		}
 		// Open reported a benign resolution miss and no ReadFileFS fallback applies:
-		// TAG it so nestedFetchMiss — and nothing downstream — demotes it.
+		// TAG it — a FAILED Open is by definition the resolution phase — so
+		// nestedFetchMiss, and nothing downstream, demotes it.
 		return nil, fmt.Errorf("%w: %w", errNestedFetchMiss, openErr)
 	}
 	data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
@@ -150,6 +174,25 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 // on the errno, so this predicate is never consulted after the resolution phase.
 func isBenignResolutionMiss(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid)
+}
+
+// isDirectNotExist reports whether err is a CANONICAL filesystem "file not found":
+// the bare [fs.ErrNotExist] sentinel or a top-level [*fs.PathError] whose Err chain
+// is fs.ErrNotExist (the shape Open/ReadFile return for a genuine miss). It
+// DELIBERATELY does NOT walk arbitrary wrappers — a fmt.Errorf("...: %w", err)
+// annotation is EXTRA, non-canonical context, so it is NOT a direct miss — so a
+// post-resolution read failure dressed up with a benign errno cannot masquerade as a
+// resolution miss. Used ONLY to classify the ATOMIC fs.ReadFile fallback in
+// [readNestedSchema], whose errors are otherwise phase-unclassifiable; ErrNotExist is
+// the one errno that unambiguously denotes non-existence and never a read failure.
+func isDirectNotExist(err error) bool {
+	if err == fs.ErrNotExist {
+		return true
+	}
+	if pe, ok := err.(*fs.PathError); ok {
+		return errors.Is(pe.Err, fs.ErrNotExist)
+	}
+	return false
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
