@@ -38,6 +38,19 @@ var errSchemaPathEscape = errors.New("xsd: schema location escapes base director
 // be swallowed.
 var errSchemaTooLarge = errors.New("xsd: schema resource exceeds size limit")
 
+// errNestedSchemaReadAfterOpen tags an error that occurred while READING a
+// nested schema document AFTER its [fs.File] was successfully opened (a
+// post-open streaming Read failure), distinguishing it from an Open/resolution
+// miss. schemaLocation is only a hint, so a genuine FETCH/RESOLUTION miss (the
+// Open step failing with [fs.ErrNotExist]/[fs.ErrInvalid]) is demoted to a
+// warning and skipped; but a location that RESOLVED and OPENED and then failed
+// to read is a real I/O failure that must ABORT compilation (fail-closed).
+// Wrapping the read error with this sentinel makes [IsFatalSchemaLoad] classify
+// it fatal — so [nestedFetchMiss] never demotes it, even when the underlying
+// read error is itself [fs.ErrInvalid]/[fs.ErrNotExist]. The wrapped error chain
+// is preserved for errors.Is/errors.As.
+var errNestedSchemaReadAfterOpen = errors.New("xsd: nested schema read failed after open")
+
 // maxNestedSchemaSize bounds the number of bytes read from any single nested
 // schema document loaded via xs:include/xs:import/xs:redefine, so an endless or
 // oversized source cannot exhaust memory. It mirrors xinclude's per-resource
@@ -63,7 +76,11 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 			return nil, errSchemaTooLarge
 		}
 		if readErr != nil {
-			return nil, readErr //nolint:wrapcheck // callers wrap with the schemaLocation for context
+			// Post-open read failure: the location RESOLVED and OPENED, so this is a
+			// real I/O failure, NOT a benign schemaLocation fetch/resolution miss.
+			// Tag it fatal so nestedFetchMiss cannot demote it to a warning even when
+			// readErr is itself fs.ErrInvalid/fs.ErrNotExist (fail-closed).
+			return nil, fmt.Errorf("%w: %w", errNestedSchemaReadAfterOpen, readErr)
 		}
 		return data, nil
 	}
@@ -107,6 +124,9 @@ type FatalSchemaLoader interface {
 //     inside an IMPORTED schema would be demoted to a warning and silently ignored
 //     by loadImport's nested-processing fallback;
 //   - a nested schema exceeded the byte cap while being read ([errSchemaTooLarge]);
+//   - a nested schema failed to READ after its file was successfully opened
+//     ([errNestedSchemaReadAfterOpen]) — a resolved-and-opened location that then
+//     fails to read is a real I/O failure, not a benign schemaLocation miss;
 //   - the configured [fs.FS] returned an error satisfying [FatalSchemaLoader]
 //     (e.g. a resource-limit breach such as a too-large external resource).
 //
@@ -115,7 +135,7 @@ type FatalSchemaLoader interface {
 // matched via errors.Is / errors.As, so they remain unexported; this helper is
 // the public surface.
 func IsFatalSchemaLoad(err error) bool {
-	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errIncludeDepthExceeded) || errors.Is(err, errSchemaTooLarge) {
+	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errIncludeDepthExceeded) || errors.Is(err, errSchemaTooLarge) || errors.Is(err, errNestedSchemaReadAfterOpen) {
 		return true
 	}
 	var f FatalSchemaLoader
@@ -249,9 +269,14 @@ func (c *compiler) nestedLoadFailureFatal(err error) bool {
 
 // nestedFetchMiss reports whether err is a CONFIRMED benign FETCH/RESOLUTION miss
 // of a nested schemaLocation — the ONLY nested-load failure demoted to a warning.
-// It is deliberately FAIL-CLOSED: a miss is confirmed ONLY for a missing file
-// ([fs.ErrNotExist]) or an unresolvable location hint ([fs.ErrInvalid] — e.g. an
-// http:// URL opened as a filesystem path). Every other condition is fatal:
+// It is deliberately FAIL-CLOSED: a miss is confirmed ONLY for an OPEN/RESOLUTION
+// step failing with a missing file ([fs.ErrNotExist]) or an unresolvable location
+// hint ([fs.ErrInvalid] — e.g. an http:// URL opened as a filesystem path). A
+// POST-OPEN read failure is NOT a miss: [readNestedSchema] wraps it in
+// [errNestedSchemaReadAfterOpen] so [IsFatalSchemaLoad] classifies it fatal here
+// (a resolved-and-opened location that then fails to read is a real I/O failure,
+// not a benign miss — even when the underlying read error is itself
+// [fs.ErrInvalid]/[fs.ErrNotExist]). Every other condition is fatal:
 //
 //   - a SECURITY/RESOURCE-limit breach ([IsFatalSchemaLoad], e.g. a path escape,
 //     include/import depth, byte cap, or a [FatalSchemaLoader] refusal such as
