@@ -883,3 +883,113 @@ func TestWildcardRestrictsGroupOpenContentCapacity(t *testing.T) {
 		require.NotNil(t, schema)
 	})
 }
+
+// FINDING (round 5) — the all-wildcard emission profile ERASES element declarations
+// (an optional/prohibited/dead element reduces to ε), so its name is dropped from the
+// profile. But XSD 1.1 ELEMENT-OVER-WILDCARD PRECEDENCE routes a base child whose name
+// matches an element declaration to that ELEMENT (validated against its type), not to
+// an overlapping wildcard. A derived wildcard that re-admits such a reserved name
+// accepts content the base validates more strictly, so it is NOT a language subset. The
+// reserved-names guard REJECTS a derived wildcard that admits a base element name a live
+// cover also admits.
+//
+//   - choice(element e:int, any ##any skip) restricted by any ##any skip: the base routes
+//     <e> to the int element (element precedence over the ##any branch) and rejects
+//     <e>bad</e>; the derived ##any skip accepts it unvalidated → REJECT.
+//   - sequence(element e:int min0, any ##any skip) restricted by any ##any skip: the base
+//     routes <e> to the int element and rejects <e>bad</e>; the derived accepts it → REJECT.
+//
+// Both bases overlap an element with a ##any wildcard, which is UPA-invalid in XSD 1.0
+// (never reaching the reduction), so the unsound accept is reachable — and the guard
+// gated — only in XSD 1.1.
+func TestWildcardRestrictsGroupReservedElementName(t *testing.T) {
+	t.Parallel()
+
+	choiceBase := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:element name="e" type="xs:int"/>
+        <xs:any namespace="##any" processContents="skip"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	sequenceBase := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:element name="e" type="xs:int" minOccurs="0"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"choice-element-branch", choiceBase},
+		{"sequence-optional-element", sequenceBase},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"element-over-wildcard precedence routes the reserved element name to the base element's type; a derived wildcard re-admitting it is not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// The sound companion of the reserved-element guard: the base element `a` is in the
+// absent namespace, DISJOINT from the derived wildcard's namespace (urn:x), so the
+// derived wildcard EXCLUDES `a` — it never re-admits the reserved element name. The
+// base wildcard branch (urn:x skip) governs every urn:x child the derived produces, so
+// the restriction IS a language subset and compiles.
+func TestWildcardRestrictsGroupReservedElementExcluded(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:element name="a" type="xs:int"/>
+        <xs:any namespace="urn:x" processContents="skip"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="urn:x" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	schema, _, cerr := compileWith(t, xsd.Version11, schemaXML)
+	require.NoError(t, cerr,
+		"the base element is in a namespace the derived wildcard excludes, so no reserved name is re-admitted — a valid subset restriction")
+	require.NotNil(t, schema)
+}

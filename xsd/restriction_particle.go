@@ -237,7 +237,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 					return true
 				}
 			}
-			return wildcardRestrictsModelGroup(r, rt, b, bt, schema)
+			return wildcardRestrictsModelGroup(r, rt, b, bt, schema, version)
 		}
 	case *ModelGroup:
 		switch bt := b.Term.(type) {
@@ -600,7 +600,7 @@ func strictWildcardAdmitsNoGlobal(wc *Wildcard, schema *Schema) bool {
 // soundly and conformantly without it. Anything the reduction cannot represent
 // language-exactly — a dead base position, a non-uniform base position, an
 // occurrence-count HOLE — is REJECTED.
-func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema) bool {
+func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *ModelGroup, schema *Schema, version Version) bool {
 	_ = bt // base model group reached via b.Term; kept for call-site symmetry
 	matchesNothing := wildcardMatchesNothing(rt)
 	switch {
@@ -619,7 +619,106 @@ func wildcardRestrictsModelGroup(r *Particle, rt *Wildcard, b *Particle, bt *Mod
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, red.lo, red.hi) {
 		return false
 	}
-	return coverAdmitsWildcard(red.cover, rt, schema)
+	if !coverAdmitsWildcard(red.cover, rt, schema) {
+		return false
+	}
+	return !wildcardReadmitsReservedElement(red.cover, rt, b, schema, version)
+}
+
+// wildcardReadmitsReservedElement enforces XSD 1.1 element-over-wildcard
+// precedence against the reduction's element ERASURE. reduceWildcardOnlyParticle
+// treats an optional/prohibited/dead element declaration as ε (it emits no
+// all-wildcard child), so its NAME is dropped from the emission profile. But in
+// XSD 1.1 a base child whose name matches an element declaration is governed by
+// that ELEMENT (validated against its type), not by an overlapping wildcard —
+// element precedence. A derived wildcard that admits such a reserved name accepts
+// content the base validates more strictly (e.g. `<e>bad</e>` against a base
+// `choice(element e:int, any skip)`), so it is NOT a language subset.
+//
+// It reports whether the derived wildcard rt re-admits any RESERVED base element
+// name (an emitting element declaration plus its instance-admissible
+// substitution-group members) that a LIVE wildcard cover also admits — the case
+// coverAdmitsWildcard just accepted on namespace grounds but that element
+// precedence makes unsound. A reserved name rt EXCLUDES (namespace or notQName) is
+// sound (rt never produces it); a name no live cover admits is already handled by
+// the namespace-subset coverAdmitsWildcard check. Only an UNENFORCING rt (skip, or
+// lax with no matching global) rejects: it never assesses the re-admitted child's
+// type, so nothing recovers the base element's stricter validation. A strict/lax-
+// with-global rt resolves a governing type the DYNAMIC EDC checks against the base
+// local type at validation, so it is left to that runtime check (compile accepts).
+// Element precedence is a 1.1 rule (a 1.0 base overlapping an element with a wildcard
+// is UPA-invalid and never reaches here), so the check is gated to Version11 to keep
+// XSD 1.0 byte-identical.
+func wildcardReadmitsReservedElement(cover []coverBranch, rt *Wildcard, b *Particle, schema *Schema, version Version) bool {
+	if version != Version11 {
+		return false
+	}
+	for _, qn := range reservedElementNames(b, schema) {
+		if !wildcardUnenforcingForName(rt, qn, schema) {
+			continue // rt excludes the name, or enforces its type (dynamic EDC covers it)
+		}
+		if coverAdmitsName(cover, qn, schema) {
+			return true
+		}
+	}
+	return false
+}
+
+// wildcardUnenforcingForName reports whether the wildcard ADMITS qn but never
+// assesses a child's type there (processContents="skip", or "lax" with no global
+// element declaration for qn) — so it recovers no type for a re-admitted element.
+func wildcardUnenforcingForName(wc *Wildcard, qn QName, schema *Schema) bool {
+	if !wildcardAllowsExpandedName(wc, qn.Local, qn.NS, schema, false) {
+		return false
+	}
+	switch wc.ProcessContents {
+	case ProcessSkip:
+		return true
+	case ProcessLax:
+		_, hasGlobal := schema.elements[qn]
+		return !hasGlobal
+	default:
+		return false
+	}
+}
+
+// coverAdmitsName reports whether any base all-wildcard cover branch admits the
+// expanded name qn.
+func coverAdmitsName(cover []coverBranch, qn QName, schema *Schema) bool {
+	for _, br := range cover {
+		if wildcardAllowsExpandedName(br.wc, qn.Local, qn.NS, schema, false) {
+			return true
+		}
+	}
+	return false
+}
+
+// reservedElementNames collects every EMITTING element declaration name reachable
+// in the base particle, plus each declaration's instance-admissible
+// substitution-group members. A non-emitting (prohibited, or under a maxOccurs=0
+// ancestor group) element emits nothing and is never routed to by element
+// precedence, so it is excluded.
+func reservedElementNames(p *Particle, schema *Schema) []QName {
+	var names []QName
+	var walk func(*Particle)
+	walk = func(pp *Particle) {
+		if particleEmitsNothing(pp) {
+			return
+		}
+		switch t := pp.Term.(type) {
+		case *ElementDecl:
+			names = append(names, t.Name)
+			for _, m := range instanceSubstMembers(t, schema) {
+				names = append(names, m.Name)
+			}
+		case *ModelGroup:
+			for _, child := range t.Particles {
+				walk(child)
+			}
+		}
+	}
+	walk(p)
+	return names
 }
 
 // coverBranch is one pc-tagged namespace contribution of a base group's
@@ -1109,9 +1208,63 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, sch
 		if !particleEmptiable(bp) {
 			return false
 		}
+		// XSD 1.1 element-over-wildcard precedence: a base child whose name matches a
+		// SKIPPED emptiable ELEMENT declaration is routed to that element (validated
+		// against its type), not to an overlapping wildcard. If a derived UNENFORCING
+		// wildcard (skip, or lax with no matching global declaration — neither assesses
+		// the child) re-admits that element's name, the derived accepts content the
+		// base validates more strictly and NOTHING recovers the type, so it is not a
+		// language subset — fail-closed reject. A strict/lax-with-global derived
+		// wildcard resolves a governing type the DYNAMIC EDC checks against the base
+		// local type at validation, so it is left to that runtime check (compile
+		// accepts). Gated to Version11 (a 1.0 base overlapping an element with a
+		// wildcard is UPA-invalid), so XSD 1.0 is byte-identical.
+		if version == Version11 && baseElementReadmittedByUnenforcingWildcard(bp, rParticles, schema) {
+			return false
+		}
 	}
 	// Every derived particle must have been consumed by some base particle.
 	return ri == len(rParticles)
+}
+
+// baseElementReadmittedByUnenforcingWildcard reports whether a SKIPPED emptiable
+// base particle contributes an EMITTING element declaration name (or an instance
+// substitution-group member) that an UNENFORCING WILDCARD leaf anywhere in the
+// derived particles re-admits — the XSD 1.1 element-precedence hole the dynamic EDC
+// cannot recover (skip/lax-no-global never assess the re-admitted child's type). A
+// derived wildcard that EXCLUDES every reserved name (namespace or notQName), or one
+// that ENFORCES (strict, or lax with a matching global), is sound here.
+func baseElementReadmittedByUnenforcingWildcard(bp *Particle, rParticles []*Particle, schema *Schema) bool {
+	for _, qn := range reservedElementNames(bp, schema) {
+		for _, rp := range rParticles {
+			if particleUnenforcingWildcardAdmitsName(rp, qn, schema) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// particleUnenforcingWildcardAdmitsName reports whether any UNENFORCING WILDCARD
+// leaf reachable in the particle (skipping non-emitting particles) admits the
+// expanded name qn. A wildcard is unenforcing for qn when it never assesses a
+// child's type there: processContents="skip", or "lax" with no global element
+// declaration for qn (strict, or lax with a global, resolves a governing type).
+func particleUnenforcingWildcardAdmitsName(p *Particle, qn QName, schema *Schema) bool {
+	if particleEmitsNothing(p) {
+		return false
+	}
+	switch t := p.Term.(type) {
+	case *Wildcard:
+		return wildcardUnenforcingForName(t, qn, schema)
+	case *ModelGroup:
+		for _, child := range t.Particles {
+			if particleUnenforcingWildcardAdmitsName(child, qn, schema) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // particleEmitsNothing reports whether a particle can never emit any element
