@@ -3249,14 +3249,20 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrN
 	// STILL contains whitespace (e.g. base="a b", two tokens) or is otherwise
 	// malformed (a leading colon like ":u") is NOT a valid QName and must be a
 	// fatal schema error — not routed into component lookup as a bogus local name.
-	// reportInvalidQNameValue dedups, so a caller that already validated the same
-	// value (checkAttributeUse) does not double-report. Return a distinguished
-	// SENTINEL QName (isInvalidQName) rather than a plausible {targetNamespace}ref
-	// lookup key, so downstream ref-resolution SKIPS the malformed value instead of
-	// emitting a spurious "does not resolve to a(n) …" follow-on on top of the clear
+	// A value that collapses to the EMPTY string — a PRESENT-but-empty attribute
+	// (type="", ref="") OR a whitespace-only one (base="   ") — is likewise not a
+	// valid QName (the empty string is not an NCName), so it is reported here too;
+	// resolveQName is only ever called for a PRESENT attribute (every caller gates
+	// on presence / a non-empty raw value), so a collapsed-empty value always means
+	// present-but-empty, never absent. reportInvalidQNameValue dedups by (element,
+	// attribute, value), so a caller that already validated the same value
+	// (checkAttributeUse) does not double-report. Return a distinguished SENTINEL
+	// QName (isInvalidQName) rather than a plausible {targetNamespace}ref lookup key,
+	// so downstream ref-resolution SKIPS the malformed value instead of emitting a
+	// spurious "does not resolve to a(n) …" follow-on on top of the clear
 	// invalid-QName diagnostic. A recovery placeholder is still installed for the
 	// sentinel so downstream never dereferences a nil type/decl.
-	if ref != "" && !xmlchar.IsValidQName(ref) {
+	if !xmlchar.IsValidQName(ref) {
 		c.reportInvalidQNameValue(ctx, elem, attrName, ref)
 		return invalidQName(ref)
 	}

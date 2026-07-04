@@ -596,8 +596,12 @@ func parseSchemaBool(raw string) (bool, bool) {
 }
 
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
-	typeRef := getAttr(elem, attrType)
-	if typeRef != "" {
+	// xs:element/@type is an xs:QName: dispatch on PRESENCE, not a non-empty value.
+	// A PRESENT-but-empty type="" (or a whitespace-only type="   ") is an invalid
+	// (empty) QName, reported by resolveQName — not silently treated as an absent
+	// @type that falls through to an inline <xs:simpleType>/<xs:complexType> child.
+	if hasAttr(elem, attrType) {
+		typeRef := getAttr(elem, attrType)
 		qn := c.resolveQName(ctx, elem, attrType, typeRef)
 		c.elemRefs[decl] = qn
 		c.markChameleonEligible(decl, elem, typeRef)
@@ -662,8 +666,12 @@ func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *heli
 
 func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Element, opts attrUseReadOptions) *AttrUse {
 	au := &AttrUse{Name: opts.name}
-	if typeRef := getAttr(elem, attrType); typeRef != "" {
-		au.TypeName = c.resolveQName(ctx, elem, attrType, typeRef)
+	// xs:attribute/@type is an xs:QName: dispatch on PRESENCE. A PRESENT-but-empty
+	// type="" (or a whitespace-only type="   ") is an invalid (empty) QName, reported
+	// by resolveQName, not silently treated as an absent @type that falls through to
+	// an inline <xs:simpleType> child.
+	if hasAttr(elem, attrType) {
+		au.TypeName = c.resolveQName(ctx, elem, attrType, getAttr(elem, attrType))
 	} else {
 		// No type attribute: look for an inline anonymous <xs:simpleType>.
 		// (type and inline simpleType are mutually exclusive, enforced by
@@ -794,8 +802,12 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 	c.checkLocalElement(ctx, elem)
 	minOcc, maxOcc := parseParticleOccurs(elem)
 
-	// Handle element references (ref="...").
-	if ref := getAttr(elem, attrRef); ref != "" {
+	// Handle element references (ref="..."). Dispatch on PRESENCE: a PRESENT-but-empty
+	// ref="" (or a whitespace-only ref="   ") is an invalid (empty) QName, reported by
+	// resolveQName, not silently treated as an absent @ref that falls through to a
+	// named-element declaration.
+	if hasAttr(elem, attrRef) {
+		ref := getAttr(elem, attrRef)
 		qn := c.resolveQName(ctx, elem, attrRef, ref)
 		edecl := &ElementDecl{
 			Name:      qn,

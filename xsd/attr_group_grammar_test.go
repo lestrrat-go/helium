@@ -440,6 +440,11 @@ func TestAttrGroupRefResolution(t *testing.T) {
 		name   string
 		body   string
 		reject bool
+		// rejectMsg, when non-empty, is the substring the rejection diagnostic must
+		// contain; it defaults to the "does not resolve" wording. A PRESENT-but-empty
+		// ref="" is a lexically-invalid (empty) QName caught at the read point, so it
+		// reports the shared invalid-QName diagnostic instead.
+		rejectMsg string
 	}{
 		{
 			name: "valid ref to a global attribute group",
@@ -468,9 +473,10 @@ func TestAttrGroupRefResolution(t *testing.T) {
 			reject: true,
 		},
 		{
-			name:   "empty ref value",
-			body:   `<xs:complexType name="t"><xs:attributeGroup ref=""/></xs:complexType>`,
-			reject: true,
+			name:      "empty ref value",
+			body:      `<xs:complexType name="t"><xs:attributeGroup ref=""/></xs:complexType>`,
+			reject:    true,
+			rejectMsg: "The QName value '' is not a valid QName.",
 		},
 		{
 			name: "nested ref inside a global group names a simpleType",
@@ -485,7 +491,11 @@ func TestAttrGroupRefResolution(t *testing.T) {
 			t.Parallel()
 			_, errs := compileWithErrors(t, head+tc.body+tail)
 			if tc.reject {
-				require.Contains(t, errs, "does not resolve to a(n) attribute group definition",
+				want := tc.rejectMsg
+				if want == "" {
+					want = "does not resolve to a(n) attribute group definition"
+				}
+				require.Contains(t, errs, want,
 					"an unresolved attribute-group reference must be rejected; got: %q", errs)
 				return
 			}

@@ -375,4 +375,95 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 				"version=%v: an undeclared type must still report unresolved; got: %s", v, errs)
 		}
 	})
+
+	// A PRESENT-but-empty QName attribute — the empty string OR a whitespace-only
+	// value that collapses to empty — is an INVALID (empty) QName, NOT an absent
+	// attribute: it dispatches on PRESENCE (hasAttr), routes through resolveQName,
+	// yields exactly ONE "is not a valid QName" diagnostic, and produces no follow-on
+	// "does not resolve" unresolved-reference error. This closes the empty/
+	// whitespace-only cell for every QName-valued read site consistently.
+	presentEmptyQName := []struct {
+		name   string
+		schema string
+	}{
+		{"element-type-empty", `<xs:element name="e" type=""/>`},
+		{"element-type-ws", `<xs:element name="e" type="   "/>`},
+		{"attribute-type-empty", `<xs:element name="e"><xs:complexType><xs:attribute name="a" type=""/></xs:complexType></xs:element>`},
+		{"attribute-type-ws", `<xs:element name="e"><xs:complexType><xs:attribute name="a" type="  "/></xs:complexType></xs:element>`},
+		{"restriction-base-empty", `<xs:simpleType name="st"><xs:restriction base=""/></xs:simpleType>`},
+		{"restriction-base-ws", `<xs:simpleType name="st"><xs:restriction base="   "/></xs:simpleType>`},
+		{"local-element-ref-empty", `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref=""/></xs:sequence></xs:complexType></xs:element>`},
+		{"local-element-ref-ws", `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="  "/></xs:sequence></xs:complexType></xs:element>`},
+		{"group-ref-empty", `<xs:element name="e"><xs:complexType><xs:group ref=""/></xs:complexType></xs:element>`},
+		{"group-ref-ws", `<xs:element name="e"><xs:complexType><xs:group ref="  "/></xs:complexType></xs:element>`},
+		{"attributeGroup-ref-empty", `<xs:element name="e"><xs:complexType><xs:attributeGroup ref=""/></xs:complexType></xs:element>`},
+		{"attributeGroup-ref-ws", `<xs:element name="e"><xs:complexType><xs:attributeGroup ref="  "/></xs:complexType></xs:element>`},
+		{"attribute-ref-empty", `<xs:element name="e"><xs:complexType><xs:attribute ref=""/></xs:complexType></xs:element>`},
+	}
+	for _, tc := range presentEmptyQName {
+		t.Run("present-empty-qname-invalid/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				schema, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: present-empty QName must reject", v)
+				require.Nil(t, schema)
+				require.Equal(t, 1, strings.Count(errs, "is not a valid QName"),
+					"version=%v: exactly one invalid-QName diagnostic; got: %s", v, errs)
+				require.NotContains(t, errs, "does not resolve",
+					"version=%v: a present-empty QName must not produce a follow-on unresolved error; got: %s", v, errs)
+			}
+		})
+	}
+
+	// A PRESENT-but-empty / whitespace-only list @itemType is reported ONCE with the
+	// list-specific "must be a valid QName; it must not be empty" diagnostic (not the
+	// generic invalid-QName message): the structural derivation-body check already
+	// covers it, so resolveQName is not also invoked — no double diagnostic.
+	itemTypeEmpty := []struct {
+		name   string
+		schema string
+	}{
+		{"empty", `<xs:simpleType name="st"><xs:list itemType=""/></xs:simpleType>`},
+		{"ws", `<xs:simpleType name="st"><xs:list itemType="   "/></xs:simpleType>`},
+	}
+	for _, tc := range itemTypeEmpty {
+		t.Run("present-empty-itemtype/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				schema, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: present-empty itemType must reject", v)
+				require.Nil(t, schema)
+				require.Contains(t, errs, "must be a valid QName; it must not be empty",
+					"version=%v: itemType uses the list-specific diagnostic; got: %s", v, errs)
+				require.Equal(t, 0, strings.Count(errs, "is not a valid QName"),
+					"version=%v: itemType must NOT also emit the generic invalid-QName diagnostic; got: %s", v, errs)
+			}
+		})
+	}
+
+	// An ABSENT QName attribute keeps its established default — presence-gating must
+	// distinguish "attribute exists but empty" (invalid) from "attribute absent"
+	// (default). An absent @type falls through to an inline type or the ur-type; an
+	// absent restriction @base falls through to an inline <xs:simpleType> base.
+	absentKeepsDefault := []struct {
+		name   string
+		schema string
+	}{
+		{"absent-element-type-inline", `<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`},
+		{"absent-element-type-urtype", `<xs:element name="e"/>`},
+		{"absent-attribute-type-inline", `<xs:element name="e"><xs:complexType><xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`},
+		{"absent-restriction-base-inline", `<xs:simpleType name="st"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
+	}
+	for _, tc := range absentKeepsDefault {
+		t.Run("absent-keeps-default/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.NoError(t, cerr, "version=%v: an absent QName attribute must keep its default; got: %s", v, errs)
+			}
+		})
+	}
 }

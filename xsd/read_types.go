@@ -284,7 +284,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 				continue
 			}
 			ref := getAttr(ce, attrRef)
-			if ref != "" {
+			// checkContentModelGroupRef returned true, so 'ref' is PRESENT (a missing
+			// ref would have failed the check). Dispatch on presence so a present-empty
+			// ref="" resolves through resolveQName (reported as an invalid empty QName).
+			if hasAttr(ce, attrRef) {
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
@@ -725,7 +728,10 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 				continue
 			}
 			ref := getAttr(ce, attrRef)
-			if ref != "" {
+			// checkContentModelGroupRef returned true, so 'ref' is PRESENT (a missing
+			// ref would have failed the check). Dispatch on presence so a present-empty
+			// ref="" resolves through resolveQName (reported as an invalid empty QName).
+			if hasAttr(ce, attrRef) {
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
@@ -1216,8 +1222,12 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 		switch {
 		case isXSDElement(ce, elemRestriction):
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
-			baseRef := getAttr(ce, attrBase)
-			if baseRef != "" {
+			// xs:restriction/@base is an xs:QName: dispatch on PRESENCE. A PRESENT-but-empty
+			// base="" (or a whitespace-only base="   ") is an invalid (empty) QName, reported
+			// by resolveQName, not silently treated as an absent @base that falls through to
+			// an inline <xs:simpleType> child.
+			if hasAttr(ce, attrBase) {
+				baseRef := getAttr(ce, attrBase)
 				qn := c.resolveQName(ctx, ce, attrBase, baseRef)
 				c.typeRefs[td] = qn
 				c.markChameleonEligible(td, ce, baseRef)
@@ -1247,7 +1257,11 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			td.Variety = TypeVarietyList
 			itemRef := getAttr(ce, attrItemType)
-			if itemRef != "" {
+			// A PRESENT-but-empty / whitespace-only itemType is already reported with a
+			// list-specific diagnostic by checkSimpleTypeDerivationBody, so gate the
+			// resolveQName call on the COLLAPSED value being non-empty to avoid a second
+			// (invalid-QName) diagnostic for the same value.
+			if normalizeWhiteSpace(itemRef, "collapse") != "" {
 				qn := c.resolveQName(ctx, ce, attrItemType, itemRef)
 				c.itemTypeRefs[td] = qn
 				c.markChameleonEligible(td, ce, itemRef)

@@ -384,9 +384,11 @@ func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 // A '@name' — the DEFINITION form, valid only as a top-level xs:schema /
 // xs:redefine / xs:override child — is a schema-representation error, as is a
 // missing 'ref' or any non-annotation element child. It returns true when the
-// reference is well-formed (a non-empty 'ref', no 'name'), so the caller records
-// the group ref; false (having reported the error) otherwise. Version-INDEPENDENT
-// XSD rule.
+// reference is structurally well-formed (a PRESENT 'ref' attribute, no 'name', no
+// stray child), so the caller records the group ref and resolves its value — a
+// PRESENT-but-empty ref="" is passed through as a present ref so resolveQName reports
+// it as an invalid (empty) QName, rather than being silently dropped here; false
+// (having reported the error) otherwise. Version-INDEPENDENT XSD rule.
 func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Element) bool {
 	ref := getAttr(ce, attrRef)
 	if c.filename == "" {
@@ -421,7 +423,10 @@ func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Ele
 			fmt.Sprintf("The content of a model group reference is restricted to (annotation?); the element '%s' is not allowed.", sub.LocalName())))
 		ok = false
 	}
-	return ok && ref != ""
+	// ok already implies a PRESENT 'ref' (a missing 'ref' set ok=false above): a
+	// present-but-empty ref="" stays well-formed here so the caller resolves it and
+	// resolveQName reports the empty value as an invalid QName.
+	return ok
 }
 
 func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
@@ -601,7 +606,10 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				continue
 			}
 			ref := getAttr(ce, attrRef)
-			if ref != "" {
+			// checkContentModelGroupRef returned true, so 'ref' is PRESENT (a missing
+			// ref would have failed the check). Dispatch on presence so a present-empty
+			// ref="" resolves through resolveQName (reported as an invalid empty QName).
+			if hasAttr(ce, attrRef) {
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				// Group reference — create a placeholder model group.
