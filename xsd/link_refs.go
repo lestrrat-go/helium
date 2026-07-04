@@ -36,8 +36,31 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			// Skip self-referencing elements (where the element name matches
 			// the type name, e.g., <xs:element name="X" type="X"/>); these
 			// should resolve against the type map instead.
-			if ge, ok := c.schema.elements[qn]; ok && ge != edecl {
+			ge, ok := c.schema.elements[qn]
+			if _, eligible := c.chameleonEligible[edecl]; !ok && edecl.IsRef && eligible {
+				// A chameleon-eligible ref (unprefixed, no in-scope default
+				// namespace) resolves to the schema's targetNamespace, but the
+				// referenced global element may come from a no-targetNamespace
+				// imported schema. Mirror the empty-namespace fallback used for
+				// type and attribute-group references so such a valid reference
+				// resolves. A prefixed ref or one bound by an in-scope default
+				// namespace is NOT eligible, so a genuine unresolved reference
+				// still reports rather than silently resolving to {}local.
+				ge, ok = c.schema.elements[QName{Local: qn.Local}]
+			}
+			if ok && ge != edecl {
 				edecl.Type = ge.Type
+				if edecl.IsRef {
+					// Adopt the resolved global element's expanded name so the
+					// content model matches instance children by the referenced
+					// element's ACTUAL namespace. This corrects the empty-namespace
+					// fallback above, where the ref's name was resolved to the
+					// schema targetNamespace but the global lives in the absent
+					// namespace of an imported no-targetNamespace schema. For an
+					// ordinary ref the resolved name already equals edecl.Name, so
+					// this is a no-op.
+					edecl.Name = ge.Name
+				}
 				if edecl.Default == nil {
 					edecl.Default = ge.Default
 					edecl.DefaultNS = ge.DefaultNS
