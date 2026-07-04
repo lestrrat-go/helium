@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -13,8 +14,50 @@ import (
 
 // schemaRegistry wraps multiple imported schemas and provides unified
 // lookup and validation operations for schema-aware XSLT processing.
+//
+// Most per-schema xpath3.SchemaDeclarations behavior (element/attribute/type
+// lookup, schema-aware cast validation, list/union atomization metadata,
+// substitution-group membership) is DELEGATED to each schema's
+// xsd.Schema.Declarations() adapter — the single canonical implementation — so
+// the registry owns only the MULTI-SCHEMA dispatch (iterate schemas, first-hit)
+// and the xslt-specific helpers that are not part of the xpath3 interface.
+// IsSubtypeOf is the sole exception: XSLT SequenceType matching and the xsd
+// assert adapter use deliberately different simpleContent-complex-type
+// derivation semantics, so it keeps its own type-chain walk (see its doc).
 type schemaRegistry struct {
 	schemas []*xsd.Schema
+
+	declsOnce sync.Once
+	decls     []xpath3.SchemaDeclarations
+}
+
+// declarations returns the per-schema xpath3.SchemaDeclarations adapters,
+// parallel to r.schemas, building them once on first use. Safe for concurrent
+// access (a stylesheet-level registry is shared read-only across transforms).
+func (r *schemaRegistry) declarations() []xpath3.SchemaDeclarations {
+	r.declsOnce.Do(func() {
+		r.decls = make([]xpath3.SchemaDeclarations, len(r.schemas))
+		for i, s := range r.schemas {
+			r.decls[i] = s.Declarations()
+		}
+	})
+	return r.decls
+}
+
+// declForType returns the Declarations adapter of the first schema that declares
+// typeName (annotation format), mirroring the first-hit lookup order used by
+// LookupTypeDef. A built-in xs: name is not a schema-declared type, so it never
+// matches — those are handled by the callers as a no-op (nil facet check, no
+// list/union metadata).
+func (r *schemaRegistry) declForType(typeName string) (xpath3.SchemaDeclarations, bool) {
+	local, ns := splitAnnotationName(typeName)
+	decls := r.declarations()
+	for i, s := range r.schemas {
+		if _, ok := s.LookupType(local, ns); ok {
+			return decls[i], true
+		}
+	}
+	return nil, false
 }
 
 // LookupElement returns the element declaration and its type name from the
@@ -145,14 +188,26 @@ func (r *schemaRegistry) CastToSchemaType(ctx context.Context, value, typeName s
 	return "", fmt.Errorf("unknown schema type %s", typeName)
 }
 
-// LookupSchemaElement implements xpath3.SchemaDeclarations.
+// LookupSchemaElement implements xpath3.SchemaDeclarations by delegating to the
+// first schema that declares a matching global element.
 func (r *schemaRegistry) LookupSchemaElement(local, ns string) (typeName string, ok bool) {
-	return r.LookupElement(local, ns)
+	for _, d := range r.declarations() {
+		if tn, found := d.LookupSchemaElement(local, ns); found {
+			return tn, true
+		}
+	}
+	return "", false
 }
 
-// LookupSchemaAttribute implements xpath3.SchemaDeclarations.
+// LookupSchemaAttribute implements xpath3.SchemaDeclarations by delegating to the
+// first schema that declares a matching global attribute.
 func (r *schemaRegistry) LookupSchemaAttribute(local, ns string) (typeName string, ok bool) {
-	return r.LookupAttribute(local, ns)
+	for _, d := range r.declarations() {
+		if tn, found := d.LookupSchemaAttribute(local, ns); found {
+			return tn, true
+		}
+	}
+	return "", false
 }
 
 // LookupSchemaAttributeType returns the type name of an attribute declared
@@ -181,14 +236,31 @@ func (r *schemaRegistry) LookupSchemaAttributeType(elemLocal, elemNS, attrLocal,
 	return ""
 }
 
-// LookupSchemaType implements xpath3.SchemaDeclarations.
+// LookupSchemaType implements xpath3.SchemaDeclarations by delegating to the
+// first schema that declares the type (returning its base/atomization type
+// name).
 func (r *schemaRegistry) LookupSchemaType(local, ns string) (baseType string, ok bool) {
-	return r.LookupType(local, ns)
+	for _, d := range r.declarations() {
+		if bt, found := d.LookupSchemaType(local, ns); found {
+			return bt, true
+		}
+	}
+	return "", false
 }
 
 // IsSubtypeOf implements xpath3.SchemaDeclarations.
 // It checks whether typeName is the same as or a subtype of baseTypeName using
 // the annotation format ("xs:localName" for built-ins, "Q{ns}localName" for user-defined).
+//
+// This is NOT delegated to xsd.Schema.Declarations().IsSubtypeOf: the two use
+// DELIBERATELY DIFFERENT derivation semantics for a simpleContent COMPLEX type.
+// XSLT SequenceType matching (element(*, T) / attribute(*, T)) treats a complex
+// type with simpleContent derived from a simple base T as a subtype of T (so a
+// complexSimpleContentElem typed as a restriction of xs:decimal matches
+// element(*, xs:decimal) — W3C match-144..151), whereas the xsd assert adapter
+// deliberately excludes a complex type from its simple ancestry (so
+// `t:c instance of element(*, xs:string)` is false, matching Saxon/the xsd
+// conformance suite). The registry therefore keeps its own type-chain walk.
 func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 	// Canonicalize the XSD-namespace Q{...}local form to xs:local so the
 	// built-in hierarchy and union-member comparisons (which produce xs:local
@@ -321,79 +393,47 @@ func effectiveVarietyIsList(td *xsd.TypeDef) bool {
 }
 
 // ValidateCast implements xpath3.SchemaDeclarations.
-// It validates a string value against a user-defined schema type's facets.
+// It validates a string value against a user-defined schema type's facets,
+// delegating to the first schema that declares the type (its version-aware
+// cast-validation path).
 func (r *schemaRegistry) ValidateCast(ctx context.Context, value, typeName string) error {
-	td, _, found := r.LookupTypeDef(typeName)
-	if !found {
+	d, ok := r.declForType(typeName)
+	if !ok {
 		return nil // type not found — no facet check possible
 	}
-	if td.ContentType != xsd.ContentTypeSimple {
-		return nil // complex types don't constrain string values
-	}
-	return td.Validate(ctx, value, nil)
+	return d.ValidateCast(ctx, value, typeName)
 }
 
 // ValidateCastWithNS validates a value against a schema type using namespace
 // context for QName/NOTATION resolution. Implements xpath3.SchemaDeclarations.
 func (r *schemaRegistry) ValidateCastWithNS(ctx context.Context, value, typeName string, nsMap map[string]string) error {
-	td, _, found := r.LookupTypeDef(typeName)
-	if !found {
+	d, ok := r.declForType(typeName)
+	if !ok {
 		return nil
 	}
-	if td.ContentType != xsd.ContentTypeSimple {
-		return nil
-	}
-	return td.Validate(ctx, value, nsMap)
-}
-
-// atomizationTypeDef resolves the TypeDef whose variety/members/item type drive
-// ATOMIZATION of a node annotated with typeName. A simpleContent COMPLEX type
-// resolves to its EFFECTIVE content simple type (xsd.TypeDef.EffectiveContentSimpleType),
-// so a node typed as a simpleContent extension/restriction of a list/union — e.g.
-// a Date element typed DateType (simpleContent extension of a union) — atomizes
-// through the narrowed content type's members, matching the xsd data()/$value
-// path. A non-simpleContent type is returned unchanged.
-func (r *schemaRegistry) atomizationTypeDef(typeName string) (*xsd.TypeDef, bool) {
-	td, _, found := r.LookupTypeDef(typeName)
-	if !found || td == nil {
-		return nil, false
-	}
-	return td.EffectiveContentSimpleType(), true
+	return d.ValidateCastWithNS(ctx, value, typeName, nsMap)
 }
 
 // ListItemType implements xpath3.SchemaDeclarations.
-// For list types, returns the item type name in annotation format.
+// For list types, returns the item type name in annotation format, delegating
+// to the first schema that declares the type (which resolves the effective
+// content simple type for a simpleContent complex type).
 func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
-	td, ok := r.atomizationTypeDef(typeName)
+	d, ok := r.declForType(typeName)
 	if !ok {
 		return "", false
 	}
-	// Walk up the type chain to find the list variety.
-	for cur := td; cur != nil; cur = cur.BaseType {
-		if cur.Variety == xsd.TypeVarietyList && cur.ItemType != nil {
-			return xsdTypeNameFromDef(cur.ItemType), true
-		}
-	}
-	return "", false
+	return d.ListItemType(typeName)
 }
 
-// UnionMemberTypes implements xpath3.SchemaDeclarations.
+// UnionMemberTypes implements xpath3.SchemaDeclarations, delegating to the first
+// schema that declares the type.
 func (r *schemaRegistry) UnionMemberTypes(typeName string) []string {
-	td, ok := r.atomizationTypeDef(typeName)
-	if !ok || td == nil {
+	d, ok := r.declForType(typeName)
+	if !ok {
 		return nil
 	}
-	// Resolve the union members through the base chain (a facet-only restriction
-	// of a union carries the members on an ancestor).
-	memberDefs := td.ResolveUnionMembers()
-	if len(memberDefs) == 0 {
-		return nil
-	}
-	members := make([]string, 0, len(memberDefs))
-	for _, member := range memberDefs {
-		members = append(members, xsdTypeNameFromDef(member))
-	}
-	return members
+	return d.UnionMemberTypes(typeName)
 }
 
 // IsSubstitutionGroupMember implements xpath3.SchemaDeclarations. It checks if
@@ -401,13 +441,9 @@ func (r *schemaRegistry) UnionMemberTypes(typeName string) []string {
 // block/derivation filtering) of the substitution group headed by the element
 // (headLocal, headNS), driving the schema-element() kind test.
 func (r *schemaRegistry) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
-	headQN := xsd.QName{Local: headLocal, NS: headNS}
-	memberQN := xsd.QName{Local: memberLocal, NS: memberNS}
-	for _, s := range r.schemas {
-		for _, member := range s.SubstGroupMembers(headQN) {
-			if member.Name == memberQN {
-				return true
-			}
+	for _, d := range r.declarations() {
+		if d.IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS) {
+			return true
 		}
 	}
 	return false
