@@ -815,6 +815,14 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 	if hasAttr(elem, attrRef) {
 		switch {
 		case isGlobalAttributeDecl(elem):
+			// On a GLOBAL (top-level) attribute declaration @ref is structurally
+			// PROHIBITED — the schema-for-schemas `topLevelAttribute` type omits it
+			// entirely — so the prohibition is the correct and COMPLETE sole
+			// diagnostic regardless of the value: a malformed/empty ref on a
+			// component that may not carry ref at all is moot. The collapse-empty
+			// invalid-QName path below is therefore deliberately NOT reached here,
+			// and no second value diagnostic is emitted (one-diagnostic contract).
+			// The message carries no value, so ref="" and ref="   " report identically.
 			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 				"The attribute 'ref' is not allowed."))
 		default:
