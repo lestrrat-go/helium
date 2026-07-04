@@ -2276,19 +2276,19 @@ type mixedContentScan struct {
 }
 
 // entityContribution is the memoized effect of one entity reference / entity
-// node on the mixed-content scan: the character data its expansion contributes
-// to the initial value and the char/elem classification flags it sets.
+// node on the mixed-content scan. The character data its expansion contributes
+// is recorded as a [start, start+length) SPAN into the scan's single `initial`
+// arena — never a copied slice — so memoizing N entities costs O(N) small
+// structs plus the one budget-bounded arena, not O(N * budget) of cloned text.
+// The arena is preallocated to the budget and never grows past it, so a span
+// stays valid for the whole scan. hasChar/hasElem are the flags the expansion
+// sets.
 type entityContribution struct {
-	text    []byte
+	start   int
+	length  int
 	hasChar bool
 	hasElem bool
 }
-
-// maxMixedInitialSize is the floor for mixedContentScan.budget: an initial
-// value is accumulated exactly up to this size (or one byte past the fixed
-// value's length, whichever is larger) before truncation kicks in. Real
-// documents stay far below it, so error messages print the full content.
-const maxMixedInitialSize = 1 << 20
 
 // scanFrame is one work item on the iterative scan stack: either a node to
 // classify (ent == nil) or an entity whose expansion has been fully scanned and
@@ -2340,7 +2340,8 @@ func (s *mixedContentScan) scan(parent helium.Node) {
 			// the enclosing scope. Everything between ent's begin and this frame
 			// was ent's subtree (the stack kept siblings below this frame).
 			s.memo[f.ent] = &entityContribution{
-				text:    slices.Clone(s.initial[f.start:]),
+				start:   f.start,
+				length:  len(s.initial) - f.start,
 				hasChar: s.hasChar,
 				hasElem: s.hasElem,
 			}
@@ -2414,7 +2415,8 @@ func (s *mixedContentScan) beginEntity(stack *[]scanFrame, ent helium.Node) {
 		s.hasChar = true
 	}
 	s.memo[ent] = &entityContribution{
-		text:    slices.Clone(s.initial[start:]),
+		start:   start,
+		length:  len(s.initial) - start,
 		hasChar: s.hasChar,
 		hasElem: s.hasElem,
 	}
@@ -2446,9 +2448,13 @@ func (s *mixedContentScan) appendInitial(b []byte) {
 	s.initial = append(s.initial, b...)
 }
 
-// applyContribution replays a memoized entity contribution into the scan.
+// applyContribution replays a memoized entity contribution into the scan by
+// re-appending its recorded span of the initial arena. The span lies within the
+// already-written prefix and the arena never reallocates (cap == budget), so the
+// re-append copies from an earlier region into the current tail — non-overlapping
+// (the write cursor is at or past the span's end) and stable.
 func (s *mixedContentScan) applyContribution(c *entityContribution) {
-	s.appendInitial(c.text)
+	s.appendInitial(s.initial[c.start : c.start+c.length])
 	s.hasChar = s.hasChar || c.hasChar
 	s.hasElem = s.hasElem || c.hasElem
 }
@@ -2483,7 +2489,15 @@ func mixedInitialValue(elem *helium.Element, fixed string) (initial string, hasC
 	if elem == nil {
 		return "", false, false, false
 	}
-	s := mixedContentScan{budget: max(maxMixedInitialSize, len(fixed)+1)}
+	// The budget is one byte past the fixed value: the initial value can only
+	// equal fixed if it is no longer than fixed, so accumulating one extra byte
+	// is enough to detect every mismatch (a longer value is a mismatch by
+	// length). Capping here — rather than at a large fixed floor — is what bounds
+	// the scan's memory to O(budget) on an adversarial exponential-expansion
+	// entity graph. The arena is preallocated to the budget so memoized
+	// contribution spans stay valid (it never reallocates).
+	budget := len(fixed) + 1
+	s := mixedContentScan{budget: budget, initial: make([]byte, 0, budget)}
 	s.scan(elem)
 	return string(s.initial), s.hasChar, s.hasElem, s.invalid
 }
