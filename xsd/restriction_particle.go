@@ -448,6 +448,12 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 				return false
 			}
 		}
+		// Element-over-wildcard precedence (as in recurseChoiceUnordered): a derived
+		// sequence that drops a base choice element branch but carries a wildcard member
+		// re-admitting its name loses the base element's validation.
+		if version == Version11 && choiceReadmitsBaseElementUnsoundly(ctx, bg.Particles, rg.Particles, schema, version) {
+			return false
+		}
 		return true
 	default:
 		// Remaining mixed-compositor pairs: choice:sequence, choice:all,
@@ -1309,7 +1315,60 @@ func recurseChoiceUnordered(ctx context.Context, rParticles, bParticles []*Parti
 			return false
 		}
 	}
+	// XSD 1.1 element-over-wildcard precedence: a base choice routes a child whose
+	// name matches an element branch to that branch (validated against its type),
+	// even when a sibling wildcard branch would also admit it. A derived choice that
+	// DROPS such an element branch but keeps a wildcard branch that re-admits its name
+	// loses that validation — the choice-compositor analog of the recurseOrdered gate.
+	if version == Version11 && choiceReadmitsBaseElementUnsoundly(ctx, bParticles, rParticles, schema, version) {
+		return false
+	}
 	return true
+}
+
+// choiceReadmitsBaseElementUnsoundly reports whether the derived side (rParticles)
+// DROPS a base element branch/substitution-member — no derived element admits its
+// name, so element-precedence in the DERIVED cannot route a same-named child to an
+// element — while a derived WILDCARD re-admits it UNSOUNDLY. It is the choice/MapAndSum
+// analog of recurseOrdered's baseElementReadmittedByDerivedWildcard gate (which relies on
+// the order-preserving mapping to skip KEPT base elements); here the "kept" set is the
+// names any emitting derived element declares (collectEmittingModelElementNames), and every
+// dropped reserved name is delegated to the shared derivedWildcardReadmitsReservedName gate
+// (deferTypeSubstitution=true — the runtime dynamic EDC recovers type-DEFINITION
+// substitutability; only an UNENFORCING wildcard, or an enforcing global that drops a
+// base-local constraint the EDC cannot recover, rejects at compile). A derived wildcard that
+// EXCLUDES a name never re-admits it. Gated to Version11 by the callers.
+func choiceReadmitsBaseElementUnsoundly(ctx context.Context, bParticles, rParticles []*Particle, schema *Schema, version Version) bool {
+	derivedWilds := collectEmittingWildcardParticles(rParticles)
+	if len(derivedWilds) == 0 {
+		return false
+	}
+	derivedNames := collectEmittingModelElementNames(&ModelGroup{Particles: rParticles, MaxOccurs: 1}, schema)
+	for _, bp := range bParticles {
+		for _, be := range reservedElementDecls(bp) {
+			if !derivedNames[be.Name] && anyDerivedWildcardReadmits(ctx, derivedWilds, be.Name, be, schema, version) {
+				return true
+			}
+			for _, m := range instanceSubstMembers(be, schema) {
+				if !derivedNames[m.Name] && anyDerivedWildcardReadmits(ctx, derivedWilds, m.Name, m, schema, version) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// anyDerivedWildcardReadmits reports whether any wildcard in derivedWilds re-admits the
+// reserved name qn (governed by constraining) UNSOUNDLY, per the shared per-wildcard gate.
+func anyDerivedWildcardReadmits(ctx context.Context, derivedWilds []*Particle, qn QName, constraining *ElementDecl, schema *Schema, version Version) bool {
+	for _, dw := range derivedWilds {
+		dwc, _ := dw.Term.(*Wildcard)
+		if derivedWildcardReadmitsReservedName(ctx, dwc, qn, constraining, schema, version, true) {
+			return true
+		}
+	}
+	return false
 }
 
 // recurseAll handles all→all: every derived particle must restrict a DISTINCT

@@ -994,6 +994,131 @@ func TestWildcardRestrictsGroupReservedElementExcluded(t *testing.T) {
 	require.NotNil(t, schema)
 }
 
+// The reserved-element guard must fire on the DIRECT group-restriction dispatch paths
+// too, not only the wildcard-reduction path: a base TOP-LEVEL choice restricted by a
+// derived choice (recurseChoiceUnordered) or a derived sequence (MapAndSum). In both,
+// the base choice's `e` element branch is DROPPED by the derived while a derived wildcard
+// branch/member re-admits its name. Element-over-wildcard precedence routes `<e>` to the
+// base element's int type, so a skip wildcard re-admitting it is not a language subset.
+// Reachable only in 1.1 (the overlapping element/wildcard base is UPA-invalid in 1.0).
+func TestWildcardRestrictsChoiceDispatchReservedElement(t *testing.T) {
+	t.Parallel()
+
+	choiceChoice := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:choice>
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:choice>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	sequenceChoice := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:choice>
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"choice-restricts-choice", choiceChoice},
+		{"sequence-restricts-choice", sequenceChoice},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"a dropped base choice element branch re-admitted by a derived skip wildcard is not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// Sound companions of the choice-dispatch guard. (1) identical: the derived choice KEEPS
+// the `e` element branch, so element precedence in the DERIVED routes <e> to it — the
+// wildcard never re-admits it, and the restriction is an exact subset. (2) excluded: the
+// derived drops `e` but its wildcard is ##other (target namespace excluded), so it does
+// NOT admit the no-namespace/target `e`; no reserved name is re-admitted.
+func TestWildcardRestrictsChoiceDispatchSound(t *testing.T) {
+	t.Parallel()
+
+	identical := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:choice>
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:choice>
+          <xs:element name="e" type="xs:int"/>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	excluded := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t">
+  <xs:complexType name="base">
+    <xs:choice>
+      <xs:element name="e" type="xs:int"/>
+      <xs:any namespace="##other" processContents="skip"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:choice>
+          <xs:any namespace="##other" processContents="skip"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"identical-keeps-element", identical},
+		{"wildcard-excludes-element", excluded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.NoError(t, cerr,
+				"element precedence keeps a re-declared element, and a namespace-excluded wildcard re-admits nothing")
+			require.NotNil(t, schema)
+		})
+	}
+}
+
 // A base xs:all element declaration is an ABSTRACT head `h` with a concrete
 // substitution-group member `m`. The base routes <m> to the `h` element particle
 // (validated against m's int type), NOT to the base ##any wildcard — substitution
