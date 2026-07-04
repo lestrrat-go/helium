@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -95,7 +94,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			// For ref elements, report unresolved element declaration error.
 			if edecl.IsRef {
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) && !isInvalidQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, elemElement, attrRef, msg))
 				}
@@ -115,7 +114,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// that should exist or a missing user-defined type — before
 				// installing a recovery placeholder, so an invalid schema cannot
 				// silently compile and validate as if the type existed.
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) && !isInvalidQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, msg))
 				}
@@ -315,6 +314,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		return danglingGroups[i].local < danglingGroups[j].local
 	})
 	for _, d := range danglingGroups {
+		// A lexically-malformed group ref was already reported at its read point.
+		if isInvalidQName(d.qn) {
+			continue
+		}
 		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) model group definition.", d.qn.NS, d.qn.Local)
 		c.schemaError(ctx, schemaParserErrorAttr(d.source, d.line, d.local, elemGroup, attrRef, msg))
 	}
@@ -1352,6 +1355,11 @@ func (c *compiler) checkAttrGroupRefsResolve(ctx context.Context) {
 	var dangling []danglingRef
 
 	report := func(src, elemLocal string, line int, qn QName) {
+		// A lexically-malformed attributeGroup ref was already reported at its read
+		// point; skip the "does not resolve" follow-on.
+		if isInvalidQName(qn) {
+			return
+		}
 		if _, ok := c.schema.attrGroups[qn]; ok {
 			return
 		}
@@ -1482,6 +1490,10 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 
 	// Part B: @ref must resolve to a global attribute declaration.
 	for au, qn := range c.attrRefs {
+		// A lexically-malformed attribute ref was already reported at its read point.
+		if isInvalidQName(qn) {
+			continue
+		}
 		if _, ok := c.schema.globalAttrs[qn]; ok {
 			continue
 		}
@@ -2036,6 +2048,12 @@ func modelGroupHasContent(mg *ModelGroup) bool {
 // placeholder only after this records the error, so an invalid schema cannot
 // silently compile and validate documents as if the missing type existed.
 func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, qn QName) {
+	// A lexically-malformed base/itemType/memberType was already reported at its
+	// read point; skip the "does not resolve" follow-on (the recovery placeholder
+	// is still installed by the caller).
+	if isInvalidQName(qn) {
+		return
+	}
 	if c.deprecatedDatatypeQName(qn) {
 		return
 	}
@@ -3232,10 +3250,15 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrN
 	// malformed (a leading colon like ":u") is NOT a valid QName and must be a
 	// fatal schema error — not routed into component lookup as a bogus local name.
 	// reportInvalidQNameValue dedups, so a caller that already validated the same
-	// value (checkAttributeUse) does not double-report.
+	// value (checkAttributeUse) does not double-report. Return a distinguished
+	// SENTINEL QName (isInvalidQName) rather than a plausible {targetNamespace}ref
+	// lookup key, so downstream ref-resolution SKIPS the malformed value instead of
+	// emitting a spurious "does not resolve to a(n) …" follow-on on top of the clear
+	// invalid-QName diagnostic. A recovery placeholder is still installed for the
+	// sentinel so downstream never dereferences a nil type/decl.
 	if ref != "" && !xmlchar.IsValidQName(ref) {
 		c.reportInvalidQNameValue(ctx, elem, attrName, ref)
-		return QName{Local: ref, NS: c.schema.targetNamespace}
+		return invalidQName(ref)
 	}
 	local := ref
 	ns := c.schema.targetNamespace
@@ -3299,6 +3322,31 @@ func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.El
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 }
 
+// invalidQNameSentinelNS marks a QName that resolveQName has already reported as
+// lexically malformed. It is a reserved, non-URI value that no real namespace can
+// equal (a leading NUL), so isInvalidQName distinguishes the sentinel and every
+// downstream ref-resolution site SKIPS it — the malformed value is never routed
+// into component lookup, so no spurious "does not resolve to a(n) …" follow-on is
+// emitted on top of the clear invalid-QName diagnostic.
+const invalidQNameSentinelNS = "\x00urn:x-helium:invalid-qname"
+
+// invalidQName builds the sentinel QName carrying the malformed lexical value.
+func invalidQName(local string) QName { return QName{Local: local, NS: invalidQNameSentinelNS} }
+
+// isInvalidQName reports whether qn is the sentinel resolveQName returns for a
+// lexically-malformed value (already reported once at its read point).
+func isInvalidQName(qn QName) bool { return qn.NS == invalidQNameSentinelNS }
+
+// invalidQNameDiagKey identifies one invalid-QName diagnostic by the reporting
+// element's IDENTITY (not its line, which two minified siblings share) plus the
+// attribute name and lexical value, so reportInvalidQNameValue dedups a single
+// attribute validated twice while two siblings each report.
+type invalidQNameDiagKey struct {
+	elem  *helium.Element
+	attr  string
+	value string
+}
+
 // reportInvalidQNameValue emits a fatal schema-compilation error for a
 // QName-valued attribute (attrName, e.g. "type"/"ref"/"base") whose value is not
 // a lexically valid xs:QName (e.g. a leading colon like ":u"). Without this such a
@@ -3310,16 +3358,18 @@ func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Ele
 		return
 	}
 	// One attribute may be validated at more than one point (e.g. checkAttributeUse
-	// AND resolveQName), so dedup identical diagnostics by (source, line, element
-	// local name, ATTRIBUTE name, value) to avoid emitting the same invalid-QName
-	// error twice. The ATTRIBUTE name is part of the key so two DIFFERENT
-	// QName-valued attributes on the SAME one-line element carrying the SAME invalid
-	// value (e.g. substitutionGroup=":bad" type=":bad") each report, and neither is
-	// silently suppressed (which would otherwise leave a follow-on bogus-lookup
-	// diagnostic to replace the clear invalid-QName error).
-	key := c.diagSource() + "\x00" + strconv.Itoa(elem.Line()) + "\x00" + elem.LocalName() + "\x00" + attrName + "\x00" + ref
+	// AND resolveQName), so dedup identical diagnostics to avoid emitting the same
+	// invalid-QName error twice. The key is the element's IDENTITY (pointer) plus the
+	// ATTRIBUTE name and value — NOT (source, line, local name), which two SIBLING
+	// same-named declarations minified onto one physical line share, collapsing their
+	// two genuine diagnostics into one. Keying on the element itself keeps the
+	// same-element double-validation deduped while letting two distinct siblings on
+	// one line each report; the attribute name distinguishes two DIFFERENT
+	// QName-valued attributes on ONE element carrying the SAME invalid value (e.g.
+	// substitutionGroup=":bad" type=":bad").
+	key := invalidQNameDiagKey{elem: elem, attr: attrName, value: ref}
 	if c.reportedInvalidQName == nil {
-		c.reportedInvalidQName = map[string]struct{}{}
+		c.reportedInvalidQName = map[invalidQNameDiagKey]struct{}{}
 	}
 	if _, seen := c.reportedInvalidQName[key]; seen {
 		return

@@ -313,4 +313,66 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 				"version=%v: each invalid-QName attribute must report; got: %s", v, errs)
 		}
 	})
+
+	// A lexically-malformed QName value is reported ONCE at its read point and must
+	// NOT also produce a spurious follow-on "does not resolve to a(n) …" diagnostic:
+	// resolveQName returns a distinguished sentinel so downstream ref-resolution
+	// skips the malformed value instead of routing it into a bogus component lookup.
+	noFollowOn := []struct {
+		name   string
+		schema string
+	}{
+		{"element-type", `<xs:element name="e" type="a b"/>`},
+		{"element-ref", `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="a b"/></xs:sequence></xs:complexType></xs:element>`},
+		{"attribute-ref", `<xs:element name="e"><xs:complexType><xs:attribute ref="a b"/></xs:complexType></xs:element>`},
+		{"restriction-base", `<xs:simpleType name="st"><xs:restriction base="a b"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
+		{"list-itemType", `<xs:simpleType name="st"><xs:list itemType="a b"/></xs:simpleType>`},
+		{"union-memberTypes", `<xs:simpleType name="u"><xs:union memberTypes="a:b:c"/></xs:simpleType>`},
+		{"group-ref", `<xs:element name="e"><xs:complexType><xs:group ref="a b"/></xs:complexType></xs:element>`},
+		{"attributeGroup-ref", `<xs:element name="e"><xs:complexType><xs:attributeGroup ref="a b"/></xs:complexType></xs:element>`},
+	}
+	for _, tc := range noFollowOn {
+		t.Run("no-follow-on-unresolved/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.schema)
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+				require.Equal(t, 1, strings.Count(errs, "is not a valid QName"),
+					"version=%v: exactly one invalid-QName diagnostic; got: %s", v, errs)
+				require.NotContains(t, errs, "does not resolve",
+					"version=%v: a malformed value must not produce a follow-on unresolved error; got: %s", v, errs)
+			}
+		})
+	}
+
+	// Two SIBLING declarations minified onto ONE physical line carrying the SAME
+	// malformed value in the SAME attribute each report: the dedup keys on the
+	// element's IDENTITY, not on (source, line, local name) which siblings share.
+	t.Run("dedup-per-element/two-siblings-one-line", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="a" type=":bad"/><xs:element name="b" type=":bad"/></xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			_, errs, cerr := compileWith(t, v, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+			require.Equal(t, 2, strings.Count(errs, "is not a valid QName"),
+				"version=%v: each sibling's invalid @type must report; got: %s", v, errs)
+		}
+	})
+
+	// A well-formed but genuinely UNDECLARED ref still gets the normal unresolved
+	// diagnostic — the sentinel skip is only for LEXICALLY malformed values, not for
+	// a lexically-valid name that happens to resolve to nothing.
+	t.Run("undeclared-ref-still-unresolved", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="missing"/></xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			_, errs, cerr := compileWith(t, v, schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+			require.NotContains(t, errs, "is not a valid QName",
+				"version=%v: a well-formed name is not a lexical error; got: %s", v, errs)
+			require.Contains(t, errs, "does not resolve",
+				"version=%v: an undeclared type must still report unresolved; got: %s", v, errs)
+		}
+	})
 }

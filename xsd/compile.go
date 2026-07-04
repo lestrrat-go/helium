@@ -60,9 +60,10 @@ type compiler struct {
 	// so the base kind is unknown and any further diagnostic would be spurious.
 	recoveryBaseTypes map[*TypeDef]bool
 	// reportedInvalidQName dedups invalid-QName diagnostics (reportInvalidQNameValue)
-	// keyed by (source, line, local name, value), so an attribute validated at more
-	// than one point (checkAttributeUse AND resolveQName) is reported only once.
-	reportedInvalidQName map[string]struct{}
+	// keyed by (element identity, attribute name, value), so one attribute validated
+	// at more than one point (checkAttributeUse AND resolveQName) is reported once
+	// while two SIBLING declarations minified onto one physical line each report.
+	reportedInvalidQName map[invalidQNameDiagKey]struct{}
 	elemRefs             map[*ElementDecl]QName
 	// unresolved xs:alternative (conditional type assignment) @type references,
 	// resolved in resolveRefs. A slice (not a map) so nil-append works without
