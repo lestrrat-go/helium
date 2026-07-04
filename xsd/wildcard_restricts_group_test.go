@@ -1104,3 +1104,201 @@ func TestWildcardRestrictsAllSubstMemberSoundCompiles(t *testing.T) {
 		})
 	}
 }
+
+// A base xs:all element declaration whose occurrences the derived side only PARTIALLY
+// covers spills its EXCESS occurrences to a derived wildcard: the matcher fills the
+// derived element's (smaller) maxOccurs budget first, then routes further same-named
+// children to the wildcard. When that wildcard is UNENFORCING (skip, or lax with no
+// matching global), the excess children are accepted UNVALIDATED, though the base
+// routes every occurrence — and every instance-admissible substitution member — to
+// the element's specific type. The narrowed case is unsound the same way the dropped
+// case is, so the reservation guard must fire on partial coverage too.
+//
+//   - own-name: base <e int, max 2> narrowed to <e int, max 1> beside a skip wildcard.
+//     A second <e> spills to the skip wildcard: derived accepts <e>bad</e>, base
+//     rejects it as a non-int. REJECT.
+//   - subst-member: base <ref h, max 2> (h abstract with concrete member m:int)
+//     narrowed to <ref m, max 1> beside a skip wildcard notQName="h". A second <m>
+//     spills to the skip wildcard (which excludes only the head h, admitting m).
+//     REJECT.
+//
+// The overlapping element/wildcard base is UPA-invalid in XSD 1.0, so this is
+// reachable only in 1.1.
+func TestWildcardRestrictsAllElementNarrowedReadmittedRejects(t *testing.T) {
+	t.Parallel()
+
+	ownName := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="broot" type="base"/>
+  <xs:element name="droot" type="derived"/>
+</xs:schema>`
+
+	substMember := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:int" abstract="true"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="h" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element ref="m" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" notQName="h" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="broot" type="base"/>
+  <xs:element name="droot" type="derived"/>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"own-name", ownName},
+		{"subst-member", substMember},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"the derived narrows the base element below its maxOccurs; the excess occurrences spill to an unenforcing wildcard, so the restriction is not a language subset")
+			require.Nil(t, schema)
+		})
+	}
+}
+
+// The sound companions of the narrowed-element guard: each COMPILES because no
+// uncovered base occurrence spills to an unenforcing wildcard.
+//
+//   - fully-covered: the derived keeps the base element at the SAME maxOccurs, so no
+//     occurrence spills — the element governs all its children.
+//   - namespace-excluded: the base element is in the absent namespace while the
+//     wildcards admit only urn:other, so a spilled <e> matches no wildcard (the
+//     derived REJECTS it) — more restrictive, hence a valid subset.
+//   - strict-defers-own-name: the excess <e> spills to a STRICT wildcard resolving a
+//     GLOBAL <e int> whose type validly restricts the base element — the DYNAMIC EDC
+//     governs it at validation, so compile defers.
+//   - strict-defers-subst: the excess substitution member <m> spills to a STRICT
+//     wildcard (notQName="h") that resolves the global member declaration — again the
+//     runtime EDC governs it, so compile defers.
+func TestWildcardRestrictsAllElementNarrowedSoundCompiles(t *testing.T) {
+	t.Parallel()
+
+	fullyCovered := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="2"/>
+          <xs:any namespace="##any" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	namespaceExcluded := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="urn:other" processContents="skip"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="urn:other" processContents="skip"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	strictOwnName := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="xs:int"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="e" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="strict"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element ref="e" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" processContents="strict"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	strictSubst := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:int" abstract="true"/>
+  <xs:element name="m" type="xs:int" substitutionGroup="h"/>
+  <xs:complexType name="base">
+    <xs:all>
+      <xs:element ref="h" minOccurs="0" maxOccurs="2"/>
+      <xs:any namespace="##any" processContents="strict"/>
+    </xs:all>
+  </xs:complexType>
+  <xs:complexType name="derived">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:all>
+          <xs:element ref="m" minOccurs="0" maxOccurs="1"/>
+          <xs:any namespace="##any" notQName="h" processContents="strict"/>
+        </xs:all>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name      string
+		schemaXML string
+	}{
+		{"fully-covered", fullyCovered},
+		{"namespace-excluded", namespaceExcluded},
+		{"strict-defers-own-name", strictOwnName},
+		{"strict-defers-subst", strictSubst},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, _, cerr := compileWith(t, xsd.Version11, tc.schemaXML)
+			require.NoError(t, cerr,
+				"no uncovered base occurrence spills to an unenforcing wildcard, so the restriction is a valid subset")
+			require.NotNil(t, schema)
+		})
+	}
+}

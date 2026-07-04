@@ -1497,36 +1497,45 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		}
 	}
 
-	// A base element the derived side DROPS (no derived particle maps to it,
-	// sumMax==0) but whose NAME a derived wildcard re-admits is an invalid
-	// restriction: in the base the name is governed by the dropped element's own
-	// (specific) type, while in the derived it is governed by the wildcard. A lax
-	// or skip wildcard, or a strict wildcard resolving to a GLOBAL element whose
-	// type does not validly restrict the dropped base element's, lets the derived
-	// type ACCEPT content for that name the base type REJECTS — so the derived is
-	// not a valid restriction. (wild069: base all{e:union(date,time), …} dropped to
-	// all{…, any ##local lax}, with a global <e type="xs:duration"> the lax wildcard
-	// admits — zang accepts <e>duration</e> that zing rejects.)
+	// A base element whose OCCURRENCES the derived side does not fully cover, but
+	// whose NAME a derived wildcard re-admits, is an invalid restriction: in the base
+	// those occurrences are governed by the element's own (specific) type, while in
+	// the derived the uncovered ones spill to the wildcard. A lax or skip wildcard, or
+	// a strict wildcard resolving to a GLOBAL element whose type does not validly
+	// restrict the base element's, lets the derived type ACCEPT content for that name
+	// the base type REJECTS — so the derived is not a valid restriction. (wild069:
+	// base all{e:union(date,time), …} dropped to all{…, any ##local lax}, with a
+	// global <e type="xs:duration"> the lax wildcard admits — zang accepts
+	// <e>duration</e> that zing rejects.)
 	//
-	// SCOPING: only DROPPED base elements are checked. A base element the derived
-	// KEEPS (sumMax>0, also admitted by the same ##local/##targetNamespace wildcard,
-	// e.g. f here) is governed by its own derived declaration, not the wildcard, so
-	// it must be skipped — otherwise every all-with-wildcard restriction whose
-	// wildcard namespace covers a kept element would be false-rejected.
+	// This covers BOTH the DROPPED case (no derived particle maps to the base
+	// element, sumMax==0, so ALL its occurrences spill) and the NARROWED case (the
+	// derived KEEPS the element but with a smaller maxOccurs, so only the EXCESS base
+	// occurrences beyond the derived's cap spill — the matcher fills the element
+	// budget first, then routes further same-named children to the wildcard). The
+	// gate is occurrence COVERAGE: when the derived-covered max (sumMax[i]) covers the
+	// base's effective max, no occurrence spills and the element is governed entirely
+	// by its own derived declaration, so it is skipped — otherwise every
+	// all-with-wildcard restriction whose wildcard namespace covers a fully-covered
+	// element would be false-rejected. occurrenceValidRestriction above already
+	// guarantees sumMax[i] <= base max, so the only uncovered cases are sumMax below
+	// the base max (bounded) or a bounded derived under an unbounded base.
 	//
 	// EXEMPTION: a STRICT derived wildcard resolving to a GLOBAL element whose type
-	// validly restricts the dropped base element (derivedElemNameAndTypeOK) keeps the
-	// content within the base type, so it is a valid restriction.
+	// validly restricts the base element (derivedElemNameAndTypeOK) keeps the spilled
+	// content within the base type, so it is a valid restriction. A strict / lax-with-
+	// global wildcard otherwise resolves a governing type the DYNAMIC EDC checks
+	// against the base local type at validation, deferring to that runtime check.
 	//
 	// SUBSTITUTION MEMBERS: the base also routes an instance-admissible
-	// substitution-group member of a dropped base element to that element (validated
-	// against the member's type via the substitution group), so an UNENFORCING derived
+	// substitution-group member of the base element to that element (validated against
+	// the member's type via the substitution group), so an UNENFORCING derived
 	// wildcard (skip, or lax with no matching global) that re-admits a member name
 	// accepts content the base validates more strictly — checked alongside the own
-	// name below.
+	// name.
 	for i, bp := range baseElems {
-		if sumMax[i] != 0 {
-			continue // kept in the derived — governed by its derived declaration
+		if occursCovers(sumMax[i], bp.MaxOccurs) {
+			continue // occurrences fully covered — no spill to a wildcard
 		}
 		if particleEmitsNothing(bp) {
 			continue // prohibited base element — admits no content to lose
@@ -1535,19 +1544,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		if !ok {
 			continue
 		}
-		for _, dw := range derivedWilds {
-			dwc, _ := dw.Term.(*Wildcard)
-			if !wildcardAllowsName(dwc, be.Name, schema) {
-				continue
-			}
-			if dwc.ProcessContents == ProcessStrict {
-				if g, found := schema.elements[be.Name]; found && derivedElemNameAndTypeOK(ctx, g, be, schema, version) {
-					continue
-				}
-			}
-			return false
-		}
-		if droppedAllElementMemberReadmittedByUnenforcingWildcard(be, derivedWilds, schema) {
+		if baseAllElementReadmittedByDerivedWildcard(ctx, be, derivedWilds, schema, version) {
 			return false
 		}
 	}
@@ -1645,20 +1642,45 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 	return true
 }
 
-// droppedAllElementMemberReadmittedByUnenforcingWildcard reports whether a DROPPED
-// base xs:all element's instance-admissible substitution-group member name is
-// re-admitted by an UNENFORCING derived wildcard (skip, or lax with no matching
-// global). The base routes such a member child to this element particle — validated
-// against the member's type via the substitution group — so an unenforcing derived
-// wildcard that admits the member accepts content the base validates more strictly,
-// and the derived is not a language subset. A strict / lax-with-global derived
-// wildcard resolves a governing type the DYNAMIC EDC checks against the base local
-// type at validation, so it is left to that runtime check (compile accepts). This
-// mirrors the element-precedence reservation applied to the choice/sequence reduction
+// baseAllElementReadmittedByDerivedWildcard reports whether a base xs:all element
+// whose occurrences the derived side does not fully cover has its spilled content
+// re-admitted by a derived wildcard that fails to govern it as strictly as the base.
+// The base routes the element's OWN name AND every instance-admissible substitution-
+// group member of it to this element particle (validated against the element's /
+// member's specific type). The uncovered (dropped or excess) occurrences spill to a
+// derived wildcard, so the restriction is UNSOUND when:
+//
+//   - a derived wildcard re-admits the element's OWN name and is not a STRICT
+//     wildcard resolving to a GLOBAL declaration whose type validly restricts the
+//     base element (derivedElemNameAndTypeOK) — a skip/lax wildcard, or a strict
+//     wildcard with no such global, accepts content the base's specific type rejects;
+//     OR
+//   - a derived wildcard UNENFORCINGLY re-admits a substitution-member name (skip, or
+//     lax with no matching global — wildcardUnenforcingForName): the base validates
+//     the member against its own type, the wildcard does not.
+//
+// A strict / lax-with-global wildcard resolves a governing type the DYNAMIC EDC
+// checks against the base local type at validation, so it is left to that runtime
+// check (compile accepts). A derived wildcard that EXCLUDES the name by namespace /
+// notQName never re-admits it (wildcardAllowsName / wildcardUnenforcingForName both
+// consult the namespace and notQName constraints), so it is exempt. This mirrors the
+// element-precedence reservation applied to the choice/sequence reduction
 // (wildcardReadmitsReservedElement) and recurseOrdered
 // (baseElementReadmittedByUnenforcingWildcard) paths, reusing instanceSubstMembers
-// and wildcardUnenforcingForName so all three stay consistent.
-func droppedAllElementMemberReadmittedByUnenforcingWildcard(be *ElementDecl, derivedWilds []*Particle, schema *Schema) bool {
+// and wildcardUnenforcingForName so all stay consistent.
+func baseAllElementReadmittedByDerivedWildcard(ctx context.Context, be *ElementDecl, derivedWilds []*Particle, schema *Schema, version Version) bool {
+	for _, dw := range derivedWilds {
+		dwc, _ := dw.Term.(*Wildcard)
+		if !wildcardAllowsName(dwc, be.Name, schema) {
+			continue
+		}
+		if dwc.ProcessContents == ProcessStrict {
+			if g, found := schema.elements[be.Name]; found && derivedElemNameAndTypeOK(ctx, g, be, schema, version) {
+				continue
+			}
+		}
+		return true
+	}
 	for _, m := range instanceSubstMembers(be, schema) {
 		for _, dw := range derivedWilds {
 			dwc, _ := dw.Term.(*Wildcard)
