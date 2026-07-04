@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -522,28 +521,15 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 				c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
 				continue
 			}
-			// An xs:NOTATION restriction's enumeration values must name a notation
-			// declared in the schema (§3.14.6). This is a version-INDEPENDENT rule,
-			// enforced in both XSD 1.0 and 1.1.
-			if variety == TypeVarietyAtomic && builtinBaseLocal(td) == lexicon.TypeNotation {
-				lex := normalizeWhiteSpace(ev, resolveWhiteSpace(td))
-				qn, qerr := resolveLexicalQName(lex, enumNS)
-				if qerr != nil {
-					continue
-				}
-				// The declaration-table lookup resolves the enumeration value as a
-				// schema QName: an UNPREFIXED value uses the in-scope DEFAULT namespace
-				// (so "png" in a schema whose default namespace is its target namespace
-				// names {tns}png). resolveLexicalQName maps an unprefixed value to no
-				// namespace for the value space, so re-apply the default namespace here
-				// for the declaration match.
-				if strings.IndexByte(lex, ':') < 0 {
-					qn.NS = enumNS[""]
-				}
-				if _, ok := c.notations[qn]; !ok {
-					msg := fmt.Sprintf("The enumeration value '%s' does not match a declared notation.", ev)
-					c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
-				}
+			// An xs:NOTATION enumeration value must name a notation declared in the
+			// schema (§3.14.6). This is a version-INDEPENDENT rule, enforced in both
+			// XSD 1.0 and 1.1, and applies to a NOTATION carrier used as an atomic
+			// base, a list item type, or a union member alike — so the check
+			// dispatches on the type's effective variety and decomposes a list/union
+			// literal into its NOTATION atomic components.
+			if c.enumLiteralNamesUndeclaredNotation(ctx, ev, enumNS, td, variety) {
+				msg := fmt.Sprintf("The enumeration value '%s' does not match a declared notation.", ev)
+				c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
 			}
 		}
 	}
@@ -711,6 +697,73 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 		// even though its collapsed form "p:a" is a perfectly valid bound QName.
 		_, err := resolveLexicalQName(normalizeWhiteSpace(ev, resolveWhiteSpace(td)), enumNS)
 		return err != nil
+	}
+}
+
+// enumLiteralNamesUndeclaredNotation reports whether the enumeration literal ev,
+// interpreted against td's effective variety, is (or contains) an xs:NOTATION
+// value that names a notation NOT declared in the schema (compiler.notations).
+// This is the §3.14.6 rule that an xs:NOTATION enumeration value must be the
+// QName of a declared <xs:notation>; it is version-INDEPENDENT and applies to a
+// NOTATION carrier used as an atomic base, a list item type, or a union member.
+// The dispatch mirrors enumLiteralHasUnboundQName so the three carrier contexts
+// cannot diverge:
+//
+//   - atomic: when the base resolves to builtin xs:NOTATION, resolve ev (its own
+//     default namespace applied to an unprefixed value via
+//     resolveNotationOrQNameValue) and look it up in compiler.notations.
+//   - list: split ev into whitespace-separated tokens and check each against the
+//     item type.
+//   - union: the literal is typed by the FIRST member (declaration order) whose
+//     value space accepts it (active-member selection); only when that member is
+//     a NOTATION carrier does the declared-notation rule apply to the literal.
+func (c *compiler) enumLiteralNamesUndeclaredNotation(ctx context.Context, ev string, enumNS map[string]string, td *TypeDef, variety TypeVariety) bool {
+	switch variety {
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return false
+		}
+		itemVariety := resolveVariety(itemType)
+		for _, item := range value.XSDFields(ev) {
+			if c.enumLiteralNamesUndeclaredNotation(ctx, item, enumNS, itemType, itemVariety) {
+				return true
+			}
+		}
+		return false
+	case TypeVarietyUnion:
+		for _, member := range resolveUnionMembers(td) {
+			if member == nil {
+				continue
+			}
+			// The literal is typed by the first member whose value space accepts it,
+			// so a value that matches an earlier non-NOTATION member (e.g. xs:string)
+			// is not a NOTATION and is not judged. A NOTATION carrier accepts a
+			// lexically valid QName regardless of whether it is declared (that is the
+			// very check this performs), so a bare-NOTATION member selects the literal
+			// and the token must then name a declared notation.
+			sub := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, suppressDepth: 1, version: c.version}
+			if validateValue(ctx, ev, enumNS, member, "", "", 0, sub) != nil {
+				continue
+			}
+			return c.enumLiteralNamesUndeclaredNotation(ctx, ev, enumNS, member, resolveVariety(member))
+		}
+		return false
+	default:
+		if builtinBaseLocal(td) != lexicon.TypeNotation {
+			return false
+		}
+		// An UNPREFIXED value uses the in-scope DEFAULT namespace (so "png" in a
+		// schema whose default namespace is its target namespace names {tns}png),
+		// matching the runtime enumeration comparison. A malformed QName is already
+		// reported by enumLiteralHasUnboundQName, so a resolve failure here is not
+		// re-flagged.
+		qn, err := resolveNotationOrQNameValue(normalizeWhiteSpace(ev, resolveWhiteSpace(td)), lexicon.TypeNotation, enumNS)
+		if err != nil {
+			return false
+		}
+		_, ok := c.notations[qn]
+		return !ok
 	}
 }
 
