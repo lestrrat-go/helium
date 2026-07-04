@@ -147,6 +147,26 @@ func baseOpenContentFromContext(ctx context.Context) *OpenContent {
 	return oc
 }
 
+// substElementRestrictionKey marks (in ctx) a DIRECT element-to-element positional
+// mapping — recurseOrdered pairing a derived element particle against a base element
+// particle — where a derived element that is an instance-admissible substitution-group
+// MEMBER of the base element may validly restrict it (NameAndTypeOK against the member).
+// It is set ONLY at that sound site, so the group-mapping recursion (sequence:choice
+// MapAndSum, choice/all reductions) does NOT inherit it: a subst-member narrowing buried
+// in a MapAndSum is a §3.9.6 restriction 1.0 syntactically rejects (W3C particlesZ028,
+// invalid in 1.0 / valid in 1.1), whereas the direct element:element mapping is accepted
+// (W3C elemZ027_e/f, particlesZ008).
+type substElementRestrictionKey struct{}
+
+func withSubstElementRestriction(ctx context.Context) context.Context {
+	return context.WithValue(ctx, substElementRestrictionKey{}, true)
+}
+
+func substElementRestrictionAllowed(ctx context.Context) bool {
+	v, _ := ctx.Value(substElementRestrictionKey{}).(bool)
+	return v
+}
+
 // particleValidRestriction reports whether the restriction particle r is a valid
 // restriction of the base particle b. Returning true means "accepted" — and, per
 // the conservative contract above, it also returns true for any case the
@@ -290,7 +310,21 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 // is checked conservatively.
 func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, schema *Schema, version Version) bool {
 	if rt.Name.Local != bt.Name.Local || rt.Name.NS != bt.Name.NS {
-		return false
+		// Name mismatch. A base element particle admits, at instance time, its head
+		// plus its whole (instance-admissible, block/abstract/derivation-filtered)
+		// substitution group, so a derived element that is a MEMBER of the base
+		// element's substitution group — and validly restricts that member
+		// (NameAndTypeOK) — is a valid restriction (W3C elemZ027_e/f, particlesZ008).
+		// Enabled ONLY from the direct element-to-element positional mapping
+		// (recurseOrdered, via the context flag), so the group-mapping recursion does
+		// not use it (particlesZ028 stays 1.0-invalid), and ONLY when the base element
+		// is AT-MOST-ONCE (b.MaxOccurs == 1): a repeating base element's occurrence
+		// check is a hole-blind interval, so a subst-member narrowing of it could hide
+		// content the base rejects (W3C elemZ026, particlesV020 stay rejected).
+		if !substElementRestrictionAllowed(ctx) || b.MaxOccurs != 1 {
+			return false
+		}
+		return derivedElementRestrictsBaseSubstMember(ctx, r, rt, b, bt, schema, version)
 	}
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
 		return false
@@ -364,6 +398,32 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 		}
 	}
 	return true
+}
+
+// isElementParticle reports whether a particle's term is an element declaration.
+func isElementParticle(p *Particle) bool {
+	_, ok := p.Term.(*ElementDecl)
+	return ok
+}
+
+// derivedElementRestrictsBaseSubstMember reports whether the derived element rt is
+// an instance-admissible substitution-group member of the base element bt whose
+// declaration rt validly restricts (NameAndTypeOK against the concrete member — same
+// name plus a type/occurrence/fixed/nillable subset), so a derived LOCAL element that
+// merely shares a member's name but widens its type is NOT accepted. The base particle
+// b's occurrence range (b.MaxOccurs == 1 here) bounds the derived, so the member
+// particle carries b's occurrence rather than a bare {1,1}.
+func derivedElementRestrictsBaseSubstMember(ctx context.Context, r *Particle, rt *ElementDecl, b *Particle, bt *ElementDecl, schema *Schema, version Version) bool {
+	for _, m := range instanceSubstMembers(bt, schema) {
+		if m.Name != rt.Name {
+			continue
+		}
+		memberP := &Particle{MinOccurs: b.MinOccurs, MaxOccurs: b.MaxOccurs, Term: m}
+		if elementRestrictsElement(ctx, r, rt, memberP, m, schema, version) {
+			return true
+		}
+	}
+	return false
 }
 
 // groupRestrictsGroup handles the model-group cases (recurse / map-and-sum). It
@@ -1229,9 +1289,19 @@ func recurseOrdered(ctx context.Context, rParticles, bParticles []*Particle, sch
 		if particleEmitsNothing(bp) {
 			continue
 		}
-		if ri < len(rParticles) && particleValidRestriction(ctx, rParticles[ri], bp, schema, version) {
-			ri++
-			continue
+		if ri < len(rParticles) {
+			// A DIRECT element-to-element positional pair is the sound site for
+			// substitution-group-member restriction (see substElementRestrictionKey):
+			// enable it only here, so a group descent (e.g. sequence:choice MapAndSum)
+			// does not inherit it.
+			pairCtx := ctx
+			if isElementParticle(rParticles[ri]) && isElementParticle(bp) {
+				pairCtx = withSubstElementRestriction(ctx)
+			}
+			if particleValidRestriction(pairCtx, rParticles[ri], bp, schema, version) {
+				ri++
+				continue
+			}
 		}
 		// This base particle is not matched by the current derived particle. It is
 		// only allowed to be unmatched if it is emptiable (can occur zero times).
