@@ -1168,6 +1168,15 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 		case isXSDElement(elem, elemComplexType):
 			name := collapsedAttr(elem, attrName)
 			if name == "" {
+				// A PRESENT-but-collapse-empty @name ("" or "   ") on a redefine child
+				// is an invalid (empty) NCName: the name-keyed dispatch would otherwise
+				// SILENTLY DROP it before any named parser runs, so the malformed child
+				// is never validated. A genuinely-ABSENT @name keeps the silent skip (it
+				// can match no redefine target). Present-empty ≡ whitespace-only.
+				if hasAttr(elem, attrName) {
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalComplexType,
+						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+				}
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1201,6 +1210,12 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 		case isXSDElement(elem, elemSimpleType):
 			name := collapsedAttr(elem, attrName)
 			if name == "" {
+				// Present-but-collapse-empty @name → invalid (empty) NCName; absent →
+				// silent skip (see the complexType case above).
+				if hasAttr(elem, attrName) {
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalSimpleType,
+						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+				}
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1228,6 +1243,12 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 		case isXSDElement(elem, elemGroup):
 			name := collapsedAttr(elem, attrName)
 			if name == "" {
+				// Present-but-collapse-empty @name → invalid (empty) NCName; absent →
+				// silent skip (see the complexType case above).
+				if hasAttr(elem, attrName) {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+				}
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1300,6 +1321,12 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 		case isXSDElement(elem, elemAttributeGroup):
 			name := collapsedAttr(elem, attrName)
 			if name == "" {
+				// Present-but-collapse-empty @name → invalid (empty) NCName; absent →
+				// silent skip (see the complexType case above).
+				if hasAttr(elem, attrName) {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "attributeGroup",
+						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
+				}
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
