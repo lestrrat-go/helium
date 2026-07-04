@@ -37,12 +37,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			// the type name, e.g., <xs:element name="X" type="X"/>); these
 			// should resolve against the type map instead.
 			ge, ok := c.schema.elements[qn]
-			if !ok && edecl.IsRef && qn.NS != "" {
-				// An unprefixed ref resolves to the schema's targetNamespace,
-				// but the referenced global element may come from a no-namespace
+			if _, eligible := c.chameleonEligible[edecl]; !ok && edecl.IsRef && eligible {
+				// A chameleon-eligible ref (unprefixed, no in-scope default
+				// namespace) resolves to the schema's targetNamespace, but the
+				// referenced global element may come from a no-targetNamespace
 				// imported schema. Mirror the empty-namespace fallback used for
-				// group and attribute-group references so a valid reference into
-				// an imported no-targetNamespace schema resolves.
+				// type and attribute-group references so such a valid reference
+				// resolves. A prefixed ref or one bound by an in-scope default
+				// namespace is NOT eligible, so a genuine unresolved reference
+				// still reports rather than silently resolving to {}local.
 				ge, ok = c.schema.elements[QName{Local: qn.Local}]
 			}
 			if ok && ge != edecl {
