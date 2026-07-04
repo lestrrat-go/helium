@@ -302,3 +302,121 @@ func TestDocOrderCache_BuildFromMultipleDocuments(t *testing.T) {
 	require.NotEqual(t, -1, cache.Position(child2))
 	require.Less(t, cache.Compare(root2, child2), 0)
 }
+
+// childByType returns the first direct child of n whose node type and (when
+// non-empty) name match.
+func childByType(n helium.Node, typ helium.ElementType, name string) helium.Node {
+	for c := range helium.Children(n) {
+		if c.Type() != typ {
+			continue
+		}
+		if name == "" || c.Name() == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// TestDocOrderCache_EntityRefNoSiblingSpill guards the owned-boundary child
+// enumeration in indexWalk. An EntityRefNode's child is the shared Entity node
+// owned by the DTD, whose sibling pointers thread into the DTD's declaration
+// list. Enumerating an entity reference's children via a raw LastChild /
+// PrevSibling walk escapes into those sibling declarations and assigns them
+// spurious document-order positions AFTER the entity reference, interleaved
+// with the element content. indexWalk enumerates via helium.Children, which
+// stops at the foreign boundary, so a sibling declaration is never dragged into
+// the content region — it keeps only whatever position the DTD-child descent
+// already gave it (before the root element), and the real element nodes keep
+// correct document order.
+//
+// The reference is to the SECOND-declared entity (bar) so that a PrevSibling
+// walk from its shared node would reach the FIRST declaration (foo); foo is the
+// spill victim under the buggy enumeration.
+func TestDocOrderCache_EntityRefNoSiblingSpill(t *testing.T) {
+	const src = "<?xml version=\"1.0\"?>\n" +
+		"<!DOCTYPE root [\n" +
+		"<!ENTITY foo \"FOO\">\n" +
+		"<!ENTITY bar \"BAR\">\n" +
+		"]>\n" +
+		"<root><a>before</a>&bar;<b>after</b></root>"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+
+	elemA := childByType(root, helium.ElementNode, "a")
+	require.NotNil(t, elemA, "element a")
+	elemB := childByType(root, helium.ElementNode, "b")
+	require.NotNil(t, elemB, "element b")
+	entityRef := childByType(root, helium.EntityRefNode, "bar")
+	require.NotNil(t, entityRef, "entity reference bar")
+
+	// The un-referenced sibling declaration foo, found in the DTD.
+	dtd := childByType(doc, helium.DTDNode, "")
+	if dtd == nil {
+		dtd = childByType(doc, helium.DocumentTypeNode, "")
+	}
+	require.NotNil(t, dtd, "DTD node")
+	fooDecl := childByType(dtd, helium.EntityNode, "foo")
+	require.NotNil(t, fooDecl, "foo entity declaration")
+
+	cache := &ixpath.DocOrderCache{}
+	cache.BuildFrom(doc)
+
+	// Real element nodes keep correct document order regardless of the entity
+	// reference between them.
+	require.Less(t, cache.Compare(elemA, entityRef), 0, "a before entity ref")
+	require.Less(t, cache.Compare(entityRef, elemB), 0, "entity ref before b")
+	require.Less(t, cache.Compare(elemA, elemB), 0, "a before b")
+
+	// The spill is gone: the un-referenced declaration foo is NOT positioned
+	// after the entity reference. It stays in the DTD region, before the root
+	// element. Under the buggy sibling walk, foo landed after the reference,
+	// interleaved with the element content (Position(foo) > Position(ref)).
+	require.Less(t, cache.Position(fooDecl), cache.Position(root),
+		"sibling declaration foo must stay in the DTD region, before the root element")
+	require.Less(t, cache.Position(fooDecl), cache.Position(entityRef),
+		"sibling declaration foo must not be spilled after the entity reference")
+}
+
+// TestDocOrderCache_EntityFreeDocUnaffected locks the byte-identical invariant:
+// a document without entity references (and one with a DTD but no references)
+// gets exactly the document-order positions the pre-fix indexWalk produced.
+func TestDocOrderCache_EntityFreeDocUnaffected(t *testing.T) {
+	t.Run("no DTD", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>x</a><b>y</b></root>`))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		a := childByType(root, helium.ElementNode, "a")
+		b := childByType(root, helium.ElementNode, "b")
+
+		cache := &ixpath.DocOrderCache{}
+		cache.BuildFrom(doc)
+
+		require.Equal(t, 0, cache.Position(doc))
+		require.Equal(t, 2, cache.Position(root))
+		require.Equal(t, 4, cache.Position(a))
+		require.Equal(t, 8, cache.Position(b))
+	})
+
+	t.Run("DTD with declarations but no reference", func(t *testing.T) {
+		const src = "<?xml version=\"1.0\"?>\n" +
+			"<!DOCTYPE root [\n<!ENTITY foo \"FOO\">\n<!ENTITY bar \"BAR\">\n]>\n" +
+			"<root><a>x</a><b>y</b></root>"
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		a := childByType(root, helium.ElementNode, "a")
+		b := childByType(root, helium.ElementNode, "b")
+
+		cache := &ixpath.DocOrderCache{}
+		cache.BuildFrom(doc)
+
+		// Declarations index in the DTD region (pre-existing DTD-child descent),
+		// before the root element, in both the old and new enumeration.
+		require.Equal(t, 8, cache.Position(root))
+		require.Equal(t, 10, cache.Position(a))
+		require.Equal(t, 14, cache.Position(b))
+	})
+}

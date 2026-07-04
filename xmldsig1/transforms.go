@@ -339,7 +339,15 @@ func collectSubtreeNodes(n helium.Node) []helium.Node {
 				nodes = append(nodes, attr)
 			}
 		}
-		for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
+		// Enumerate owned children via helium.Children, which stops at a
+		// foreign-owned child (an entity reference's shared Entity node is owned
+		// by the DTD, whose sibling pointers thread into the DTD declaration
+		// list) and is cycle-safe. A raw FirstChild/NextSibling walk would spill
+		// DTD declaration nodes into the c14n node set. This matches the c14n
+		// canonicalizer itself, which enumerates element children and expands an
+		// entity reference through helium.Children, so the node set holds only
+		// the owned subtree.
+		for child := range helium.Children(cur) {
 			walk(child)
 		}
 	}
