@@ -336,7 +336,10 @@ func compileSchemaErrors(t *testing.T, schemaXML string) string {
 func TestNotationEnumeration(t *testing.T) {
 	t.Parallel()
 
-	const enumSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+	// The notations are declared in the schema targetNamespace urn:p, so the
+	// enumeration values "p:jpeg"/"p:png" (p bound to urn:p) name declared
+	// notations (§3.14.6).
+	const enumSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" targetNamespace="urn:p">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:notation name="png" public="image/png"/>
   <xs:simpleType name="imageNotation">
@@ -350,13 +353,13 @@ func TestNotationEnumeration(t *testing.T) {
 
 	t.Run("enumeration-derived unbound prefix rejected", func(t *testing.T) {
 		t.Parallel()
-		_, err := validateInstance(t, enumSchema, `<n>q:jpeg</n>`)
+		_, err := validateInstance(t, enumSchema, `<n xmlns="urn:p">q:jpeg</n>`)
 		require.Error(t, err)
 	})
 
 	t.Run("enumeration-derived bound prefix accepted", func(t *testing.T) {
 		t.Parallel()
-		errs, err := validateInstance(t, enumSchema, `<n xmlns:p="urn:p">p:jpeg</n>`)
+		errs, err := validateInstance(t, enumSchema, `<n xmlns="urn:p" xmlns:p="urn:p">p:jpeg</n>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
@@ -751,15 +754,17 @@ func TestUnionOfListsEnumerationValueSpace(t *testing.T) {
 	})
 }
 
-// TestNotationCarrierRecursive verifies item 3 (W09): the NOTATION-without-
-// enumeration check is recursive over varieties. An xs:list itemType="xs:NOTATION"
-// and a union member typed xs:NOTATION (neither enumeration-derived) are rejected
-// at compile time, while a list/union built over an enumeration-derived NOTATION
-// type compiles cleanly.
+// TestNotationCarrierRecursive verifies the NOTATION-carrier recursion over
+// varieties. The bare built-in xs:NOTATION referenced directly as an xs:list
+// itemType or union memberType is NOT an error — only a RESTRICTION of
+// xs:NOTATION requires an enumeration (W3C particlesZ007 declares a valid union
+// memberTypes="xs:NOTATION"), and that restriction is judged at its own simpleType
+// definition. A list/union built over an enumeration-derived NOTATION type that
+// names a declared notation compiles cleanly.
 func TestNotationCarrierRecursive(t *testing.T) {
 	t.Parallel()
 
-	t.Run("list of un-enumerated NOTATION rejected", func(t *testing.T) {
+	t.Run("list of bare xs:NOTATION compiles", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="notationList">
@@ -768,11 +773,10 @@ func TestNotationCarrierRecursive(t *testing.T) {
   <xs:element name="n" type="notationList"/>
 </xs:schema>`
 		errs := compileSchemaErrors(t, schemaXML)
-		require.NotEmpty(t, errs, "expected a compile error for list of un-enumerated NOTATION")
-		require.Contains(t, errs, "NOTATION")
+		require.Empty(t, errs, "the bare built-in xs:NOTATION as a list item type is not an error: %s", errs)
 	})
 
-	t.Run("union member un-enumerated NOTATION rejected", func(t *testing.T) {
+	t.Run("union member bare xs:NOTATION compiles", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="notationOrInt">
@@ -781,17 +785,16 @@ func TestNotationCarrierRecursive(t *testing.T) {
   <xs:element name="n" type="notationOrInt"/>
 </xs:schema>`
 		errs := compileSchemaErrors(t, schemaXML)
-		require.NotEmpty(t, errs, "expected a compile error for union member un-enumerated NOTATION")
-		require.Contains(t, errs, "NOTATION")
+		require.Empty(t, errs, "the bare built-in xs:NOTATION as a union member is not an error (particlesZ007): %s", errs)
 	})
 
 	t.Run("list of enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION">
-      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="jpeg"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="notationList">
@@ -805,11 +808,11 @@ func TestNotationCarrierRecursive(t *testing.T) {
 
 	t.Run("union member enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION">
-      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="jpeg"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="notationOrInt">
@@ -856,11 +859,11 @@ func TestNotationTypeOnDeclaration(t *testing.T) {
 
 	t.Run("element typed via enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION">
-      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="jpeg"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="n" type="imageNotation"/>
@@ -1240,14 +1243,16 @@ func TestQNameUnprefixedIgnoresDefaultNamespace(t *testing.T) {
 
 // TestNotationUnprefixedIgnoresDefaultNamespace mirrors the QName case for
 // xs:NOTATION: an UNPREFIXED NOTATION *value* resolves to NO namespace and must
-// not pick up the in-scope default namespace of either the schema or the
-// instance. The schema and instance declare DIFFERENT default namespaces, yet
-// an enumeration of unprefixed "jpeg" must match an unprefixed instance "jpeg".
+// not pick up the in-scope default namespace of the instance. The notation and
+// the enumeration value are declared in the schema targetNamespace urn:tns (so
+// the enumeration value "tns:jpeg" names a declared notation per §3.14.6); a
+// prefixed instance value bound to urn:tns matches it, while an unprefixed
+// instance value — even under a default namespace of urn:tns — resolves to no
+// namespace and so does NOT match the {urn:tns}jpeg enumeration.
 func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
 	t.Parallel()
 
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns="urn:schema-default"
     targetNamespace="urn:tns"
     xmlns:tns="urn:tns">
   <xs:notation name="jpeg" public="image/jpeg"/>
@@ -1255,23 +1260,23 @@ func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
   <xs:element name="n">
     <xs:simpleType>
       <xs:restriction base="xs:NOTATION">
-        <xs:enumeration value="jpeg"/>
+        <xs:enumeration value="tns:jpeg"/>
       </xs:restriction>
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
 
-	t.Run("unprefixed value matches enumeration across different default namespaces", func(t *testing.T) {
+	t.Run("prefixed value bound to target namespace matches enumeration", func(t *testing.T) {
 		t.Parallel()
 		errs, err := validateInstance(t, schemaXML,
-			`<tns:n xmlns:tns="urn:tns" xmlns="urn:instance-default">jpeg</tns:n>`)
+			`<tns:n xmlns:tns="urn:tns">tns:jpeg</tns:n>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
-	t.Run("unprefixed value does not pick up instance default namespace", func(t *testing.T) {
+	t.Run("unprefixed value ignores default namespace and resolves to no namespace", func(t *testing.T) {
 		t.Parallel()
 		errs, err := validateInstance(t, schemaXML,
-			`<tns:n xmlns:tns="urn:tns" xmlns:d="urn:instance-default">d:jpeg</tns:n>`)
+			`<tns:n xmlns:tns="urn:tns" xmlns="urn:tns">jpeg</tns:n>`)
 		require.Error(t, err)
 		require.Contains(t, errs, "[facet 'enumeration']")
 	})
