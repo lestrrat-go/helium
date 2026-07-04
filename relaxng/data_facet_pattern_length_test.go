@@ -115,10 +115,12 @@ func TestDataLengthFacetQNameEnforced(t *testing.T) {
 
 	t.Run("maxLength constrains a QName", func(t *testing.T) {
 		t.Parallel()
-		// "abc" is a 3-rune lexically valid QName; maxLength="1" rejects it, the same
-		// way the xsd validator rejects an out-of-space QName length facet.
+		// "abc" is a 3-rune lexically valid QName; RELAX NG's datatype library
+		// (pre-errata-4009) treats maxLength="1" as constraining and rejects it. The
+		// xsd validator instead treats QName length facets as vacuous (errata 4009),
+		// so this is a deliberate RELAX-NG-vs-XSD divergence.
 		require.Error(t, validateWith(t, mk("QName", "maxLength", "1"), `<r>abc</r>`),
-			`maxLength on xs:QName must reject a longer value (XSD 1.0 parity)`)
+			`RELAX NG maxLength on xs:QName rejects a longer value (pre-errata-4009 enforcement)`)
 	})
 
 	t.Run("maxLength accepts an in-bounds QName", func(t *testing.T) {

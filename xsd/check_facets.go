@@ -402,9 +402,11 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 // because checkEnumQNameAndNotation already reports that exact case with
 // libxml2-matching phrasing; validating it here too would produce a duplicate /
 // differently-phrased diagnostic. Every OTHER enumeration literal of a
-// QName/NOTATION-carrying type is still validated against the base value space,
-// so a QName base restricted with (e.g.) xs:length value="2" still rejects an
-// out-of-space "abc" enumeration member.
+// QName/NOTATION-carrying type is still validated against the base value space
+// (prefix binding, and any applicable facets). The length facets do NOT apply to
+// QName/NOTATION (errata 4009; see checkFacets), so a QName base carrying xs:length
+// does not reject an "out-of-length" enumeration member — only a genuinely
+// value-space-invalid literal is caught.
 func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	base := td.BaseType
 	if base == nil || len(fs.Enumeration) == 0 {
