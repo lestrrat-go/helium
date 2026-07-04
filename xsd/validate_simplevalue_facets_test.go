@@ -377,6 +377,53 @@ func TestNotationEnumeration(t *testing.T) {
 	})
 }
 
+// TestNotationEnumUnprefixedDefaultNamespace verifies that an UNPREFIXED
+// xs:NOTATION enumeration LITERAL resolves against the schema's in-scope DEFAULT
+// namespace consistently at compile time (the declared-notation lookup,
+// check_facets.go) AND at validation time (the facet comparison,
+// simplevalue_facets.go). The schema declares its default namespace equal to its
+// target namespace, so `<xs:enumeration value="jpeg"/>` names {urn:p}jpeg on both
+// sides; a prefixed instance value p:jpeg (same namespace) therefore matches the
+// enumeration, while an instance value in no namespace does not — the enum's
+// value space is identical at both phases.
+func TestNotationEnumUnprefixedDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	// xmlns default == targetNamespace, so the unprefixed enumeration literal
+	// "jpeg" names the declared {urn:p}jpeg notation (§3.14.6) — the schema
+	// compiles (agreeing that the enum is {urn:p}jpeg, not {}jpeg).
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:p" targetNamespace="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:element name="n">
+    <xs:simpleType>
+      <xs:restriction base="xs:NOTATION">
+        <xs:enumeration value="jpeg"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("prefixed instance value in the schema default namespace matches", func(t *testing.T) {
+		t.Parallel()
+		// The runtime enum resolves the unprefixed literal to {urn:p}jpeg (the
+		// schema default namespace), matching the prefixed instance value p:jpeg.
+		errs, err := validateInstance(t, schemaXML,
+			`<n xmlns="urn:p" xmlns:p="urn:p">p:jpeg</n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("no-namespace instance value does not match", func(t *testing.T) {
+		t.Parallel()
+		// A NOTATION *value* with no prefix resolves to no namespace, so it cannot
+		// equal the {urn:p}jpeg enumeration — proving the enum picked up the schema
+		// default namespace rather than staying {}jpeg.
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:n xmlns:tns="urn:p">jpeg</tns:n>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}
+
 // TestEnumQNameUnboundPrefixCompileError verifies item 1: an enumeration literal
 // of a QName/NOTATION-restricted type whose prefix is not bound in the literal's
 // in-scope namespaces is reported as a compile-time schema error, rather than
@@ -1290,15 +1337,17 @@ func TestQNameUnprefixedIgnoresDefaultNamespace(t *testing.T) {
 	})
 }
 
-// TestNotationUnprefixedIgnoresDefaultNamespace mirrors the QName case for
-// xs:NOTATION: an UNPREFIXED NOTATION *value* resolves to NO namespace and must
-// not pick up the in-scope default namespace of the instance. The notation and
-// the enumeration value are declared in the schema targetNamespace urn:tns (so
-// the enumeration value "tns:jpeg" names a declared notation per §3.14.6); a
-// prefixed instance value bound to urn:tns matches it, while an unprefixed
-// instance value — even under a default namespace of urn:tns — resolves to no
-// namespace and so does NOT match the {urn:tns}jpeg enumeration.
-func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
+// TestNotationUnprefixedPicksUpDefaultNamespace verifies that an UNPREFIXED
+// xs:NOTATION value resolves against its own in-scope DEFAULT namespace — the
+// same rule the compile-time declared-notation lookup applies to the enumeration
+// literal — so the enum's value space is identical at compile and validation
+// (W3C msData/simpleType/stZ075). The notation and enumeration value are declared
+// in the schema targetNamespace urn:tns; the enumeration literal "tns:jpeg" names
+// the declared {urn:tns}jpeg notation. A prefixed instance value bound to urn:tns
+// matches it, an unprefixed instance value under a default namespace of urn:tns
+// resolves to {urn:tns}jpeg and matches too, and an unprefixed value with NO
+// default namespace resolves to no namespace and does NOT match.
+func TestNotationUnprefixedPicksUpDefaultNamespace(t *testing.T) {
 	t.Parallel()
 
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -1322,10 +1371,17 @@ func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
-	t.Run("unprefixed value ignores default namespace and resolves to no namespace", func(t *testing.T) {
+	t.Run("unprefixed value under matching default namespace matches enumeration", func(t *testing.T) {
 		t.Parallel()
 		errs, err := validateInstance(t, schemaXML,
 			`<tns:n xmlns:tns="urn:tns" xmlns="urn:tns">jpeg</tns:n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("unprefixed value with no default namespace resolves to no namespace and fails", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:n xmlns:tns="urn:tns">jpeg</tns:n>`)
 		require.Error(t, err)
 		require.Contains(t, errs, "[facet 'enumeration']")
 	})

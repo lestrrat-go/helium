@@ -135,6 +135,21 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 		found := false
 		if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 			valueQN, err := resolveLexicalQName(val, valueNS)
+			// For xs:NOTATION an UNPREFIXED value — the instance value here and each
+			// enumeration literal below — is a QName resolved in its own in-scope
+			// namespace context and picks up the DEFAULT namespace, the same rule the
+			// compile-time declared-notation lookup (check_facets.go) applies to the
+			// enumeration literal. Applying it to BOTH sides keeps the enum's value
+			// space consistent between compile and validation: an unprefixed
+			// `<xs:enumeration value="jpeg"/>` under a schema default namespace names
+			// {ns}jpeg at both phases, so a prefixed instance value in that namespace
+			// matches while a no-default-namespace instance value does not. Each side
+			// resolves against ITS OWN default (the instance's valueNS, the literal's
+			// captured enumNS). xs:QName keeps the no-namespace value-space rule — it
+			// has no compile-time default-namespace resolution to agree with.
+			if err == nil && builtinLocal == lexicon.TypeNotation && strings.IndexByte(val, ':') < 0 {
+				valueQN.NS = valueNS[""]
+			}
 			if err == nil {
 				for i, ev := range fs.Enumeration {
 					var enumNS map[string]string
@@ -145,8 +160,15 @@ func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs 
 					// value space, so it must be whitespace-normalized with the same
 					// effective whiteSpace facet the instance value already had
 					// applied before its QName is resolved.
-					enumQN, enumErr := resolveLexicalQName(normalizeWhiteSpace(ev, whiteSpace), enumNS)
-					if enumErr == nil && valueQN == enumQN {
+					enumLex := normalizeWhiteSpace(ev, whiteSpace)
+					enumQN, enumErr := resolveLexicalQName(enumLex, enumNS)
+					if enumErr != nil {
+						continue
+					}
+					if builtinLocal == lexicon.TypeNotation && strings.IndexByte(enumLex, ':') < 0 {
+						enumQN.NS = enumNS[""]
+					}
+					if valueQN == enumQN {
 						found = true
 						break
 					}
