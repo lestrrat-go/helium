@@ -612,13 +612,15 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 // restriction/extension and records the type ref. Shared by parseRestriction and
 // parseExtension.
 func (c *compiler) recordDerivationBaseRef(ctx context.Context, elem *helium.Element, td *TypeDef) {
-	baseRef := getAttr(elem, attrBase)
-	if baseRef == "" {
+	// @base is an xs:QName: dispatch on PRESENCE via resolveQNameRef so a
+	// PRESENT-but-empty base="" (or whitespace-only) is reported once as an invalid
+	// QName, not silently treated as an absent (inline-derivation) base.
+	qn, ok := c.resolveQNameRef(ctx, elem, attrBase)
+	if !ok {
 		return
 	}
-	qn := c.resolveQName(ctx, elem, attrBase, baseRef)
 	c.typeRefs[td] = qn
-	c.markChameleonEligible(td, elem, baseRef)
+	c.markChameleonEligible(td, elem, getAttr(elem, attrBase))
 }
 
 // parseComplexContentDerivationBody parses the children of an <xs:restriction> or
@@ -855,11 +857,12 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 // lenient loop and the XSD 1.1 strict wrapper so both behave identically once a
 // derivation is selected.
 func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *helium.Element, td *TypeDef, kind DerivationKind) {
-	baseRef := getAttr(ce, attrBase)
-	if baseRef != "" {
-		qn := c.resolveQName(ctx, ce, attrBase, baseRef)
+	// @base is an xs:QName: dispatch on PRESENCE via resolveQNameRef so a
+	// PRESENT-but-empty base="" (or whitespace-only) is reported once as an invalid
+	// QName, not silently treated as absent.
+	if qn, ok := c.resolveQNameRef(ctx, ce, attrBase); ok {
 		c.typeRefs[td] = qn
-		c.markChameleonEligible(td, ce, baseRef)
+		c.markChameleonEligible(td, ce, getAttr(ce, attrBase))
 	}
 	td.Derivation = kind
 	c.parseSimpleContentChildren(ctx, ce, td, kind)
@@ -1288,15 +1291,26 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 		case isXSDElement(ce, elemUnion):
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			td.Variety = TypeVarietyUnion
-			// Parse memberTypes attribute (space-separated QNames).
-			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
-				for _, ref := range splitSpace(memberTypesAttr) {
-					qn := c.resolveQName(ctx, ce, attrMemberTypes, ref)
-					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
-						owner:             td,
-						name:              qn,
-						chameleonEligible: refChameleonEligible(ce, ref),
-					})
+			// Parse memberTypes (a whitespace-collapsed LIST of xs:QName). Dispatch on
+			// PRESENCE: a PRESENT-but-empty memberTypes="" (or whitespace-only) is not a
+			// valid QName list, so it is reported once here (the same empty-report as
+			// resolveQNameListRef) rather than silently tokenizing to the empty set. A
+			// non-empty list resolves per token, each carrying its OWN chameleon
+			// eligibility (which resolveQNameListRef's plain []QName cannot convey), so
+			// the tokens are resolved inline instead of through that reader.
+			if hasAttr(ce, attrMemberTypes) {
+				collapsed := normalizeWhiteSpace(getAttr(ce, attrMemberTypes), "collapse")
+				if collapsed == "" {
+					c.reportInvalidQNameValue(ctx, ce, attrMemberTypes, collapsed)
+				} else {
+					for _, ref := range splitSpace(collapsed) {
+						qn := c.resolveQName(ctx, ce, attrMemberTypes, ref)
+						c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
+							owner:             td,
+							name:              qn,
+							chameleonEligible: refChameleonEligible(ce, ref),
+						})
+					}
 				}
 			}
 			// Parse inline <simpleType> children.
@@ -1354,7 +1368,11 @@ func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, der
 
 	hasBase := hasAttr(deriv, attrBase)
 	hasItemType := hasAttr(deriv, attrItemType)
-	hasMemberTypes := normalizeWhiteSpace(getAttr(deriv, attrMemberTypes), "collapse") != ""
+	// PRESENCE, not non-emptiness: a PRESENT-but-empty memberTypes="" satisfies the
+	// union grammar's "memberTypes or a simpleType child" requirement here, and its
+	// invalid (empty) QName-list value is reported once by the memberTypes parse loop
+	// — so the two do not double-report the same present-empty attribute.
+	hasMemberTypes := hasAttr(deriv, attrMemberTypes)
 
 	// An empty itemType attribute is not a valid xs:QName (it must name the list's
 	// item type). getAttr treats absent and empty identically, so the empty case

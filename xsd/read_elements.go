@@ -504,10 +504,12 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		decl.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 	}
 
-	if opts.allowSubstitutionGroup {
-		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
-			decl.setSubstitutionGroupHeads(c.resolveSubstitutionGroupHeads(ctx, elem, sg))
-		}
+	if opts.allowSubstitutionGroup && hasAttr(elem, attrSubstitutionGroup) {
+		// Dispatch on PRESENCE: a PRESENT-but-empty substitutionGroup="" (or, in 1.1,
+		// a whitespace-only value that splitSpace would tokenize to nothing) is an
+		// invalid (empty) QName, reported once by resolveSubstitutionGroupHeads, not
+		// silently treated as absent.
+		decl.setSubstitutionGroupHeads(c.resolveSubstitutionGroupHeads(ctx, elem))
 	}
 
 	decl.Default, decl.Fixed = readDefaultOrFixed(elem)
@@ -646,15 +648,24 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	return nil
 }
 
-func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element, raw string) []QName {
+// resolveSubstitutionGroupHeads resolves the @substitutionGroup heads of an element
+// declaration. The caller has already confirmed the attribute is PRESENT. In XSD 1.0
+// the value is a SINGLE xs:QName; in 1.1 it is a whitespace-separated LIST of xs:QName
+// (deduped). A present-but-empty / whitespace-only value resolves to no head after the
+// single invalid-QName diagnostic that resolveQNameRef/resolveQNameListRef emits, so
+// an invalid value never installs the sentinel as a spurious head.
+func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element) []QName {
 	if c.version != Version11 {
-		return []QName{c.resolveQName(ctx, elem, attrSubstitutionGroup, raw)}
+		qn, ok := c.resolveQNameRef(ctx, elem, attrSubstitutionGroup)
+		if !ok || isInvalidQName(qn) {
+			return nil
+		}
+		return []QName{qn}
 	}
-	tokens := splitSpace(raw)
+	tokens, _ := c.resolveQNameListRef(ctx, elem, attrSubstitutionGroup)
 	heads := make([]QName, 0, len(tokens))
 	seen := make(map[QName]struct{}, len(tokens))
-	for _, token := range tokens {
-		qn := c.resolveQName(ctx, elem, attrSubstitutionGroup, token)
+	for _, qn := range tokens {
 		if _, ok := seen[qn]; ok {
 			continue
 		}
@@ -913,9 +924,11 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) *AttrUse {
 	c.checkAttributeUse(ctx, elem)
-	// Handle attribute references (ref="...").
-	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(ctx, elem, attrRef, ref)
+	// Handle attribute references (ref="..."). Dispatch on PRESENCE via resolveQNameRef:
+	// a PRESENT-but-empty ref="" (or whitespace-only) is an invalid (empty) QName,
+	// reported once, not silently treated as an absent @ref falling through to the
+	// named-declaration branch.
+	if qn, ok := c.resolveQNameRef(ctx, elem, attrRef); ok {
 		au := &AttrUse{Name: qn}
 		switch getAttr(elem, attrUse) {
 		case attrValRequired:

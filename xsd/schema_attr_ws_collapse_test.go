@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"testing/fstest"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -399,6 +401,25 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 		{"attributeGroup-ref-empty", `<xs:element name="e"><xs:complexType><xs:attributeGroup ref=""/></xs:complexType></xs:element>`},
 		{"attributeGroup-ref-ws", `<xs:element name="e"><xs:complexType><xs:attributeGroup ref="  "/></xs:complexType></xs:element>`},
 		{"attribute-ref-empty", `<xs:element name="e"><xs:complexType><xs:attribute ref=""/></xs:complexType></xs:element>`},
+		{"attribute-ref-ws", `<xs:element name="e"><xs:complexType><xs:attribute ref="   "/></xs:complexType></xs:element>`},
+		// complexContent restriction/extension @base — routed through resolveQNameRef.
+		// The invalidQName sentinel base is excluded from the extension/restriction
+		// derivation loops, so no spurious cos-ct-extends/restriction follow-on fires.
+		{"complexContent-restriction-base-empty", `<xs:complexType name="ct"><xs:complexContent><xs:restriction base=""><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"complexContent-extension-base-ws", `<xs:complexType name="ct"><xs:complexContent><xs:extension base="   "><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
+		// simpleContent extension/restriction @base — routed through resolveQNameRef.
+		{"simpleContent-extension-base-empty", `<xs:complexType name="ct"><xs:simpleContent><xs:extension base=""/></xs:simpleContent></xs:complexType>`},
+		{"simpleContent-restriction-base-ws", `<xs:complexType name="ct"><xs:simpleContent><xs:restriction base="   "/></xs:simpleContent></xs:complexType>`},
+		// @substitutionGroup — a single QName in 1.0, a QName-LIST in 1.1; both the
+		// present-empty and the whitespace-only case (which splitSpace would tokenize to
+		// nothing) yield exactly one invalid-QName and install no spurious head.
+		{"substitutionGroup-empty", `<xs:element name="head" type="xs:string"/><xs:element name="member" type="xs:string" substitutionGroup=""/>`},
+		{"substitutionGroup-ws", `<xs:element name="head" type="xs:string"/><xs:element name="member" type="xs:string" substitutionGroup="   "/>`},
+		// @memberTypes — a QName-LIST whose present-empty/whitespace-only value is an
+		// invalid list, reported once (and satisfies the union grammar's hasMemberTypes
+		// presence check, so it is not also reported as "must have memberTypes/simpleType").
+		{"union-memberTypes-empty", `<xs:simpleType name="u"><xs:union memberTypes=""/></xs:simpleType>`},
+		{"union-memberTypes-ws", `<xs:simpleType name="u"><xs:union memberTypes="   "/></xs:simpleType>`},
 	}
 	for _, tc := range presentEmptyQName {
 		t.Run("present-empty-qname-invalid/"+tc.name, func(t *testing.T) {
@@ -466,4 +487,46 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 			}
 		})
 	}
+
+	// The nested <xs:attributeGroup ref="..."> inside an xs:redefine attributeGroup
+	// OVERRIDE is a QName store site too: a PRESENT-but-empty ref="" routes through
+	// resolveQNameRef and is reported ONCE as an invalid QName (the invalidQName
+	// sentinel it yields never equals the redefined group's name, so it routes to the
+	// non-self branch and checkAttrGroupRefsResolve's sentinel guard suppresses any
+	// follow-on "does not resolve"), rather than being silently dropped.
+	t.Run("redefine-override-attributeGroup-ref-empty", func(t *testing.T) {
+		t.Parallel()
+		fsys := fstest.MapFS{
+			"redef_ag_main.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="redef_ag_base.xsd">
+    <xs:attributeGroup name="g">
+      <xs:attribute name="a" type="xs:string"/>
+      <xs:attributeGroup ref=""/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:complexType name="t"><xs:attributeGroup ref="g"/></xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`)},
+			"redef_ag_base.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g"><xs:attribute name="z" type="xs:string"/></xs:attributeGroup>
+</xs:schema>`)},
+		}
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			data, err := fsys.ReadFile("redef_ag_main.xsd")
+			require.NoError(t, err)
+			doc, err := helium.NewParser().Parse(t.Context(), data)
+			require.NoError(t, err)
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			schema, cerr := xsd.NewCompiler().Version(v).Label("redef_ag_main.xsd").
+				ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+			require.NoError(t, collector.Close())
+			errs := compileErrorsString(collector.Errors())
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v: present-empty override ref must reject", v)
+			require.Nil(t, schema)
+			require.Equal(t, 1, strings.Count(errs, "is not a valid QName"),
+				"version=%v: exactly one invalid-QName diagnostic; got: %s", v, errs)
+			require.NotContains(t, errs, "does not resolve",
+				"version=%v: a present-empty override ref must not produce a follow-on unresolved error; got: %s", v, errs)
+		}
+	})
 }

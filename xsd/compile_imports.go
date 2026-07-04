@@ -1378,8 +1378,12 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 						reportAfterWildcard(gce)
 						continue
 					}
-					if ref := getAttr(gce, attrRef); ref != "" {
-						refQN := c.resolveQName(ctx, gce, attrRef, ref)
+					// Dispatch on PRESENCE via resolveQNameRef: a PRESENT-but-empty
+					// ref="" is an invalid (empty) QName, reported once, not silently
+					// dropped. The invalidQName sentinel it yields never equals the
+					// redefined group's name, so it routes to the non-self default
+					// branch and is skipped by checkAttrGroupRefsResolve's sentinel guard.
+					if refQN, ok := c.resolveQNameRef(ctx, gce, attrRef); ok {
 						switch refQN {
 						case qn:
 							// A self-reference resolves to the Phase-A group content,

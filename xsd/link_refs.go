@@ -538,6 +538,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if td.Derivation != DerivationExtension || td.BaseType == nil {
 			continue
 		}
+		// A @base that was a lexically-malformed / present-empty QName resolved to the
+		// invalidQName sentinel placeholder and was already reported once at its read
+		// point. Skip the extension derivation-validity/merge checks so they do not emit
+		// a spurious follow-on (cos-ct-extends mixedness, attribute finalization) against
+		// the placeholder base. A genuinely-missing WELL-FORMED base is not the sentinel,
+		// so its normal unresolved diagnostics are unaffected.
+		if isInvalidQName(td.BaseType.Name) {
+			continue
+		}
 		extensionTypes = append(extensionTypes, td)
 	}
 	typeDepth := make(map[*TypeDef]int, len(extensionTypes))
@@ -745,6 +754,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	var restrictionTypes []*TypeDef
 	for td := range c.typeRefs {
 		if td.Derivation != DerivationRestriction || td.BaseType == nil {
+			continue
+		}
+		// A malformed / present-empty @base resolved to the invalidQName sentinel
+		// placeholder (already reported once); skip the restriction derivation-validity
+		// checks so they do not emit a spurious follow-on against it. A genuinely-missing
+		// well-formed base is not the sentinel, so it is unaffected.
+		if isInvalidQName(td.BaseType.Name) {
 			continue
 		}
 		restrictionTypes = append(restrictionTypes, td)
@@ -3298,6 +3314,50 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrN
 
 	c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns)
 	return QName{Local: local, NS: ns}
+}
+
+// resolveQNameRef is the sanctioned reader for a SINGLE QName-valued schema
+// attribute (@base/@type/@ref/@itemType/…). It DISPATCHES ON PRESENCE (hasAttr),
+// not on a non-empty raw value, so a QName store site can never gate on the raw
+// value and silently treat a PRESENT-but-empty (or whitespace-only) attribute as
+// absent: an absent attribute returns (QName{}, false) — the caller keeps its
+// established default — while a present attribute always flows through resolveQName,
+// where a value that collapses to the empty string (or is otherwise malformed) is
+// reported ONCE as an invalid QName and returned as the invalidQName sentinel. Every
+// single-QName store site routes through here so the presence gate lives in one place.
+func (c *compiler) resolveQNameRef(ctx context.Context, elem *helium.Element, attrName string) (QName, bool) {
+	if !hasAttr(elem, attrName) {
+		return QName{}, false
+	}
+	return c.resolveQName(ctx, elem, attrName, getAttr(elem, attrName)), true
+}
+
+// resolveQNameListRef is the sanctioned reader for a QName-LIST schema attribute
+// (@substitutionGroup in 1.1, @memberTypes) whose value space is a whitespace-
+// separated list of xs:QName. Like resolveQNameRef it DISPATCHES ON PRESENCE. A
+// present value is whitespace-COLLAPSED; a value that collapses to the empty string
+// — a PRESENT-but-empty attribute OR a whitespace-only one — is not a valid QName
+// list (splitSpace would yield zero tokens and the whole value would be silently
+// treated as absent), so it is reported ONCE via reportInvalidQNameValue and (nil,
+// true) is returned. Otherwise the collapsed value is split and each token resolved
+// through resolveQName (a per-token invalid QName reported individually); the
+// returned slice preserves declaration order and is NOT deduped (callers that need
+// dedup, e.g. @substitutionGroup, do it themselves).
+func (c *compiler) resolveQNameListRef(ctx context.Context, elem *helium.Element, attrName string) ([]QName, bool) {
+	if !hasAttr(elem, attrName) {
+		return nil, false
+	}
+	collapsed := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
+	if collapsed == "" {
+		c.reportInvalidQNameValue(ctx, elem, attrName, collapsed)
+		return nil, true
+	}
+	tokens := splitSpace(collapsed)
+	qns := make([]QName, 0, len(tokens))
+	for _, tok := range tokens {
+		qns = append(qns, c.resolveQName(ctx, elem, attrName, tok))
+	}
+	return qns, true
 }
 
 // rejectDeprecatedDatatypeNamespace reports the XSD 1.1 rule that schema QName
