@@ -21,11 +21,12 @@ type idRefOccurrence struct {
 // idCollector accumulates ID values (and their owning element) and pending IDREF
 // references during a document-wide xs:ID/xs:IDREF/xs:IDREFS validation pass.
 type idCollector struct {
-	// ids maps each collected xs:ID value to the element it identifies. XSD 1.1
-	// allows the SAME ID value to appear more than once as long as every
-	// occurrence identifies the SAME element (e.g. two ID attributes of one
-	// element, or two <id> children of one parent), so a repeat is a duplicate
-	// only when the owning element differs.
+	// ids maps each collected xs:ID value to the element it identifies. In XSD 1.1
+	// the SAME ID value may appear more than once as long as every occurrence
+	// identifies the SAME element (e.g. two ID attributes of one element, or two
+	// <id> children of one parent), so a repeat is a duplicate only when the owning
+	// element differs; in XSD 1.0 any repeat is a duplicate (recordID gates the
+	// relaxation on Version11).
 	ids   map[string]helium.Node
 	refs  []idRefOccurrence
 	valid bool
@@ -55,14 +56,13 @@ func idOwner(elem *helium.Element, elementContent bool) helium.Node {
 // document (except across multiple ID attributes of one element), and every
 // xs:IDREF token must match some xs:ID value.
 //
-// It is gated to XSD 1.1 mode by the caller, so XSD 1.0 stays byte-identical
-// (helium does not enforce these datatype constraints in 1.0, and the
-// libxml2-compat goldens depend on that). The 1.1 relaxation allowing an element
-// type to carry more than one xs:ID attribute is handled implicitly: every
-// ID-typed attribute contributes to the same document-wide table with no
-// per-element cap. Values whose type is a list and/or union are decomposed to
-// their atomic ID/IDREF leaves (mirroring canonicalValueKey), so e.g. a list of
-// union(xs:ID, xs:integer) contributes each ID item.
+// It runs in BOTH XSD 1.0 and 1.1 (cvc-id is version-independent). The 1.1
+// relaxation allowing the same ID value to recur as long as it identifies the
+// SAME element is applied in recordID under Version11 only; XSD 1.0 keeps the
+// strict document-wide uniqueness (at most one ID per element). Values whose type
+// is a list and/or union are decomposed to their atomic ID/IDREF leaves
+// (mirroring canonicalValueKey), so e.g. a list of union(xs:ID, xs:integer)
+// contributes each ID item.
 func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Document) bool {
 	col := &idCollector{ids: make(map[string]helium.Node), valid: true}
 
@@ -125,15 +125,30 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 
 		// Attributes typed as ID/IDREF (including via list/union). An attribute ID
 		// is owned by its bearing element.
+		idAttrCount := 0
 		for _, a := range elem.Attributes() {
 			if vc.isSpecialAttr(a) {
 				continue
 			}
 			atd := vc.attrTypeForID(a)
-			if atd == nil || !idFamilyType(atd) {
+			if atd == nil {
+				continue
+			}
+			// XSD 1.0: an element may bear at most one attribute whose type is (or
+			// derives from) xs:ID. XSD 1.1 removed this cap, so multiple ID attributes
+			// are legal there — counted and enforced only under Version10.
+			if builtinBaseLocal(atd) == "ID" {
+				idAttrCount++
+			}
+			if !idFamilyType(atd) {
 				continue
 			}
 			vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a))
+		}
+		if vc.version == Version10 && idAttrCount > 1 {
+			col.valid = false
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+				"An element may have at most one attribute of type ID.")
 		}
 		return nil
 	})); err != nil {
@@ -226,7 +241,12 @@ func (vc *validationContext) recordID(ctx context.Context, col *idCollector, tok
 	}
 	prev, seen := col.ids[tok]
 	if seen {
-		if prev == owner {
+		// XSD 1.1 relaxation: the same ID value may recur as long as every
+		// occurrence identifies the SAME element (e.g. two ID attributes of one
+		// element, or two <id> children of one parent). XSD 1.0 has no such
+		// relaxation — an ID value must be unique across the whole document (at
+		// most one ID per element), so a repeat is always a duplicate.
+		if vc.version == Version11 && prev == owner {
 			return
 		}
 		col.valid = false

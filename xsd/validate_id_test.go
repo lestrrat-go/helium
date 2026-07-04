@@ -8,11 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestValidateIDIDREF covers XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS
-// validation: ID values must be unique across the document, except that the same
-// value may identify a single element more than once (multiple ID attributes of
-// one element, or multiple ID children of one parent); every IDREF token must
-// resolve to some ID.
+// TestValidateIDIDREF covers document-wide xs:ID / xs:IDREF / xs:IDREFS
+// validation (cvc-id, version-independent): ID values must be unique across the
+// document and every IDREF token must resolve to some ID. XSD 1.1 relaxes
+// uniqueness so the same value may identify a single element more than once
+// (multiple ID attributes of one element, or multiple ID children of one parent);
+// XSD 1.0 has no such relaxation — any repeat is a duplicate.
 func TestValidateIDIDREF(t *testing.T) {
 	compileValidate := func(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {
 		t.Helper()
@@ -62,14 +63,6 @@ func TestValidateIDIDREF(t *testing.T) {
 		t.Parallel()
 		inst := `<doc><para id-one="aaa" id-two="bbb"/><para id-one="ccc" id-two=" aaa "/></doc>`
 		require.Error(t, compileValidate(t, xsd.Version11, multiIDSchema, inst))
-	})
-
-	t.Run("XSD 1.0 does not enforce ID uniqueness", func(t *testing.T) {
-		t.Parallel()
-		// The same duplicate that is invalid in 1.1 stays accepted in 1.0 mode,
-		// which keeps helium byte-identical with the libxml2-compat goldens.
-		inst := `<doc><para id-one="aaa" id-two="bbb"/><para id-one="ccc" id-two="aaa"/></doc>`
-		require.NoError(t, compileValidate(t, xsd.Version10, multiIDSchema, inst))
 	})
 
 	// Element-content ID is owned by the PARENT element, so two <id> children of
@@ -137,6 +130,31 @@ func TestValidateIDIDREF(t *testing.T) {
 		require.NoError(t, compileValidate(t, xsd.Version11, idrefSchema, ok))
 		bad := `<root><a id="x"/><a id="y"/><a refs="x y z"/></root>`
 		require.Error(t, compileValidate(t, xsd.Version11, idrefSchema, bad))
+	})
+
+	t.Run("XSD 1.0 enforces ID uniqueness across elements", func(t *testing.T) {
+		t.Parallel()
+		// cvc-id is version-independent: a duplicate ID value across two different
+		// elements is invalid in 1.0 too. Each <a> carries a single xs:ID attribute,
+		// legal in 1.0.
+		inst := `<root><a id="x"/><a id="x"/></root>`
+		require.Error(t, compileValidate(t, xsd.Version10, idrefSchema, inst))
+	})
+
+	t.Run("XSD 1.0 resolves IDREF referential integrity", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compileValidate(t, xsd.Version10, idrefSchema, `<root><a id="x"/><a ref="x"/></root>`))
+		require.Error(t, compileValidate(t, xsd.Version10, idrefSchema, `<root><a id="x"/><a ref="y"/></root>`))
+	})
+
+	t.Run("XSD 1.0 has no multiple-ID-per-element relaxation", func(t *testing.T) {
+		t.Parallel()
+		// Two <id> children of one parent share a value. XSD 1.1 accepts this (they
+		// identify the SAME element); XSD 1.0 has no such relaxation, so it is a
+		// duplicate.
+		inst := `<root><node><id>zzz</id><id>zzz</id></node></root>`
+		require.NoError(t, compileValidate(t, xsd.Version11, elemIDSchema, inst))
+		require.Error(t, compileValidate(t, xsd.Version10, elemIDSchema, inst))
 	})
 }
 
