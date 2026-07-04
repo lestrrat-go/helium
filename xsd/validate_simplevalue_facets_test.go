@@ -756,15 +756,19 @@ func TestUnionOfListsEnumerationValueSpace(t *testing.T) {
 
 // TestNotationCarrierRecursive verifies the NOTATION-carrier recursion over
 // varieties. The bare built-in xs:NOTATION referenced directly as an xs:list
-// itemType or union memberType is NOT an error — only a RESTRICTION of
+// itemType or union memberType is NOT an error in XSD 1.0 — only a RESTRICTION of
 // xs:NOTATION requires an enumeration (W3C particlesZ007 declares a valid union
 // memberTypes="xs:NOTATION"), and that restriction is judged at its own simpleType
-// definition. A list/union built over an enumeration-derived NOTATION type that
-// names a declared notation compiles cleanly.
+// definition; XSD 1.1 rejects even the bare built-in carrier (simple092/093). But
+// a USER-DEFINED simple type that restricts xs:NOTATION WITHOUT an enumeration
+// remains a schema-representation error when used as a list item / union member in
+// BOTH versions — the version-10 exemption applies only to the bare built-in. A
+// list/union built over an enumeration-derived NOTATION type that names a declared
+// notation compiles cleanly.
 func TestNotationCarrierRecursive(t *testing.T) {
 	t.Parallel()
 
-	t.Run("list of bare xs:NOTATION compiles", func(t *testing.T) {
+	t.Run("list of bare xs:NOTATION compiles in 1.0 but not 1.1", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="notationList">
@@ -772,11 +776,13 @@ func TestNotationCarrierRecursive(t *testing.T) {
   </xs:simpleType>
   <xs:element name="n" type="notationList"/>
 </xs:schema>`
-		errs := compileSchemaErrors(t, schemaXML)
-		require.Empty(t, errs, "the bare built-in xs:NOTATION as a list item type is not an error: %s", errs)
+		require.Empty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"the bare built-in xs:NOTATION as a list item type is not an error in XSD 1.0 (particlesZ007)")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"the bare built-in xs:NOTATION as a list item type IS an error in XSD 1.1 (simple092)")
 	})
 
-	t.Run("union member bare xs:NOTATION compiles", func(t *testing.T) {
+	t.Run("union member bare xs:NOTATION compiles in 1.0 but not 1.1", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="notationOrInt">
@@ -784,8 +790,51 @@ func TestNotationCarrierRecursive(t *testing.T) {
   </xs:simpleType>
   <xs:element name="n" type="notationOrInt"/>
 </xs:schema>`
-		errs := compileSchemaErrors(t, schemaXML)
-		require.Empty(t, errs, "the bare built-in xs:NOTATION as a union member is not an error (particlesZ007): %s", errs)
+		require.Empty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"the bare built-in xs:NOTATION as a union member is not an error in XSD 1.0 (particlesZ007)")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"the bare built-in xs:NOTATION as a union member IS an error in XSD 1.1 (simple093)")
+	})
+
+	// A USER-DEFINED simple type that restricts xs:NOTATION without supplying an
+	// enumeration is not enumeration-derived. Used as a list item type, this is a
+	// schema-representation error in BOTH XSD 1.0 and 1.1 — the version-10
+	// exemption applies only to the BARE built-in xs:NOTATION carrier, never to a
+	// user-defined restriction of it.
+	t.Run("list of user-defined non-enumerated NOTATION restriction rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="notationRestr">
+    <xs:restriction base="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:simpleType name="notationList">
+    <xs:list itemType="notationRestr"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationList"/>
+</xs:schema>`
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"a list of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.0")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"a list of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.1")
+	})
+
+	// The same for a union memberType: a user-defined non-enumerated restriction of
+	// xs:NOTATION as a union member is rejected in BOTH versions.
+	t.Run("union member user-defined non-enumerated NOTATION restriction rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="notationRestr">
+    <xs:restriction base="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:simpleType name="notationOrInt">
+    <xs:union memberTypes="notationRestr xs:int"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationOrInt"/>
+</xs:schema>`
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, false),
+			"a union member of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.0")
+		require.NotEmpty(t, compileSchemaErrorsVersion(t, schemaXML, true),
+			"a union member of a user-defined non-enumerated NOTATION restriction must be rejected in XSD 1.1")
 	})
 
 	t.Run("list of enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
