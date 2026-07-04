@@ -93,9 +93,10 @@ const maxNestedSchemaSize = 10 << 20 // 10 MiB
 // ATOMIC (open+read+close in one call), its errors are mostly phase-UNCLASSIFIABLE —
 // a post-resolution read failure is indistinguishable from a genuine miss — so a
 // fallback error is DEMOTED only when it is a CANONICAL "file not found"
-// ([isDirectNotExist]: the bare fs.ErrNotExist sentinel or a top-level *fs.PathError
-// wrapping it, the one shape that can never be a read failure). EVERY other fallback
-// error — fs.ErrInvalid, a message-wrapped errno (even one wrapping fs.ErrNotExist),
+// ([isDirectNotExist]: the bare fs.ErrNotExist sentinel or a *fs.PathError with
+// Op=="open" whose Err satisfies fs.ErrNotExist, the one shape that can never be a
+// read failure). EVERY other fallback error — fs.ErrInvalid, a message-wrapped errno
+// that is not such a PathError (even one wrapping fs.ErrNotExist), a non-"open" Op,
 // anything else — is returned UNTAGGED and stays FATAL (fail-closed).
 //
 // A POST-OPEN read failure is wrapped in [errNestedSchemaReadAfterOpen] (fatal,
@@ -135,11 +136,12 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 			// RESOLVES the file but then fails mid-READ returns an errno indistinguishable
 			// from a genuine miss. So the fallback demotes ONLY a CANONICAL filesystem
 			// "file not found" at the RESOLUTION/OPEN phase ([isDirectNotExist]: the bare
-			// fs.ErrNotExist sentinel or a top-level *fs.PathError with Op=="open" and the
-			// UNWRAPPED fs.ErrNotExist sentinel) — the one shape that unambiguously denotes
-			// NON-EXISTENCE at resolution and can never be a post-resolution read failure.
-			// EVERY other fallback error — fs.ErrInvalid, a custom message wrap (even one
-			// wrapping fs.ErrNotExist), a *fs.PathError with a non-open Op (e.g.
+			// fs.ErrNotExist sentinel or a *fs.PathError with Op=="open" whose Err satisfies
+			// fs.ErrNotExist — including a real syscall.ENOENT from os.DirFS) — the one shape
+			// that unambiguously denotes NON-EXISTENCE at resolution and can never be a
+			// post-resolution read failure. EVERY other fallback error — fs.ErrInvalid, a
+			// custom message wrap that is not such a PathError (even one wrapping
+			// fs.ErrNotExist), a *fs.PathError with a non-open Op (e.g.
 			// {Op:"read", Err: fs.ErrNotExist}, a post-open read failure), anything else —
 			// is UNCLASSIFIABLE and returned UNTAGGED, so it stays FATAL (fail-closed).
 			if !isDirectNotExist(rfErr) {
@@ -181,27 +183,37 @@ func isBenignResolutionMiss(err error) bool {
 // at the RESOLUTION/OPEN phase — the one shape that unambiguously denotes
 // non-existence and can never be a post-resolution read failure. It accepts ONLY:
 //   - the bare [fs.ErrNotExist] sentinel (err == fs.ErrNotExist), or
-//   - a top-level [*fs.PathError] whose Op is exactly "open" (the resolution/open
-//     operation — NOT "read"/"stat"/any other op, which are post-open failures) AND
-//     whose Err is the UNWRAPPED fs.ErrNotExist sentinel (an Err that itself wraps
-//     ErrNotExist with extra context is not canonical).
+//   - a [*fs.PathError] (reachable through wrapping via [errors.As]) whose Op is
+//     exactly "open" — the resolution/open operation, NOT "read"/"stat"/any other
+//     op, which are post-open failures — and whose Err satisfies fs.ErrNotExist
+//     under [errors.Is].
 //
-// Everything else — a message-wrapped fs.ErrNotExist (fmt.Errorf("...: %w", …)), a
-// *fs.PathError with a non-open Op such as {Op:"read", Err: fs.ErrNotExist} (a
-// POST-resolution read failure that happens to report the ErrNotExist errno), or a
-// PathError.Err that merely wraps the sentinel — is REJECTED, so it stays UNTAGGED
-// and therefore FATAL (fail-closed). This is the last classifiable edge for the
+// The Op=="open" guard is the load-bearing phase discriminator: a failed Open IS the
+// resolution phase, so an "open" PathError denotes non-existence at resolution and can
+// never be a post-resolution read failure. The Err test is errors.Is (not an exact
+// ==) so a real errno like syscall.ENOENT — what [os.DirFS] returns for a missing
+// file, satisfying fs.ErrNotExist yet NOT the fs.ErrNotExist sentinel by == — is
+// correctly accepted, while a *fs.PathError{Op:"read", Err: fs.ErrNotExist}/{Op:"stat",
+// …} (a POST-resolution failure that merely reports the ErrNotExist errno) is still
+// REJECTED, so it stays UNTAGGED and therefore FATAL (fail-closed).
+//
+// Everything else — a message-wrapped fs.ErrNotExist that is NOT a *fs.PathError
+// (fmt.Errorf("...: %w", …)), a non-"open" Op, or an err that does not satisfy
+// fs.ErrNotExist at all — is REJECTED. This is the last classifiable edge for the
 // inherently-atomic fs.ReadFile fallback in [readNestedSchema]: beyond it an FS would
 // have to lie about its Op, violating fs conventions.
 func isDirectNotExist(err error) bool {
 	if err == fs.ErrNotExist {
 		return true
 	}
-	pe, ok := err.(*fs.PathError)
-	if !ok {
+	if !errors.Is(err, fs.ErrNotExist) {
 		return false
 	}
-	return pe.Op == "open" && pe.Err == fs.ErrNotExist
+	var pe *fs.PathError
+	if !errors.As(err, &pe) {
+		return false
+	}
+	return pe.Op == "open"
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
