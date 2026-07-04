@@ -95,6 +95,78 @@ func TestIntrinsicBuiltinFacets(t *testing.T) {
 						<xsd:restriction base="xsd:positiveInteger"><xsd:maxExclusive value="1"/></xsd:restriction>
 					</xsd:simpleType></xsd:element></xsd:schema>`,
 			},
+			{
+				// The intrinsic minLength=1 of xs:NMTOKENS must still bind through an
+				// INTERMEDIATE restriction that carries only an unrelated facet (a
+				// pattern): a nearest-ancestor lookup would see only the pattern step and
+				// miss the inherited minLength.
+				name: "minLength_below_intrinsic_through_intermediate",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="mid">
+						<xsd:restriction base="xsd:NMTOKENS"><xsd:pattern value=".*"/></xsd:restriction>
+					</xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="mid"><xsd:minLength value="0"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// User minLength=5 hidden behind a pattern-only intermediate; derived
+				// minLength=3 loosens it.
+				name: "minLength_loosened_through_intermediate",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:minLength value="5"/></xsd:restriction></xsd:simpleType>
+					<xsd:simpleType name="mid"><xsd:restriction base="base"><xsd:pattern value=".*"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="mid"><xsd:minLength value="3"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// User maxLength=5 hidden behind a pattern-only intermediate; derived
+				// maxLength=7 widens it.
+				name: "maxLength_widened_through_intermediate",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:maxLength value="5"/></xsd:restriction></xsd:simpleType>
+					<xsd:simpleType name="mid"><xsd:restriction base="base"><xsd:pattern value=".*"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="mid"><xsd:maxLength value="7"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// Inherited length=5, derived maxLength=4 < length.
+				name: "maxLength_below_inherited_length",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:length value="5"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="base"><xsd:maxLength value="4"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// Inherited length=5, derived minLength=6 > length.
+				name: "minLength_above_inherited_length",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:length value="5"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="base"><xsd:minLength value="6"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// Inherited minLength=10, derived length=5 < minLength.
+				name: "length_below_inherited_minLength",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:minLength value="10"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="base"><xsd:length value="5"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// Inherited maxLength=5, derived length=10 > maxLength.
+				name: "length_above_inherited_maxLength",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:maxLength value="5"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="base"><xsd:length value="10"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -130,6 +202,21 @@ func TestIntrinsicBuiltinFacets(t *testing.T) {
 				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 					<xsd:element name="e"><xsd:simpleType>
 						<xsd:restriction base="xsd:NMTOKENS"><xsd:length value="5"/></xsd:restriction>
+					</xsd:simpleType></xsd:element></xsd:schema>`,
+			},
+			{
+				// A minLength=1 inherited through MULTIPLE levels (a pattern-only
+				// intermediate) restated alongside length=5 (own 1 == effective inherited
+				// 1, 1 <= 5): still a valid restatement, must not regress.
+				name: "length_with_multilevel_restated_minLength",
+				schema: `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+					<xsd:simpleType name="base"><xsd:restriction base="xsd:string"><xsd:minLength value="1"/></xsd:restriction></xsd:simpleType>
+					<xsd:simpleType name="mid"><xsd:restriction base="base"><xsd:pattern value=".*"/></xsd:restriction></xsd:simpleType>
+					<xsd:element name="e"><xsd:simpleType>
+						<xsd:restriction base="mid">
+							<xsd:length value="5"/>
+							<xsd:minLength value="1"/>
+						</xsd:restriction>
 					</xsd:simpleType></xsd:element></xsd:schema>`,
 			},
 		} {
