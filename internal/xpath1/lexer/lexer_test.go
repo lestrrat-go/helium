@@ -130,6 +130,26 @@ func TestLexerAxisNotation(t *testing.T) {
 	require.Equal(t, "para", tokens[2].Value)
 }
 
+func TestLexerAxisWhitespace(t *testing.T) {
+	// XPath permits insignificant whitespace around the '::' axis separator,
+	// so 'child :: para' must lex to the same tokens as 'child::para'.
+	for _, input := range []string{"child ::para", "child:: para", "child :: para"} {
+		l, err := lexer.New(input)
+		require.NoError(t, err, input)
+		tokens := l.Tokens()
+		require.Len(t, tokens, 3, input)
+		require.Equal(t, lexer.TokenName, tokens[0].Type, input)
+		require.Equal(t, "child", tokens[0].Value, input)
+		require.Equal(t, lexer.TokenColonColon, tokens[1].Type, input)
+		require.Equal(t, lexer.TokenName, tokens[2].Type, input)
+		require.Equal(t, "para", tokens[2].Value, input)
+	}
+
+	// A lone ':' at a token boundary is not valid XPath.
+	_, err := lexer.New("child : para")
+	require.Error(t, err)
+}
+
 func TestLexerDots(t *testing.T) {
 	l, err := lexer.New("../child")
 	require.NoError(t, err)
