@@ -556,7 +556,15 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 		// strings.TrimSpace, which strips Unicode whitespace (e.g. NBSP) that is
 		// NOT XSD whitespace and would corrupt the canonical key — producing false
 		// duplicate/keyref diagnostics for QName values containing such characters.
-		qn, err := resolveLexicalQName(normalized, ns)
+		//
+		// resolveNotationOrQNameValue applies the unprefixed-NOTATION
+		// default-namespace resolution (ns[""]) so two NOTATION values whose
+		// canonical names agree — a prefixed p:jpeg and an unprefixed jpeg under a
+		// default namespace urn:p — collide on the same key and an xs:unique/xs:key
+		// duplicate is caught, consistent with the facet comparison paths. xs:QName
+		// keeps the no-default value-space rule (the helper's TypeNotation gate
+		// leaves the QName branch on resolveLexicalQName).
+		qn, err := resolveNotationOrQNameValue(normalized, builtinLocal, ns)
 		if err != nil {
 			return raw
 		}

@@ -291,11 +291,14 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	if (instanceIsQName && fixedIsQName) || (instanceIsNotation && fixedIsNotation) {
 		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
 		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
-		iqn, ierr := resolveLexicalQName(ni, instanceNS)
+		// resolveNotationOrQNameValue applies the unprefixed-NOTATION default-namespace
+		// resolution (both members are NOTATION-derived here), consistent with the
+		// same-member fixedAtomicMatches bottom; QName-derived members are unchanged.
+		iqn, ierr := resolveNotationOrQNameValue(ni, instanceLocal, instanceNS)
 		if ierr != nil {
 			return false
 		}
-		fqn, ferr := resolveLexicalQName(nf, fixedNS)
+		fqn, ferr := resolveNotationOrQNameValue(nf, fixedLocal, fixedNS)
 		if ferr != nil {
 			return false
 		}
@@ -433,8 +436,13 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 // equality of the normalized lexical forms.
 func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedNS map[string]string) bool {
 	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
-		iqn, ierr := resolveLexicalQName(instance, instanceNS)
-		fqn, ferr := resolveLexicalQName(fixed, fixedNS)
+		// resolveNotationOrQNameValue applies the unprefixed-NOTATION default-namespace
+		// resolution (instance value → instanceNS[""], fixed/enum literal → fixedNS[""])
+		// so this shared bottom — reached by the direct atomic, list-item, and
+		// union-member comparison paths — agrees with the compile-time declared-notation
+		// value space. xs:QName keeps the no-default-namespace value-space rule.
+		iqn, ierr := resolveNotationOrQNameValue(instance, builtinLocal, instanceNS)
+		fqn, ferr := resolveNotationOrQNameValue(fixed, builtinLocal, fixedNS)
 		// A prefix that cannot be resolved makes the QName/NOTATION itself invalid;
 		// the fixed comparison must NOT fall back to raw lexical equality (which
 		// would wrongly accept a fixed "s:name" against an instance "s:name" that

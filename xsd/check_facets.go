@@ -499,7 +499,7 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 		// inside a list item type or a union member is caught too, not only a
 		// direct atomic xs:NOTATION restriction base. A NOTATION carrier is allowed
 		// only when it is itself enumeration-derived.
-		if notationUsedWithoutEnumeration(td) {
+		if notationUsedWithoutEnumeration(td, c.version) {
 			c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
 				"It is an error if the base type is the built-in 'NOTATION' and there is no 'enumeration' facet."))
 		}
@@ -521,18 +521,15 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 				c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
 				continue
 			}
-			// XSD 1.1: an xs:NOTATION restriction's enumeration values must name a
-			// notation declared in the schema. (XSD 1.0 keeps the historical
-			// behavior — declaration-table matching deferred — to stay byte-identical.)
-			if c.version == Version11 && variety == TypeVarietyAtomic && builtinBaseLocal(td) == lexicon.TypeNotation {
-				qn, qerr := resolveLexicalQName(normalizeWhiteSpace(ev, resolveWhiteSpace(td)), enumNS)
-				if qerr != nil {
-					continue
-				}
-				if _, ok := c.notations[qn]; !ok {
-					msg := fmt.Sprintf("The enumeration value '%s' does not match a declared notation.", ev)
-					c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
-				}
+			// An xs:NOTATION enumeration value must name a notation declared in the
+			// schema (§3.14.6). This is a version-INDEPENDENT rule, enforced in both
+			// XSD 1.0 and 1.1, and applies to a NOTATION carrier used as an atomic
+			// base, a list item type, or a union member alike — so the check
+			// dispatches on the type's effective variety and decomposes a list/union
+			// literal into its NOTATION atomic components.
+			if c.enumLiteralNamesUndeclaredNotation(ctx, ev, enumNS, td, variety) {
+				msg := fmt.Sprintf("The enumeration value '%s' does not match a declared notation.", ev)
+				c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
 			}
 		}
 	}
@@ -703,6 +700,73 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 	}
 }
 
+// enumLiteralNamesUndeclaredNotation reports whether the enumeration literal ev,
+// interpreted against td's effective variety, is (or contains) an xs:NOTATION
+// value that names a notation NOT declared in the schema (compiler.notations).
+// This is the §3.14.6 rule that an xs:NOTATION enumeration value must be the
+// QName of a declared <xs:notation>; it is version-INDEPENDENT and applies to a
+// NOTATION carrier used as an atomic base, a list item type, or a union member.
+// The dispatch mirrors enumLiteralHasUnboundQName so the three carrier contexts
+// cannot diverge:
+//
+//   - atomic: when the base resolves to builtin xs:NOTATION, resolve ev (its own
+//     default namespace applied to an unprefixed value via
+//     resolveNotationOrQNameValue) and look it up in compiler.notations.
+//   - list: split ev into whitespace-separated tokens and check each against the
+//     item type.
+//   - union: the literal is typed by the FIRST member (declaration order) whose
+//     value space accepts it (active-member selection); only when that member is
+//     a NOTATION carrier does the declared-notation rule apply to the literal.
+func (c *compiler) enumLiteralNamesUndeclaredNotation(ctx context.Context, ev string, enumNS map[string]string, td *TypeDef, variety TypeVariety) bool {
+	switch variety {
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return false
+		}
+		itemVariety := resolveVariety(itemType)
+		for _, item := range value.XSDFields(ev) {
+			if c.enumLiteralNamesUndeclaredNotation(ctx, item, enumNS, itemType, itemVariety) {
+				return true
+			}
+		}
+		return false
+	case TypeVarietyUnion:
+		for _, member := range resolveUnionMembers(td) {
+			if member == nil {
+				continue
+			}
+			// The literal is typed by the first member whose value space accepts it,
+			// so a value that matches an earlier non-NOTATION member (e.g. xs:string)
+			// is not a NOTATION and is not judged. A NOTATION carrier accepts a
+			// lexically valid QName regardless of whether it is declared (that is the
+			// very check this performs), so a bare-NOTATION member selects the literal
+			// and the token must then name a declared notation.
+			sub := &validationContext{schema: c.schema, errorHandler: helium.NilErrorHandler{}, suppressDepth: 1, version: c.version}
+			if validateValue(ctx, ev, enumNS, member, "", "", 0, sub) != nil {
+				continue
+			}
+			return c.enumLiteralNamesUndeclaredNotation(ctx, ev, enumNS, member, resolveVariety(member))
+		}
+		return false
+	default:
+		if builtinBaseLocal(td) != lexicon.TypeNotation {
+			return false
+		}
+		// An UNPREFIXED value uses the in-scope DEFAULT namespace (so "png" in a
+		// schema whose default namespace is its target namespace names {tns}png),
+		// matching the runtime enumeration comparison. A malformed QName is already
+		// reported by enumLiteralHasUnboundQName, so a resolve failure here is not
+		// re-flagged.
+		qn, err := resolveNotationOrQNameValue(normalizeWhiteSpace(ev, resolveWhiteSpace(td)), lexicon.TypeNotation, enumNS)
+		if err != nil {
+			return false
+		}
+		_, ok := c.notations[qn]
+		return !ok
+	}
+}
+
 // notationUsedWithoutEnumeration reports whether td INTRODUCES an xs:NOTATION
 // use that is not permitted because the NOTATION carrier is not
 // enumeration-derived. Per XSD, xs:NOTATION may only appear in a derivation that
@@ -720,13 +784,13 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 // A NOTATION carrier nested inside a list/union is permitted only when that
 // item/member type is enumeration-derived (hasEffectiveEnumeration over its own
 // chain), so an xs:list itemType="<enumerated NOTATION type>" compiles cleanly.
-func notationUsedWithoutEnumeration(td *TypeDef) bool {
+func notationUsedWithoutEnumeration(td *TypeDef, version Version) bool {
 	if td == nil {
 		return false
 	}
 
 	// Atomic: only the type that directly restricts xs:NOTATION is judged, exactly
-	// as the original direct-base check did.
+	// as the original direct-base check did (version-independent).
 	if td.Derivation == DerivationRestriction && td.BaseType != nil &&
 		td.BaseType.Name.NS == lexicon.NamespaceXSD && td.BaseType.Name.Local == lexicon.TypeNotation {
 		return td.Facets == nil || len(td.Facets.Enumeration) == 0
@@ -734,12 +798,17 @@ func notationUsedWithoutEnumeration(td *TypeDef) bool {
 
 	// List: judged at the type that declares the itemType.
 	if td.ItemType != nil {
-		return notationCarrierNotEnumerated(td.ItemType)
+		return notationCarrierNotEnumerated(td.ItemType, version)
 	}
 
 	// Union: judged at the type that declares the memberTypes.
 	if len(td.MemberTypes) > 0 {
-		return slices.ContainsFunc(td.MemberTypes, notationCarrierNotEnumerated)
+		for _, m := range td.MemberTypes {
+			if notationCarrierNotEnumerated(m, version) {
+				return true
+			}
+		}
+		return false
 	}
 
 	return false
@@ -750,8 +819,8 @@ func notationUsedWithoutEnumeration(td *TypeDef) bool {
 // derived. A bare atomic xs:NOTATION carrier is permitted only when its own
 // derivation chain supplies an enumeration; a list/union recurses into its
 // item/member types.
-func notationCarrierNotEnumerated(td *TypeDef) bool {
-	return notationCarrierNotEnumeratedVisit(td, map[*TypeDef]struct{}{})
+func notationCarrierNotEnumerated(td *TypeDef, version Version) bool {
+	return notationCarrierNotEnumeratedVisit(td, version, map[*TypeDef]struct{}{})
 }
 
 // notationCarrierNotEnumeratedVisit is the cycle-guarded recursion behind
@@ -761,7 +830,7 @@ func notationCarrierNotEnumerated(td *TypeDef) bool {
 // genuinely circular member type is an invalid schema reported by the regular
 // compilation checks, so stopping here (treating the cyclic node as not a
 // NOTATION carrier) lets that real error surface instead of crashing.
-func notationCarrierNotEnumeratedVisit(td *TypeDef, visited map[*TypeDef]struct{}) bool {
+func notationCarrierNotEnumeratedVisit(td *TypeDef, version Version, visited map[*TypeDef]struct{}) bool {
 	if td == nil {
 		return false
 	}
@@ -771,12 +840,27 @@ func notationCarrierNotEnumeratedVisit(td *TypeDef, visited map[*TypeDef]struct{
 	visited[td] = struct{}{}
 	switch resolveVariety(td) {
 	case TypeVarietyList:
-		return notationCarrierNotEnumeratedVisit(resolveItemType(td), visited)
+		return notationCarrierNotEnumeratedVisit(resolveItemType(td), version, visited)
 	case TypeVarietyUnion:
-		return slices.ContainsFunc(resolveUnionMembers(td), func(m *TypeDef) bool {
-			return notationCarrierNotEnumeratedVisit(m, visited)
-		})
+		for _, m := range resolveUnionMembers(td) {
+			if notationCarrierNotEnumeratedVisit(m, version, visited) {
+				return true
+			}
+		}
+		return false
 	default:
+		// XSD 1.0: the bare built-in xs:NOTATION referenced directly as a list item
+		// type or union member is NOT the narrowing "use" that requires an
+		// enumeration — only a RESTRICTION of xs:NOTATION does (W3C particlesZ007
+		// declares a valid union memberTypes="xs:NOTATION"). XSD 1.1 tightened this:
+		// such a use IS an error (W3C simple092/simple093), so the exemption is gated
+		// to Version10. A RESTRICTION of xs:NOTATION without an enumeration is judged
+		// at its own simpleType definition in both versions (the atomic direct-base
+		// branch of notationUsedWithoutEnumeration), so exempting the built-in here
+		// loses no diagnostic.
+		if version == Version10 && td.Name.NS == lexicon.NamespaceXSD && td.Name.Local == lexicon.TypeNotation {
+			return false
+		}
 		if builtinBaseLocal(td) != lexicon.TypeNotation {
 			return false
 		}

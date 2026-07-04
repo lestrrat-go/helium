@@ -195,3 +195,72 @@ func TestSimpleEdge_NotationEnumerationMustBeDeclared(t *testing.T) {
 	require.NoError(t, cerr, "declared notation enumeration must compile: %s", errs)
 	require.NotNil(t, schema)
 }
+
+// TestSimpleEdge_NotationEnumInListUnionCarrier verifies the §3.14.6
+// "enumeration value must name a declared notation" rule reaches a NOTATION
+// carrier used as a list itemType or a union memberType, not only a direct
+// atomic xs:NOTATION restriction. A bare built-in xs:NOTATION list/union carrier
+// is permitted in XSD 1.0 (particlesZ007), so the enumeration-value check is what
+// rejects an undeclared token there; the same carrier is separately rejected as
+// non-enumeration-derived in XSD 1.1.
+func TestSimpleEdge_NotationEnumInListUnionCarrier(t *testing.T) {
+	t.Parallel()
+
+	// listSchema builds a schema whose enumeration constrains a list of
+	// bare xs:NOTATION to the single-token value tok.
+	listSchema := func(tok string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:notation name="jpeg" public="image/jpeg" system="viewer.exe"/>
+  <xs:simpleType name="notationList">
+    <xs:list itemType="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:simpleType name="restrictedList">
+    <xs:restriction base="notationList">
+      <xs:enumeration value="` + tok + `"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:attribute name="a" type="restrictedList"/>
+</xs:schema>`
+	}
+
+	// unionSchema builds a schema whose enumeration constrains a union whose first
+	// member is bare xs:NOTATION to the value tok.
+	unionSchema := func(tok string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:notation name="jpeg" public="image/jpeg" system="viewer.exe"/>
+  <xs:simpleType name="notationUnion">
+    <xs:union memberTypes="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:simpleType name="restrictedUnion">
+    <xs:restriction base="notationUnion">
+      <xs:enumeration value="` + tok + `"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:attribute name="a" type="restrictedUnion"/>
+</xs:schema>`
+	}
+
+	// XSD 1.0: bare-NOTATION list/union carrier is a permitted use, so the only
+	// thing rejecting an undeclared token is the enumeration-value check.
+	_, cerr := compileV10(t, listSchema("png"))
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "1.0 list: undeclared notation token must fail")
+
+	schema, cerr := compileV10(t, listSchema("jpeg"))
+	require.NoError(t, cerr, "1.0 list: declared notation token must compile")
+	require.NotNil(t, schema)
+
+	_, cerr = compileV10(t, unionSchema("png"))
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "1.0 union: undeclared notation value must fail")
+
+	schema, cerr = compileV10(t, unionSchema("jpeg"))
+	require.NoError(t, cerr, "1.0 union: declared notation value must compile")
+	require.NotNil(t, schema)
+
+	// XSD 1.1: an undeclared token in either carrier is still rejected (the
+	// bare carrier is additionally non-enumeration-derived here).
+	_, _, cerr = compileV11(t, listSchema("png"))
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "1.1 list: undeclared notation token must fail")
+
+	_, _, cerr = compileV11(t, unionSchema("png"))
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "1.1 union: undeclared notation value must fail")
+}
