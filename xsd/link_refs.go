@@ -3193,6 +3193,11 @@ func (c *compiler) markChameleonEligible(owner any, elem *helium.Element, ref st
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
 // using the namespace declarations in scope on the given element.
 func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName {
+	// A QName-valued schema attribute (@base/@type/@ref/@itemType/@memberType)
+	// has value space xs:QName, whose whiteSpace facet is fixed "collapse", so
+	// leading/trailing (and internal) whitespace is discarded before prefix
+	// resolution — e.g. base="    xsd:string " resolves to xsd:string.
+	ref = normalizeWhiteSpace(ref, "collapse")
 	local := ref
 	ns := c.schema.targetNamespace
 

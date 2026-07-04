@@ -106,12 +106,13 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	if name == "" {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."))
-	} else if !xmlchar.IsValidNCName(name) {
+	} else if !xmlchar.IsValidNCName(normalizeWhiteSpace(name, "collapse")) {
 		// The {name} of an element declaration must be an NCName (XSD
-		// Structures §3.3.2; xsd:element/@name is of type xs:NCName). A value
-		// that is empty-after-trim, starts with a non-name character, or
-		// contains a colon (a QName, not an NCName) is a schema-representation
-		// error.
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName, whose
+		// whiteSpace facet is fixed "collapse"). The value is collapsed before
+		// the NCName test, so name="sub2-elem " is valid. A value that is
+		// empty-after-collapse, starts with a non-name character, or contains a
+		// colon (a QName, not an NCName) is a schema-representation error.
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
 			"The value '"+name+"' is not a valid 'NCName'."))
 	}
@@ -533,9 +534,10 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		c.checkElementContentOrder(ctx, elem)
 
 		// The {name} of a local element declaration must be an NCName (XSD
-		// Structures §3.3.2; xsd:element/@name is of type xs:NCName), exactly as
-		// for global declarations.
-		if !xmlchar.IsValidNCName(name) {
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName, whiteSpace
+		// fixed "collapse"), exactly as for global declarations — the value is
+		// collapsed before the NCName test.
+		if !xmlchar.IsValidNCName(normalizeWhiteSpace(name, "collapse")) {
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
 				"The value '"+name+"' is not a valid 'NCName'."))
 		}
