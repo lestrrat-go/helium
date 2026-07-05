@@ -937,6 +937,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// integrity is never enforced.
 	c.checkKeyRefRefers(ctx)
 
+	// Enforce the XSD 1.0 Schema Component Constraint that a complex type must not
+	// have more than one attribute use whose type is or is derived from xs:ID
+	// (Part 1 §3.4.6). Runs after resolveRefs so each type's effective attribute
+	// uses (including inherited/attribute-group-contributed ones) are finalized;
+	// gated to Version10 (XSD 1.1 removed the rule).
+	c.checkIDAttributeUses(ctx)
+
 	// Fatal schema diagnostics were already delivered to the ErrorHandler as
 	// they were discovered. A non-zero error count means the schema is
 	// invalid, so the compiled Schema must not be handed back: returning it
