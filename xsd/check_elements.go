@@ -23,6 +23,63 @@ func hasAttr(elem *helium.Element, name string) bool {
 	return false
 }
 
+// qnameCompanionUsable reports whether a QName-valued schema attribute (attr, e.g.
+// @type/@ref) should fire the STRUCTURAL representation gate it participates in — a
+// with-ref prohibition ("type not allowed"), an inline-type mutual-exclusion
+// ("type and the <simpleType> child are mutually exclusive"), or the like. It
+// returns true ONLY when attr is present with a value that COLLAPSES TO NON-EMPTY.
+//
+// A PRESENT-but-collapse-empty value — the literal "" OR a whitespace-only "   "
+// (xs:QName has its whiteSpace facet fixed "collapse") — is instead an invalid
+// (empty) xs:QName: the helper reports that ONE invalid-QName value diagnostic and
+// returns false, so the structural secondary is suppressed. Because
+// reportInvalidQNameValue dedups by (element, attribute, value), re-reporting a
+// value already flagged at its QName store site (element/attribute @type, @base,
+// …) collapses to a single diagnostic; where no store site validates the value
+// (an @type alongside @ref is never routed), this helper is the sole reporter. So
+// a present-empty and a whitespace-only companion stay SYMMETRIC — each yields
+// exactly the one invalid-QName diagnostic with no spurious structural follow-on —
+// while a genuinely-present non-empty value (valid, or a two-token/leading-colon
+// malformed value that is out of scope here) still fires the structural gate.
+func (c *compiler) qnameCompanionUsable(ctx context.Context, elem *helium.Element, attr string) bool {
+	if !hasAttr(elem, attr) {
+		return false
+	}
+	v := collapsedAttr(elem, attr)
+	if v == "" {
+		c.reportInvalidQNameValue(ctx, elem, attr, v)
+		return false
+	}
+	return true
+}
+
+// ncnameCompanionUsable is the xs:NCName (@name) counterpart of
+// qnameCompanionUsable: it reports whether the @name companion should fire its
+// with-ref structural gate (a "ref and name are mutually exclusive" / "name is not
+// allowed" prohibition). It returns true only when @name is present with a value
+// that COLLAPSES TO NON-EMPTY. A PRESENT-but-collapse-empty @name (""/whitespace-
+// only — xs:NCName also has whiteSpace fixed "collapse") is an invalid (empty)
+// NCName: the helper reports that ONE invalid-NCName diagnostic (the same wording
+// the primary declaration branch uses) and returns false, suppressing the
+// structural secondary so a present-empty and a whitespace-only @name stay
+// SYMMETRIC. A present non-empty @name (valid or malformed — the latter reported
+// by the enclosing declaration's own NCName check) still fires the structural
+// gate. xsdElem is the schema-for-schemas element name the diagnostic cites
+// ("attribute"/"element"). The with-ref branch does not otherwise validate @name,
+// so this helper is the sole reporter — no double diagnostic.
+func (c *compiler) ncnameCompanionUsable(ctx context.Context, elem *helium.Element, xsdElem string) bool {
+	if !hasAttr(elem, attrName) {
+		return false
+	}
+	v := collapsedAttr(elem, attrName)
+	if v == "" {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), xsdElem, attrName,
+			"The value '"+v+"' is not a valid 'NCName'."))
+		return false
+	}
+	return true
+}
+
 // isValidFinal checks if a value is valid for the 'final' attribute on elements.
 func isValidFinal(v string) bool {
 	if v == lexicon.ModeAll {
@@ -102,22 +159,28 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	// Content-model ordering: annotation must be the first child (§3.3.2).
 	c.checkElementContentOrder(ctx, elem)
 
-	// name is required for global elements.
-	if name == "" {
+	// name is required for global elements. Presence is detected by hasAttr, so a
+	// genuinely-ABSENT @name is "required but missing", while a PRESENT @name — the
+	// literal "" AND the whitespace-only "   " (xs:element/@name is xs:NCName,
+	// whiteSpace fixed "collapse", so both collapse to the empty string) — is an
+	// invalid (empty) NCName, symmetric between the two forms. A padded
+	// name="sub2-elem " is valid; an internal-whitespace name="a b" fails.
+	if !hasAttr(elem, attrName) {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."))
-	} else if !xmlchar.IsValidNCName(name) {
-		// The {name} of an element declaration must be an NCName (XSD
-		// Structures §3.3.2; xsd:element/@name is of type xs:NCName). A value
-		// that is empty-after-trim, starts with a non-name character, or
-		// contains a colon (a QName, not an NCName) is a schema-representation
-		// error.
+	} else if cname := normalizeWhiteSpace(name, "collapse"); !xmlchar.IsValidNCName(cname) {
+		// Report the COLLAPSED value so name="" and name="   " (both collapse to "")
+		// emit the identical '' diagnostic, matching ncnameCompanionUsable.
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
-			"The value '"+name+"' is not a valid 'NCName'."))
+			"The value '"+cname+"' is not a valid 'NCName'."))
 	}
 
-	// ref is not allowed at global level.
-	if getAttr(elem, attrRef) != "" {
+	// ref is not allowed at global level. @ref is xs:QName: a PRESENT-but-collapse-
+	// empty ref (""/whitespace-only) is instead an invalid (empty) QName, surfaced as
+	// that one value diagnostic by qnameCompanionUsable (which returns false), so the
+	// prohibition is suppressed and present-empty stays symmetric with whitespace-only;
+	// a present non-empty ref still fires the prohibition.
+	if c.qnameCompanionUsable(ctx, elem, attrRef) {
 		c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 			"The attribute 'ref' is not allowed."))
 	}
@@ -162,8 +225,13 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 			"The attributes 'default' and 'fixed' are mutually exclusive."))
 	}
 
-	// type and inline complexType/simpleType are mutually exclusive.
-	if getAttr(elem, attrType) != "" {
+	// type and inline complexType/simpleType are mutually exclusive. @type is
+	// xs:QName: a PRESENT-but-collapse-empty type is an invalid (empty) QName (its
+	// one value diagnostic fires at the @type store site, re-reported deduped by
+	// qnameCompanionUsable, which returns false), so the mutual-exclusion is
+	// suppressed and present-empty stays symmetric with whitespace-only; a present
+	// non-empty type still fires the mutual-exclusion.
+	if c.qnameCompanionUsable(ctx, elem, attrType) {
 		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
@@ -423,7 +491,13 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 	if c.filename == "" {
 		return
 	}
-	ref := getAttr(elem, attrRef)
+	// @ref is xs:QName (whiteSpace fixed "collapse"): dispatch on the COLLAPSED value
+	// so a PRESENT-but-collapse-empty ref (""/whitespace-only) is NOT treated as a
+	// present reference. It falls through to the named/else branch exactly like an
+	// empty ref="", so the invalid (empty) QName — reported once at the @ref store
+	// site (parseLocalElement) — does not also trigger the ref-branch's companion/
+	// prohibition secondaries; present-empty and whitespace-only stay symmetric.
+	ref := collapsedAttr(elem, attrRef)
 	name := getAttr(elem, attrName)
 	line := elem.Line()
 	local := elem.LocalName()
@@ -481,8 +555,12 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			}
 		}
 
-		// ref and name are mutually exclusive.
-		if name != "" {
+		// ref and name are mutually exclusive. @name is xs:NCName: a PRESENT-but-
+		// collapse-empty name is instead an invalid (empty) NCName — ncnameCompanionUsable
+		// reports that one value diagnostic and returns false, suppressing the
+		// mutual-exclusion so present-empty stays symmetric with whitespace-only; a
+		// present non-empty name still fires the mutual-exclusion.
+		if c.ncnameCompanionUsable(ctx, elem, elemElement) {
 			c.schemaError(ctx, schemaParserError(c.filename, line, local, "element",
 				"The attributes 'ref' and 'name' are mutually exclusive."))
 		}
@@ -524,8 +602,13 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 				break // only report first
 			}
 		}
-	} else if name != "" {
-		// Named local element constraints.
+	} else if hasAttr(elem, attrName) {
+		// Named local element constraints (dispatch on PRESENCE, not a non-empty
+		// value): a PRESENT-but-collapse-empty @name — the literal "" AND the
+		// whitespace-only "   " (xs:NCName, whiteSpace collapse) — enters this branch
+		// and is reported as an invalid (empty) NCName below, symmetric between the
+		// two forms; a genuinely-ABSENT @name falls through to the targetNamespace
+		// branch (and, with no @ref/@name, to parseLocalElement's missing-name path).
 		// Matches libxml2 ordering: maxOccurs, not-allowed attrs,
 		// block/final value checks, default+fixed, type/content children.
 
@@ -533,11 +616,14 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		c.checkElementContentOrder(ctx, elem)
 
 		// The {name} of a local element declaration must be an NCName (XSD
-		// Structures §3.3.2; xsd:element/@name is of type xs:NCName), exactly as
-		// for global declarations.
-		if !xmlchar.IsValidNCName(name) {
+		// Structures §3.3.2; xsd:element/@name is of type xs:NCName, whiteSpace
+		// fixed "collapse"), exactly as for global declarations — the value is
+		// collapsed before the NCName test.
+		if cname := normalizeWhiteSpace(name, "collapse"); !xmlchar.IsValidNCName(cname) {
+			// Report the COLLAPSED value so name="" and name="   " emit the identical
+			// '' diagnostic, matching ncnameCompanionUsable.
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, elemElement, attrName,
-				"The value '"+name+"' is not a valid 'NCName'."))
+				"The value '"+cname+"' is not a valid 'NCName'."))
 		}
 
 		// maxOccurs must be a non-negative integer (or "unbounded"). A maxOccurs of
@@ -597,8 +683,12 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 				"The attributes 'default' and 'fixed' are mutually exclusive."))
 		}
 
-		// type and inline complexType/simpleType checks.
-		hasType := getAttr(elem, attrType) != ""
+		// type and inline complexType/simpleType checks. @type is xs:QName: a
+		// PRESENT-but-collapse-empty type is an invalid (empty) QName (reported at the
+		// store site, re-reported deduped here), so it does NOT count as a present type
+		// for the mutual-exclusion — present-empty stays symmetric with whitespace-only;
+		// a present non-empty type still fires the mutual-exclusion.
+		hasType := c.qnameCompanionUsable(ctx, elem, attrType)
 		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
@@ -631,7 +721,11 @@ func (c *compiler) checkLocalElementTargetNamespace(ctx context.Context, elem *h
 
 	line := elem.Line()
 	local := elem.LocalName()
-	if getAttr(elem, attrName) == "" {
+	// Fire the "requires a name" diagnostic only when @name is genuinely ABSENT
+	// (hasAttr): a PRESENT-but-collapse-empty @name ("" or "   ") is reported as an
+	// invalid (empty) NCName by checkLocalElement, so this secondary is suppressed —
+	// present-empty ≡ whitespace-only, one diagnostic.
+	if !hasAttr(elem, attrName) {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "element",
 			"The attribute 'targetNamespace' requires a local element declaration with a 'name'."))
 		return
@@ -660,12 +754,16 @@ func (c *compiler) localElementUnderNonAnyTypeRestriction(ctx context.Context, e
 		if !isXSDElement(pe, elemRestriction) || !isContentDerivationRestriction(pe) {
 			continue
 		}
-		base := getAttr(pe, attrBase)
-		if base == "" {
+		// @base is an xs:QName: gate on PRESENCE and route the value through the QName
+		// chokepoint so a PRESENT-but-empty base="" behaves like the whitespace-only
+		// base="   " — both collapse to the invalidQName sentinel, whose invalid-QName
+		// diagnostic already fired, so this secondary targetNamespace check does not
+		// emit its own error (isInvalidQName → suppress).
+		if !hasAttr(pe, attrBase) {
 			return false
 		}
-		qn := c.resolveQName(ctx, pe, base)
-		return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
+		qn := c.resolveQName(ctx, pe, attrBase, getAttr(pe, attrBase))
+		return isInvalidQName(qn) || qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 	}
 	return false
 }
@@ -675,7 +773,10 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 	if c.filename == "" {
 		return
 	}
-	ref := getAttr(elem, attrRef)
+	// xs:attribute/@ref is an xs:QName (whiteSpace fixed "collapse"): read it
+	// collapsed so the whole function (presence dispatch, QName validity) sees the
+	// same value the store/resolution does.
+	ref := collapsedAttr(elem, attrRef)
 	line := elem.Line()
 	local := elem.LocalName()
 
@@ -728,22 +829,44 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 	if hasAttr(elem, attrRef) {
 		switch {
 		case isGlobalAttributeDecl(elem):
+			// On a GLOBAL (top-level) attribute declaration @ref is structurally
+			// PROHIBITED — the schema-for-schemas `topLevelAttribute` type omits it
+			// entirely — so the prohibition is the correct and COMPLETE sole
+			// diagnostic regardless of the value: a malformed/empty ref on a
+			// component that may not carry ref at all is moot. The collapse-empty
+			// invalid-QName path below is therefore deliberately NOT reached here,
+			// and no second value diagnostic is emitted (one-diagnostic contract).
+			// The message carries no value, so ref="" and ref="   " report identically.
 			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 				"The attribute 'ref' is not allowed."))
-		case !xmlchar.IsValidQName(ref):
-			c.reportInvalidQNameValue(ctx, elem, ref)
+		default:
+			// ref is already collapsed (collapsedAttr): reject a value still not a
+			// valid QName after collapsing (empty, internal whitespace, a leading
+			// colon, …); a padded ref=" p:a " is accepted.
+			if !xmlchar.IsValidQName(ref) {
+				c.reportInvalidQNameValue(ctx, elem, attrRef, ref)
+			}
 		}
 	}
 
 	if ref != "" {
-		// ref and name are mutually exclusive.
-		if getAttr(elem, attrName) != "" {
+		// name is not allowed alongside ref. @name is xs:NCName: a PRESENT-but-
+		// collapse-empty name is instead an invalid (empty) NCName — ncnameCompanionUsable
+		// reports that one value diagnostic and returns false, suppressing the
+		// prohibition so present-empty stays symmetric with whitespace-only; a present
+		// non-empty name still fires the prohibition.
+		if c.ncnameCompanionUsable(ctx, elem, "attribute") {
 			c.schemaError(ctx, schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'name' is not allowed."))
 		}
 
-		// type not allowed with ref.
-		if getAttr(elem, attrType) != "" {
+		// type is not allowed alongside ref. @type is xs:QName: a PRESENT-but-collapse-
+		// empty type is instead an invalid (empty) QName. The ref branch never routes
+		// @type through a QName store site, so qnameCompanionUsable is the sole reporter
+		// of that one value diagnostic (and returns false), suppressing the prohibition
+		// so present-empty stays symmetric with whitespace-only; a present non-empty type
+		// still fires the prohibition.
+		if c.qnameCompanionUsable(ctx, elem, attrType) {
 			c.schemaError(ctx, schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'type' is not allowed."))
 		}
@@ -797,17 +920,17 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		// Version-INDEPENDENT schema-representation rule (enforced in 1.0 and 1.1).
 		c.checkAttributeChildren(ctx, elem)
 
-		// Attribute name must not be "xmlns".
-		if getAttr(elem, attrName) == lexicon.PrefixXMLNS {
+		// xs:attribute/@name is xs:NCName (whiteSpace fixed "collapse"): read the
+		// collapsed value — the same one parseAttributeUse/parseGlobalAttribute
+		// registers — so the xmlns and NCName checks agree with storage. A padded
+		// name="a " is valid; an internal-whitespace name="a b" fails NCName.
+		cname := collapsedAttr(elem, attrName)
+		if cname == lexicon.PrefixXMLNS {
 			c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
 				"The value of the attribute must not match 'xmlns'."))
-		} else if name := getAttr(elem, attrName); hasAttr(elem, attrName) && !xmlchar.IsValidNCName(name) {
-			// The {name} of an attribute declaration must be an NCName (XSD
-			// Structures §3.2.2; xsd:attribute/@name is of type xs:NCName). A
-			// value that is empty, starts with a non-name character, or contains
-			// a colon (a QName, not an NCName) is a schema-representation error.
+		} else if hasAttr(elem, attrName) && !xmlchar.IsValidNCName(cname) {
 			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), line, local, "attribute", "name",
-				"The value '"+name+"' is not a valid 'NCName'."))
+				"The value '"+cname+"' is not a valid 'NCName'."))
 		}
 
 		// Schema Representation Constraint on the `form` attribute of
@@ -865,12 +988,21 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		// unprefixed reference. (Version-INDEPENDENT — enforced in 1.0 and 1.1. A
 		// syntactically valid @type that resolves to a non-simple-type component is
 		// a separate, resolution-time check.)
-		if t := getAttr(elem, attrType); t != "" && !xmlchar.IsValidQName(t) {
-			c.reportInvalidQNameValue(ctx, elem, t)
+		if ct := collapsedAttr(elem, attrType); ct != "" {
+			// xs:attribute/@type is an xs:QName (whiteSpace fixed "collapse"): validate
+			// the COLLAPSED value so a padded type=" xs:string " is accepted, and reject
+			// one still malformed after collapsing.
+			if !xmlchar.IsValidQName(ct) {
+				c.reportInvalidQNameValue(ctx, elem, attrType, ct)
+			}
 		}
 
-		// type and inline simpleType are mutually exclusive.
-		if getAttr(elem, attrType) != "" {
+		// type and inline simpleType are mutually exclusive. @type is xs:QName: a
+		// PRESENT-but-collapse-empty type is an invalid (empty) QName (reported at the
+		// store site, re-reported deduped here), so it does NOT trigger the
+		// mutual-exclusion — present-empty stays symmetric with whitespace-only; a
+		// present non-empty type still fires the mutual-exclusion.
+		if c.qnameCompanionUsable(ctx, elem, attrType) {
 			for child := range helium.Children(elem) {
 				if child.Type() != helium.ElementNode {
 					continue
@@ -948,7 +1080,11 @@ func (c *compiler) checkLocalAttributeTargetNamespace(ctx context.Context, elem 
 
 	line := elem.Line()
 	local := elem.LocalName()
-	if getAttr(elem, attrName) == "" {
+	// Fire the "requires a name" diagnostic only when @name is genuinely ABSENT
+	// (hasAttr): a PRESENT-but-collapse-empty @name ("" or "   ") is reported as an
+	// invalid (empty) NCName by checkAttributeUse, so this secondary is suppressed —
+	// present-empty ≡ whitespace-only, one diagnostic.
+	if !hasAttr(elem, attrName) {
 		c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
 			"The attribute 'targetNamespace' requires a local attribute declaration with a 'name'."))
 	}
@@ -985,12 +1121,16 @@ func (c *compiler) localAttributeUnderNonAnyTypeRestriction(ctx context.Context,
 	if !ok || !isXSDElement(parent, elemRestriction) || !isContentDerivationRestriction(parent) {
 		return false
 	}
-	base := getAttr(parent, attrBase)
-	if base == "" {
+	// @base is an xs:QName: gate on PRESENCE and route the value through the QName
+	// chokepoint so a PRESENT-but-empty base="" behaves like the whitespace-only
+	// base="   " — both collapse to the invalidQName sentinel, whose invalid-QName
+	// diagnostic already fired, so this secondary targetNamespace check does not
+	// emit its own error (isInvalidQName → suppress).
+	if !hasAttr(parent, attrBase) {
 		return false
 	}
-	qn := c.resolveQName(ctx, parent, base)
-	return qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
+	qn := c.resolveQName(ctx, parent, attrBase, getAttr(parent, attrBase))
+	return isInvalidQName(qn) || qn.NS != lexicon.NamespaceXSD || qn.Local != typeAnyType
 }
 
 func isContentDerivationRestriction(elem *helium.Element) bool {

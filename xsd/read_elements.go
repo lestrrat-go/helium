@@ -504,10 +504,12 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		decl.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 	}
 
-	if opts.allowSubstitutionGroup {
-		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
-			decl.setSubstitutionGroupHeads(c.resolveSubstitutionGroupHeads(ctx, elem, sg))
-		}
+	if opts.allowSubstitutionGroup && hasAttr(elem, attrSubstitutionGroup) {
+		// Dispatch on PRESENCE: a PRESENT-but-empty substitutionGroup="" (or, in 1.1,
+		// a whitespace-only value that splitSpace would tokenize to nothing) is an
+		// invalid (empty) QName, reported once by resolveSubstitutionGroupHeads, not
+		// silently treated as absent.
+		decl.setSubstitutionGroupHeads(c.resolveSubstitutionGroupHeads(ctx, elem))
 	}
 
 	decl.Default, decl.Fixed = readDefaultOrFixed(elem)
@@ -596,9 +598,13 @@ func parseSchemaBool(raw string) (bool, bool) {
 }
 
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
-	typeRef := getAttr(elem, attrType)
-	if typeRef != "" {
-		qn := c.resolveQName(ctx, elem, typeRef)
+	// xs:element/@type is an xs:QName: dispatch on PRESENCE, not a non-empty value.
+	// A PRESENT-but-empty type="" (or a whitespace-only type="   ") is an invalid
+	// (empty) QName, reported by resolveQName — not silently treated as an absent
+	// @type that falls through to an inline <xs:simpleType>/<xs:complexType> child.
+	if hasAttr(elem, attrType) {
+		typeRef := getAttr(elem, attrType)
+		qn := c.resolveQName(ctx, elem, attrType, typeRef)
 		c.elemRefs[decl] = qn
 		c.markChameleonEligible(decl, elem, typeRef)
 		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line(), source: c.diagSource()}
@@ -642,15 +648,30 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	return nil
 }
 
-func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element, raw string) []QName {
+// resolveSubstitutionGroupHeads resolves the @substitutionGroup heads of an element
+// declaration. The caller has already confirmed the attribute is PRESENT. In XSD 1.0
+// the value is a SINGLE xs:QName; in 1.1 it is a whitespace-separated LIST of xs:QName
+// (deduped). A present-but-empty / whitespace-only value resolves to no head after the
+// single invalid-QName diagnostic that resolveQNameRef/resolveQNameListRef emits, so
+// an invalid value never installs the sentinel as a spurious head.
+func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *helium.Element) []QName {
 	if c.version != Version11 {
-		return []QName{c.resolveQName(ctx, elem, raw)}
+		qn, ok := c.resolveQNameRef(ctx, elem, attrSubstitutionGroup)
+		if !ok || isInvalidQName(qn) {
+			return nil
+		}
+		return []QName{qn}
 	}
-	tokens := splitSpace(raw)
+	tokens, _ := c.resolveQNameListRef(ctx, elem, attrSubstitutionGroup)
 	heads := make([]QName, 0, len(tokens))
 	seen := make(map[QName]struct{}, len(tokens))
-	for _, token := range tokens {
-		qn := c.resolveQName(ctx, elem, token)
+	for _, qn := range tokens {
+		// An invalid token (a present-empty/whitespace-only value's invalidQName
+		// sentinel, or a malformed member) installs NO head — its invalid-QName
+		// diagnostic already fired, matching the XSD 1.0 scalar branch above.
+		if isInvalidQName(qn) {
+			continue
+		}
 		if _, ok := seen[qn]; ok {
 			continue
 		}
@@ -662,8 +683,12 @@ func (c *compiler) resolveSubstitutionGroupHeads(ctx context.Context, elem *heli
 
 func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Element, opts attrUseReadOptions) *AttrUse {
 	au := &AttrUse{Name: opts.name}
-	if typeRef := getAttr(elem, attrType); typeRef != "" {
-		au.TypeName = c.resolveQName(ctx, elem, typeRef)
+	// xs:attribute/@type is an xs:QName: dispatch on PRESENCE. A PRESENT-but-empty
+	// type="" (or a whitespace-only type="   ") is an invalid (empty) QName, reported
+	// by resolveQName, not silently treated as an absent @type that falls through to
+	// an inline <xs:simpleType> child.
+	if hasAttr(elem, attrType) {
+		au.TypeName = c.resolveQName(ctx, elem, attrType, getAttr(elem, attrType))
 	} else {
 		// No type attribute: look for an inline anonymous <xs:simpleType>.
 		// (type and inline simpleType are mutually exclusive, enforced by
@@ -730,7 +755,10 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element) error {
 	c.checkGlobalElement(ctx, elem)
-	name := getAttr(elem, attrName)
+	// xs:element/@name is xs:NCName (whiteSpace fixed "collapse"), so the STORED
+	// declaration name is the collapsed value — a ref/instance to the trimmed name
+	// (e.g. name="sub2-elem ") then resolves against the registered {tns}sub2-elem.
+	name := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
 	if name == "" {
 		// Still register with a placeholder name to continue parsing.
 		return nil
@@ -791,9 +819,13 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 	c.checkLocalElement(ctx, elem)
 	minOcc, maxOcc := parseParticleOccurs(elem)
 
-	// Handle element references (ref="...").
-	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(ctx, elem, ref)
+	// Handle element references (ref="..."). Dispatch on PRESENCE: a PRESENT-but-empty
+	// ref="" (or a whitespace-only ref="   ") is an invalid (empty) QName, reported by
+	// resolveQName, not silently treated as an absent @ref that falls through to a
+	// named-element declaration.
+	if hasAttr(elem, attrRef) {
+		ref := getAttr(elem, attrRef)
+		qn := c.resolveQName(ctx, elem, attrRef, ref)
 		edecl := &ElementDecl{
 			Name:      qn,
 			MinOccurs: minOcc,
@@ -810,14 +842,20 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 		}, nil
 	}
 
-	name := getAttr(elem, attrName)
+	// xs:element/@name is xs:NCName (whiteSpace fixed "collapse"), so the STORED
+	// declaration name is the collapsed value, exactly as for global declarations.
+	name := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
 	if name == "" {
-		if c.version != Version11 || !hasAttr(elem, attrTargetNamespace) {
+		// Distinguish a genuinely-ABSENT @name from a PRESENT-but-collapse-empty one
+		// ("" or "   "). A present-empty @name is an invalid (empty) NCName already
+		// reported by checkLocalElement, and a v11 targetNamespace-only local element
+		// legitimately omits @name — both use a valid internal recovery name so
+		// compilation reaches the usual ErrCompilationFailed gate. Only a genuinely
+		// missing name (absent @name, no @ref, and — in 1.1 — no @targetNamespace) is
+		// the internal parser error.
+		if !hasAttr(elem, attrName) && (c.version != Version11 || !hasAttr(elem, attrTargetNamespace)) {
 			return nil, fmt.Errorf("xsd: local element missing name")
 		}
-		// checkLocalElement has already reported the schema error. Use a valid,
-		// internal recovery name so compilation reaches the usual ErrCompilationFailed
-		// gate instead of returning a raw parser error.
 		name = fmt.Sprintf("__invalid_local_element_%d", elem.Line())
 	}
 
@@ -856,7 +894,7 @@ func (c *compiler) parseAnyAttribute(ctx context.Context, elem *helium.Element) 
 
 func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Element) {
 	c.checkAttributeUse(ctx, elem)
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return
 	}
@@ -896,9 +934,11 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) *AttrUse {
 	c.checkAttributeUse(ctx, elem)
-	// Handle attribute references (ref="...").
-	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(ctx, elem, ref)
+	// Handle attribute references (ref="..."). Dispatch on PRESENCE via resolveQNameRef:
+	// a PRESENT-but-empty ref="" (or whitespace-only) is an invalid (empty) QName,
+	// reported once, not silently treated as an absent @ref falling through to the
+	// named-declaration branch.
+	if qn, ok := c.resolveQNameRef(ctx, elem, attrRef); ok {
 		au := &AttrUse{Name: qn}
 		switch getAttr(elem, attrUse) {
 		case attrValRequired:
@@ -955,7 +995,7 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		return au
 	}
 
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	return c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
 		name:       QName{Local: name, NS: c.localAttributeNamespace(elem)},
 		includeUse: true,
@@ -994,12 +1034,12 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
 func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
-	name := getAttr(elem, attrName)
+	name := collapsedAttr(elem, attrName)
 	// Detect the @ref form by PRESENCE, not value: getAttr cannot tell an absent
 	// attribute from an empty one, so a literal ref="" must be recognized as the
 	// (invalid) ref form rather than silently treated as absent and dropped.
 	hasRef := c.version == Version11 && hasAttr(elem, attrRef)
-	if name == "" && !hasRef {
+	if !hasRef && !hasAttr(elem, attrName) {
 		// @name is required (XSD Structures 3.11.2 / src-identity-constraint).
 		// libxml2 reports the missing attribute and drops the constraint; an
 		// absent name previously compiled clean and silently discarded the
@@ -1030,7 +1070,12 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			source = c.filename
 		}
 		xsdElem := idcKindName(kind)
-		ref := getAttr(elem, attrRef)
+		// xs:key/@ref (and unique/keyref) is an xs:QName (whiteSpace fixed
+		// "collapse"), so collapse at the read point: the stored ConstraintRef and
+		// the validateQName check in resolveIDCNameQName both see the collapsed value,
+		// and a padded ref=" k " resolves instead of failing on a whitespace-padded
+		// prefix.
+		ref := collapsedAttr(elem, attrRef)
 		// An empty @ref names no constraint and is a fatal schema error; drop the
 		// constraint so resolveConstraintRefs does not also report it as unknown.
 		if ref == "" {
@@ -1041,14 +1086,28 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			return nil
 		}
 		// A @ref constraint must not also declare its own name/selector/field/refer
-		// (the ref form is mutually exclusive with the full form). Companions are
-		// detected by PRESENCE (hasAttr), not value, so an empty-but-present
-		// name=""/refer="" is still rejected, consistent with the ref-form detection.
+		// (the ref form is mutually exclusive with the full form). A companion is
+		// PRESENT by hasAttr, but a present-but-empty @name/@refer — the literal ""
+		// OR a whitespace-only value (xs:NCName and xs:QName both fix whiteSpace
+		// "collapse") — is an invalid NCName/QName in its OWN right, so it emits that
+		// one value diagnostic (matching how present-empty @name/@refer are treated
+		// everywhere else) instead of the structural ref-conflict, keeping present-
+		// empty and whitespace-only symmetric. A present NON-empty companion still
+		// fires the ref-conflict.
 		if hasAttr(elem, attrName) {
-			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
+			if collapsedAttr(elem, attrName) == "" {
+				c.reportIDCStructureError(ctx, kind, elem.Line(), elem.LocalName(),
+					"The value '' of attribute 'name' is not a valid 'xs:NCName'.")
+			} else {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrName)
+			}
 		}
 		if hasAttr(elem, attrRefer) {
-			c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
+			if collapsedAttr(elem, attrRefer) == "" {
+				c.reportInvalidQNameValue(ctx, elem, attrRefer, "")
+			} else {
+				c.reportIDCRefConflict(ctx, source, elem.Line(), xsdElem, attrRefer)
+			}
 		}
 		for child := range helium.Children(elem) {
 			ce, ok := helium.AsNode[*helium.Element](child)
@@ -1101,14 +1160,27 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			"The attribute 'refer' is not allowed.")
 	}
 	if kind == IDCKeyRef {
-		idc.Refer = getAttr(elem, attrRefer)
-		// @refer is a QName; resolve it namespace-aware against the constraint
-		// element's in-scope namespaces. An empty refer or an unbound prefix is a
-		// fatal schema error (reported later by checkKeyRefRefers, which also
-		// verifies the referenced constraint exists). Store the resolved QName so
-		// validation can look the target up by full identity rather than by local
-		// name only.
-		idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
+		// xs:keyref/@refer is an xs:QName (whiteSpace fixed "collapse"). Dispatch on
+		// PRESENCE: a PRESENT-but-collapse-empty @refer ("" or "   ") is an invalid
+		// (empty) QName — report that ONE value diagnostic here and mark referUnbound
+		// so checkKeyRefRefers does NOT also emit its "no refer attribute" (absent)
+		// diagnostic. Present-empty is NOT absent, so present-empty ≡ whitespace-only.
+		// A genuinely-ABSENT @refer leaves idc.Refer empty and keeps that "no refer
+		// attribute naming a key or unique" diagnostic (checkKeyRefRefers).
+		switch {
+		case hasAttr(elem, attrRefer) && collapsedAttr(elem, attrRefer) == "":
+			c.reportInvalidQNameValue(ctx, elem, attrRefer, "")
+			idc.referUnbound = true
+		default:
+			// Collapse at the read point so the stored Refer and the validateQName
+			// check in resolveIDCReferQName both see the collapsed value (a padded
+			// refer=" k " resolves instead of failing on a whitespace-padded prefix).
+			// resolveIDCReferQName resolves the QName namespace-aware; an unbound
+			// prefix is a fatal error there. Store the resolved QName so validation
+			// looks the target up by full identity rather than by local name only.
+			idc.Refer = collapsedAttr(elem, attrRefer)
+			idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
+		}
 	}
 	// fieldLines tracks the source line of each <field>, parallel to idc.Fields,
 	// so a malformed field XPath is reported against the right element.
@@ -1369,7 +1441,7 @@ func (c *compiler) resolveIDCNameQName(ctx context.Context, elem *helium.Element
 	// as an unprefixed/default-namespace reference (strings.Cut would yield an
 	// empty prefix that bypasses the unbound-prefix check below).
 	if err := validateQName(ref); err != nil {
-		c.reportInvalidQNameValue(ctx, elem, ref)
+		c.reportInvalidQNameValue(ctx, elem, attrRef, ref)
 		return QName{}, true
 	}
 	if prefix, local, found := strings.Cut(ref, ":"); found {

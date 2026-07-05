@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // xs:override (XSD 1.1, W3C XML Schema 1.1 Part 1 §4.2.5 / §F) performs WHOLESALE
@@ -107,32 +108,46 @@ func (c *compiler) applySchemaDefaultAttrs(s schemaDefaultAttrsState) {
 	c.schema.defaultAttrsSrc = s.src
 }
 
+// overrideChildSymbol returns the override symbol space of a NAMED top-level
+// component element (complexType/simpleType share the type symbol space), and false
+// for any element that is not a named top-level component (annotation, include,
+// import, override, redefine). It does NOT look at @name, so name validity is a
+// SEPARATE concern (validateComponentChildName).
+func overrideChildSymbol(elem *helium.Element) (overrideSymbol, bool) {
+	switch {
+	case isXSDElement(elem, elemComplexType), isXSDElement(elem, elemSimpleType):
+		return overrideSymType, true
+	case isXSDElement(elem, elemElement):
+		return overrideSymElement, true
+	case isXSDElement(elem, elemAttribute):
+		return overrideSymAttribute, true
+	case isXSDElement(elem, elemGroup):
+		return overrideSymGroup, true
+	case isXSDElement(elem, elemAttributeGroup):
+		return overrideSymAttrGroup, true
+	case isXSDElement(elem, elemNotation):
+		return overrideSymNotation, true
+	}
+	return 0, false
+}
+
 // overrideChildKey returns the (symbol space, name) identity of a potential
 // override child / top-level component, with the name resolved in the current
 // schema's target namespace (which a chameleon referenced document adopts). The
-// second result is false for an element that is not a named top-level component
-// (annotation, include, import, override, redefine, an unnamed declaration).
+// second result is false for an element that is not a named top-level component, or
+// one whose @name is absent/empty. It is the MATCHING key builder (used to test a
+// target-document component against the active override set); malformed-name
+// reporting lives in collectOverrideChildren via validateComponentChildName.
 func (c *compiler) overrideChildKey(elem *helium.Element) (overrideKey, bool) {
-	name := getAttr(elem, attrName)
+	sym, ok := overrideChildSymbol(elem)
+	if !ok {
+		return overrideKey{}, false
+	}
+	name := collapsedAttr(elem, attrName)
 	if name == "" {
 		return overrideKey{}, false
 	}
-	qn := QName{Local: name, NS: c.schema.targetNamespace}
-	switch {
-	case isXSDElement(elem, elemComplexType), isXSDElement(elem, elemSimpleType):
-		return overrideKey{sym: overrideSymType, qn: qn}, true
-	case isXSDElement(elem, elemElement):
-		return overrideKey{sym: overrideSymElement, qn: qn}, true
-	case isXSDElement(elem, elemAttribute):
-		return overrideKey{sym: overrideSymAttribute, qn: qn}, true
-	case isXSDElement(elem, elemGroup):
-		return overrideKey{sym: overrideSymGroup, qn: qn}, true
-	case isXSDElement(elem, elemAttributeGroup):
-		return overrideKey{sym: overrideSymAttrGroup, qn: qn}, true
-	case isXSDElement(elem, elemNotation):
-		return overrideKey{sym: overrideSymNotation, qn: qn}, true
-	}
-	return overrideKey{}, false
+	return overrideKey{sym: sym, qn: QName{Local: name, NS: c.schema.targetNamespace}}, true
 }
 
 // loadOverride handles a top-level <xs:override schemaLocation="..."> element. The
@@ -176,10 +191,38 @@ func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *he
 		if isXSDElement(elem, elemAnnotation) {
 			continue
 		}
-		key, ok := c.overrideChildKey(elem)
-		if !ok {
+		sym, isComponent := overrideChildSymbol(elem)
+		if !isComponent {
+			// Not a named component (xs:include/xs:import/xs:override/xs:redefine):
+			// never a replacement child; handled by overrideProcessNested.
 			continue
 		}
+		var name string
+		switch sym {
+		case overrideSymNotation:
+			// A notation's validity — INCLUDING its @name NCName — is owned by
+			// checkNotations (the DOM walk), so it must NOT also go through
+			// validateComponentChildName (that would DOUBLE-report a malformed name).
+			// Key on the collapsed name as before so a matched target notation is
+			// suppressed and the override child's name is collected (over015); an
+			// absent/empty/malformed name is not a valid key.
+			name = collapsedAttr(elem, attrName)
+			if name == "" || !xmlchar.IsValidNCName(name) {
+				continue
+			}
+		default:
+			// A MODELED component (complexType/simpleType/group/attributeGroup, and
+			// element/attribute) is validated here BEFORE keying: a malformed name
+			// (present-empty, whitespace-only, or "a b") is a schema error rather than
+			// a silent drop, mirroring the xs:redefine dispatch. An absent @name is
+			// skipped (not a valid component key), preserving existing behavior.
+			var nameOK bool
+			name, nameOK = c.validateComponentChildName(ctx, elem)
+			if !nameOK {
+				continue
+			}
+		}
+		key := overrideKey{sym: sym, qn: QName{Local: name, NS: c.schema.targetNamespace}}
 		if _, dup := localSeen[key]; dup {
 			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemOverride,
 				fmt.Sprintf("An xs:override must not contain two children that override the same component '%s'.", key.qn.Local)))
@@ -297,7 +340,7 @@ func (c *compiler) registerOverrideChild(ctx context.Context, key overrideKey, e
 // collectNotation records an <xs:notation>'s name in c.notations (in the current
 // document's target namespace), matching parseSchemaChildren's notation handling.
 func (c *compiler) collectNotation(elem *helium.Element) {
-	if name := getAttr(elem, attrName); name != "" {
+	if name := collapsedAttr(elem, attrName); name != "" {
 		c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
 	}
 }

@@ -46,7 +46,7 @@ func TestLookaheadGroupRepetition(t *testing.T) {
 		{"single a then b", `<root><a>1</a><b>1</b></root>`, true},
 		{"repeated inner a then b", `<root><a>1</a><a>2</a><b>1</b></root>`, true},
 		{"two outer reps", `<root><a>1</a><a>2</a><b>1</b><a>3</a><a>4</a><b>2</b></root>`, true},
-		{"empty", `<root></root>`, true},
+		{testLabelEmpty, `<root></root>`, true},
 		// Inner group permits at most two `a`; a third must be rejected.
 		{"inner over max", `<root><a>1</a><a>2</a><a>3</a><b>1</b></root>`, false},
 	}

@@ -196,7 +196,7 @@ func TestVersion11DefaultAttributesInvalidQNameFailsCompile(t *testing.T) {
 		want      string
 	}{
 		{name: "leading colon", ref: ":defaults", want: "is not a valid QName"},
-		{name: "empty", ref: "", want: "is not a valid QName"},
+		{name: testLabelEmpty, ref: "", want: "is not a valid QName"},
 		{name: "contains whitespace", ref: "bad name", want: "is not a valid QName"},
 		{name: "unbound prefix", ref: "p:missing", want: "not bound to a namespace"},
 		{

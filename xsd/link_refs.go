@@ -8,6 +8,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -102,7 +103,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			// For ref elements, report unresolved element declaration error.
 			if edecl.IsRef {
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) && !isInvalidQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, elemElement, attrRef, msg))
 				}
@@ -122,7 +123,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// that should exist or a missing user-defined type — before
 				// installing a recovery placeholder, so an invalid schema cannot
 				// silently compile and validate as if the type existed.
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) && !isInvalidQName(qn) {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, msg))
 				}
@@ -322,6 +323,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		return danglingGroups[i].local < danglingGroups[j].local
 	})
 	for _, d := range danglingGroups {
+		// A lexically-malformed group ref was already reported at its read point.
+		if isInvalidQName(d.qn) {
+			continue
+		}
 		msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) model group definition.", d.qn.NS, d.qn.Local)
 		c.schemaError(ctx, schemaParserErrorAttr(d.source, d.line, d.local, elemGroup, attrRef, msg))
 	}
@@ -562,6 +567,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if td.Derivation != DerivationExtension || td.BaseType == nil {
 			continue
 		}
+		// A @base that was a lexically-malformed / present-empty QName resolved to the
+		// invalidQName sentinel placeholder and was already reported once at its read
+		// point. Skip the extension derivation-validity/merge checks so they do not emit
+		// a spurious follow-on (cos-ct-extends mixedness, attribute finalization) against
+		// the placeholder base. A genuinely-missing WELL-FORMED base is not the sentinel,
+		// so its normal unresolved diagnostics are unaffected.
+		if isInvalidQName(td.BaseType.Name) {
+			continue
+		}
 		extensionTypes = append(extensionTypes, td)
 	}
 	typeDepth := make(map[*TypeDef]int, len(extensionTypes))
@@ -769,6 +783,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	var restrictionTypes []*TypeDef
 	for td := range c.typeRefs {
 		if td.Derivation != DerivationRestriction || td.BaseType == nil {
+			continue
+		}
+		// A malformed / present-empty @base resolved to the invalidQName sentinel
+		// placeholder (already reported once); skip the restriction derivation-validity
+		// checks so they do not emit a spurious follow-on against it. A genuinely-missing
+		// well-formed base is not the sentinel, so it is unaffected.
+		if isInvalidQName(td.BaseType.Name) {
 			continue
 		}
 		restrictionTypes = append(restrictionTypes, td)
@@ -1379,6 +1400,11 @@ func (c *compiler) checkAttrGroupRefsResolve(ctx context.Context) {
 	var dangling []danglingRef
 
 	report := func(src, elemLocal string, line int, qn QName) {
+		// A lexically-malformed attributeGroup ref was already reported at its read
+		// point; skip the "does not resolve" follow-on.
+		if isInvalidQName(qn) {
+			return
+		}
 		if _, ok := c.schema.attrGroups[qn]; ok {
 			return
 		}
@@ -1509,6 +1535,10 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 
 	// Part B: @ref must resolve to a global attribute declaration.
 	for au, qn := range c.attrRefs {
+		// A lexically-malformed attribute ref was already reported at its read point.
+		if isInvalidQName(qn) {
+			continue
+		}
 		if _, ok := c.schema.globalAttrs[qn]; ok {
 			continue
 		}
@@ -2081,6 +2111,12 @@ func modelGroupHasContent(mg *ModelGroup) bool {
 // placeholder only after this records the error, so an invalid schema cannot
 // silently compile and validate documents as if the missing type existed.
 func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, qn QName) {
+	// A lexically-malformed base/itemType/memberType was already reported at its
+	// read point; skip the "does not resolve" follow-on (the recovery placeholder
+	// is still installed by the caller).
+	if isInvalidQName(qn) {
+		return
+	}
 	if c.deprecatedDatatypeQName(qn) {
 		return
 	}
@@ -3260,9 +3296,39 @@ func (c *compiler) markChameleonEligible(owner any, elem *helium.Element, ref st
 	}
 }
 
-// resolveQName resolves a prefixed name (like "xsd:string") to a QName
-// using the namespace declarations in scope on the given element.
-func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName {
+// resolveQName resolves a prefixed name (like "xsd:string") to a QName using the
+// namespace declarations in scope on the given element. attrName is the schema
+// attribute the value came from (@base/@type/@ref/@itemType/@substitutionGroup/a
+// @memberTypes token, …); it keys the invalid-QName dedup so distinct attributes
+// on one element are each reported.
+func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrName, ref string) QName {
+	// A QName-valued schema attribute has value space xs:QName, whose whiteSpace
+	// facet is fixed "collapse", so leading/trailing (and internal) whitespace is
+	// discarded before prefix resolution — e.g. base="    xsd:string " resolves to
+	// xsd:string. (Collapse is idempotent, so callers reading via collapsedAttr are
+	// unaffected.)
+	ref = normalizeWhiteSpace(ref, "collapse")
+	// After collapsing, the value must be a lexically valid xs:QName. A value that
+	// STILL contains whitespace (e.g. base="a b", two tokens) or is otherwise
+	// malformed (a leading colon like ":u") is NOT a valid QName and must be a
+	// fatal schema error — not routed into component lookup as a bogus local name.
+	// A value that collapses to the EMPTY string — a PRESENT-but-empty attribute
+	// (type="", ref="") OR a whitespace-only one (base="   ") — is likewise not a
+	// valid QName (the empty string is not an NCName), so it is reported here too;
+	// resolveQName is only ever called for a PRESENT attribute (every caller gates
+	// on presence / a non-empty raw value), so a collapsed-empty value always means
+	// present-but-empty, never absent. reportInvalidQNameValue dedups by (element,
+	// attribute, value), so a caller that already validated the same value
+	// (checkAttributeUse) does not double-report. Return a distinguished SENTINEL
+	// QName (isInvalidQName) rather than a plausible {targetNamespace}ref lookup key,
+	// so downstream ref-resolution SKIPS the malformed value instead of emitting a
+	// spurious "does not resolve to a(n) …" follow-on on top of the clear
+	// invalid-QName diagnostic. A recovery placeholder is still installed for the
+	// sentinel so downstream never dereferences a nil type/decl.
+	if !xmlchar.IsValidQName(ref) {
+		c.reportInvalidQNameValue(ctx, elem, attrName, ref)
+		return invalidQName(ref)
+	}
 	local := ref
 	ns := c.schema.targetNamespace
 
@@ -3297,6 +3363,50 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref s
 	return QName{Local: local, NS: ns}
 }
 
+// resolveQNameRef is the sanctioned reader for a SINGLE QName-valued schema
+// attribute (@base/@type/@ref/@itemType/…). It DISPATCHES ON PRESENCE (hasAttr),
+// not on a non-empty raw value, so a QName store site can never gate on the raw
+// value and silently treat a PRESENT-but-empty (or whitespace-only) attribute as
+// absent: an absent attribute returns (QName{}, false) — the caller keeps its
+// established default — while a present attribute always flows through resolveQName,
+// where a value that collapses to the empty string (or is otherwise malformed) is
+// reported ONCE as an invalid QName and returned as the invalidQName sentinel. Every
+// single-QName store site routes through here so the presence gate lives in one place.
+func (c *compiler) resolveQNameRef(ctx context.Context, elem *helium.Element, attrName string) (QName, bool) {
+	if !hasAttr(elem, attrName) {
+		return QName{}, false
+	}
+	return c.resolveQName(ctx, elem, attrName, getAttr(elem, attrName)), true
+}
+
+// resolveQNameListRef is the sanctioned reader for a QName-LIST schema attribute
+// (@substitutionGroup in 1.1, @memberTypes) whose value space is a whitespace-
+// separated list of xs:QName. Like resolveQNameRef it DISPATCHES ON PRESENCE. A
+// present value is whitespace-COLLAPSED; a value that collapses to the empty string
+// — a PRESENT-but-empty attribute OR a whitespace-only one — is not a valid QName
+// list (splitSpace would yield zero tokens and the whole value would be silently
+// treated as absent), so it is reported ONCE via reportInvalidQNameValue and (nil,
+// true) is returned. Otherwise the collapsed value is split and each token resolved
+// through resolveQName (a per-token invalid QName reported individually); the
+// returned slice preserves declaration order and is NOT deduped (callers that need
+// dedup, e.g. @substitutionGroup, do it themselves).
+func (c *compiler) resolveQNameListRef(ctx context.Context, elem *helium.Element, attrName string) ([]QName, bool) {
+	if !hasAttr(elem, attrName) {
+		return nil, false
+	}
+	collapsed := normalizeWhiteSpace(getAttr(elem, attrName), "collapse")
+	if collapsed == "" {
+		c.reportInvalidQNameValue(ctx, elem, attrName, collapsed)
+		return nil, true
+	}
+	tokens := splitSpace(collapsed)
+	qns := make([]QName, 0, len(tokens))
+	for _, tok := range tokens {
+		qns = append(qns, c.resolveQName(ctx, elem, attrName, tok))
+	}
+	return qns, true
+}
+
 // rejectDeprecatedDatatypeNamespace reports the XSD 1.1 rule that schema QName
 // references must not use the old XML Schema datatypes namespace.
 func (c *compiler) rejectDeprecatedDatatypeNamespace(ctx context.Context, elem *helium.Element, ref, ns string) bool {
@@ -3325,15 +3435,59 @@ func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.El
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))
 }
 
+// invalidQNameSentinelNS marks a QName that resolveQName has already reported as
+// lexically malformed. It is a reserved, non-URI value that no real namespace can
+// equal (a leading NUL), so isInvalidQName distinguishes the sentinel and every
+// downstream ref-resolution site SKIPS it — the malformed value is never routed
+// into component lookup, so no spurious "does not resolve to a(n) …" follow-on is
+// emitted on top of the clear invalid-QName diagnostic.
+const invalidQNameSentinelNS = "\x00urn:x-helium:invalid-qname"
+
+// invalidQName builds the sentinel QName carrying the malformed lexical value.
+func invalidQName(local string) QName { return QName{Local: local, NS: invalidQNameSentinelNS} }
+
+// isInvalidQName reports whether qn is the sentinel resolveQName returns for a
+// lexically-malformed value (already reported once at its read point).
+func isInvalidQName(qn QName) bool { return qn.NS == invalidQNameSentinelNS }
+
+// invalidQNameDiagKey identifies one invalid-QName diagnostic by the reporting
+// element's IDENTITY (not its line, which two minified siblings share) plus the
+// attribute name and lexical value, so reportInvalidQNameValue dedups a single
+// attribute validated twice while two siblings each report.
+type invalidQNameDiagKey struct {
+	elem  *helium.Element
+	attr  string
+	value string
+}
+
 // reportInvalidQNameValue emits a fatal schema-compilation error for a
-// QName-valued attribute whose value is not a lexically valid xs:QName (e.g. a
-// leading colon like ":u"). Without this such a value would slip past the
-// prefix-resolution path (strings.Cut yields an empty prefix that bypasses the
-// unbound-prefix check) and resolve as an unprefixed reference.
-func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, ref string) {
+// QName-valued attribute (attrName, e.g. "type"/"ref"/"base") whose value is not
+// a lexically valid xs:QName (e.g. a leading colon like ":u"). Without this such a
+// value would slip past the prefix-resolution path (strings.Cut yields an empty
+// prefix that bypasses the unbound-prefix check) and resolve as an unprefixed
+// reference.
+func (c *compiler) reportInvalidQNameValue(ctx context.Context, elem *helium.Element, attrName, ref string) {
 	if c.filename == "" {
 		return
 	}
+	// One attribute may be validated at more than one point (e.g. checkAttributeUse
+	// AND resolveQName), so dedup identical diagnostics to avoid emitting the same
+	// invalid-QName error twice. The key is the element's IDENTITY (pointer) plus the
+	// ATTRIBUTE name and value — NOT (source, line, local name), which two SIBLING
+	// same-named declarations minified onto one physical line share, collapsing their
+	// two genuine diagnostics into one. Keying on the element itself keeps the
+	// same-element double-validation deduped while letting two distinct siblings on
+	// one line each report; the attribute name distinguishes two DIFFERENT
+	// QName-valued attributes on ONE element carrying the SAME invalid value (e.g.
+	// substitutionGroup=":bad" type=":bad").
+	key := invalidQNameDiagKey{elem: elem, attr: attrName, value: ref}
+	if c.reportedInvalidQName == nil {
+		c.reportedInvalidQName = map[invalidQNameDiagKey]struct{}{}
+	}
+	if _, seen := c.reportedInvalidQName[key]; seen {
+		return
+	}
+	c.reportedInvalidQName[key] = struct{}{}
 	msg := fmt.Sprintf("The QName value '%s' is not a valid QName.", ref)
 	c.schemaError(ctx,
 		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg))

@@ -7,27 +7,13 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
-	if name == "" {
-		return fmt.Errorf("xsd: named complexType missing name")
-	}
-
-	// The @name of a global complexType is an xs:NCName (XSD Structures §3.4.2). A
-	// value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g. "1foo")
-	// is a schema error; the type is dropped so it does not enter the target-namespace
-	// symbol space under a bogus name. Version-independent XSD rule.
-	if !xmlchar.IsValidNCName(name) {
-		if c.filename != "" {
-			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-				elem.LocalName(), componentLocalComplexType,
-				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-		}
-		return nil
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named complexType missing name", componentLocalComplexType, true)
+	if err != nil || !ok {
+		return err
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -63,22 +49,9 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 }
 
 func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
-	if name == "" {
-		return fmt.Errorf("xsd: named simpleType missing name")
-	}
-
-	// The @name of a global simpleType is an xs:NCName (XSD Structures §3.14.2). A
-	// value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g. "1foo")
-	// is a schema error; the type is dropped so it does not enter the target-namespace
-	// symbol space under a bogus name. Version-independent XSD rule.
-	if !xmlchar.IsValidNCName(name) {
-		if c.filename != "" {
-			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-				elem.LocalName(), componentLocalSimpleType,
-				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-		}
-		return nil
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named simpleType missing name", componentLocalSimpleType, true)
+	if err != nil || !ok {
+		return err
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -132,8 +105,12 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 	// or an xs:alternative — must NOT carry a @name (XSD Structures §3.4.2:
 	// localComplexType has no {name}). Only a top-level complexType (child of
 	// xs:schema/xs:redefine/xs:override) is named. Version-independent XSD rule;
-	// report-and-continue so the body still parses.
-	if local && hasAttr(elem, attrName) && c.filename != "" {
+	// report-and-continue so the body still parses. The prohibition fires only for a
+	// GENUINELY-PRESENT (collapse-non-empty) @name (via ncnameCompanionUsable); a
+	// present-but-collapse-empty @name (""/whitespace-only, xs:NCName collapses) is
+	// instead the one invalid-NCName value diagnostic with no "must not have a name"
+	// secondary, so present-empty ≡ whitespace-only.
+	if local && c.filename != "" && c.ncnameCompanionUsable(ctx, elem, elemComplexType) {
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
 			elem.LocalName(), componentLocalComplexType,
 			"A local complexType definition must not have a 'name' attribute."))
@@ -284,11 +261,14 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 				continue
 			}
 			ref := getAttr(ce, attrRef)
-			if ref != "" {
+			// checkContentModelGroupRef returned true, so 'ref' is PRESENT (a missing
+			// ref would have failed the check). Dispatch on presence so a present-empty
+			// ref="" resolves through resolveQName (reported as an invalid empty QName).
+			if hasAttr(ce, attrRef) {
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
-				qn := c.resolveQName(ctx, ce, ref)
+				qn := c.resolveQName(ctx, ce, attrRef, ref)
 				c.groupRefs[placeholder] = qn
 				// Direct reference: this group ref is the sole top-level particle
 				// of the complex type's content, so a resolved 'all' model group
@@ -397,7 +377,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			}
 			c.checkAttrGroupRef(ctx, ce)
 			if hasAttr(ce, attrRef) {
-				qn := c.resolveQName(ctx, ce, getAttr(ce, attrRef))
+				qn := c.resolveQName(ctx, ce, attrRef, getAttr(ce, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ce.Line(),
 					elemLocal: ce.LocalName(),
@@ -609,13 +589,15 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 // restriction/extension and records the type ref. Shared by parseRestriction and
 // parseExtension.
 func (c *compiler) recordDerivationBaseRef(ctx context.Context, elem *helium.Element, td *TypeDef) {
-	baseRef := getAttr(elem, attrBase)
-	if baseRef == "" {
+	// @base is an xs:QName: dispatch on PRESENCE via resolveQNameRef so a
+	// PRESENT-but-empty base="" (or whitespace-only) is reported once as an invalid
+	// QName, not silently treated as an absent (inline-derivation) base.
+	qn, ok := c.resolveQNameRef(ctx, elem, attrBase)
+	if !ok {
 		return
 	}
-	qn := c.resolveQName(ctx, elem, baseRef)
 	c.typeRefs[td] = qn
-	c.markChameleonEligible(td, elem, baseRef)
+	c.markChameleonEligible(td, elem, getAttr(elem, attrBase))
 }
 
 // parseComplexContentDerivationBody parses the children of an <xs:restriction> or
@@ -725,11 +707,14 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 				continue
 			}
 			ref := getAttr(ce, attrRef)
-			if ref != "" {
+			// checkContentModelGroupRef returned true, so 'ref' is PRESENT (a missing
+			// ref would have failed the check). Dispatch on presence so a present-empty
+			// ref="" resolves through resolveQName (reported as an invalid empty QName).
+			if hasAttr(ce, attrRef) {
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
-				qn := c.resolveQName(ctx, ce, ref)
+				qn := c.resolveQName(ctx, ce, attrRef, ref)
 				c.groupRefs[placeholder] = qn
 				// Direct reference: this group ref is the sole top-level particle
 				// of the derived type's content, so a resolved 'all' model group
@@ -784,7 +769,7 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 			}
 			c.checkAttrGroupRef(ctx, ce)
 			if hasAttr(ce, attrRef) {
-				qn := c.resolveQName(ctx, ce, getAttr(ce, attrRef))
+				qn := c.resolveQName(ctx, ce, attrRef, getAttr(ce, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ce.Line(),
 					elemLocal: ce.LocalName(),
@@ -849,11 +834,12 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 // lenient loop and the XSD 1.1 strict wrapper so both behave identically once a
 // derivation is selected.
 func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *helium.Element, td *TypeDef, kind DerivationKind) {
-	baseRef := getAttr(ce, attrBase)
-	if baseRef != "" {
-		qn := c.resolveQName(ctx, ce, baseRef)
+	// @base is an xs:QName: dispatch on PRESENCE via resolveQNameRef so a
+	// PRESENT-but-empty base="" (or whitespace-only) is reported once as an invalid
+	// QName, not silently treated as absent.
+	if qn, ok := c.resolveQNameRef(ctx, ce, attrBase); ok {
 		c.typeRefs[td] = qn
-		c.markChameleonEligible(td, ce, baseRef)
+		c.markChameleonEligible(td, ce, getAttr(ce, attrBase))
 	}
 	td.Derivation = kind
 	c.parseSimpleContentChildren(ctx, ce, td, kind)
@@ -1012,7 +998,7 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			}
 			c.checkAttrGroupRef(ctx, ae)
 			if hasAttr(ae, attrRef) {
-				qn := c.resolveQName(ctx, ae, getAttr(ae, attrRef))
+				qn := c.resolveQName(ctx, ae, attrRef, getAttr(ae, attrRef))
 				c.recordAttrGroupRef(td, qn, attrGroupRefUseSource{
 					line:      ae.Line(),
 					elemLocal: ae.LocalName(),
@@ -1153,8 +1139,12 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 	// restriction/list/union, an element, an attribute, or an xs:alternative —
 	// must NOT carry a @name (XSD Structures §3.14.2: {name} is absent). Only a
 	// top-level simpleType (child of xs:schema/xs:redefine/xs:override) is named.
-	// Version-independent XSD rule; report-and-continue so the body still parses.
-	if local && hasAttr(elem, attrName) && c.filename != "" {
+	// Version-independent XSD rule; report-and-continue so the body still parses. The
+	// prohibition fires only for a GENUINELY-PRESENT (collapse-non-empty) @name (via
+	// ncnameCompanionUsable); a present-but-collapse-empty @name (""/whitespace-only,
+	// xs:NCName collapses) is instead the one invalid-NCName value diagnostic with no
+	// "must not have a name" secondary, so present-empty ≡ whitespace-only.
+	if local && c.filename != "" && c.ncnameCompanionUsable(ctx, elem, elemSimpleType) {
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
 			elem.LocalName(), componentLocalSimpleType,
 			"A local simpleType definition must not have a 'name' attribute."))
@@ -1216,9 +1206,13 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 		switch {
 		case isXSDElement(ce, elemRestriction):
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
-			baseRef := getAttr(ce, attrBase)
-			if baseRef != "" {
-				qn := c.resolveQName(ctx, ce, baseRef)
+			// xs:restriction/@base is an xs:QName: dispatch on PRESENCE. A PRESENT-but-empty
+			// base="" (or a whitespace-only base="   ") is an invalid (empty) QName, reported
+			// by resolveQName, not silently treated as an absent @base that falls through to
+			// an inline <xs:simpleType> child.
+			if hasAttr(ce, attrBase) {
+				baseRef := getAttr(ce, attrBase)
+				qn := c.resolveQName(ctx, ce, attrBase, baseRef)
 				c.typeRefs[td] = qn
 				c.markChameleonEligible(td, ce, baseRef)
 			} else {
@@ -1247,8 +1241,12 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			td.Variety = TypeVarietyList
 			itemRef := getAttr(ce, attrItemType)
-			if itemRef != "" {
-				qn := c.resolveQName(ctx, ce, itemRef)
+			// A PRESENT-but-empty / whitespace-only itemType is already reported with a
+			// list-specific diagnostic by checkSimpleTypeDerivationBody, so gate the
+			// resolveQName call on the COLLAPSED value being non-empty to avoid a second
+			// (invalid-QName) diagnostic for the same value.
+			if normalizeWhiteSpace(itemRef, "collapse") != "" {
+				qn := c.resolveQName(ctx, ce, attrItemType, itemRef)
 				c.itemTypeRefs[td] = qn
 				c.markChameleonEligible(td, ce, itemRef)
 			} else {
@@ -1274,15 +1272,26 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 		case isXSDElement(ce, elemUnion):
 			c.checkSimpleTypeDerivationBody(ctx, elem, ce)
 			td.Variety = TypeVarietyUnion
-			// Parse memberTypes attribute (space-separated QNames).
-			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
-				for _, ref := range splitSpace(memberTypesAttr) {
-					qn := c.resolveQName(ctx, ce, ref)
-					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
-						owner:             td,
-						name:              qn,
-						chameleonEligible: refChameleonEligible(ce, ref),
-					})
+			// Parse memberTypes (a whitespace-collapsed LIST of xs:QName). Dispatch on
+			// PRESENCE: a PRESENT-but-empty memberTypes="" (or whitespace-only) is not a
+			// valid QName list, so it is reported once here (the same empty-report as
+			// resolveQNameListRef) rather than silently tokenizing to the empty set. A
+			// non-empty list resolves per token, each carrying its OWN chameleon
+			// eligibility (which resolveQNameListRef's plain []QName cannot convey), so
+			// the tokens are resolved inline instead of through that reader.
+			if hasAttr(ce, attrMemberTypes) {
+				collapsed := normalizeWhiteSpace(getAttr(ce, attrMemberTypes), "collapse")
+				if collapsed == "" {
+					c.reportInvalidQNameValue(ctx, ce, attrMemberTypes, collapsed)
+				} else {
+					for _, ref := range splitSpace(collapsed) {
+						qn := c.resolveQName(ctx, ce, attrMemberTypes, ref)
+						c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
+							owner:             td,
+							name:              qn,
+							chameleonEligible: refChameleonEligible(ce, ref),
+						})
+					}
 				}
 			}
 			// Parse inline <simpleType> children.
@@ -1340,7 +1349,23 @@ func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, der
 
 	hasBase := hasAttr(deriv, attrBase)
 	hasItemType := hasAttr(deriv, attrItemType)
-	hasMemberTypes := normalizeWhiteSpace(getAttr(deriv, attrMemberTypes), "collapse") != ""
+	// PRESENCE, not non-emptiness: a PRESENT-but-empty memberTypes="" satisfies the
+	// union grammar's "memberTypes or a simpleType child" requirement here, and its
+	// invalid (empty) QName-list value is reported once by the memberTypes parse loop
+	// — so the two do not double-report the same present-empty attribute.
+	hasMemberTypes := hasAttr(deriv, attrMemberTypes)
+
+	// The base/itemType-vs-simpleType MUTUAL-EXCLUSION fires only for a GENUINELY-
+	// PRESENT (collapse-non-empty) @base/@itemType. A present-but-collapse-empty value
+	// (""/whitespace-only — both xs:QName, whiteSpace fixed "collapse") is an invalid
+	// (empty) QName reported ONCE as its own value diagnostic (base by resolveQName at
+	// the store site, itemType by the empty-itemType check below), so it must NOT also
+	// trigger the structural "must not have both …" secondary — present-empty stays
+	// symmetric with whitespace-only. The missing-source checks keep the plain
+	// hasBase/hasItemType PRESENCE gate, so a present-empty base/itemType still counts
+	// as a base/itemType source and does not fire "must have a base or a simpleType child".
+	baseUsable := hasBase && collapsedAttr(deriv, attrBase) != ""
+	itemTypeUsable := hasItemType && collapsedAttr(deriv, attrItemType) != ""
 
 	// An empty itemType attribute is not a valid xs:QName (it must name the list's
 	// item type). getAttr treats absent and empty identically, so the empty case
@@ -1384,10 +1409,10 @@ func (c *compiler) checkSimpleTypeDerivationBody(ctx context.Context, owner, der
 			if isRestriction && facetSeen {
 				report(ce.Line(), "The simpleType child of a restriction must appear before the facets.")
 			}
-			if isRestriction && hasBase {
+			if isRestriction && baseUsable {
 				report(ce.Line(), "A restriction must not have both a 'base' attribute and a simpleType child.")
 			}
-			if isList && hasItemType {
+			if isList && itemTypeUsable {
 				report(ce.Line(), "A list must not have both an 'itemType' attribute and a simpleType child.")
 			}
 			simpleTypeSeen = true

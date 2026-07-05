@@ -6,26 +6,12 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
-	if name == "" {
-		return fmt.Errorf("xsd: named group missing name")
-	}
-
-	// The @name of a global model group definition is an xs:NCName (XSD Structures
-	// §3.7.2). A value with a colon (e.g. "a:b") or an otherwise invalid NCName
-	// (e.g. "1") is a schema error; the group is dropped so it does not enter the
-	// target-namespace symbol space under a bogus name. Version-independent XSD rule.
-	if !xmlchar.IsValidNCName(name) {
-		if c.filename != "" {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(),
-				elem.LocalName(), "group",
-				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-		}
-		return nil
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named group missing name", "group", false)
+	if err != nil || !ok {
+		return err
 	}
 
 	// A named model group DEFINITION (§3.7.2) has only the id and name attributes;
@@ -149,21 +135,9 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 }
 
 func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.Element) error {
-	name := getAttr(elem, attrName)
-	if name == "" {
-		return fmt.Errorf("xsd: named attributeGroup missing name")
-	}
-
-	// The @name of a global attribute group definition is an xs:NCName (XSD
-	// Structures §3.6.2). A value with a colon (e.g. "a:b") or an otherwise invalid
-	// NCName (e.g. a leading digit like "0") is a schema error; the group is dropped
-	// so it does not enter the target-namespace symbol space under a bogus name.
-	// Version-INDEPENDENT XSD rule, mirroring parseNamedGroup / parseNamedSimpleType.
-	if c.filename != "" && !xmlchar.IsValidNCName(name) {
-		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(),
-			elem.LocalName(), "attributeGroup",
-			"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-		return nil
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named attributeGroup missing name", "attributeGroup", false)
+	if err != nil || !ok {
+		return err
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -302,7 +276,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			}
 			if hasAttr(ce, attrRef) {
 				ref := getAttr(ce, attrRef)
-				refQN := c.resolveQName(ctx, ce, ref)
+				refQN := c.resolveQName(ctx, ce, attrRef, ref)
 				if ref != "" && refQN == qn {
 					// XSD 1.1 permits circular attribute group definitions (W3C bug
 					// 15795 / attgC010-C031): a direct self-reference contributes
@@ -343,6 +317,17 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	return nil
 }
 
+// refPresentEmpty reports whether @ref is PRESENT but collapses to the empty
+// string ("" or whitespace-only). @ref is an xs:QName (whiteSpace fixed
+// "collapse"), so a present-but-collapse-empty ref is an invalid (empty) QName —
+// the reference form's PRIMARY attribute is malformed. Both reference checks
+// (checkContentModelGroupRef / checkAttrGroupRef) use this to report that one
+// value diagnostic and suppress the @name-prohibition secondary, so the two forms
+// behave identically and present-empty ≡ whitespace-only.
+func refPresentEmpty(elem *helium.Element) bool {
+	return hasAttr(elem, attrRef) && collapsedAttr(elem, attrRef) == ""
+}
+
 // checkAttrGroupRef enforces the XML representation of an attributeGroup
 // REFERENCE (§3.6.2): a nested <xs:attributeGroup> appearing inside a named
 // attribute group definition, a complexType, or a derivation body is a reference,
@@ -350,13 +335,22 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 // A '@name' — the DEFINITION form, which is valid only as a top-level xs:schema or
 // xs:redefine child — is a schema-representation error, as is any non-annotation
 // element child (e.g. a nested xs:attribute/xs:attributeGroup/xs:anyAttribute). The
+// '@name' prohibition fires only for a GENUINELY-PRESENT (collapse-non-empty) value
+// (via ncnameCompanionUsable); a present-but-collapse-empty @name (""/whitespace-only,
+// xs:NCName collapses) is instead reported as the one invalid-NCName value diagnostic
+// with no spurious "name not allowed" secondary, so present-empty ≡ whitespace-only. The
 // PERMITTED XSD 1.1 circular self-reference uses this reference form (ref only, no
 // name, no content) and is therefore unaffected. Version-INDEPENDENT XSD rule.
 func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 	if c.filename == "" {
 		return
 	}
-	if hasAttr(ce, attrName) {
+	// @ref is the PRIMARY reference attribute. A present-but-collapse-empty
+	// ref="" / "   " is an invalid (empty) QName — the caller's resolveQName reports
+	// that one value diagnostic — so SUPPRESS the @name-prohibition secondary here,
+	// uniformly with checkContentModelGroupRef, so the two reference forms behave
+	// identically (one invalid-QName diagnostic, no spurious "name not allowed").
+	if !refPresentEmpty(ce) && c.ncnameCompanionUsable(ctx, ce, elemAttributeGroup) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", attrName,
 			"The attribute 'name' is not allowed on an attributeGroup reference; use 'ref'."))
 	}
@@ -382,11 +376,17 @@ func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 // derivation body, or nested in an xs:sequence/xs:choice/xs:all — is a reference,
 // whose only naming attribute is 'ref' and whose content model is (annotation?).
 // A '@name' — the DEFINITION form, valid only as a top-level xs:schema /
-// xs:redefine / xs:override child — is a schema-representation error, as is a
-// missing 'ref' or any non-annotation element child. It returns true when the
-// reference is well-formed (a non-empty 'ref', no 'name'), so the caller records
-// the group ref; false (having reported the error) otherwise. Version-INDEPENDENT
-// XSD rule.
+// xs:redefine / xs:override child — is a schema-representation error (fired only for
+// a GENUINELY-PRESENT collapse-non-empty value via ncnameCompanionUsable; a
+// present-but-collapse-empty @name ""/whitespace-only yields the one invalid-NCName
+// value diagnostic and no "name not allowed" secondary, present-empty ≡
+// whitespace-only), as is a missing 'ref' or any non-annotation element child. It
+// returns true when the
+// reference is structurally well-formed (a PRESENT 'ref' attribute, no 'name', no
+// stray child), so the caller records the group ref and resolves its value — a
+// PRESENT-but-empty ref="" is passed through as a present ref so resolveQName reports
+// it as an invalid (empty) QName, rather than being silently dropped here; false
+// (having reported the error) otherwise. Version-INDEPENDENT XSD rule.
 func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Element) bool {
 	ref := getAttr(ce, attrRef)
 	if c.filename == "" {
@@ -394,8 +394,17 @@ func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Ele
 		// behavior (record only a non-empty ref) when none is available.
 		return ref != ""
 	}
+	// @ref is the PRIMARY reference attribute. A present-but-collapse-empty
+	// ref="" / "   " is an invalid (empty) QName: report that ONE value diagnostic
+	// and reject the ref, SUPPRESSING the @name-prohibition secondary — uniformly
+	// with checkAttrGroupRef. The caller skips resolution on a false return, so this
+	// is the sole report and present-empty ≡ whitespace-only.
+	if refPresentEmpty(ce) {
+		c.reportInvalidQNameValue(ctx, ce, attrRef, "")
+		return false
+	}
 	ok := true
-	if hasAttr(ce, attrName) {
+	if c.ncnameCompanionUsable(ctx, ce, elemGroup) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), ce.Line(), ce.LocalName(), "group", attrName,
 			"The attribute 'name' is not allowed on a model group reference; use 'ref'."))
 		ok = false
@@ -421,7 +430,10 @@ func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Ele
 			fmt.Sprintf("The content of a model group reference is restricted to (annotation?); the element '%s' is not allowed.", sub.LocalName())))
 		ok = false
 	}
-	return ok && ref != ""
+	// ok already implies a PRESENT 'ref' (a missing 'ref' set ok=false above): a
+	// present-but-empty ref="" stays well-formed here so the caller resolves it and
+	// resolveQName reports the empty value as an invalid QName.
+	return ok
 }
 
 func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
@@ -474,8 +486,12 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 	reportStray := func(ce *helium.Element) {
 		reportGrammar(ce, fmt.Sprintf("The content is not valid. Expected is %s.", expectedContent))
 	}
-	// An inline model group must not carry a @name attribute.
-	if hasAttr(elem, attrName) {
+	// An inline model group must not carry a @name attribute. The prohibition fires
+	// only for a GENUINELY-PRESENT (collapse-non-empty) value; a present-but-collapse-
+	// empty @name (""/whitespace-only, xs:NCName collapses) is instead the one
+	// invalid-NCName value diagnostic with no "name not allowed" secondary
+	// (present-empty ≡ whitespace-only).
+	if c.ncnameCompanionUsable(ctx, elem, compElem) {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), compElem, attrName,
 			"Attribute 'name' is not allowed on an inline model group."))
 	}
@@ -601,7 +617,10 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				continue
 			}
 			ref := getAttr(ce, attrRef)
-			if ref != "" {
+			// checkContentModelGroupRef returned true, so 'ref' is PRESENT (a missing
+			// ref would have failed the check). Dispatch on presence so a present-empty
+			// ref="" resolves through resolveQName (reported as an invalid empty QName).
+			if hasAttr(ce, attrRef) {
 				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				// Group reference — create a placeholder model group.
@@ -609,7 +628,7 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 					MinOccurs: placeholderMin,
 					MaxOccurs: placeholderMax,
 				}
-				qn := c.resolveQName(ctx, ce, ref)
+				qn := c.resolveQName(ctx, ce, attrRef, ref)
 				c.groupRefs[placeholder] = qn
 				// Nested reference: this group ref is contained inside another
 				// model group (xs:sequence/xs:choice/xs:all), so a resolved 'all'

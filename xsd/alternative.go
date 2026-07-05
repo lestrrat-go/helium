@@ -95,6 +95,20 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 	typeRef := getAttr(elem, attrType)
 	inlineCount := countInlineAlternativeTypes(elem)
 	switch {
+	case hasType && normalizeWhiteSpace(typeRef, "collapse") == "":
+		// A PRESENT-but-collapse-empty @type (""/whitespace-only — xs:QName has its
+		// whiteSpace facet fixed "collapse") is an invalid (empty) QName: report that
+		// ONE value diagnostic FIRST and suppress the inline/type mutual-exclusion
+		// secondary, so present-empty stays symmetric with whitespace-only. A
+		// genuinely-present VALID @type alongside an inline type still fires the
+		// mutual-exclusion below. Report the COLLAPSED value (empty here) so ""
+		// and "   " emit the identical diagnostic, matching the valid-@type path
+		// below which reports the collapsed typeRef.
+		if c.filename != "" {
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative, attrType,
+				"The value '"+normalizeWhiteSpace(typeRef, "collapse")+"' is not a valid QName."))
+		}
+		return nil
 	case hasType && inlineCount > 0:
 		if c.filename != "" {
 			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
@@ -105,12 +119,6 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 		if c.filename != "" {
 			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative,
 				"An xs:alternative must not have more than one inline type definition."))
-		}
-		return nil
-	case hasType && normalizeWhiteSpace(typeRef, "collapse") == "":
-		if c.filename != "" {
-			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), elemAlternative, attrType,
-				"The value '"+typeRef+"' is not a valid QName."))
 		}
 		return nil
 	}
@@ -130,7 +138,7 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 			}
 			return nil
 		}
-		alt.TypeName = c.resolveQName(ctx, elem, typeRef)
+		alt.TypeName = c.resolveQName(ctx, elem, attrType, typeRef)
 		c.altTypeRefs = append(c.altTypeRefs, altTypeRef{
 			alt:               alt,
 			qn:                alt.TypeName,
