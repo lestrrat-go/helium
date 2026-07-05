@@ -548,11 +548,11 @@ func (vc *validationContext) builtinListItemType(td *TypeDef) *TypeDef {
 	var local string
 	switch builtinBaseLocal(td) {
 	case typeNMTokens:
-		local = "NMTOKEN"
+		local = typeNMToken
 	case typeIDRefs:
 		local = lexicon.TypeIDREF
 	case typeEntities:
-		local = "ENTITY"
+		local = typeEntity
 	default:
 		return nil
 	}
