@@ -533,20 +533,37 @@ func canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, t
 	}
 }
 
-// canonicalAtomicKey canonicalizes raw for an atomic type td. The value is first
-// whitespace-processed per td's effective whiteSpace facet (resolveWhiteSpace —
-// the same helper the validator uses), so a restriction of xs:string with
-// whiteSpace="collapse" makes "a b" and "a  b" collide. QName/NOTATION then
-// resolve the prefix against fieldNode's in-scope namespaces to a Clark-name key;
-// everything else delegates to value.CanonicalKey on the builtin base local,
-// which returns a value-space canonical form for value-comparable types and the
-// whitespace-processed lexical value for lexical-only ones (xs:string family,
-// anyURI, …). An unresolvable type or QName falls back to the raw value.
+// primitiveKeySeparator separates the PRIMITIVE-type tag from the canonical value
+// in an atomic IDC key. It is a control character absent from every primitive
+// local name (all NCNames) and from formatKeySequence's field separator (\x00), so
+// primitiveTag + separator + canonicalValue splits unambiguously: two atomic keys
+// are equal iff they share the same primitive AND the same canonical value.
+const primitiveKeySeparator = "\x01"
+
+// canonicalAtomicKey canonicalizes raw for an atomic type td, tagged with the
+// value's XSD PRIMITIVE datatype so cross-primitive values that share a lexical/
+// canonical form do NOT collide. cvc-identity-constraint value equality is "same
+// value in the same primitive datatype", so a boolean `1`, an xs:decimal `1`, an
+// xs:float `1` and an xs:string `1` are four distinct keys. The tag is the
+// PRIMITIVE base (atomicPrimitiveLocal), not the exact derived type, so two types
+// sharing a primitive still compare by value — an xs:int `1` and an xs:integer `1`
+// both tag `decimal` and collide, matching the spec.
+//
+// The value is first whitespace-processed per td's effective whiteSpace facet
+// (resolveWhiteSpace — the same helper the validator uses), so a restriction of
+// xs:string with whiteSpace="collapse" makes "a b" and "a  b" collide. QName/
+// NOTATION then resolve the prefix against fieldNode's in-scope namespaces to a
+// Clark-name key; everything else delegates to value.CanonicalKey on the builtin
+// base local, which returns a value-space canonical form for value-comparable
+// types and the whitespace-processed lexical value for lexical-only ones (xs:string
+// family, anyURI, …). An unresolvable type or QName falls back to the raw value
+// (untagged — it can only collide with other equally-unresolvable raw values).
 func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 	builtinLocal := builtinBaseLocal(td)
 	if builtinLocal == "" {
 		return raw
 	}
+	primitive := atomicPrimitiveLocal(builtinLocal)
 	normalized := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
 	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 		ns := fieldNodeNSContext(fieldNode)
@@ -563,15 +580,16 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 		// default namespace urn:p — collide on the same key and an xs:unique/xs:key
 		// duplicate is caught, consistent with the facet comparison paths. xs:QName
 		// keeps the no-default value-space rule (the helper's TypeNotation gate
-		// leaves the QName branch on resolveLexicalQName).
+		// leaves the QName branch on resolveLexicalQName). xs:QName and xs:NOTATION
+		// are DISTINCT primitives, so the tag keeps their same-Clark-name values apart.
 		qn, err := resolveNotationOrQNameValue(normalized, builtinLocal, ns)
 		if err != nil {
 			return raw
 		}
-		return helium.ClarkName(qn.NS, qn.Local)
+		return primitive + primitiveKeySeparator + helium.ClarkName(qn.NS, qn.Local)
 	}
 	key, _ := value.CanonicalKey(normalized, builtinLocal)
-	return key
+	return primitive + primitiveKeySeparator + key
 }
 
 // unionActiveMember resolves the active member type of a union value: the first
