@@ -241,17 +241,17 @@ Some edge cases and parity gaps are still being iterated on; contributions and i
 
 ## W3C conformance suites
 
-Each row links to the package's README (for scope and details) and its committed, point-in-time evidence (a stamped summary; a matching JUnit `results-*.xml` sits beside it).
+Each row links to the package's README (for scope and details) and its
+committed, point-in-time evidence. The package summaries carry the generated
+date, pinned upstream suite revision, pass/skip/fail counts, and skip breakdowns
+where applicable.
 
-| Suite | Result | Package | Evidence |
-|-------|--------|---------|----------|
-| XPath 3.1 (QT3) | 21,987 / 22,473 | [`xpath3`](xpath3/README.md) | [summary](xpath3/summary-qt3.md) |
-| XSLT 3.0 | 12,346 / 13,127 · **0 failures** | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md) |
-| XSD 1.0 — schema validity (default) | 14,178 / 14,399 (98.5%) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
-| XSD 1.0 — instance validity (default) | 24,799 / 25,005 | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
-| XSD 1.1 (opt-in) | 1,049 cases · **0 failures** | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd11.md) |
-
-XSLT 3.0 has **zero failing tests**; every one of the 781 default skips is accounted for — performance-gated slow tests, legitimate XSLT 2.0-vs-3.0 divergences (where our 3.0 output is correct), optional features, and other out-of-scope cases — none a missing mandatory Basic 3.0 facility. Running with `HELIUM_SLOW_TESTS=1` (the on-demand [`conformance.yml`](.github/workflows/conformance.yml) workflow) passes **12,827**, executing +481 performance-gated tests with 0 failures. The XSD 1.1 cases are drawn from the IBM, Saxon, Oracle, and W3C-WG collections.
+| Suite | Package | Evidence |
+|-------|---------|----------|
+| XPath 3.1 (QT3) | [`xpath3`](xpath3/README.md) | [summary](xpath3/summary-qt3.md) |
+| XSLT 3.0 | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md), [conformance declaration](xslt3/CONFORMANCE.md) |
+| XSD 1.0 (default) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
+| XSD 1.1 (opt-in) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd11.md) |
 
 ## libxml2 compatibility (golden tests)
 

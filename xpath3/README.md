@@ -7,13 +7,22 @@ Import path: `github.com/lestrrat-go/helium/xpath3`
 ## Conformance
 
 The package targets **XPath 3.1** (in XSD 1.1 mode). Against the W3C QT3 test
-suite it passes 21,987 / 22,473 cases, with 486 skipped and 0 failures. The
-skips are out-of-scope dependencies — cases requiring an XSLT transform, XQuery
-`load-xquery-module`, a schema-validated source, static typing, XPath 2.0-only
-behavior, XML 1.1, or Unicode 7.0. Committed evidence sits beside this package —
-a stamped `summary-qt3.md` and JUnit `results-qt3.xml` — regenerated from the
-sibling `helium-w3c-tests` module (`go run ./cmd/w3ctest -no-system-out -summary
-../helium/xpath3/summary-qt3.md -out ../helium/xpath3/results-qt3.xml qt3`).
+suite:
+
+| Outcome | Count |
+|---------|------:|
+| Pass | 22,090 |
+| Skip | 383 |
+| Fail | 0 |
+| Total | 22,473 |
+
+The skips are out-of-scope dependencies — cases requiring an XSLT transform,
+XQuery `load-xquery-module`, a schema-validated source, static typing, XPath
+2.0-only behavior, XML 1.1, or Unicode 7.0. Committed evidence sits beside this
+package — a stamped `summary-qt3.md` and JUnit `results-qt3.xml` — regenerated
+from the sibling `helium-w3c-tests` module (`go run ./cmd/w3ctest
+-no-system-out -summary ../helium/xpath3/summary-qt3.md -out
+../helium/xpath3/results-qt3.xml qt3`).
 
 <!-- INCLUDE(examples/xpath3_find_example_test.go) -->
 ```go
