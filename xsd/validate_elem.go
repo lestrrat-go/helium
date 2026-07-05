@@ -612,18 +612,15 @@ func (vc *validationContext) validateContentModelTop(ctx context.Context, parent
 
 	// Greedy could not fully consume. The content model may still be an
 	// occurrence-partition-ambiguous match a greedy pass false-rejects; bounded
-	// backtracking (wildcard-free models only) decides. Prune non-emitting
-	// (maxOccurs=0) particles FIRST — reusing the greedy open-content matcher's
-	// pruneNonEmittingParticles (element leaves, groups, all-group members, at any
-	// nesting) — so the reachability automaton NEVER routes a child through a
-	// prohibited particle. The greedy fast path above and the greedy fallback below
-	// use the ORIGINAL model (their matchers handle maxOccurs=0 themselves). When
-	// backtracking proves acceptance, validate each child's content against its
-	// UPA-unique declaration in the pruned model (visiting each child once).
-	pruned := pruneNonEmittingParticles(mg)
-	if pruned != nil && vc.contentModelAccepts(ctx, pruned, children) {
+	// backtracking (wildcard-free models only) decides. A prohibited (effective
+	// maxOccurs=0) particle is handled in the automaton itself — it contributes
+	// only the zero-occurrence SKIP reach, never a consume branch — so the model is
+	// kept intact (see btReachParticle/btReachAll). When backtracking proves
+	// acceptance, validate each child's content against its UPA-unique declaration
+	// (visiting each child once).
+	if vc.contentModelAccepts(ctx, mg, children) {
 		var elemLeaves []*ElementDecl
-		collectElementLeaves(pruned, &elemLeaves)
+		collectElementLeaves(mg, &elemLeaves)
 		return vc.validateContentModelChildren(ctx, parent, children, elemLeaves)
 	}
 

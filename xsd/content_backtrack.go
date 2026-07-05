@@ -73,13 +73,11 @@ type btMemo struct {
 // contentModelAccepts reports whether children can be fully consumed by mg under
 // some occurrence partition. It is pure (no side effects, no diagnostics), and
 // runs only on content models inside the engagement envelope (see above); a model
-// outside the envelope is not proven here (defers to greedy).
-//
-// PRECONDITION: mg must already have its non-emitting (maxOccurs=0) particles
-// pruned (pruneNonEmittingParticles), so the reachability automaton never routes
-// a child through a prohibited particle. The sole caller (validateContentModelTop)
-// prunes before calling; the same pruned model must feed collectElementLeaves so
-// the per-child attribution agrees with the automaton.
+// outside the envelope is not proven here (defers to greedy). The model is kept
+// INTACT (not pruned): a prohibited (effective maxOccurs=0) particle is given
+// skip-only reach in the automaton (btReachElem/btReachGroupAt), so it never
+// routes a child through, while a maxOccurs=0 particle inside an xs:choice still
+// contributes the empty (ε) branch — keeping a nullable choice nullable.
 func (vc *validationContext) contentModelAccepts(ctx context.Context, mg *ModelGroup, children []childElem) bool {
 	if !inBacktrackEnvelope(mg, vc.schema) {
 		return false
@@ -165,8 +163,13 @@ func (vc *validationContext) btReachParticle(ctx context.Context, m *btMemo, p *
 }
 
 // btReachElem returns pos+k for every occurrence count k in [MinOccurs, feasible]
-// where the first k children from pos all match the element declaration.
+// where the first k children from pos all match the element declaration. A
+// PROHIBITED leaf (maxOccurs=0) contributes ONLY the zero-occurrence SKIP reach —
+// it never consumes a child.
 func (vc *validationContext) btReachElem(p *Particle, edecl *ElementDecl, children []childElem, pos int) []int {
+	if p.MaxOccurs == 0 {
+		return []int{pos}
+	}
 	maxc := 0
 	for pos+maxc < len(children) && elemMatchesDeclOrSubst(children[pos+maxc], edecl, vc.schema) {
 		maxc++
@@ -204,6 +207,16 @@ func (vc *validationContext) btReachGroupAt(ctx context.Context, m *btMemo, mg *
 	if m.states > btStateCap {
 		m.capped = true
 		return nil
+	}
+
+	// A PROHIBITED group (effective maxOccurs=0, own or via an ancestor group that
+	// gave it skip-only reach) contributes ONLY the zero-occurrence SKIP reach,
+	// never consuming a child. This uniformly covers a maxOccurs=0 sequence,
+	// choice, and all group, so no child routes through a prohibited group term.
+	if mg.MaxOccurs == 0 {
+		out := []int{pos}
+		m.cache[key] = out
+		return out
 	}
 
 	// An xs:all group is matched greedily (no occurrence backtracking) — its per-

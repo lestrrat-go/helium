@@ -224,6 +224,64 @@ func TestContentBacktrackProhibitedParticle(t *testing.T) {
 	})
 }
 
+// TestContentBacktrackProhibitedChoiceBranch verifies a maxOccurs=0 particle
+// inside an xs:choice is an EMPTY (ε) branch — it keeps the choice NULLABLE — so
+// the reachability automaton gives it skip-only reach WITHOUT dropping the empty
+// branch (which pruning the particle would). This is the false-reject the
+// skip-only-in-automaton approach fixes (versus pruning, which would turn a
+// nullable choice non-nullable).
+func TestContentBacktrackProhibitedChoiceBranch(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prohibited element as choice branch keeps choice nullable", func(t *testing.T) {
+		t.Parallel()
+		// The leading sequence{2,2}(x+) is occurrence-ambiguous (greedy fails),
+		// forcing the fallback; the trailing choice must match ε via its prohibited
+		// a{0,0} branch so <x/><x/> validates.
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="x" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:choice>
+        <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		// x|x then the EMPTY choice branch (a{0,0} matches ε) — valid.
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/></root>`))
+		// x|x then the b branch — valid.
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><b>1</b></root>`))
+		// <a> is prohibited, so it cannot satisfy the choice — invalid.
+		require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><a>1</a></root>`))
+	})
+
+	t.Run("prohibited group as choice branch keeps choice nullable", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="x" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:choice>
+        <xs:sequence minOccurs="0" maxOccurs="0">
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+        <xs:element name="b" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		// The prohibited (maxOccurs=0) sequence branch is an empty branch, so the
+		// choice is nullable and <x/><x/> validates.
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/></root>`))
+	})
+}
+
 // validateBtInstance compiles schemaXML at the given version (which must be valid)
 // and validates instanceXML, returning the validation error (nil when valid).
 func validateBtInstance(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {
