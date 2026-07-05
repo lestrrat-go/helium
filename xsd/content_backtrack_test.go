@@ -282,6 +282,68 @@ func TestContentBacktrackProhibitedChoiceBranch(t *testing.T) {
 	})
 }
 
+// TestGreedyProhibitedParticle verifies the GREEDY matcher (the common path, no
+// backtracking) never lets a maxOccurs=0 (prohibited) element particle consume a
+// child, in BOTH XSD 1.0 and 1.1 — matchElementParticle/tryMatchElementParticle
+// enforce MaxOccurs before consuming, and matchAll10/tryMatchAll10 exclude a
+// maxOccurs=0 member from the by-name map.
+func TestGreedyProhibitedParticle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prohibited element in a sequence rejects a present child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			require.Error(t, validateBtInstance(t, v, schema, `<root><a/></root>`),
+				"prohibited <a> must reject (version %v)", v)
+			require.NoError(t, validateBtInstance(t, v, schema, `<root/>`),
+				"empty content is valid (version %v)", v)
+		}
+	})
+
+	t.Run("prohibited element after a sibling rejects a present child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			require.Error(t, validateBtInstance(t, v, schema, `<root><a/><b>1</b></root>`),
+				"prohibited <a> must reject (version %v)", v)
+			require.NoError(t, validateBtInstance(t, v, schema, `<root><b>1</b></root>`),
+				"b alone is valid (version %v)", v)
+		}
+	})
+
+	t.Run("prohibited xs:all member rejects a present child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all>
+      <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			require.Error(t, validateBtInstance(t, v, schema, `<root><a/><b>1</b></root>`),
+				"prohibited all member <a> must reject (version %v)", v)
+			require.NoError(t, validateBtInstance(t, v, schema, `<root><b>1</b></root>`),
+				"b alone is valid (version %v)", v)
+		}
+	})
+}
+
 // validateBtInstance compiles schemaXML at the given version (which must be valid)
 // and validates instanceXML, returning the validation error (nil when valid).
 func validateBtInstance(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {

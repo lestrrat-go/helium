@@ -283,6 +283,11 @@ func (vc *validationContext) matchAll10(ctx context.Context, parent *helium.Elem
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
+		// A PROHIBITED member (maxOccurs=0) can never consume a child, so it is not
+		// mapped: a present child of that name is then "not expected".
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
 			// TRANSITIVE, block-filtered substitution closure (the pre-feature XSD
@@ -688,6 +693,13 @@ func (vc *validationContext) matchParticle(ctx context.Context, parent *helium.E
 
 // matchElementParticle matches an element particle.
 func (vc *validationContext) matchElementParticle(ctx context.Context, parent *helium.Element, p *Particle, edecl *ElementDecl, children []childElem, pos int, seqHasWildcard bool) (int, error) {
+	// A PROHIBITED particle (maxOccurs=0) matches zero occurrences and must NOT
+	// consume a child — enforce MaxOccurs BEFORE the consume loop (which increments
+	// before its own max check). A present child of that name is left unmatched, so
+	// the surrounding matcher rejects it (minOccurs is 0 here, so no missing error).
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
 		// Record each matched child's (possibly LOCAL) host declaration AS SOON
@@ -891,6 +903,11 @@ func (vc *validationContext) tryMatchParticle(ctx context.Context, p *Particle, 
 }
 
 func (vc *validationContext) tryMatchElementParticle(_ context.Context, p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) {
+	// A PROHIBITED particle (maxOccurs=0) matches zero occurrences and must NOT
+	// consume a child (minOccurs is 0 here, so no insufficient error).
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
 		count++
@@ -1065,6 +1082,11 @@ func (vc *validationContext) tryMatchAll10(mg *ModelGroup, children []childElem,
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
+		// A PROHIBITED member (maxOccurs=0) can never consume a child, so it is not
+		// mapped.
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
 			// TRANSITIVE, block-filtered substitution closure (the pre-feature XSD
