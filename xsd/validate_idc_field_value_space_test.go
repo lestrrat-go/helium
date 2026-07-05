@@ -1271,6 +1271,25 @@ func TestIDCFieldCrossPrimitiveTyping(t *testing.T) {
 			valid:    true,
 		},
 		{
+			// Built-in xs:NMTOKENS is registered as a flat built-in placeholder, but
+			// its value space is a list, distinct from atomic xs:string.
+			name:     "nmtokens a b and string a b distinct list and atomic",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:NMTOKENS">a b</uid><uid xsi:type="xs:string">a b</uid></root>`,
+			valid:    true,
+		},
+		{
+			// A one-item list is still a list value, not the same atomic value as its item.
+			name:     "nmtokens a and nmtoken a distinct list and atomic",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:NMTOKENS">a</uid><uid xsi:type="xs:NMTOKEN">a</uid></root>`,
+			valid:    true,
+		},
+		{
+			// The same built-in list type still compares item-by-item in value space.
+			name:     "nmtokens collapsed list values collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:NMTOKENS">a b</uid><uid xsi:type="xs:NMTOKENS"> a  b </uid></root>`,
+			valid:    false,
+		},
+		{
 			// int 1 vs integer 1 — SAME primitive (xs:decimal), same value → collide.
 			name:     "int 1 and integer 1 same primitive collide",
 			instance: `<root` + xsiNS + `><uid xsi:type="xs:int">1</uid><uid xsi:type="xs:integer">1</uid></root>`,

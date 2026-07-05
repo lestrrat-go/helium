@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -497,16 +498,7 @@ func (vc *validationContext) canonicalValueKey(ctx context.Context, raw string, 
 		if item == nil {
 			return raw
 		}
-		// Split list items on XSD whitespace only (space, tab, CR, LF), not the
-		// wider set strings.Fields uses: an item containing NBSP must stay one
-		// token so it canonicalizes (and validates) as the single invalid value it
-		// is, consistent with validateListValue.
-		fields := value.XSDFields(raw)
-		parts := make([]string, len(fields))
-		for i, f := range fields {
-			parts[i] = vc.canonicalValueKey(ctx, f, fieldNode, item)
-		}
-		return strings.Join(parts, " ")
+		return vc.canonicalListKey(ctx, raw, fieldNode, item)
 	case TypeVarietyUnion:
 		// The active member of a union value is the first DIRECT member
 		// (declaration order, descending nested unions only when the value
@@ -529,8 +521,47 @@ func (vc *validationContext) canonicalValueKey(ctx context.Context, raw string, 
 		}
 		return raw
 	default:
+		if item := vc.builtinListItemType(td); item != nil {
+			return vc.canonicalListKey(ctx, raw, fieldNode, item)
+		}
 		return canonicalAtomicKey(raw, fieldNode, td)
 	}
+}
+
+func (vc *validationContext) canonicalListKey(ctx context.Context, raw string, fieldNode helium.Node, item *TypeDef) string {
+	fields := value.XSDFields(raw)
+	var b strings.Builder
+	b.WriteString("list")
+	b.WriteString(primitiveKeySeparator)
+	b.WriteString(strconv.Itoa(len(fields)))
+	for _, f := range fields {
+		key := vc.canonicalValueKey(ctx, f, fieldNode, item)
+		b.WriteString(primitiveKeySeparator)
+		b.WriteString(strconv.Itoa(len(key)))
+		b.WriteByte(':')
+		b.WriteString(key)
+	}
+	return b.String()
+}
+
+func (vc *validationContext) builtinListItemType(td *TypeDef) *TypeDef {
+	var local string
+	switch builtinBaseLocal(td) {
+	case typeNMTokens:
+		local = "NMTOKEN"
+	case typeIDRefs:
+		local = lexicon.TypeIDREF
+	case typeEntities:
+		local = "ENTITY"
+	default:
+		return nil
+	}
+	if vc.schema != nil {
+		if item := vc.schema.types[QName{NS: lexicon.NamespaceXSD, Local: local}]; item != nil {
+			return item
+		}
+	}
+	return &TypeDef{Name: QName{NS: lexicon.NamespaceXSD, Local: local}, ContentType: ContentTypeSimple}
 }
 
 // primitiveKeySeparator separates the PRIMITIVE-type tag from the canonical value
