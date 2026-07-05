@@ -398,6 +398,7 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 	if c.overridePaths == nil {
 		c.overridePaths = make(map[string]struct{})
 	}
+	_, overridePathExisted := c.overridePaths[path]
 	c.overrideVisited[vkey] = struct{}{}
 	c.overridePaths[path] = struct{}{}
 
@@ -408,12 +409,15 @@ func (c *compiler) overrideLoadTarget(ctx context.Context, location string, srcE
 		// demotes it to the standard skip warning, matching the xs:include/xs:redefine
 		// hint semantics. Roll back the visited/path markers set above so a later
 		// composition of the same location is not spuriously treated as a cycle or an
-		// include+override conflict (mirrors loadRedefine's rollback). A content or
-		// policy failure keeps its own (untagged/security) classification and stays
-		// fatal.
+		// include+override conflict (mirrors loadRedefine's rollback), but preserve a
+		// path marker that was already present from an earlier successful transformed
+		// load under a different active override set. A content or policy failure keeps
+		// its own (untagged/security) classification and stays fatal.
 		if errors.Is(err, errSchemaFetchMiss) {
 			delete(c.overrideVisited, vkey)
-			delete(c.overridePaths, path)
+			if !overridePathExisted {
+				delete(c.overridePaths, path)
+			}
 		}
 		return matched, fmt.Errorf("xsd: failed to load override %q: %w", location, err)
 	}

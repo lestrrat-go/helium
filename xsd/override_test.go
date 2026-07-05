@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"io/fs"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -16,6 +17,23 @@ const (
 	fileMain = "main.xsd"
 	fileA    = "a.xsd"
 )
+
+type overrideMissAfterFS struct {
+	files     fstest.MapFS
+	missAfter map[string]int
+	opens     map[string]int
+}
+
+func (f *overrideMissAfterFS) Open(name string) (fs.File, error) {
+	if f.opens == nil {
+		f.opens = make(map[string]int)
+	}
+	f.opens[name]++
+	if max, ok := f.missAfter[name]; ok && f.opens[name] > max {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	return f.files.Open(name)
+}
 
 // compileOverride compiles main.xsd from fsys under XSD 1.1 and returns the
 // schema and compile error.
@@ -353,6 +371,46 @@ func TestOverride_IncludeThenOverrideConflict(t *testing.T) {
 	_, err := compileOverride(t, fsys)
 	require.Error(t, err,
 		"include then override of the same document must be a fatal conflict, not a no-op")
+}
+
+func TestOverride_FetchMissRollbackPreservesEarlierPathMarker(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	main := `<xs:schema ` + xs + `>
+  <xs:override schemaLocation="a.xsd"/>
+  <xs:override schemaLocation="b.xsd"/>
+  <xs:include schemaLocation="leaf.xsd"/>
+</xs:schema>`
+	fsys := &overrideMissAfterFS{
+		files: fstest.MapFS{
+			fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="leaf.xsd"><xs:element name="x" type="xs:int"/></xs:override>
+</xs:schema>`)},
+			"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="leaf.xsd"><xs:element name="y" type="xs:int"/></xs:override>
+</xs:schema>`)},
+			"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:element name="x" type="xs:string"/>
+  <xs:element name="y" type="xs:string"/>
+  <xs:element name="doc" type="xs:string"/>
+</xs:schema>`)},
+		},
+		missAfter: map[string]int{"leaf.xsd": 1},
+		opens:     make(map[string]int),
+	}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, err = xsd.NewCompiler().Version(xsd.Version11).Label(fileMain).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+	require.Error(t, err, "a later include of a successfully overridden path must still report include+override conflict")
+
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+	}
+	require.Contains(t, b.String(), "both included/redefined and overridden")
+	require.Equal(t, 2, fsys.opens["leaf.xsd"],
+		"the include must be rejected by the preserved override marker before opening leaf.xsd again")
 }
 
 // TestOverride_ImportWarningInTarget is the OVR-003 regression: an xs:import inside

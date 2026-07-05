@@ -3,6 +3,7 @@
 package iofs
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -41,16 +42,13 @@ type PermissiveRoot struct{}
 
 // Open implements [fs.FS].
 func (PermissiveRoot) Open(name string) (fs.File, error) {
-	// A non-file-scheme absolute URI (http://, https://, urn:, ...) is NOT a
-	// local filesystem path. Handing it to os.Open opens a file whose NAME is
-	// the literal URI, which fails with a platform-DEPENDENT errno — ENOENT on
-	// Linux, EINVAL ("invalid argument") on macOS/Windows — that a resolution-
-	// miss classifier (e.g. the xsd nested-schema loader's isBenignResolutionMiss)
-	// cannot reliably treat as benign, so a legitimately-ABSENT optional
-	// include/import hint pointing at a network URI becomes fatal on some hosts.
-	// Report it as a canonical fs.ErrNotExist "not found" so it is classified as a
-	// resolution miss CONSISTENTLY across platforms; a REQUIRED load still
-	// surfaces the miss to its caller.
+	// A non-file-scheme absolute URI (http://, https://, urn:, ...) is first
+	// handed to os.Open exactly like any other name. That preserves the public
+	// PermissiveFS contract for real local filenames that merely LOOK URI-shaped
+	// (for example "urn:cache-key"). If the local open fails with a not-found or
+	// invalid-name errno, canonicalize that URI-shaped resolution miss to
+	// fs.ErrNotExist so optional schemaLocation hints are classified consistently
+	// across platforms; permission and other real local errors pass through.
 	//
 	// A "file:" URI IS a local resource, but os.Open of the literal "file:///abs"
 	// string opens a file whose NAME is that string (which never exists). CONVERT
@@ -66,7 +64,14 @@ func (PermissiveRoot) Open(name string) (fs.File, error) {
 	// os.Open and returns its real errno, so a malformed LOCAL path stays fatal.
 	if s := uripath.URIScheme(name); s != "" {
 		if s != "file" {
-			return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+			f, err := os.Open(name) //nolint:gosec // intentional passthrough; see type doc
+			if err == nil {
+				return f, nil
+			}
+			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
+				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+			}
+			return nil, err //nolint:wrapcheck // intentional passthrough; see type doc
 		}
 		p, err := FileURIToPath(name)
 		if err != nil {

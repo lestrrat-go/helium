@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/lestrrat-go/helium/internal/iofs"
@@ -13,10 +14,10 @@ import (
 )
 
 // A non-file-scheme absolute URI is not a local filesystem path: PermissiveRoot
-// must classify it as a resolution MISS (fs.ErrNotExist) rather than os.Open'ing
-// it and returning a platform-dependent errno (ENOENT on Linux, EINVAL on
-// macOS/Windows) that a demotion classifier cannot treat consistently. A local
-// path (no scheme, or a "file:" URI) still reaches os.Open.
+// must classify a failed local os.Open attempt as a resolution MISS
+// (fs.ErrNotExist) rather than returning a platform-dependent errno (ENOENT on
+// Linux, EINVAL on macOS/Windows) that a demotion classifier cannot treat
+// consistently. A local path (no scheme, or a "file:" URI) still reaches os.Open.
 func TestPermissiveRootNonFileURI(t *testing.T) {
 	t.Parallel()
 
@@ -46,6 +47,26 @@ func TestPermissiveRootNonFileURI(t *testing.T) {
 	// as a URI), so a local malformed/missing path stays fatal/normal.
 	_, err = iofs.PermissiveRoot{}.Open(filepath.Join(dir, "missing.xsd"))
 	require.True(t, errors.Is(err, fs.ErrNotExist))
+}
+
+func TestPermissiveRootOpensURILikeLocalFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows path components cannot contain ':'; URI-shaped local filename coverage is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	const name = "urn:cache-key"
+	require.NoError(t, os.WriteFile(name, []byte("cached"), 0o600))
+
+	f, err := iofs.PermissiveRoot{}.Open(name)
+	require.NoError(t, err, "a local filename that looks like a URI must still open via os.Open")
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.Equal(t, "cached", string(b))
 }
 
 func TestFileURIToPath(t *testing.T) {
