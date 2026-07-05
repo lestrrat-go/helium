@@ -1641,8 +1641,7 @@ func (vc *validationContext) contentModelSuffixEndpoint(ctx context.Context, mg 
 	}
 	declaredNames := collectEmittingModelElementNames(mg, vc.schema)
 	slices.Sort(ends)
-	for i := len(ends) - 1; i >= 0; i-- {
-		end := ends[i]
+	for _, end := range slices.Backward(ends) {
 		if end > len(children) {
 			continue
 		}
