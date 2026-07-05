@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -68,7 +69,7 @@ func (PermissiveRoot) Open(name string) (fs.File, error) {
 			if err == nil {
 				return f, nil
 			}
-			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
+			if errors.Is(err, fs.ErrNotExist) || isInvalidNameOpenError(runtime.GOOS, err) {
 				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 			}
 			return nil, err //nolint:wrapcheck // intentional passthrough; see type doc
@@ -96,6 +97,19 @@ type DenyAll struct{}
 // present.
 func (DenyAll) Open(name string) (fs.File, error) {
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+const windowsInvalidNameCode = 123
+
+func isInvalidNameOpenError(goos string, err error) bool {
+	if errors.Is(err, fs.ErrInvalid) {
+		return true
+	}
+	if goos != goosWindows {
+		return false
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && errno == syscall.Errno(windowsInvalidNameCode)
 }
 
 // FileURIToPath converts a "file:" URI into a local filesystem path. It mirrors
