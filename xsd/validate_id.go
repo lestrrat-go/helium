@@ -21,11 +21,12 @@ type idRefOccurrence struct {
 // idCollector accumulates ID values (and their owning element) and pending IDREF
 // references during a document-wide xs:ID/xs:IDREF/xs:IDREFS validation pass.
 type idCollector struct {
-	// ids maps each collected xs:ID value to the element it identifies. XSD 1.1
-	// allows the SAME ID value to appear more than once as long as every
-	// occurrence identifies the SAME element (e.g. two ID attributes of one
-	// element, or two <id> children of one parent), so a repeat is a duplicate
-	// only when the owning element differs.
+	// ids maps each collected xs:ID value to the element it identifies. In XSD 1.1
+	// the SAME ID value may appear more than once as long as every occurrence
+	// identifies the SAME element (e.g. two ID attributes of one element, or two
+	// <id> children of one parent), so a repeat is a duplicate only when the owning
+	// element differs; in XSD 1.0 any repeat is a duplicate (recordID gates the
+	// relaxation on Version11).
 	ids   map[string]helium.Node
 	refs  []idRefOccurrence
 	valid bool
@@ -55,14 +56,13 @@ func idOwner(elem *helium.Element, elementContent bool) helium.Node {
 // document (except across multiple ID attributes of one element), and every
 // xs:IDREF token must match some xs:ID value.
 //
-// It is gated to XSD 1.1 mode by the caller, so XSD 1.0 stays byte-identical
-// (helium does not enforce these datatype constraints in 1.0, and the
-// libxml2-compat goldens depend on that). The 1.1 relaxation allowing an element
-// type to carry more than one xs:ID attribute is handled implicitly: every
-// ID-typed attribute contributes to the same document-wide table with no
-// per-element cap. Values whose type is a list and/or union are decomposed to
-// their atomic ID/IDREF leaves (mirroring canonicalValueKey), so e.g. a list of
-// union(xs:ID, xs:integer) contributes each ID item.
+// It runs in BOTH XSD 1.0 and 1.1 (cvc-id is version-independent). The 1.1
+// relaxation allowing the same ID value to recur as long as it identifies the
+// SAME element is applied in recordID under Version11 only; XSD 1.0 keeps the
+// strict document-wide uniqueness (at most one ID per element). Values whose type
+// is a list and/or union are decomposed to their atomic ID/IDREF leaves
+// (mirroring canonicalValueKey), so e.g. a list of union(xs:ID, xs:integer)
+// contributes each ID item.
 func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Document) bool {
 	col := &idCollector{ids: make(map[string]helium.Node), valid: true}
 
@@ -125,6 +125,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 
 		// Attributes typed as ID/IDREF (including via list/union). An attribute ID
 		// is owned by its bearing element.
+		idAttrCount := 0
 		for _, a := range elem.Attributes() {
 			if vc.isSpecialAttr(a) {
 				continue
@@ -133,7 +134,33 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 			if atd == nil || !idFamilyType(atd) {
 				continue
 			}
-			vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a))
+			// An attribute counts toward the XSD 1.0 one-ID-attribute cap iff its
+			// value contributes at least one xs:ID leaf under the SAME list/union
+			// active-member decomposition the collection uses (so a union(xs:int,
+			// xs:ID) attribute counts only when its value is an ID, and a list of
+			// xs:ID counts) — keeping the cap consistent with the uniqueness table.
+			if vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a)) {
+				idAttrCount++
+			}
+		}
+		// This is the INSTANCE manifestation of the one-ID-per-element rule: >1
+		// ID-typed attribute actually PRESENT on an element. It covers the current
+		// targets (attZ014a/attZ014b supply their two ID attributes via a wildcard,
+		// so the element instance carries two IDs) and every constructible case where
+		// two ID attributes co-occur. Two related XSD 1.0 SCHEMA-COMPONENT rules are
+		// DEFERRED (compile-time, not yet enforced):
+		//   (i) the static Schema Component Constraint that a complex type must not
+		//       have two or more ID-typed attribute USES even when one/both are
+		//       optional and never both present in any instance (Part 1 §3.4.6). The
+		//       instance cap here does not reject such a type at compile time.
+		//   (ii) the full "wild IDs" rule — a declared ID attribute use together with
+		//       a wildcard-admitted global ID attribute is invalid even when the
+		//       declared use is ABSENT in the instance. The instance-present case is
+		//       covered by this cap; the declared-absent static case is not.
+		if vc.version == Version10 && idAttrCount > 1 {
+			col.valid = false
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+				"An element may have at most one attribute of type ID.")
 		}
 		return nil
 	})); err != nil {
@@ -182,24 +209,37 @@ func idFamilyType(td *TypeDef) bool {
 // and queuing xs:IDREF references at the atomic ID/IDREF leaves. fieldNode
 // supplies namespace context for union active-member resolution. List values are
 // split and each item recursed; a union value is resolved to its active member.
-func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idCollector, td *TypeDef, raw string, owner helium.Node, fieldNode helium.Node, elem *helium.Element, attr string) {
+//
+// It returns whether the decomposition yielded at least one xs:ID leaf (VALUE-
+// dependent: a union(xs:int, xs:ID) attribute reports true only when its value
+// selects the xs:ID member; a list of xs:ID reports true when it has ID tokens).
+// The Version10 one-ID-attribute cap uses this return so it detects ID-ness the
+// SAME way the collection does, keeping the cap and the uniqueness table
+// consistent by construction.
+func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idCollector, td *TypeDef, raw string, owner helium.Node, fieldNode helium.Node, elem *helium.Element, attr string) bool {
 	switch resolveVariety(td) {
 	case TypeVarietyList:
 		item := resolveItemType(td)
 		if item == nil {
-			return
+			return false
 		}
+		hasID := false
 		for _, f := range value.XSDFields(raw) {
-			vc.collectIDFromValue(ctx, col, item, f, owner, fieldNode, elem, attr)
+			if vc.collectIDFromValue(ctx, col, item, f, owner, fieldNode, elem, attr) {
+				hasID = true
+			}
 		}
+		return hasID
 	case TypeVarietyUnion:
 		if m := unionActiveMember(ctx, raw, fieldNode, td); m != nil {
-			vc.collectIDFromValue(ctx, col, m, raw, owner, fieldNode, elem, attr)
+			return vc.collectIDFromValue(ctx, col, m, raw, owner, fieldNode, elem, attr)
 		}
+		return false
 	default:
 		switch builtinBaseLocal(td) {
 		case "ID":
 			vc.recordID(ctx, col, normalizeWhiteSpace(raw, "collapse"), owner, elem, attr)
+			return true
 		case lexicon.TypeIDREF:
 			vc.recordIDRef(col, normalizeWhiteSpace(raw, "collapse"), elem, attr)
 		case lexicon.TypeIDREFS:
@@ -209,6 +249,7 @@ func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idColl
 				vc.recordIDRef(col, f, elem, attr)
 			}
 		}
+		return false
 	}
 }
 
@@ -226,7 +267,14 @@ func (vc *validationContext) recordID(ctx context.Context, col *idCollector, tok
 	}
 	prev, seen := col.ids[tok]
 	if seen {
-		if prev == owner {
+		// XSD 1.1 relaxation: the same ID value may recur as long as every
+		// occurrence identifies the SAME element (two ID attributes of one element,
+		// or two ID element-content children of one parent). XSD 1.0 has NO such
+		// relaxation — every distinct ID-bearing item must have a unique value, so a
+		// repeat is a duplicate even on the same owner (W3C elemZ016 / idconstrdefs
+		// 00301m2_n: two same-value xs:ID children of one parent are invalid in 1.0,
+		// valid in 1.1). Gated on Version11.
+		if vc.version == Version11 && prev == owner {
 			return
 		}
 		col.valid = false
