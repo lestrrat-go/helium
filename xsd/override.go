@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // xs:override (XSD 1.1, W3C XML Schema 1.1 Part 1 §4.2.5 / §F) performs WHOLESALE
@@ -204,9 +205,9 @@ func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *he
 			// validateComponentChildName (that would DOUBLE-report a malformed name).
 			// Key on the collapsed name as before so a matched target notation is
 			// suppressed and the override child's name is collected (over015); an
-			// absent/empty name is not a valid key.
+			// absent/empty/malformed name is not a valid key.
 			name = collapsedAttr(elem, attrName)
-			if name == "" {
+			if name == "" || !xmlchar.IsValidNCName(name) {
 				continue
 			}
 		default:

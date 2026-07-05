@@ -7,27 +7,13 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
-	name := collapsedAttr(elem, attrName)
-	if name == "" {
-		return fmt.Errorf("xsd: named complexType missing name")
-	}
-
-	// The @name of a global complexType is an xs:NCName (XSD Structures §3.4.2). A
-	// value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g. "1foo")
-	// is a schema error; the type is dropped so it does not enter the target-namespace
-	// symbol space under a bogus name. Version-independent XSD rule.
-	if !xmlchar.IsValidNCName(name) {
-		if c.filename != "" {
-			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-				elem.LocalName(), componentLocalComplexType,
-				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-		}
-		return nil
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named complexType missing name", componentLocalComplexType, true)
+	if err != nil || !ok {
+		return err
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -63,22 +49,9 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 }
 
 func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Element) error {
-	name := collapsedAttr(elem, attrName)
-	if name == "" {
-		return fmt.Errorf("xsd: named simpleType missing name")
-	}
-
-	// The @name of a global simpleType is an xs:NCName (XSD Structures §3.14.2). A
-	// value with a colon (e.g. "a:b") or an otherwise invalid NCName (e.g. "1foo")
-	// is a schema error; the type is dropped so it does not enter the target-namespace
-	// symbol space under a bogus name. Version-independent XSD rule.
-	if !xmlchar.IsValidNCName(name) {
-		if c.filename != "" {
-			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-				elem.LocalName(), componentLocalSimpleType,
-				"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-		}
-		return nil
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named simpleType missing name", componentLocalSimpleType, true)
+	if err != nil || !ok {
+		return err
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}

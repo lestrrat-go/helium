@@ -1077,6 +1077,47 @@ func compileRedefineVersioned(t *testing.T, v xsd.Version, baseXSD, mainXSD stri
 	return schema, compileErrorsString(collector.Errors()), cerr
 }
 
+// TestDirectTopLevelNamedComponentCollapseEmptyName verifies that a present
+// collapse-empty @name on a DIRECT top-level named component is an invalid NCName
+// schema error, not the raw "missing name" parse-error path. This covers the four
+// parseNamed* entry points used by parseSchemaChildren.
+func TestDirectTopLevelNamedComponentCollapseEmptyName(t *testing.T) {
+	t.Parallel()
+
+	const wantNCName = "is not a valid 'xs:NCName'"
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"complexType", `<xs:complexType name="%s"><xs:sequence/></xs:complexType>`},
+		{"simpleType", `<xs:simpleType name="%s"><xs:restriction base="xs:string"/></xs:simpleType>`},
+		{"group", `<xs:group name="%s"><xs:sequence/></xs:group>`},
+		{"attributeGroup", `<xs:attributeGroup name="%s"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				errsByValue := make([]string, 0, 2)
+				for _, val := range []string{"", "   "} {
+					schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, fmt.Sprintf(tc.body, val))
+					schema, errs, cerr := compileWith(t, v, schemaXML)
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+						"version=%v: direct %s name=%q must reject; got: %s", v, tc.name, val, errs)
+					require.Nil(t, schema)
+					require.Equal(t, 1, strings.Count(errs, wantNCName),
+						"version=%v: direct %s name=%q must emit exactly one invalid-NCName diagnostic; got: %s", v, tc.name, val, errs)
+					errsByValue = append(errsByValue, errs)
+				}
+				require.Equal(t, errsByValue[0], errsByValue[1],
+					"version=%v: direct %s present-empty and whitespace-only @name must emit identical diagnostics", v, tc.name)
+			}
+		})
+	}
+}
+
 // TestComponentChildNameKeyedDispatchValidity covers EVERY name-keyed
 // component-dispatch loop — xs:redefine (processRedefineOverrides) AND xs:override
 // (collectOverrideChildren) — for all four named-component kinds
@@ -1239,6 +1280,9 @@ func TestOverrideNotationNameSingleDiagnostic(t *testing.T) {
 	buildMain := func(nameVal string) string {
 		return fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:override schemaLocation="redef_base.xsd"><xs:notation name="%s" public="pub2"/></xs:override></xs:schema>`, nameVal)
 	}
+	buildMainTwice := func(nameVal string) string {
+		return fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:override schemaLocation="redef_base.xsd"><xs:notation name="%s" public="pub2"/><xs:notation name="%s" public="pub3"/></xs:override></xs:schema>`, nameVal, nameVal)
+	}
 
 	for _, bad := range []string{"", wsName, "a b"} {
 		schema, errs, cerr := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMain(bad))
@@ -1249,6 +1293,14 @@ func TestOverrideNotationNameSingleDiagnostic(t *testing.T) {
 		require.NotContains(t, errs, spurious,
 			"name=%q: no spurious component-child-gate NCName diagnostic; got: %s", bad, errs)
 	}
+
+	schema, errs, cerr := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMainTwice("a b"))
+	require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "duplicate malformed notation names must reject; got: %s", errs)
+	require.Nil(t, schema)
+	require.Equal(t, 2, strings.Count(errs, wantNotation),
+		"both malformed notation children are diagnosed by checkNotations; got: %s", errs)
+	require.NotContains(t, errs, "must not contain two children that override the same component",
+		"malformed notation names must not be keyed into override duplicate checking; got: %s", errs)
 
 	// Present-empty and whitespace-only emit byte-identical diagnostics.
 	_, errsEmpty, _ := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMain(""))
