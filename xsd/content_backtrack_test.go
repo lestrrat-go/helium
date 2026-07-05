@@ -325,6 +325,23 @@ func TestGreedyProhibitedParticle(t *testing.T) {
 		}
 	})
 
+	t.Run("prohibited wildcard in a sequence rejects a present child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:any processContents="skip" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+			require.Error(t, validateBtInstance(t, v, schema, `<root><child/></root>`),
+				"prohibited wildcard must reject a present child (version %v)", v)
+			require.NoError(t, validateBtInstance(t, v, schema, `<root/>`),
+				"empty content is valid (version %v)", v)
+		}
+	})
+
 	t.Run("prohibited xs:all member rejects a present child", func(t *testing.T) {
 		t.Parallel()
 		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

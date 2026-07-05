@@ -1151,6 +1151,9 @@ func (vc *validationContext) tryMatchAll11(mg *ModelGroup, children []childElem,
 
 // matchWildcardParticle matches a wildcard particle against children.
 func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *helium.Element, p *Particle, wc *Wildcard, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
@@ -1363,6 +1366,9 @@ func localElementDeclsByName(mg *ModelGroup, qn QName) []*ElementDecl {
 
 // tryMatchWildcardParticle is the try version (no error reporting).
 func (vc *validationContext) tryMatchWildcardParticle(_ context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) {
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
