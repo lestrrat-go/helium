@@ -220,7 +220,9 @@ func (d *Document) SetVersion(v string) {
 }
 
 // URL returns the document URI, used as the base for relative URI resolution.
-// This mirrors libxml2's xmlDoc.URL field.
+// This mirrors libxml2's xmlDoc.URL field. An empty URL is valid for in-memory
+// documents; callers that need a non-empty diagnostic label must provide their
+// own fallback.
 func (d *Document) URL() string {
 	return d.url
 }
