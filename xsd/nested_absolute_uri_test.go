@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -79,7 +80,7 @@ func TestNestedIncludeFileURILoads(t *testing.T) {
 	// fails — so a successful compile proves the file:/// include loaded.
 	mainXSD := `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:include schemaLocation="file://` + filepath.ToSlash(partPath) + `"/>
+  <xs:include schemaLocation="` + fileURIForTestPath(partPath) + `"/>
   <xs:element name="root" type="PartType"/>
 </xs:schema>`
 
@@ -100,7 +101,7 @@ func TestNestedIncludeFileURIMissingDemotes(t *testing.T) {
 
 	mainXSD := `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:include schemaLocation="file://` + filepath.ToSlash(missingPath) + `"/>
+  <xs:include schemaLocation="` + fileURIForTestPath(missingPath) + `"/>
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
 
@@ -109,6 +110,14 @@ func TestNestedIncludeFileURIMissingDemotes(t *testing.T) {
 
 	_, err = xsd.NewCompiler().FS(helium.PermissiveFS()).BaseDir(dir).Compile(t.Context(), doc)
 	require.NoError(t, err, "a missing file:/// include must demote to a warning-and-skip, not fail compile")
+}
+
+func fileURIForTestPath(path string) string {
+	slashPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(slashPath, "/") {
+		slashPath = "/" + slashPath
+	}
+	return "file://" + slashPath
 }
 
 // TestNestedIncludeAbsoluteURIErrInvalidDemotes verifies the FS-INDEPENDENT
