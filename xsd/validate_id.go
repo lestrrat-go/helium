@@ -128,7 +128,18 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		idAttrCount := 0
 		for _, a := range elem.Attributes() {
 			if vc.isSpecialAttr(a) {
-				continue
+				// A DECLARED special-attribute use that was genuinely assessed in pass 1
+				// still participates in the document-wide ID/IDREF pass — an attribute ID
+				// identifies its bearing element regardless of namespace. In XSD 1.0 a
+				// declared `ref="xml:id"` is typed as xs:ID (via xmlNamespaceAttrType) and
+				// annotated, so its value must be collected for uniqueness/integrity like
+				// any xs:ID attribute; a declared xsi: attribute is assessed the same way
+				// (its non-ID type is simply filtered below). An UNDECLARED special
+				// attribute (an undeclared xml:id, xmlns, or an unassessed xsi: attr) is
+				// never assessed, so it stays skipped.
+				if _, assessed := vc.assessedAttrs[a]; !assessed {
+					continue
+				}
 			}
 			atd := vc.attrTypeForID(a)
 			if atd == nil || !idFamilyType(atd) {

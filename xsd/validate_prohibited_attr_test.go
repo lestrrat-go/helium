@@ -220,4 +220,45 @@ func TestDeclaredXMLAttributeValue(t *testing.T) {
 		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="i1"/>`))
 		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="1bad"/>`), xsd.ErrValidationFailed)
 	})
+
+	t.Run("declared xml:id participates in document-wide ID uniqueness", func(t *testing.T) {
+		t.Parallel()
+		// A schema declaring ref="xml:id" types the attribute as xs:ID, so the
+		// document-wide ID pass (XSD 1.0) collects it: a duplicate value across two
+		// elements is a validity error, distinct values are valid.
+		declared := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute ref="xml:id" use="required"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), declared, `<root><item xml:id="a"/><item xml:id="b"/></root>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), declared, `<root><item xml:id="dup"/><item xml:id="dup"/></root>`), xsd.ErrValidationFailed)
+
+		// An UNDECLARED xml:id (no schema declaration referencing it) stays special-
+		// skipped: it is not assessed, so it does not participate in the ID pass and
+		// a duplicate value is not flagged.
+		undeclared := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:anyAttribute processContents="skip"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), undeclared, `<root><item xml:id="dup"/><item xml:id="dup"/></root>`))
+	})
 }
