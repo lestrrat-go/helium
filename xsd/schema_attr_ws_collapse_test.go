@@ -1077,87 +1077,142 @@ func compileRedefineVersioned(t *testing.T, v xsd.Version, baseXSD, mainXSD stri
 	return schema, compileErrorsString(collector.Errors()), cerr
 }
 
-// TestRedefineChildPresentEmptyNameRejected covers the xs:redefine override-child
-// dispatch: a redefining complexType/simpleType/group/attributeGroup whose @name is
-// PRESENT but collapses to empty ("" OR whitespace-only "   ") must be REJECTED as an
-// invalid (empty) NCName — the name-keyed dispatch must not silently drop the
-// malformed child and let the schema compile. Present-empty and whitespace-only
-// produce byte-identical diagnostics; a well-formed self-redefining child still
-// compiles. Version-INDEPENDENT (the dispatch runs in both XSD 1.0 and 1.1).
-func TestRedefineChildPresentEmptyNameRejected(t *testing.T) {
+// TestComponentChildNameKeyedDispatchValidity covers EVERY name-keyed
+// component-dispatch loop — xs:redefine (processRedefineOverrides) AND xs:override
+// (collectOverrideChildren) — for all four named-component kinds
+// (complexType/simpleType/group/attributeGroup). A direct component child whose
+// @name is PRESENT but not a valid xs:NCName — the literal "" AND the whitespace-only
+// "   " (both collapse to empty) AND a malformed NON-empty name like "a b" — must be
+// REJECTED as an invalid NCName, not silently dropped (matching no target) and left to
+// compile. Present-empty and whitespace-only produce byte-identical diagnostics; a
+// well-formed child still compiles. xs:redefine runs in both XSD 1.0 and 1.1;
+// xs:override is 1.1-only.
+func TestComponentChildNameKeyedDispatchValidity(t *testing.T) {
 	t.Parallel()
 
-	const wantNCName = "is not a valid 'xs:NCName'"
+	const (
+		wantNCName   = "is not a valid 'xs:NCName'"
+		wrapRedefine = "redefine"
+		wrapOverride = "override"
+		wsName       = "   " // whitespace-only @name (collapses to empty)
+	)
 
 	cases := []struct {
 		name       string
+		wrapper    string // wrapRedefine or wrapOverride
 		baseBody   string
-		childTmpl  string // %s = the redefine child's @name value
+		childTmpl  string // %s = the dispatch child's @name value
 		extraBody  string // consumer/root in the main document
-		wellFormed string // a valid self-redefining @name
+		wellFormed string // a valid @name that matches a base target
+		versions   []xsd.Version
 	}{
+		// xs:redefine — the child must SELF-derive from the redefined component.
 		{
 			"redefine-complexType",
+			wrapRedefine,
 			`<xs:complexType name="ct"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
 			`<xs:complexType name="%s"><xs:complexContent><xs:restriction base="ct"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`,
 			`<xs:element name="root" type="ct"/>`,
 			"ct",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
 		},
 		{
 			"redefine-simpleType",
+			wrapRedefine,
 			`<xs:simpleType name="st"><xs:restriction base="xs:string"/></xs:simpleType>`,
 			`<xs:simpleType name="%s"><xs:restriction base="st"><xs:maxLength value="5"/></xs:restriction></xs:simpleType>`,
 			`<xs:element name="root" type="st"/>`,
 			"st",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
 		},
 		{
 			"redefine-group",
+			wrapRedefine,
 			`<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`,
 			`<xs:group name="%s"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`,
 			`<xs:complexType name="rt"><xs:group ref="g"/></xs:complexType><xs:element name="root" type="rt"/>`,
 			"g",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
 		},
 		{
 			"redefine-attributeGroup",
+			wrapRedefine,
 			`<xs:attributeGroup name="ag"><xs:attribute name="x" type="xs:string"/></xs:attributeGroup>`,
 			`<xs:attributeGroup name="%s"><xs:attribute name="x" type="xs:string"/></xs:attributeGroup>`,
 			`<xs:complexType name="rt"><xs:attributeGroup ref="ag"/></xs:complexType><xs:element name="root" type="rt"/>`,
 			"ag",
+			[]xsd.Version{xsd.Version10, xsd.Version11},
 		},
-	}
-
-	buildMain := func(child, extra string) string {
-		return fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:redefine schemaLocation="redef_base.xsd">%s</xs:redefine>%s</xs:schema>`, child, extra)
+		// xs:override — the child WHOLESALE-replaces the same-named base component.
+		{
+			"override-complexType",
+			wrapOverride,
+			`<xs:complexType name="ct"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
+			`<xs:complexType name="%s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType>`,
+			`<xs:element name="root" type="ct"/>`,
+			"ct",
+			[]xsd.Version{xsd.Version11},
+		},
+		{
+			"override-simpleType",
+			wrapOverride,
+			`<xs:simpleType name="st"><xs:restriction base="xs:string"/></xs:simpleType>`,
+			`<xs:simpleType name="%s"><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`,
+			`<xs:element name="root" type="st"/>`,
+			"st",
+			[]xsd.Version{xsd.Version11},
+		},
+		{
+			"override-group",
+			wrapOverride,
+			`<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`,
+			`<xs:group name="%s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`,
+			`<xs:complexType name="rt"><xs:group ref="g"/></xs:complexType><xs:element name="root" type="rt"/>`,
+			"g",
+			[]xsd.Version{xsd.Version11},
+		},
+		{
+			"override-attributeGroup",
+			wrapOverride,
+			`<xs:attributeGroup name="ag"><xs:attribute name="x" type="xs:string"/></xs:attributeGroup>`,
+			`<xs:attributeGroup name="%s"><xs:attribute name="y" type="xs:string"/></xs:attributeGroup>`,
+			`<xs:complexType name="rt"><xs:attributeGroup ref="ag"/></xs:complexType><xs:element name="root" type="rt"/>`,
+			"ag",
+			[]xsd.Version{xsd.Version11},
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			baseXSD := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`, tc.baseBody)
-			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
-				// Present-empty ("") and whitespace-only ("   ") @name: both rejected as
-				// an invalid (empty) NCName, byte-identical diagnostics.
-				emptyMain := buildMain(fmt.Sprintf(tc.childTmpl, ""), tc.extraBody)
-				wsMain := buildMain(fmt.Sprintf(tc.childTmpl, "   "), tc.extraBody)
+			buildMain := func(nameVal string) string {
+				child := fmt.Sprintf(tc.childTmpl, nameVal)
+				return fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:%s schemaLocation="redef_base.xsd">%s</xs:%s>%s</xs:schema>`,
+					tc.wrapper, child, tc.wrapper, tc.extraBody)
+			}
+			for _, v := range tc.versions {
+				// Every present-but-invalid @name is rejected as an invalid NCName.
+				for _, bad := range []string{"", wsName, "a b"} {
+					schema, errs, cerr := compileRedefineVersioned(t, v, baseXSD, buildMain(bad))
+					require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+						"version=%v: a %s child with name=%q must be REJECTED, not silently compiled; got: %s", v, tc.wrapper, bad, errs)
+					require.Nil(t, schema)
+					require.Contains(t, errs, wantNCName,
+						"version=%v: name=%q must emit an invalid-NCName diagnostic; got: %s", v, bad, errs)
+				}
 
-				schemaEmpty, errsEmpty, cerrEmpty := compileRedefineVersioned(t, v, baseXSD, emptyMain)
-				_, errsWs, cerrWs := compileRedefineVersioned(t, v, baseXSD, wsMain)
-
-				require.ErrorIs(t, cerrEmpty, xsd.ErrCompilationFailed,
-					"version=%v: a redefine child with name=\"\" must be REJECTED, not silently compiled; got: %s", v, errsEmpty)
-				require.ErrorIs(t, cerrWs, xsd.ErrCompilationFailed,
-					"version=%v: a redefine child with name=\"   \" must be REJECTED; got: %s", v, errsWs)
-				require.Nil(t, schemaEmpty)
+				// Present-empty ("") and whitespace-only ("   ") emit byte-identical
+				// diagnostics (both collapse to "").
+				_, errsEmpty, _ := compileRedefineVersioned(t, v, baseXSD, buildMain(""))
+				_, errsWs, _ := compileRedefineVersioned(t, v, baseXSD, buildMain(wsName))
 				require.Equal(t, errsEmpty, errsWs,
-					"version=%v: present-empty and whitespace-only redefine-child @name must emit identical diagnostics", v)
-				require.Contains(t, errsEmpty, wantNCName,
-					"version=%v: the one invalid-NCName diagnostic must appear; got: %s", v, errsEmpty)
+					"version=%v: present-empty and whitespace-only %s-child @name must emit identical diagnostics", v, tc.wrapper)
 
-				// A well-formed self-redefining child still compiles.
-				validMain := buildMain(fmt.Sprintf(tc.childTmpl, tc.wellFormed), tc.extraBody)
-				schemaValid, errsValid, cerrValid := compileRedefineVersioned(t, v, baseXSD, validMain)
+				// A well-formed child still compiles.
+				schemaValid, errsValid, cerrValid := compileRedefineVersioned(t, v, baseXSD, buildMain(tc.wellFormed))
 				require.NoError(t, cerrValid,
-					"version=%v: a well-formed redefine child must still compile; got: %s", v, errsValid)
+					"version=%v: a well-formed %s child must still compile; got: %s", v, tc.wrapper, errsValid)
 				require.NotNil(t, schemaValid)
 			}
 		})

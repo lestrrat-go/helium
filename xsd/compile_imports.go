@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/uripath"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // errImportDepthExceeded signals that xs:import recursion reached the
@@ -1142,6 +1143,45 @@ func satAdd(a, b int) int {
 // or already consumed by an earlier redefine is reported as a duplicate. The
 // override children belong to the REDEFINING schema, so the caller must have
 // restored that schema's per-document defaults and include-file label first.
+// validateComponentChildName validates the @name of a NAMED top-level component
+// child (complexType/simpleType/element/attribute/group/attributeGroup/notation)
+// that a name-keyed component-dispatch loop — xs:redefine (processRedefineOverrides)
+// or xs:override (collectOverrideChildren) — uses as its dispatch/match KEY. Because
+// the child is keyed by name BEFORE its named parser runs, a malformed @name would
+// otherwise be silently dropped (matching no target) and never validated. This ONE
+// shared gate closes that hole for every such loop:
+//   - @name ABSENT (hasAttr false): returns ("", false) with NO error — the caller
+//     keeps its existing behavior (the child is not a valid component key).
+//   - @name PRESENT but not a valid xs:NCName after collapse (empty "", whitespace-
+//     only "   ", or malformed like "a b"/"1x"/"a:b"): reports the invalid-NCName
+//     schema-representation error (with the child's own component label, matching its
+//     named parser) and returns (collapsedName, false).
+//   - @name PRESENT and a valid NCName: returns (collapsedName, true).
+func (c *compiler) validateComponentChildName(ctx context.Context, elem *helium.Element) (string, bool) {
+	name := collapsedAttr(elem, attrName)
+	if !hasAttr(elem, attrName) {
+		return name, false
+	}
+	if xmlchar.IsValidNCName(name) {
+		return name, true
+	}
+	if c.filename != "" {
+		msg := "The value '" + name + "' of attribute 'name' is not a valid 'xs:NCName'."
+		switch {
+		case isXSDElement(elem, elemComplexType):
+			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalComplexType, msg))
+		case isXSDElement(elem, elemSimpleType):
+			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalSimpleType, msg))
+		default:
+			// group/attributeGroup/element/attribute/notation: elem.LocalName() is the
+			// schema-for-schemas element name (e.g. "group"), matching each kind's own
+			// named-parser diagnostic.
+			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elem.LocalName(), msg))
+		}
+	}
+	return name, false
+}
+
 func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}) error {
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
@@ -1166,17 +1206,10 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 		case isXSDElement(elem, elemAnnotation):
 			// skip
 		case isXSDElement(elem, elemComplexType):
-			name := collapsedAttr(elem, attrName)
-			if name == "" {
-				// A PRESENT-but-collapse-empty @name ("" or "   ") on a redefine child
-				// is an invalid (empty) NCName: the name-keyed dispatch would otherwise
-				// SILENTLY DROP it before any named parser runs, so the malformed child
-				// is never validated. A genuinely-ABSENT @name keeps the silent skip (it
-				// can match no redefine target). Present-empty ≡ whitespace-only.
-				if hasAttr(elem, attrName) {
-					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalComplexType,
-						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-				}
+			name, ok := c.validateComponentChildName(ctx, elem)
+			if !ok {
+				// Malformed @name (empty/whitespace-only/"a b") reported; absent @name
+				// silently skipped — the name-keyed dispatch matches no target.
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1208,14 +1241,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemSimpleType):
-			name := collapsedAttr(elem, attrName)
-			if name == "" {
-				// Present-but-collapse-empty @name → invalid (empty) NCName; absent →
-				// silent skip (see the complexType case above).
-				if hasAttr(elem, attrName) {
-					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalSimpleType,
-						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-				}
+			name, ok := c.validateComponentChildName(ctx, elem)
+			if !ok {
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1241,14 +1268,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemGroup):
-			name := collapsedAttr(elem, attrName)
-			if name == "" {
-				// Present-but-collapse-empty @name → invalid (empty) NCName; absent →
-				// silent skip (see the complexType case above).
-				if hasAttr(elem, attrName) {
-					c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
-						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-				}
+			name, ok := c.validateComponentChildName(ctx, elem)
+			if !ok {
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1319,14 +1340,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				}
 			}
 		case isXSDElement(elem, elemAttributeGroup):
-			name := collapsedAttr(elem, attrName)
-			if name == "" {
-				// Present-but-collapse-empty @name → invalid (empty) NCName; absent →
-				// silent skip (see the complexType case above).
-				if hasAttr(elem, attrName) {
-					c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "attributeGroup",
-						"The value '"+name+"' of attribute 'name' is not a valid 'xs:NCName'."))
-				}
+			name, ok := c.validateComponentChildName(ctx, elem)
+			if !ok {
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
