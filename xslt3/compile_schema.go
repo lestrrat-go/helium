@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync/atomic"
 
@@ -23,6 +24,12 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// Fetch phase: any error here (a resolve/read miss) is returned UNTAGGED so
+	// the top-level import-schema caller may fall back to a precompiled schema.
+	// A policy denial / resource-cap breach is already fatal-tagged by
+	// loadSchemaBytes / schemaResolverFS. Everything AFTER this point is
+	// post-fetch and is tagged errSchemaContentInvalid (a malformed/invalid
+	// schema that WAS fetched must never be masked by the fallback).
 	data, err := c.loadSchemaBytes(ctx, uri)
 	if err != nil {
 		return nil, err
@@ -39,7 +46,9 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// of being re-parsed into duplicate components.
 	doc, err := parseExternalXML(ctx, c.parser, data, uri, false, nil, nil, c.maxResourceBytes)
 	if err != nil {
-		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
+		// Malformed XML — a post-fetch content error, tagged so the fallback
+		// cannot mask it.
+		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, errors.Join(errSchemaContentInvalid, err))
 	}
 	// Preserve relative include/import resolution within the schema by
 	// rooting the XSD compiler's base directory at the schema's location,
@@ -69,16 +78,20 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// reports this as ErrCompilationFailed (nil schema); the fatalErrorCounter
 	// carries the diagnostic count for the message.
 	if errors.Is(err, xsd.ErrCompilationFailed) {
-		return nil, staticError(errCodeXTSE0220,
+		return nil, staticErrorCause(errCodeXTSE0220, errSchemaContentInvalid,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	if err != nil {
-		return nil, err
+		// A post-fetch compile error (invalid XSD, or a fatal nested load the
+		// xsd compiler surfaced): tag it content-invalid so the fallback cannot
+		// mask it. A nested fatal-load marker in err survives the join, so
+		// isFatalSchemaLoadError still recognizes it.
+		return nil, errors.Join(errSchemaContentInvalid, err)
 	}
 	// Defensive: a fatal diagnostic without ErrCompilationFailed should not
 	// happen, but keep the XTSE0220 guard so an invalid schema never leaks.
 	if errCounter.count.Load() > 0 {
-		return nil, staticError(errCodeXTSE0220,
+		return nil, staticErrorCause(errCodeXTSE0220, errSchemaContentInvalid,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	return schema, nil
@@ -108,15 +121,29 @@ func (c *compiler) loadResourceBytes(_ context.Context, uri string) ([]byte, err
 // fallback).
 func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error) {
 	if c.resolver == nil {
-		return nil, staticError(errCodeXTSE0165,
+		return nil, staticErrorCause(errCodeXTSE0165, errSchemaResolverDenied,
 			"cannot load schema %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
 	rc, err := c.resolver.Resolve(uri)
 	if err != nil {
+		// A demotable miss must POSITIVELY signal the resource is ABSENT: tag it
+		// [errSchemaResolutionMiss] (the ONLY demotable classification) ONLY when
+		// the resolver's error satisfies fs.ErrNotExist. An OPAQUE/ambiguous
+		// resolver error (e.g. a bare "HTTP 403", a transport failure) is NOT
+		// tagged, so the positive-tag partition makes it FATAL (fail-closed). A
+		// URIResolver must return an fs.ErrNotExist-satisfying error to signal a
+		// demotable absent optional schema.
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, markResolutionMiss(err))
+		}
 		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
 	}
 	data, err := readCloserToBytes(rc, c.maxResourceBytes)
 	if err != nil {
+		// The reader WAS obtained, then Read failed — a POST-OPEN read failure,
+		// NOT a resolution miss (mirroring the xsd errNestedSchemaReadAfterOpen
+		// discipline). Return it UNTAGGED so it is FATAL by the positive-tag
+		// partition (isDemotableSchemaMiss is false), never demoted.
 		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
 	}
 	return data, nil
@@ -213,21 +240,21 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 
 		schema, err := c.compileSchemaFromURI(ctx, uri)
 		if err != nil {
-			// A genuine "schema not found / not applicable" error may fall back
-			// to a pre-compiled import schema registered for the namespace. But a
-			// fatal schema-load (resource-limit breach, path escape, or
-			// import-depth overflow) must NOT be papered over by the fallback —
-			// doing so would let an over-cap or path-traversal schema-location
-			// silently succeed, defeating the guard. The single classifier
-			// recognizes every fatal-load condition (including a nested path
-			// escape, which surfaces as a plain xsd sentinel that an interface-only
-			// check would miss); propagate those, preserving the sentinel for
-			// errors.Is. Decided BEFORE findImportSchema so no fatal load can fall
-			// through to the precompiled-schema path.
-			if isFatalSchemaLoadError(err) {
+			// POSITIVE-TAG discipline (mirrors the xsd nested classifier): ONLY a
+			// CONFIRMED benign resolution miss ([isDemotableSchemaMiss] — the
+			// schema-location could not be resolved / HTTP 404) may fall back to a
+			// pre-compiled import schema registered for the namespace. EVERYTHING
+			// else fails closed — a post-open read failure, an HTTP 401/403/5xx, a
+			// FATAL load (resource-cap breach, path escape, import-depth overflow,
+			// policy/no-resolver denial, permission/multi-error), a CONTENT error
+			// (fetched but malformed XML / invalid XSD), or any untagged/ambiguous
+			// error — since masking any of those with the precompiled fallback
+			// would let a broken/denied authoritative schema-location silently
+			// succeed via a registered ImportSchemas entry.
+			if !isDemotableSchemaMiss(err) {
 				return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 			}
-			// File not found — try pre-compiled import schemas by namespace.
+			// Confirmed fetch miss — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
 				if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
 					c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
@@ -237,12 +264,13 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 		}
 		// XTSE0220: namespace attribute must match the schema's targetNamespace.
+		// The schema-location WAS fetched and compiled, so it is authoritative:
+		// a namespace mismatch is a fatal XTSE0220, NOT a fetch miss. Falling
+		// back to a precompiled ImportSchemas entry here would silently mask an
+		// authoritative-but-wrong schema-location (fall open), the same unsound
+		// masking the fetch/content taxonomy above forbids — the precompiled
+		// fallback is reserved for a genuine fetch miss (no bytes fetched).
 		if declaredNS != "" && schema.TargetNamespace() != declaredNS {
-			// Try pre-compiled import schemas by namespace before erroring.
-			if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
-				c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
-				return nil
-			}
 			return staticError(errCodeXTSE0220,
 				"xsl:import-schema namespace %q does not match schema targetNamespace %q",
 				declaredNS, schema.TargetNamespace())

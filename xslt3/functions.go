@@ -3,8 +3,10 @@ package xslt3
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"path"
@@ -514,6 +516,28 @@ func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI st
 	return nil, fmt.Errorf("no URIResolver configured for %q", resolvedURI)
 }
 
+// schemaFetchAvailable reports whether a resolver / HTTPClient is configured to
+// fetch uri, mirroring retrieveDocumentBytes's config dispatch. When false, a
+// source-schema fetch is a default-deny POLICY DENIAL (not a benign fetch miss),
+// so its failure must stay fatal even under lax validation — the same distinction
+// loadSchemaBytes draws via its c.resolver == nil check.
+func (ec *execContext) schemaFetchAvailable(uri string) bool {
+	var resolver xpath3.URIResolver
+	var httpClient *http.Client
+	if ec.transformConfig != nil {
+		resolver = ec.transformConfig.uriResolver
+		httpClient = ec.transformConfig.httpClient
+	}
+	isHTTP := false
+	if u, err := url.Parse(uri); err == nil {
+		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
+	}
+	if isHTTP {
+		return httpClient != nil || resolver != nil
+	}
+	return resolver != nil
+}
+
 // resourceLimit returns the per-resource read cap for runtime resolver/HTTP
 // reads, taken from the transformConfig (0 = MaxResourceBytes default).
 func (ec *execContext) resourceLimit() int64 {
@@ -542,9 +566,21 @@ func (ec *execContext) injectedParser() *helium.Parser {
 func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {
 	rc, err := r.ResolveURI(uri)
 	if err != nil {
+		// A demotable miss must POSITIVELY signal the resource is ABSENT: tag it
+		// as a resolution miss ([isDemotableSchemaMiss]) ONLY when the resolver's
+		// error satisfies fs.ErrNotExist. An OPAQUE/ambiguous resolver error
+		// (e.g. a bare "HTTP 403", a transport failure) is NOT tagged, so the
+		// positive-tag partition makes it FATAL for schema loaders (fail-closed);
+		// the tag is transparent to non-schema callers (message/chain preserved).
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, markResolutionMiss(err)
+		}
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
+	// A read failure here is POST-OPEN (the reader WAS obtained): return it
+	// UNTAGGED so it is FATAL by the positive-tag partition, never a demotable
+	// miss.
 	return readResourceBounded(rc, limit)
 }
 
@@ -625,12 +661,24 @@ func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string, limit 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		// A transport/connection error (DNS, connection refused, timeout) is
+		// ambiguous — NOT a confirmed not-found — so it stays UNTAGGED and is
+		// therefore FATAL by the positive-tag partition (fail-closed).
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
+		// A definite NOT-FOUND (404/410) is a resolution miss a schema loader may
+		// demote. Every OTHER non-2xx (401/403/5xx/…) is UNTAGGED and therefore
+		// FATAL — an authoritative-but-unavailable/forbidden schema-location must
+		// never be silently demoted.
+		httpErr := fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+			return nil, markResolutionMiss(httpErr)
+		}
+		return nil, httpErr
 	}
+	// A read failure here is POST-OPEN (status was 2xx): UNTAGGED, so FATAL.
 	return readResourceBounded(resp.Body, limit)
 }
 

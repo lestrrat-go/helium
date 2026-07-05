@@ -52,6 +52,7 @@ func TestHasURIScheme(t *testing.T) {
 		{":nohead", false},
 	}
 	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.URIScheme(tc.in) != "", "HasURIScheme(%q)", tc.in)
 		require.Equalf(t, tc.want, uripath.HasURIScheme(tc.in), "in=%q", tc.in)
 	}
 }
@@ -237,5 +238,31 @@ func TestWindowsToFileURI(t *testing.T) {
 	}
 	for _, tc := range cases {
 		require.Equalf(t, tc.want, uripath.WindowsToFileURI(tc.in), "in=%q", tc.in)
+	}
+}
+
+func TestURIScheme(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"http://host/p", "http"},
+		{"HTTPS://host/p", "https"}, // lowercased
+		{"file:///x", "file"},
+		{"urn:isbn:0", "urn"},
+		{"a+b-c.d:rest", "a+b-c.d"},
+		{`C:\x`, ""},    // single-letter scheme is a Windows drive letter
+		{`C:/x`, ""},    // same, with forward slash
+		{`D:`, ""},      // bare drive
+		{"rel.dtd", ""}, // relative reference
+		{"/abs/x", ""},  // POSIX absolute path, no scheme
+		{`\\srv\s`, ""},
+		{"", ""},
+		{"http", ""}, // no colon
+		{":nohead", ""},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.URIScheme(tc.in), "in=%q", tc.in)
 	}
 }

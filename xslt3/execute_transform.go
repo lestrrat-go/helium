@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"errors"
 	"maps"
 	"strings"
 	"time"
@@ -326,12 +325,20 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	runtimeSchemas := collectPackageSchemas(ss)
 	if effectiveSource != nil {
 		sourceSchemas, schemaErr := ec.loadSchemasFromSchemaLocation(ctx, effectiveSource)
-		// A schema-location load failure is normally non-fatal under lax
-		// validation (the source is simply not validated). A resource-limit
-		// breach must NOT be demoted that way, or the cap is defeated for a
-		// schema referenced via xsi:schemaLocation; propagate it regardless of
-		// the validation mode, preserving ErrResourceTooLarge for callers.
-		if schemaErr != nil && (ss.defaultValidation == validationStrict || errors.Is(schemaErr, ErrResourceTooLarge)) {
+		// A source schema-location load applies the SAME positive-tag discipline as
+		// the top-level import-schema path (compileImportSchema) and the nested xsd
+		// loaders. Under lax/default validation the transform proceeds ONLY when the
+		// load error is a CONFIRMED benign resolution miss ([isDemotableSchemaMiss] —
+		// an unresolvable schemaLocation / HTTP 404, best-effort: the source is
+		// simply not validated). EVERYTHING else is fatal even under lax — a CONTENT
+		// error (fetched but malformed XML / invalid XSD), a post-open read failure,
+		// an HTTP 401/403/5xx, or a FATAL load (policy/no-resolver denial,
+		// resource-cap breach, path escape, import-depth overflow,
+		// permission/multi-error) — since masking a broken or policy-denied
+		// authoritative schema would silently skip validation the instance
+		// requested. Strict validation stays fatal on any load failure.
+		if schemaErr != nil && (ss.defaultValidation == validationStrict ||
+			!isDemotableSchemaMiss(schemaErr)) {
 			return nil, schemaErr
 		}
 		runtimeSchemas = mergeRuntimeSchemas(runtimeSchemas, sourceSchemas)

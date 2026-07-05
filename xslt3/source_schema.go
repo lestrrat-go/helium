@@ -35,7 +35,10 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 			for i := 1; i < len(fields); i += 2 {
 				resolved, err := resolveSchemaURI(fields[i], baseURI)
 				if err != nil {
-					return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w", fields[i], baseURI, err)
+					// A malformed schema-location reference is authoritatively broken,
+					// not a benign fetch miss — tag it content-invalid so it stays fatal
+					// even under lax validation.
+					return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w: %w", fields[i], baseURI, errSchemaContentInvalid, err)
 				}
 				if resolved == "" {
 					continue
@@ -50,7 +53,10 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 			ref := strings.TrimSpace(attr.Value())
 			resolved, err := resolveSchemaURI(ref, baseURI)
 			if err != nil {
-				return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w", ref, baseURI, err)
+				// A malformed schema-location reference is authoritatively broken, not a
+				// benign fetch miss — tag it content-invalid so it stays fatal even under
+				// lax validation.
+				return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w: %w", ref, baseURI, errSchemaContentInvalid, err)
 			}
 			if resolved == "" {
 				continue
@@ -67,11 +73,44 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		return nil, nil
 	}
 
+	// AGGREGATING loop: a demotable fetch miss on one entry must not short-circuit
+	// the loop, because a LATER entry may be an authoritative CONTENT error
+	// (malformed XML / invalid XSD) or POLICY/CAP breach that must stay fatal even
+	// under lax validation, or a valid schema to load best-effort. Only a genuine
+	// untagged fetch miss is recorded (the FIRST one) and skipped; every fatal /
+	// content error returns eagerly, preserving the schemas loaded so far. This
+	// mirrors the accumulate-then-break shape of the xsd loaders (override.go
+	// overrideProcessNested, compile_imports.go processIncludes). The caller
+	// (execute_transform.go) then classifies the aggregated result: a fatal/content
+	// error stays fatal, a pure miss is demoted under lax, and the partial schemas
+	// merge best-effort.
 	schemas := make([]*xsd.Schema, 0, len(paths))
+	var firstMiss error
 	for _, uri := range paths {
 		data, err := ec.retrieveDocumentBytes(ctx, uri)
 		if err != nil {
-			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
+			// Phase-tag the fetch failure so the caller's fetch/content/denial
+			// taxonomy classifies it. With no resolver/HTTPClient configured this is a
+			// default-deny POLICY DENIAL (tagged errSchemaResolverDenied) that stays
+			// fatal even under lax validation.
+			if !ec.schemaFetchAvailable(uri) {
+				return schemas, fmt.Errorf("load source schema %q: %w: %w", uri, errSchemaResolverDenied, err)
+			}
+			wrapped := fmt.Errorf("load source schema %q: %w", uri, err)
+			// POSITIVE-TAG discipline (mirrors the xsd nested classifier): ONLY a
+			// CONFIRMED benign resolution miss ([isDemotableSchemaMiss] — an
+			// unresolvable schemaLocation / HTTP 404) is demotable under lax and is
+			// recorded (FIRST only) without short-circuiting the aggregating loop.
+			// EVERYTHING else — a post-open read failure, an HTTP 401/403/5xx, a
+			// resource-cap breach, a permission/multi-error, or any untagged/ambiguous
+			// error — is FATAL and returns EAGERLY so a later entry cannot mask it.
+			if !isDemotableSchemaMiss(wrapped) {
+				return schemas, wrapped
+			}
+			if firstMiss == nil {
+				firstMiss = wrapped
+			}
+			continue
 		}
 		// Parse with the schema's own URI as the base so doc.URL() carries the
 		// canonical location, mirroring compileSchemaFromURI. The xsd compiler's
@@ -81,7 +120,9 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// is re-parsed into duplicate components instead of being skipped.
 		schemaDoc, err := secureXMLParser(ec.injectedParser(), uri, ec.resourceLimit()).Parse(ctx, data)
 		if err != nil {
-			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
+			// Malformed XML — a post-fetch CONTENT error (the bytes were fetched but
+			// are unusable), tagged so lax validation cannot mask it.
+			return schemas, fmt.Errorf("parse source schema %q: %w: %w", uri, errSchemaContentInvalid, err)
 		}
 		// Root the XSD compiler's base directory at the schema's location so
 		// the schema's own relative xs:include/xs:import references resolve,
@@ -94,11 +135,18 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		}
 		schema, err := schemaCompiler.Compile(ctx, schemaDoc)
 		if err != nil {
-			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
+			// Invalid XSD (or a fatal nested load the xsd compiler surfaced) — a
+			// post-fetch CONTENT error, tagged so lax validation cannot mask it. A
+			// nested fatal-load marker in err (e.g. a resource-cap breach or policy
+			// denial on a nested xs:include/xs:import) survives the join, so
+			// isFatalSchemaLoadError still recognizes it.
+			return schemas, fmt.Errorf("compile source schema %q: %w: %w", uri, errSchemaContentInvalid, err)
 		}
 		schemas = append(schemas, schema)
 	}
-	return schemas, nil
+	// Every schema that loaded, plus at most the first genuine fetch miss (nil when
+	// all entries loaded). The caller demotes a pure miss under lax.
+	return schemas, firstMiss
 }
 
 // collectPackageSchemas returns the schemas of ss followed by the schemas of

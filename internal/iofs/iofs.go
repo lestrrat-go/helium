@@ -3,6 +3,7 @@
 package iofs
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -10,7 +11,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -40,6 +43,43 @@ type PermissiveRoot struct{}
 
 // Open implements [fs.FS].
 func (PermissiveRoot) Open(name string) (fs.File, error) {
+	// A non-file-scheme absolute URI (http://, https://, urn:, ...) is first
+	// handed to os.Open exactly like any other name. That preserves the public
+	// PermissiveFS contract for real local filenames that merely LOOK URI-shaped
+	// (for example "urn:cache-key"). If the local open fails with a not-found or
+	// invalid-name errno, canonicalize that URI-shaped resolution miss to
+	// fs.ErrNotExist so optional schemaLocation hints are classified consistently
+	// across platforms; permission and other real local errors pass through.
+	//
+	// A "file:" URI IS a local resource, but os.Open of the literal "file:///abs"
+	// string opens a file whose NAME is that string (which never exists). CONVERT
+	// it to a local filesystem path first (percent-decode, "file:///abs" -> "/abs",
+	// Windows "file:///C:/x" -> "C:\\x"), so a valid file:/// include LOADS and a
+	// MISSING one yields os.Open's own ENOENT (a demotable resolution miss). A
+	// malformed/UNC/non-local file URI is not a servable local resource: return it
+	// as a NON-fs.ErrNotExist PathError so it stays FATAL (fail-closed), never
+	// silently demoted as an absent optional include.
+	//
+	// A genuinely-local path (no scheme, or a Windows drive-letter path such as
+	// "C:\\x", whose single-letter "scheme" URIScheme rejects) still reaches
+	// os.Open and returns its real errno, so a malformed LOCAL path stays fatal.
+	if s := uripath.URIScheme(name); s != "" {
+		if s != "file" {
+			f, err := os.Open(name) //nolint:gosec // intentional passthrough; see type doc
+			if err == nil {
+				return f, nil
+			}
+			if errors.Is(err, fs.ErrNotExist) || isInvalidNameOpenError(runtime.GOOS, err) {
+				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+			}
+			return nil, err //nolint:wrapcheck // intentional passthrough; see type doc
+		}
+		p, err := FileURIToPath(name)
+		if err != nil {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		}
+		name = p
+	}
 	return os.Open(name) //nolint:gosec,wrapcheck // intentional passthrough; see type doc
 }
 
@@ -57,6 +97,19 @@ type DenyAll struct{}
 // present.
 func (DenyAll) Open(name string) (fs.File, error) {
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+const windowsInvalidNameCode = 123
+
+func isInvalidNameOpenError(goos string, err error) bool {
+	if errors.Is(err, fs.ErrInvalid) {
+		return true
+	}
+	if goos != goosWindows {
+		return false
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && errno == syscall.Errno(windowsInvalidNameCode)
 }
 
 // FileURIToPath converts a "file:" URI into a local filesystem path. It mirrors

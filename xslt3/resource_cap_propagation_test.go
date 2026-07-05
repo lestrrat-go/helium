@@ -400,6 +400,58 @@ func TestImportSchemaOverCapNotMaskedByPrecompiledFallback(t *testing.T) {
 		"over-cap import-schema must surface ErrResourceTooLarge, not silently fall back to ImportSchemas")
 }
 
+// A top-level xsl:import-schema with a schema-location but NO Compiler.URIResolver
+// must FAIL compilation with the default-deny denial even when a pre-compiled
+// schema for the SAME target namespace was registered via Compiler.ImportSchemas.
+// The denial ("no URIResolver configured") is a policy refusal, not a fetch miss,
+// so it must NOT be papered over by the pre-compiled fallback — doing so would let
+// a no-resolver schema-location silently compile via the registered schema,
+// bypassing the secure-by-default policy.
+func TestImportSchemaNoResolverNotMaskedByPrecompiledFallback(t *testing.T) {
+	t.Parallel()
+
+	const baseURI = "mem://stylesheets/main.xsl"
+	const ns = "http://example.com/s"
+
+	// A small, valid pre-compiled schema for the same namespace, registered as a
+	// fallback via Compiler.ImportSchemas.
+	preSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="` + ns + `"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="` + ns + `">
+  <xsl:import-schema namespace="` + ns + `" schema-location="s.xsd"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	preDoc, err := helium.NewParser().Parse(ctx, []byte(preSchema))
+	require.NoError(t, err)
+	precompiled, err := xsd.NewCompiler().Compile(ctx, preDoc)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+
+	// No URIResolver: the schema-location load is a default-deny policy refusal.
+	// The registered pre-compiled schema must NOT mask it.
+	_, err = xslt3.NewCompiler().
+		BaseURI(baseURI).
+		ImportSchemas(precompiled).
+		Compile(ctx, doc)
+	require.Error(t, err,
+		"no-resolver import-schema schema-location must fail even with a pre-compiled fallback registered")
+	require.Contains(t, err.Error(), "no URIResolver configured",
+		"the default-deny denial message must surface, not a silent fallback to ImportSchemas")
+}
+
 // An xsl:import-schema whose schema-location loads fine but whose NESTED
 // xs:include escapes its base directory via "../" must FAIL compilation, even
 // when a pre-compiled schema for the SAME target namespace is registered via
