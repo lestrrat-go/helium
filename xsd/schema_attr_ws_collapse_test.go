@@ -445,7 +445,7 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 		name   string
 		schema string
 	}{
-		{"empty", `<xs:simpleType name="st"><xs:list itemType=""/></xs:simpleType>`},
+		{testLabelEmpty, `<xs:simpleType name="st"><xs:list itemType=""/></xs:simpleType>`},
 		{"ws", `<xs:simpleType name="st"><xs:list itemType="   "/></xs:simpleType>`},
 	}
 	for _, tc := range itemTypeEmpty {
@@ -647,7 +647,7 @@ func TestCheckElementsRepresentationGateSymmetry(t *testing.T) {
 			wantQName, wantNCName, []string{wantMutEx}},
 	}
 	for _, tc := range symmetric {
-		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", wsName}} {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {testLabelWhitespaceOnly, wsName}} {
 			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
 				t.Parallel()
 				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
@@ -753,7 +753,7 @@ func TestReadParticlesTypesNameProhibitionGateSymmetry(t *testing.T) {
 	for _, tc := range gates {
 		// present-empty ≡ whitespace-only: each yields exactly one invalid-NCName
 		// value diagnostic and no structural prohibition secondary.
-		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {testLabelWhitespaceOnly, "   "}} {
 			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
 				t.Parallel()
 				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
@@ -847,7 +847,7 @@ func TestDerivationBodyAndAlternativeQNameGateSymmetry(t *testing.T) {
 	}
 
 	for _, tc := range gates {
-		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {testLabelWhitespaceOnly, "   "}} {
 			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
 				t.Parallel()
 				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,

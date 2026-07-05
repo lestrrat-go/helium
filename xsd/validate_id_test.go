@@ -703,7 +703,7 @@ func TestIDConstraintRefFormCompanionSymmetry(t *testing.T) {
 		{"refer", `<xs:unique ref="u" refer="%s"/>`, wantQName, wantNCName},
 	}
 	for _, tc := range valueCases {
-		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {testLabelWhitespaceOnly, "   "}} {
 			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
 				t.Parallel()
 				errs, cerr := compile(t, fmt.Sprintf(tc.idcFmt, val.v))

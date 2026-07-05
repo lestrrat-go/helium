@@ -27,7 +27,7 @@ func TestAttribute_NameMustBeNCName(t *testing.T) {
 		name string
 		attr string
 	}{
-		{"empty", `<xs:attribute name=""/>`},
+		{testLabelEmpty, `<xs:attribute name=""/>`},
 		{"leading-digit", `<xs:attribute name="0"/>`},
 		{"apostrophe", `<xs:attribute name="&apos;"/>`},
 		{"colon-declared-prefix", `<xs:attribute name="a:b"/>`},

@@ -193,8 +193,8 @@ func TestIDConstraintFullFormNameCollapseEmptyIsInvalidNCName(t *testing.T) {
 		name     string
 		nameAttr string
 	}{
-		{"empty", `name=""`},
-		{"whitespace-only", `name="   "`},
+		{testLabelEmpty, `name=""`},
+		{testLabelWhitespaceOnly, `name="   "`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
