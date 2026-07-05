@@ -1624,6 +1624,61 @@ func xsiProcessorAttrBuiltinType(local string) (QName, bool) {
 	return QName{}, false
 }
 
+// xmlNamespaceAttrType returns the built-in *TypeDef that governs a declared
+// XML-namespace attribute use (a ref to xml:base/xml:lang/xml:space/xml:id),
+// per the standard xml: namespace schema (http://www.w3.org/2001/xml.xsd), or
+// nil when local is not one of them. These attributes are implicitly available
+// and never appear as user-declared global attributes, so a ref to one resolves
+// to no global; associating the type lets a DECLARED xml: use validate its
+// instance value (validateAttributes' declaredXML path) instead of skipping the
+// value check. The mappings: xml:base→xs:anyURI, xml:id→xs:ID, xml:space→a
+// restriction of xs:NCName enumerated {default, preserve}, xml:lang→a union of
+// xs:language and the empty string.
+func xmlNamespaceAttrType(local string, s *Schema) *TypeDef {
+	builtin := func(name string) *TypeDef {
+		td, _ := s.LookupType(name, lexicon.NamespaceXSD)
+		return td
+	}
+	switch local {
+	case lexicon.AttrBase:
+		return builtin(lexicon.TypeAnyURI)
+	case lexicon.AttrID:
+		return builtin(typeID)
+	case lexicon.AttrSpace:
+		base := builtin(typeNCName)
+		if base == nil {
+			return nil
+		}
+		return &TypeDef{
+			Name:        QName{Local: lexicon.AttrSpace, NS: lexicon.NamespaceXML},
+			ContentType: ContentTypeSimple,
+			BaseType:    base,
+			Facets:      &FacetSet{Enumeration: []string{"default", "preserve"}},
+		}
+	case lexicon.AttrLang:
+		lang := builtin(typeLanguage)
+		str := builtin(lexicon.TypeString)
+		if lang == nil || str == nil {
+			return nil
+		}
+		// xml.xsd defines xml:lang as a union of xs:language and a one-value
+		// enumeration of the empty string (an empty xml:lang is legal).
+		emptyMember := &TypeDef{
+			Name:        QName{Local: "langEmpty", NS: lexicon.NamespaceXML},
+			ContentType: ContentTypeSimple,
+			BaseType:    str,
+			Facets:      &FacetSet{Enumeration: []string{""}},
+		}
+		return &TypeDef{
+			Name:        QName{Local: lexicon.AttrLang, NS: lexicon.NamespaceXML},
+			ContentType: ContentTypeSimple,
+			Variety:     TypeVarietyUnion,
+			MemberTypes: []*TypeDef{lang, emptyMember},
+		}
+	}
+	return nil
+}
+
 // xsiSchemaLocationTokens collapses a value in XSD whitespace and splits it on
 // XSD list whitespace ONLY (space/tab/CR/LF via value.XSDFields — NBSP and
 // other Unicode whitespace are NOT separators), yielding the

@@ -175,3 +175,49 @@ func TestProhibitedAttributeUse(t *testing.T) {
 			"must be 'optional' if the attribute 'default' is present")
 	})
 }
+
+// TestDeclaredXMLAttributeValue verifies that in XSD 1.0 a declared
+// XML-namespace attribute use (a ref to xml:base/xml:lang/xml:space/xml:id) not
+// only satisfies its presence requirement but also has its VALUE validated
+// against the standard xml: namespace type — xml:space against the {default,
+// preserve} enumeration, xml:lang against the union of xs:language and the empty
+// string, xml:base against xs:anyURI, and xml:id against xs:ID. (In XSD 1.1 xml:
+// attributes are not special and are handled by the ordinary ref path.)
+func TestDeclaredXMLAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	schema := func(local, use string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="xml:` + local + `" use="` + use + `"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	}
+
+	t.Run("xml:space enumeration is enforced", func(t *testing.T) {
+		t.Parallel()
+		s := schema("space", "required")
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:space="preserve"/>`))
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:space="default"/>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:space="bogus"/>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("xml:lang language value is enforced", func(t *testing.T) {
+		t.Parallel()
+		s := schema("lang", "required")
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:lang="en-US"/>`))
+		// The empty string is a legal xml:lang (the union's second member).
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:lang=""/>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:lang="en US"/>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("xml:base accepts a URI and xml:id validates as ID", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema("base", "required"), `<root xml:base="a"/>`))
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="i1"/>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="1bad"/>`), xsd.ErrValidationFailed)
+	})
+}
