@@ -1487,7 +1487,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	children := collectChildElements(elem)
 
 	if oc.Mode == OpenContentSuffix {
-		consumed, err := vc.matchContentModelSuffix(ctx, elem, mg, children)
+		consumed, err := vc.matchContentModelSuffix(ctx, elem, mg, oc.Wildcard, children)
 		if err != nil {
 			return err
 		}
@@ -1617,11 +1617,52 @@ func (vc *validationContext) refineInterleavePartition(ctx context.Context, elem
 // content). For an xs:all group it uses the lenient member matcher so a trailing
 // open-content child does not abort the all match; for sequence/choice the normal
 // matcher already stops at the first non-matching child.
-func (vc *validationContext) matchContentModelSuffix(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) (int, error) {
+func (vc *validationContext) matchContentModelSuffix(ctx context.Context, parent *helium.Element, mg *ModelGroup, wc *Wildcard, children []childElem) (int, error) {
 	if mg.Compositor == CompositorAll && vc.version == Version11 {
 		return vc.matchAll11(ctx, parent, mg, children, 0, mg, true)
 	}
+	_, tryErr := vc.tryMatchModelGroup(ctx, mg, children, 0)
+	if tryErr == nil {
+		return vc.matchContentModel(ctx, parent, mg, children)
+	}
+	if consumed, ok := vc.contentModelSuffixEndpoint(ctx, mg, wc, children); ok {
+		if err := vc.validateContentModelTop(ctx, parent, mg, children[:consumed]); err != nil {
+			return consumed, err
+		}
+		return consumed, nil
+	}
 	return vc.matchContentModel(ctx, parent, mg, children)
+}
+
+func (vc *validationContext) contentModelSuffixEndpoint(ctx context.Context, mg *ModelGroup, wc *Wildcard, children []childElem) (int, bool) {
+	ends := vc.contentModelEndpoints(ctx, mg, children)
+	if len(ends) == 0 {
+		return 0, false
+	}
+	declaredNames := collectEmittingModelElementNames(mg, vc.schema)
+	slices.Sort(ends)
+	for i := len(ends) - 1; i >= 0; i-- {
+		end := ends[i]
+		if end > len(children) {
+			continue
+		}
+		if suffixOpenStructurallyAllowed(wc, children[end:], declaredNames, vc.schema) {
+			return end, true
+		}
+	}
+	return 0, false
+}
+
+func suffixOpenStructurallyAllowed(wc *Wildcard, children []childElem, declaredNames map[QName]bool, schema *Schema) bool {
+	for _, ch := range children {
+		if declaredNames[QName{Local: ch.name, NS: ch.ns}] {
+			return false
+		}
+		if !wildcardAllowsExpandedName(wc, ch.name, ch.ns, schema, false) {
+			return false
+		}
+	}
+	return true
 }
 
 // validateOpenChildren validates a set of open-content child elements against the

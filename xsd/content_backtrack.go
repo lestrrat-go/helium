@@ -30,31 +30,34 @@ import (
 // stands — fail-closed, since the backtracker only ever runs after greedy already
 // failed. All three conditions must hold:
 //
-//  1. WILDCARD-FREE (no xs:any at any depth). Otherwise a looser automaton would
-//     have to re-implement every XSD 1.1 element-over-wildcard precedence rule
-//     (choice commit-no-fallback, sequence reservation, xs:all attribution) to
-//     avoid admitting an instance the greedy matcher correctly rejects. With no
-//     wildcards, element-over-wildcard precedence can never arise.
+//  1. EMITTING-WILDCARD-FREE (no child-consuming xs:any at any depth).
+//     Otherwise a looser automaton would have to re-implement every XSD 1.1
+//     element-over-wildcard precedence rule (choice commit-no-fallback, sequence
+//     reservation, xs:all attribution) to avoid admitting an instance the greedy
+//     matcher correctly rejects. A maxOccurs=0 wildcard emits nothing and is
+//     skip-only, like a prohibited element, so it is allowed.
 //  2. UNAMBIGUOUS name→declaration: no two DISTINCT element-declaration leaves
 //     share a name. A UPA-clean model may still contain two same-name local
 //     declarations that differ in nillable/fixed/default (e.g. positional
 //     sequence(a nillable=true, a nillable=false)); first-name-match would
 //     misattribute the second child to the first declaration.
 //  3. NO substitution complication: no element leaf is a substitution-group head
-//     with members. A child matching via a differently-named substitution member
-//     (possibly differing in nillable/type) could be misattributed by
-//     first-name-match.
+//     with INSTANCE-admissible members. A child matching via a differently-named
+//     concrete substitution member (possibly differing in nillable/type) could be
+//     misattributed by first-name-match. Abstract-only declaration members cannot
+//     match an instance and do not disable the fallback.
 //
 // Within the envelope every child's element name selects its UNIQUE declaration,
 // so a wildcard-free UPA-deterministic content model's reachability automaton
 // accepts exactly its regular language and validateContentModelChildren validates
-// each child against the same declaration the real matcher would.
+// each child against the same emitting declaration the real matcher would.
 //
 // It uses the SAME per-child predicate as the greedy matcher
 // (elemMatchesDeclOrSubst), so it models exactly the greedy content-model
-// language and never accepts a non-member. `xs:all` groups are matched greedily
-// (deterministic per-member counting, no occurrence backtracking), which is
-// conservative: it can only fail to prove, never over-accept.
+// language and never accepts a non-member. Prohibited wildcards are skip-only and
+// never consume. `xs:all` groups are matched greedily (deterministic per-member
+// counting, no occurrence backtracking), which is conservative: it can only fail
+// to prove, never over-accept.
 
 const btStateCap = 200000
 
@@ -79,33 +82,47 @@ type btMemo struct {
 // routes a child through, while a maxOccurs=0 particle inside an xs:choice still
 // contributes the empty (ε) branch — keeping a nullable choice nullable.
 func (vc *validationContext) contentModelAccepts(ctx context.Context, mg *ModelGroup, children []childElem) bool {
+	return slices.Contains(vc.contentModelEndpoints(ctx, mg, children), len(children))
+}
+
+// contentModelEndpoints returns every child index reachable after matching mg
+// under some occurrence partition. It is pure and fail-closed: models outside the
+// engagement envelope, or capped searches, return nil.
+func (vc *validationContext) contentModelEndpoints(ctx context.Context, mg *ModelGroup, children []childElem) []int {
 	if !inBacktrackEnvelope(mg, vc.schema) {
-		return false
+		return nil
 	}
 	m := &btMemo{cache: make(map[reachKey][]int)}
 	ends := vc.btReachGroup(ctx, m, mg, children)
 	if m.capped {
-		return false
+		return nil
 	}
-	return slices.Contains(ends, len(children))
+	return ends
 }
 
 // inBacktrackEnvelope reports whether mg is inside the backtracker's provably-safe
-// engagement envelope: wildcard-free, with an unambiguous name→declaration
-// mapping (no two distinct element-declaration leaves sharing a name), and no
-// substitution-group head with members. See the file-level comment for why each
-// condition is required for the element-only first-name-match design to be sound.
+// engagement envelope: emitting-wildcard-free, with an unambiguous
+// name→declaration mapping (no two distinct emitting element-declaration leaves
+// sharing a name), and no substitution-group head with instance-admissible
+// members. See the file-level comment for why each condition is required for the
+// element-only first-name-match design to be sound.
 func inBacktrackEnvelope(mg *ModelGroup, schema *Schema) bool {
 	return envelopeWalk(mg, schema, make(map[QName]*ElementDecl))
 }
 
 func envelopeWalk(mg *ModelGroup, schema *Schema, byName map[QName]*ElementDecl) bool {
+	if mg == nil || mg.MaxOccurs == 0 {
+		return true
+	}
 	for _, p := range mg.Particles {
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		switch term := p.Term.(type) {
 		case *Wildcard:
 			return false
 		case *ElementDecl:
-			if len(substitutableMembersFor(term, schema)) > 0 {
+			if len(instanceSubstMembers(term, schema)) > 0 {
 				return false
 			}
 			prev, seen := byName[term.Name]
@@ -138,6 +155,9 @@ func (vc *validationContext) btReachParticle(ctx context.Context, m *btMemo, p *
 	if m.capped {
 		return nil
 	}
+	if p.MaxOccurs == 0 {
+		return []int{pos}
+	}
 	key := reachKey{p: p, pos: pos}
 	if v, ok := m.cache[key]; ok {
 		return v
@@ -155,9 +175,11 @@ func (vc *validationContext) btReachParticle(ctx context.Context, m *btMemo, p *
 		// A group particle's occurrence lives on the ModelGroup term (matchParticle
 		// reads term.MinOccurs/MaxOccurs, not p's), so delegate to the group reach.
 		out = vc.btReachGroupAt(ctx, m, term, children, pos)
+	case *Wildcard:
+		// Only prohibited wildcards can reach here; emitting wildcards are outside
+		// the engagement envelope. A prohibited wildcard is skip-only.
+		out = []int{pos}
 	}
-	// A *Wildcard term cannot occur: contentModelAccepts gates out wildcard-bearing
-	// models before any reach runs.
 	m.cache[key] = out
 	return out
 }
@@ -372,10 +394,16 @@ func (vc *validationContext) validateContentModelChildren(ctx context.Context, p
 }
 
 // collectElementLeaves gathers every element leaf declaration in the model group
-// tree, in document order. The model is wildcard-free, so there are no wildcard
-// leaves to collect.
+// tree, in document order. The model is emitting-wildcard-free, so there are no
+// child-consuming wildcard leaves to collect.
 func collectElementLeaves(mg *ModelGroup, leaves *[]*ElementDecl) {
+	if mg == nil || mg.MaxOccurs == 0 {
+		return
+	}
 	for _, p := range mg.Particles {
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		switch term := p.Term.(type) {
 		case *ElementDecl:
 			*leaves = append(*leaves, term)

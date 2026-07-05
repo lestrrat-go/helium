@@ -282,6 +282,58 @@ func TestContentBacktrackProhibitedChoiceBranch(t *testing.T) {
 	})
 }
 
+func TestContentBacktrackProhibitedWildcard(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="x" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:any processContents="skip" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/></root>`))
+	require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><y/></root>`))
+}
+
+func TestContentBacktrackAbstractOnlySubstitutionMember(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="h" type="xs:string"/>
+  <xs:element name="m" type="xs:string" abstract="true" substitutionGroup="h"/>
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence minOccurs="2" maxOccurs="2">
+      <xs:element ref="h" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><h/><h/></root>`))
+}
+
+func TestContentBacktrackSuffixOpenContentPrefix(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:openContent mode="suffix">
+      <xs:any namespace="urn:o" processContents="skip"/>
+    </xs:openContent>
+    <xs:sequence minOccurs="2" maxOccurs="2">
+      <xs:element name="a" type="xs:string" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+
+	require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root xmlns:o="urn:o"><a/><a/><o:x/></root>`))
+	require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root xmlns:o="urn:o"><a/><o:x/><a/></root>`))
+}
+
 // TestGreedyProhibitedParticle verifies the GREEDY matcher (the common path, no
 // backtracking) never lets a maxOccurs=0 (prohibited) element particle consume a
 // child, in BOTH XSD 1.0 and 1.1 — matchElementParticle/tryMatchElementParticle
