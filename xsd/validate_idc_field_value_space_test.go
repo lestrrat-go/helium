@@ -1214,6 +1214,263 @@ func TestIDCFieldQNameNoDefaultNamespace(t *testing.T) {
 	}
 }
 
+// TestIDCFieldCrossPrimitiveTyping covers cvc-identity-constraint.3 value equality
+// across DISTINCT primitive datatypes: two field values are equal iff they are the
+// same value in the SAME primitive. `uid` is xs:anyType, so xsi:type governs each
+// item's type; the field key is tagged with the value's primitive base, so
+// equal-looking values in different primitives do NOT collide, while values sharing
+// a primitive (xs:int vs xs:integer, both xs:decimal-derived) still do. Mirrors W3C
+// idF012/idF013/idF014/idL090.
+func TestIDCFieldCrossPrimitiveTyping(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="uid" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="uuid">
+      <xs:selector xpath=".//uid"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+  <xs:element name="uid" type="xs:anyType"/>
+</xs:schema>`
+
+	const xsiNS = ` xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// boolean 1 vs decimal 1 — different primitives, no collision (idF012).
+			name:     "boolean 1 and decimal 1 distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:boolean">1</uid><uid xsi:type="xs:decimal">1</uid></root>`,
+			valid:    true,
+		},
+		{
+			// float 1 vs decimal 1 — float is its own primitive (idF013).
+			name:     "float 1 and decimal 1 distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:float">1</uid><uid xsi:type="xs:decimal">1</uid></root>`,
+			valid:    true,
+		},
+		{
+			// float 1 vs unsignedByte 1 — float vs decimal primitive (idF014).
+			name:     "float 1 and unsignedByte 1 distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:float">1</uid><uid xsi:type="xs:unsignedByte">1</uid></root>`,
+			valid:    true,
+		},
+		{
+			// string 1 vs decimal 1 — string vs decimal primitive (idL090 shape).
+			name:     "string 1 and decimal 1 distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:string">1</uid><uid xsi:type="xs:decimal">1</uid></root>`,
+			valid:    true,
+		},
+		{
+			// Built-in xs:NMTOKENS is registered as a flat built-in placeholder, but
+			// its value space is a list, distinct from atomic xs:string.
+			name:     "nmtokens a b and string a b distinct list and atomic",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:NMTOKENS">a b</uid><uid xsi:type="xs:string">a b</uid></root>`,
+			valid:    true,
+		},
+		{
+			// A one-item list is still a list value, not the same atomic value as its item.
+			name:     "nmtokens a and nmtoken a distinct list and atomic",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:NMTOKENS">a</uid><uid xsi:type="xs:NMTOKEN">a</uid></root>`,
+			valid:    true,
+		},
+		{
+			// The same built-in list type still compares item-by-item in value space.
+			name:     "nmtokens collapsed list values collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:NMTOKENS">a b</uid><uid xsi:type="xs:NMTOKENS"> a  b </uid></root>`,
+			valid:    false,
+		},
+		{
+			// int 1 vs integer 1 — SAME primitive (xs:decimal), same value → collide.
+			name:     "int 1 and integer 1 same primitive collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:int">1</uid><uid xsi:type="xs:integer">1</uid></root>`,
+			valid:    false,
+		},
+		{
+			// decimal 1 vs decimal +1 — same primitive, same value → collide.
+			name:     "decimal 1 and decimal +1 collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:decimal">1</uid><uid xsi:type="xs:decimal">+1</uid></root>`,
+			valid:    false,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCFieldDerivedBuiltinPrimitiveTyping covers the XSD 1.1 derived builtins that
+// share a primitive with a base builtin: xs:dayTimeDuration/xs:yearMonthDuration fold
+// to the xs:duration primitive and xs:dateTimeStamp folds to xs:dateTime, so a
+// lexically-distinct but value-equal pair across the two types COLLIDES for
+// xs:unique, while a genuinely distinct primitive (duration vs dateTime, float vs
+// double, date vs dateTime) stays apart. Compiled at XSD 1.1 for the 1.1-only types.
+func TestIDCFieldDerivedBuiltinPrimitiveTyping(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="uid" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="uuid">
+      <xs:selector xpath=".//uid"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+  <xs:element name="uid" type="xs:anyType"/>
+</xs:schema>`
+
+	const xsiNS = ` xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// duration P1D vs dayTimeDuration PT24H — same primitive (duration), same
+			// value (86400s), lexically distinct → collide.
+			name:     "duration and dayTimeDuration same value collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:duration">P1D</uid><uid xsi:type="xs:dayTimeDuration">PT24H</uid></root>`,
+			valid:    false,
+		},
+		{
+			// dayTimeDuration PT24H vs yearMonthDuration P1Y — both fold to duration, but
+			// 86400s vs 12 months are distinct values → no collision.
+			name:     "dayTimeDuration and yearMonthDuration distinct values",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:dayTimeDuration">PT24H</uid><uid xsi:type="xs:yearMonthDuration">P1Y</uid></root>`,
+			valid:    true,
+		},
+		{
+			// dateTime vs dateTimeStamp same instant — dateTimeStamp folds to dateTime →
+			// collide.
+			name:     "dateTime and dateTimeStamp same instant collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:dateTime">2020-01-01T00:00:00Z</uid><uid xsi:type="xs:dateTimeStamp">2020-01-01T00:00:00Z</uid></root>`,
+			valid:    false,
+		},
+		{
+			// duration P1D vs dateTime — distinct primitives, no collision.
+			name:     "duration and dateTime distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:duration">P1D</uid><uid xsi:type="xs:dateTime">2020-01-01T00:00:00Z</uid></root>`,
+			valid:    true,
+		},
+		{
+			// float 1 vs double 1 — distinct primitives, no collision.
+			name:     "float 1 and double 1 distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:float">1</uid><uid xsi:type="xs:double">1</uid></root>`,
+			valid:    true,
+		},
+		{
+			// date vs dateTime — distinct primitives, no collision.
+			name:     "date and dateTime distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:date">2020-01-01</uid><uid xsi:type="xs:dateTime">2020-01-01T00:00:00Z</uid></root>`,
+			valid:    true,
+		},
+	}
+
+	v := compileValidatorVersion(t, schema, true)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCUnionActiveMemberVersion covers the IDC union active-member selection
+// resolving under the SCHEMA'S version. A union(xs:float, xs:string) field over an
+// xs:unique: "INF" is a valid xs:float lexical in both versions, but "+INF" is a
+// valid xs:float lexical ONLY in XSD 1.1. So under 1.1 both values select xs:float
+// (same primitive, same value INF) and COLLIDE → invalid; under 1.0 "+INF" is not a
+// float and falls through to xs:string (distinct primitive from the float "INF") →
+// valid. Before the version was threaded into typeAcceptsValue, the throwaway
+// context defaulted to 1.0 and the 1.1 duplicate was missed.
+func TestIDCUnionActiveMemberVersion(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="floatOrString">
+    <xs:union memberTypes="xs:float xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="floatOrString" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	const instance = `<root><item>INF</item><item>+INF</item></root>`
+
+	cases := []struct {
+		name  string
+		v11   bool
+		valid bool
+	}{
+		// 1.0: "+INF" is not a float lexical → xs:string; float "INF" vs string "+INF"
+		// are distinct primitives → no collision.
+		{name: "xsd10 INF and +INF distinct", v11: false, valid: true},
+		// 1.1: "+INF" is a valid float → both xs:float, same value INF → collide.
+		{name: "xsd11 INF and +INF collide", v11: true, valid: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			v := compileValidatorVersion(t, schema, tc.v11)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error (duplicate)")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))

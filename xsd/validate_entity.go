@@ -129,7 +129,7 @@ func (vc *validationContext) checkEntityValue(ctx context.Context, doc *helium.D
 		}
 		return valid
 	case TypeVarietyUnion:
-		m := unionActiveMember(ctx, raw, fieldNode, td)
+		m := vc.unionActiveMember(ctx, raw, fieldNode, td)
 		if m == nil {
 			return true
 		}

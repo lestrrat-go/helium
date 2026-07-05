@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -368,7 +369,7 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			// "5 6"/"+5 06") compare equal. Falls back to the raw value when the
 			// type cannot be resolved.
 			fieldTD := vc.resolveFieldType(fieldNode, elem, edecl, schema)
-			entry.canon = append(entry.canon, canonicalFieldKey(ctx, value, fieldNode, fieldTD))
+			entry.canon = append(entry.canon, vc.canonicalFieldKey(ctx, value, fieldNode, fieldTD))
 		}
 
 		if allPresent {
@@ -471,11 +472,11 @@ func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTa
 //   - union fields resolve the active member (first member the value validates
 //     against, per validateUnionValue) and canonicalize in that member's value
 //     space, so a value whose active member is xs:string stays lexically distinct.
-func canonicalFieldKey(ctx context.Context, raw string, fieldNode helium.Node, typeDef *TypeDef) string {
+func (vc *validationContext) canonicalFieldKey(ctx context.Context, raw string, fieldNode helium.Node, typeDef *TypeDef) string {
 	if typeDef == nil {
 		return raw
 	}
-	return canonicalValueKey(ctx, raw, fieldNode, typeDef)
+	return vc.canonicalValueKey(ctx, raw, fieldNode, typeDef)
 }
 
 // canonicalValueKey canonicalizes raw in the value space of td, dispatching on
@@ -483,7 +484,7 @@ func canonicalFieldKey(ctx context.Context, raw string, fieldNode helium.Node, t
 // context needed to resolve QName/NOTATION prefixes; it may be nil, in which case
 // only the field node's own bindings are unavailable and lexical-only fallback
 // applies for QName-family types.
-func canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, td *TypeDef) string {
+func (vc *validationContext) canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, td *TypeDef) string {
 	// Dispatch on the RESOLVED variety, walking restriction derivations: a
 	// restriction whose base is an inline list/union keeps Variety==Atomic on the
 	// derived TypeDef, so switching on td.Variety alone would mis-route it to the
@@ -497,16 +498,7 @@ func canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, t
 		if item == nil {
 			return raw
 		}
-		// Split list items on XSD whitespace only (space, tab, CR, LF), not the
-		// wider set strings.Fields uses: an item containing NBSP must stay one
-		// token so it canonicalizes (and validates) as the single invalid value it
-		// is, consistent with validateListValue.
-		fields := value.XSDFields(raw)
-		parts := make([]string, len(fields))
-		for i, f := range fields {
-			parts[i] = canonicalValueKey(ctx, f, fieldNode, item)
-		}
-		return strings.Join(parts, " ")
+		return vc.canonicalListKey(ctx, raw, fieldNode, item)
 	case TypeVarietyUnion:
 		// The active member of a union value is the first DIRECT member
 		// (declaration order, descending nested unions only when the value
@@ -524,29 +516,85 @@ func canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, t
 		// active member xs:string), "xs:integer xs:string" collapses them, and
 		// memberTypes="intList xs:string" (intList = xs:list itemType="xs:integer")
 		// collapses "5 6" and "+5 06".
-		if m := unionActiveMember(ctx, raw, fieldNode, td); m != nil {
-			return canonicalValueKey(ctx, raw, fieldNode, m)
+		if m := vc.unionActiveMember(ctx, raw, fieldNode, td); m != nil {
+			return vc.canonicalValueKey(ctx, raw, fieldNode, m)
 		}
 		return raw
 	default:
+		if item := vc.builtinListItemType(td); item != nil {
+			return vc.canonicalListKey(ctx, raw, fieldNode, item)
+		}
 		return canonicalAtomicKey(raw, fieldNode, td)
 	}
 }
 
-// canonicalAtomicKey canonicalizes raw for an atomic type td. The value is first
-// whitespace-processed per td's effective whiteSpace facet (resolveWhiteSpace —
-// the same helper the validator uses), so a restriction of xs:string with
-// whiteSpace="collapse" makes "a b" and "a  b" collide. QName/NOTATION then
-// resolve the prefix against fieldNode's in-scope namespaces to a Clark-name key;
-// everything else delegates to value.CanonicalKey on the builtin base local,
-// which returns a value-space canonical form for value-comparable types and the
-// whitespace-processed lexical value for lexical-only ones (xs:string family,
-// anyURI, …). An unresolvable type or QName falls back to the raw value.
+func (vc *validationContext) canonicalListKey(ctx context.Context, raw string, fieldNode helium.Node, item *TypeDef) string {
+	fields := value.XSDFields(raw)
+	var b strings.Builder
+	b.WriteString("list")
+	b.WriteString(primitiveKeySeparator)
+	b.WriteString(strconv.Itoa(len(fields)))
+	for _, f := range fields {
+		key := vc.canonicalValueKey(ctx, f, fieldNode, item)
+		b.WriteString(primitiveKeySeparator)
+		b.WriteString(strconv.Itoa(len(key)))
+		b.WriteByte(':')
+		b.WriteString(key)
+	}
+	return b.String()
+}
+
+func (vc *validationContext) builtinListItemType(td *TypeDef) *TypeDef {
+	var local string
+	switch builtinBaseLocal(td) {
+	case typeNMTokens:
+		local = typeNMToken
+	case typeIDRefs:
+		local = lexicon.TypeIDREF
+	case typeEntities:
+		local = typeEntity
+	default:
+		return nil
+	}
+	if vc.schema != nil {
+		if item := vc.schema.types[QName{NS: lexicon.NamespaceXSD, Local: local}]; item != nil {
+			return item
+		}
+	}
+	return &TypeDef{Name: QName{NS: lexicon.NamespaceXSD, Local: local}, ContentType: ContentTypeSimple}
+}
+
+// primitiveKeySeparator separates the PRIMITIVE-type tag from the canonical value
+// in an atomic IDC key. It is a control character absent from every primitive
+// local name (all NCNames) and from formatKeySequence's field separator (\x00), so
+// primitiveTag + separator + canonicalValue splits unambiguously: two atomic keys
+// are equal iff they share the same primitive AND the same canonical value.
+const primitiveKeySeparator = "\x01"
+
+// canonicalAtomicKey canonicalizes raw for an atomic type td, tagged with the
+// value's XSD PRIMITIVE datatype so cross-primitive values that share a lexical/
+// canonical form do NOT collide. cvc-identity-constraint value equality is "same
+// value in the same primitive datatype", so a boolean `1`, an xs:decimal `1`, an
+// xs:float `1` and an xs:string `1` are four distinct keys. The tag is the
+// PRIMITIVE base (atomicPrimitiveLocal), not the exact derived type, so two types
+// sharing a primitive still compare by value — an xs:int `1` and an xs:integer `1`
+// both tag `decimal` and collide, matching the spec.
+//
+// The value is first whitespace-processed per td's effective whiteSpace facet
+// (resolveWhiteSpace — the same helper the validator uses), so a restriction of
+// xs:string with whiteSpace="collapse" makes "a b" and "a  b" collide. QName/
+// NOTATION then resolve the prefix against fieldNode's in-scope namespaces to a
+// Clark-name key; everything else delegates to value.CanonicalKey on the builtin
+// base local, which returns a value-space canonical form for value-comparable
+// types and the whitespace-processed lexical value for lexical-only ones (xs:string
+// family, anyURI, …). An unresolvable type or QName falls back to the raw value
+// (untagged — it can only collide with other equally-unresolvable raw values).
 func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 	builtinLocal := builtinBaseLocal(td)
 	if builtinLocal == "" {
 		return raw
 	}
+	primitive := atomicPrimitiveLocal(builtinLocal)
 	normalized := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
 	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 		ns := fieldNodeNSContext(fieldNode)
@@ -563,15 +611,16 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 		// default namespace urn:p — collide on the same key and an xs:unique/xs:key
 		// duplicate is caught, consistent with the facet comparison paths. xs:QName
 		// keeps the no-default value-space rule (the helper's TypeNotation gate
-		// leaves the QName branch on resolveLexicalQName).
+		// leaves the QName branch on resolveLexicalQName). xs:QName and xs:NOTATION
+		// are DISTINCT primitives, so the tag keeps their same-Clark-name values apart.
 		qn, err := resolveNotationOrQNameValue(normalized, builtinLocal, ns)
 		if err != nil {
 			return raw
 		}
-		return helium.ClarkName(qn.NS, qn.Local)
+		return primitive + primitiveKeySeparator + helium.ClarkName(qn.NS, qn.Local)
 	}
 	key, _ := value.CanonicalKey(normalized, builtinLocal)
-	return key
+	return primitive + primitiveKeySeparator + key
 }
 
 // unionActiveMember resolves the active member type of a union value: the first
@@ -592,12 +641,12 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 // prefixed names) resolves its prefixes against the field node's in-scope
 // namespaces. Returns nil when no member accepts raw (the caller then falls back
 // to the raw value).
-func unionActiveMember(ctx context.Context, raw string, fieldNode helium.Node, td *TypeDef) *TypeDef {
+func (vc *validationContext) unionActiveMember(ctx context.Context, raw string, fieldNode helium.Node, td *TypeDef) *TypeDef {
 	for _, m := range resolveUnionMembers(td) {
 		if m == nil {
 			continue
 		}
-		if typeAcceptsValue(ctx, m, raw, fieldNode) {
+		if vc.typeAcceptsValue(ctx, m, raw, fieldNode) {
 			return m
 		}
 	}
@@ -611,17 +660,22 @@ func unionActiveMember(ctx context.Context, raw string, fieldNode helium.Node, t
 // validation. fieldNode's in-scope namespaces are passed as the value's namespace
 // context so QName/NOTATION facets (e.g. enumerations of prefixed names) resolve
 // against the same bindings the instance value uses.
-func typeAcceptsValue(ctx context.Context, td *TypeDef, raw string, fieldNode helium.Node) bool {
-	// IDC field-type resolution has no version source here, so the throwaway
-	// context defaults to Version10 (strict). The field value is already validated
-	// under the schema's real version on the main path; the only Phase-1 gap is a
-	// 1.1-only lexical form (e.g. "+INF") in an IDC field whose type is a
-	// float/date union, which a later phase can tighten.
-	vc := &validationContext{
+func (vc *validationContext) typeAcceptsValue(ctx context.Context, td *TypeDef, raw string, fieldNode helium.Node) bool {
+	// Thread the live validation's VERSION and SCHEMA into the diagnostic-
+	// suppressing throwaway context so IDC union active-member selection resolves
+	// exactly as the main content validator did: a 1.1-only lexical form (e.g.
+	// "+INF" for xs:float/xs:double, year "0000", xs:dateTimeStamp) is accepted as
+	// its member under Version11 and rejected under Version10, and a schema-aware
+	// cast in a member's facet/assertion (castable as t:T) resolves against the
+	// real schema. Mirrors the compile-time throwaway contexts that reach
+	// validateValue (built with schema: c.schema).
+	tvc := &validationContext{
 		errorHandler:  helium.NilErrorHandler{},
 		suppressDepth: 1,
+		version:       vc.version,
+		schema:        vc.schema,
 	}
-	return validateValue(ctx, raw, fieldNodeNSContext(fieldNode), td, "", "", 0, vc) == nil
+	return validateValue(ctx, raw, fieldNodeNSContext(fieldNode), td, "", "", 0, tvc) == nil
 }
 
 // fieldNodeNSContext returns the in-scope namespace bindings visible at an IDC

@@ -148,13 +148,20 @@ var lengthApplicableTypes = map[string]struct{}{
 }
 
 // atomicPrimitiveLocal returns the local name of the XSD PRIMITIVE built-in that
-// an atomic type's builtin base reduces to, used to name the offending primitive
-// in a "facet not allowed on types derived from …" message (e.g. xs:token →
-// "string"). xs:decimal and its integer derivations collapse to "decimal"; the
-// xs:string-derived family collapses to "string"; anyURI and every other
-// primitive (boolean, float, double, the date/time family, the binary types,
-// QName, NOTATION) are their own primitive and pass through unchanged.
+// an atomic type's builtin base reduces to, used both to name the offending
+// primitive in a "facet not allowed on types derived from …" message (e.g. xs:token
+// → "string") and to TAG an identity-constraint field key with its primitive datatype
+// class (canonicalAtomicKey). The XSD 1.1-only built-ins fold to their canonical
+// primitive base first via builtinType11Bases (xs:dayTimeDuration/xs:yearMonthDuration
+// → "duration", xs:dateTimeStamp → "dateTime"; xs:anyAtomicType/xs:error →
+// "anySimpleType"); then xs:decimal and its integer derivations collapse to
+// "decimal", the xs:string-derived family collapses to "string", and every other
+// primitive (boolean, float, double, the date/time family, the binary types, anyURI,
+// QName, NOTATION) is its own primitive and passes through unchanged.
 func atomicPrimitiveLocal(builtinLocal string) string {
+	if base, ok := builtinType11Bases[builtinLocal]; ok {
+		builtinLocal = base
+	}
 	if value.IsDecimalFamily(builtinLocal) {
 		return lexicon.TypeDecimal
 	}
