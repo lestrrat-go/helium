@@ -10,10 +10,13 @@ import (
 
 // TestProhibitedAttributeUse checks that an attribute use declared with
 // use="prohibited" does not contribute an allowed attribute: an instance
-// carrying such an attribute is rejected with "is not allowed", matching
-// xmllint. A prohibited use must also never be admitted by an attribute
-// wildcard, and must not block a same-QName non-prohibited use declared
-// elsewhere (non-prohibited wins).
+// carrying such an attribute (with no attribute wildcard) is rejected with "is
+// not allowed", matching xmllint, and a prohibited use must not block a
+// same-QName non-prohibited use declared elsewhere (non-prohibited wins). The
+// interaction with an attribute wildcard is version-specific: XSD 1.1 retains
+// the prohibited use in {attribute uses} and rejects the name even when a
+// wildcard would admit it, while XSD 1.0 has no such retention — the name
+// matches no use and falls through to the {attribute wildcard}.
 func TestProhibitedAttributeUse(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +60,7 @@ func TestProhibitedAttributeUse(t *testing.T) {
 		require.NoError(t, compileAndValidate(t, schemaXML, `<root a="ok"/>`, nil))
 	})
 
-	t.Run("prohibited use is not admitted by a wildcard", func(t *testing.T) {
+	t.Run("prohibited use and a wildcard is version-specific", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:attribute name="a" type="xs:string"/>
@@ -69,10 +72,14 @@ func TestProhibitedAttributeUse(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-		var out string
-		err := compileAndValidate(t, schemaXML, `<root a="x"/>`, &out)
-		require.Error(t, err)
-		require.Contains(t, out, "is not allowed")
+		// XSD 1.1 rejects the prohibited name outright — the wildcard cannot
+		// re-admit it (W3C addB034/addB136/attZ002 are the 1.0 counterpart).
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML, `<root a="x"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+
+		// XSD 1.0 (default): the prohibited use is absent from {attribute uses},
+		// so the attribute matches no use and the lax wildcard admits it.
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schemaXML, `<root a="x"/>`))
 	})
 
 	t.Run("non-prohibited attribute of same name accepted", func(t *testing.T) {
@@ -166,5 +173,97 @@ func TestProhibitedAttributeUse(t *testing.T) {
 		_, errs := compileWithErrors(t, schemaXML)
 		require.Contains(t, errs,
 			"must be 'optional' if the attribute 'default' is present")
+	})
+}
+
+// TestDeclaredXMLAttributeValue verifies that in XSD 1.0 a declared
+// XML-namespace attribute use (a ref to xml:base/xml:lang/xml:space/xml:id) not
+// only satisfies its presence requirement but also has its VALUE validated
+// against the standard xml: namespace type — xml:space against the {default,
+// preserve} enumeration, xml:lang against the union of xs:language and the empty
+// string, xml:base against xs:anyURI, and xml:id against xs:ID. (In XSD 1.1 xml:
+// attributes are not special and are handled by the ordinary ref path.)
+func TestDeclaredXMLAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	schema := func(local, use string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="xml:` + local + `" use="` + use + `"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	}
+
+	t.Run("xml:space enumeration is enforced", func(t *testing.T) {
+		t.Parallel()
+		s := schema("space", "required")
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:space="preserve"/>`))
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:space="default"/>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:space="bogus"/>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("xml:lang language value is enforced", func(t *testing.T) {
+		t.Parallel()
+		s := schema("lang", "required")
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:lang="en-US"/>`))
+		// The empty string is a legal xml:lang (the union's second member).
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:lang=""/>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), s, `<root xml:lang="en US"/>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("xml:base accepts a URI and xml:id validates as ID", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema("base", "required"), `<root xml:base="a"/>`))
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="i1"/>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="1bad"/>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("unknown xml attribute does not satisfy required declared use", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), schema("foo", "required"), `<root xml:foo="x"/>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("declared xml:id participates in document-wide ID uniqueness", func(t *testing.T) {
+		t.Parallel()
+		// A schema declaring ref="xml:id" types the attribute as xs:ID, so the
+		// document-wide ID pass (XSD 1.0) collects it: a duplicate value across two
+		// elements is a validity error, distinct values are valid.
+		declared := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute ref="xml:id" use="required"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), declared, `<root><item xml:id="a"/><item xml:id="b"/></root>`))
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), declared, `<root><item xml:id="dup"/><item xml:id="dup"/></root>`), xsd.ErrValidationFailed)
+
+		// An UNDECLARED xml:id (no schema declaration referencing it) stays special-
+		// skipped: it is not assessed, so it does not participate in the ID pass and
+		// a duplicate value is not flagged.
+		undeclared := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:anyAttribute processContents="skip"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), undeclared, `<root><item xml:id="dup"/><item xml:id="dup"/></root>`))
 	})
 }

@@ -1624,6 +1624,72 @@ func xsiProcessorAttrBuiltinType(local string) (QName, bool) {
 	return QName{}, false
 }
 
+// xmlNamespaceAttrType returns the built-in *TypeDef that governs a declared
+// XML-namespace attribute use (a ref to xml:base/xml:lang/xml:space/xml:id),
+// per the standard xml: namespace schema (http://www.w3.org/2001/xml.xsd), or
+// nil when local is not one of them. These attributes are implicitly available
+// and never appear as user-declared global attributes, so a ref to one resolves
+// to no global; associating the type lets a DECLARED xml: use validate its
+// instance value (validateAttributes' declaredXML path) instead of skipping the
+// value check. The mappings: xml:base→xs:anyURI, xml:id→xs:ID, xml:space→a
+// restriction of xs:NCName enumerated {default, preserve}, xml:lang→a union of
+// xs:language and the empty string.
+func xmlNamespaceAttrType(local string, s *Schema) *TypeDef {
+	builtin := func(name string) *TypeDef {
+		td, _ := s.LookupType(name, lexicon.NamespaceXSD)
+		return td
+	}
+	if !isKnownXMLNamespaceAttr(local) {
+		return nil
+	}
+	switch local {
+	case lexicon.AttrBase:
+		return builtin(lexicon.TypeAnyURI)
+	case lexicon.AttrID:
+		return builtin(typeID)
+	case lexicon.AttrSpace:
+		base := builtin(typeNCName)
+		if base == nil {
+			return nil
+		}
+		return &TypeDef{
+			Name:        QName{Local: lexicon.AttrSpace, NS: lexicon.NamespaceXML},
+			ContentType: ContentTypeSimple,
+			BaseType:    base,
+			Facets:      &FacetSet{Enumeration: []string{"default", "preserve"}},
+		}
+	case lexicon.AttrLang:
+		lang := builtin(typeLanguage)
+		str := builtin(lexicon.TypeString)
+		if lang == nil || str == nil {
+			return nil
+		}
+		// xml.xsd defines xml:lang as a union of xs:language and a one-value
+		// enumeration of the empty string (an empty xml:lang is legal).
+		emptyMember := &TypeDef{
+			Name:        QName{Local: "langEmpty", NS: lexicon.NamespaceXML},
+			ContentType: ContentTypeSimple,
+			BaseType:    str,
+			Facets:      &FacetSet{Enumeration: []string{""}},
+		}
+		return &TypeDef{
+			Name:        QName{Local: lexicon.AttrLang, NS: lexicon.NamespaceXML},
+			ContentType: ContentTypeSimple,
+			Variety:     TypeVarietyUnion,
+			MemberTypes: []*TypeDef{lang, emptyMember},
+		}
+	}
+	return nil
+}
+
+func isKnownXMLNamespaceAttr(local string) bool {
+	switch local {
+	case lexicon.AttrBase, lexicon.AttrID, lexicon.AttrLang, lexicon.AttrSpace:
+		return true
+	}
+	return false
+}
+
 // xsiSchemaLocationTokens collapses a value in XSD whitespace and splits it on
 // XSD list whitespace ONLY (space/tab/CR/LF via value.XSDFields — NBSP and
 // other Unicode whitespace are NOT separators), yielding the
@@ -1769,12 +1835,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// both maps. 1.0 keeps the historical skip (byte-identical).
 			_, allowedXSI := allowed[aqn]
 			_, prohibitedXSI := prohibited[aqn]
-			declaredXSI := allowedXSI || prohibitedXSI
-			// Only the four real xsi: processor attributes participate; a declared
-			// ref to any other xsi: local name (e.g. xsi:foo) is not specially
-			// accepted — it stays skipped as special, so a required use of it is
-			// never satisfied (the instance is rejected as missing).
-			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI || !isKnownXsiProcessorAttr(a.LocalName()) {
+			declaredUse := allowedXSI || prohibitedXSI
+			// XSD 1.1: only the four real xsi: processor attributes participate; a
+			// declared ref to any other xsi: local name (e.g. xsi:foo) is not
+			// specially accepted — it stays skipped as special, so a required use of
+			// it is never satisfied (the instance is rejected as missing).
+			declaredXSI := vc.version == Version11 && a.URI() == lexicon.NamespaceXSI && declaredUse && isKnownXsiProcessorAttr(a.LocalName())
+			// XSD 1.0: an XML-namespace attribute (xml:base/xml:lang/xml:space/xml:id)
+			// is otherwise skipped as always-allowed, but when EXPLICITLY declared as
+			// an attribute use it participates in ordinary validation instead — its
+			// ref resolves to the real global XML-namespace attribute, so the normal
+			// allowed-use path validates its value and satisfies a required use.
+			// (XSD 1.1 does not treat xml: as special, so isSpecialAttr never returns
+			// true for it there; this is a 1.0-only path, byte-identical otherwise.)
+			declaredXML := vc.version != Version11 && a.URI() == lexicon.NamespaceXML && declaredUse && isKnownXMLNamespaceAttr(a.LocalName())
+			if !declaredXSI && !declaredXML {
 				continue
 			}
 			// A NON-prohibited declared xsi: use must validate its value against the
@@ -1782,8 +1857,10 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// invalid value (e.g. xsi:type="") is a validity error and does NOT
 			// satisfy the use — it is not recorded as present, so a required use also
 			// reports missing. A prohibited use needs no value check: its mere
-			// presence is rejected below.
-			if allowedXSI {
+			// presence is rejected below. A declared XML-namespace use (declaredXML)
+			// skips this xsi-specific check and is validated by the normal
+			// allowed-use path below against its real global-attribute type.
+			if declaredXSI && allowedXSI {
 				if err := vc.validateDeclaredXsiAttrValue(a, elem); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
@@ -1841,9 +1918,14 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			continue
 		}
-		// An explicitly prohibited attribute use is rejected outright and must
-		// not be allowed in by an attribute wildcard.
-		if _, prohib := prohibited[aqn]; prohib {
+		// XSD 1.1: an explicitly prohibited attribute use is rejected outright and
+		// must NOT be admitted by an attribute wildcard — a prohibited use is
+		// retained in {attribute uses} precisely to forbid the name (§3.4.4.2). XSD
+		// 1.0 has no such retention: a prohibited use is simply absent from
+		// {attribute uses}, so the attribute matches no use and falls through to the
+		// {attribute wildcard} (or the not-allowed report below when there is none),
+		// per cvc-complex-type.3 (W3C addB034/addB136/attZ002).
+		if _, prohib := prohibited[aqn]; prohib && vc.version == Version11 {
 			ad := attrDisplayName(a)
 			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
 			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)

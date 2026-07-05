@@ -450,6 +450,26 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 					au.TypeName = bt
 				}
 			}
+			// XSD 1.0: a ref to one of the implicitly-available XML-namespace
+			// attributes (xml:base/xml:lang/xml:space/xml:id) resolves to no
+			// user-declared global attribute, but the attribute has a fixed built-in
+			// type per the standard xml: namespace schema. Associate that type so a
+			// DECLARED xml: use validates its value at instance time
+			// (validateAttributes' declaredXML path) — e.g. xml:space="bogus" is
+			// rejected — and a declared xml:id, now typed as xs:ID, participates in the
+			// document-wide ID uniqueness/integrity pass. Scoped to Version10, where
+			// xml: attributes are otherwise special-skipped and the declaredXML path
+			// runs. XSD 1.1 is DELIBERATELY left byte-identical to origin: a 1.1
+			// declared xml: ref stays UNTYPED (its value is not validated and xml:id ID
+			// integrity is not applied) — declared XML-namespace-attribute value
+			// validation in 1.1 is a deferred gap, out of scope for this 1.0-focused
+			// path and avoided to prevent any 1.1 regression.
+			if c.version != Version11 && qn.NS == lexicon.NamespaceXML &&
+				au.Type == nil && au.TypeName == (QName{}) {
+				if t := xmlNamespaceAttrType(qn.Local, c.schema); t != nil {
+					au.Type = t
+				}
+			}
 			continue
 		}
 		// A use="prohibited" ref corresponds to NO attribute-use component (XSD 1.0
