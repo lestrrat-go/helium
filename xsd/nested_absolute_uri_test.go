@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -132,4 +133,30 @@ func TestNestedIncludeAbsoluteURIErrInvalidDemotes(t *testing.T) {
 	// response to a non-ValidPath (URI-shaped) name.
 	_, err = xsd.NewCompiler().FS(openMissSchemaFS{fs.ErrInvalid}).BaseDir(".").Compile(t.Context(), doc)
 	require.NoError(t, err, "a non-file-URI include reported via fs.ErrInvalid must demote, not fail compile")
+}
+
+// TestNestedIncludeAbsoluteURIOpaqueOpenIsFatal verifies the scheme-demotion gate
+// is NOT too broad: an Open-only URI-AWARE fs.FS that actually FETCHES a non-file
+// URI and fails with an OPAQUE error (an "HTTP 500" — neither fs.ErrInvalid nor
+// fs.ErrNotExist) reports a REAL fetch failure, not a local-resolution miss, so it
+// must stay FATAL. Only fs.ErrInvalid/fs.ErrNotExist (what a plain FS returns for a
+// URI it cannot resolve locally) demotes.
+func TestNestedIncludeAbsoluteURIOpaqueOpenIsFatal(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="http://example.com/inc.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+	require.NoError(t, err)
+
+	// An Open-only FS whose Open returns an OPAQUE fetch error (no fs.ErrInvalid /
+	// fs.ErrNotExist in the chain), modeling a URI-aware FS that fetched and got
+	// an HTTP 500.
+	opaque := errors.New("HTTP 500 for http://example.com/inc.xsd")
+	_, err = xsd.NewCompiler().FS(openMissSchemaFS{opaque}).BaseDir(".").Compile(t.Context(), doc)
+	require.Error(t, err, "an opaque HTTP-500 open error on a non-file URI must be fatal, not demoted")
 }

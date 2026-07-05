@@ -170,15 +170,22 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 		// miss): a failed Open IS the resolution answer.
 		//
 		// A non-file-scheme ABSOLUTE URI schemaLocation (http://, urn:, ...) is NOT a
-		// local resource: a filesystem FS cannot serve it and reports a benign miss
-		// whose errno is FS-DEPENDENT — fs.ErrNotExist (os.Open / iofs.PermissiveRoot's
+		// local resource: a plain filesystem FS cannot resolve it and POSITIVELY signals
+		// so with an FS-DEPENDENT errno — fs.ErrNotExist (os.Open / iofs.PermissiveRoot's
 		// URI mapping) or fs.ErrInvalid ([os.DirFS], which rejects a non-fs.ValidPath
 		// name). schemaLocation is only a hint (src-include.1 / src-import), so demote
-		// it as a resolution MISS regardless of the FS-specific errno — UNLESS the error
-		// is [notDemotable]. This is FS-INDEPENDENT (os.DirFS, PermissiveRoot, any local
-		// FS); a URI-serving FS (xslt3's schemaResolverFS, or a ReadFileFS handled
-		// above) serves the bytes or fails fatal, so it never relies on this branch.
-		if s := uriScheme(path); s != "" && s != "file" && !notDemotable(openErr) {
+		// the URI as a resolution MISS ONLY when the Open error is one of those two
+		// local-cannot-resolve errnos AND not [notDemotable]. An OPAQUE Open error on a
+		// non-file URI — a URI-AWARE Open-only fs.FS that actually FETCHED it and got an
+		// "HTTP 500" / transport failure (neither fs.ErrInvalid nor fs.ErrNotExist) — is
+		// a real fetch failure, NOT a local-resolution miss, and stays FATAL
+		// (fail-closed). A URI-serving FS that CAN resolve the URI (xslt3's
+		// schemaResolverFS, or a ReadFileFS handled above) serves the bytes, reports a
+		// genuine miss as fs.ErrNotExist, or fails fatal via a FatalSchemaLoader, so it
+		// never false-demotes here.
+		if s := uriScheme(path); s != "" && s != "file" &&
+			(errors.Is(openErr, fs.ErrInvalid) || errors.Is(openErr, fs.ErrNotExist)) &&
+			!notDemotable(openErr) {
 			return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, openErr)
 		}
 		// A genuinely-LOCAL path: demote ONLY a POSITIVE not-found
