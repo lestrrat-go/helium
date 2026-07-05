@@ -1218,3 +1218,46 @@ func TestComponentChildNameKeyedDispatchValidity(t *testing.T) {
 		})
 	}
 }
+
+// TestOverrideNotationNameSingleDiagnostic pins that an xs:override xs:notation
+// child with a malformed @name is reported EXACTLY ONCE — by checkNotations (which
+// owns notation @name NCName validity) — and does NOT also go through the
+// component-child name gate (validateComponentChildName), which would emit a spurious
+// SECOND invalid-name diagnostic. Present-empty ("") and whitespace-only ("   ") are
+// byte-identical; a well-formed override notation child still compiles. xs:override
+// is 1.1-only.
+func TestOverrideNotationNameSingleDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	const (
+		wantNotation = "A notation declaration must have a 'name' attribute that is a valid NCName."
+		spurious     = "is not a valid 'xs:NCName'"
+		wsName       = "   " // whitespace-only @name (collapses to empty)
+	)
+
+	baseXSD := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:notation name="n" public="pub"/><xs:element name="root" type="xs:string"/></xs:schema>`
+	buildMain := func(nameVal string) string {
+		return fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:override schemaLocation="redef_base.xsd"><xs:notation name="%s" public="pub2"/></xs:override></xs:schema>`, nameVal)
+	}
+
+	for _, bad := range []string{"", wsName, "a b"} {
+		schema, errs, cerr := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMain(bad))
+		require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "name=%q: malformed override notation name must reject; got: %s", bad, errs)
+		require.Nil(t, schema)
+		require.Equal(t, 1, strings.Count(errs, wantNotation),
+			"name=%q: exactly ONE checkNotations diagnostic; got: %s", bad, errs)
+		require.NotContains(t, errs, spurious,
+			"name=%q: no spurious component-child-gate NCName diagnostic; got: %s", bad, errs)
+	}
+
+	// Present-empty and whitespace-only emit byte-identical diagnostics.
+	_, errsEmpty, _ := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMain(""))
+	_, errsWs, _ := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMain(wsName))
+	require.Equal(t, errsEmpty, errsWs,
+		"present-empty and whitespace-only override notation @name must emit identical diagnostics")
+
+	// A well-formed override notation child (matching the base notation) still compiles.
+	schemaValid, errsValid, cerrValid := compileRedefineVersioned(t, xsd.Version11, baseXSD, buildMain("n"))
+	require.NoError(t, cerrValid, "a well-formed override notation child must still compile; got: %s", errsValid)
+	require.NotNil(t, schemaValid)
+}

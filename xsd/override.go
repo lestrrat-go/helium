@@ -196,13 +196,30 @@ func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *he
 			// never a replacement child; handled by overrideProcessNested.
 			continue
 		}
-		// Validate the component child's @name BEFORE keying on it: a malformed name
-		// (present-empty, whitespace-only, or "a b") is a schema error rather than a
-		// silent drop, mirroring the xs:redefine dispatch. An absent @name is skipped
-		// (not a valid component key), preserving existing behavior.
-		name, nameOK := c.validateComponentChildName(ctx, elem)
-		if !nameOK {
-			continue
+		var name string
+		switch sym {
+		case overrideSymNotation:
+			// A notation's validity — INCLUDING its @name NCName — is owned by
+			// checkNotations (the DOM walk), so it must NOT also go through
+			// validateComponentChildName (that would DOUBLE-report a malformed name).
+			// Key on the collapsed name as before so a matched target notation is
+			// suppressed and the override child's name is collected (over015); an
+			// absent/empty name is not a valid key.
+			name = collapsedAttr(elem, attrName)
+			if name == "" {
+				continue
+			}
+		default:
+			// A MODELED component (complexType/simpleType/group/attributeGroup, and
+			// element/attribute) is validated here BEFORE keying: a malformed name
+			// (present-empty, whitespace-only, or "a b") is a schema error rather than
+			// a silent drop, mirroring the xs:redefine dispatch. An absent @name is
+			// skipped (not a valid component key), preserving existing behavior.
+			var nameOK bool
+			name, nameOK = c.validateComponentChildName(ctx, elem)
+			if !nameOK {
+				continue
+			}
 		}
 		key := overrideKey{sym: sym, qn: QName{Local: name, NS: c.schema.targetNamespace}}
 		if _, dup := localSeen[key]; dup {
