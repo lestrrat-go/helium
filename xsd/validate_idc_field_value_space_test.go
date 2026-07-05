@@ -1392,6 +1392,66 @@ func TestIDCFieldDerivedBuiltinPrimitiveTyping(t *testing.T) {
 	}
 }
 
+// TestIDCUnionActiveMemberVersion covers the IDC union active-member selection
+// resolving under the SCHEMA'S version. A union(xs:float, xs:string) field over an
+// xs:unique: "INF" is a valid xs:float lexical in both versions, but "+INF" is a
+// valid xs:float lexical ONLY in XSD 1.1. So under 1.1 both values select xs:float
+// (same primitive, same value INF) and COLLIDE → invalid; under 1.0 "+INF" is not a
+// float and falls through to xs:string (distinct primitive from the float "INF") →
+// valid. Before the version was threaded into typeAcceptsValue, the throwaway
+// context defaulted to 1.0 and the 1.1 duplicate was missed.
+func TestIDCUnionActiveMemberVersion(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="floatOrString">
+    <xs:union memberTypes="xs:float xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="floatOrString" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	const instance = `<root><item>INF</item><item>+INF</item></root>`
+
+	cases := []struct {
+		name  string
+		v11   bool
+		valid bool
+	}{
+		// 1.0: "+INF" is not a float lexical → xs:string; float "INF" vs string "+INF"
+		// are distinct primitives → no collision.
+		{name: "xsd10 INF and +INF distinct", v11: false, valid: true},
+		// 1.1: "+INF" is a valid float → both xs:float, same value INF → collide.
+		{name: "xsd11 INF and +INF collide", v11: true, valid: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			v := compileValidatorVersion(t, schema, tc.v11)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error (duplicate)")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))

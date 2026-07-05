@@ -231,7 +231,7 @@ func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idColl
 		}
 		return hasID
 	case TypeVarietyUnion:
-		if m := unionActiveMember(ctx, raw, fieldNode, td); m != nil {
+		if m := vc.unionActiveMember(ctx, raw, fieldNode, td); m != nil {
 			return vc.collectIDFromValue(ctx, col, m, raw, owner, fieldNode, elem, attr)
 		}
 		return false
