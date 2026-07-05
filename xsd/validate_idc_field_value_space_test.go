@@ -1302,6 +1302,96 @@ func TestIDCFieldCrossPrimitiveTyping(t *testing.T) {
 	}
 }
 
+// TestIDCFieldDerivedBuiltinPrimitiveTyping covers the XSD 1.1 derived builtins that
+// share a primitive with a base builtin: xs:dayTimeDuration/xs:yearMonthDuration fold
+// to the xs:duration primitive and xs:dateTimeStamp folds to xs:dateTime, so a
+// lexically-distinct but value-equal pair across the two types COLLIDES for
+// xs:unique, while a genuinely distinct primitive (duration vs dateTime, float vs
+// double, date vs dateTime) stays apart. Compiled at XSD 1.1 for the 1.1-only types.
+func TestIDCFieldDerivedBuiltinPrimitiveTyping(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="uid" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="uuid">
+      <xs:selector xpath=".//uid"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+  <xs:element name="uid" type="xs:anyType"/>
+</xs:schema>`
+
+	const xsiNS = ` xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// duration P1D vs dayTimeDuration PT24H — same primitive (duration), same
+			// value (86400s), lexically distinct → collide.
+			name:     "duration and dayTimeDuration same value collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:duration">P1D</uid><uid xsi:type="xs:dayTimeDuration">PT24H</uid></root>`,
+			valid:    false,
+		},
+		{
+			// dayTimeDuration PT24H vs yearMonthDuration P1Y — both fold to duration, but
+			// 86400s vs 12 months are distinct values → no collision.
+			name:     "dayTimeDuration and yearMonthDuration distinct values",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:dayTimeDuration">PT24H</uid><uid xsi:type="xs:yearMonthDuration">P1Y</uid></root>`,
+			valid:    true,
+		},
+		{
+			// dateTime vs dateTimeStamp same instant — dateTimeStamp folds to dateTime →
+			// collide.
+			name:     "dateTime and dateTimeStamp same instant collide",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:dateTime">2020-01-01T00:00:00Z</uid><uid xsi:type="xs:dateTimeStamp">2020-01-01T00:00:00Z</uid></root>`,
+			valid:    false,
+		},
+		{
+			// duration P1D vs dateTime — distinct primitives, no collision.
+			name:     "duration and dateTime distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:duration">P1D</uid><uid xsi:type="xs:dateTime">2020-01-01T00:00:00Z</uid></root>`,
+			valid:    true,
+		},
+		{
+			// float 1 vs double 1 — distinct primitives, no collision.
+			name:     "float 1 and double 1 distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:float">1</uid><uid xsi:type="xs:double">1</uid></root>`,
+			valid:    true,
+		},
+		{
+			// date vs dateTime — distinct primitives, no collision.
+			name:     "date and dateTime distinct primitives",
+			instance: `<root` + xsiNS + `><uid xsi:type="xs:date">2020-01-01</uid><uid xsi:type="xs:dateTime">2020-01-01T00:00:00Z</uid></root>`,
+			valid:    true,
+		},
+	}
+
+	v := compileValidatorVersion(t, schema, true)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
