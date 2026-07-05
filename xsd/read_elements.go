@@ -1039,7 +1039,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// attribute from an empty one, so a literal ref="" must be recognized as the
 	// (invalid) ref form rather than silently treated as absent and dropped.
 	hasRef := c.version == Version11 && hasAttr(elem, attrRef)
-	if name == "" && !hasRef {
+	if !hasRef && !hasAttr(elem, attrName) {
 		// @name is required (XSD Structures 3.11.2 / src-identity-constraint).
 		// libxml2 reports the missing attribute and drops the constraint; an
 		// absent name previously compiled clean and silently discarded the

@@ -185,3 +185,35 @@ func TestIDConstraintSchemaRules(t *testing.T) {
 		})
 	}
 }
+
+func TestIDConstraintFullFormNameCollapseEmptyIsInvalidNCName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		nameAttr string
+	}{
+		{"empty", `name=""`},
+		{"whitespace-only", `name="   "`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="root">
+    <xsd:complexType><xsd:sequence/></xsd:complexType>
+    <xsd:key ` + tc.nameAttr + `>
+      <xsd:selector xpath="."/>
+      <xsd:field xpath="@id"/>
+    </xsd:key>
+  </xsd:element>
+</xsd:schema>`
+			for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+				_, errs, cerr := compileWith(t, v, schemaXML)
+				require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v must reject collapse-empty IDC @name", v)
+				require.Contains(t, errs, "is not a valid 'xs:NCName'", "version=%v", v)
+				require.NotContains(t, errs, "The attribute 'name' is required but missing.", "version=%v", v)
+			}
+		})
+	}
+}
