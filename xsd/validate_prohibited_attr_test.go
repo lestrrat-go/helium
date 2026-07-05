@@ -10,10 +10,13 @@ import (
 
 // TestProhibitedAttributeUse checks that an attribute use declared with
 // use="prohibited" does not contribute an allowed attribute: an instance
-// carrying such an attribute is rejected with "is not allowed", matching
-// xmllint. A prohibited use must also never be admitted by an attribute
-// wildcard, and must not block a same-QName non-prohibited use declared
-// elsewhere (non-prohibited wins).
+// carrying such an attribute (with no attribute wildcard) is rejected with "is
+// not allowed", matching xmllint, and a prohibited use must not block a
+// same-QName non-prohibited use declared elsewhere (non-prohibited wins). The
+// interaction with an attribute wildcard is version-specific: XSD 1.1 retains
+// the prohibited use in {attribute uses} and rejects the name even when a
+// wildcard would admit it, while XSD 1.0 has no such retention — the name
+// matches no use and falls through to the {attribute wildcard}.
 func TestProhibitedAttributeUse(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +60,7 @@ func TestProhibitedAttributeUse(t *testing.T) {
 		require.NoError(t, compileAndValidate(t, schemaXML, `<root a="ok"/>`, nil))
 	})
 
-	t.Run("prohibited use is not admitted by a wildcard", func(t *testing.T) {
+	t.Run("prohibited use and a wildcard is version-specific", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:attribute name="a" type="xs:string"/>
@@ -69,10 +72,14 @@ func TestProhibitedAttributeUse(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-		var out string
-		err := compileAndValidate(t, schemaXML, `<root a="x"/>`, &out)
-		require.Error(t, err)
-		require.Contains(t, out, "is not allowed")
+		// XSD 1.1 rejects the prohibited name outright — the wildcard cannot
+		// re-admit it (W3C addB034/addB136/attZ002 are the 1.0 counterpart).
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML, `<root a="x"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+
+		// XSD 1.0 (default): the prohibited use is absent from {attribute uses},
+		// so the attribute matches no use and the lax wildcard admits it.
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schemaXML, `<root a="x"/>`))
 	})
 
 	t.Run("non-prohibited attribute of same name accepted", func(t *testing.T) {

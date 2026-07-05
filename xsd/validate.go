@@ -1769,12 +1769,21 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// both maps. 1.0 keeps the historical skip (byte-identical).
 			_, allowedXSI := allowed[aqn]
 			_, prohibitedXSI := prohibited[aqn]
-			declaredXSI := allowedXSI || prohibitedXSI
-			// Only the four real xsi: processor attributes participate; a declared
-			// ref to any other xsi: local name (e.g. xsi:foo) is not specially
-			// accepted — it stays skipped as special, so a required use of it is
-			// never satisfied (the instance is rejected as missing).
-			if vc.version != Version11 || a.URI() != lexicon.NamespaceXSI || !declaredXSI || !isKnownXsiProcessorAttr(a.LocalName()) {
+			declaredUse := allowedXSI || prohibitedXSI
+			// XSD 1.1: only the four real xsi: processor attributes participate; a
+			// declared ref to any other xsi: local name (e.g. xsi:foo) is not
+			// specially accepted — it stays skipped as special, so a required use of
+			// it is never satisfied (the instance is rejected as missing).
+			declaredXSI := vc.version == Version11 && a.URI() == lexicon.NamespaceXSI && declaredUse && isKnownXsiProcessorAttr(a.LocalName())
+			// XSD 1.0: an XML-namespace attribute (xml:base/xml:lang/xml:space/xml:id)
+			// is otherwise skipped as always-allowed, but when EXPLICITLY declared as
+			// an attribute use it participates in ordinary validation instead — its
+			// ref resolves to the real global XML-namespace attribute, so the normal
+			// allowed-use path validates its value and satisfies a required use.
+			// (XSD 1.1 does not treat xml: as special, so isSpecialAttr never returns
+			// true for it there; this is a 1.0-only path, byte-identical otherwise.)
+			declaredXML := vc.version != Version11 && a.URI() == lexicon.NamespaceXML && declaredUse
+			if !declaredXSI && !declaredXML {
 				continue
 			}
 			// A NON-prohibited declared xsi: use must validate its value against the
@@ -1782,8 +1791,10 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// invalid value (e.g. xsi:type="") is a validity error and does NOT
 			// satisfy the use — it is not recorded as present, so a required use also
 			// reports missing. A prohibited use needs no value check: its mere
-			// presence is rejected below.
-			if allowedXSI {
+			// presence is rejected below. A declared XML-namespace use (declaredXML)
+			// skips this xsi-specific check and is validated by the normal
+			// allowed-use path below against its real global-attribute type.
+			if declaredXSI && allowedXSI {
 				if err := vc.validateDeclaredXsiAttrValue(a, elem); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
@@ -1841,9 +1852,14 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			continue
 		}
-		// An explicitly prohibited attribute use is rejected outright and must
-		// not be allowed in by an attribute wildcard.
-		if _, prohib := prohibited[aqn]; prohib {
+		// XSD 1.1: an explicitly prohibited attribute use is rejected outright and
+		// must NOT be admitted by an attribute wildcard — a prohibited use is
+		// retained in {attribute uses} precisely to forbid the name (§3.4.4.2). XSD
+		// 1.0 has no such retention: a prohibited use is simply absent from
+		// {attribute uses}, so the attribute matches no use and falls through to the
+		// {attribute wildcard} (or the not-allowed report below when there is none),
+		// per cvc-complex-type.3 (W3C addB034/addB136/attZ002).
+		if _, prohib := prohibited[aqn]; prohib && vc.version == Version11 {
 			ad := attrDisplayName(a)
 			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
 			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
