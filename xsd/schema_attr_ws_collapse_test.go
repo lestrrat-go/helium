@@ -607,6 +607,7 @@ func TestCheckElementsRepresentationGateSymmetry(t *testing.T) {
 	const wantQName = "is not a valid QName"
 	const wantNCName = "is not a valid 'NCName'"
 	const wantMutEx = "mutually exclusive"
+	const wsName = "   "
 
 	// A collapse-empty companion (""/whitespace-only) must emit EXACTLY the one
 	// value diagnostic (wantValue) and NONE of the structural secondaries (notWant).
@@ -646,7 +647,7 @@ func TestCheckElementsRepresentationGateSymmetry(t *testing.T) {
 			wantQName, wantNCName, []string{wantMutEx}},
 	}
 	for _, tc := range symmetric {
-		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", "   "}} {
+		for _, val := range []struct{ label, v string }{{"literal-empty", ""}, {"whitespace-only", wsName}} {
 			t.Run("collapse-empty/"+tc.name+"/"+val.label, func(t *testing.T) {
 				t.Parallel()
 				schemaXML := fmt.Sprintf(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">%s</xs:schema>`,
@@ -1085,12 +1086,13 @@ func TestDirectTopLevelNamedComponentCollapseEmptyName(t *testing.T) {
 	t.Parallel()
 
 	const wantNCName = "is not a valid 'xs:NCName'"
+	const complexTypeName = "complexType"
 
 	cases := []struct {
 		name string
 		body string
 	}{
-		{"complexType", `<xs:complexType name="%s"><xs:sequence/></xs:complexType>`},
+		{complexTypeName, `<xs:complexType name="%s"><xs:sequence/></xs:complexType>`},
 		{"simpleType", `<xs:simpleType name="%s"><xs:restriction base="xs:string"/></xs:simpleType>`},
 		{"group", `<xs:group name="%s"><xs:sequence/></xs:group>`},
 		{"attributeGroup", `<xs:attributeGroup name="%s"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
