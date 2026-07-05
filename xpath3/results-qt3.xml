@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="22473" failures="0" skipped="389" time="9.480">
-  <testsuite name="qt3-conformance" tests="22473" failures="0" skipped="389" time="9.480">
+<testsuites tests="22473" failures="0" skipped="383" time="13.520">
+  <testsuite name="qt3-conformance" tests="22473" failures="0" skipped="383" time="13.520">
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ArrayTest-030" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ArrayTest-031" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ArrayTest-032" time="0.000"></testcase>
@@ -138,7 +138,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes020-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes021-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes023-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes027-1" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes027-1" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes030-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes030-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes031-1" time="0.000"></testcase>
@@ -222,7 +222,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes069-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes069-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes070-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes070-2" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes070-2" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes070-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes071-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Axes071-2" time="0.000"></testcase>
@@ -1637,18 +1637,18 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CastableAs668" time="0.000">
       <skipped message="castable-as of a non-atomizable operand does not raise XPTY0004">=== RUN   TestQT3W3C/CastableAs668&#xA;=== PAUSE TestQT3W3C/CastableAs668&#xA;=== CONT  TestQT3W3C/CastableAs668&#xA;    qt3_helpers_test.go:223: castable-as of a non-atomizable operand does not raise XPTY0004&#xA;--- SKIP: TestQT3W3C/CastableAs668 (0.00s)&#xA;</skipped>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr008" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr008" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr015" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr016" time="0.030"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr017" time="0.040"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr018" time="0.040"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr019" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr016" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr017" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr018" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr019" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr20" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr21" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/CondExpr21" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Count001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Count002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Count003" time="0.000"></testcase>
@@ -1679,21 +1679,21 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ExpandedQNameConstructFunc015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ExpandedQNameConstructFunc016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr005" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr005" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr007" time="0.040"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr009" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr012" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr013" time="0.610"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr014" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr015" time="0.020"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr016" time="0.030"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr017" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr018" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr012" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr013" time="0.840"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr014" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr015" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr016" time="0.050"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr017" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr018" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr019" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr020" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr021" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr025" time="0.210"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr026" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr025" time="0.280"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr026" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ForExpr030" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/FunctionCall-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/FunctionCall-011" time="0.000"></testcase>
@@ -2051,7 +2051,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-18" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-4" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-4" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-DateTimeFunc-7" time="0.000"></testcase>
@@ -2304,7 +2304,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-48" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-49" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-50" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-51" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-51" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-52" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-53" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-FilterExpr-54" time="0.000"></testcase>
@@ -3212,7 +3212,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-30" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-31" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-32" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-32" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-33" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-34" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-NumericSubtract-35" time="0.000"></testcase>
@@ -4073,7 +4073,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1384" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1385" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1386" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1387" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1387" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1388" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-1389" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqExprCast-139" time="0.000"></testcase>
@@ -5441,11 +5441,11 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-15" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-16" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-17" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-18" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-18" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-19" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-20" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-21" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-21" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SeqReverseFunc-5" time="0.000"></testcase>
@@ -5615,8 +5615,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-7" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-8" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-9" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-8" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-StringToCodepointFunc-9" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SubstringAfterFunc-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SubstringAfterFunc-10" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-SubstringAfterFunc-11" time="0.000"></testcase>
@@ -5852,7 +5852,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationLT-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationLT-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationLT-4" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationLT-5" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationLT-5" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationLT-6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationMultiply-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K-YearMonthDurationMultiply-10" time="0.000"></testcase>
@@ -6118,7 +6118,7 @@
     </testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DateEQ-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DateTimeEQ-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DateTimeFunc-1" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DateTimeFunc-1" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DayTimeDurationSubtract-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DayTimeDurationSubtract-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-DirectConElemContent-1" time="0.000"></testcase>
@@ -6797,8 +6797,8 @@
       <skipped message="requires XSD 1.0">=== RUN   TestQT3W3C/K2-SeqExprCast-231&#xA;=== PAUSE TestQT3W3C/K2-SeqExprCast-231&#xA;=== CONT  TestQT3W3C/K2-SeqExprCast-231&#xA;    qt3_helpers_test.go:223: requires XSD 1.0&#xA;--- SKIP: TestQT3W3C/K2-SeqExprCast-231 (0.00s)&#xA;</skipped>
     </testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-231a" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-232" time="0.000">
-      <skipped message="requires XSD 1.0">=== RUN   TestQT3W3C/K2-SeqExprCast-232&#xA;=== PAUSE TestQT3W3C/K2-SeqExprCast-232&#xA;=== CONT  TestQT3W3C/K2-SeqExprCast-232&#xA;    qt3_helpers_test.go:223: requires XSD 1.0&#xA;--- SKIP: TestQT3W3C/K2-SeqExprCast-232 (0.00s)&#xA;</skipped>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-232" time="0.010">
+      <skipped message="requires XSD 1.0">=== RUN   TestQT3W3C/K2-SeqExprCast-232&#xA;=== PAUSE TestQT3W3C/K2-SeqExprCast-232&#xA;=== CONT  TestQT3W3C/K2-SeqExprCast-232&#xA;    qt3_helpers_test.go:223: requires XSD 1.0&#xA;--- SKIP: TestQT3W3C/K2-SeqExprCast-232 (0.01s)&#xA;</skipped>
     </testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-232a" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-233" time="0.000"></testcase>
@@ -6830,7 +6830,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-257" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-258" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-259" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-26" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-26" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-260" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-261" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-262" time="0.000"></testcase>
@@ -6921,8 +6921,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-339" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-34" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-340" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-341" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-342" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-341" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-342" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-343" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-344" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/K2-SeqExprCast-345" time="0.000"></testcase>
@@ -7460,7 +7460,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc014" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc015a" time="0.030"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc015a" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/LocalNameFromQNameFunc018" time="0.000"></testcase>
@@ -7656,9 +7656,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NamespaceURIFromQNameFunc020" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest003" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest004" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest005" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest003" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest004" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/NodeTest005" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Parenexpr-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Parenexpr-10" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/Parenexpr-12" time="0.000"></testcase>
@@ -7777,20 +7777,20 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/RangeExpr-416b" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/RangeExpr-600" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/RangeExpr-601" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr005" time="0.040"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr006" time="0.020"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr007" time="0.020"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr008" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr009" time="0.200"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr011" time="0.020"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr012" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr013" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr014" time="0.030"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr015" time="0.050"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr017" time="0.030"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr018" time="0.020"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr019" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr020" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr005" time="0.080"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr006" time="0.060"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr007" time="0.060"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr008" time="0.070"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr009" time="0.310"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr011" time="0.070"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr012" time="0.040"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr013" time="0.030"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr014" time="0.070"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr015" time="0.060"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr017" time="0.060"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr018" time="0.070"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr019" time="0.030"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ReturnExpr020" time="0.070"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/ST-Axes001" time="0.000">
       <skipped message="requires static typing">=== RUN   TestQT3W3C/ST-Axes001&#xA;=== PAUSE TestQT3W3C/ST-Axes001&#xA;=== CONT  TestQT3W3C/ST-Axes001&#xA;    qt3_helpers_test.go:223: requires static typing&#xA;--- SKIP: TestQT3W3C/ST-Axes001 (0.00s)&#xA;</skipped>
     </testcase>
@@ -7962,11 +7962,11 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/UseCaseJSON-007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/UseCaseJSON-008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/UseCaseJSON-014" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/UseCaseNLP-003" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment009" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment010" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment011" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/UseCaseNLP-003" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment002" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment009" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment010" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment011" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/XQueryComment014" time="0.000"></testcase>
@@ -8102,7 +8102,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-101" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-102" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-103" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-104" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-104" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-105" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-107" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-fold-left-108" time="0.000"></testcase>
@@ -8142,7 +8142,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-006" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-007" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-get-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-head-601" time="0.000"></testcase>
@@ -8177,7 +8177,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-put-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-put-006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-put-007" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-put-011" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-put-011" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-put-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-remove-401" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/array-remove-402" time="0.000"></testcase>
@@ -8378,9 +8378,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/base64BinaryEqual-9" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/base64binaryequal-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-002" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-002" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-003" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-004" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-004" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/boolean-007" time="0.000"></testcase>
@@ -8823,8 +8823,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-NMTOKENS-018" time="0.000">
       <skipped message="requires XML Schema support">=== RUN   TestQT3W3C/cbcl-castable-NMTOKENS-018&#xA;=== PAUSE TestQT3W3C/cbcl-castable-NMTOKENS-018&#xA;=== CONT  TestQT3W3C/cbcl-castable-NMTOKENS-018&#xA;    qt3_helpers_test.go:223: requires XML Schema support&#xA;--- SKIP: TestQT3W3C/cbcl-castable-NMTOKENS-018 (0.00s)&#xA;</skipped>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-NMTOKENS-019" time="0.000">
-      <skipped message="requires XML Schema support">=== RUN   TestQT3W3C/cbcl-castable-NMTOKENS-019&#xA;=== PAUSE TestQT3W3C/cbcl-castable-NMTOKENS-019&#xA;=== CONT  TestQT3W3C/cbcl-castable-NMTOKENS-019&#xA;    qt3_helpers_test.go:223: requires XML Schema support&#xA;--- SKIP: TestQT3W3C/cbcl-castable-NMTOKENS-019 (0.00s)&#xA;</skipped>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-NMTOKENS-019" time="0.010">
+      <skipped message="requires XML Schema support">=== RUN   TestQT3W3C/cbcl-castable-NMTOKENS-019&#xA;=== PAUSE TestQT3W3C/cbcl-castable-NMTOKENS-019&#xA;=== CONT  TestQT3W3C/cbcl-castable-NMTOKENS-019&#xA;    qt3_helpers_test.go:223: requires XML Schema support&#xA;--- SKIP: TestQT3W3C/cbcl-castable-NMTOKENS-019 (0.01s)&#xA;</skipped>
     </testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-NMTOKENS-020" time="0.000">
       <skipped message="requires XML Schema support">=== RUN   TestQT3W3C/cbcl-castable-NMTOKENS-020&#xA;=== PAUSE TestQT3W3C/cbcl-castable-NMTOKENS-020&#xA;=== CONT  TestQT3W3C/cbcl-castable-NMTOKENS-020&#xA;    qt3_helpers_test.go:223: requires XML Schema support&#xA;--- SKIP: TestQT3W3C/cbcl-castable-NMTOKENS-020 (0.00s)&#xA;</skipped>
@@ -8920,7 +8920,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-unsignedShort-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-yearMonthDuration-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-castable-yearMonthDuration-002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-005" time="0.130"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-005" time="0.170"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-008" time="0.000"></testcase>
@@ -8931,7 +8931,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-015" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-016" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-016" time="0.030"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-019" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-codepoints-to-string-020" time="0.000"></testcase>
@@ -8980,7 +8980,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-date-less-than-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-date-less-than-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-date-ne-001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-dateTime-001" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-dateTime-001" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-dateTime-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-dateTime-equal-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-dateTime-equal-003" time="0.000"></testcase>
@@ -9058,7 +9058,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-030" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-031" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-032" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-033" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-033" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-034" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-error-035" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-escape-html-uri-001" time="0.000"></testcase>
@@ -9210,7 +9210,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-instance-of-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-is-same-node-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-matches-001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-matches-002" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-matches-002" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-matches-003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-matches-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-matches-005" time="0.000"></testcase>
@@ -9319,7 +9319,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-string-less-than-003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-string-less-than-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-subsequence-001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-subsequence-002" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-subsequence-002" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-subsequence-003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-subsequence-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-subsequence-005" time="0.000"></testcase>
@@ -9409,8 +9409,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-009" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-010" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-011" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-010" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-011" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/cbcl-treat-as-014" time="0.000"></testcase>
@@ -9466,19 +9466,19 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-006" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-007" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-008" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-009" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-009" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-014" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-015" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-015" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-018" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-019" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-019" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-020" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-021" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-022" time="0.000"></testcase>
@@ -9503,7 +9503,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-041" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-042" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-043" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-044" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-044" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/compare-045" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/constSeq-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/constSeq-10" time="0.000"></testcase>
@@ -9547,7 +9547,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/environment-variable-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/environment-variable-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/environment-variable-011" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/environment-variable-012" time="0.740"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/environment-variable-012" time="1.170"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-018" time="0.000"></testcase>
@@ -9568,7 +9568,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-034" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-904" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-905" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-906" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-906" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-907" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-908" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/eqname-909p" time="0.000"></testcase>
@@ -9690,7 +9690,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-047" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-048" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-049" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-050" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-050" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-051" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-052" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-abs-more-args-053" time="0.000"></testcase>
@@ -9795,7 +9795,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-12" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-13" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-14" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-15" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-15" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-16" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-17" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-adjust-dateTime-to-timezone-18" time="0.000"></testcase>
@@ -10135,7 +10135,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-booleanusht1args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-booleanusht1args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-booleanusht1args-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-ceiling-1" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-ceiling-1" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-ceiling-decimal-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-ceiling-decimal-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-ceiling-decimal-3" time="0.000"></testcase>
@@ -10547,11 +10547,11 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-12" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-13" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-14" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-15" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-15" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-16" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-17" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-18" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-19" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-19" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-20" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-current-time-21" time="0.000"></testcase>
@@ -10643,7 +10643,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-11" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-12" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-13" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-14" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-14" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-15" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-16" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-day-from-date-17" time="0.000"></testcase>
@@ -10748,7 +10748,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-011" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-012" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-012" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-deep-equal-mix-args-015" time="0.000"></testcase>
@@ -11018,7 +11018,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-12" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-13" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-14" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-15" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-15" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-16" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-encode-for-uri-3" time="0.000"></testcase>
@@ -11186,7 +11186,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneulng1args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneulng1args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneulng1args-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneusht1args-1" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneusht1args-1" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneusht1args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-exactly-oneusht1args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-except-node-args-001" time="0.000"></testcase>
@@ -11535,7 +11535,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-086" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-087" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-088" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-089" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-089" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-090" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-091" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-function-lookup-092" time="0.000"></testcase>
@@ -12379,14 +12379,14 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-014" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-015" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-015" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-016" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-017" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-018" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-017" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-018" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-019" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-020" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-020" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-021" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-022" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-022" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-023" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-024" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-innermost-025" time="0.000"></testcase>
@@ -12443,7 +12443,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-003" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-004" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-004" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-intersect-node-args-007" time="0.000"></testcase>
@@ -12512,16 +12512,16 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-24" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-25" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-26" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-27" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-27" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-28" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-29" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-30" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-30" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-31" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-32" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-5" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-6" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-6" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-7" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-8" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-lang-9" time="0.000"></testcase>
@@ -13056,7 +13056,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minintg2args-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng1args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng1args-2" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng1args-3" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng1args-3" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng2args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng2args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minlng2args-3" time="0.000"></testcase>
@@ -13103,7 +13103,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minsht2args-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minsht2args-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minulng1args-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minulng1args-2" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minulng1args-2" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minulng1args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minulng2args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minulng2args-2" time="0.000"></testcase>
@@ -13154,7 +13154,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-20" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-21" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-3" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-3" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-6" time="0.000"></testcase>
@@ -13162,7 +13162,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-8" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration-9" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration1args-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration1args-2" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration1args-2" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-duration1args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-time-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-minutes-from-time-10" time="0.000"></testcase>
@@ -13271,7 +13271,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-25" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-26" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-27" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-28" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-28" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-29" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-name-30" time="0.000"></testcase>
@@ -13305,24 +13305,16 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-29" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-30" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-31" time="0.000">
-      <skipped message="validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed">=== RUN   TestQT3W3C/fn-nilled-31&#xA;=== PAUSE TestQT3W3C/fn-nilled-31&#xA;=== CONT  TestQT3W3C/fn-nilled-31&#xA;    qt3_helpers_test.go:285: validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed&#xA;--- SKIP: TestQT3W3C/fn-nilled-31 (0.00s)&#xA;</skipped>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-32" time="0.000">
-      <skipped message="validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed">=== RUN   TestQT3W3C/fn-nilled-32&#xA;=== PAUSE TestQT3W3C/fn-nilled-32&#xA;=== CONT  TestQT3W3C/fn-nilled-32&#xA;    qt3_helpers_test.go:285: validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed&#xA;--- SKIP: TestQT3W3C/fn-nilled-32 (0.00s)&#xA;</skipped>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-31" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-32" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-33" time="0.000">
       <skipped message="requires schema PSVI nilled property (unsupported by standalone evaluator)">=== RUN   TestQT3W3C/fn-nilled-33&#xA;=== PAUSE TestQT3W3C/fn-nilled-33&#xA;=== CONT  TestQT3W3C/fn-nilled-33&#xA;    qt3_helpers_test.go:223: requires schema PSVI nilled property (unsupported by standalone evaluator)&#xA;--- SKIP: TestQT3W3C/fn-nilled-33 (0.00s)&#xA;</skipped>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-34" time="0.000">
-      <skipped message="validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed">=== RUN   TestQT3W3C/fn-nilled-34&#xA;=== PAUSE TestQT3W3C/fn-nilled-34&#xA;=== CONT  TestQT3W3C/fn-nilled-34&#xA;    qt3_helpers_test.go:285: validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed&#xA;--- SKIP: TestQT3W3C/fn-nilled-34 (0.00s)&#xA;</skipped>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-34" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-35" time="0.000">
       <skipped message="requires schema PSVI nilled property (unsupported by standalone evaluator)">=== RUN   TestQT3W3C/fn-nilled-35&#xA;=== PAUSE TestQT3W3C/fn-nilled-35&#xA;=== CONT  TestQT3W3C/fn-nilled-35&#xA;    qt3_helpers_test.go:223: requires schema PSVI nilled property (unsupported by standalone evaluator)&#xA;--- SKIP: TestQT3W3C/fn-nilled-35 (0.00s)&#xA;</skipped>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-36" time="0.000">
-      <skipped message="validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed">=== RUN   TestQT3W3C/fn-nilled-36&#xA;=== PAUSE TestQT3W3C/fn-nilled-36&#xA;=== CONT  TestQT3W3C/fn-nilled-36&#xA;    qt3_helpers_test.go:285: validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed&#xA;--- SKIP: TestQT3W3C/fn-nilled-36 (0.00s)&#xA;</skipped>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-36" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-37" time="0.000">
       <skipped message="requires schema PSVI nilled property (unsupported by standalone evaluator)">=== RUN   TestQT3W3C/fn-nilled-37&#xA;=== PAUSE TestQT3W3C/fn-nilled-37&#xA;=== CONT  TestQT3W3C/fn-nilled-37&#xA;    qt3_helpers_test.go:223: requires schema PSVI nilled property (unsupported by standalone evaluator)&#xA;--- SKIP: TestQT3W3C/fn-nilled-37 (0.00s)&#xA;</skipped>
     </testcase>
@@ -13332,12 +13324,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-39" time="0.000">
       <skipped message="requires schema PSVI nilled property (unsupported by standalone evaluator)">=== RUN   TestQT3W3C/fn-nilled-39&#xA;=== PAUSE TestQT3W3C/fn-nilled-39&#xA;=== CONT  TestQT3W3C/fn-nilled-39&#xA;    qt3_helpers_test.go:223: requires schema PSVI nilled property (unsupported by standalone evaluator)&#xA;--- SKIP: TestQT3W3C/fn-nilled-39 (0.00s)&#xA;</skipped>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-42" time="0.000">
-      <skipped message="validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed">=== RUN   TestQT3W3C/fn-nilled-42&#xA;=== PAUSE TestQT3W3C/fn-nilled-42&#xA;=== CONT  TestQT3W3C/fn-nilled-42&#xA;    qt3_helpers_test.go:285: validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed&#xA;--- SKIP: TestQT3W3C/fn-nilled-42 (0.00s)&#xA;</skipped>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-43" time="0.000">
-      <skipped message="validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed">=== RUN   TestQT3W3C/fn-nilled-43&#xA;=== PAUSE TestQT3W3C/fn-nilled-43&#xA;=== CONT  TestQT3W3C/fn-nilled-43&#xA;    qt3_helpers_test.go:285: validating source (root ns &#34;http://www.w3.org/XQueryTest/nillable&#34;) against schema &#34;http://www.w3.org/XQueryTest/nillable&#34;: xsd: validation failed&#xA;--- SKIP: TestQT3W3C/fn-nilled-43 (0.00s)&#xA;</skipped>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-42" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-43" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-nilled-44" time="0.000">
       <skipped message="requires schema PSVI nilled property (unsupported by standalone evaluator)">=== RUN   TestQT3W3C/fn-nilled-44&#xA;=== PAUSE TestQT3W3C/fn-nilled-44&#xA;=== CONT  TestQT3W3C/fn-nilled-44&#xA;    qt3_helpers_test.go:223: requires schema PSVI nilled property (unsupported by standalone evaluator)&#xA;--- SKIP: TestQT3W3C/fn-nilled-44 (0.00s)&#xA;</skipped>
     </testcase>
@@ -13796,7 +13784,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-20" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-21" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-22" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-22" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-23" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-prefix-from-qname-4" time="0.000"></testcase>
@@ -13821,7 +13809,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-23" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-24" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-25" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-26" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-26" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-27" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-28" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-random-number-generator-29" time="0.000"></testcase>
@@ -14010,7 +13998,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-reverseusht1args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-reverseusht1args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-root-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-root-14" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-root-14" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-root-15" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-root-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-root-24" time="0.000"></testcase>
@@ -14241,7 +14229,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-20" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-21" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-22" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-23" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-23" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-24" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-25" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-3" time="0.000"></testcase>
@@ -14260,7 +14248,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-error-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-frac-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-spec-1" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-spec-1b" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-spec-1b" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-spec-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-spec-6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sort-str-1" time="0.000"></testcase>
@@ -14323,7 +14311,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-24" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-25" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-26" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-27" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-27" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-28" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-29" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-3" time="0.000"></testcase>
@@ -14408,11 +14396,11 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-length1args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-10" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-11" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-11" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-12" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-13" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-14" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-15" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-14" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-15" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-string-to-codepoints-4" time="0.000"></testcase>
@@ -14699,7 +14687,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint1args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint1args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint1args-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint2args-1" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint2args-1" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint2args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint2args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumnint2args-4" time="0.000"></testcase>
@@ -14738,7 +14726,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint1args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint2args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint2args-2" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint2args-3" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint2args-3" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint2args-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint2args-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumpint3args-1" time="0.000"></testcase>
@@ -14762,7 +14750,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng1args-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng1args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng1args-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng2args-1" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng2args-1" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng2args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng2args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-sumulng2args-4" time="0.000"></testcase>
@@ -15494,20 +15482,20 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-019" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-020" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-021" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-020" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-021" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-023" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-024" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-025" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-026" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-026" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-027" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-028" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-029" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-030" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-031" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-032" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-033" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-033" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-034" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-035" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-available-036" time="0.000"></testcase>
@@ -15546,8 +15534,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-011" time="0.000">
       <skipped message="requires static typing">=== RUN   TestQT3W3C/fn-unparsed-text-lines-011&#xA;=== PAUSE TestQT3W3C/fn-unparsed-text-lines-011&#xA;=== CONT  TestQT3W3C/fn-unparsed-text-lines-011&#xA;    qt3_helpers_test.go:223: requires static typing&#xA;--- SKIP: TestQT3W3C/fn-unparsed-text-lines-011 (0.00s)&#xA;</skipped>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-012" time="0.000">
-      <skipped message="requires static typing">=== RUN   TestQT3W3C/fn-unparsed-text-lines-012&#xA;=== PAUSE TestQT3W3C/fn-unparsed-text-lines-012&#xA;=== CONT  TestQT3W3C/fn-unparsed-text-lines-012&#xA;    qt3_helpers_test.go:223: requires static typing&#xA;--- SKIP: TestQT3W3C/fn-unparsed-text-lines-012 (0.00s)&#xA;</skipped>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-012" time="0.020">
+      <skipped message="requires static typing">=== RUN   TestQT3W3C/fn-unparsed-text-lines-012&#xA;=== PAUSE TestQT3W3C/fn-unparsed-text-lines-012&#xA;=== CONT  TestQT3W3C/fn-unparsed-text-lines-012&#xA;    qt3_helpers_test.go:223: requires static typing&#xA;--- SKIP: TestQT3W3C/fn-unparsed-text-lines-012 (0.02s)&#xA;</skipped>
     </testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-014" time="0.000"></testcase>
@@ -15577,7 +15565,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-038" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-039" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-040" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-041" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-041" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-042" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-043" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fn-unparsed-text-lines-044" time="0.000"></testcase>
@@ -15893,7 +15881,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-003" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-004" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-004" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-fold-left-007" time="0.000"></testcase>
@@ -16062,7 +16050,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-006" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-007" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fo-test-fn-substring-010" time="0.000"></testcase>
@@ -16295,7 +16283,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-left-015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-left-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-left-019" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-left-020" time="1.140"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-left-020" time="1.310"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-003" time="0.000"></testcase>
@@ -16308,7 +16296,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-012" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-013" time="1.080"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-013" time="1.250"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/fold-right-016" time="0.000"></testcase>
@@ -16723,7 +16711,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-024u" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-024v" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-1340err" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-809err" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-809err" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-810err" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-811err" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/format-time-812err" time="0.000"></testcase>
@@ -17157,11 +17145,11 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-381" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-382" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-383" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-384" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-384" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-385" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-386" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-386" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-387" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-388" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-388" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-389" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-390" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/function-literal-391" time="0.000"></testcase>
@@ -17483,7 +17471,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-max-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-max-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-max-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-max-4" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-max-4" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-max-all" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-min-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-min-2" time="0.000"></testcase>
@@ -17585,7 +17573,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-dateTime-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-duration-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-duration-2" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-duration-3" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-duration-3" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-duration-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-duration-all" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-seconds-from-time-1" time="0.000"></testcase>
@@ -17703,7 +17691,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-years-from-duration-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-years-from-duration-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-years-from-duration-5" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-years-from-duration-all" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-years-from-duration-all" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-zero-or-one-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-zero-or-one-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/functx-fn-zero-or-one-all" time="0.000"></testcase>
@@ -17746,8 +17734,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression172" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression176" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression177" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression178" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression179" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression178" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression179" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression18" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression180" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression181" time="0.000"></testcase>
@@ -17971,9 +17959,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression592" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression593" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression594" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression70" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression70" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression71" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression72" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression72" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression73" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression77" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression78" time="0.000"></testcase>
@@ -17988,8 +17976,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression89" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression9" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression90" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression91" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression92" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression91" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression92" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression93" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression97" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generalexpression98" time="0.000"></testcase>
@@ -18005,9 +17993,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-010" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-011" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-011" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-012" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-013" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-013" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-019" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-901" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/generate-id-902" time="0.000"></testcase>
@@ -18208,7 +18196,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof37" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof38" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof39" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof4" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof4" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof40" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof41" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/instanceof42" time="0.000"></testcase>
@@ -18494,7 +18482,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/lessthanonanyuri-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/liam-contains-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/liam-contains-002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/liam-contains-003" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/liam-contains-003" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/liam-contains-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/line-ending-P002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-001" time="0.000"></testcase>
@@ -18512,7 +18500,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-015" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-016" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-016" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-call-019" time="0.000"></testcase>
@@ -18583,7 +18571,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-013" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-014" time="1.880"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-014" time="1.790"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-for-each-016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-get-001" time="0.000"></testcase>
@@ -18631,7 +18619,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-keys-011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-keys-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-keys-013" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-keys-014" time="1.140"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-keys-014" time="1.520"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-003" time="0.000"></testcase>
@@ -18649,19 +18637,19 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-011" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-012" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-019" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-020" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-020" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-021" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-022" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-023" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-022" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-023" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-024" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-024-hof" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-025" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-025" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-026" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-merge-027" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-002" time="0.000"></testcase>
@@ -18674,12 +18662,12 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-011" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-012" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-012" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-019" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-020" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-020" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-021" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-put-023" time="0.000"></testcase>
@@ -18693,7 +18681,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-011" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-012" time="1.620"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-012" time="1.640"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/map-remove-015" time="0.000"></testcase>
@@ -19080,7 +19068,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat262" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat263" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat27" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat28" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat28" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat29" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat30" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/numberformat301" time="0.000"></testcase>
@@ -19768,7 +19756,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-dayTimeDuration2args-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-dayTimeDuration2args-3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-dayTimeDuration2args-4" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-dayTimeDuration2args-5" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-dayTimeDuration2args-5" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-yearMonthDuration-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-yearMonthDuration-10" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/op-divide-yearMonthDuration-11" time="0.000"></testcase>
@@ -21495,7 +21483,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-003" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-006" time="0.000"></testcase>
@@ -21523,19 +21511,19 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/parse-xml-fragment-025" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path003" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path004" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path003" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path004" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path005" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path006" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path007" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path008" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path006" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path007" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path008" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path011" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path012" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path013" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path012" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path013" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path015" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path020" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/path020" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/position-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/position-10" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/position-11" time="0.000"></testcase>
@@ -21734,8 +21722,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-39" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-40" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-41" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-42" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-41" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-42" time="0.030"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/rangeExpr-7" time="0.000"></testcase>
@@ -21794,7 +21782,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00051" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00052" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00053" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00054" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00054" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00055" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00056" time="0.000">
       <skipped message="requires XSD 1.0">=== RUN   TestQT3W3C/re00056&#xA;=== PAUSE TestQT3W3C/re00056&#xA;=== CONT  TestQT3W3C/re00056&#xA;    qt3_helpers_test.go:223: requires XSD 1.0&#xA;--- SKIP: TestQT3W3C/re00056 (0.00s)&#xA;</skipped>
@@ -21808,8 +21796,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00062" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00063" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00064" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00065" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00066" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00065" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00066" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00067" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00068" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00069" time="0.000"></testcase>
@@ -22348,16 +22336,16 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00596" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00597" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00598" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00599" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00600" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00601" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00602" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00603" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00599" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00600" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00601" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00602" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00603" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00604" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00605" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00606" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00607" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00608" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00605" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00606" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00607" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00608" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00609" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00610" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00611" time="0.000"></testcase>
@@ -22734,7 +22722,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00980" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00982" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00983" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00984" time="0.020"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00984" time="0.040"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00985" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00988" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/re00989" time="0.000"></testcase>
@@ -22764,7 +22752,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/same-key-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/same-key-021" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/same-key-022" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/same-key-027" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/same-key-027" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/same-key-028" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/seq-queries-results-q1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/sequence-type-1" time="0.000"></testcase>
@@ -22818,7 +22806,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-102" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-103" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-104" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-105" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-105" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-106" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-107" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-108" time="0.000"></testcase>
@@ -22840,7 +22828,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-124" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-125" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-126" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-127" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-127" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-128" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-130" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/serialize-json-131" time="0.000"></testcase>
@@ -22977,7 +22965,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-18" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-19" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-2" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-20" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-20" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-21" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-22" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/treat-as-23" time="0.000"></testcase>
@@ -23027,9 +23015,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-4" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-5" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-6" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-4" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-5" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-6" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-7" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-double-8" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comp-eq-int-1" time="0.000"></testcase>
@@ -23073,7 +23061,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-10" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-11" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-12" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-12" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/value-comparison-6" time="0.000"></testcase>
@@ -23114,16 +23102,16 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-016" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-017" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-018" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-001" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-017" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-C-018" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-001" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-004" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-005" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-005" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-007" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-008" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-008" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-009" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-011" time="0.000"></testcase>
@@ -23162,7 +23150,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-509" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-510" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xml-to-json-D-511" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xqhof10" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xqhof10" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xqhof11" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xqhof12" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xpath3" name="TestQT3W3C/xqhof5" time="0.000"></testcase>

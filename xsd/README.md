@@ -20,10 +20,10 @@ xs:ID/xs:IDREF/xs:ENTITY value-space validation, and identity-constraint scoping
 
 Measured against the W3C XML Schema Test Suite:
 
-| Mode | Result | Collections |
-|------|--------|-------------|
-| **XSD 1.0** (default) | 14,178 / 14,399 (98.5%) schema-validity tests; 24,799 / 25,005 instance tests | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
-| **XSD 1.1** | 1,049 / 1,049 (100%) XSD-1.1-tagged cases, 0 failures | IBM, Saxon, Oracle, W3C-WG |
+| Mode | Pass | Skip | Fail | Total | Pass/Total | Collections |
+|------|-----:|-----:|-----:|------:|-----------:|-------------|
+| **XSD 1.0** (default) | 14,233 | 0 | 166 | 14,399 | 98.85% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
+| **XSD 1.1** | 1,049 | 0 | 0 | 1,049 | 100.00% | IBM, Saxon, Oracle, W3C-WG |
 
 The 1.0-era collections (Microsoft, NIST, Sun, Boeing) contain no 1.1-tagged
 cases, so they are not part of the 1.1 run.

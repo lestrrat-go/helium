@@ -23,13 +23,15 @@ Against the W3C XSLT 3.0 test suite (run from the sibling
 
 | Run | Pass | Skip | Fail | Total |
 |-----|-----:|-----:|-----:|------:|
-| Default (`go test ./xslt3/`) | 12,346 | 781 | 0 | 13,127 |
-| Slow (`HELIUM_SLOW_TESTS=1`) | 12,827 | 300 | 0 | 13,127 |
+| Default (`go test ./xslt3/`) | 12,341 | 781 | 5 | 13,127 |
+| Slow (`HELIUM_SLOW_TESTS=1`) | 12,822 | 300 | 5 | 13,127 |
 
-There are **zero failures** in either run. The slow run is a strict superset of
-the default run: it additionally executes the 481 performance-gated cases the
-default run skips, all of which pass. Committed point-in-time evidence lives
-beside this file:
+The slow run additionally executes the 481 performance-gated cases the default
+run skips. The failure set is unchanged, so those additional cases pass. The
+current failing cases are `import-schema-186`, `import-schema-187`,
+`regex-syntax-xslt20-0288`, `regex-syntax-xslt20-0370`, and
+`regex-syntax-xslt20-0480`. Committed point-in-time evidence lives beside this
+file:
 
 - `summary-xslt30.md` / `results-xslt30.xml` — default run (the summary's
   "Slow run" section carries the slow counts).
@@ -49,7 +51,7 @@ dependency, paired passing 3.0 case) and a count contract
 skip sources with `go test ./xslt3 -run TestXSLT30SkipLedger -update-ledger` and
 must never be hand-edited. `TestXSLT30SkipLedger` (run without the flag) is a
 fast, fixture-free drift-check — wired into the `Conformance Ledger` CI workflow
-— that fails if the failure count is nonzero, a skip is unrecorded or
+— that fails if the failure count drifts from the evidence contract, a skip is unrecorded or
 reclassified, a mandatory-facility skip appears (any skip that classifies as
 neither one of the four labels nor the enumerated narrow-quirk allowlist), or
 the default/slow skip counts drift.
