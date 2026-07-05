@@ -1278,17 +1278,17 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 }
 
 // pruneNonEmittingParticles returns a shallow copy of the model group with every
-// NON-EMITTING particle removed: a direct particle with maxOccurs == 0, any nested
-// group with maxOccurs == 0, and any nested group whose members are all pruned away.
-// A group with no emitting members emits nothing, but it is still EMPTIABLE (it
-// matches ONLY the empty sequence), and that emptiability is SEMANTICALLY LOAD-BEARING
+// NON-EMITTING particle removed or normalized to an empty branch: a direct particle
+// with maxOccurs == 0, any nested group with maxOccurs == 0, and any nested group
+// whose members are all pruned away. A non-emitting particle consumes no children,
+// but it is still EMPTIABLE, and that emptiability is SEMANTICALLY LOAD-BEARING
 // inside an xs:choice: an empty branch makes the whole choice emptiable, so silently
 // dropping it would turn a previously-emptiable choice into one that REQUIRES another
 // branch (a false reject). The prune is therefore semantics-preserving:
 //
 //   - In a SEQUENCE (or xs:all) parent, an emptied member is a no-op (matching empty
 //     consumes nothing), so it is dropped — a required sibling stays required.
-//   - In a CHOICE parent, an emptied branch is REPLACED by a normalized emptiable
+//   - In a CHOICE parent, a non-emitting branch is REPLACED by a normalized emptiable
 //     empty-SEQUENCE particle (minOccurs 0). The choice thus stays emptiable (one
 //     branch matches empty), and the branch is a SEQUENCE — never a literally-empty
 //     choice the matcher would treat as a missing required branch (round-15/16).
@@ -1309,6 +1309,9 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 	clone.Particles = make([]*Particle, 0, len(mg.Particles))
 	for _, p := range mg.Particles {
 		if p.MaxOccurs == 0 {
+			if mg.Compositor == CompositorChoice {
+				clone.Particles = append(clone.Particles, emptyChoiceBranchParticle())
+			}
 			continue // direct prohibited particle: emits nothing
 		}
 		if grp, ok := p.Term.(*ModelGroup); ok {
@@ -1320,11 +1323,7 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 				// SEQUENCE branch (minOccurs 0) so the matcher still matches the choice by
 				// consuming nothing, and never via a literally-empty choice.
 				if mg.Compositor == CompositorChoice {
-					clone.Particles = append(clone.Particles, &Particle{
-						MinOccurs: 0,
-						MaxOccurs: 1,
-						Term:      &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1},
-					})
+					clone.Particles = append(clone.Particles, emptyChoiceBranchParticle())
 				}
 				continue
 			}
@@ -1336,6 +1335,14 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 		clone.Particles = append(clone.Particles, p)
 	}
 	return &clone
+}
+
+func emptyChoiceBranchParticle() *Particle {
+	return &Particle{
+		MinOccurs: 0,
+		MaxOccurs: 1,
+		Term:      &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1},
+	}
 }
 
 // resolveDefinedSiblings populates SiblingNames on every xs:any wildcard that

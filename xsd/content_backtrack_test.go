@@ -179,7 +179,7 @@ func TestContentBacktrackOptionalAll(t *testing.T) {
 
 // TestContentBacktrackProhibitedParticle verifies that a maxOccurs=0 (PROHIBITED)
 // particle never consumes a child in the backtracker: the reachability automaton
-// operates on a non-emitting-pruned model (pruneNonEmittingParticles), so a
+// keeps the model intact and gives prohibited particles skip-only reach, so a
 // prohibited element leaf cannot route a child through and mask an invalid
 // instance. The leading occurrence-ambiguous sequence forces the greedy matcher to
 // fail, engaging the backtracker.
@@ -203,7 +203,7 @@ func TestContentBacktrackProhibitedParticle(t *testing.T) {
 		// over-acceptance. The instance is invalid.
 		require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><a/><b/></root>`))
 		// The same model with the prohibited element absent is valid (x|x partition,
-		// then b) — confirms pruning does not over-reject.
+		// then b) — confirms skip-only reach does not over-reject.
 		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><b/></root>`))
 	})
 

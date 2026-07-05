@@ -657,7 +657,7 @@ func TestOpenContent_AllNonEmittingGroup(t *testing.T) {
 			"a fully non-emitting declared model means only open content applies")
 	})
 
-	t.Run("choice with at least one emitting branch still matches normally", func(t *testing.T) {
+	t.Run("choice with at least one emitting branch keeps prohibited branch emptiable", func(t *testing.T) {
 		t.Parallel()
 		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="doc"><xs:complexType>
@@ -672,8 +672,10 @@ func TestOpenContent_AllNonEmittingGroup(t *testing.T) {
 			"an emitting branch still matches normally")
 		require.NoError(t, validateOC(t, schema, `<doc><g>x</g><e>anything</e></doc>`),
 			"the prohibited branch's name routes to open content alongside the satisfied emitting branch")
-		require.Error(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
-			"the choice still requires its emitting branch g (the prohibited branch does not make it optional)")
+		require.NoError(t, validateOC(t, schema, `<doc/>`),
+			"the prohibited branch keeps the choice emptiable")
+		require.NoError(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"the prohibited branch cannot consume, so e routes to open content")
 	})
 }
 
