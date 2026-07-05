@@ -1,6 +1,9 @@
 package xsd_test
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -51,4 +54,82 @@ func TestNestedImportAbsoluteURIMissingDependencyFatal(t *testing.T) {
 
 	_, err = xsd.NewCompiler().FS(helium.PermissiveFS()).BaseDir(".").Compile(t.Context(), doc)
 	require.Error(t, err, "a schema depending on a component from a missed absolute-URI import must fail compile (the miss is not masked)")
+}
+
+// A "file:" scheme schemaLocation is a LOCAL resource: PermissiveRoot converts
+// the file URI to a filesystem path before os.Open, so a valid file:/// include
+// LOADS (the type it defines resolves), and a missing one yields os.Open's own
+// ENOENT — a demotable resolution miss.
+func TestNestedIncludeFileURILoads(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	partPath := filepath.Join(dir, "part.xsd")
+	const partXSD = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="PartType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`
+	require.NoError(t, os.WriteFile(partPath, []byte(partXSD), 0o600))
+
+	// The main schema references PartType from the file:/// include; if the
+	// include is skipped instead of loaded, PartType is unresolved and compile
+	// fails — so a successful compile proves the file:/// include loaded.
+	mainXSD := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="file://` + filepath.ToSlash(partPath) + `"/>
+  <xs:element name="root" type="PartType"/>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(mainXSD))
+	require.NoError(t, err)
+
+	_, err = xsd.NewCompiler().FS(helium.PermissiveFS()).BaseDir(dir).Compile(t.Context(), doc)
+	require.NoError(t, err, "a valid file:/// include must load (its type must resolve), not be skipped")
+}
+
+// A MISSING file:/// include is a demotable resolution miss (os.Open ENOENT): the
+// optional include is skipped and the self-sufficient schema still compiles.
+func TestNestedIncludeFileURIMissingDemotes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	missingPath := filepath.Join(dir, "missing.xsd")
+
+	mainXSD := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="file://` + filepath.ToSlash(missingPath) + `"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(mainXSD))
+	require.NoError(t, err)
+
+	_, err = xsd.NewCompiler().FS(helium.PermissiveFS()).BaseDir(dir).Compile(t.Context(), doc)
+	require.NoError(t, err, "a missing file:/// include must demote to a warning-and-skip, not fail compile")
+}
+
+// TestNestedIncludeAbsoluteURIErrInvalidDemotes verifies the FS-INDEPENDENT
+// non-file-URI classification: os.DirFS (used by the W3C harness) rejects a
+// non-fs.ValidPath name like "http://foo/foo" with fs.ErrInvalid, NOT
+// fs.ErrNotExist. An optional include whose absolute-URI schemaLocation the FS
+// reports via fs.ErrInvalid must still DEMOTE (schemaLocation is only a hint),
+// exactly as it does when a URI-mapping FS reports fs.ErrNotExist.
+func TestNestedIncludeAbsoluteURIErrInvalidDemotes(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="http://foo/foo"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+	require.NoError(t, err)
+
+	// openMissSchemaFS returns fs.ErrInvalid for every Open — modeling os.DirFS's
+	// response to a non-ValidPath (URI-shaped) name.
+	_, err = xsd.NewCompiler().FS(openMissSchemaFS{fs.ErrInvalid}).BaseDir(".").Compile(t.Context(), doc)
+	require.NoError(t, err, "a non-file-URI include reported via fs.ErrInvalid must demote, not fail compile")
 }

@@ -1,6 +1,7 @@
 package xslt3_test
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -146,4 +147,27 @@ func TestSourceSchemaStrictFatalOnMiss(t *testing.T) {
 	}}
 	_, err = ss.Transform(src).URIResolver(resolver).Serialize(ctx)
 	require.Error(t, err, "a source-schema miss must be fatal under strict validation")
+}
+
+// opaqueRuntimeResolver is an xpath3.URIResolver whose ResolveURI returns an
+// OPAQUE error (a bare "HTTP 403", NOT satisfying fs.ErrNotExist) for every URI.
+// Per the demotable-miss contract such an error is FATAL, never demoted.
+type opaqueRuntimeResolver struct{}
+
+func (opaqueRuntimeResolver) ResolveURI(string) (io.ReadCloser, error) {
+	return nil, errors.New("HTTP 403 Forbidden")
+}
+
+// TestSourceSchemaOpaqueResolverErrorFatalUnderLax verifies that an OPAQUE source
+// schema-location resolver error (not fs.ErrNotExist) is FATAL even under lax —
+// only a CONFIRMED not-found (fs.ErrNotExist / HTTP 404) is a demotable miss.
+func TestSourceSchemaOpaqueResolverErrorFatalUnderLax(t *testing.T) {
+	ctx := t.Context()
+	ss := compileTaxSheet(t)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(taxSource))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(src).URIResolver(opaqueRuntimeResolver{}).Serialize(ctx)
+	require.Error(t, err, "an opaque source-schema resolver error (not fs.ErrNotExist) must be fatal under lax")
 }

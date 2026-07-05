@@ -3,8 +3,10 @@ package xslt3
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"path"
@@ -564,12 +566,16 @@ func (ec *execContext) injectedParser() *helium.Parser {
 func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {
 	rc, err := r.ResolveURI(uri)
 	if err != nil {
-		// The reader could not be OBTAINED — a resolution-phase miss. Tag it so a
-		// schema loader may demote it ([isDemotableSchemaMiss]); a
-		// permission/cap/multi-error cause still wins via isFatalSchemaLoadError.
-		// The tag is transparent to non-schema callers (message + unwrap chain
-		// preserved).
-		return nil, markResolutionMiss(err)
+		// A demotable miss must POSITIVELY signal the resource is ABSENT: tag it
+		// as a resolution miss ([isDemotableSchemaMiss]) ONLY when the resolver's
+		// error satisfies fs.ErrNotExist. An OPAQUE/ambiguous resolver error
+		// (e.g. a bare "HTTP 403", a transport failure) is NOT tagged, so the
+		// positive-tag partition makes it FATAL for schema loaders (fail-closed);
+		// the tag is transparent to non-schema callers (message/chain preserved).
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, markResolutionMiss(err)
+		}
+		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
 	// A read failure here is POST-OPEN (the reader WAS obtained): return it

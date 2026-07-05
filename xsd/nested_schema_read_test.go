@@ -180,17 +180,35 @@ func TestNestedIncludeReadFailAfterOpenIsFatal(t *testing.T) {
 }
 
 // TestNestedIncludeOpenMissWarns verifies that a genuine unresolvable-at-open
-// miss (fs.ErrNotExist / fs.ErrInvalid from Open) stays a benign fetch-miss:
-// the include is skipped and compilation succeeds.
+// miss that POSITIVELY signals absence (fs.ErrNotExist from Open) stays a benign
+// fetch-miss: the include is skipped and compilation succeeds.
 func TestNestedIncludeOpenMissWarns(t *testing.T) {
 	t.Parallel()
 
-	for _, openErr := range []error{fs.ErrNotExist, fs.ErrInvalid} {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
+	require.NoError(t, err)
+
+	_, err = xsd.NewCompiler().FS(openMissSchemaFS{fs.ErrNotExist}).BaseDir(".").Compile(t.Context(), doc)
+	require.NoError(t, err, "an fs.ErrNotExist open-miss must be a skipped fetch-miss, not fatal")
+}
+
+// TestNestedIncludeOpenInvalidIsFatal verifies that a plain-fs.FS Open error that
+// does NOT positively signal absence — fs.ErrInvalid (a malformed/invalid local
+// open), delivered as a *fs.PathError{Op:"open", Err: fs.ErrInvalid} — is FATAL,
+// not swallowed as a benign resolution miss. Only fs.ErrNotExist demotes; every
+// other Open errno stays fatal (fail-closed).
+func TestNestedIncludeOpenInvalidIsFatal(t *testing.T) {
+	t.Parallel()
+
+	for _, openErr := range []error{
+		fs.ErrInvalid,
+		&fs.PathError{Op: "open", Path: "nested.xsd", Err: fs.ErrInvalid},
+	} {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(includeMainSchema))
 		require.NoError(t, err)
 
 		_, err = xsd.NewCompiler().FS(openMissSchemaFS{openErr}).BaseDir(".").Compile(t.Context(), doc)
-		require.NoError(t, err, "open-miss (%v) must be a skipped fetch-miss, not fatal", openErr)
+		require.Error(t, err, "an fs.ErrInvalid open error (%v) must be fatal, not swallowed as a resolution miss", openErr)
 	}
 }
 

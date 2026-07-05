@@ -1,6 +1,8 @@
 package xslt3_test
 
 import (
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -172,4 +174,33 @@ func TestImportSchemaFetchMissFallsBackToPrecompiled(t *testing.T) {
 	out, err := ss.Transform(src).Serialize(ctx)
 	require.NoError(t, err)
 	require.Contains(t, out, "out")
+}
+
+// opaqueResolveErrorResolver is a compile-time URIResolver whose Resolve returns
+// an OPAQUE error (a bare "HTTP 403", NOT satisfying fs.ErrNotExist) for every
+// URI — modeling a resolver that could not fetch for a reason OTHER than a
+// confirmed not-found. Per the demotable-miss contract such an error is fatal.
+type opaqueResolveErrorResolver struct{}
+
+func (opaqueResolveErrorResolver) Resolve(string) (io.ReadCloser, error) {
+	return nil, errors.New("HTTP 403 Forbidden")
+}
+
+// An OPAQUE resolver error (not fs.ErrNotExist) on the top-level import-schema
+// path is FATAL and must NOT fall back to a matching pre-compiled ImportSchemas
+// entry — only a CONFIRMED not-found (fs.ErrNotExist) is a demotable miss.
+func TestImportSchemaOpaqueResolverErrorNotMaskedByPrecompiledFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(isImportSchemaStylesheet))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		BaseURI("mem://stylesheets/main.xsl").
+		URIResolver(opaqueResolveErrorResolver{}).
+		ImportSchemas(isPrecompiledSchema(t)).
+		Compile(ctx, doc)
+	require.Error(t, err,
+		"an opaque resolver error (not fs.ErrNotExist) must be fatal, not masked by the precompiled fallback")
 }

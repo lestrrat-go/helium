@@ -131,17 +131,16 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 		if _, denyAll := c.fsys.(iofs.DenyAll); denyAll || IsFatalSchemaLoad(openErr) {
 			return nil, openErr //nolint:wrapcheck // callers/classifiers key on the original error
 		}
-		// A NON-BENIGN open error (fs.ErrPermission, an "outside root" policy error,
-		// or any other/ambiguous errno) is NOT a resolution miss and is fatal: return
-		// it verbatim and UNTAGGED so nestedFetchMiss never demotes it. Fail-closed.
-		if !isBenignResolutionMiss(openErr) {
-			return nil, openErr //nolint:wrapcheck // non-benign open error is fatal, not a miss
-		}
-		// Benign open miss. A ReadFileFS may still SERVE THE BYTES even when its Open is
-		// unsupported (a ReadFileFS-only FS whose Open returns fs.ErrNotExist/
-		// fs.ErrInvalid), so retry through fs.ReadFile for that FS kind only (a plain
-		// fs.FS's fs.ReadFile would merely re-Open and reproduce the identical miss).
-		if _, ok := c.fsys.(fs.ReadFileFS); ok {
+		// A ReadFileFS may still SERVE THE BYTES even when its Open is UNSUPPORTED (a
+		// ReadFileFS-only FS whose Open returns fs.ErrNotExist/fs.ErrInvalid), so
+		// retry through the atomic fs.ReadFile for that FS kind when the Open error is
+		// a benign miss OR an Open-unsupported signal ([isOpenMissOrUnsupported] — NOT
+		// a permission/multi/fatal cause). fs.ReadFile is the AUTHORITATIVE path here,
+		// so its OWN error is classified by [isDirectNotExist] (only a canonical
+		// not-found demotes; fs.ErrInvalid and everything else stay fatal). A plain
+		// fs.FS's fs.ReadFile would merely re-Open and reproduce the identical miss, so
+		// the fallback is confined to a real ReadFileFS.
+		if _, ok := c.fsys.(fs.ReadFileFS); ok && isOpenMissOrUnsupported(openErr) {
 			data, rfErr := fs.ReadFile(c.fsys, path)
 			if rfErr == nil {
 				if int64(len(data)) > maxNestedSchemaSize {
@@ -167,9 +166,31 @@ func (c *compiler) readNestedSchema(path string) ([]byte, error) {
 			}
 			return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, rfErr)
 		}
-		// Open reported a benign resolution miss and no ReadFileFS fallback applies:
-		// TAG it — a FAILED Open is by definition the resolution phase — so
-		// nestedFetchMiss, and nothing downstream, demotes it.
+		// Plain fs.FS (or a ReadFileFS whose Open error is not a benign/unsupported
+		// miss): a failed Open IS the resolution answer.
+		//
+		// A non-file-scheme ABSOLUTE URI schemaLocation (http://, urn:, ...) is NOT a
+		// local resource: a filesystem FS cannot serve it and reports a benign miss
+		// whose errno is FS-DEPENDENT — fs.ErrNotExist (os.Open / iofs.PermissiveRoot's
+		// URI mapping) or fs.ErrInvalid ([os.DirFS], which rejects a non-fs.ValidPath
+		// name). schemaLocation is only a hint (src-include.1 / src-import), so demote
+		// it as a resolution MISS regardless of the FS-specific errno — UNLESS the error
+		// is [notDemotable]. This is FS-INDEPENDENT (os.DirFS, PermissiveRoot, any local
+		// FS); a URI-serving FS (xslt3's schemaResolverFS, or a ReadFileFS handled
+		// above) serves the bytes or fails fatal, so it never relies on this branch.
+		if s := uriScheme(path); s != "" && s != "file" && !notDemotable(openErr) {
+			return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, openErr)
+		}
+		// A genuinely-LOCAL path: demote ONLY a POSITIVE not-found
+		// ([isBenignResolutionMiss] = fs.ErrNotExist); an fs.ErrPermission, an "outside
+		// root" policy error, a MALFORMED-LOCAL fs.ErrInvalid, or any other/ambiguous
+		// errno is NOT a confirmed absence and stays FATAL, returned verbatim and
+		// UNTAGGED so nestedFetchMiss never demotes it (fail-closed).
+		if !isBenignResolutionMiss(openErr) {
+			return nil, openErr //nolint:wrapcheck // non-benign open error is fatal, not a miss
+		}
+		// A FAILED Open reporting a positive not-found IS the resolution phase: TAG it
+		// so nestedFetchMiss, and nothing downstream, demotes it.
 		return nil, fmt.Errorf("%w: %w", errSchemaFetchMiss, openErr)
 	}
 	data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
@@ -210,18 +231,42 @@ func notDemotable(err error) bool {
 }
 
 // isBenignResolutionMiss reports whether err is a benign schemaLocation
-// RESOLUTION miss — a missing file ([fs.ErrNotExist]) or an unresolvable location
-// hint ([fs.ErrInvalid], e.g. an http:// URL opened as a filesystem path). It
-// gates the whitelist ONLY inside [readNestedSchema], where a benign miss is then
-// wrapped in [errSchemaFetchMiss]; downstream classification keys on that tag, not
-// on the errno, so this predicate is never consulted after the resolution phase.
+// RESOLUTION miss — an error that POSITIVELY signals the resource is ABSENT
+// ([fs.ErrNotExist]). A demotable miss must positively signal not-found: only
+// [fs.ErrNotExist] qualifies. An [fs.ErrInvalid] (or any other) Open error is NOT
+// a confirmed absence — a malformed/invalid LOCAL open must stay FATAL
+// (fail-closed) — so it is not demoted here. A non-file-scheme absolute URI is
+// already mapped to [fs.ErrNotExist] by [iofs.PermissiveRoot.Open] (it is not a
+// local path, so it is genuinely absent), so the optional absolute-URI include
+// still demotes. It gates the whitelist ONLY inside [readNestedSchema], where a
+// benign miss is then wrapped in [errSchemaFetchMiss]; downstream classification
+// keys on that tag, not on the errno, so this predicate is never consulted after
+// the resolution phase.
 //
 // The shared [notDemotable] veto is applied FIRST — the SAME veto [isDirectNotExist]
 // uses — so a MULTI-ERROR ([errors.Join]), an fs.ErrPermission anywhere in the chain,
 // or a fatal schema-load condition is NEVER demoted even when it ALSO wraps a benign
-// fs.ErrNotExist/fs.ErrInvalid errno. A failed Open IS the resolution phase, so only
-// after that veto is the broad benign errno set an accept.
+// fs.ErrNotExist errno. A failed Open IS the resolution phase, so only after that
+// veto is the fs.ErrNotExist accept applied.
 func isBenignResolutionMiss(err error) bool {
+	if notDemotable(err) {
+		return false
+	}
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// isOpenMissOrUnsupported reports whether a FAILED Open error qualifies a
+// [fs.ReadFileFS] for the atomic fs.ReadFile fallback: a benign resolution miss
+// ([fs.ErrNotExist]) OR an Open-UNSUPPORTED signal ([fs.ErrInvalid]) that a
+// ReadFileFS-only FS returns when Open is not implemented — but NOT a
+// permission/multi-error/fatal cause ([notDemotable]). The fallback then serves
+// the bytes or surfaces the AUTHORITATIVE fs.ReadFile error, which is classified
+// by [isDirectNotExist] (fs.ErrNotExist only). This is DELIBERATELY broader than
+// [isBenignResolutionMiss] (the final Open-path DEMOTION gate, fs.ErrNotExist
+// only): fs.ErrInvalid may ROUTE a ReadFileFS to its fallback, but must never by
+// itself DEMOTE an Open failure — a malformed-local fs.ErrInvalid on a plain
+// fs.FS stays fatal.
+func isOpenMissOrUnsupported(err error) bool {
 	if notDemotable(err) {
 		return false
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync/atomic"
 
@@ -125,11 +126,17 @@ func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error
 	}
 	rc, err := c.resolver.Resolve(uri)
 	if err != nil {
-		// The reader could not be OBTAINED — a resolution-phase miss. Tag it
-		// [errSchemaResolutionMiss] (the ONLY demotable classification) so the
-		// top-level import-schema path may fall back to a precompiled entry; a
-		// permission/cap/multi-error cause still wins via isFatalSchemaLoadError.
-		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, markResolutionMiss(err))
+		// A demotable miss must POSITIVELY signal the resource is ABSENT: tag it
+		// [errSchemaResolutionMiss] (the ONLY demotable classification) ONLY when
+		// the resolver's error satisfies fs.ErrNotExist. An OPAQUE/ambiguous
+		// resolver error (e.g. a bare "HTTP 403", a transport failure) is NOT
+		// tagged, so the positive-tag partition makes it FATAL (fail-closed). A
+		// URIResolver must return an fs.ErrNotExist-satisfying error to signal a
+		// demotable absent optional schema.
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, markResolutionMiss(err))
+		}
+		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
 	}
 	data, err := readCloserToBytes(rc, c.maxResourceBytes)
 	if err != nil {

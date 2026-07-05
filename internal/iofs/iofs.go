@@ -50,11 +50,29 @@ func (PermissiveRoot) Open(name string) (fs.File, error) {
 	// include/import hint pointing at a network URI becomes fatal on some hosts.
 	// Report it as a canonical fs.ErrNotExist "not found" so it is classified as a
 	// resolution miss CONSISTENTLY across platforms; a REQUIRED load still
-	// surfaces the miss to its caller. A genuinely-local path (no scheme, or a
-	// "file:" URI / Windows drive-letter path) still reaches os.Open and returns
-	// its real errno, so a malformed LOCAL path stays fatal/normal.
-	if s := uripath.URIScheme(name); s != "" && s != "file" {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	// surfaces the miss to its caller.
+	//
+	// A "file:" URI IS a local resource, but os.Open of the literal "file:///abs"
+	// string opens a file whose NAME is that string (which never exists). CONVERT
+	// it to a local filesystem path first (percent-decode, "file:///abs" -> "/abs",
+	// Windows "file:///C:/x" -> "C:\\x"), so a valid file:/// include LOADS and a
+	// MISSING one yields os.Open's own ENOENT (a demotable resolution miss). A
+	// malformed/UNC/non-local file URI is not a servable local resource: return it
+	// as a NON-fs.ErrNotExist PathError so it stays FATAL (fail-closed), never
+	// silently demoted as an absent optional include.
+	//
+	// A genuinely-local path (no scheme, or a Windows drive-letter path such as
+	// "C:\\x", whose single-letter "scheme" URIScheme rejects) still reaches
+	// os.Open and returns its real errno, so a malformed LOCAL path stays fatal.
+	if s := uripath.URIScheme(name); s != "" {
+		if s != "file" {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+		}
+		p, err := FileURIToPath(name)
+		if err != nil {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		}
+		name = p
 	}
 	return os.Open(name) //nolint:gosec,wrapcheck // intentional passthrough; see type doc
 }

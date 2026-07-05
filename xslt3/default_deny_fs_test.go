@@ -2,6 +2,7 @@ package xslt3_test
 
 import (
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 	"testing"
@@ -54,11 +55,17 @@ func baseName(s string) string {
 	return s
 }
 
+// resolverNotFoundError models a well-behaved URIResolver reporting a genuine
+// not-found: per the demotable-miss contract it satisfies fs.ErrNotExist (via
+// Unwrap), so a schema loader may demote an ABSENT optional schema. An
+// opaque/ambiguous resolver error that does NOT satisfy fs.ErrNotExist is fatal.
 type resolverNotFoundError struct {
 	uri string
 }
 
 func (e *resolverNotFoundError) Error() string { return "not found: " + e.uri }
+
+func (*resolverNotFoundError) Unwrap() error { return fs.ErrNotExist }
 
 const ddIncludedXSL = `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
