@@ -1639,6 +1639,9 @@ func xmlNamespaceAttrType(local string, s *Schema) *TypeDef {
 		td, _ := s.LookupType(name, lexicon.NamespaceXSD)
 		return td
 	}
+	if !isKnownXMLNamespaceAttr(local) {
+		return nil
+	}
 	switch local {
 	case lexicon.AttrBase:
 		return builtin(lexicon.TypeAnyURI)
@@ -1677,6 +1680,14 @@ func xmlNamespaceAttrType(local string, s *Schema) *TypeDef {
 		}
 	}
 	return nil
+}
+
+func isKnownXMLNamespaceAttr(local string) bool {
+	switch local {
+	case lexicon.AttrBase, lexicon.AttrID, lexicon.AttrLang, lexicon.AttrSpace:
+		return true
+	}
+	return false
 }
 
 // xsiSchemaLocationTokens collapses a value in XSD whitespace and splits it on
@@ -1837,7 +1848,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// allowed-use path validates its value and satisfies a required use.
 			// (XSD 1.1 does not treat xml: as special, so isSpecialAttr never returns
 			// true for it there; this is a 1.0-only path, byte-identical otherwise.)
-			declaredXML := vc.version != Version11 && a.URI() == lexicon.NamespaceXML && declaredUse
+			declaredXML := vc.version != Version11 && a.URI() == lexicon.NamespaceXML && declaredUse && isKnownXMLNamespaceAttr(a.LocalName())
 			if !declaredXSI && !declaredXML {
 				continue
 			}

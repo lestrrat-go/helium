@@ -221,6 +221,11 @@ func TestDeclaredXMLAttributeValue(t *testing.T) {
 		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), schema("id", "required"), `<root xml:id="1bad"/>`), xsd.ErrValidationFailed)
 	})
 
+	t.Run("unknown xml attribute does not satisfy required declared use", func(t *testing.T) {
+		t.Parallel()
+		require.ErrorIs(t, compileAndValidateV(t, xsd.NewCompiler(), schema("foo", "required"), `<root xml:foo="x"/>`), xsd.ErrValidationFailed)
+	})
+
 	t.Run("declared xml:id participates in document-wide ID uniqueness", func(t *testing.T) {
 		t.Parallel()
 		// A schema declaring ref="xml:id" types the attribute as xs:ID, so the
