@@ -1278,17 +1278,17 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 }
 
 // pruneNonEmittingParticles returns a shallow copy of the model group with every
-// NON-EMITTING particle removed: a direct particle with maxOccurs == 0, any nested
-// group with maxOccurs == 0, and any nested group whose members are all pruned away.
-// A group with no emitting members emits nothing, but it is still EMPTIABLE (it
-// matches ONLY the empty sequence), and that emptiability is SEMANTICALLY LOAD-BEARING
+// NON-EMITTING particle removed or normalized to an empty branch: a direct particle
+// with maxOccurs == 0, any nested group with maxOccurs == 0, and any nested group
+// whose members are all pruned away. A non-emitting particle consumes no children,
+// but it is still EMPTIABLE, and that emptiability is SEMANTICALLY LOAD-BEARING
 // inside an xs:choice: an empty branch makes the whole choice emptiable, so silently
 // dropping it would turn a previously-emptiable choice into one that REQUIRES another
 // branch (a false reject). The prune is therefore semantics-preserving:
 //
 //   - In a SEQUENCE (or xs:all) parent, an emptied member is a no-op (matching empty
 //     consumes nothing), so it is dropped — a required sibling stays required.
-//   - In a CHOICE parent, an emptied branch is REPLACED by a normalized emptiable
+//   - In a CHOICE parent, a non-emitting branch is REPLACED by a normalized emptiable
 //     empty-SEQUENCE particle (minOccurs 0). The choice thus stays emptiable (one
 //     branch matches empty), and the branch is a SEQUENCE — never a literally-empty
 //     choice the matcher would treat as a missing required branch (round-15/16).
@@ -1309,6 +1309,9 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 	clone.Particles = make([]*Particle, 0, len(mg.Particles))
 	for _, p := range mg.Particles {
 		if p.MaxOccurs == 0 {
+			if mg.Compositor == CompositorChoice {
+				clone.Particles = append(clone.Particles, emptyChoiceBranchParticle())
+			}
 			continue // direct prohibited particle: emits nothing
 		}
 		if grp, ok := p.Term.(*ModelGroup); ok {
@@ -1320,11 +1323,7 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 				// SEQUENCE branch (minOccurs 0) so the matcher still matches the choice by
 				// consuming nothing, and never via a literally-empty choice.
 				if mg.Compositor == CompositorChoice {
-					clone.Particles = append(clone.Particles, &Particle{
-						MinOccurs: 0,
-						MaxOccurs: 1,
-						Term:      &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1},
-					})
+					clone.Particles = append(clone.Particles, emptyChoiceBranchParticle())
 				}
 				continue
 			}
@@ -1336,6 +1335,14 @@ func pruneNonEmittingParticles(mg *ModelGroup) *ModelGroup {
 		clone.Particles = append(clone.Particles, p)
 	}
 	return &clone
+}
+
+func emptyChoiceBranchParticle() *Particle {
+	return &Particle{
+		MinOccurs: 0,
+		MaxOccurs: 1,
+		Term:      &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1},
+	}
 }
 
 // resolveDefinedSiblings populates SiblingNames on every xs:any wildcard that
@@ -1487,7 +1494,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	children := collectChildElements(elem)
 
 	if oc.Mode == OpenContentSuffix {
-		consumed, err := vc.matchContentModelSuffix(ctx, elem, mg, children)
+		consumed, err := vc.matchContentModelSuffix(ctx, elem, mg, oc.Wildcard, children)
 		if err != nil {
 			return err
 		}
@@ -1617,11 +1624,51 @@ func (vc *validationContext) refineInterleavePartition(ctx context.Context, elem
 // content). For an xs:all group it uses the lenient member matcher so a trailing
 // open-content child does not abort the all match; for sequence/choice the normal
 // matcher already stops at the first non-matching child.
-func (vc *validationContext) matchContentModelSuffix(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) (int, error) {
+func (vc *validationContext) matchContentModelSuffix(ctx context.Context, parent *helium.Element, mg *ModelGroup, wc *Wildcard, children []childElem) (int, error) {
 	if mg.Compositor == CompositorAll && vc.version == Version11 {
 		return vc.matchAll11(ctx, parent, mg, children, 0, mg, true)
 	}
+	_, tryErr := vc.tryMatchModelGroup(ctx, mg, children, 0)
+	if tryErr == nil {
+		return vc.matchContentModel(ctx, parent, mg, children)
+	}
+	if consumed, ok := vc.contentModelSuffixEndpoint(ctx, mg, wc, children); ok {
+		if err := vc.validateContentModelTop(ctx, parent, mg, children[:consumed]); err != nil {
+			return consumed, err
+		}
+		return consumed, nil
+	}
 	return vc.matchContentModel(ctx, parent, mg, children)
+}
+
+func (vc *validationContext) contentModelSuffixEndpoint(ctx context.Context, mg *ModelGroup, wc *Wildcard, children []childElem) (int, bool) {
+	ends := vc.contentModelEndpoints(ctx, mg, children)
+	if len(ends) == 0 {
+		return 0, false
+	}
+	declaredNames := collectEmittingModelElementNames(mg, vc.schema)
+	slices.Sort(ends)
+	for _, end := range slices.Backward(ends) {
+		if end > len(children) {
+			continue
+		}
+		if suffixOpenStructurallyAllowed(wc, children[end:], declaredNames, vc.schema) {
+			return end, true
+		}
+	}
+	return 0, false
+}
+
+func suffixOpenStructurallyAllowed(wc *Wildcard, children []childElem, declaredNames map[QName]bool, schema *Schema) bool {
+	for _, ch := range children {
+		if declaredNames[QName{Local: ch.name, NS: ch.ns}] {
+			return false
+		}
+		if !wildcardAllowsExpandedName(wc, ch.name, ch.ns, schema, false) {
+			return false
+		}
+	}
+	return true
 }
 
 // validateOpenChildren validates a set of open-content child elements against the

@@ -74,11 +74,8 @@ func TestOpenContent_ChoiceEmptiablePrune(t *testing.T) {
 			"r present satisfies the sequence")
 	})
 
-	t.Run("a direct prohibited element leaf does NOT make a choice emptiable (round-16)", func(t *testing.T) {
+	t.Run("direct prohibited element leaf keeps interleave choice emptiable", func(t *testing.T) {
 		t.Parallel()
-		// Distinct from the group cases above: a prohibited ELEMENT leaf is dropped
-		// outright (it is not a group that matches the empty string), so the sibling
-		// emitting branch stays required — the established round-16 behavior.
 		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="doc"><xs:complexType>
     <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
@@ -88,8 +85,35 @@ func TestOpenContent_ChoiceEmptiablePrune(t *testing.T) {
     </xs:choice>
   </xs:complexType></xs:element>
 </xs:schema>`
-		require.Error(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
-			"the prohibited leaf e does not make the choice emptiable; g is still required")
+		require.NoError(t, validateOC(t, schema, `<doc/>`),
+			"the prohibited leaf is an empty branch, so g is optional")
+		require.NoError(t, validateOC(t, schema, `<doc><g>x</g></doc>`),
+			"the emitting branch g still matches")
+		require.NoError(t, validateOC(t, schema, `<doc><z>open</z></doc>`),
+			"the choice matches empty and z routes to open content")
+		require.NoError(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"the prohibited leaf e cannot consume, so e routes to open content")
+	})
+
+	t.Run("direct prohibited element leaf keeps suffix choice emptiable", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="doc"><xs:complexType>
+    <xs:openContent mode="suffix"><xs:any namespace="##local" processContents="skip"/></xs:openContent>
+    <xs:choice>
+      <xs:element name="e" type="xs:int" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="g" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		require.NoError(t, validateOC(t, schema, `<doc/>`),
+			"the prohibited leaf is an empty branch, so g is optional")
+		require.NoError(t, validateOC(t, schema, `<doc><g>x</g></doc>`),
+			"the emitting branch g still matches")
+		require.NoError(t, validateOC(t, schema, `<doc><z>open</z></doc>`),
+			"the choice matches empty and z routes to suffix open content")
+		require.NoError(t, validateOC(t, schema, `<doc><e>anything</e></doc>`),
+			"the prohibited leaf e cannot consume, so e routes to suffix open content")
 	})
 }
 

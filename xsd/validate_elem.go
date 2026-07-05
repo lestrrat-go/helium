@@ -283,6 +283,11 @@ func (vc *validationContext) matchAll10(ctx context.Context, parent *helium.Elem
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
+		// A PROHIBITED member (maxOccurs=0) can never consume a child, so it is not
+		// mapped: a present child of that name is then "not expected".
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
 			// TRANSITIVE, block-filtered substitution closure (the pre-feature XSD
@@ -601,6 +606,35 @@ func unseenParticleNames(particles []*Particle, seen []bool, schema *Schema) []s
 // validateContentModelTop validates children against a model group, checking
 // that ALL children are consumed. This is the top-level entry point.
 func (vc *validationContext) validateContentModelTop(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) error {
+	// Fast path: if the greedy structural try fully consumes the children, the
+	// greedy matcher will succeed too, so run it directly (unchanged behavior,
+	// single validation pass). tryMatchModelGroup is pure — no side effects, no
+	// diagnostics — so this pre-scan cannot emit a premature error.
+	tryCons, tryErr := vc.tryMatchModelGroup(ctx, mg, children, 0)
+	if tryErr == nil && tryCons == len(children) {
+		return vc.matchContentModelFull(ctx, parent, mg, children)
+	}
+
+	// Greedy could not fully consume. The content model may still be an
+	// occurrence-partition-ambiguous match a greedy pass false-rejects; bounded
+	// backtracking (wildcard-free models only) decides. A prohibited (effective
+	// maxOccurs=0) particle is handled in the automaton itself — it contributes
+	// only the zero-occurrence SKIP reach, never a consume branch — so the model is
+	// kept intact (see btReachParticle/btReachAll). When backtracking proves
+	// acceptance, validate each child's content against its UPA-unique declaration
+	// (visiting each child once).
+	if vc.contentModelAccepts(ctx, mg, children) {
+		var elemLeaves []*ElementDecl
+		collectElementLeaves(mg, &elemLeaves)
+		return vc.validateContentModelChildren(ctx, parent, children, elemLeaves)
+	}
+
+	// Genuinely does not match: run the greedy matcher for the correct diagnostics.
+	return vc.matchContentModelFull(ctx, parent, mg, children)
+}
+
+// matchContentModelFull runs the greedy matcher and reports any leftover child.
+func (vc *validationContext) matchContentModelFull(ctx context.Context, parent *helium.Element, mg *ModelGroup, children []childElem) error {
 	consumed, err := vc.matchContentModel(ctx, parent, mg, children)
 	if err != nil {
 		return err
@@ -659,6 +693,13 @@ func (vc *validationContext) matchParticle(ctx context.Context, parent *helium.E
 
 // matchElementParticle matches an element particle.
 func (vc *validationContext) matchElementParticle(ctx context.Context, parent *helium.Element, p *Particle, edecl *ElementDecl, children []childElem, pos int, seqHasWildcard bool) (int, error) {
+	// A PROHIBITED particle (maxOccurs=0) matches zero occurrences and must NOT
+	// consume a child — enforce MaxOccurs BEFORE the consume loop (which increments
+	// before its own max check). A present child of that name is left unmatched, so
+	// the surrounding matcher rejects it (minOccurs is 0 here, so no missing error).
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
 		// Record each matched child's (possibly LOCAL) host declaration AS SOON
@@ -862,6 +903,11 @@ func (vc *validationContext) tryMatchParticle(ctx context.Context, p *Particle, 
 }
 
 func (vc *validationContext) tryMatchElementParticle(_ context.Context, p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) {
+	// A PROHIBITED particle (maxOccurs=0) matches zero occurrences and must NOT
+	// consume a child (minOccurs is 0 here, so no insufficient error).
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
 		count++
@@ -1036,6 +1082,11 @@ func (vc *validationContext) tryMatchAll10(mg *ModelGroup, children []childElem,
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
+		// A PROHIBITED member (maxOccurs=0) can never consume a child, so it is not
+		// mapped.
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		if ed, ok := p.Term.(*ElementDecl); ok {
 			nameToIdx[ed.Name] = i
 			// TRANSITIVE, block-filtered substitution closure (the pre-feature XSD
@@ -1100,6 +1151,9 @@ func (vc *validationContext) tryMatchAll11(mg *ModelGroup, children []childElem,
 
 // matchWildcardParticle matches a wildcard particle against children.
 func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *helium.Element, p *Particle, wc *Wildcard, children []childElem, pos int, edcScope *ModelGroup) (int, error) {
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
@@ -1312,6 +1366,9 @@ func localElementDeclsByName(mg *ModelGroup, qn QName) []*ElementDecl {
 
 // tryMatchWildcardParticle is the try version (no error reporting).
 func (vc *validationContext) tryMatchWildcardParticle(_ context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) {
+	if p.MaxOccurs == 0 {
+		return 0, nil
+	}
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
