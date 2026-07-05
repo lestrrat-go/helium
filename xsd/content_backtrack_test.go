@@ -177,6 +177,53 @@ func TestContentBacktrackOptionalAll(t *testing.T) {
 	})
 }
 
+// TestContentBacktrackProhibitedParticle verifies that a maxOccurs=0 (PROHIBITED)
+// particle never consumes a child in the backtracker: the reachability automaton
+// operates on a non-emitting-pruned model (pruneNonEmittingParticles), so a
+// prohibited element leaf cannot route a child through and mask an invalid
+// instance. The leading occurrence-ambiguous sequence forces the greedy matcher to
+// fail, engaging the backtracker.
+func TestContentBacktrackProhibitedParticle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prohibited element leaf cannot consume a child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="x" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		// <a/> is prohibited (maxOccurs=0), so routing it through would be an
+		// over-acceptance. The instance is invalid.
+		require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><a/><b/></root>`))
+		// The same model with the prohibited element absent is valid (x|x partition,
+		// then b) — confirms pruning does not over-reject.
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><x/><x/><b/></root>`))
+	})
+
+	t.Run("prohibited xs:all member cannot consume a child", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all>
+      <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`
+		// <a/> is prohibited; the instance is invalid.
+		require.Error(t, validateBtInstance(t, xsd.Version11, schema, `<root><a>1</a><b>2</b></root>`))
+		// b alone is valid.
+		require.NoError(t, validateBtInstance(t, xsd.Version11, schema, `<root><b>2</b></root>`))
+	})
+}
+
 // validateBtInstance compiles schemaXML at the given version (which must be valid)
 // and validates instanceXML, returning the validation error (nil when valid).
 func validateBtInstance(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {

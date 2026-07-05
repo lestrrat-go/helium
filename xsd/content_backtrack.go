@@ -74,6 +74,12 @@ type btMemo struct {
 // some occurrence partition. It is pure (no side effects, no diagnostics), and
 // runs only on content models inside the engagement envelope (see above); a model
 // outside the envelope is not proven here (defers to greedy).
+//
+// PRECONDITION: mg must already have its non-emitting (maxOccurs=0) particles
+// pruned (pruneNonEmittingParticles), so the reachability automaton never routes
+// a child through a prohibited particle. The sole caller (validateContentModelTop)
+// prunes before calling; the same pruned model must feed collectElementLeaves so
+// the per-child attribution agrees with the automaton.
 func (vc *validationContext) contentModelAccepts(ctx context.Context, mg *ModelGroup, children []childElem) bool {
 	if !inBacktrackEnvelope(mg, vc.schema) {
 		return false
