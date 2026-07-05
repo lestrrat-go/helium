@@ -48,8 +48,19 @@ func HasWindowsDrivePrefix(s string) bool {
 // helper exists so an absolute URI can be distinguished from a relative
 // reference independent of runtime.GOOS.
 func HasURIScheme(s string) bool {
+	return URIScheme(s) != ""
+}
+
+// URIScheme returns the LOWERCASED absolute-URI scheme of s ("http", "https",
+// "file", "urn", ...) or "" when s carries no scheme. The grammar mirrors
+// [HasURIScheme] (RFC 3986 ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )), and a
+// SINGLE-letter scheme is deliberately NOT recognized so a Windows drive-letter
+// prefix ("C:\\x", "D:/x") is never mistaken for a URI scheme. The result is
+// lowercased because URI schemes are case-insensitive (RFC 3986 §3.1), so a
+// caller can compare against a fixed scheme name without re-normalizing.
+func URIScheme(s string) string {
 	if len(s) < 2 || !IsWindowsDriveLetter(s[0]) {
-		return false
+		return ""
 	}
 	i := 1
 	for i < len(s) {
@@ -61,12 +72,15 @@ func HasURIScheme(s string) bool {
 		case c == ':':
 			// A single-character scheme ("C:") is a Windows drive letter, not a
 			// URI scheme. Require at least two scheme characters.
-			return i >= 2
+			if i < 2 {
+				return ""
+			}
+			return strings.ToLower(s[:i])
 		default:
-			return false
+			return ""
 		}
 	}
-	return false
+	return ""
 }
 
 // IsWindowsAbsolute reports whether s is a Windows-style absolute path: a

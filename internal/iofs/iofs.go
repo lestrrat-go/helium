@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -40,6 +41,21 @@ type PermissiveRoot struct{}
 
 // Open implements [fs.FS].
 func (PermissiveRoot) Open(name string) (fs.File, error) {
+	// A non-file-scheme absolute URI (http://, https://, urn:, ...) is NOT a
+	// local filesystem path. Handing it to os.Open opens a file whose NAME is
+	// the literal URI, which fails with a platform-DEPENDENT errno — ENOENT on
+	// Linux, EINVAL ("invalid argument") on macOS/Windows — that a resolution-
+	// miss classifier (e.g. the xsd nested-schema loader's isBenignResolutionMiss)
+	// cannot reliably treat as benign, so a legitimately-ABSENT optional
+	// include/import hint pointing at a network URI becomes fatal on some hosts.
+	// Report it as a canonical fs.ErrNotExist "not found" so it is classified as a
+	// resolution miss CONSISTENTLY across platforms; a REQUIRED load still
+	// surfaces the miss to its caller. A genuinely-local path (no scheme, or a
+	// "file:" URI / Windows drive-letter path) still reaches os.Open and returns
+	// its real errno, so a malformed LOCAL path stays fatal/normal.
+	if s := uripath.URIScheme(name); s != "" && s != "file" {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
 	return os.Open(name) //nolint:gosec,wrapcheck // intentional passthrough; see type doc
 }
 
