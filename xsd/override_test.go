@@ -16,6 +16,7 @@ import (
 const (
 	fileMain = "main.xsd"
 	fileA    = "a.xsd"
+	fileLeaf = "leaf.xsd"
 )
 
 type overrideMissAfterFS struct {
@@ -29,7 +30,7 @@ func (f *overrideMissAfterFS) Open(name string) (fs.File, error) {
 		f.opens = make(map[string]int)
 	}
 	f.opens[name]++
-	if max, ok := f.missAfter[name]; ok && f.opens[name] > max {
+	if limit, ok := f.missAfter[name]; ok && f.opens[name] > limit {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 	return f.files.Open(name)
@@ -238,10 +239,10 @@ func TestOverride_Transitive(t *testing.T) {
   <xs:simpleType name="zoned"><xs:restriction base="xs:string"><xs:pattern value="[A-Z]+"/></xs:restriction></xs:simpleType>
 </xs:schema>`)},
 		"mid.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` elementFormDefault="qualified">
-  <xs:override schemaLocation="leaf.xsd"><xs:element name="para" type="zoneless"/></xs:override>
+  <xs:override schemaLocation="` + fileLeaf + `"><xs:element name="para" type="zoneless"/></xs:override>
   <xs:simpleType name="zoneless"><xs:restriction base="xs:string"><xs:pattern value="[0-9]+"/></xs:restriction></xs:simpleType>
 </xs:schema>`)},
-		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` elementFormDefault="qualified">
+		fileLeaf: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` elementFormDefault="qualified">
   <xs:element name="doc"><xs:complexType><xs:sequence><xs:element ref="para" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="para" type="xs:string"/>
 </xs:schema>`)},
@@ -266,9 +267,9 @@ func TestOverride_IndirectChameleon(t *testing.T) {
   <xs:override schemaLocation="a.xsd"><xs:element name="doc" type="xs:date"/></xs:override>
 </xs:schema>`)},
 		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` elementFormDefault="qualified">
-  <xs:include schemaLocation="b.xsd"/>
+  <xs:include schemaLocation="` + residueBXSD + `"/>
 </xs:schema>`)},
-		"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` elementFormDefault="qualified">
+		residueBXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` elementFormDefault="qualified">
   <xs:element name="doc"><xs:complexType><xs:sequence><xs:element name="para"/></xs:sequence></xs:complexType></xs:element>
 </xs:schema>`)},
 	}
@@ -331,11 +332,11 @@ func TestOverride_NestedChildContext(t *testing.T) {
 </xs:schema>`)},
 		// mid: qualified. Its override child `doc` owns a local `para`.
 		"mid.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `" elementFormDefault="qualified">
-  <xs:override schemaLocation="leaf.xsd">
+  <xs:override schemaLocation="` + fileLeaf + `">
     <xs:element name="doc"><xs:complexType><xs:sequence><xs:element name="para" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   </xs:override>
 </xs:schema>`)},
-		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `">
+		fileLeaf: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + ` targetNamespace="` + ns + `">
   <xs:element name="doc" type="xs:string"/>
 </xs:schema>`)},
 	}
@@ -377,24 +378,24 @@ func TestOverride_FetchMissRollbackPreservesEarlierPathMarker(t *testing.T) {
 	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
 	main := `<xs:schema ` + xs + `>
   <xs:override schemaLocation="a.xsd"/>
-  <xs:override schemaLocation="b.xsd"/>
-  <xs:include schemaLocation="leaf.xsd"/>
+  <xs:override schemaLocation="` + residueBXSD + `"/>
+  <xs:include schemaLocation="` + fileLeaf + `"/>
 </xs:schema>`
 	fsys := &overrideMissAfterFS{
 		files: fstest.MapFS{
 			fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:override schemaLocation="leaf.xsd"><xs:element name="x" type="xs:int"/></xs:override>
+  <xs:override schemaLocation="` + fileLeaf + `"><xs:element name="x" type="xs:int"/></xs:override>
 </xs:schema>`)},
-			"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:override schemaLocation="leaf.xsd"><xs:element name="y" type="xs:int"/></xs:override>
+			residueBXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="` + fileLeaf + `"><xs:element name="y" type="xs:int"/></xs:override>
 </xs:schema>`)},
-			"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+			fileLeaf: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
   <xs:element name="x" type="xs:string"/>
   <xs:element name="y" type="xs:string"/>
   <xs:element name="doc" type="xs:string"/>
 </xs:schema>`)},
 		},
-		missAfter: map[string]int{"leaf.xsd": 1},
+		missAfter: map[string]int{fileLeaf: 1},
 		opens:     make(map[string]int),
 	}
 
@@ -409,7 +410,7 @@ func TestOverride_FetchMissRollbackPreservesEarlierPathMarker(t *testing.T) {
 		b.WriteString(e.Error())
 	}
 	require.Contains(t, b.String(), "both included/redefined and overridden")
-	require.Equal(t, 2, fsys.opens["leaf.xsd"],
+	require.Equal(t, 2, fsys.opens[fileLeaf],
 		"the include must be rejected by the preserved override marker before opening leaf.xsd again")
 }
 
@@ -461,15 +462,15 @@ func TestOverride_DistinctActiveSetsNotDeduped(t *testing.T) {
 	fsys := fstest.MapFS{
 		fileMain: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
   <xs:override schemaLocation="a.xsd"/>
-  <xs:override schemaLocation="b.xsd"/>
+  <xs:override schemaLocation="` + residueBXSD + `"/>
 </xs:schema>`)},
 		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:override schemaLocation="leaf.xsd"><xs:element name="y" type="xs:int"/></xs:override>
+  <xs:override schemaLocation="` + fileLeaf + `"><xs:element name="y" type="xs:int"/></xs:override>
 </xs:schema>`)},
-		"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:override schemaLocation="leaf.xsd"><xs:element name="z" type="xs:int"/></xs:override>
+		residueBXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:override schemaLocation="` + fileLeaf + `"><xs:element name="z" type="xs:int"/></xs:override>
 </xs:schema>`)},
-		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+		fileLeaf: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
   <xs:element name="y" type="xs:string"/>
   <xs:element name="z" type="xs:string"/>
   <xs:element name="doc"><xs:complexType><xs:sequence><xs:element ref="y"/><xs:element ref="z"/></xs:sequence></xs:complexType></xs:element>
@@ -492,16 +493,16 @@ func TestOverride_SameActiveSetDiamondDeduped(t *testing.T) {
   <xs:override schemaLocation="a.xsd"><xs:element name="doc" type="xs:date"/></xs:override>
 </xs:schema>`)},
 		fileA: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:include schemaLocation="b.xsd"/>
+  <xs:include schemaLocation="` + residueBXSD + `"/>
   <xs:include schemaLocation="c.xsd"/>
 </xs:schema>`)},
-		"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:include schemaLocation="leaf.xsd"/>
+		residueBXSD: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+  <xs:include schemaLocation="` + fileLeaf + `"/>
 </xs:schema>`)},
 		"c.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
-  <xs:include schemaLocation="leaf.xsd"/>
+  <xs:include schemaLocation="` + fileLeaf + `"/>
 </xs:schema>`)},
-		"leaf.xsd": &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
+		fileLeaf: &fstest.MapFile{Data: []byte(`<xs:schema ` + xs + `>
   <xs:element name="doc" type="xs:string"/>
 </xs:schema>`)},
 	}

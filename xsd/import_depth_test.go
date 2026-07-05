@@ -33,9 +33,9 @@ func TestCompile_ImportCycle_Terminates(t *testing.T) {
 	// A → B → C → A (and back). The cycle must resolve to a single set of
 	// constituent documents and compile cleanly.
 	fsys := fstest.MapFS{
-		"a.xsd": &fstest.MapFile{Data: []byte(mkSchema(nsA, nsB, "b.xsd"))},
-		"b.xsd": &fstest.MapFile{Data: []byte(mkSchema(nsB, nsC, "c.xsd"))},
-		"c.xsd": &fstest.MapFile{Data: []byte(mkSchema(nsC, nsA, "a.xsd"))},
+		"a.xsd":     &fstest.MapFile{Data: []byte(mkSchema(nsA, nsB, residueBXSD))},
+		residueBXSD: &fstest.MapFile{Data: []byte(mkSchema(nsB, nsC, "c.xsd"))},
+		"c.xsd":     &fstest.MapFile{Data: []byte(mkSchema(nsC, nsA, "a.xsd"))},
 	}
 
 	data, err := fsys.ReadFile("a.xsd")
