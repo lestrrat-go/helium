@@ -10,11 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestValidateIDIDREF covers XSD 1.1 document-wide xs:ID / xs:IDREF / xs:IDREFS
-// validation: ID values must be unique across the document, except that the same
-// value may identify a single element more than once (multiple ID attributes of
-// one element, or multiple ID children of one parent); every IDREF token must
-// resolve to some ID.
+// TestValidateIDIDREF covers document-wide xs:ID / xs:IDREF / xs:IDREFS
+// validation (cvc-id, version-independent): ID values must be unique across the
+// document and every IDREF token must resolve to some ID. XSD 1.1 relaxes
+// uniqueness so the same value may identify a single element more than once
+// (multiple ID attributes of one element, or multiple ID children of one parent);
+// XSD 1.0 has no such relaxation — any repeat is a duplicate.
 func TestValidateIDIDREF(t *testing.T) {
 	compileValidate := func(t *testing.T, version xsd.Version, schemaXML, instanceXML string) error {
 		t.Helper()
@@ -64,14 +65,6 @@ func TestValidateIDIDREF(t *testing.T) {
 		t.Parallel()
 		inst := `<doc><para id-one="aaa" id-two="bbb"/><para id-one="ccc" id-two=" aaa "/></doc>`
 		require.Error(t, compileValidate(t, xsd.Version11, multiIDSchema, inst))
-	})
-
-	t.Run("XSD 1.0 does not enforce ID uniqueness", func(t *testing.T) {
-		t.Parallel()
-		// The same duplicate that is invalid in 1.1 stays accepted in 1.0 mode,
-		// which keeps helium byte-identical with the libxml2-compat goldens.
-		inst := `<doc><para id-one="aaa" id-two="bbb"/><para id-one="ccc" id-two="aaa"/></doc>`
-		require.NoError(t, compileValidate(t, xsd.Version10, multiIDSchema, inst))
 	})
 
 	// Element-content ID is owned by the PARENT element, so two <id> children of
@@ -139,6 +132,120 @@ func TestValidateIDIDREF(t *testing.T) {
 		require.NoError(t, compileValidate(t, xsd.Version11, idrefSchema, ok))
 		bad := `<root><a id="x"/><a id="y"/><a refs="x y z"/></root>`
 		require.Error(t, compileValidate(t, xsd.Version11, idrefSchema, bad))
+	})
+
+	t.Run("XSD 1.0 enforces ID uniqueness across elements", func(t *testing.T) {
+		t.Parallel()
+		// cvc-id is version-independent: a duplicate ID value across two different
+		// elements is invalid in 1.0 too. Each <a> carries a single xs:ID attribute,
+		// legal in 1.0.
+		inst := `<root><a id="x"/><a id="x"/></root>`
+		require.Error(t, compileValidate(t, xsd.Version10, idrefSchema, inst))
+	})
+
+	t.Run("XSD 1.0 resolves IDREF referential integrity", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compileValidate(t, xsd.Version10, idrefSchema, `<root><a id="x"/><a ref="x"/></root>`))
+		require.Error(t, compileValidate(t, xsd.Version10, idrefSchema, `<root><a id="x"/><a ref="y"/></root>`))
+	})
+
+	t.Run("XSD 1.0 rejects same-owner same-value ID recurrence", func(t *testing.T) {
+		t.Parallel()
+		// Two <id> element-content children of one <node> share a value (both
+		// identify the same parent element). XSD 1.1 accepts this (the multiple-ID
+		// relaxation); XSD 1.0 has no such relaxation, so it is a duplicate (W3C
+		// elemZ016 / idconstrdefs00301m2_n).
+		inst := `<root><node><id>zzz</id><id>zzz</id></node></root>`
+		require.NoError(t, compileValidate(t, xsd.Version11, elemIDSchema, inst))
+		require.Error(t, compileValidate(t, xsd.Version10, elemIDSchema, inst))
+	})
+
+	t.Run("XSD 1.0 rejects same value across two distinct elements", func(t *testing.T) {
+		t.Parallel()
+		// Distinct owner elements (two separate <node>s) with the same value are a
+		// uniqueness violation in BOTH versions.
+		inst := `<root><node><id>zzz</id></node><node><id>zzz</id></node></root>`
+		require.Error(t, compileValidate(t, xsd.Version10, elemIDSchema, inst))
+		require.Error(t, compileValidate(t, xsd.Version11, elemIDSchema, inst))
+	})
+
+	// A complex type admitting two global xs:ID attributes on one element via
+	// anyAttribute. XSD 1.0 caps an element at one ID-typed attribute; XSD 1.1
+	// removed the cap.
+	const twoIDAttrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base">
+    <xs:anyAttribute processContents="strict"/>
+  </xs:complexType>
+  <xs:element name="doc" type="base"/>
+  <xs:attribute name="a" type="xs:ID"/>
+  <xs:attribute name="b" type="xs:ID"/>
+</xs:schema>`
+
+	t.Run("XSD 1.0 caps one ID-typed attribute per element", func(t *testing.T) {
+		t.Parallel()
+		// Two DISTINCT-valued ID attributes on one element: rejected in 1.0 (the
+		// one-ID-per-element cardinality rule, W3C attZ014a/attZ014b), accepted in
+		// 1.1. Values differ, so this is the cardinality rule, not value-uniqueness.
+		inst := `<doc a="x" b="y"/>`
+		require.Error(t, compileValidate(t, xsd.Version10, twoIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, twoIDAttrSchema, inst))
+	})
+
+	// Two attributes of type union(xs:int, xs:ID). The union is not itself
+	// ID-typed, so the cap must detect ID-ness VALUE-dependently, the same way the
+	// uniqueness collection does — an attribute counts only when its value selects
+	// the xs:ID member.
+	const unionIDAttrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrID">
+    <xs:union memberTypes="xs:int xs:ID"/>
+  </xs:simpleType>
+  <xs:complexType name="base">
+    <xs:attribute name="u1" type="intOrID"/>
+    <xs:attribute name="u2" type="intOrID"/>
+  </xs:complexType>
+  <xs:element name="doc" type="base"/>
+</xs:schema>`
+
+	t.Run("XSD 1.0 caps two union(int,ID) attributes both carrying IDs", func(t *testing.T) {
+		t.Parallel()
+		// "aaa"/"bbb" are not valid xs:int, so each resolves to the xs:ID member —
+		// two ID-bearing attributes → rejected in 1.0, accepted in 1.1.
+		inst := `<doc u1="aaa" u2="bbb"/>`
+		require.Error(t, compileValidate(t, xsd.Version10, unionIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, unionIDAttrSchema, inst))
+	})
+
+	t.Run("XSD 1.0 union int value does not count toward the ID cap", func(t *testing.T) {
+		t.Parallel()
+		// u1="5" resolves to xs:int (no ID leaf, doesn't count); only u2="aaa" is
+		// ID-bearing → one ID attribute → valid in both versions.
+		inst := `<doc u1="5" u2="aaa"/>`
+		require.NoError(t, compileValidate(t, xsd.Version10, unionIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, unionIDAttrSchema, inst))
+	})
+
+	// Two attributes of type list-of-xs:ID. A list is not itself ID-typed either,
+	// so the cap must count via the same decomposition (a list contributes ID
+	// leaves for its tokens).
+	const listIDAttrSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="idList">
+    <xs:list itemType="xs:ID"/>
+  </xs:simpleType>
+  <xs:complexType name="base">
+    <xs:attribute name="l1" type="idList"/>
+    <xs:attribute name="l2" type="idList"/>
+  </xs:complexType>
+  <xs:element name="doc" type="base"/>
+</xs:schema>`
+
+	t.Run("XSD 1.0 caps two list-of-ID attributes", func(t *testing.T) {
+		t.Parallel()
+		// Each list contributes xs:ID leaves, so both attributes are ID-bearing →
+		// rejected in 1.0, accepted in 1.1. Tokens are all distinct (no uniqueness
+		// violation), isolating the cardinality cap.
+		inst := `<doc l1="a b" l2="c d"/>`
+		require.Error(t, compileValidate(t, xsd.Version10, listIDAttrSchema, inst))
+		require.NoError(t, compileValidate(t, xsd.Version11, listIDAttrSchema, inst))
 	})
 }
 
