@@ -9,6 +9,29 @@ import (
 )
 
 func TestAbstractTypeValidation(t *testing.T) {
+	t.Run("abstract root element declaration rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" abstract="true"/>
+</xs:schema>`
+
+		instanceXML := `<root></root>`
+
+		schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+
+		schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDOC)
+		require.NoError(t, err)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+		require.NoError(t, err)
+
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+		require.Error(t, err)
+		require.Contains(t, errs, "The element declaration is abstract.")
+	})
+
 	t.Run("abstract complex type rejected", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

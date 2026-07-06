@@ -17,6 +17,10 @@ import (
 // effective type definition is abstract (cvc-elt / cvc-type).
 const msgAbstractType = "The type definition is abstract."
 
+// msgAbstractElement is the validity-error message reported when an instance
+// element directly matches an abstract element declaration.
+const msgAbstractElement = "The element declaration is abstract."
+
 // fixedValueMatches reports whether an instance value satisfies a fixed value
 // constraint whose declared simple type is td. The comparison is performed in
 // the type's value space (XSD 1.1 §3.16, cvc-au/cvc-elt fixed-value rules):
@@ -894,6 +898,11 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// member, the effective TYPE is inherited from the head (effectiveDeclType
 	// walks the substitutionGroup chain), but the declaration — and thus the
 	// nillable flag — stays the member's. This mirrors the particle paths.
+	if edecl.Abstract {
+		msg := msgAbstractElement
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return fmt.Errorf("abstract element")
+	}
 	declType := effectiveDeclType(edecl, vc.schema)
 	if declType == nil {
 		return nil
