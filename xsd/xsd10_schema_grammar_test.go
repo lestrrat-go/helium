@@ -240,3 +240,52 @@ func TestXSD10RedefineStrayChild(t *testing.T) {
 	</xs:schema>`
 	require.Empty(t, compileWithMod(t, valid), "expected a valid redefine to compile")
 }
+
+// TestXSD10RedefineAttrGroupProhibitedDefault verifies that the
+// "default requires use=optional" schema-representation rule (§3.2.3,
+// version-INDEPENDENT) is enforced on a use="prohibited" attribute declared
+// inside an <xs:attributeGroup> REDEFINE OVERRIDE, mirroring the
+// parseNamedAttributeGroup path (attKb005). A prohibited-without-default override
+// stays valid (the pointless use is skipped with a warning).
+func TestXSD10RedefineAttrGroupProhibitedDefault(t *testing.T) {
+	t.Parallel()
+
+	const modXSD = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t">
+		<xs:attributeGroup name="ag"><xs:attribute name="keep" type="xs:string"/></xs:attributeGroup>
+	</xs:schema>`
+
+	compileWithMod := func(t *testing.T, mainSrc string) string {
+		t.Helper()
+		fsys := fstest.MapFS{
+			xsd10GrammarMainXSD: &fstest.MapFile{Data: []byte(mainSrc)},
+			"mod.xsd":           &fstest.MapFile{Data: []byte(modXSD)},
+		}
+		data, err := fsys.ReadFile(xsd10GrammarMainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, _ = xsd.NewCompiler().Label(xsd10GrammarMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, collector.Close())
+		_, errStr := partitionCompileErrors(collector.Errors())
+		return errStr
+	}
+
+	invalid := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t">
+		<xs:redefine schemaLocation="mod.xsd">
+			<xs:attributeGroup name="ag">
+				<xs:attribute name="p" use="prohibited" default="abc"/>
+			</xs:attributeGroup>
+		</xs:redefine>
+	</xs:schema>`
+	require.NotEmpty(t, compileWithMod(t, invalid), "expected rejection of prohibited+default in redefine override")
+
+	valid := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t">
+		<xs:redefine schemaLocation="mod.xsd">
+			<xs:attributeGroup name="ag">
+				<xs:attribute name="p" use="prohibited"/>
+			</xs:attributeGroup>
+		</xs:redefine>
+	</xs:schema>`
+	require.Empty(t, compileWithMod(t, valid), "expected a prohibited-without-default override to compile")
+}

@@ -1814,6 +1814,20 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 					// warns and skips it so a referencing wildcard still admits the
 					// attribute. Mirror parseNamedAttributeGroup here.
 					if getAttr(gce, attrUse) == attrValProhibited {
+						// The prohibited use is skipped as pointless (below), but a value
+						// constraint on it is still a schema-representation error the
+						// pointless-skip must not swallow. The "default requires
+						// use=optional" rule (§3.2.3) is version-INDEPENDENT; the
+						// fixed-value defect is a 1.1 Schema Representation Constraint —
+						// mirroring parseNamedAttributeGroup exactly.
+						if hasAttr(gce, attrDefault) {
+							c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
+								"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."))
+						}
+						if c.version == Version11 && hasAttr(gce, attrFixed) {
+							c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
+								"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
+						}
 						if c.filename != "" {
 							c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
 								"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>."), helium.ErrorLevelWarning))
