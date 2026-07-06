@@ -151,8 +151,8 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	// XSD 1.1: an xs:anyAttribute, if present, must be the OPTIONAL FINAL child of
 	// the group (XSD 3.6.2), and there may be at most one. anyAttributeSeen tracks
 	// it so a later attribute/attributeGroup child, or a second wildcard, is
-	// rejected. Gated on Version11 (1.0 ignores group wildcards entirely, so its
-	// grammar handling stays byte-identical).
+	// rejected. Gated on Version11 so 1.0 keeps its legacy lenient grammar
+	// diagnostics while still recording the wildcard below.
 	var anyAttributeSeen bool
 	// sawContent tracks whether any content particle (attribute, attributeGroup
 	// ref, or anyAttribute wildcard) has been seen, so a later <xs:annotation> can
@@ -233,15 +233,11 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			continue
 		}
 		// XSD 1.0: record the group's attribute wildcard (namespace + processContents
-		// only, no diagnostics) so checkRestrictionAttrs can compute a base type's
-		// effective/complete {attribute wildcard} when it is contributed transitively
-		// through this attribute group. XSD 1.0 never merges group wildcards into a
-		// type's {attribute wildcard} at validation (byte-identical); this record is
-		// consulted ONLY by the compile-time restriction-derivation check. The full
-		// readWildcard path is deliberately NOT used here — it would emit new 1.0
-		// diagnostics (checkWildcardAttrs / validateWildcardNamespace / a bad
-		// processContents value) for a malformed anyAttribute that XSD 1.0 currently
-		// silently accepts inside an attribute group.
+		// only, no diagnostics) so the referencing type's complete wildcard can be
+		// computed without adding new 1.0 grammar diagnostics. The full readWildcard
+		// path is deliberately NOT used here — it would report checkWildcardAttrs /
+		// validateWildcardNamespace / bad processContents errors for malformed
+		// anyAttribute declarations that XSD 1.0 currently accepts leniently.
 		if isXSDElement(ce, elemAnyAttribute) {
 			if _, exists := c.attrGroupWildcards[qn]; !exists {
 				ns := WildcardNSAny

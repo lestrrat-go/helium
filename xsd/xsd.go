@@ -435,7 +435,8 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { /
 		return ErrNilDocument
 	}
 
-	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
+	schema := schemaWithInstanceHints(ctx, v.schema, doc)
+	valid := validateDocument(ctx, doc, schema, cfg, handler)
 
 	if valid {
 		return nil

@@ -387,27 +387,38 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
 		srcs := c.attrGroupRefUseSources[td]
+		localWildcard := td.AnyAttribute
+		groupWildcard := (*Wildcard)(nil)
 		for i, qn := range qns {
-			if _, ok := c.schema.attrGroups[qn]; !ok {
+			refQN, ok := c.resolveAttrGroupRefQName(qn)
+			if !ok {
 				continue
 			}
-			uses := c.expandAttrGroupUses(qn, map[QName]struct{}{})
+			uses := c.expandAttrGroupUses(refQN, map[QName]struct{}{})
 			if i < len(srcs) && srcs[i].attr == attrDefaultAttributes {
 				c.markDefaultAttrUses(td, uses)
 			}
 			td.Attributes = append(td.Attributes, uses...)
-			// XSD 1.1: a referenced attribute group's xs:anyAttribute wildcard is
-			// INTERSECTED into the type's effective attribute wildcard (XSD 3.4.2,
-			// "complete wildcard"). Gated on Version11 so 1.0 (which drops group
-			// wildcards) is unchanged.
-			if c.version != Version11 {
-				continue
-			}
-			if gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{}); gw != nil {
-				if td.AnyAttribute == nil {
-					td.AnyAttribute = gw
+			// A referenced attribute group's xs:anyAttribute wildcard is INTERSECTED
+			// into the type's effective attribute wildcard (the complete wildcard).
+			if gw := c.attrGroupCompleteWildcard(refQN, map[QName]struct{}{}); gw != nil {
+				if c.version == Version10 {
+					if localWildcard != nil {
+						localWildcard = intersectWildcardsWithProcessContents(localWildcard, gw, localWildcard.ProcessContents)
+						td.AnyAttribute = localWildcard
+					} else if groupWildcard == nil {
+						groupWildcard = gw
+						td.AnyAttribute = groupWildcard
+					} else {
+						groupWildcard = intersectWildcardsWithProcessContents(groupWildcard, gw, groupWildcard.ProcessContents)
+						td.AnyAttribute = groupWildcard
+					}
 				} else {
-					td.AnyAttribute = intersectWildcards(td.AnyAttribute, gw)
+					if td.AnyAttribute == nil {
+						td.AnyAttribute = gw
+					} else {
+						td.AnyAttribute = intersectWildcards(td.AnyAttribute, gw)
+					}
 				}
 			}
 		}
@@ -634,7 +645,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 					td.AnyAttribute = td.BaseType.AnyAttribute
 				} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-					td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
+					td.AnyAttribute = c.extensionWildcardUnion(ctx, td, td.BaseType.AnyAttribute, td.AnyAttribute)
 				}
 			}
 			continue
@@ -765,7 +776,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 				td.AnyAttribute = td.BaseType.AnyAttribute
 			} else if td.AnyAttribute != nil && td.BaseType.AnyAttribute != nil {
-				td.AnyAttribute = wildcardUnion(td.BaseType.AnyAttribute, td.AnyAttribute, c.version)
+				td.AnyAttribute = c.extensionWildcardUnion(ctx, td, td.BaseType.AnyAttribute, td.AnyAttribute)
 			}
 		}
 	}
@@ -1014,6 +1025,19 @@ func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*
 	return uses
 }
 
+func (c *compiler) resolveAttrGroupRefQName(qn QName) (QName, bool) {
+	if _, ok := c.schema.attrGroups[qn]; ok {
+		return qn, true
+	}
+	if qn.NS != "" {
+		fallback := QName{Local: qn.Local}
+		if _, ok := c.schema.attrGroups[fallback]; ok {
+			return fallback, true
+		}
+	}
+	return QName{}, false
+}
+
 func (c *compiler) markDefaultAttrUses(td *TypeDef, uses []*AttrUse) {
 	if td == nil || len(uses) == 0 {
 		return
@@ -1055,11 +1079,10 @@ func (c *compiler) markDefaultAttrUse(td *TypeDef, au *AttrUse) {
 	attrs[au.Name] = au
 }
 
-// attrGroupCompleteWildcard returns the XSD 1.1 "complete wildcard" of an
-// attribute group: its OWN xs:anyAttribute (if any) INTERSECTED with the
-// complete wildcards of every nested xs:attributeGroup ref child. visited guards
-// against reference cycles. Returns nil if neither the group nor any referenced
-// group declares a wildcard.
+// attrGroupCompleteWildcard returns an attribute group's complete wildcard: its
+// OWN xs:anyAttribute (if any) INTERSECTED with the complete wildcards of every
+// nested xs:attributeGroup ref child. visited guards against reference cycles.
+// Returns nil if neither the group nor any referenced group declares a wildcard.
 func (c *compiler) attrGroupCompleteWildcard(qn QName, visited map[QName]struct{}) *Wildcard {
 	if _, seen := visited[qn]; seen {
 		return nil
@@ -1076,19 +1099,26 @@ func (c *compiler) attrGroupCompleteWildcard(qn QName, visited map[QName]struct{
 			result = nested
 			continue
 		}
-		result = intersectWildcards(result, nested)
+		if c.version == Version10 {
+			result = intersectWildcardsWithProcessContents(result, nested, result.ProcessContents)
+		} else {
+			result = intersectWildcards(result, nested)
+		}
 	}
 	return result
 }
 
 // combineGroupWildcards intersects two possibly-nil attribute-group wildcards,
 // returning nil when both are nil and the non-nil one when only one is present.
-func combineGroupWildcards(a, b *Wildcard) *Wildcard {
+func combineGroupWildcards(version Version, a, b *Wildcard) *Wildcard {
 	if a == nil {
 		return b
 	}
 	if b == nil {
 		return a
+	}
+	if version == Version10 {
+		return intersectWildcardsWithProcessContents(a, b, a.ProcessContents)
 	}
 	return intersectWildcards(a, b)
 }
@@ -2638,21 +2668,10 @@ func isUrSimpleType(td *TypeDef) bool {
 }
 
 // effectiveAttrWildcard returns the {attribute wildcard} of a complex type for
-// the restriction-derivation check. In XSD 1.1 the group-ref wildcards are
-// already merged into td.AnyAttribute at link time, so this returns it unchanged.
-// In XSD 1.0 group wildcards are NOT merged into a type's {attribute wildcard} at
-// validation (byte-identical); this re-derives one on demand ONLY to recognize a
-// base whose attribute wildcard comes SOLELY through a referenced attribute group
-// (td.AnyAttribute nil): it fills in the first group-ref complete wildcard so
-// derivation-ok-restriction 4.1 sees a wildcard and 4.2/4.3 have one to compare.
-//
-// A DIRECT td.AnyAttribute is returned as-is and is NEVER narrowed by intersecting
-// group-ref wildcards: 1.0 instance validation uses only the direct wildcard, so
-// narrowing it here would newly reject a restriction whose derived wildcard is a
-// subset of the direct base wildcard but not of the (narrower) intersection —
-// breaking 1.0 byte-identical behavior. The first group-ref wildcard suffices to
-// discharge 4.1 for the transitive-only case; the full multi-group intersection is
-// not modeled here.
+// the restriction-derivation check. Attribute-group wildcards are merged into
+// td.AnyAttribute before restriction checks, but the fallback keeps older
+// partially-linked paths conservative when a type has only transitive group
+// wildcards.
 func (c *compiler) effectiveAttrWildcard(td *TypeDef) *Wildcard {
 	if td == nil {
 		return nil
@@ -2662,10 +2681,11 @@ func (c *compiler) effectiveAttrWildcard(td *TypeDef) *Wildcard {
 		return w
 	}
 	for _, qn := range c.attrGroupRefs[td] {
-		if _, ok := c.schema.attrGroups[qn]; !ok {
+		refQN, ok := c.resolveAttrGroupRefQName(qn)
+		if !ok {
 			continue
 		}
-		if gw := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{}); gw != nil {
+		if gw := c.attrGroupCompleteWildcard(refQN, map[QName]struct{}{}); gw != nil {
 			return gw
 		}
 	}
@@ -2913,8 +2933,26 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 	case td.AnyAttribute == nil:
 		td.AnyAttribute = base.AnyAttribute
 	case td.Derivation == DerivationExtension && base.AnyAttribute != nil:
-		td.AnyAttribute = wildcardUnion(base.AnyAttribute, td.AnyAttribute, c.version)
+		td.AnyAttribute = c.extensionWildcardUnion(ctx, td, base.AnyAttribute, td.AnyAttribute)
 	}
+}
+
+func (c *compiler) extensionWildcardUnion(ctx context.Context, td *TypeDef, base, derived *Wildcard) *Wildcard {
+	wc, ok := wildcardUnionWithStatus(base, derived, c.version)
+	if ok || c.version != Version10 || c.filename == "" {
+		return wc
+	}
+	src, hasSrc := c.typeDefSources[td]
+	if !hasSrc {
+		return wc
+	}
+	component := componentLocalComplexType
+	if !src.isLocal {
+		component = "complex type '" + td.Name.Local + "'"
+	}
+	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+		"The union of the base and derived attribute wildcards is not expressible."))
+	return wc
 }
 
 // wildcardNSSet expands a wildcard's namespace constraint into a set of URIs.
@@ -2955,6 +2993,11 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 //   - "not(absent)" → matches everything except absent (empty namespace)
 //   - "set"       → finite set of namespace URIs (empty string = absent)
 func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
+	wc, _ := wildcardUnionWithStatus(w1, w2, version)
+	return wc
+}
+
+func wildcardUnionWithStatus(w1, w2 *Wildcard, version Version) (*Wildcard, bool) {
 	// Route to the general constraint algebra for EVERY XSD 1.1 union, not just
 	// those whose operands carry a notNamespace/notQName field. The 1.0 case
 	// analysis below keys processContents on w1 and APPROXIMATES some namespace
@@ -2965,7 +3008,7 @@ func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
 	// STRICTLY for Version10 so existing goldens stay byte-identical; the
 	// 1.1-field guard remains as a defensive fallback.
 	if version == Version11 || wildcardHas11Fields(w1) || wildcardHas11Fields(w2) {
-		return unionWildcards11(w1, w2)
+		return unionWildcards11(w1, w2), true
 	}
 
 	pc := w1.ProcessContents
@@ -2973,7 +3016,7 @@ func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
 
 	// Case 2: If either is ##any, result is ##any.
 	if w1.Namespace == WildcardNSAny || w2.Namespace == WildcardNSAny {
-		return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}, true
 	}
 
 	w1IsNeg := w1.Namespace == WildcardNSOther || w1.Namespace == WildcardNSNotAbsent
@@ -2981,7 +3024,7 @@ func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
 
 	// Case 1: Both are the same value.
 	if w1.Namespace == w2.Namespace && w1.TargetNS == w2.TargetNS {
-		return &Wildcard{Namespace: w1.Namespace, ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: w1.Namespace, ProcessContents: pc, TargetNS: tns}, true
 	}
 
 	// Case 3: Both are sets (neither is a negation or ##any).
@@ -2990,7 +3033,7 @@ func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
 		for ns := range wildcardNSSet(w2) {
 			set[ns] = true
 		}
-		return wildcardFromSet(set, pc, tns)
+		return wildcardFromSet(set, pc, tns), true
 	}
 
 	// Case 4: Both are negations.
@@ -2999,10 +3042,10 @@ func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
 		w2NegNS := wildcardNegatedNS(w2)
 		if w1NegNS == w2NegNS {
 			// Same negated value → same result.
-			return &Wildcard{Namespace: w1.Namespace, ProcessContents: pc, TargetNS: tns}
+			return &Wildcard{Namespace: w1.Namespace, ProcessContents: pc, TargetNS: tns}, true
 		}
 		// Different negated values → not(absent).
-		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}, true
 	}
 
 	// Cases 5 & 6: One is a negation, the other is a set.
@@ -3022,28 +3065,27 @@ func wildcardUnion(w1, w2 *Wildcard, version Version) *Wildcard {
 		// Case 6: neg is not(absent).
 		if hasAbsent {
 			// 6.1: Set includes absent → any.
-			return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
+			return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}, true
 		}
 		// 6.2: Set doesn't include absent → not(absent).
-		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}, true
 	}
 
 	// Case 5: neg is not(ns).
 	if hasNegated && hasAbsent {
 		// 5.1: Set includes both negated ns and absent → any.
-		return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}, true
 	}
 	if hasNegated && !hasAbsent {
 		// 5.2: Set includes negated ns but not absent → not(absent).
-		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}, true
 	}
 	if !hasNegated && !hasAbsent {
 		// 5.4: Set includes neither → the negation.
-		return &Wildcard{Namespace: neg.Namespace, ProcessContents: pc, TargetNS: neg.TargetNS}
+		return &Wildcard{Namespace: neg.Namespace, ProcessContents: pc, TargetNS: neg.TargetNS}, true
 	}
-	// 5.3: Set includes absent but not negated ns → not expressible.
-	// Fall back to ##any (permissive).
-	return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
+	// 5.3: Set includes absent but not negated ns → not expressible in XSD 1.0.
+	return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}, false
 }
 
 // wildcardNegatedNS returns the namespace being negated.

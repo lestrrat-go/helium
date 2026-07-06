@@ -106,4 +106,62 @@ func TestRedefineAttrGroupRefSet(t *testing.T) {
 		require.Contains(t, errStr, "Duplicate attribute use",
 			"override's new nested ref must be flattened so its duplicate is detected; got: %q", errStr)
 	})
+
+	t.Run("no-self-ref override cannot add attributes outside original", func(t *testing.T) {
+		t.Parallel()
+		const (
+			mainXSD = "outside_main.xsd"
+			baseXSD = "outside_base.xsd"
+		)
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="outside_base.xsd">
+    <xs:attributeGroup name="g">
+      <xs:attributeGroup ref="added"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:attributeGroup name="added">
+    <xs:attribute name="z" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:complexType name="t"><xs:attributeGroup ref="g"/></xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`)},
+			baseXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`)},
+		}
+		errStr := compile(t, fsys, mainXSD)
+		require.Contains(t, errStr, "src-redefine.7.2",
+			"a no-self-ref attributeGroup redefine must restrict the original group; got: %q", errStr)
+	})
+
+	t.Run("no-self-ref override cannot drop required original attribute", func(t *testing.T) {
+		t.Parallel()
+		const (
+			mainXSD = "required_main.xsd"
+			baseXSD = "required_base.xsd"
+		)
+		fsys := fstest.MapFS{
+			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="required_base.xsd">
+    <xs:attributeGroup name="g">
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:complexType name="t"><xs:attributeGroup ref="g"/></xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`)},
+			baseXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="a" type="xs:string" use="required"/>
+    <xs:attribute name="b" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`)},
+		}
+		errStr := compile(t, fsys, mainXSD)
+		require.Contains(t, errStr, "src-redefine.7.2",
+			"a no-self-ref attributeGroup redefine must keep required original attributes; got: %q", errStr)
+	})
 }

@@ -226,8 +226,17 @@ func notQNameUnion(a, b []QName) []QName {
 // (strict > lax > skip) so the intersection is order-independent — a strict
 // operand must not be weakened to skip just because it was listed second.
 func intersectWildcards(a, b *Wildcard) *Wildcard {
+	return intersectWildcardsWithProcessContents(a, b, strongerProcessContents(a.ProcessContents, b.ProcessContents))
+}
+
+// intersectWildcardsWithProcessContents computes the same namespace/disallowed-name
+// intersection as intersectWildcards, while taking the result processContents
+// from the caller. XSD 1.0 complete-wildcard construction fixes processContents
+// from the local wildcard or first contributing group wildcard; it does not use
+// the stronger-of-both rule that applies to the general intersection helper.
+func intersectWildcardsWithProcessContents(a, b *Wildcard, pc ProcessContentsKind) *Wildcard {
 	con := constraintIntersect(wildcardConstraint(a), wildcardConstraint(b))
-	return constraintToWildcard(con, strongerProcessContents(a.ProcessContents, b.ProcessContents), a.TargetNS,
+	return constraintToWildcard(con, pc, a.TargetNS,
 		notQNameUnion(a.NotQName, b.NotQName),
 		a.NotQNameDefined || b.NotQNameDefined,
 		a.NotQNameDefinedSibling || b.NotQNameDefinedSibling,

@@ -1659,6 +1659,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				continue
 			}
 			origAttrs := c.schema.attrGroups[qn]
+			origEffectiveAttrs := c.expandAttrGroupUses(qn, map[QName]struct{}{})
+			origEffectiveWildcard := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{})
 			// The override REPLACES the Phase-A attribute group, so the nested
 			// attribute-group ref set must be rebuilt from the redefining group's
 			// children. Snapshot the Phase-A refs first (for self-reference
@@ -1676,6 +1678,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			origWildcard := c.attrGroupWildcards[qn]
 			delete(c.attrGroupWildcards, qn)
 			var ownWildcard, selfRefWildcard *Wildcard
+			var selfRefSeen bool
 			var anyAttributeSeen bool
 			reportAfterWildcard := func(gce *helium.Element) {
 				c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attributeGroup",
@@ -1712,14 +1715,28 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 					}
 					au := c.parseAttributeUse(ctx, gce)
 					attrs = append(attrs, au)
-				case c.version == Version11 && isXSDElement(gce, elemAnyAttribute):
+				case isXSDElement(gce, elemAnyAttribute):
 					if anyAttributeSeen {
-						c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attributeGroup",
-							fmt.Sprintf("An attribute group definition must not have more than one attribute wildcard (found a second '%s').", gce.LocalName())))
+						if c.version == Version11 {
+							c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attributeGroup",
+								fmt.Sprintf("An attribute group definition must not have more than one attribute wildcard (found a second '%s').", gce.LocalName())))
+						}
 						continue
 					}
 					anyAttributeSeen = true
-					ownWildcard = c.parseAnyAttribute(ctx, gce)
+					if c.version == Version11 {
+						ownWildcard = c.parseAnyAttribute(ctx, gce)
+					} else {
+						ns := WildcardNSAny
+						if hasAttr(gce, attrNamespace) {
+							ns = getAttr(gce, attrNamespace)
+						}
+						ownWildcard = &Wildcard{
+							Namespace:       ns,
+							ProcessContents: quietProcessContents(gce),
+							TargetNS:        c.schema.targetNamespace,
+						}
+					}
 				case isXSDElement(gce, elemAttributeGroup):
 					if c.version == Version11 && anyAttributeSeen {
 						reportAfterWildcard(gce)
@@ -1738,6 +1755,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 							if origAttrs != nil {
 								attrs = append(attrs, origAttrs...)
 							}
+							selfRefSeen = true
 							selfRefWildcard = origWildcard
 							if len(origRefChildren) > 0 {
 								c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], origRefChildren...)
@@ -1753,14 +1771,17 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				}
 			}
 			c.schema.attrGroups[qn] = attrs
-			// Store the override's effective group wildcard (Version11): the group's
-			// own xs:anyAttribute INTERSECTED with the original wildcard a
-			// self-reference re-contributes. The type's "complete wildcard" further
-			// intersects the non-self refs recorded above at link time.
-			if c.version == Version11 {
-				if w := combineGroupWildcards(ownWildcard, selfRefWildcard); w != nil {
-					c.attrGroupWildcards[qn] = w
-				}
+			// Store the override's effective group wildcard: the group's own
+			// xs:anyAttribute INTERSECTED with the original wildcard a self-reference
+			// re-contributes. The type's "complete wildcard" further intersects the
+			// non-self refs recorded above at link time.
+			if w := combineGroupWildcards(c.version, ownWildcard, selfRefWildcard); w != nil {
+				c.attrGroupWildcards[qn] = w
+			}
+			if !selfRefSeen {
+				derivedAttrs := c.expandAttrGroupUses(qn, map[QName]struct{}{})
+				derivedWildcard := c.attrGroupCompleteWildcard(qn, map[QName]struct{}{})
+				c.checkRedefineAttrGroupRestriction(ctx, elem, qn, derivedAttrs, derivedWildcard, origEffectiveAttrs, origEffectiveWildcard)
 			}
 			// The override REPLACES the Phase-A attribute group, so re-record its
 			// source to the redefining file/line (c.includeFile is the redefining
@@ -2164,8 +2185,8 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			c.attrGroupRefChildren[qn] = refs
 		}
 	}
-	// Merge the XSD 1.1 attribute-group wildcards so a type in the importing
-	// schema that references an imported group sees the group's xs:anyAttribute.
+	// Merge attribute-group wildcards so a type in the importing schema that
+	// references an imported group sees the group's xs:anyAttribute.
 	for qn, wc := range impC.attrGroupWildcards {
 		if _, exists := c.attrGroupWildcards[qn]; !exists {
 			c.attrGroupWildcards[qn] = wc

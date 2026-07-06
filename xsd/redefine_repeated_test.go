@@ -44,11 +44,13 @@ func TestRedefine_RepeatedDocument(t *testing.T) {
 			mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:redefine schemaLocation="disjoint_base.xsd">
     <xs:attributeGroup name="g1">
+      <xs:attributeGroup ref="g1"/>
       <xs:attribute name="a1" type="xs:string"/>
     </xs:attributeGroup>
   </xs:redefine>
   <xs:redefine schemaLocation="disjoint_base.xsd">
     <xs:attributeGroup name="g2">
+      <xs:attributeGroup ref="g2"/>
       <xs:attribute name="b1" type="xs:string"/>
     </xs:attributeGroup>
   </xs:redefine>

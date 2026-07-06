@@ -129,15 +129,12 @@ func TestRestrictionAttrNamespace(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
-	t.Run("does not narrow a direct base wildcard by a group-ref wildcard", func(t *testing.T) {
+	t.Run("narrows a direct base wildcard by a group-ref wildcard", func(t *testing.T) {
 		t.Parallel()
 		// The base has a DIRECT <xs:anyAttribute namespace="##any"/> AND a
 		// referenced attribute group contributing a NARROWER ##other wildcard.
-		// XSD 1.0 instance validation uses only the direct ##any wildcard, so the
-		// restriction check must too: a derived ##any wildcard is a valid subset of
-		// the direct base ##any and must compile. Intersecting the direct wildcard
-		// with the group's ##other would narrow the base and newly reject this in
-		// 1.0 — a byte-identical break.
+		// The effective complete wildcard is their intersection, so a derived
+		// ##any wildcard widens the base and is not a valid restriction.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:attributeGroup name="g">
     <xs:attribute name="a" type="xs:string"/>
@@ -158,7 +155,7 @@ func TestRestrictionAttrNamespace(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
-		require.Empty(t, compileFatalErrors(t, schema))
+		require.Contains(t, compileFatalErrors(t, schema), "not a valid subset")
 	})
 
 	t.Run("rejects restriction widening a transitive base attribute-group wildcard", func(t *testing.T) {
