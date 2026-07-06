@@ -1259,12 +1259,12 @@ func (c *compiler) checkRedefineSelfDerivation(ctx context.Context, elem *helium
 // resolver, so the original group is cloned with group-reference placeholders
 // expanded just for this check. The real schema tree is left for the normal
 // resolver so diagnostics and all-group reference checks stay centralized.
-func (c *compiler) checkRedefineGroupRestriction(ctx context.Context, elem *helium.Element, qn QName, origGroup *ModelGroup) {
+func (c *compiler) checkRedefineGroupRestriction(ctx context.Context, elem *helium.Element, qn QName, origGroup *ModelGroup, phaseAGroups map[QName]*ModelGroup) {
 	redef := c.schema.groups[qn]
 	if redef == nil || origGroup == nil {
 		return
 	}
-	expandedOrig, ok := c.expandGroupRefsForRedefineRestriction(origGroup)
+	expandedOrig, ok := c.expandGroupRefsForRedefineRestriction(origGroup, phaseAGroups)
 	if !ok {
 		return
 	}
@@ -1275,16 +1275,16 @@ func (c *compiler) checkRedefineGroupRestriction(ctx context.Context, elem *heli
 		fmt.Sprintf("src-redefine.6.2: The redefinition of group '%s' is not a valid restriction of the original group.", qn.Local)))
 }
 
-func (c *compiler) expandGroupRefsForRedefineRestriction(mg *ModelGroup) (*ModelGroup, bool) {
-	return c.expandGroupRefsForRedefineRestrictionVisit(mg, make(map[*ModelGroup]*ModelGroup), make(map[QName]struct{}))
+func (c *compiler) expandGroupRefsForRedefineRestriction(mg *ModelGroup, phaseAGroups map[QName]*ModelGroup) (*ModelGroup, bool) {
+	return c.expandGroupRefsForRedefineRestrictionVisit(mg, phaseAGroups, make(map[*ModelGroup]*ModelGroup), make(map[QName]struct{}))
 }
 
-func (c *compiler) expandGroupRefsForRedefineRestrictionVisit(mg *ModelGroup, cloned map[*ModelGroup]*ModelGroup, resolving map[QName]struct{}) (*ModelGroup, bool) {
+func (c *compiler) expandGroupRefsForRedefineRestrictionVisit(mg *ModelGroup, phaseAGroups map[QName]*ModelGroup, cloned map[*ModelGroup]*ModelGroup, resolving map[QName]struct{}) (*ModelGroup, bool) {
 	if mg == nil {
 		return nil, true
 	}
 	if qn, isRef := c.groupRefs[mg]; isRef {
-		target, ok := c.lookupGroupForRef(qn)
+		target, ok := c.lookupGroupForRef(qn, phaseAGroups)
 		if !ok {
 			return nil, false
 		}
@@ -1292,7 +1292,7 @@ func (c *compiler) expandGroupRefsForRedefineRestrictionVisit(mg *ModelGroup, cl
 			return nil, false
 		}
 		resolving[qn] = struct{}{}
-		expanded, ok := c.expandGroupRefsForRedefineRestrictionVisit(target, cloned, resolving)
+		expanded, ok := c.expandGroupRefsForRedefineRestrictionVisit(target, phaseAGroups, cloned, resolving)
 		delete(resolving, qn)
 		if !ok || expanded == nil {
 			return nil, false
@@ -1323,7 +1323,7 @@ func (c *compiler) expandGroupRefsForRedefineRestrictionVisit(mg *ModelGroup, cl
 		}
 		cp := *p
 		if sub, ok := p.Term.(*ModelGroup); ok {
-			expanded, ok := c.expandGroupRefsForRedefineRestrictionVisit(sub, cloned, resolving)
+			expanded, ok := c.expandGroupRefsForRedefineRestrictionVisit(sub, phaseAGroups, cloned, resolving)
 			if !ok {
 				return nil, false
 			}
@@ -1334,13 +1334,13 @@ func (c *compiler) expandGroupRefsForRedefineRestrictionVisit(mg *ModelGroup, cl
 	return out, true
 }
 
-func (c *compiler) lookupGroupForRef(qn QName) (*ModelGroup, bool) {
-	grp, ok := c.schema.groups[qn]
+func (c *compiler) lookupGroupForRef(qn QName, groups map[QName]*ModelGroup) (*ModelGroup, bool) {
+	grp, ok := groups[qn]
 	if ok {
 		return grp, true
 	}
 	if qn.NS != "" {
-		grp, ok = c.schema.groups[QName{Local: qn.Local}]
+		grp, ok = groups[QName{Local: qn.Local}]
 		return grp, ok
 	}
 	return nil, false
@@ -1489,6 +1489,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
+	phaseAGroups := make(map[QName]*ModelGroup, len(c.schema.groups))
+	maps.Copy(phaseAGroups, c.schema.groups)
 	c.redefine = &redefineState{
 		phaseAKeys: phaseAKeys,
 		seen:       make(map[redefineKind]map[QName]struct{}),
@@ -1660,7 +1662,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				// group (Particle Valid (Restriction) §3.9.6). Enforce the
 				// provably-sound core of that rule here.
 				if len(selfRefs) == 0 && !nonSelfRefSeen {
-					c.checkRedefineGroupRestriction(ctx, elem, qn, origGroup)
+					c.checkRedefineGroupRestriction(ctx, elem, qn, origGroup, phaseAGroups)
 				}
 			}
 		case isXSDElement(elem, elemAttributeGroup):
