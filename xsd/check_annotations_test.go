@@ -149,3 +149,42 @@ func TestAnnotationSchemaRepresentation(t *testing.T) {
 		})
 	}
 }
+
+func TestAnnotationSourceAnyURIVersionSpecific(t *testing.T) {
+	t.Parallel()
+
+	compile := func(t *testing.T, version xsd.Version, schemaXML string) bool {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, gotErr := xsd.NewCompiler().Version(version).Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		return gotErr != nil
+	}
+
+	for _, tc := range []struct {
+		name   string
+		schema string
+	}{
+		{
+			name: "appinfo",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:annotation><xs:appinfo source="anyURI:"/></xs:annotation>
+  <xs:element name="foo" type="xs:string"/>
+</xs:schema>`,
+		},
+		{
+			name: "documentation",
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:annotation><xs:documentation source="bad%escape"/></xs:annotation>
+  <xs:element name="foo" type="xs:string"/>
+</xs:schema>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.True(t, compile(t, xsd.Version10, tc.schema), "XSD 1.0 must reject invalid anyURI annotation source")
+			require.False(t, compile(t, xsd.Version11, tc.schema), "XSD 1.1 keeps the permissive anyURI lexical behavior")
+		})
+	}
+}
