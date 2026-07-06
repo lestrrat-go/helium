@@ -909,6 +909,18 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			// CONTAINING an 'all' group, which is forbidden.
 			allExtErr()
 			continue
+		case derivedMG != nil && derivedMG.Compositor == CompositorAll && !modelGroupHasContent(baseMG):
+			// §3.4.2: when the base type's effective content is EMPTY (an empty 'all'
+			// or 'sequence' model group), the extension's {content type} is the derived
+			// particle ALONE — the base contributes nothing, so no wrapping sequence is
+			// formed. This case is reached only for a derived 'all' over an empty base
+			// (a non-empty base with a derived 'all' is rejected by the cos-all-limited
+			// case above), where wrapping it in a sequence would nest an 'all' inside a
+			// sequence — forbidden by All Group Limited — and would falsely reject a
+			// valid instance (W3C mgZ003: an xs:group ref to an all group extending an
+			// empty base 'all'). A non-empty base keeps the sequence merge below,
+			// byte-identical.
+			td.ContentModel = derivedMG
 		case baseMG != nil && derivedMG != nil:
 			// Merge: create a sequence of base content + derived content.
 			td.ContentModel = &ModelGroup{
@@ -1835,7 +1847,32 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 			continue
 		}
 		td := c.resolveNamedType(au.TypeName)
-		if td == nil || !td.IsComplex {
+		if td == nil {
+			// An @type that resolves to NO type of that name is a src-resolve error,
+			// UNLESS it is a deferrable §5.3 unused-missing-component (an absent-
+			// namespace user type that may be supplied later — mirroring the element,
+			// item-type, and union-member deferral) or a lexically-malformed /
+			// deprecated-namespace QName already reported at its read point. A
+			// qualified miss (a prefixed or target-namespace type, e.g. xs:strong /
+			// xsd:undefined) is never deferrable, so it is reported here — a missing
+			// attribute @type would otherwise let an invalid schema compile. If a
+			// missing-type PLACEHOLDER already exists under this name it was installed
+			// (and reported) by a base/item/union reference, so td is non-nil and this
+			// branch does not double-report.
+			if c.deferMissingTypeRef(au.TypeName) || isInvalidQName(au.TypeName) || c.deprecatedDatatypeQName(au.TypeName) {
+				continue
+			}
+			issues = append(issues, issue{
+				source: c.diagSourceOrRecorded(src.source),
+				line:   src.line,
+				local:  src.local,
+				qn:     au.TypeName,
+				msg: fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.",
+					au.TypeName.NS, au.TypeName.Local),
+			})
+			continue
+		}
+		if !td.IsComplex {
 			continue
 		}
 		issues = append(issues, issue{
