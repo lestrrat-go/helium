@@ -1687,6 +1687,9 @@ func validateIDCXPathLexical(expr string) error {
 	if strings.ContainsRune(expr, '(') {
 		return errors.New("node type tests and function calls are not permitted")
 	}
+	if err := validateIDCQNameColons(expr); err != nil {
+		return err
+	}
 	for path := range strings.SplitSeq(expr, "|") {
 		before, after, found := strings.Cut(path, "//")
 		if !found {
@@ -1704,6 +1707,37 @@ func validateIDCXPathLexical(expr string) error {
 		}
 	}
 	return nil
+}
+
+// validateIDCQNameColons rejects insignificant whitespace immediately adjacent
+// to the SINGLE ':' that joins the two halves of a name-test QName
+// (Prefix ':' LocalPart) or prefixed wildcard (NCName ':' '*'). Such a QName is
+// a single lexical token in the restricted §3.11.6 subset — XPath admits
+// ExprWhitespace only BETWEEN tokens — so 'xpns: *' or 'xpns :id' splits the
+// prefix from the local part and is outside the grammar, even though the xpath1
+// lexer tolerates the trailing form. The '::' axis separator is a DISTINCT token
+// whose surrounding whitespace ('child :: item') stays permitted, so a colon
+// that is part of a '::' pair is exempt.
+func validateIDCQNameColons(expr string) error {
+	r := []rune(expr)
+	for i, c := range r {
+		if c != ':' {
+			continue
+		}
+		// Exempt the '::' axis separator (either colon of the pair).
+		if (i+1 < len(r) && r[i+1] == ':') || (i > 0 && r[i-1] == ':') {
+			continue
+		}
+		if (i > 0 && isXMLSpaceRune(r[i-1])) || (i+1 < len(r) && isXMLSpaceRune(r[i+1])) {
+			return errors.New("whitespace is not permitted within a name-test QName")
+		}
+	}
+	return nil
+}
+
+// isXMLSpaceRune reports whether r is one of the four XML whitespace characters.
+func isXMLSpaceRune(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
 }
 
 // validateIDCXPathSubset reports an error if expr falls outside the XSD

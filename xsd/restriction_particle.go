@@ -2034,7 +2034,14 @@ func baseWildcardExclusive(bw *Particle, bwc *Wildcard, baseWilds []*Particle) b
 // with confidence it stays conservative (accepts) rather than risk a false
 // rejection.
 func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
-	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+	// RecurseAsIfGroup wraps R in a SINGLETON group whose {min occurs} and
+	// {max occurs} are both 1; it is that wrapper occurrence — NOT R's own — that
+	// must validly restrict the base group's occurrence range. R's full occurrence
+	// (and type) is enforced by the inner per-member/branch match below, which
+	// carries r unchanged. Comparing R's own occurrence here would false-reject a
+	// valid restriction whose element occurrence differs from {1,1} (W3C xsd10
+	// particlesHa022/Hb010/L003/M003). Version-INDEPENDENT.
+	if !occurrenceValidRestriction(1, 1, b.MinOccurs, b.MaxOccurs) {
 		return false
 	}
 	switch bg.Compositor {

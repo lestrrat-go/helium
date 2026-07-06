@@ -1144,16 +1144,23 @@ func (c *compiler) checkSimpleTypeResolution(ctx context.Context) {
 	}
 }
 
-// checkAnySimpleTypeUsage (XSD 1.1) rejects user derivations that restrict the
-// simple ur-type xs:anySimpleType. Per the note in XML Schema Part 2 §2.4.1 (and
-// the resolution of W3C bug 14559) the simple ur-type must not be named as the
-// {base type definition} of a restriction, the {item type definition} of a list,
-// or a {member type definition} of a union — nor may a complexType with simple
-// content restrict a base whose content type is xs:anySimpleType (which would
-// derive a content simple type that restricts the ur-type). It stays valid as an
+// checkAnySimpleTypeUsage rejects user derivations that restrict the simple
+// ur-type xs:anySimpleType. Per the note in XML Schema Part 2 §2.4.1 (and the
+// resolution of W3C bug 14559) the simple ur-type must not be named as the {base
+// type definition} of a restriction, the {item type definition} of a list, or a
+// {member type definition} of a union — nor may a complexType with simple content
+// restrict a base whose content type is xs:anySimpleType (which would derive a
+// content simple type that restricts the ur-type). It stays valid as an
 // element/attribute/xsi:type type and as the base of a simpleContent EXTENSION
 // (e.g. the head of a substitution group). It walks every parsed type, including
 // inline anonymous ones (typeDefSources).
+//
+// The RESTRICTION arms (a simpleType restriction base, and a simpleContent
+// restriction whose effective content type is left as the ur-type) are
+// version-INDEPENDENT: cos-st-restricts requires a restriction base to be
+// atomic/list/union, and libxml2 rejects restricting the ur-type in XSD 1.0 too.
+// The list-item and union-member arms stay 1.1-only, so the XSD 1.0 path is
+// byte-identical apart from the newly-enforced restriction cases.
 func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
 	if c.filename == "" {
 		return
@@ -1198,10 +1205,19 @@ func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
 				"The "+role+" must not be the built-in 'anySimpleType'."))
 		}
 
-		// A complexType with simple content whose restriction leaves (or produces)
-		// xs:anySimpleType as the content simple type is restricting the ur-type.
+		// A complexType with simple content whose restriction leaves xs:anySimpleType
+		// as the content simple type (no nested <xs:simpleType>/facet narrowing) is
+		// restricting the ur-type. Two cases, differing by version:
+		//   - the DIRECT restriction base is the ur-type itself — invalid in BOTH
+		//     versions (W3C stZ009);
+		//   - the direct base is a COMPLEX type whose content type merely resolves to
+		//     the ur-type — invalid only in XSD 1.1; VALID in XSD 1.0 (W3C bug 14559,
+		//     stZ007/stZ047/stZ055, valid in 1.0, invalid in 1.1).
+		// A nested simpleType/facet narrowing (effective content != ur-type) is valid
+		// in both versions and never reaches here.
 		if td.IsSimpleContent {
-			if td.Derivation == DerivationRestriction && isAnySimpleTypeDef(effectiveContentSimpleType(td)) {
+			if td.Derivation == DerivationRestriction && isAnySimpleTypeDef(effectiveContentSimpleType(td)) &&
+				(isAnySimpleTypeDef(td.BaseType) || c.version == Version11) {
 				report("base type")
 			}
 			continue
@@ -1210,9 +1226,9 @@ func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
 		switch {
 		case td.Derivation == DerivationRestriction && isAnySimpleTypeDef(td.BaseType):
 			report("base type")
-		case isAnySimpleTypeDef(td.ItemType):
+		case c.version == Version11 && isAnySimpleTypeDef(td.ItemType):
 			report("item type")
-		case slices.ContainsFunc(td.MemberTypes, isAnySimpleTypeDef):
+		case c.version == Version11 && slices.ContainsFunc(td.MemberTypes, isAnySimpleTypeDef):
 			report("member type")
 		}
 	}

@@ -294,19 +294,19 @@ func (c *compiler) checkElementAttrVocabulary(ctx context.Context, elem *helium.
 	}
 }
 
-// checkElementContentOrder enforces the §3.3.2 element content model ordering
-// constraint that an <xs:annotation> must be the FIRST child of an <xs:element>
-// declaration — it may not FOLLOW a recognized content child (<simpleType>,
-// <complexType>, <alternative>, <unique>, <key>, <keyref>). This is
-// version-INDEPENDENT: annotation is the leading term of the element content
-// model in every XSD version ((annotation?, ((simpleType | complexType)?,
-// alternative*, (unique | key | keyref)*))). Only recognized content children set
-// the "saw a non-annotation" state, so a stray/foreign child that helium
-// otherwise tolerates does not trigger the diagnostic. The at-most-one-annotation
-// rule and the annotation's own content model are enforced separately by
-// checkAnnotations.
+// checkElementContentOrder enforces the §3.3.2 element content model ordering:
+// (annotation?, ((simpleType | complexType)?, alternative*, (unique | key |
+// keyref)*)). The recognized content children must appear in non-decreasing
+// grammar order, so an <xs:annotation> may not follow any content child, and a
+// type definition (<simpleType>/<complexType>) may not follow an <alternative>
+// or an identity constraint (<unique>/<key>/<keyref>). This is
+// version-INDEPENDENT: the ordering is identical in every XSD version (in 1.0
+// <alternative> is simply absent). Only recognized content children participate,
+// so a stray/foreign child that helium otherwise tolerates does not trigger the
+// diagnostic. The at-most-one-annotation and at-most-one-type cardinality rules,
+// and the annotation's own content model, are enforced separately.
 func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.Element) {
-	sawContentChild := false
+	maxOrdinal := -1
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -318,20 +318,35 @@ func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.El
 		if ce.URI() != lexicon.NamespaceXSD {
 			continue
 		}
-		if isXSDElement(ce, elemAnnotation) {
-			if sawContentChild {
-				c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "element",
-					"The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*))."))
-			}
+		ord, ok := elementContentOrdinal(ce)
+		if !ok {
 			continue
 		}
-		switch {
-		case isXSDElement(ce, elemSimpleType), isXSDElement(ce, elemComplexType),
-			isXSDElement(ce, elemAlternative), isXSDElement(ce, elemUnique),
-			isXSDElement(ce, elemKey), isXSDElement(ce, elemKeyRef):
-			sawContentChild = true
+		if ord < maxOrdinal {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "element",
+				"The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*))."))
+			continue
 		}
+		maxOrdinal = ord
 	}
+}
+
+// elementContentOrdinal maps a recognized <xs:element> content child to its
+// position in the §3.3.2 content model ((annotation?, ((simpleType |
+// complexType)?, alternative*, (unique | key | keyref)*))). The second return is
+// false for any element outside that vocabulary.
+func elementContentOrdinal(ce *helium.Element) (int, bool) {
+	switch {
+	case isXSDElement(ce, elemAnnotation):
+		return 0, true
+	case isXSDElement(ce, elemSimpleType), isXSDElement(ce, elemComplexType):
+		return 1, true
+	case isXSDElement(ce, elemAlternative):
+		return 2, true
+	case isXSDElement(ce, elemUnique), isXSDElement(ce, elemKey), isXSDElement(ce, elemKeyRef):
+		return 3, true
+	}
+	return 0, false
 }
 
 // attributeAttrAllowed reports whether name is a recognized unqualified attribute
