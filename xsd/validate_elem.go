@@ -752,6 +752,10 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// The host declaration was already recorded during the initial match scan
 		// above (before any early return). Nothing to record here.
 		declType := effectiveDeclType(actualDecl, vc.schema)
+		if err := vc.rejectMissingTypeRef(ctx, child.elem, declType); err != nil {
+			contentErr = err
+			continue
+		}
 		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
 		if xsiErr != nil {
