@@ -185,6 +185,46 @@ func TestVersion10LegacyGMonthIDCCanonicalValue(t *testing.T) {
 	require.ErrorIs(t, err, xsd.ErrValidationFailed)
 }
 
+func TestVersion10LegacyGMonthFacetedListUnionWrappersStrict(t *testing.T) {
+	t.Run("union enumeration", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="monthUnion">
+    <xs:union memberTypes="xs:gMonth"/>
+  </xs:simpleType>
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="monthUnion">
+        <xs:enumeration value="--03"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03</v>`))
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("list enumeration", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="monthList">
+    <xs:list itemType="xs:gMonth"/>
+  </xs:simpleType>
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="monthList">
+        <xs:enumeration value="--03"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03</v>`))
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+}
+
 // TestVersion11BuiltinTypes verifies the XSD 1.1-only built-in datatypes are
 // registered (and resolve) only in 1.1 mode, and validate per their lexical
 // space.

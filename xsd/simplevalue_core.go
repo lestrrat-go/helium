@@ -219,16 +219,23 @@ func xsd10LegacyGMonthCurrentLexicalForType(value, builtinLocal string, td *Type
 	}
 	// XSTS bug-6901-era XSD 1.0 cases accept legacy "--MM--" instance values, but
 	// the same spelling remains invalid for schema facet/default literals.
-	for cur := range baseChain(td) {
-		if !facetSetEmpty(cur.Facets) {
-			return "", false
-		}
+	if !typeChainHasNoFacets(td) {
+		return "", false
 	}
 	current, ok := xsd10LegacyGMonthCurrentLexical(value)
 	if !ok {
 		return "", false
 	}
 	return current, validateBuiltinValue(current, builtinLocal, version) == nil
+}
+
+func typeChainHasNoFacets(td *TypeDef) bool {
+	for cur := range baseChain(td) {
+		if !facetSetEmpty(cur.Facets) {
+			return false
+		}
+	}
+	return true
 }
 
 func xsd10LegacyGMonthCurrentLexical(value string) (string, bool) {
@@ -260,6 +267,11 @@ func resolveUnionMembers(td *TypeDef) []*TypeDef {
 // If all member types fail, a union-level error is reported.
 func validateUnionValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	members := resolveUnionMembers(td)
+	oldAllowLegacyGMonth := vc.allowXSD10LegacyGMonthInstance
+	vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth && typeChainHasNoFacets(td)
+	defer func() {
+		vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth
+	}()
 
 	// First, check restriction facets on the union type itself (e.g., enumeration).
 	// If the type has facets and the value doesn't match them, that's the error.
@@ -395,6 +407,12 @@ func resolveVariety(td *TypeDef) TypeVariety {
 
 // validateListValue validates a space-separated list value against a list type.
 func validateListValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
+	oldAllowLegacyGMonth := vc.allowXSD10LegacyGMonthInstance
+	vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth && typeChainHasNoFacets(td)
+	defer func() {
+		vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth
+	}()
+
 	// Split value into items by XSD whitespace only (space, tab, CR, LF). Using
 	// strings.Fields would also split on NBSP and other Unicode whitespace,
 	// silently turning an invalid item like "1 2" into two valid tokens;
