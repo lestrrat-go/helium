@@ -1401,8 +1401,12 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		return vc.validateSimpleContentValue(ctx, effectiveValue, valueNS, td, elemDisplayName(elem), elem.Line())
 	}
 
-	// XSD 1.0: validate the text value against the type with the historical gating.
-	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != lexicon.TypeAnySimpleType) {
+	// XSD 1.0: validate the text value against the type. simpleContentNeedsValidation
+	// reports whether td constrains the value — a list/union variety, a non-string
+	// builtin, or a facet ANYWHERE along the base chain — so a simpleContent EXTENSION
+	// of a named faceted simple type (whose facets live on the base, not on td itself)
+	// still enforces the base type's minLength/maxLength/etc.
+	if td != nil && simpleContentNeedsValidation(td) {
 		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
 	}
 
