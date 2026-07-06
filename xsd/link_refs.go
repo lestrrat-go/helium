@@ -154,7 +154,6 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 					}
 				}
 				td = missingTypePlaceholder(qn)
-				c.schema.types[qn] = td
 			}
 			edecl.Type = td
 		}
@@ -214,7 +213,6 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				c.reportUnresolvedTypeRef(ctx, td, qn)
 			}
 			itemTD = missingTypePlaceholder(qn)
-			c.schema.types[qn] = itemTD
 		}
 		td.ItemType = itemTD
 	}

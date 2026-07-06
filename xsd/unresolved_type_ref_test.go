@@ -39,6 +39,16 @@ func TestUnresolvedTypeRef(t *testing.T) {
 		require.Empty(t, errors)
 		return schema
 	}
+	compileErrorsVersion11 := func(t *testing.T, schemaXML string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").Version(xsd.Version11).ErrorHandler(collector).Compile(t.Context(), doc)
+		requireCompileResultErr(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
 	validateXML := func(t *testing.T, schema *xsd.Schema, xml string) error {
 		t.Helper()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
@@ -99,6 +109,29 @@ func TestUnresolvedTypeRef(t *testing.T) {
 		schema := compileOK(t, schemaXML)
 		require.NoError(t, validateXML(t, schema, `<good>1</good>`))
 		require.ErrorIs(t, validateXML(t, schema, `<bad>1</bad>`), xsd.ErrValidationFailed)
+	})
+
+	t.Run("deferred missing element type is not globally visible", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:anyType"/>
+  <xs:element name="unused" type="MissingType"/>
+</xs:schema>`
+		schema := compileOK(t, schemaXML)
+		_, ok := schema.LookupType("MissingType", "")
+		require.False(t, ok)
+		require.NoError(t, validateXML(t, schema, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><unknown xsi:type="MissingType">ok</unknown></root>`))
+	})
+
+	t.Run("deferred missing element type does not satisfy alternative type", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:anyType">
+    <xs:alternative test="true()" type="MissingType"/>
+  </xs:element>
+  <xs:element name="unused" type="MissingType"/>
+</xs:schema>`
+		require.Contains(t, compileErrorsVersion11(t, schemaXML), wantMsg)
 	})
 
 	t.Run("missing element type and substitution head are deferred until validation", func(t *testing.T) {
