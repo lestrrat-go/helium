@@ -882,8 +882,9 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// xs:redefine of the same already-loaded document can validate its overrides.
 	if err == nil {
 		c.loadedRedefinable[path] = &redefinableSet{
-			keys:     c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups),
-			consumed: make(map[redefineKind]map[QName]struct{}),
+			keys:      c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups),
+			consumed:  make(map[redefineKind]map[QName]struct{}),
+			chameleon: incTargetNS == "",
 		}
 	}
 
@@ -1003,12 +1004,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				redefineKindAttrGroup:   {},
 			}
 		}
-		return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, consumed)
+		chameleon := rs != nil && rs.chameleon
+		return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, consumed, chameleon)
 	}
 	c.includeVisited[path] = struct{}{}
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
+		c.checkRedefineOverrideRepresentation(ctx, redefineElem)
 		// Roll back the loaded-set marker added above (see loadInclude): a
 		// missing redefine target demoted to a warning must not leave the path
 		// marked, or a later xs:redefine of the same location would hit the
@@ -1040,6 +1043,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	}
 	rootExcluded := c.applyConditionalInclusion(ctx, incRoot)
 	c.includeFile = savedIncludeFileVC
+	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if rootExcluded {
 		// The redefined document's root is vc-excluded, so it contributes NO
 		// Phase-A components. The <xs:redefine> override children (which live in the
@@ -1056,15 +1060,15 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 			redefineKindAttrGroup:   {},
 		}
 		rs := &redefinableSet{
-			keys:     emptyKeys,
-			consumed: make(map[redefineKind]map[QName]struct{}),
+			keys:      emptyKeys,
+			consumed:  make(map[redefineKind]map[QName]struct{}),
+			chameleon: incTargetNS == "",
 		}
 		c.loadedRedefinable[path] = rs
-		return c.processRedefineOverrides(ctx, redefineElem, rs.keys, rs.consumed)
+		return c.processRedefineOverrides(ctx, redefineElem, rs.keys, rs.consumed, rs.chameleon)
 	}
 
 	// Check target namespace compatibility (same rules as include).
-	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
 		displayLoc := location
 		if c.filename != "" {
@@ -1192,8 +1196,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// components are merged), then process this redefine's overrides against it.
 	phaseAKeys := c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups)
 	rs := &redefinableSet{
-		keys:     phaseAKeys,
-		consumed: make(map[redefineKind]map[QName]struct{}),
+		keys:      phaseAKeys,
+		consumed:  make(map[redefineKind]map[QName]struct{}),
+		chameleon: incTargetNS == "",
 	}
 	c.loadedRedefinable[path] = rs
 
@@ -1222,7 +1227,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// open content (restored here), not the redefined document's Phase A value.
 	c.defaultOpenContent = savedDefaultOpenContent
 
-	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
+	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed, rs.chameleon)
 }
 
 // checkRedefineSelfDerivation enforces src-redefine.5: a <simpleType> or
@@ -1248,194 +1253,109 @@ func (c *compiler) checkRedefineSelfDerivation(ctx context.Context, elem *helium
 	return false
 }
 
-// checkRedefineGroupRestriction enforces the provably-sound core of
-// src-redefine.6.2 (§4.2.3): a redefining <group> with no self-reference must be
-// a ·valid restriction· of the original group (Particle Valid (Restriction),
-// §3.9.6). A restriction can never REQUIRE an element that the base group
-// EXPLICITLY forbids: if the original model declares element E with an effective
-// maximum occurrence of ZERO (so E can never appear) while the redefined model
-// GUARANTEES at least one occurrence of E, the redefinition resurrects a
-// declared-but-forbidden element and is not a valid restriction.
-//
-// The check is deliberately conservative. It fires only when (1) BOTH the
-// redefined and the original content models are fully analyzable as name-only
-// model groups — no wildcards, no unresolved group references, and no element
-// references / substitution groups — and (2) the offending name is DECLARED by
-// the original group (present as a particle) yet capped at zero occurrences. A
-// name the original omits entirely is left alone. Anything else returns without a
-// verdict, so the check can only ever add a rejection for a clear violation and
-// never over-rejects a valid restriction. Version-independent.
+// checkRedefineGroupRestriction enforces src-redefine.6.2 (§4.2.3): a
+// redefining <group> with no self-reference must be a valid restriction of the
+// original group. Redefine override processing runs before the normal group-ref
+// resolver, so callers invoke this only after confirming the override introduced
+// no unresolved group references.
 func (c *compiler) checkRedefineGroupRestriction(ctx context.Context, elem *helium.Element, qn QName, origGroup *ModelGroup) {
 	redef := c.schema.groups[qn]
 	if redef == nil || origGroup == nil {
 		return
 	}
-	// Any group ref still pending resolution is a placeholder in c.groupRefs; a
-	// nested inline sequence/choice/all is not. Snapshot the ref placeholders so
-	// the walk can distinguish them and bail on an unresolved reference.
-	refSet := make(map[*ModelGroup]bool, len(c.groupRefs))
-	for mg := range c.groupRefs {
-		refSet[mg] = true
-	}
-	if !groupContentAnalyzable(redef, refSet) || !groupContentAnalyzable(origGroup, refSet) {
+	if redefineGroupValidRestriction(ctx, redef, origGroup, c.schema, c.version) {
 		return
 	}
-	// Names the ORIGINAL group declares but caps at zero occurrences.
-	origNames := map[QName]struct{}{}
-	collectGroupElementNames(origGroup, origNames)
-	// For each element name the redefined model guarantees (min >= 1), reject when
-	// the original DECLARES that name yet can never contain it (max == 0).
-	redefNames := map[QName]struct{}{}
-	collectGroupElementNames(redef, redefNames)
-	for name := range redefNames {
-		if _, declared := origNames[name]; !declared {
-			continue
-		}
-		if groupMinCount(redef, name) >= 1 && groupMaxCount(origGroup, name) == 0 {
-			c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
-				fmt.Sprintf("src-redefine.6.2: The redefinition of group '%s' is not a valid restriction of the original: it requires element '%s', which the original group forbids (maxOccurs=0).", qn.Local, name.Local)))
-			return
-		}
-	}
+	c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+		fmt.Sprintf("src-redefine.6.2: The redefinition of group '%s' is not a valid restriction of the original group.", qn.Local)))
 }
 
-// groupContentAnalyzable reports whether a model group's content is composed
-// solely of local element declarations and nested inline model groups — i.e. no
-// wildcard, no element reference/substitution group, and no unresolved group
-// reference (a *ModelGroup present in refSet). It is the precondition for the
-// sound occurrence-counting used by checkRedefineGroupRestriction.
-func groupContentAnalyzable(mg *ModelGroup, refSet map[*ModelGroup]bool) bool {
-	for _, p := range mg.Particles {
-		switch t := p.Term.(type) {
-		case *ElementDecl:
-			if t.IsRef {
-				return false
-			}
-		case *ModelGroup:
-			if refSet[t] {
-				return false
-			}
-			if !groupContentAnalyzable(t, refSet) {
-				return false
-			}
-		default: // *Wildcard or anything unexpected
+func redefineGroupValidRestriction(ctx context.Context, redef, origGroup *ModelGroup, schema *Schema, version Version) bool {
+	derivedP := &Particle{MinOccurs: redef.MinOccurs, MaxOccurs: redef.MaxOccurs, Term: redef}
+	baseP := &Particle{MinOccurs: origGroup.MinOccurs, MaxOccurs: origGroup.MaxOccurs, Term: origGroup}
+
+	// XSD 1.0 applies the intensional Particle Valid (Restriction) rules. For
+	// all->all redefine groups that means member mapping is source-order
+	// preserving; the XSD 1.1 language-subset relaxation below is what makes the
+	// same all-member set in a different declaration order valid.
+	if version != Version11 && redef.Compositor == CompositorAll && origGroup.Compositor == CompositorAll {
+		if !occurrenceEmptiableRestriction(derivedP, baseP, version) {
 			return false
 		}
+		return recurseOrdered(ctx, redef.Particles, origGroup.Particles, schema, version)
 	}
-	return true
+
+	if particleValidRestriction(ctx, derivedP, baseP, schema, version) {
+		return true
+	}
+	if version == Version11 && particleLanguageSubset(ctx, derivedP, baseP, schema, version) {
+		return true
+	}
+	return false
 }
 
-// collectGroupElementNames gathers every element declaration name reachable in a
-// name-only model group (precondition: groupContentAnalyzable).
-func collectGroupElementNames(mg *ModelGroup, out map[QName]struct{}) {
-	for _, p := range mg.Particles {
-		switch t := p.Term.(type) {
-		case *ElementDecl:
-			out[t.Name] = struct{}{}
-		case *ModelGroup:
-			collectGroupElementNames(t, out)
-		}
-	}
-}
-
-// occursSat is a saturating count used to fold occurrence products without
-// overflow; any value at or above it is treated as "many".
-const occursSat = 1 << 20
-
-// groupMaxCount returns the maximum number of times an element named `name` can
-// occur in one instance of the given name-only model group's content (its own
-// occurrence range excluded — the caller applies particle occurrences).
-func groupMaxCount(mg *ModelGroup, name QName) int {
-	total := 0
-	for _, p := range mg.Particles {
-		var per int
-		switch t := p.Term.(type) {
-		case *ElementDecl:
-			if t.Name == name {
-				per = 1
-			}
-		case *ModelGroup:
-			per = groupMaxCount(t, name)
-		}
-		if per == 0 {
+func (c *compiler) checkRedefineOverrideRepresentation(ctx context.Context, redefineElem *helium.Element) {
+	for child := range helium.Children(redefineElem) {
+		if child.Type() != helium.ElementNode {
 			continue
 		}
-		per = satMul(per, occursMaxBound(p.MaxOccurs))
-		if mg.Compositor == CompositorChoice {
-			if per > total {
-				total = per
-			}
+		elem, ok := helium.AsNode[*helium.Element](child)
+		if !ok || !isXSDElement(elem, elemGroup) {
 			continue
 		}
-		total = satAdd(total, per)
+		c.checkRedefineGroupDefinitionRepresentation(ctx, elem)
 	}
-	return total
 }
 
-// groupMinCount returns the minimum number of times an element named `name` is
-// GUARANTEED to occur in every instance of the given name-only model group's
-// content (its own occurrence range excluded).
-func groupMinCount(mg *ModelGroup, name QName) int {
-	if mg.Compositor == CompositorChoice {
-		// A choice guarantees only what EVERY branch guarantees.
-		minVal := -1
-		for _, p := range mg.Particles {
-			per := particleMinCount(p, name)
-			if minVal < 0 || per < minVal {
-				minVal = per
+func (c *compiler) checkRedefineGroupDefinitionRepresentation(ctx context.Context, elem *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+	if hasAttr(elem, attrRef) {
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), "group", attrRef,
+			"The attribute 'ref' is not allowed on a model group definition."))
+	}
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok || !isXSDElement(ce, elemAll) {
+			continue
+		}
+		c.validateAllOccurs(ctx, ce)
+		for grand := range helium.Children(ce) {
+			if grand.Type() != helium.ElementNode {
+				continue
+			}
+			ge, ok := helium.AsNode[*helium.Element](grand)
+			if ok && isXSDElement(ge, elemElement) {
+				c.checkAllElementParticleOccurs(ctx, ge)
 			}
 		}
-		if minVal < 0 {
-			return 0
+	}
+}
+
+func redefineGroupHasUnprefixedSelfRef(elem *helium.Element, local string) bool {
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
 		}
-		return minVal
-	}
-	total := 0
-	for _, p := range mg.Particles {
-		total = satAdd(total, particleMinCount(p, name))
-	}
-	return total
-}
-
-func particleMinCount(p *Particle, name QName) int {
-	var per int
-	switch t := p.Term.(type) {
-	case *ElementDecl:
-		if t.Name == name {
-			per = 1
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
 		}
-	case *ModelGroup:
-		per = groupMinCount(t, name)
+		if isXSDElement(ce, elemGroup) && hasAttr(ce, attrRef) {
+			ref := normalizeWhiteSpace(getAttr(ce, attrRef), "collapse")
+			if ref == local && refChameleonEligible(ce, ref) {
+				return true
+			}
+		}
+		if redefineGroupHasUnprefixedSelfRef(ce, local) {
+			return true
+		}
 	}
-	if per == 0 || p.MinOccurs == 0 {
-		return 0
-	}
-	return satMul(per, p.MinOccurs)
-}
-
-func occursMaxBound(m int) int {
-	if m < 0 { // unbounded
-		return occursSat
-	}
-	return m
-}
-
-func satMul(a, b int) int {
-	if a == 0 || b == 0 {
-		return 0
-	}
-	if a >= occursSat || b >= occursSat || a > occursSat/b {
-		return occursSat
-	}
-	return a * b
-}
-
-func satAdd(a, b int) int {
-	s := a + b
-	if s >= occursSat {
-		return occursSat
-	}
-	return s
+	return false
 }
 
 // processRedefineOverrides applies the override children of an xs:redefine
@@ -1487,7 +1407,7 @@ func (c *compiler) validateComponentChildName(ctx context.Context, elem *helium.
 	return name, false
 }
 
-func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}) error {
+func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}, chameleon bool) error {
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
@@ -1573,6 +1493,11 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				c.typeRefs[newType] = origKey
 			}
 		case isXSDElement(elem, elemGroup):
+			if hasAttr(elem, attrRef) {
+				c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(), elem.LocalName(), "group", attrRef,
+					"The attribute 'ref' is not allowed on a model group definition."))
+				continue
+			}
 			name, ok := c.validateComponentChildName(ctx, elem)
 			if !ok {
 				continue
@@ -1595,18 +1520,36 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				c.includeFile = savedIncludeFile
 				return err
 			}
+			chameleonUnprefixedSelfRef := chameleon && qn.NS != "" && redefineGroupHasUnprefixedSelfRef(elem, qn.Local)
+			if chameleonUnprefixedSelfRef {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+					fmt.Sprintf("src-redefine.6.1.1: The self-reference to chameleon group '%s' inside <redefine> must use a qualified name in the redefining namespace.", qn.Local)))
+			}
 			// Patch self-reference: find newly-added groupRefs entries referencing qn.
 			if origGroup != nil {
-				// Collect the newly-parsed self-references (a group ref inside the
-				// redefine child whose ref names the redefined group itself).
+				// Collect the newly-parsed group references in the redefine child. A
+				// group reference inside a redefining group must name the group being
+				// redefined; non-self refs are invalid and cannot be left for the normal
+				// resolver because this path runs before reference resolution.
 				var selfRefs []*ModelGroup
+				var nonSelfRef QName
+				var nonSelfRefSeen bool
 				for mg, refQN := range c.groupRefs {
 					if existingRefs[mg] {
 						continue
 					}
 					if refQN == qn {
 						selfRefs = append(selfRefs, mg)
+						continue
 					}
+					if !nonSelfRefSeen {
+						nonSelfRef = refQN
+						nonSelfRefSeen = true
+					}
+				}
+				if nonSelfRefSeen {
+					c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
+						fmt.Sprintf("src-redefine.6.1.1: The group '%s' redefined inside <redefine> must not reference a different group ('%s').", qn.Local, nonSelfRef.Local)))
 				}
 				// src-redefine.6.1.1/6.1.2 (§4.2.3): a <group> child of <redefine>
 				// that references itself must do so exactly ONCE and with
@@ -1640,7 +1583,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				// self-reference must be a ·valid restriction· of the original
 				// group (Particle Valid (Restriction) §3.9.6). Enforce the
 				// provably-sound core of that rule here.
-				if len(selfRefs) == 0 {
+				if len(selfRefs) == 0 && !nonSelfRefSeen {
 					c.checkRedefineGroupRestriction(ctx, elem, qn, origGroup)
 				}
 			}

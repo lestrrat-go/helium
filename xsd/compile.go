@@ -298,8 +298,9 @@ type compiler struct {
 // component that an earlier xs:redefine already redefined as a duplicate, while
 // still accepting redefinitions of disjoint components.
 type redefinableSet struct {
-	keys     map[redefineKind]map[QName]struct{}
-	consumed map[redefineKind]map[QName]struct{}
+	keys      map[redefineKind]map[QName]struct{}
+	consumed  map[redefineKind]map[QName]struct{}
+	chameleon bool
 }
 
 // redefineKind identifies the component category a redefine override targets.

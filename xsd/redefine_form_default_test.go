@@ -44,7 +44,7 @@ func TestRedefine_OverrideUsesRedefiningSchemaFormDefault(t *testing.T) {
 		baseXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + ns + `">
   <xs:group name="g">
     <xs:sequence>
-      <xs:element name="placeholder" type="xs:string"/>
+      <xs:any namespace="##targetNamespace" processContents="skip"/>
     </xs:sequence>
   </xs:group>
 </xs:schema>`)},

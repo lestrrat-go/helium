@@ -9,24 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRedefineGroupRestriction verifies the provably-sound core of
-// src-redefine.6.2 (§4.2.3): a redefining <group> with no self-reference must be
-// a valid restriction of the original group. A restriction can never REQUIRE an
-// element the original group EXPLICITLY forbids (declares with maxOccurs=0). This
-// mirrors W3C ModelGroups mgO013, which the corpus marks invalid. A redefinition
-// that merely picks a subset of the original (choice{e1} restricting all{e1,e2?})
-// stays valid. Version-independent.
+// TestRedefineGroupRestriction verifies src-redefine.6.2 (§4.2.3): a
+// redefining <group> with no self-reference must be a valid restriction of the
+// original group. The default XSD 1.0 path uses the intensional Particle Valid
+// (Restriction) rules; XSD 1.1 can accept language-subset cases such as a
+// reordered xs:all.
 func TestRedefineGroupRestriction(t *testing.T) {
 	t.Parallel()
 
-	compileErrors := func(t *testing.T, mainSchema, baseSchema string) string {
+	compileErrors := func(t *testing.T, mainSchema, baseSchema string, configure ...func(xsd.Compiler) xsd.Compiler) string {
 		t.Helper()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(mainSchema))
 		require.NoError(t, err)
 		fsys := fstest.MapFS{"base.xsd": &fstest.MapFile{Data: []byte(baseSchema)}}
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = xsd.NewCompiler().Label("main.xsd").FS(fsys).ErrorHandler(collector).Compile(t.Context(), doc)
-		requireCompileResultErr(t, err)
+		compiler := xsd.NewCompiler().Label("main.xsd").FS(fsys).ErrorHandler(collector)
+		for _, fn := range configure {
+			compiler = fn(compiler)
+		}
+		_, err = compiler.Compile(t.Context(), doc)
+		if err != nil {
+			requireCompileResultErr(t, err)
+		}
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
 	}
@@ -62,11 +66,22 @@ func TestRedefineGroupRestriction(t *testing.T) {
 		require.Empty(t, compileErrors(t, main, base))
 	})
 
-	t.Run("ignores an element the original omits", func(t *testing.T) {
+	t.Run("rejects dropping a required base member", func(t *testing.T) {
 		t.Parallel()
-		// The redefinition introduces a new required element the original never
-		// declares. The conservative rule stays silent (only explicitly-forbidden
-		// declared names are rejected), so this compiles.
+		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all></xs:group>
+</xs:schema>`
+		main := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  </xs:redefine>
+  <xs:element name="doc"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, main, base), wantMsg)
+	})
+
+	t.Run("rejects adding an element the original omits", func(t *testing.T) {
+		t.Parallel()
 		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
 </xs:schema>`
@@ -76,6 +91,37 @@ func TestRedefineGroupRestriction(t *testing.T) {
   </xs:redefine>
   <xs:element name="doc"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
 </xs:schema>`
-		require.Empty(t, compileErrors(t, main, base))
+		require.Contains(t, compileErrors(t, main, base), wantMsg)
+	})
+
+	t.Run("rejects reordered sequence", func(t *testing.T) {
+		t.Parallel()
+		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>
+</xs:schema>`
+		main := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  </xs:redefine>
+  <xs:element name="doc"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, main, base), wantMsg)
+	})
+
+	t.Run("reordered all is invalid in xsd 1.0 and valid in xsd 1.1", func(t *testing.T) {
+		t.Parallel()
+		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all></xs:group>
+</xs:schema>`
+		main := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:all><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  </xs:redefine>
+  <xs:element name="doc"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, main, base), wantMsg)
+		require.Empty(t, compileErrors(t, main, base, func(c xsd.Compiler) xsd.Compiler {
+			return c.Version(xsd.Version11)
+		}))
 	})
 }

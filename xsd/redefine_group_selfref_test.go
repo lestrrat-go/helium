@@ -77,13 +77,14 @@ func TestRedefine_GroupSelfReferenceCardinality(t *testing.T) {
 			wantErr: "src-redefine.6.1.1",
 		},
 		{
-			name: "no self-reference (references a different group) is not caught by 6.1",
+			name: "different group reference is invalid",
 			redef: `<xs:group name="g">
     <xs:choice>
       <xs:element name="c1" type="xs:int"/>
       <xs:group ref="other"/>
     </xs:choice>
   </xs:group>`,
+			wantErr: "src-redefine.6.1.1",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
