@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/iolimit"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
@@ -1813,6 +1814,20 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 					// warns and skips it so a referencing wildcard still admits the
 					// attribute. Mirror parseNamedAttributeGroup here.
 					if getAttr(gce, attrUse) == attrValProhibited {
+						// The prohibited use is skipped as pointless (below), but a value
+						// constraint on it is still a schema-representation error the
+						// pointless-skip must not swallow. The "default requires
+						// use=optional" rule (§3.2.3) is version-INDEPENDENT; the
+						// fixed-value defect is a 1.1 Schema Representation Constraint —
+						// mirroring parseNamedAttributeGroup exactly.
+						if hasAttr(gce, attrDefault) {
+							c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
+								"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."))
+						}
+						if c.version == Version11 && hasAttr(gce, attrFixed) {
+							c.schemaError(ctx, schemaParserError(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
+								"The attribute 'fixed' is not allowed when the value of the attribute 'use' is 'prohibited'."))
+						}
 						if c.filename != "" {
 							c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
 								"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>."), helium.ErrorLevelWarning))
@@ -1895,6 +1910,16 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			// this group would keep the stale Phase-A source from parseNamedAttribute
 			// Group and cite the redefined (base) file instead of the redefine.
 			c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.diagSource()}
+		default:
+			// The xs:redefine content model is
+			// (annotation | (simpleType | complexType | group | attributeGroup))* —
+			// any other XSD-namespace child (e.g. an <xs:element> or <xs:attribute>)
+			// is a schema-representation error (W3C sunData xsd003-1.e/xsd003-2.e).
+			// Foreign-namespace children are ignored. Version-INDEPENDENT.
+			if elem.URI() == lexicon.NamespaceXSD && c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elem.LocalName(),
+					"Element '{"+lexicon.NamespaceXSD+"}"+elem.LocalName()+"' is not allowed as a child of the redefine element."))
+			}
 		}
 	}
 

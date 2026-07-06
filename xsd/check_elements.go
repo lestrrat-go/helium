@@ -301,10 +301,12 @@ func (c *compiler) checkElementAttrVocabulary(ctx context.Context, elem *helium.
 // type definition (<simpleType>/<complexType>) may not follow an <alternative>
 // or an identity constraint (<unique>/<key>/<keyref>). This is
 // version-INDEPENDENT: the ordering is identical in every XSD version (in 1.0
-// <alternative> is simply absent). Only recognized content children participate,
-// so a stray/foreign child that helium otherwise tolerates does not trigger the
-// diagnostic. The at-most-one-annotation and at-most-one-type cardinality rules,
-// and the annotation's own content model, are enforced separately.
+// <alternative> is simply absent). It also enforces the CLOSED vocabulary: an
+// XSD-namespace child outside {annotation, simpleType, complexType, alternative,
+// unique, key, keyref} (e.g. a compositor, <xs:attribute>, or <xs:group> ref) is
+// a schema-representation error. Foreign-namespace children are ignored. The
+// at-most-one-annotation and at-most-one-type cardinality rules, and the
+// annotation's own content model, are enforced separately.
 func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.Element) {
 	maxOrdinal := -1
 	for child := range helium.Children(elem) {
@@ -320,6 +322,13 @@ func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.El
 		}
 		ord, ok := elementContentOrdinal(ce)
 		if !ok {
+			// The xs:element content model is a CLOSED vocabulary — any other
+			// XSD-namespace child (a compositor like <xs:sequence>, an <xs:attribute>,
+			// an <xs:group> reference, …) can only appear nested and is a
+			// schema-representation error here (W3C attQ002 / groupO024). Foreign-
+			// namespace children are ignored. Version-INDEPENDENT.
+			c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "element",
+				"Element '{"+lexicon.NamespaceXSD+"}"+ce.LocalName()+"' is not allowed as a child of the element declaration."))
 			continue
 		}
 		if ord < maxOrdinal {
@@ -944,6 +953,17 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		// must be first, at most one simpleType, and no other element children.
 		// Version-INDEPENDENT schema-representation rule (enforced in 1.0 and 1.1).
 		c.checkAttributeChildren(ctx, elem)
+
+		// A GLOBAL (top-level) attribute declaration REQUIRES @name (§3.2.2 — the
+		// schema-for-schemas topLevelAttribute makes @name mandatory and omits
+		// @ref). An absent @name on a top-level <xs:attribute> is a
+		// schema-representation error (W3C msMeta/Attribute_w3c attQ005).
+		// Version-INDEPENDENT. Presence keyed on hasAttr so a present-but-empty
+		// @name instead falls through to the invalid-NCName diagnostic below.
+		if isGlobalAttributeDecl(elem) && !hasAttr(elem, attrName) {
+			c.schemaError(ctx, schemaParserError(c.diagSource(), line, local, "attribute",
+				"The attribute 'name' is required but missing."))
+		}
 
 		// xs:attribute/@name is xs:NCName (whiteSpace fixed "collapse"): read the
 		// collapsed value — the same one parseAttributeUse/parseGlobalAttribute
