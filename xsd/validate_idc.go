@@ -526,7 +526,7 @@ func (vc *validationContext) canonicalValueKey(ctx context.Context, raw string, 
 		if item := vc.builtinListItemType(td); item != nil {
 			return vc.canonicalListKey(ctx, raw, fieldNode, item)
 		}
-		return canonicalAtomicKey(raw, fieldNode, td)
+		return vc.canonicalAtomicKey(raw, fieldNode, td)
 	}
 }
 
@@ -591,7 +591,7 @@ const primitiveKeySeparator = "\x01"
 // types and the whitespace-processed lexical value for lexical-only ones (xs:string
 // family, anyURI, …). An unresolvable type or QName falls back to the raw value
 // (untagged — it can only collide with other equally-unresolvable raw values).
-func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
+func (vc *validationContext) canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 	builtinLocal := builtinBaseLocal(td)
 	if builtinLocal == "" {
 		return raw
@@ -620,6 +620,9 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 			return raw
 		}
 		return primitive + primitiveKeySeparator + helium.ClarkName(qn.NS, qn.Local)
+	}
+	if current, ok := xsd10LegacyGMonthCurrentLexicalForType(normalized, builtinLocal, td, vc.allowXSD10LegacyGMonthInstance, vc.version); ok {
+		normalized = current
 	}
 	key, _ := value.CanonicalKey(normalized, builtinLocal)
 	return primitive + primitiveKeySeparator + key
@@ -672,10 +675,11 @@ func (vc *validationContext) typeAcceptsValue(ctx context.Context, td *TypeDef, 
 	// real schema. Mirrors the compile-time throwaway contexts that reach
 	// validateValue (built with schema: c.schema).
 	tvc := &validationContext{
-		errorHandler:  helium.NilErrorHandler{},
-		suppressDepth: 1,
-		version:       vc.version,
-		schema:        vc.schema,
+		errorHandler:                   helium.NilErrorHandler{},
+		suppressDepth:                  1,
+		version:                        vc.version,
+		schema:                         vc.schema,
+		allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance,
 	}
 	return validateValue(ctx, raw, fieldNodeNSContext(fieldNode), td, "", "", 0, tvc) == nil
 }

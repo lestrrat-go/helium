@@ -49,6 +49,14 @@ const msgAbstractType = "The type definition is abstract."
 // QName/NOTATION types. When td is nil the comparison falls back to raw string
 // equality.
 func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
+	return fixedValueMatchesInternal(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version, false)
+}
+
+func fixedValueMatchesForInstance(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
+	return fixedValueMatchesInternal(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
+}
+
+func fixedValueMatchesInternal(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
 	if td == nil {
 		return instance == fixed
 	}
@@ -74,7 +82,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// each member normalize with its own facet. List and atomic types keep their
 	// type-level normalization.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version)
+		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
 	}
 
 	ws := resolveWhiteSpace(td)
@@ -82,9 +90,9 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	nf := normalizeWhiteSpace(fixed, ws)
 
 	if resolveVariety(td) == TypeVarietyList {
-		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, schema, version)
+		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
 	}
-	return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
+	return fixedAtomicMatches(ni, nf, td, instanceNS, fixedNS, version, allowXSD10LegacyGMonthInstance)
 }
 
 // fixedListMatches compares two whitespace-normalized list values item by item
@@ -92,7 +100,7 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 // variety-aware comparator on the actual item type, so a list whose item type is
 // a union (or itself a list) is compared in the correct value space rather than
 // raw lexical text.
-func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
+func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
 	ii := value.XSDFields(instance)
 	fi := value.XSDFields(fixed)
 	if len(ii) != len(fi) {
@@ -100,7 +108,7 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 	}
 	itemType := resolveItemType(td)
 	for i := range ii {
-		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, schema, version) {
+		if !fixedValueMatchesInternal(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance) {
 			return false
 		}
 	}
@@ -142,14 +150,14 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 // same per-member validateValue path the normal (non-fixed) validation uses, so
 // the fixed-comparison and ordinary-validation notions of "active member" stay
 // consistent.
-func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
+func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
 	members := resolveUnionMembers(td)
 
-	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, schema, version)
+	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members, schema, version, false)
 	if fixedMember == nil {
 		return false
 	}
-	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, schema, version)
+	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members, schema, version, allowXSD10LegacyGMonthInstance)
 	if instanceMember == nil {
 		return false
 	}
@@ -158,7 +166,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 		// Same active member: compare in that member's value space. A union has no
 		// whiteSpace facet of its own, so the raw values are forwarded and the
 		// member normalizes both with its own facet inside fixedValueMatches.
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
+		return fixedValueMatchesInternal(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
 	}
 
 	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
@@ -169,7 +177,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	// atomic members reduce to their primitive value-space family. Cross-variety
 	// pairs (a list member vs an atomic member) have no shared value space and
 	// remain unequal.
-	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, schema, version)
+	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
 }
 
 // crossMemberValueComparisonMaxDepth bounds the recursion of
@@ -207,11 +215,11 @@ const crossMemberValueComparisonMaxDepth = 64
 //     normalized-lexical for the string family).
 //   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
 //     no shared value space → unequal.
-func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version) bool {
-	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, schema, version)
+func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
+	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0, schema, version, allowXSD10LegacyGMonthInstance)
 }
 
-func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, schema *Schema, version Version) bool {
+func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
 	if depth > crossMemberValueComparisonMaxDepth {
 		return false
 	}
@@ -227,18 +235,18 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// a union nested directly inside another union, and any deeper combination, so
 	// the recursion always descends to a non-union variety before comparing.
 	if instanceVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), schema, version)
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember), schema, version, allowXSD10LegacyGMonthInstance)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, schema, version)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1, schema, version, allowXSD10LegacyGMonthInstance)
 	}
 	if fixedVariety == TypeVarietyUnion {
-		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), schema, version)
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember), schema, version, false)
 		if active == nil {
 			return false
 		}
-		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, schema, version)
+		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1, schema, version, allowXSD10LegacyGMonthInstance)
 	}
 
 	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
@@ -255,7 +263,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 			return false
 		}
 		for i := range ii {
-			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, schema, version) {
+			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1, schema, version, allowXSD10LegacyGMonthInstance) {
 				return false
 			}
 		}
@@ -271,7 +279,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
 	// no-shared-family rule.
 	if instanceMember == fixedMember {
-		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version)
+		return fixedValueMatchesInternal(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
 	}
 
 	fixedLocal := builtinBaseLocal(fixedMember)
@@ -317,6 +325,9 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	// form first.
 	ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
 	nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+	if current, ok := xsd10LegacyGMonthCurrentLexicalForType(ni, instanceLocal, instanceMember, allowXSD10LegacyGMonthInstance, version); ok {
+		ni = current
+	}
 	if !fComparable {
 		// String-family: the value space equals the whitespace-processed lexical
 		// space, so compare the normalized lexical forms directly.
@@ -405,13 +416,14 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // (schema-awareness is immaterial for plain fixed/enumeration comparisons); the
 // assertion $value path passes the real schema so union member typing is
 // consistent with validation.
-func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, schema *Schema, version Version) *TypeDef {
+func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) *TypeDef {
 	for _, member := range members {
 		vc := &validationContext{
-			schema:        schema,
-			errorHandler:  helium.NilErrorHandler{},
-			suppressDepth: 1,
-			version:       version,
+			schema:                         schema,
+			errorHandler:                   helium.NilErrorHandler{},
+			suppressDepth:                  1,
+			version:                        version,
+			allowXSD10LegacyGMonthInstance: allowXSD10LegacyGMonthInstance,
 		}
 		if validateValue(ctx, value, valueNS, member, "", "", 0, vc) != nil {
 			continue
@@ -420,7 +432,7 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 		// the active basic member within it; the validateValue success above
 		// guarantees at least one nested member accepts the value.
 		if resolveVariety(member) == TypeVarietyUnion {
-			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), schema, version); basic != nil {
+			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member), schema, version, allowXSD10LegacyGMonthInstance); basic != nil {
 				return basic
 			}
 		}
@@ -435,7 +447,8 @@ func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[strin
 // Other value-comparable builtins use value.Compare (covering numeric, boolean,
 // date/time, and binary value spaces); everything else falls back to exact
 // equality of the normalized lexical forms.
-func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedNS map[string]string) bool {
+func fixedAtomicMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, version Version, allowXSD10LegacyGMonthInstance bool) bool {
+	builtinLocal := builtinBaseLocal(td)
 	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 		// resolveNotationOrQNameValue applies the unprefixed-NOTATION default-namespace
 		// resolution (instance value → instanceNS[""], fixed/enum literal → fixedNS[""])
@@ -452,6 +465,9 @@ func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedN
 			return false
 		}
 		return iqn == fqn
+	}
+	if current, ok := xsd10LegacyGMonthCurrentLexicalForType(instance, builtinLocal, td, allowXSD10LegacyGMonthInstance, version); ok {
+		instance = current
 	}
 	if _, ok := enumValueSpaceTypes[builtinLocal]; ok {
 		if (builtinLocal == lexicon.TypeFloat || builtinLocal == lexicon.TypeDouble) &&
@@ -472,7 +488,12 @@ type validationContext struct {
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
-	idcDocOrder   *ixpath.DocOrderCache
+	// allowXSD10LegacyGMonthInstance is set only for real instance-validation
+	// contexts. Compile-time schema literals, default/fixed constraints, and
+	// standalone TypeDef.Validate stay strict even when they carry diagnostic
+	// source metadata.
+	allowXSD10LegacyGMonthInstance bool
+	idcDocOrder                    *ixpath.DocOrderCache
 	// edcType is the complex type whose content model is currently being matched.
 	// It is set (and restored) by validateContentByType, so the wildcard
 	// Element-Declarations-Consistent check (validateWildcardElementConsistent) can
@@ -609,18 +630,19 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		version = schema.version
 	}
 	vc := &validationContext{
-		schema:           schema,
-		version:          version,
-		cfg:              cfg,
-		filename:         filename,
-		errorHandler:     handler,
-		idcDocOrder:      &ixpath.DocOrderCache{},
-		actualElemType:   make(map[*helium.Element]*TypeDef),
-		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
-		attrInheritable:  make(map[*helium.Attribute]struct{}),
-		assessedElemType: make(map[*helium.Element]*TypeDef),
-		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
-		assessedAttrs:    make(map[*helium.Attribute]struct{}),
+		schema:                         schema,
+		version:                        version,
+		cfg:                            cfg,
+		filename:                       filename,
+		errorHandler:                   handler,
+		allowXSD10LegacyGMonthInstance: true,
+		idcDocOrder:                    &ixpath.DocOrderCache{},
+		actualElemType:                 make(map[*helium.Element]*TypeDef),
+		actualElemDecl:                 make(map[*helium.Element]*ElementDecl),
+		attrInheritable:                make(map[*helium.Attribute]struct{}),
+		assessedElemType:               make(map[*helium.Element]*TypeDef),
+		actualAttrType:                 make(map[*helium.Attribute]*TypeDef),
+		assessedAttrs:                  make(map[*helium.Attribute]struct{}),
 	}
 	if version == Version11 {
 		vc.assertAnnotations = make(TypeAnnotations)
@@ -1316,7 +1338,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 		// In XSD 1.1 fixedValueMatches itself narrows a simpleContent type to its
 		// effective content simple type, so the raw declared type is passed here.
-		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version) {
+		if !fixedValueMatchesForInstance(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
@@ -1890,7 +1912,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 				case isDeclaredXsiSchemaLocationUse(au, vc.version):
 					fixedMatches = xsiSchemaLocationValueEqual(a.Value(), *au.Fixed)
 				default:
-					fixedMatches = fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version)
+					fixedMatches = fixedValueMatchesForInstance(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance)
 				}
 				if !fixedMatches {
 					ad := attrDisplayName(a)
@@ -1905,7 +1927,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// type is associated only for the fixed-value comparison just done), so
 			// skip the generic check to avoid validating the same value twice.
 			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
-				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
+				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -2079,7 +2101,7 @@ func (vc *validationContext) materializeQNameValueVisit(ctx context.Context, ele
 	switch resolveVariety(td) {
 	case TypeVarietyUnion:
 		collapsed := normalizeWhiteSpace(raw, "collapse")
-		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version, false)
 		if activeTD == nil {
 			return raw, false
 		}
@@ -2145,7 +2167,7 @@ func (vc *validationContext) valueHasQNameNotationCarrierVisit(ctx context.Conte
 	switch resolveVariety(td) {
 	case TypeVarietyUnion:
 		collapsed := normalizeWhiteSpace(raw, "collapse")
-		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version)
+		activeTD := fixedUnionActiveMember(ctx, collapsed, declNS, resolveUnionMembers(td), vc.schema, vc.version, false)
 		return vc.valueHasQNameNotationCarrierVisit(ctx, activeTD, collapsed, declNS, seen)
 	case TypeVarietyList:
 		itemType := resolveItemType(td)
@@ -2319,7 +2341,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
-	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.schema, vc.version) {
+	if globalAttr.Fixed != nil && !fixedValueMatchesForInstance(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
 		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -2328,7 +2350,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
+		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)

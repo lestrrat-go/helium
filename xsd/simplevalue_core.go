@@ -183,6 +183,9 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 
 	// Validate against the builtin type's lexical space.
 	if err := validateBuiltinValue(trimmed, builtinLocal, vc.version); err != nil {
+		if acceptsXSD10LegacyGMonthInstance(trimmed, builtinLocal, td, vc) {
+			return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
+		}
 		typeName := typeDisplayName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
 		vc.reportValidityError(ctx, filename, line, elemName, msg)
@@ -205,6 +208,50 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 }
 
+func acceptsXSD10LegacyGMonthInstance(value, builtinLocal string, td *TypeDef, vc *validationContext) bool {
+	_, ok := xsd10LegacyGMonthCurrentLexicalForType(value, builtinLocal, td, vc.allowXSD10LegacyGMonthInstance, vc.version)
+	return ok
+}
+
+func xsd10LegacyGMonthCurrentLexicalForType(value, builtinLocal string, td *TypeDef, allow bool, version Version) (string, bool) {
+	if !allow || version != Version10 || builtinLocal != lexicon.TypeGMonth {
+		return "", false
+	}
+	// XSTS bug-6901-era XSD 1.0 cases accept legacy "--MM--" instance values, but
+	// the same spelling remains invalid for schema facet/default literals.
+	if !typeChainHasNoFacets(td) {
+		return "", false
+	}
+	current, ok := xsd10LegacyGMonthCurrentLexical(value)
+	if !ok {
+		return "", false
+	}
+	return current, validateBuiltinValue(current, builtinLocal, version) == nil
+}
+
+func typeChainHasNoFacets(td *TypeDef) bool {
+	for cur := range baseChain(td) {
+		if !facetSetEmpty(cur.Facets) {
+			return false
+		}
+	}
+	return true
+}
+
+func xsd10LegacyGMonthCurrentLexical(value string) (string, bool) {
+	if len(value) < 6 || !strings.HasPrefix(value, "--") || value[4:6] != "--" {
+		return "", false
+	}
+	if value[2] < '0' || value[2] > '9' || value[3] < '0' || value[3] > '9' {
+		return "", false
+	}
+	tz := value[6:]
+	if tz != "" && tz != "Z" && !strings.HasPrefix(tz, "+") && !strings.HasPrefix(tz, "-") {
+		return "", false
+	}
+	return "--" + value[2:4] + tz, true
+}
+
 // resolveUnionMembers walks up the base type chain to find the union's member
 // types. baseChain keeps the walk finite on a cyclic BaseType chain.
 func resolveUnionMembers(td *TypeDef) []*TypeDef {
@@ -220,6 +267,11 @@ func resolveUnionMembers(td *TypeDef) []*TypeDef {
 // If all member types fail, a union-level error is reported.
 func validateUnionValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	members := resolveUnionMembers(td)
+	oldAllowLegacyGMonth := vc.allowXSD10LegacyGMonthInstance
+	vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth && typeChainHasNoFacets(td)
+	defer func() {
+		vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth
+	}()
 
 	// First, check restriction facets on the union type itself (e.g., enumeration).
 	// If the type has facets and the value doesn't match them, that's the error.
@@ -265,7 +317,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		// fallback on a string leaf.
 		memberLocal := ""
 		memberWS := resolveWhiteSpace(cur)
-		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), nil, vc.version); active != nil {
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), nil, vc.version, vc.allowXSD10LegacyGMonthInstance); active != nil {
 			memberLocal = builtinBaseLocal(active)
 			memberWS = resolveWhiteSpace(active)
 		}
@@ -322,7 +374,7 @@ func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string
 		if i < len(td.Facets.EnumerationNS) {
 			enumNS = td.Facets.EnumerationNS[i]
 		}
-		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.schema, vc.version) {
+		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 			return nil
 		}
 	}
@@ -355,6 +407,12 @@ func resolveVariety(td *TypeDef) TypeVariety {
 
 // validateListValue validates a space-separated list value against a list type.
 func validateListValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
+	oldAllowLegacyGMonth := vc.allowXSD10LegacyGMonthInstance
+	vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth && typeChainHasNoFacets(td)
+	defer func() {
+		vc.allowXSD10LegacyGMonthInstance = oldAllowLegacyGMonth
+	}()
+
 	// Split value into items by XSD whitespace only (space, tab, CR, LF). Using
 	// strings.Fields would also split on NBSP and other Unicode whitespace,
 	// silently turning an invalid item like "1 2" into two valid tokens;
@@ -494,7 +552,7 @@ func checkListEnumeration(ctx context.Context, value string, valueNS map[string]
 		if i < len(fs.EnumerationNS) {
 			enumNS = fs.EnumerationNS[i]
 		}
-		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.schema, vc.version) {
+		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 			return nil
 		}
 	}

@@ -72,6 +72,159 @@ func TestVersionToggle(t *testing.T) {
 	})
 }
 
+func TestVersion10LegacyGMonthInstanceLexical(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:gMonth"/>
+</xs:schema>`
+
+	for _, instance := range []string{`<v>--03--</v>`, `<v>--05---05:00</v>`} {
+		t.Run("xsd10 accepts "+instance, func(t *testing.T) {
+			t.Parallel()
+			err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, instance)
+			require.NoError(t, err)
+		})
+
+		t.Run("xsd11 rejects "+instance, func(t *testing.T) {
+			t.Parallel()
+			err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML, instance)
+			require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		})
+	}
+}
+
+func TestVersion10LegacyGMonthPatternRestrictionDoesNotAcceptLegacyLexical(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="xs:gMonth">
+        <xs:pattern value="--[0-9]{2}--"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+}
+
+func TestVersion10LegacyGMonthFacetLexicalRejected(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="xs:gMonth">
+        <xs:enumeration value="--10--"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
+func TestVersion10LegacyGMonthElementValueConstraintRejected(t *testing.T) {
+	for _, attr := range []string{`default="--03--"`, `fixed="--03--"`} {
+		t.Run(attr, func(t *testing.T) {
+			schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:gMonth" ` + attr + `/>
+</xs:schema>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+			require.NoError(t, err)
+			_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
+}
+
+func TestVersion10LegacyGMonthFixedValueComparison(t *testing.T) {
+	t.Run("element fixed", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:gMonth" fixed="--03"/>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("attribute fixed", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:complexType>
+      <xs:attribute name="m" type="xs:gMonth" fixed="--03"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v m="--03--"/>`)
+		require.NoError(t, err)
+	})
+}
+
+func TestVersion10LegacyGMonthIDCCanonicalValue(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="m" type="xs:gMonth" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="uniqueMonth">
+      <xs:selector xpath="m"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<root><m>--03</m><m>--04--</m></root>`)
+	require.NoError(t, err)
+
+	err = compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<root><m>--03</m><m>--03--</m></root>`)
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+}
+
+func TestVersion10LegacyGMonthFacetedListUnionWrappersStrict(t *testing.T) {
+	t.Run("union enumeration", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="monthUnion">
+    <xs:union memberTypes="xs:gMonth"/>
+  </xs:simpleType>
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="monthUnion">
+        <xs:enumeration value="--03"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03</v>`))
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+
+	t.Run("list enumeration", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="monthList">
+    <xs:list itemType="xs:gMonth"/>
+  </xs:simpleType>
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="monthList">
+        <xs:enumeration value="--03"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03</v>`))
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	})
+}
+
 // TestVersion11BuiltinTypes verifies the XSD 1.1-only built-in datatypes are
 // registered (and resolve) only in 1.1 mode, and validate per their lexical
 // space.
