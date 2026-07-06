@@ -2872,6 +2872,11 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 	if prefix, rest, ok := strings.Cut(xsiTypeVal, ":"); ok {
 		local = rest
 		ns = lookupNS(elem, prefix)
+		if ns == "" {
+			msg := fmt.Sprintf("The value '%s' of the xsi:type attribute does not resolve to a type definition.", xsiTypeVal)
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			return nil, fmt.Errorf("xsi:type prefix not bound")
+		}
 	} else {
 		// No prefix — use the default namespace (empty prefix) or schema target namespace.
 		ns = lookupNS(elem, "")
@@ -2931,6 +2936,9 @@ func (vc *validationContext) resolveXsiTypeQuiet(elem *helium.Element) (*TypeDef
 	if prefix, rest, ok := strings.Cut(xsiTypeVal, ":"); ok {
 		local = rest
 		ns = lookupNS(elem, prefix)
+		if ns == "" {
+			return nil, false
+		}
 	} else {
 		ns = lookupNS(elem, "")
 	}

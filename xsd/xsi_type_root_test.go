@@ -28,6 +28,23 @@ func TestXsiTypeCanGovernUndeclaredRoot(t *testing.T) {
 		`<root><n>7</n></root>`), xsd.ErrValidationFailed)
 }
 
+func TestXsiTypeUnboundPrefixDoesNotResolveToNoNamespaceType(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="RootType">
+    <xs:sequence>
+      <xs:element name="n" type="xs:int"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+
+	const instanceXML = `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="missing:RootType"><n>7</n></root>`
+
+	err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, instanceXML)
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+}
+
 func TestXsiTypeDoesNotFallbackToSchemaTargetNamespace(t *testing.T) {
 	t.Parallel()
 

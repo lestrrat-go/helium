@@ -788,6 +788,9 @@ func TestIDLaxWildcardXsiTypeAssessed(t *testing.T) {
 	compileValidate := func(t *testing.T, processContents, instanceXML string) error {
 		t.Helper()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="LocalID">
+    <xs:restriction base="xs:ID"/>
+  </xs:simpleType>
   <xs:element name="doc">
     <xs:complexType>
       <xs:sequence>
@@ -822,6 +825,15 @@ func TestIDLaxWildcardXsiTypeAssessed(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, compileValidate(t, "skip", dupDifferentOwners),
 			"skip content is never assessed, so its xsi:type=xs:ID must not be checked")
+	})
+
+	t.Run("lax wildcard unbound xsi:type prefix is not assessed as no-namespace type", func(t *testing.T) {
+		t.Parallel()
+		inst := `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+			`<w1><id xsi:type="missing:LocalID">dup</id></w1>` +
+			`<w2><id xsi:type="missing:LocalID">dup</id></w2></doc>`
+		require.NoError(t, compileValidate(t, "lax", inst),
+			"an unbound xsi:type prefix must not fall through to a no-namespace type lookup")
 	})
 
 	t.Run("lax wildcard xsi:type=xs:ID under one owner is valid", func(t *testing.T) {
