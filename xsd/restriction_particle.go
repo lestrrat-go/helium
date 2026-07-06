@@ -486,6 +486,19 @@ func groupHasWildcardFlat(g *ModelGroup) bool {
 }
 
 func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
+	// §3.9.6 pointless-particle elimination (Sequence/Choice : Any): a base
+	// sequence/choice group that is a pointless wrapper around a single WILDCARD is
+	// equivalent to that wildcard particle. The derived group must then satisfy
+	// NSRecurseCheckCardinality against the base wildcard — its TOTAL
+	// element-emission range within the wildcard's range and every leaf admitted —
+	// rather than the element-by-element positional recurse the same-compositor
+	// rules would apply, which wrongly rejects e.g. a derived sequence(e,e,any)
+	// restricting a base sequence(any{2,3}) by mapping element e{1,1} against the
+	// wildcard{2,3} (W3C particlesHa080 valid / particlesHa081 invalid).
+	// Version-independent — groupRestrictsWildcard is the sound §3.9.6 rule.
+	if bw, ok := baseWildcardFromPointlessGroup(b); ok {
+		return groupRestrictsWildcard(r, rg, bw, schema)
+	}
 	// XSD 1.1 occurrence-counting subsumption of a base xs:all: a derived xs:all,
 	// xs:sequence, or xs:choice restricting a base all is checked by summing the
 	// derived side's per-member occurrence contributions (several derived
@@ -676,6 +689,36 @@ func reduceSingletonGroup(p *Particle) *Particle {
 			MaxOccurs: mulOccurs(p.MaxOccurs, only.MaxOccurs),
 			Term:      only.Term,
 		}
+	}
+}
+
+// baseWildcardFromPointlessGroup reduces a base sequence/choice particle that is a
+// §3.9.6-pointless wrapper — occurrence {1,1} with EXACTLY ONE particle —
+// repeatedly down to its innermost particle, returning that particle plus true
+// only when it is a lone WILDCARD. Only genuine {1,1} single-particle wrappers are
+// folded: a wider wrapper occurrence would multiply the inner range and could hide
+// a hole (e.g. seq{0,1}(any{2,∞}) emits {0}∪[2,∞), a hole at 1, that a naive
+// [0,1]×[2,∞)=[0,∞) collapse erases), and a wrapper with a non-emitting sibling has
+// >1 particle so it is not folded. The innermost wildcard keeps its OWN occurrence
+// range unchanged (each folded {1,1} wrapper contributes an identity factor), so
+// the reduction is language-exact. Version-independent.
+func baseWildcardFromPointlessGroup(p *Particle) (*Particle, bool) {
+	for {
+		mg, ok := p.Term.(*ModelGroup)
+		if !ok {
+			_, isWild := p.Term.(*Wildcard)
+			return p, isWild
+		}
+		if p.MinOccurs != 1 || p.MaxOccurs != 1 {
+			return p, false
+		}
+		if mg.Compositor != CompositorSequence && mg.Compositor != CompositorChoice {
+			return p, false
+		}
+		if len(mg.Particles) != 1 {
+			return p, false
+		}
+		p = mg.Particles[0]
 	}
 }
 
