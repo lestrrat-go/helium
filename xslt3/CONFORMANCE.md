@@ -23,15 +23,11 @@ Against the W3C XSLT 3.0 test suite (run from the sibling
 
 | Run | Pass | Skip | Fail | Total |
 |-----|-----:|-----:|-----:|------:|
-| Default (`go test ./xslt3/`) | 12,341 | 781 | 5 | 13,127 |
-| Slow (`HELIUM_SLOW_TESTS=1`) | 12,822 | 300 | 5 | 13,127 |
+| Default (`go test ./xslt3/`) | 12,346 | 781 | 0 | 13,127 |
+| Slow (`HELIUM_SLOW_TESTS=1`) | 12,827 | 300 | 0 | 13,127 |
 
 The slow run additionally executes the 481 performance-gated cases the default
-run skips. The failure set is unchanged, so those additional cases pass. The
-current failing cases are `import-schema-186`, `import-schema-187`,
-`regex-syntax-xslt20-0288`, `regex-syntax-xslt20-0370`, and
-`regex-syntax-xslt20-0480`. Committed point-in-time evidence lives beside this
-file:
+run skips. Committed point-in-time evidence lives beside this file:
 
 - `summary-xslt30.md` / `results-xslt30.xml` — default run (the summary's
   "Slow run" section carries the slow counts).

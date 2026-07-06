@@ -356,19 +356,18 @@ module; see "Running the conformance tests" below):
 
 | Run | Pass | Skip | Fail | Total | Pass/Total |
 |-----|-----:|-----:|-----:|------:|-----------:|
-| Default (`go test ./xslt3/`) | 12,341 | 781 | 5 | 13,127 | 94.01% |
-| Slow (`HELIUM_SLOW_TESTS=1`) | 12,822 | 300 | 5 | 13,127 | 97.68% |
+| Default (`go test ./xslt3/`) | 12,346 | 781 | 0 | 13,127 | 94.05% |
+| Slow (`HELIUM_SLOW_TESTS=1`) | 12,827 | 300 | 0 | 13,127 | 97.71% |
 
 This is the **reproducible local baseline** plus the on-demand slow run from
 `.github/workflows/conformance.yml`. The slow run additionally executes the
-**+481** performance-gated cases the default run skips; the failure set is
-unchanged, so those additional cases pass.
+**+481** performance-gated cases the default run skips.
 
 The slow figures are on-demand CI evidence (committed as
 `results-xslt30-slow.xml`); the default baseline is what a local run reproduces.
 
-There are **5 failing tests** in the current W3C run; they are listed in
-`summary-xslt30.md`. **Every skip is expected, not a deficiency.**
+There are **0 failing tests** in the current W3C run. **Every skip is expected,
+not a deficiency.**
 Each carries a precise, individually-recorded reason and falls into one of the
 legitimate categories below — **none is a missing mandatory Basic XSLT 3.0
 facility.** The two sources of truth for the per-case reasons are:
@@ -486,7 +485,7 @@ CI pass. Helium ships an on-demand GitHub Actions workflow
 (`.github/workflows/conformance.yml`, `workflow_dispatch` with a `slow` toggle,
 plus a nightly cron) whose `slow` toggle sets `HELIUM_SLOW_TESTS=1`; a slow run
 passes **481 additional** performance-gated tests without adding failures
-(12,822 pass / 300 skip / 5 fail, total 13,127), confirming they are CI runtime
+(12,827 pass / 300 skip / 0 fail, total 13,127), confirming they are CI runtime
 gates, not capability gaps. That workflow is how the slow figures above are
 produced.
 
