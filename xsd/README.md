@@ -22,8 +22,8 @@ Measured against the W3C XML Schema Test Suite:
 
 | Mode | Pass | Skip | Fail | Total | Pass/Total | Collections |
 |------|-----:|-----:|-----:|------:|-----------:|-------------|
-| **XSD 1.0** (default) | 14,314 | 0 | 85 | 14,399 | 99.41% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
-| **XSD 1.1** | 1,046 | 0 | 3 | 1,049 | 99.71% | IBM, Saxon, Oracle, W3C-WG |
+| **XSD 1.0** (default) | 14,338 | 0 | 61 | 14,399 | 99.58% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
+| **XSD 1.1** | 1,049 | 0 | 0 | 1,049 | 100.00% | IBM, Saxon, Oracle, W3C-WG |
 
 The 1.0-era collections (Microsoft, NIST, Sun, Boeing) contain no 1.1-tagged
 cases, so they are not part of the 1.1 run.

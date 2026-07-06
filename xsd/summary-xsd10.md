@@ -5,14 +5,14 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-06
 - Upstream suite: https://github.com/w3c/xsdtests @ `7bc3365c652a322f3d762021b3879eb92dae7e30`
-- helium: `f32694e4`
-- helium-w3c-tests (harness): `4163ab9`
+- helium: `48369d33`
+- helium-w3c-tests (harness): `2a461fa`
 - Go: `go version go1.26.1 linux/amd64`
 - Run mode: default
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 14314 |
+| Pass | 14338 |
 | Skip | 0 |
-| Fail | 85 |
+| Fail | 61 |
 | **Total** | **14399** |
