@@ -113,6 +113,32 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 	return n, true
 }
 
+// compareNonNegDigits compares two non-empty ASCII-digit strings as
+// non-negative integers, ignoring leading zeros, returning -1, 0, or 1. Unlike
+// strconv.Atoi it never overflows, so the relative minOccurs <= maxOccurs
+// constraint (cos-particle / schema-for-schemas) holds even for occurrence
+// values too large for a machine int (which parseNonNegativeOccurs clamps to a
+// sentinel). Both arguments must already be all-ASCII-digit lexicals; a longer
+// (leading-zeros-stripped) string is the larger number, and equal-length strings
+// compare lexicographically.
+func compareNonNegDigits(a, b string) int {
+	a = strings.TrimLeft(a, "0")
+	b = strings.TrimLeft(b, "0")
+	switch {
+	case len(a) != len(b):
+		if len(a) < len(b) {
+			return -1
+		}
+		return 1
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // isASCIIDigits reports whether s is a non-empty run of ASCII digits ('0'-'9')
 // with no sign, whitespace, or other characters. This matches the lexical space
 // of xs:nonNegativeInteger as XSD/libxml2 enforce it for occurrence counts.
@@ -200,15 +226,27 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		}
 	}
 
-	// minOccurs must not exceed maxOccurs (Unbounded is treated as +inf, so it
-	// can never be exceeded). The comparison uses the EFFECTIVE occurrences:
-	// minVal/maxVal default to 1 when the attribute is absent, so a minOccurs=2
-	// with an ABSENT maxOccurs (effective 1) is rejected the same as an explicit
-	// maxOccurs=1. Suppress this when the ">= 1" rule already fired on maxOccurs;
-	// libxml2 reports only the maxOccurs error there.
-	if minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
-		c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
-			"The value must not be greater than the value of 'maxOccurs'."))
+	// minOccurs must not exceed maxOccurs. The comparison is on the collapsed
+	// digit strings (compareNonNegDigits) rather than the parsed ints, so a value
+	// too large for an int — clamped to a sentinel by parseNonNegativeOccurs — is
+	// still checked (an overflowing maxOccurs clamps to Unbounded, which an int
+	// comparison would treat as +inf and wrongly skip). The effective occurrences
+	// default to "1" when the attribute is absent, so a minOccurs=2 with an ABSENT
+	// maxOccurs is rejected the same as an explicit maxOccurs=1. The literal
+	// "unbounded" is always >= any min. Suppress when the ">= 1" rule already
+	// fired on maxOccurs; libxml2 reports only the maxOccurs error there.
+	if minOK && maxOK && !maxBelowOne {
+		minRaw, maxRaw := "1", "1"
+		if minPresent {
+			minRaw = getAttr(elem, attrMinOccurs)
+		}
+		if maxPresent {
+			maxRaw = getAttr(elem, attrMaxOccurs)
+		}
+		if maxRaw != attrValUnbounded && compareNonNegDigits(minRaw, maxRaw) > 0 {
+			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
+				"The value must not be greater than the value of 'maxOccurs'."))
+		}
 	}
 }
 

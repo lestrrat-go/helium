@@ -543,13 +543,18 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			}
 		}
 
-		// minOccurs > maxOccurs check. Skip it when maxOccurs already failed the
-		// >= 1 rule (maxVal < 1 with an effective minOccurs >= 1); libxml2 reports
-		// only the maxOccurs error there.
+		// minOccurs > maxOccurs check. The comparison is on the collapsed digit
+		// strings (compareNonNegDigits), not the parsed ints, so an occurs value too
+		// large for an int — clamped to a sentinel by parseNonNegativeOccurs — is
+		// still checked (an overflowing maxOccurs clamps to Unbounded, which an int
+		// comparison would treat as +inf and wrongly skip). Skip it when maxOccurs
+		// already failed the >= 1 rule (maxOccurs == 0 with an effective minOccurs
+		// >= 1); libxml2 reports only the maxOccurs error there.
 		if minPresent && maxPresent && maxOcc != attrValUnbounded {
-			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
+			_, minOK := parseNonNegativeOccurs(minOcc, false)
 			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
-			if minOK && maxOK && maxVal != Unbounded && (maxVal >= 1 || minVal < 1) && minVal > maxVal {
+			suppressed := maxVal != Unbounded && maxVal < 1 && effectiveMinOccurs(minOcc) >= 1
+			if minOK && maxOK && !suppressed && compareNonNegDigits(minOcc, maxOcc) > 0 {
 				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"The value must not be greater than the value of 'maxOccurs'."))
 			}
@@ -649,13 +654,18 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			}
 		}
 
-		// minOccurs > maxOccurs check. Skip it when maxOccurs already failed the
-		// >= 1 rule (maxVal < 1 with an effective minOccurs >= 1); libxml2 reports
-		// only the maxOccurs error there.
+		// minOccurs > maxOccurs check. The comparison is on the collapsed digit
+		// strings (compareNonNegDigits), not the parsed ints, so an occurs value too
+		// large for an int — clamped to a sentinel by parseNonNegativeOccurs — is
+		// still checked (an overflowing maxOccurs clamps to Unbounded, which an int
+		// comparison would treat as +inf and wrongly skip). Skip it when maxOccurs
+		// already failed the >= 1 rule (maxOccurs == 0 with an effective minOccurs
+		// >= 1); libxml2 reports only the maxOccurs error there.
 		if minPresent && maxPresent && maxOcc != attrValUnbounded {
-			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
+			_, minOK := parseNonNegativeOccurs(minOcc, false)
 			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
-			if minOK && maxOK && maxVal != Unbounded && (maxVal >= 1 || minVal < 1) && minVal > maxVal {
+			suppressed := maxVal != Unbounded && maxVal < 1 && effectiveMinOccurs(minOcc) >= 1
+			if minOK && maxOK && !suppressed && compareNonNegDigits(minOcc, maxOcc) > 0 {
 				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"The value must not be greater than the value of 'maxOccurs'."))
 			}
