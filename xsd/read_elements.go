@@ -313,13 +313,6 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 		TargetNS:        c.schema.targetNamespace,
 	}
 
-	// XSD 1.1 negated namespace / name constraints. Gated on Version11 so 1.0
-	// behavior is byte-identical (the attributes are not recognized in 1.0; if
-	// present they are simply ignored, as any foreign attribute would be).
-	if c.version != Version11 {
-		return wc
-	}
-
 	hasNotNS := hasAttr(elem, attrNotNamespace)
 	// @namespace and @notNamespace are mutually exclusive (XSD 3.10.2,
 	// no-xmlns / src-wildcard): a wildcard may carry at most one of them.
@@ -345,10 +338,9 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 // error. Foreign-namespaced attributes are allowed; an XSD-namespaced attribute
 // or an unexpected unqualified attribute is a schema error.
 //
-// This rule is version-INDEPENDENT for the base attribute set. The 1.1 negated
-// constraints @notNamespace/@notQName are permitted-and-ignored in both versions
-// (in 1.0 they are unrecognized but leniently ignored, keeping the 1.0 path
-// byte-identical to origin). The stricter no-occurs grammar of an xs:openContent
+// This rule is version-INDEPENDENT for the base attribute set. The negated
+// constraints @notNamespace/@notQName are permitted here and parsed by
+// readWildcard when present. The stricter no-occurs grammar of an xs:openContent
 // wildcard is enforced separately by parseOpenContentWildcard.
 func (c *compiler) checkWildcardAttrs(ctx context.Context, elem *helium.Element) {
 	src := c.diagSource()
@@ -369,9 +361,7 @@ func (c *compiler) checkWildcardAttrs(ctx context.Context, elem *helium.Element)
 						attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed on 'anyAttribute'."))
 				}
 			case attrNotNamespace, attrNotQName:
-				// XSD 1.1 negated constraints. In 1.0 they are unrecognized but
-				// leniently IGNORED (the 1.0 path is byte-identical to origin),
-				// so they are permitted-and-ignored in both versions here.
+				// Negated wildcard constraints, parsed by readWildcard.
 			default:
 				c.schemaError(ctx, schemaParserErrorAttr(src, line, local, local,
 					attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed."))

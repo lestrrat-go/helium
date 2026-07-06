@@ -1346,7 +1346,7 @@ func emptyChoiceBranchParticle() *Particle {
 }
 
 // resolveDefinedSiblings populates SiblingNames on every xs:any wildcard that
-// carries @notQName="##definedSibling" (XSD 1.1). The sibling set is the names
+// carries @notQName="##definedSibling". The sibling set is the names
 // of the element declarations that appear in the SAME content model as the
 // wildcard, so the wildcard never claims a child a sibling element declaration
 // would match. Runs after group refs are expanded so nested/group-contributed
