@@ -515,11 +515,7 @@ func translateUnicodePropertyInCharClass(name string, neg, xsd11 bool) (string, 
 		if !neg {
 			return rng, nil
 		}
-		low, high, err := parseUnicodeBlockRange(rng)
-		if err != nil {
-			return "", err
-		}
-		return complementUnicodeRange(low, high), nil
+		return complementClassRanges(rng)
 	}
 
 	return translateUnicodeProperty(name, neg, xsd11)
@@ -535,41 +531,6 @@ func lookupUnicodeBlockRange(blockName string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func parseUnicodeBlockRange(rng string) (int64, int64, error) {
-	parts := strings.SplitN(rng, "-", 2)
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("invalid unicode block range: %s", rng)
-	}
-	low, err := parseUnicodeEscape(parts[0])
-	if err != nil {
-		return 0, 0, err
-	}
-	high, err := parseUnicodeEscape(parts[1])
-	if err != nil {
-		return 0, 0, err
-	}
-	return low, high, nil
-}
-
-func parseUnicodeEscape(s string) (int64, error) {
-	if !strings.HasPrefix(s, `\x{`) || !strings.HasSuffix(s, "}") {
-		return 0, fmt.Errorf("invalid unicode escape: %s", s)
-	}
-	return strconv.ParseInt(s[3:len(s)-1], 16, 64)
-}
-
-func complementUnicodeRange(low, high int64) string {
-	const maxCodepoint = 0x10FFFF
-	var parts []string
-	if low > 0 {
-		parts = append(parts, formatRuneRange(0, low-1))
-	}
-	if high < maxCodepoint {
-		parts = append(parts, formatRuneRange(high+1, maxCodepoint))
-	}
-	return strings.Join(parts, "")
 }
 
 func complementClassRanges(spec string) (string, error) {
@@ -904,10 +865,9 @@ var unicodeBlocks = map[string]string{
 	"SupplementaryPrivateUseArea-A":        `\x{F0000}-\x{FFFFD}`,
 	"SupplementaryPrivateUseArea-B":        `\x{100000}-\x{10FFFD}`,
 	"Tags":                                 `\x{E0000}-\x{E007F}`,
-	// The "Private Use" block is the BMP Private Use Area U+E000-U+F8FF. The
-	// supplementary planes are the separate SupplementaryPrivateUseArea-A/-B
-	// blocks, so \p{IsPrivateUse} must NOT match them.
-	"PrivateUse": `\x{E000}-\x{F8FF}`,
+	// The "Private Use" block spans all Unicode private-use ranges. Keep the
+	// individual block names above available for callers that need one range.
+	"PrivateUse": `\x{E000}-\x{F8FF}\x{F0000}-\x{FFFFD}\x{100000}-\x{10FFFD}`,
 }
 
 // validateXPathRegex checks for patterns that Go's regexp accepts but
