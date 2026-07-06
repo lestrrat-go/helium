@@ -9,6 +9,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/lestrrat-go/helium/xpath1"
 )
@@ -37,6 +38,7 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	if len(edecl.IDCs) == 0 {
 		return nil
 	}
+	ctx = ixpath.WithDocOrderCache(ctx, vc.idcDocOrder)
 
 	// Evaluate all constraints declared on this element and collect their
 	// key-sequence tables. The tables are scoped to THIS element OCCURRENCE: an

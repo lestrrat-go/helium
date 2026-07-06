@@ -34,14 +34,18 @@ type evalContext struct {
 	docOrder      *ixpath.DocOrderCache
 }
 
-func newEvalContextWithConfig(node helium.Node, cfg *evalConfig) *evalContext {
+func newEvalContextWithConfig(ctx context.Context, node helium.Node, cfg *evalConfig) *evalContext {
 	opCount := 0
+	docOrder := ixpath.DocOrderCacheFromContext(ctx)
+	if docOrder == nil {
+		docOrder = &ixpath.DocOrderCache{}
+	}
 	ectx := &evalContext{
 		node:     node,
 		position: 1,
 		size:     1,
 		opCount:  &opCount,
-		docOrder: &ixpath.DocOrderCache{},
+		docOrder: docOrder,
 	}
 	if cfg != nil {
 		ectx.namespaces = cfg.namespaces
