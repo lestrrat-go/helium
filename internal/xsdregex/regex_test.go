@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const privateUseClassPattern = `[\p{IsPrivateUse}]`
+
 func TestCaretDollarAreLiterals(t *testing.T) {
 	// In the XSD xs:pattern grammar (Compile) '^' and '$' are literal
 	// characters, not anchors, and the pattern is implicitly anchored to the
@@ -234,7 +236,7 @@ func TestXSD10CharClassRangeAfterRange(t *testing.T) {
 	// reH19-21 expect these invalid in XSD 1.0 and VALID in XSD 1.1 (whose
 	// rewritten grammar admits a mid-group '-' as a literal singleChar).
 	t.Run("xsd10 rejects range operator after a completed range", func(t *testing.T) {
-		for _, pat := range []string{`[^a-d-b-c]`, `[a-c-1-4x-z-7-9]`, `[a-a-x-x]`, `[a-z-+]`, `[a-z-9]`} {
+		for _, pat := range []string{`[^a-d-b-c]`, `[a-c-1-4x-z-7-9]`, `[a-a-x-x]`, `[a-z-+]`, `[a-z-9]`, `[7-\w]`} {
 			t.Run(pat, func(t *testing.T) {
 				_, err := xsdregex.Compile(pat + "*")
 				require.Error(t, err, "pattern %q must be rejected in XSD 1.0", pat)
@@ -263,9 +265,9 @@ func TestXSD10CharClassRangeAfterRange(t *testing.T) {
 }
 
 func TestPrivateUseBlockAllRanges(t *testing.T) {
-	// \p{IsPrivateUse} is the union of the BMP Private Use Area and both
-	// supplementary private-use planes. The individual block names still name
-	// their separate ranges.
+	// In XSD 1.1 mode, \p{IsPrivateUse} is the union of the BMP Private Use
+	// Area and both supplementary private-use planes. The individual block names
+	// still name their separate ranges.
 	const privateUsePattern = `\p{IsPrivateUse}`
 
 	bmpLo, bmpHi := string(rune(0xE000)), string(rune(0xF8FF))
@@ -285,10 +287,10 @@ func TestPrivateUseBlockAllRanges(t *testing.T) {
 		{"supp-b-matches", privateUsePattern, suppB, true},
 		{"tags-boundary-not-matched", privateUsePattern, tagsHi, false},
 		{"cjk-compat-boundary-not-matched", privateUsePattern, cjkCompatLo, false},
-		{"class-bmp-matches", `[\p{IsPrivateUse}]`, bmpLo, true},
-		{"class-supp-a-matches", `[\p{IsPrivateUse}]`, suppA, true},
-		{"class-supp-b-matches", `[\p{IsPrivateUse}]`, suppB, true},
-		{"class-tags-boundary-not-matched", `[\p{IsPrivateUse}]`, tagsHi, false},
+		{"class-bmp-matches", privateUseClassPattern, bmpLo, true},
+		{"class-supp-a-matches", privateUseClassPattern, suppA, true},
+		{"class-supp-b-matches", privateUseClassPattern, suppB, true},
+		{"class-tags-boundary-not-matched", privateUseClassPattern, tagsHi, false},
 		{"supp-a-block-still-matches", `\p{IsSupplementaryPrivateUseArea-A}`, suppA, true},
 		{"supp-b-block-still-matches", `\p{IsSupplementaryPrivateUseArea-B}`, suppB, true},
 		{"neg-bmp-not-matched", `\P{IsPrivateUse}`, bmpLo, false},
@@ -305,12 +307,52 @@ func TestPrivateUseBlockAllRanges(t *testing.T) {
 		{"prop-neg-class-cjk-compat-boundary-matched", `[\P{IsPrivateUse}]`, cjkCompatLo, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			re, err := xsdregex.CompileVersion(tc.pattern, true)
+			require.NoError(t, err, "pattern %q must compile", tc.pattern)
+			require.Equal(t, tc.want, re.MatchString(tc.input),
+				"pattern %q on U+%04X", tc.pattern, []rune(tc.input)[0])
+		})
+	}
+}
+
+func TestXSD10UnicodeCategorySnapshot(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		pattern string
+		input   string
+		want    bool
+	}{
+		{"lu-supplementary-letter-not-in-10", `\p{Lu}*`, "A" + string(rune(0x1D7A8)), false},
+		{"ll-supplementary-letter-not-in-10", `\p{Ll}*`, "a" + string(rune(0x1D7C9)), false},
+		{"mc-supplementary-mark-not-in-10", `\p{Mc}*`, string(rune(0x0903)) + string(rune(0x1D172)), false},
+		{"ethiopic-digit-matches-d", `\d`, string(rune(0x1369)), true},
+		{"ethiopic-digit-matches-class-d", `[\d]`, string(rune(0x1369)), true},
+		{"tamil-one-matches-class-d", `[\d]`, string(rune(0x0BE7)), true},
+		{"old-tamil-zero-does-not-match-class-d", `[\d]`, string(rune(0x0BE6)), false},
+		{"supplementary-digit-does-not-match-d", `\d`, string(rune(0x1D7CE)), false},
+		{"old-tamil-digit-matches-D", `\D`, string(rune(0x0BE6)), true},
+		{"supplementary-unassigned-does-not-match-D", `\D`, string(rune(0x1D7CD)), false},
+		{"old-unassigned-letter-does-not-match-w", `\w`, string(rune(0x023F)), false},
+		{"class-w-keeps-current-valid-member", `[\w]`, string(rune(0x0220)), true},
+		{"bmp-private-use-matches", `\p{IsPrivateUse}`, string(rune(0xE000)), true},
+		{"supplementary-private-use-does-not-match", `\p{IsPrivateUse}`, string(rune(0xF0000)), false},
+		{"supplementary-private-use-class-does-not-match", privateUseClassPattern, string(rune(0x100000)), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			re, err := xsdregex.Compile(tc.pattern)
 			require.NoError(t, err, "pattern %q must compile", tc.pattern)
 			require.Equal(t, tc.want, re.MatchString(tc.input),
 				"pattern %q on U+%04X", tc.pattern, []rune(tc.input)[0])
 		})
 	}
+}
+
+func TestXPathTranslateKeepsCurrentUnicodeCategories(t *testing.T) {
+	out, err := xsdregex.Translate(`\p{Lu}`, false, false)
+	require.NoError(t, err)
+
+	re := regexp.MustCompile(`^(?:` + out + `)$`)
+	require.True(t, re.MatchString(string(rune(0x1D7A8))))
 }
 
 func TestDefaultMatchTimeoutAccessors(t *testing.T) {
