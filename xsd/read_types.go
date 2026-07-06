@@ -1529,7 +1529,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"))
 			fs.TotalDigits = &n
 		case "length":
 			if duplicateSingletonFacet(ce, "length") {
@@ -1541,7 +1541,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"))
 			fs.Length = &n
 		case "minLength":
 			if duplicateSingletonFacet(ce, "minLength") {
@@ -1553,7 +1553,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"))
 			fs.MinLength = &n
 		case "maxLength":
 			if duplicateSingletonFacet(ce, "maxLength") {
@@ -1565,7 +1565,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"))
 			fs.MaxLength = &n
 		case "fractionDigits":
 			if duplicateSingletonFacet(ce, "fractionDigits") {
@@ -1577,7 +1577,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			n := parseOccurs(normalizeWhiteSpace(val, "collapse"), 0)
+			n := parseOccurs(normalizeWhiteSpace(val, "collapse"))
 			fs.FractionDigits = &n
 		case "whiteSpace":
 			if duplicateSingletonFacet(ce, "whiteSpace") {

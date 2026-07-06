@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -52,14 +53,27 @@ func (c *compiler) localElementNamespace(elem *helium.Element) string {
 	return ""
 }
 
+// occursOverflowClamp is the effective occurrence count substituted for a
+// lexically valid xs:nonNegativeInteger occurs value too large for a machine int.
+// XSD's minOccurs / maxOccurs value spaces are unbounded, so such a literal is
+// valid and must not be rejected; the content-model matcher only needs a finite
+// upper bound (a minOccurs this large already cannot be satisfied by any
+// instance). math.MaxInt32 leaves headroom for the matcher's occurrence
+// arithmetic while still reading as "effectively unlimited".
+const occursOverflowClamp = math.MaxInt32
+
 func parseParticleOccurs(elem *helium.Element) (int, int) {
 	minOccurs := 1
 	maxOccurs := 1
 	if v := getAttr(elem, attrMinOccurs); v != "" {
-		minOccurs = parseOccurs(v, 1)
+		if n, ok := parseNonNegativeOccurs(v, false); ok {
+			minOccurs = n
+		}
 	}
 	if v := getAttr(elem, attrMaxOccurs); v != "" {
-		maxOccurs = parseOccurs(v, 1)
+		if n, ok := parseNonNegativeOccurs(v, true); ok {
+			maxOccurs = n
+		}
 	}
 	return minOccurs, maxOccurs
 }
@@ -81,7 +95,19 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 		return 0, false
 	}
 	n, err := strconv.Atoi(s)
-	if err != nil || n < 0 {
+	if err != nil {
+		// isASCIIDigits guaranteed a non-empty all-digits string, so the only
+		// possible Atoi failure is a range error: a lexically valid
+		// xs:nonNegativeInteger whose magnitude exceeds int. The value space is
+		// unbounded, so this is valid — clamp it rather than reject. A maxOccurs
+		// beyond int range is treated as "unbounded" (matching the MS "maxOccurs
+		// > 4096 ⇒ xs:any" behavior); a minOccurs clamps to a large finite cap.
+		if allowMax {
+			return Unbounded, true
+		}
+		return occursOverflowClamp, true
+	}
+	if n < 0 {
 		return 0, false
 	}
 	return n, true

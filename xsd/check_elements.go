@@ -529,7 +529,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			if !ok {
 				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value '"+maxOcc+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."))
-			} else if maxVal < 1 && effectiveMinOccurs(minOcc) >= 1 {
+			} else if maxVal != Unbounded && maxVal < 1 && effectiveMinOccurs(minOcc) >= 1 {
 				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value must be greater than or equal to 1."))
 			}
@@ -635,7 +635,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			if !ok {
 				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value '"+maxOcc+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."))
-			} else if maxVal < 1 && effectiveMinOccurs(minOcc) >= 1 {
+			} else if maxVal != Unbounded && maxVal < 1 && effectiveMinOccurs(minOcc) >= 1 {
 				c.schemaError(ctx, schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value must be greater than or equal to 1."))
 			}
