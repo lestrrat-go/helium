@@ -30,8 +30,111 @@ func (c *compiler) deferMissingTypeRef(qn QName) bool {
 	if qn.NS != "" || isInvalidQName(qn) || c.deprecatedDatatypeQName(qn) {
 		return false
 	}
-	_, droppedOverrideType := c.droppedOverrideTypes[qn]
-	return !droppedOverrideType
+	if _, droppedOverrideType := c.droppedOverrideTypes[qn]; droppedOverrideType {
+		return false
+	}
+	if _, failedRedefine := c.failedRedefineTypes[qn]; failedRedefine {
+		return false
+	}
+	return true
+}
+
+// qnameNamesNonType reports whether qn resolves to an EXISTING component in a
+// symbol space other than the type-definition one (a global attribute, model
+// group, or attribute group). An element @type naming such a component is a
+// wrong-symbol-space reference (src-resolve), not a §5.3 missing component, so it
+// must be reported rather than deferred.
+func (c *compiler) qnameNamesNonType(qn QName) bool {
+	if _, ok := c.schema.globalAttrs[qn]; ok {
+		return true
+	}
+	if _, ok := c.schema.groups[qn]; ok {
+		return true
+	}
+	if _, ok := c.schema.attrGroups[qn]; ok {
+		return true
+	}
+	return false
+}
+
+// reportUndeferredMissingElemTypes emits the "does not resolve to a(n) type
+// definition" schema error for a global element whose @type is a missing
+// component that §5.3 unused-missing-component deferral must NOT cover: a
+// referenced global element (used by a content-model @ref), an xs:override
+// replacement child, or an element whose @type names an existing non-type
+// component (wrong symbol space). The missing placeholder stays installed — the
+// schema has already failed to compile, and the placeholder keeps the validation
+// path well-defined.
+func (c *compiler) reportUndeferredMissingElemTypes(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	type report struct {
+		source   string
+		line     int
+		elemName string
+		msg      string
+	}
+	var reports []report
+	for ge, missqn := range c.undeferredMissingElemTypes() {
+		src, hasSrc := c.elemRefSources[ge]
+		if !hasSrc {
+			continue
+		}
+		reports = append(reports, report{
+			source:   c.diagSourceOrRecorded(src.source),
+			line:     src.line,
+			elemName: src.elemName,
+			msg:      fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", missqn.NS, missqn.Local),
+		})
+	}
+	// Sort so diagnostic order is independent of the schema.elements map iteration
+	// order — the deferral path must not become a source of nondeterminism.
+	sort.Slice(reports, func(i, j int) bool {
+		if reports[i].source != reports[j].source {
+			return reports[i].source < reports[j].source
+		}
+		if reports[i].line != reports[j].line {
+			return reports[i].line < reports[j].line
+		}
+		return reports[i].elemName < reports[j].elemName
+	})
+	for _, r := range reports {
+		c.schemaError(ctx, schemaElemDeclErrorAttr(r.source, r.line, r.elemName, r.msg))
+	}
+}
+
+// undeferredMissingElemTypes yields each global element whose missing @type is a
+// genuine dependency (see missingElemTypeIsNeeded) paired with the missing type
+// QName.
+func (c *compiler) undeferredMissingElemTypes() map[*ElementDecl]QName {
+	out := make(map[*ElementDecl]QName)
+	for _, ge := range c.schema.elements {
+		missqn, ok := missingTypeRef(ge.Type)
+		if !ok {
+			continue
+		}
+		if c.deprecatedDatatypeQName(missqn) || isInvalidQName(missqn) {
+			continue
+		}
+		if !c.missingElemTypeIsNeeded(ge, missqn) {
+			continue
+		}
+		out[ge] = missqn
+	}
+	return out
+}
+
+// missingElemTypeIsNeeded reports whether a global element's missing @type is a
+// genuine dependency rather than a deferrable §5.3 unused-missing-component.
+func (c *compiler) missingElemTypeIsNeeded(ge *ElementDecl, missqn QName) bool {
+	if _, ok := c.overrideChildElems[ge]; ok {
+		return true
+	}
+	if _, ok := c.referencedGlobalElems[ge]; ok {
+		return true
+	}
+	return c.qnameNamesNonType(missqn)
 }
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -83,6 +186,16 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			if ok && ge != edecl {
 				edecl.Type = ge.Type
+				if edecl.IsRef {
+					// Record that this global element is genuinely referenced by a
+					// content-model @ref: its type (a missing placeholder or otherwise)
+					// is needed, so a missing type on it is NOT a deferrable §5.3
+					// unused-missing-component.
+					if c.referencedGlobalElems == nil {
+						c.referencedGlobalElems = make(map[*ElementDecl]struct{})
+					}
+					c.referencedGlobalElems[ge] = struct{}{}
+				}
 				if edecl.IsRef {
 					// Adopt the resolved global element's expanded name so the
 					// content model matches instance children by the referenced
@@ -158,6 +271,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			edecl.Type = td
 		}
 	}
+
+	// A missing element @type is deferred (§5.3 unused-missing-component) ONLY on a
+	// declaration nothing depends on. A global element referenced by a content-model
+	// @ref, an xs:override replacement child, or an element whose @type names an
+	// existing non-type component is genuinely needed / a wrong-symbol-space
+	// reference, so its missing type is a compile-time error.
+	c.reportUndeferredMissingElemTypes(ctx)
 
 	// Reject an entry-document element @type/@ref into a namespace the entry
 	// document did not directly import (src-resolve §3.3.2).
