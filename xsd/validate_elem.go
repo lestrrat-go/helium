@@ -71,11 +71,18 @@ func (vc *validationContext) matchSequence(ctx context.Context, parent *helium.E
 			break
 		}
 		if tryCons == 0 {
-			reps++
-			if reps >= minReps {
-				break
-			}
-			continue
+			// The body repetition matched but consumed no children: an emptiable
+			// body. Re-running at the same position would consume 0 again (no
+			// progress is possible), and minOccurs is trivially satisfiable by
+			// padding with these zero-width repetitions. Stop instead of looping up
+			// to minReps, which may be astronomically large — a huge minOccurs on an
+			// emptiable-body sequence would otherwise spin the validator for ~minReps
+			// iterations (a CPU DoS). This is verdict-neutral: minOccurs for a
+			// sequence is enforced only when the body FAILS to match while
+			// reps < minReps (above), and the returned consumed count does not depend
+			// on how many zero-width reps are counted. (reps is unused after the
+			// loop, so no reps=minReps bookkeeping is needed, unlike matchChoice.)
+			break
 		}
 		// Actually run with error reporting (for nested validation).
 		consumed, e := matchOnce(pos)
