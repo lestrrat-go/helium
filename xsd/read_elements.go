@@ -31,6 +31,26 @@ type attrUseReadOptions struct {
 	includeUse bool
 }
 
+// elementDocDeclaresTargetNS reports whether the schema document that owns elem
+// declares its OWN non-empty @targetNamespace on its root <xs:schema>. A document
+// that does NOT (a chameleon include, or a no-target-namespace schema) has its
+// unqualified declarations coerced into an enclosing namespace as a unit; one that
+// DOES declares its components in that namespace directly. It is used to decide
+// whether an unprefixed attribute @ref (which has no namespace of its own) should
+// resolve to no namespace ({}) rather than be coerced to the effective target
+// namespace.
+func elementDocDeclaresTargetNS(elem *helium.Element) bool {
+	owner := elem.OwnerDocument()
+	if owner == nil {
+		return false
+	}
+	root := owner.DocumentElement()
+	if root == nil {
+		return false
+	}
+	return getAttr(root, attrTargetNamespace) != ""
+}
+
 func (c *compiler) localAttributeNamespace(elem *helium.Element) string {
 	if c.version == Version11 && hasAttr(elem, attrTargetNamespace) {
 		return getAttr(elem, attrTargetNamespace)
@@ -993,6 +1013,24 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 	// reported once, not silently treated as an absent @ref falling through to the
 	// named-declaration branch.
 	if qn, ok := c.resolveQNameRef(ctx, elem, attrRef); ok {
+		// An unprefixed attribute @ref with NO in-scope default namespace resolves to
+		// NO namespace: an attribute reference never falls back to the schema
+		// targetNamespace the way resolveQName defaults a bare name. Without this,
+		// ref="a" would wrongly bind to a same-targetNamespace global attribute {T}a
+		// and let an invalid schema compile (W3C AU_attrDecl00101m1_n). refChameleon-
+		// Eligible captures exactly the unprefixed / no-default-namespace case; a
+		// prefixed ref, or one under a default namespace, keeps the namespace
+		// resolveQName determined.
+		//
+		// EXCEPTION — a chameleon include: when the OWNING schema document declares no
+		// @targetNamespace of its own, its unqualified declarations (and refs to them)
+		// are coerced into the including schema's namespace as a unit, so the ref must
+		// keep the coerced targetNamespace resolveQName gave it (W3C include1_0). Only
+		// a document that declares its OWN target namespace forces the ref to {}.
+		if !isInvalidQName(qn) && refChameleonEligible(elem, normalizeWhiteSpace(getAttr(elem, attrRef), "collapse")) &&
+			elementDocDeclaresTargetNS(elem) {
+			qn.NS = ""
+		}
 		au := &AttrUse{Name: qn}
 		switch getAttr(elem, attrUse) {
 		case attrValRequired:

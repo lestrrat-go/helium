@@ -382,6 +382,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// after the base types above are resolved.
 	c.checkSimpleContentBase(ctx)
 
+	// Enforce Derivation Valid (Restriction, Simple) / cos-st-restricts: a
+	// simpleContent restriction's derived content simple type must validly restrict
+	// the base's effective content simple type. Version-INDEPENDENT.
+	c.checkSimpleContentRestrictionDerivation(ctx)
+
 	// Resolve group references — replace placeholder content with actual group content.
 	//
 	// Collect and sort by source line so the all-group reference constraint
@@ -904,6 +909,18 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			// CONTAINING an 'all' group, which is forbidden.
 			allExtErr()
 			continue
+		case derivedMG != nil && derivedMG.Compositor == CompositorAll && !modelGroupHasContent(baseMG):
+			// §3.4.2: when the base type's effective content is EMPTY (an empty 'all'
+			// or 'sequence' model group), the extension's {content type} is the derived
+			// particle ALONE — the base contributes nothing, so no wrapping sequence is
+			// formed. This case is reached only for a derived 'all' over an empty base
+			// (a non-empty base with a derived 'all' is rejected by the cos-all-limited
+			// case above), where wrapping it in a sequence would nest an 'all' inside a
+			// sequence — forbidden by All Group Limited — and would falsely reject a
+			// valid instance (W3C mgZ003: an xs:group ref to an all group extending an
+			// empty base 'all'). A non-empty base keeps the sequence merge below,
+			// byte-identical.
+			td.ContentModel = derivedMG
 		case baseMG != nil && derivedMG != nil:
 			// Merge: create a sequence of base content + derived content.
 			td.ContentModel = &ModelGroup{
@@ -1154,6 +1171,119 @@ func (c *compiler) checkSimpleContentBase(ctx context.Context) {
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
 	}
+}
+
+// checkSimpleContentRestrictionDerivation enforces Derivation Valid (Restriction,
+// Simple) / cos-st-restricts (XSD §3.4.6.3): a <xs:simpleContent> RESTRICTION's
+// derived content simple type — defined by a nested <xs:simpleType> and/or direct
+// facets — must validly RESTRICT the base complex type's effective content simple
+// type. A list or union (whose primitive base is xs:anySimpleType), or an atomic
+// type over an unrelated primitive, does NOT descend from a concrete base content
+// type such as xs:decimal, so it is not a valid restriction (W3C particlesZ018).
+// This is version-INDEPENDENT — enforced in both XSD 1.0 and 1.1. Runs after base
+// types are resolved (from resolveRefs, right after checkSimpleContentBase).
+//
+// Exemption: when the base's effective content simple type is the simple ur-type
+// xs:anySimpleType (or xs:anyType), ANY derived simple type — list/union/atomic —
+// is a valid restriction (§3.16.3 clause 2.2.3), so the check is skipped.
+func (c *compiler) checkSimpleContentRestrictionDerivation(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	tds := make([]*TypeDef, 0, len(c.typeRefs))
+	for td := range c.typeRefs {
+		if td.IsSimpleContent && td.Derivation == DerivationRestriction &&
+			td.BaseType != nil && td.ContentSimpleType != nil {
+			tds = append(tds, td)
+		}
+	}
+	sort.Slice(tds, func(i, j int) bool {
+		si, sj := c.typeDefSources[tds[i]], c.typeDefSources[tds[j]]
+		if si.line != sj.line {
+			return si.line < sj.line
+		}
+		return si.ordinal < sj.ordinal
+	})
+	for _, td := range tds {
+		base := td.BaseType
+		if c.recoveryBaseTypes[base] {
+			continue // base ref did not resolve; already reported
+		}
+		// Only a simpleContent complex-type base has a concrete content simple type
+		// to restrict. The mixed-emptiable-base and non-simpleContent cases are
+		// handled (or already rejected) by checkSimpleContentBase.
+		if !base.IsComplex || base.ContentType != ContentTypeSimple {
+			continue
+		}
+		baseEff := effectiveContentSimpleType(base)
+		if baseEff == nil {
+			continue
+		}
+		// The simple ur-types admit any derived simple type; skip the derivation check.
+		if baseEff.Name.NS == lexicon.NamespaceXSD &&
+			(baseEff.Name.Local == typeAnySimpleType || baseEff.Name.Local == typeAnyType) {
+			continue
+		}
+		derivedEff := effectiveContentSimpleType(td)
+		if derivedEff == nil {
+			continue
+		}
+		if simpleContentContentValidlyRestricts(derivedEff, baseEff) {
+			continue
+		}
+		src, srcOK := c.typeDefSources[td]
+		if !srcOK {
+			continue
+		}
+		component := componentLocalComplexType
+		if !src.isLocal {
+			component = "complex type '" + td.Name.Local + "'"
+		}
+		c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+			"The content type of a 'simpleContent' restriction must be validly derived by restriction from the base type's content type."))
+	}
+}
+
+// simpleContentContentValidlyRestricts reports whether a simpleContent
+// restriction's derived content simple type validly restricts the base's
+// effective content simple type (cos-st-restricts). It is deliberately
+// CONSERVATIVE — it accepts by default and rejects only the cases it can PROVE
+// invalid, so it never false-rejects the lenient nested-<xs:simpleType> narrowing
+// model (a nested type authored on a shared builtin ancestor of the base content
+// still composes the inherited base facets and is valid). The simple ur-type
+// (xs:anySimpleType/xs:anyType) base is handled by the caller's exemption.
+//
+// It rejects two provable widenings of a concrete ATOMIC base content type:
+//   - a LIST or UNION derived variety (a list/union's primitive base is
+//     xs:anySimpleType, which does NOT descend from a concrete atomic base such as
+//     xs:decimal — W3C particlesZ018);
+//   - an ATOMIC derived type whose builtin primitive does not derive from the base
+//     content's builtin primitive (e.g. narrowing an xs:string base to an xs:date
+//     type, or widening xs:int back to xs:integer).
+func simpleContentContentValidlyRestricts(derived, base *TypeDef) bool {
+	if derived == nil || base == nil {
+		return true
+	}
+	if resolveVariety(base) != TypeVarietyAtomic {
+		// A list/union base is only validly restricted through the real pointer
+		// chain, which the lenient narrowing model does not always express; accept
+		// conservatively (the ur-type exemption is handled by the caller).
+		return true
+	}
+	switch resolveVariety(derived) {
+	case TypeVarietyList, TypeVarietyUnion:
+		return false
+	}
+	db := builtinBaseLocal(derived)
+	bb := builtinBaseLocal(base)
+	if db == "" || bb == "" {
+		return true
+	}
+	ok, known := builtinDerivesFrom(db, bb)
+	if !known {
+		return true
+	}
+	return ok
 }
 
 // contentModelEmptiable reports whether a complex type's content model can match
@@ -1717,7 +1847,32 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 			continue
 		}
 		td := c.resolveNamedType(au.TypeName)
-		if td == nil || !td.IsComplex {
+		if td == nil {
+			// An @type that resolves to NO type of that name is a src-resolve error,
+			// UNLESS it is a deferrable §5.3 unused-missing-component (an absent-
+			// namespace user type that may be supplied later — mirroring the element,
+			// item-type, and union-member deferral) or a lexically-malformed /
+			// deprecated-namespace QName already reported at its read point. A
+			// qualified miss (a prefixed or target-namespace type, e.g. xs:strong /
+			// xsd:undefined) is never deferrable, so it is reported here — a missing
+			// attribute @type would otherwise let an invalid schema compile. If a
+			// missing-type PLACEHOLDER already exists under this name it was installed
+			// (and reported) by a base/item/union reference, so td is non-nil and this
+			// branch does not double-report.
+			if c.deferMissingTypeRef(au.TypeName) || isInvalidQName(au.TypeName) || c.deprecatedDatatypeQName(au.TypeName) {
+				continue
+			}
+			issues = append(issues, issue{
+				source: c.diagSourceOrRecorded(src.source),
+				line:   src.line,
+				local:  src.local,
+				qn:     au.TypeName,
+				msg: fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.",
+					au.TypeName.NS, au.TypeName.Local),
+			})
+			continue
+		}
+		if !td.IsComplex {
 			continue
 		}
 		issues = append(issues, issue{
