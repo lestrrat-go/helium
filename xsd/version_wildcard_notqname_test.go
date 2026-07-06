@@ -270,14 +270,13 @@ func TestVersion11AttrGroupWildcardIntersection(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 ignores attribute-group wildcards (lenient, attribute rejected)", func(t *testing.T) {
+	t.Run("1.0 applies attribute-group wildcards while ignoring notNamespace", func(t *testing.T) {
 		t.Parallel()
-		// In 1.0 the group wildcards are dropped (pre-existing behavior), and
-		// notNamespace is unrecognized, so the type has no effective wildcard and
-		// the unknown attribute is not allowed.
+		// In 1.0 notNamespace is unrecognized, so both group wildcards behave as
+		// the default ##any and their complete wildcard admits the attribute.
 		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schema,
 			`<e m:adam="m" xmlns:m="http://adam.com/"/>`)
-		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		require.NoError(t, err)
 	})
 }
 

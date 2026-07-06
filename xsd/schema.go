@@ -1,8 +1,10 @@
 package xsd
 
 import (
+	"io/fs"
 	"slices"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -56,6 +58,9 @@ type Schema struct {
 	attrGroups        map[QName][]*AttrUse
 	globalAttrs       map[QName]*AttrUse
 	substGroups       map[QName][]*ElementDecl // head QName → member element declarations
+	loaderFS          fs.FS
+	loaderBaseDir     string
+	loaderParser      *helium.Parser
 }
 
 // LookupElement returns the global element declaration for the given name.

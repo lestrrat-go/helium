@@ -100,11 +100,10 @@ type compiler struct {
 	// through a referenced group — not just direct xs:attribute children — is
 	// reported (ag-props-correct.2).
 	attrGroupRefChildren map[QName][]QName
-	// XSD 1.1: the xs:anyAttribute wildcard declared directly inside a GLOBAL
-	// attribute group, keyed by the group's QName. A type referencing the group
-	// intersects this wildcard (and those of nested group refs) into its
-	// effective attribute wildcard. Populated only in Version11 so 1.0 behavior
-	// (group wildcards dropped) is unchanged.
+	// The xs:anyAttribute wildcard declared directly inside a GLOBAL attribute
+	// group, keyed by the group's QName. A type referencing the group intersects
+	// this wildcard (and those of nested group refs) into its effective attribute
+	// wildcard.
 	attrGroupWildcards map[QName]*Wildcard
 	// per-edge source info for the nested xs:attributeGroup ref children recorded in
 	// attrGroupRefChildren, keyed by the containing group's QName and index-aligned
@@ -611,12 +610,15 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 	c := &compiler{
 		schema: &Schema{
-			elements:    make(map[QName]*ElementDecl),
-			types:       make(map[QName]*TypeDef),
-			groups:      make(map[QName]*ModelGroup),
-			attrGroups:  make(map[QName][]*AttrUse),
-			globalAttrs: make(map[QName]*AttrUse),
-			substGroups: make(map[QName][]*ElementDecl),
+			elements:      make(map[QName]*ElementDecl),
+			types:         make(map[QName]*TypeDef),
+			groups:        make(map[QName]*ModelGroup),
+			attrGroups:    make(map[QName][]*AttrUse),
+			globalAttrs:   make(map[QName]*AttrUse),
+			substGroups:   make(map[QName][]*ElementDecl),
+			loaderFS:      fsys,
+			loaderBaseDir: baseDir,
+			loaderParser:  parser,
 		},
 		baseDir:                   baseDir,
 		fsys:                      fsys,
