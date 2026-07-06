@@ -475,6 +475,9 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child childElem, edecl *ElementDecl) error {
 	actualDecl := resolveSubstDecl(child, edecl, vc.schema)
 	declType := effectiveDeclType(actualDecl, vc.schema)
+	if err := vc.rejectMissingTypeRef(ctx, child.elem, declType); err != nil {
+		return err
+	}
 	declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
 	td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
 	if xsiErr != nil {
@@ -1247,6 +1250,9 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		return vc.assessLaxElement(ctx, child.elem)
 	}
 	declType := effectiveDeclType(edecl, vc.schema)
+	if err := vc.rejectMissingTypeRef(ctx, child.elem, declType); err != nil {
+		return err
+	}
 	declType = vc.applyTypeAlternatives(ctx, child.elem, edecl, declType)
 	td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(edecl))
 	if xsiErr != nil {

@@ -362,19 +362,22 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 		}
 	})
 
-	// A well-formed but genuinely UNDECLARED ref still gets the normal unresolved
-	// diagnostic — the sentinel skip is only for LEXICALLY malformed values, not for
-	// a lexically-valid name that happens to resolve to nothing.
-	t.Run("undeclared-ref-still-unresolved", func(t *testing.T) {
+	// A well-formed absent-namespace element type ref that resolves to nothing is
+	// a deferred missing component: not a lexical QName error at compile time, but
+	// invalid when validation selects the declaration.
+	t.Run("undeclared-ref-deferred-until-validation", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="missing"/></xs:schema>`
 		for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
-			_, errs, cerr := compileWith(t, v, schemaXML)
-			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed, "version=%v", v)
+			schema, errs, cerr := compileWith(t, v, schemaXML)
+			require.NoError(t, cerr, "version=%v: absent-namespace missing element type is deferred: %s", v, errs)
 			require.NotContains(t, errs, "is not a valid QName",
 				"version=%v: a well-formed name is not a lexical error; got: %s", v, errs)
-			require.Contains(t, errs, "does not resolve",
-				"version=%v: an undeclared type must still report unresolved; got: %s", v, errs)
+			require.NotContains(t, errs, "does not resolve",
+				"version=%v: deferred missing type must not report unresolved at compile time; got: %s", v, errs)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<e>value</e>`))
+			require.NoError(t, err)
+			require.ErrorIs(t, xsd.NewValidator(schema).Validate(t.Context(), doc), xsd.ErrValidationFailed)
 		}
 	})
 

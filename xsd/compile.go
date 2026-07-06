@@ -281,6 +281,10 @@ type compiler struct {
 	// is a fatal conflict (distinct constituents with colliding components), not a
 	// silent no-op.
 	overridePaths map[string]struct{}
+	// droppedOverrideTypes records type override children that matched no target
+	// component and were therefore ignored. A reference to one must remain a
+	// schema error rather than being deferred as an unused missing component.
+	droppedOverrideTypes map[QName]struct{}
 	// notations records the QNames of every <xs:notation> declared in the schema
 	// (and its included/imported documents). Used to verify that an xs:NOTATION
 	// restriction's enumeration values name declared notations.

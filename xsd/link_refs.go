@@ -11,6 +11,29 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
+func missingTypePlaceholder(qn QName) *TypeDef {
+	return &TypeDef{
+		Name:           qn,
+		ContentType:    ContentTypeSimple,
+		missingTypeRef: qn,
+	}
+}
+
+func missingTypeRef(td *TypeDef) (QName, bool) {
+	if td == nil || td.missingTypeRef == (QName{}) {
+		return QName{}, false
+	}
+	return td.missingTypeRef, true
+}
+
+func (c *compiler) deferMissingTypeRef(qn QName) bool {
+	if qn.NS != "" || isInvalidQName(qn) || c.deprecatedDatatypeQName(qn) {
+		return false
+	}
+	_, droppedOverrideType := c.droppedOverrideTypes[qn]
+	return !droppedOverrideType
+}
+
 func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve element type references.
 	// Two passes: the first pass resolves type-name refs and may leave
@@ -119,16 +142,22 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				}
 			}
 			if !ok {
-				// Report the unresolved element type — whether an XSD built-in
-				// that should exist or a missing user-defined type — before
-				// installing a recovery placeholder, so an invalid schema cannot
-				// silently compile and validate as if the type existed.
-				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) && !isInvalidQName(qn) {
-					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-					c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, msg))
+				// XSD lets a no-namespace schema carry a declaration whose local
+				// type definition is missing until validation actually selects that
+				// declaration. Qualified misses remain fatal: a prefixed, target-
+				// namespace, or failed-import component dependency cannot be
+				// treated as an unused local declaration.
+				if !c.deferMissingTypeRef(qn) {
+					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" && !c.deprecatedDatatypeQName(qn) && !isInvalidQName(qn) {
+						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
+						c.schemaError(ctx, schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, msg))
+					}
 				}
-				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
+				td = missingTypePlaceholder(qn)
 				c.schema.types[qn] = td
+			} else if _, missing := missingTypeRef(td); missing {
+				// A prior unresolved reference may have installed the placeholder.
+				// Element declarations can carry it until they are selected.
 			}
 			edecl.Type = td
 		}
@@ -155,8 +184,14 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			// Report the unresolved base type before installing a recovery
 			// placeholder, so an invalid schema cannot silently compile.
 			c.reportUnresolvedTypeRef(ctx, td, qn)
-			base = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
+			base = missingTypePlaceholder(qn)
 			c.schema.types[qn] = base
+			if c.recoveryBaseTypes == nil {
+				c.recoveryBaseTypes = make(map[*TypeDef]bool)
+			}
+			c.recoveryBaseTypes[base] = true
+		} else if _, missing := missingTypeRef(base); missing {
+			c.reportUnresolvedTypeRef(ctx, td, qn)
 			if c.recoveryBaseTypes == nil {
 				c.recoveryBaseTypes = make(map[*TypeDef]bool)
 			}
@@ -176,8 +211,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 		}
 		if !ok {
-			c.reportUnresolvedTypeRef(ctx, td, qn)
-			itemTD = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
+			// As with element declarations, only an absent-namespace user item
+			// type is deferred. Qualified misses remain compile-time errors.
+			if !c.deferMissingTypeRef(qn) {
+				c.reportUnresolvedTypeRef(ctx, td, qn)
+			}
+			itemTD = missingTypePlaceholder(qn)
 			c.schema.types[qn] = itemTD
 		}
 		td.ItemType = itemTD
@@ -193,8 +232,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		if !ok {
 			c.reportUnresolvedTypeRef(ctx, ref.owner, ref.name)
-			memberTD = &TypeDef{Name: ref.name, ContentType: ContentTypeSimple}
+			memberTD = missingTypePlaceholder(ref.name)
 			c.schema.types[ref.name] = memberTD
+		} else if _, missing := missingTypeRef(memberTD); missing {
+			c.reportUnresolvedTypeRef(ctx, ref.owner, ref.name)
 		}
 		ref.owner.MemberTypes = append(ref.owner.MemberTypes, memberTD)
 	}
