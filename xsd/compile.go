@@ -53,6 +53,15 @@ type compiler struct {
 	parser             *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
+	// redefineOrigSeq is a monotonic counter minting a UNIQUE synthetic key for
+	// the original (Phase-A) type stashed by each xs:redefine self-reference patch
+	// (processRedefineOverrides). A chain of xs:redefine targeting the SAME type
+	// name (a document that redefines a document that redefines the type) patches
+	// the name at every level, so a fixed per-name key would collide: an outer
+	// level would overwrite the stash the inner level's base still points at,
+	// looping the base onto itself (a spurious circular-type error). The counter
+	// keeps each level's stash distinct.
+	redefineOrigSeq int
 	// recoveryBaseTypes marks the placeholder TypeDefs inserted when a @base/
 	// itemType/memberTypes reference does not resolve (reportUnresolvedTypeRef).
 	// Downstream derivation checks (checkSimpleContentBase) skip a derivation
