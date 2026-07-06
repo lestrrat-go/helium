@@ -75,7 +75,12 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | Parse pipeline, encoding, entities, SAX→DOM, push parser | `.claude/docs/parser-internals.md` |
 | DOM node hierarchy, struct fields, namespace/attr storage | `.claude/docs/node-types.md` |
 | XSD/RELAX NG/Schematron compile→validate flow | `.claude/docs/validation-pipeline.md` |
-| XSD 1.1 feature state (`Version11`), any work in `xsd/` | `.claude/docs/xsd11.md` |
+| XSD 1.1 feature state (`Version11`), any work in `xsd/` — index → area sub-docs | `.claude/docs/xsd11.md` |
+| XSD 1.1 types: assert, alternative/CTA, simpleContent, attr inheritance | `.claude/docs/xsd11-types.md` |
+| XSD 1.1 content models: UPA, open content, xs:all, wildcards, restriction, backtracking, EDC | `.claude/docs/xsd11-content-models.md` |
+| XSD 1.1 identity constraints (xs:key/unique/keyref) | `.claude/docs/xsd11-identity-constraints.md` |
+| XSD 1.1 document-wide ID/IDREF/ENTITY walks | `.claude/docs/xsd11-doc-walks.md` |
+| XSD 1.1 representation/structural/composition checks, xs:override, vc:, notation | `.claude/docs/xsd11-representation.md` |
 | helium CLI commands, flags, pipeline, exit codes | `.claude/docs/helium-command.md` |
 | XPath 3.1 design overview, constraints, sub-doc index | `.claude/docs/xpath3-design.md` |
 | XPath 3.1 architecture, file layout, internal/xpath | `.claude/docs/xpath3-architecture.md` |
@@ -105,7 +110,7 @@ These docs cache repository state. Still read source before modifying code.
 | `parser-internals.md` | Parse pipeline, encoding, entity, SAX, or parserCtx changes |
 | `node-types.md` | Node type, struct field, or tree operation changes |
 | `validation-pipeline.md` | Compile/validate phase, data model, or backtracking changes |
-| `xsd11.md` | XSD 1.1 feature, gating, gap, or version-resolution changes |
+| `xsd11.md` (+ `xsd11-*.md` sub-docs) | XSD 1.1 feature, gating, gap, or version-resolution changes — update the sub-doc for the affected area; keep the index table in sync |
 | `helium-command.md` | CLI command, flag, pipeline, or exit code changes |
 | `xpath3-design.md` | Design constraints, sub-doc structure changes |
 | `xpath3-architecture.md` | Package layout, file additions/removals, import graph changes |
