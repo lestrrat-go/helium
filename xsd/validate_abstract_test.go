@@ -15,7 +15,7 @@ func TestAbstractTypeValidation(t *testing.T) {
   <xs:element name="root" abstract="true"/>
 </xs:schema>`
 
-		instanceXML := `<root/>`
+		instanceXML := `<root></root>`
 
 		schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
