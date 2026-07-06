@@ -262,14 +262,16 @@ func TestXSD10CharClassRangeAfterRange(t *testing.T) {
 	})
 }
 
-func TestPrivateUseBlockBMPOnly(t *testing.T) {
-	// \p{IsPrivateUse} is the BMP Private Use Area U+E000-U+F8FF only. The two
-	// supplementary Private Use planes are the separate
-	// SupplementaryPrivateUseArea-A/-B blocks and must NOT be matched by
-	// \p{IsPrivateUse}. This block table is shared by XSD, Relax NG and XPath, so
-	// lock the boundary down (both bare and inside a character class).
+func TestPrivateUseBlockAllRanges(t *testing.T) {
+	// \p{IsPrivateUse} is the union of the BMP Private Use Area and both
+	// supplementary private-use planes. The individual block names still name
+	// their separate ranges.
+	const privateUsePattern = `\p{IsPrivateUse}`
+
 	bmpLo, bmpHi := string(rune(0xE000)), string(rune(0xF8FF))
 	suppA, suppB := string(rune(0xF0000)), string(rune(0x10FFFD))
+	tagsHi := string(rune(0xE007F))
+	cjkCompatLo := string(rune(0xF900))
 
 	for _, tc := range []struct {
 		name    string
@@ -277,18 +279,30 @@ func TestPrivateUseBlockBMPOnly(t *testing.T) {
 		input   string
 		want    bool
 	}{
-		{"bmp-low-matches", `\p{IsPrivateUse}`, bmpLo, true},
-		{"bmp-high-matches", `\p{IsPrivateUse}`, bmpHi, true},
-		{"supp-a-not-matched", `\p{IsPrivateUse}`, suppA, false},
-		{"supp-b-not-matched", `\p{IsPrivateUse}`, suppB, false},
+		{"bmp-low-matches", privateUsePattern, bmpLo, true},
+		{"bmp-high-matches", privateUsePattern, bmpHi, true},
+		{"supp-a-matches", privateUsePattern, suppA, true},
+		{"supp-b-matches", privateUsePattern, suppB, true},
+		{"tags-boundary-not-matched", privateUsePattern, tagsHi, false},
+		{"cjk-compat-boundary-not-matched", privateUsePattern, cjkCompatLo, false},
 		{"class-bmp-matches", `[\p{IsPrivateUse}]`, bmpLo, true},
-		{"class-supp-a-not-matched", `[\p{IsPrivateUse}]`, suppA, false},
+		{"class-supp-a-matches", `[\p{IsPrivateUse}]`, suppA, true},
+		{"class-supp-b-matches", `[\p{IsPrivateUse}]`, suppB, true},
+		{"class-tags-boundary-not-matched", `[\p{IsPrivateUse}]`, tagsHi, false},
 		{"supp-a-block-still-matches", `\p{IsSupplementaryPrivateUseArea-A}`, suppA, true},
 		{"supp-b-block-still-matches", `\p{IsSupplementaryPrivateUseArea-B}`, suppB, true},
 		{"neg-bmp-not-matched", `\P{IsPrivateUse}`, bmpLo, false},
-		{"neg-supp-a-matched", `\P{IsPrivateUse}`, suppA, true},
+		{"neg-supp-a-not-matched", `\P{IsPrivateUse}`, suppA, false},
+		{"neg-supp-b-not-matched", `\P{IsPrivateUse}`, suppB, false},
+		{"neg-cjk-compat-boundary-matched", `\P{IsPrivateUse}`, cjkCompatLo, true},
 		{"neg-class-bmp-not-matched", `[^\p{IsPrivateUse}]`, bmpHi, false},
-		{"neg-class-supp-b-matched", `[^\p{IsPrivateUse}]`, suppB, true},
+		{"neg-class-supp-a-not-matched", `[^\p{IsPrivateUse}]`, suppA, false},
+		{"neg-class-supp-b-not-matched", `[^\p{IsPrivateUse}]`, suppB, false},
+		{"neg-class-tags-boundary-matched", `[^\p{IsPrivateUse}]`, tagsHi, true},
+		{"prop-neg-class-bmp-not-matched", `[\P{IsPrivateUse}]`, bmpLo, false},
+		{"prop-neg-class-supp-a-not-matched", `[\P{IsPrivateUse}]`, suppA, false},
+		{"prop-neg-class-supp-b-not-matched", `[\P{IsPrivateUse}]`, suppB, false},
+		{"prop-neg-class-cjk-compat-boundary-matched", `[\P{IsPrivateUse}]`, cjkCompatLo, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			re, err := xsdregex.Compile(tc.pattern)

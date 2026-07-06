@@ -81,6 +81,11 @@ func TestFnMatches(t *testing.T) {
 	require.Equal(t, 1, seq.Len())
 	av := seq.Get(0).(xpath3.AtomicValue)
 	require.True(t, av.BooleanVal())
+
+	seq = evalExpr(t, doc, `matches(codepoints-to-string(983040), "[\p{IsPrivateUse}]")`)
+	require.Equal(t, 1, seq.Len())
+	av = seq.Get(0).(xpath3.AtomicValue)
+	require.True(t, av.BooleanVal())
 }
 
 func TestFnReplace(t *testing.T) {
