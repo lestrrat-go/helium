@@ -166,7 +166,7 @@ func derivedElemNameAndTypeOK(ctx context.Context, rt, constraining *ElementDecl
 	// step (clause 3.2.5.2), and no base-type-@block-forbidden derivation
 	// (cvc-elt.4.3). Without this, an xs:all element retyped to an extension-derived
 	// type — rejected as an xs:sequence restriction — would compile.
-	if !elementTypeValidlyRestricts(rtType, conType, version) {
+	if !elementTypeValidlyRestricts(rtType, conType) {
 		return false
 	}
 	if !constraining.Nillable && rt.Nillable {

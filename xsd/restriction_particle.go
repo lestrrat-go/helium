@@ -313,9 +313,10 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 //
 //	(a) rtType is derived from btType (BUILT-IN-AWARE via
 //	    strictBuiltinAwareDerivedFrom — the 1.0 built-ins are not BaseType-linked,
-//	    so e.g. derived xs:int validly restricts base xs:integer; plus, in XSD 1.1,
-//	    the union-member path where btType is a union and rtType derives from one of
-//	    its transitive members);
+//	    so e.g. derived xs:int validly restricts base xs:integer; plus the
+//	    union-member path where btType is a union and rtType derives from one of
+//	    its transitive members — cos-st-derived-ok clause 2.2.4, version-INDEPENDENT,
+//	    valid in both 1.0 and 1.1: W3C addB150);
 //	(b) the derivation reaches btType by RESTRICTION only (clause 3.2.5.2,
 //	    disallowed subset {extension, list, union}): the EXTENSION step is rejected
 //	    (W3C particlesIj008). The list/union arm is deliberately NOT blocked — a
@@ -332,12 +333,12 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 //
 // When either type is unresolved (nil), it accepts conservatively — matching the
 // long-standing per-site "skip the derivation check on a nil type" behavior.
-func elementTypeValidlyRestricts(rtType, btType *TypeDef, version Version) bool {
+func elementTypeValidlyRestricts(rtType, btType *TypeDef) bool {
 	if rtType == nil || btType == nil {
 		return true
 	}
 	ok := strictBuiltinAwareDerivedFrom(rtType, btType)
-	if !ok && version == Version11 {
+	if !ok {
 		ok = isXsiTypeDerivedFromDeclared(rtType, btType)
 	}
 	if !ok {
@@ -381,7 +382,7 @@ func elementRestrictsElement(ctx context.Context, r *Particle, rt *ElementDecl, 
 	// element's type (NameAndTypeOK — built-in-aware derived-from, no extension step,
 	// no base-type-@block-forbidden method). Shared with the xs:all counting path
 	// and the substitution-member/language-inclusion paths via elementTypeValidlyRestricts.
-	if !elementTypeValidlyRestricts(rt.Type, bt.Type, version) {
+	if !elementTypeValidlyRestricts(rt.Type, bt.Type) {
 		return false
 	}
 	// XSD 1.1 Particle Valid (Restriction) clause 4.6: the derived and base element
