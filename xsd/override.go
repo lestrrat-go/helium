@@ -311,6 +311,16 @@ func (c *compiler) registerMatchedChildren(ctx context.Context, entries []overri
 		if err != nil {
 			return err
 		}
+		// Record an element replacement child so a missing @type on it is a
+		// composition error, not a deferrable §5.3 unused-missing-component.
+		if e.key.sym == overrideSymElement {
+			if ge, ok := c.schema.elements[e.key.qn]; ok {
+				if c.overrideChildElems == nil {
+					c.overrideChildElems = make(map[*ElementDecl]struct{})
+				}
+				c.overrideChildElems[ge] = struct{}{}
+			}
+		}
 	}
 	return nil
 }

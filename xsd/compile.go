@@ -285,6 +285,21 @@ type compiler struct {
 	// component and were therefore ignored. A reference to one must remain a
 	// schema error rather than being deferred as an unused missing component.
 	droppedOverrideTypes map[QName]struct{}
+	// failedRedefineTypes records the names of the inline simpleType/complexType
+	// children of an xs:redefine whose target document FAILED to load (a demoted
+	// "Skipping the redefine" warning). Such a type was meant to be provided by the
+	// redefine; a reference to it is a genuine dangling reference, NOT a §5.3
+	// unused-missing-component, so it must not be deferred.
+	failedRedefineTypes map[QName]struct{}
+	// overrideChildElems records the global element declarations installed as
+	// xs:override replacement children. A missing @type on such a declaration is a
+	// composition error, not a deferrable §5.3 unused-missing-component.
+	overrideChildElems map[*ElementDecl]struct{}
+	// referencedGlobalElems records the global element declarations that are the
+	// target of an xs:element @ref in a content model. A referenced global element
+	// whose @type is a missing component is genuinely needed, so its missing type is
+	// a compile-time error rather than a deferrable §5.3 unused-missing-component.
+	referencedGlobalElems map[*ElementDecl]struct{}
 	// notations records the QNames of every <xs:notation> declared in the schema
 	// (and its included/imported documents). Used to verify that an xs:NOTATION
 	// restriction's enumeration values name declared notations.
@@ -1382,9 +1397,35 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 			if name := collapsedAttr(elem, attrName); name != "" {
 				c.notations[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
 			}
+		default:
+			// The xs:schema content model is a closed vocabulary of top-level
+			// components plus the composition/annotation elements handled before
+			// this pass (include/import/redefine/override/annotation/
+			// defaultOpenContent). Any OTHER XSD-namespace child — e.g. a stray
+			// compositor (sequence/choice/all) or derivation (extension/restriction)
+			// element that can only appear nested — is a schema-representation error
+			// (W3C mgP059-mgP062). Foreign-namespace children are ignored.
+			if elem.URI() == lexicon.NamespaceXSD && c.filename != "" && !isTopLevelSchemaElement(elem.LocalName()) {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elem.LocalName(),
+					"Element '{"+lexicon.NamespaceXSD+"}"+elem.LocalName()+"' is not allowed as a child of the schema element."))
+			}
 		}
 	}
 	return nil
+}
+
+// isTopLevelSchemaElement reports whether localName is an XSD element permitted as
+// a direct child of xs:schema. The component elements (element/complexType/
+// simpleType/group/attributeGroup/attribute/notation) are dispatched by the
+// parseSchemaChildren switch; the composition/annotation elements below are
+// handled in earlier phases, so both sets are legitimate top-level children.
+func isTopLevelSchemaElement(localName string) bool {
+	switch localName {
+	case elemAnnotation, elemInclude, elemImport, elemRedefine, elemOverride, elemDefaultOpenContent:
+		return true
+	default:
+		return false
+	}
 }
 
 func findDocumentElement(doc *helium.Document) *helium.Element {

@@ -495,6 +495,7 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 					return err
 				}
 				c.reportSchemaLoadWarning(ctx, elem, elemRedefine, "redefine", loc)
+				c.recordFailedRedefineTypes(elem)
 			}
 		case c.version == Version11 && isXSDElement(elem, elemOverride):
 			// xs:override is an XSD 1.1 construct. In 1.0 mode it is ignored
@@ -588,6 +589,31 @@ func (c *compiler) reportSchemaLoadWarning(ctx context.Context, elem *helium.Ele
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
 		elem.LocalName(), elemKind,
 		"Failed to locate a schema at location '"+displayLoc+"'. Skipping the "+verb+"."), helium.ErrorLevelWarning))
+}
+
+// recordFailedRedefineTypes records the names of the inline simpleType/complexType
+// children of an xs:redefine whose target document FAILED to load. Those types
+// were meant to be provided by the redefine, so a reference to one is a genuine
+// dangling reference (not a §5.3 unused-missing-component) and must not be
+// deferred (W3C addB030 — a redefine of a schema that does not exist).
+func (c *compiler) recordFailedRedefineTypes(redefineElem *helium.Element) {
+	for child := range helium.Children(redefineElem) {
+		elem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if !isXSDElement(elem, elemComplexType) && !isXSDElement(elem, elemSimpleType) {
+			continue
+		}
+		name := collapsedAttr(elem, attrName)
+		if name == "" {
+			continue
+		}
+		if c.failedRedefineTypes == nil {
+			c.failedRedefineTypes = make(map[QName]struct{})
+		}
+		c.failedRedefineTypes[QName{Local: name, NS: c.schema.targetNamespace}] = struct{}{}
+	}
 }
 
 // processImport handles a single xs:import element: it enforces the
