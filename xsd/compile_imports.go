@@ -480,6 +480,12 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				return err
 			}
 		case isXSDElement(elem, elemRedefine):
+			// The schema-for-schemas gives xs:redefine a CLOSED attribute set:
+			// {id, schemaLocation} plus any foreign-namespaced attribute. An
+			// unqualified attribute outside that set (e.g. namespace="foo", which
+			// belongs to xs:import, not xs:redefine) is a schema-representation
+			// error. Version-INDEPENDENT (msMeta/Schema_w3c.xml schH4).
+			c.checkRedefineAttrs(ctx, elem)
 			// src-redefine.1 (§4.2.5 / the schema-for-schemas): @schemaLocation is
 			// REQUIRED on xs:redefine — same representation rule as xs:include above.
 			if !hasAttr(elem, attrSchemaLocation) {
@@ -1428,6 +1434,24 @@ func redefineGroupValidRestriction(ctx context.Context, redef, origGroup *ModelG
 	return false
 }
 
+// checkRedefineAttrs rejects any unqualified attribute on <xs:redefine> outside
+// the closed schema-for-schemas set {id, schemaLocation}. Foreign-namespaced
+// attributes are admitted; a no-namespace attribute such as `namespace` (an
+// xs:import attribute) is a schema-representation error. Version-INDEPENDENT.
+func (c *compiler) checkRedefineAttrs(ctx context.Context, elem *helium.Element) {
+	for _, attr := range elem.Attributes() {
+		if attr.URI() != "" {
+			continue
+		}
+		switch attr.LocalName() {
+		case "id", attrSchemaLocation:
+			continue
+		}
+		c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elemRedefine,
+			"The attribute '"+attr.LocalName()+"' is not allowed."))
+	}
+}
+
 func (c *compiler) checkRedefineOverrideRepresentation(ctx context.Context, redefineElem *helium.Element) {
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
@@ -1598,7 +1622,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				continue
 			}
 			if origType != nil {
-				origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
+				c.redefineOrigSeq++
+				origKey := QName{Local: fmt.Sprintf("\x00redefine:%d:%s", c.redefineOrigSeq, name), NS: qn.NS}
 				c.schema.types[origKey] = origType
 				c.typeRefs[newType] = origKey
 			}
@@ -1625,7 +1650,8 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				continue
 			}
 			if origType != nil {
-				origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
+				c.redefineOrigSeq++
+				origKey := QName{Local: fmt.Sprintf("\x00redefine:%d:%s", c.redefineOrigSeq, name), NS: qn.NS}
 				c.schema.types[origKey] = origType
 				c.typeRefs[newType] = origKey
 			}
