@@ -1256,18 +1256,94 @@ func (c *compiler) checkRedefineSelfDerivation(ctx context.Context, elem *helium
 // checkRedefineGroupRestriction enforces src-redefine.6.2 (§4.2.3): a
 // redefining <group> with no self-reference must be a valid restriction of the
 // original group. Redefine override processing runs before the normal group-ref
-// resolver, so callers invoke this only after confirming the override introduced
-// no unresolved group references.
+// resolver, so the original group is cloned with group-reference placeholders
+// expanded just for this check. The real schema tree is left for the normal
+// resolver so diagnostics and all-group reference checks stay centralized.
 func (c *compiler) checkRedefineGroupRestriction(ctx context.Context, elem *helium.Element, qn QName, origGroup *ModelGroup) {
 	redef := c.schema.groups[qn]
 	if redef == nil || origGroup == nil {
 		return
 	}
-	if redefineGroupValidRestriction(ctx, redef, origGroup, c.schema, c.version) {
+	expandedOrig, ok := c.expandGroupRefsForRedefineRestriction(origGroup)
+	if !ok {
+		return
+	}
+	if redefineGroupValidRestriction(ctx, redef, expandedOrig, c.schema, c.version) {
 		return
 	}
 	c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), "group",
 		fmt.Sprintf("src-redefine.6.2: The redefinition of group '%s' is not a valid restriction of the original group.", qn.Local)))
+}
+
+func (c *compiler) expandGroupRefsForRedefineRestriction(mg *ModelGroup) (*ModelGroup, bool) {
+	return c.expandGroupRefsForRedefineRestrictionVisit(mg, make(map[*ModelGroup]*ModelGroup), make(map[QName]struct{}))
+}
+
+func (c *compiler) expandGroupRefsForRedefineRestrictionVisit(mg *ModelGroup, cloned map[*ModelGroup]*ModelGroup, resolving map[QName]struct{}) (*ModelGroup, bool) {
+	if mg == nil {
+		return nil, true
+	}
+	if qn, isRef := c.groupRefs[mg]; isRef {
+		target, ok := c.lookupGroupForRef(qn)
+		if !ok {
+			return nil, false
+		}
+		if _, recursive := resolving[qn]; recursive {
+			return nil, false
+		}
+		resolving[qn] = struct{}{}
+		expanded, ok := c.expandGroupRefsForRedefineRestrictionVisit(target, cloned, resolving)
+		delete(resolving, qn)
+		if !ok || expanded == nil {
+			return nil, false
+		}
+		return &ModelGroup{
+			Compositor: expanded.Compositor,
+			Particles:  expanded.Particles,
+			MinOccurs:  mg.MinOccurs,
+			MaxOccurs:  mg.MaxOccurs,
+		}, true
+	}
+	if existing := cloned[mg]; existing != nil {
+		return existing, true
+	}
+	out := &ModelGroup{
+		Compositor: mg.Compositor,
+		MinOccurs:  mg.MinOccurs,
+		MaxOccurs:  mg.MaxOccurs,
+	}
+	cloned[mg] = out
+	if len(mg.Particles) == 0 {
+		return out, true
+	}
+	out.Particles = make([]*Particle, 0, len(mg.Particles))
+	for _, p := range mg.Particles {
+		if p == nil {
+			continue
+		}
+		cp := *p
+		if sub, ok := p.Term.(*ModelGroup); ok {
+			expanded, ok := c.expandGroupRefsForRedefineRestrictionVisit(sub, cloned, resolving)
+			if !ok {
+				return nil, false
+			}
+			cp.Term = expanded
+		}
+		out.Particles = append(out.Particles, &cp)
+	}
+	return out, true
+}
+
+func (c *compiler) lookupGroupForRef(qn QName) (*ModelGroup, bool) {
+	grp, ok := c.schema.groups[qn]
+	if ok {
+		return grp, true
+	}
+	if qn.NS != "" {
+		grp, ok = c.schema.groups[QName{Local: qn.Local}]
+		return grp, ok
+	}
+	return nil, false
 }
 
 func redefineGroupValidRestriction(ctx context.Context, redef, origGroup *ModelGroup, schema *Schema, version Version) bool {

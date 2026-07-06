@@ -80,6 +80,21 @@ func TestRedefineGroupRestriction(t *testing.T) {
 		require.Contains(t, compileErrors(t, main, base), wantMsg)
 	})
 
+	t.Run("rejects dropping required base member hidden behind group ref", func(t *testing.T) {
+		t.Parallel()
+		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="h"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  <xs:group name="g"><xs:sequence><xs:group ref="h"/></xs:sequence></xs:group>
+</xs:schema>`
+		main := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:sequence/></xs:group>
+  </xs:redefine>
+  <xs:element name="doc"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, main, base), wantMsg)
+	})
+
 	t.Run("rejects adding an element the original omits", func(t *testing.T) {
 		t.Parallel()
 		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
