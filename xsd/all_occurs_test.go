@@ -495,7 +495,7 @@ func TestRedefineAllGroupNesting(t *testing.T) {
 
 	// base.xsd declares group "g" as an xs:all model group; main.xsd redefines it.
 	const baseSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:all></xs:group>
 </xs:schema>`
 
 	compileErrors := func(t *testing.T, mainSchema string) string {

@@ -292,14 +292,17 @@ type compiler struct {
 }
 
 // redefinableSet caches the redefinable component names a schema document
-// contributed (keys, split by kind) plus the names already consumed by
-// xs:redefine overrides across every xs:redefine of that document (consumed).
-// The consumed set lets a second xs:redefine of the same document reject a
-// component that an earlier xs:redefine already redefined as a duplicate, while
-// still accepting redefinitions of disjoint components.
+// contributed (keys, split by kind), the original Phase-A group bodies, and the
+// names already consumed by xs:redefine overrides across every xs:redefine of
+// that document (consumed). The consumed set lets a second xs:redefine of the
+// same document reject a component that an earlier xs:redefine already
+// redefined as a duplicate, while still accepting redefinitions of disjoint
+// components.
 type redefinableSet struct {
-	keys     map[redefineKind]map[QName]struct{}
-	consumed map[redefineKind]map[QName]struct{}
+	keys      map[redefineKind]map[QName]struct{}
+	consumed  map[redefineKind]map[QName]struct{}
+	groups    map[QName]*ModelGroup
+	chameleon bool
 }
 
 // redefineKind identifies the component category a redefine override targets.
