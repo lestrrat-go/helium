@@ -381,17 +381,29 @@ func attributeAttrAllowed(name string) bool {
 // checkAttrVocabulary reports every unqualified attribute on an <xs:attribute>
 // declaration that is outside the closed §3.2.2 vocabulary. Foreign-namespaced
 // attributes are admitted by the schema-for-schemas `##other` anyAttribute, so
-// only no-namespace attributes are checked. Version-INDEPENDENT.
+// only no-namespace attributes are checked. `targetNamespace`/`inheritable` are
+// XSD 1.1 additions: in XSD 1.0 they are unknown attributes and are rejected
+// (matching libxml2; W3C ibmData S3_2_3/s3_2_3si05).
 func (c *compiler) checkAttrVocabulary(ctx context.Context, elem *helium.Element) {
 	line := elem.Line()
 	local := elem.LocalName()
 	src := c.diagSource()
 	for _, attr := range elem.Attributes() {
-		if attr.URI() != "" || attributeAttrAllowed(attr.LocalName()) {
+		if attr.URI() != "" {
+			continue
+		}
+		name := attr.LocalName()
+		if attributeAttrAllowed(name) {
+			// targetNamespace/inheritable are recognized only in XSD 1.1; in 1.0
+			// they are outside the closed vocabulary.
+			if c.version != Version11 && (name == attrTargetNamespace || name == attrInheritable) {
+				c.schemaError(ctx, schemaParserError(src, line, local, "attribute",
+					"The attribute '"+name+"' is not allowed."))
+			}
 			continue
 		}
 		c.schemaError(ctx, schemaParserError(src, line, local, "attribute",
-			"The attribute '"+attr.LocalName()+"' is not allowed."))
+			"The attribute '"+name+"' is not allowed."))
 	}
 }
 

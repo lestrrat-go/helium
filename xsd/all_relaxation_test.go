@@ -29,28 +29,16 @@ func validateAll11(t *testing.T, schemaXML, instanceXML string) error {
 	return xsd.NewValidator(schema).Validate(t.Context(), idoc)
 }
 
-// TestAll10WildcardOnlyRegression guards the XSD 1.0 xs:all matcher against the
-// regression where the flat-member rewrite dropped wildcard particles from the
-// 1.0 required-member bookkeeping. A wildcard-only xs:all with minOccurs=1 (the
-// parser tolerates a wildcard inside an xs:all even in 1.0) must reject empty
-// content as a missing required member — exactly as the pre-rewrite matcher did,
-// and unlike 1.1 (which actually matches the wildcard). The 1.0 path never
-// matches a wildcard member, so any child is "not expected".
-func TestAll10WildcardOnlyRegression(t *testing.T) {
+// TestAll10WildcardInAllRejected verifies that an <xs:any> wildcard directly
+// inside an <xs:all> is a schema-representation error in XSD 1.0 (Structures
+// §3.8.2: the 1.0 xs:all content model is (annotation?, element*) — a wildcard is
+// not an admissible particle), while XSD 1.1 admits it (§3.8.2 relaxed to
+// (element | any | group)). libxml2 rejects the wildcard-in-all at parse in 1.0.
+// W3C sunData MGroup particles00104m1. (This supersedes an earlier regression
+// test that asserted the 1.0 parser TOLERATED the wildcard — the W3C conformance
+// evidence shows the 1.0 vocabulary excludes it.)
+func TestAll10WildcardInAllRejected(t *testing.T) {
 	t.Parallel()
-
-	compile10 := func(t *testing.T, schemaXML string) (*xsd.Schema, error) {
-		t.Helper()
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
-		require.NoError(t, err)
-		return xsd.NewCompiler().Compile(t.Context(), doc)
-	}
-	validate10 := func(t *testing.T, schema *xsd.Schema, instanceXML string) error {
-		t.Helper()
-		idoc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
-		require.NoError(t, err)
-		return xsd.NewValidator(schema).Validate(t.Context(), idoc)
-	}
 
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="doc"><xs:complexType>
@@ -58,15 +46,21 @@ func TestAll10WildcardOnlyRegression(t *testing.T) {
   </xs:complexType></xs:element>
 </xs:schema>`
 
-	sch, cerr := compile10(t, schema)
-	require.NoError(t, cerr, "1.0 schema with a wildcard-only xs:all should compile")
+	t.Run("rejected in 1.0", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err)
+		_, cerr := xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+		require.Error(t, cerr, "XSD 1.0 must reject an xs:any inside xs:all")
+	})
 
-	// Empty content: the required wildcard member is missing — must be rejected.
-	require.Error(t, validate10(t, sch, `<doc/>`),
-		"1.0 wildcard-only all minOccurs=1 must reject empty content (regression guard)")
-
-	// A child is never matched by a wildcard in 1.0, so it is unexpected.
-	require.Error(t, validate10(t, sch, `<doc><e/></doc>`))
+	t.Run("accepted in 1.1", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err)
+		_, cerr := xsd.NewCompiler().Version(xsd.Version11).Compile(t.Context(), doc)
+		require.NoError(t, cerr, "XSD 1.1 must accept an xs:any inside xs:all")
+	})
 }
 
 // TestAll11MemberMaxOccurs verifies the XSD 1.1 relaxation that an element member
