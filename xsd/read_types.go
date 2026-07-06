@@ -1045,12 +1045,16 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		td.scHasSimpleTypeChild = true
 	}
 
-	// XSD 1.1: a simpleContent RESTRICTION narrows the base content type via a
-	// nested <xs:simpleType> OR direct facets. Capture the resulting effective
-	// content simple type so validateSimpleContent checks the text against the
-	// narrowed type (e.g. an enumeration or a restriction to xs:float) rather than
-	// only the base. Gated to 1.1 so XSD 1.0 content validation stays byte-identical.
-	if kind == DerivationRestriction && c.version == Version11 {
+	// A simpleContent RESTRICTION narrows the base content type via a nested
+	// <xs:simpleType> OR direct facets. Capture the resulting effective content
+	// simple type. In XSD 1.1 validateSimpleContent checks the instance text against
+	// the narrowed type (e.g. an enumeration or a restriction to xs:float). In BOTH
+	// versions the synthetic type is recorded in typeDefSources (by
+	// parseSimpleContentRestrictionType), so checkFacetConsistency runs its facet
+	// applicability / value-against-base checks — a direct facet that is inapplicable
+	// to the base content type (e.g. minLength on a restriction of xs:anySimpleType)
+	// is a schema error in 1.0 as well as 1.1.
+	if kind == DerivationRestriction {
 		td.ContentSimpleType = c.parseSimpleContentRestrictionType(ctx, derivation, td)
 	}
 }
