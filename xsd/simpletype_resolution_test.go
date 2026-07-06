@@ -34,6 +34,9 @@ func TestSimpleTypeResolution(t *testing.T) {
 			{"union-member-complex-second", simpleContentCT + `<xsd:simpleType name="t"><xsd:union memberTypes="xsd:string ct"/></xsd:simpleType>`},
 			{"list-item-list-named", `<xsd:simpleType name="l"><xsd:list itemType="xsd:string"/></xsd:simpleType><xsd:simpleType name="t"><xsd:list itemType="l"/></xsd:simpleType>`},
 			{"list-item-list-inline-derived", `<xsd:simpleType name="l"><xsd:list><xsd:simpleType><xsd:restriction base="xsd:integer"/></xsd:simpleType></xsd:list></xsd:simpleType><xsd:simpleType name="t"><xsd:list itemType="l"/></xsd:simpleType>`},
+			// Restricting the simple ur-type xs:anySimpleType is invalid in both
+			// versions (cos-st-restricts; libxml2 rejects it in XSD 1.0 too).
+			{"restriction-base-anySimpleType", `<xsd:simpleType name="t"><xsd:restriction base="xsd:anySimpleType"/></xsd:simpleType>`},
 			{"local-restriction-base-complex", simpleContentCT + `<xsd:element name="e"><xsd:complexType><xsd:sequence><xsd:element name="c"><xsd:simpleType><xsd:restriction base="ct"/></xsd:simpleType></xsd:element></xsd:sequence></xsd:complexType></xsd:element>`},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
@@ -51,7 +54,6 @@ func TestSimpleTypeResolution(t *testing.T) {
 			schema string
 		}{
 			{"restriction-base-builtin", `<xsd:simpleType name="t"><xsd:restriction base="xsd:string"><xsd:maxLength value="5"/></xsd:restriction></xsd:simpleType>`},
-			{"restriction-base-anySimpleType", `<xsd:simpleType name="t"><xsd:restriction base="xsd:anySimpleType"/></xsd:simpleType>`},
 			{"restriction-base-user-list", `<xsd:simpleType name="l"><xsd:list itemType="xsd:string"/></xsd:simpleType><xsd:simpleType name="t"><xsd:restriction base="l"><xsd:length value="2"/></xsd:restriction></xsd:simpleType>`},
 			{"list-item-builtin", `<xsd:simpleType name="t"><xsd:list itemType="xsd:integer"/></xsd:simpleType>`},
 			{"list-item-user-atomic", `<xsd:simpleType name="a"><xsd:restriction base="xsd:integer"/></xsd:simpleType><xsd:simpleType name="t"><xsd:list itemType="a"/></xsd:simpleType>`},

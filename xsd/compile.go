@@ -916,11 +916,14 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// of a user-defined simple type, nor as a list item type or union member type.
 	if c.version == Version11 {
 		c.checkAnyAtomicTypeUsage(ctx)
-		// XSD 1.1: the simple ur-type xs:anySimpleType must not be restricted —
-		// neither as a simpleType restriction base / list item / union member, nor
-		// as the content type a simpleContent restriction leaves in place.
-		c.checkAnySimpleTypeUsage(ctx)
 	}
+
+	// The simple ur-type xs:anySimpleType must not be RESTRICTED — as a simpleType
+	// restriction base, nor as the content type a simpleContent restriction leaves
+	// in place. This is version-INDEPENDENT (cos-st-restricts requires a restriction
+	// base to be atomic/list/union; libxml2 rejects it in XSD 1.0 too). The
+	// list-item/union-member arms of the check stay 1.1-only (see checkAnySimpleTypeUsage).
+	c.checkAnySimpleTypeUsage(ctx)
 
 	// XSD 1.1: each conditional-type-assignment alternative's type must be validly
 	// substitutable for the element's declared type. Runs after type refs resolve.
