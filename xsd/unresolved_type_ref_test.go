@@ -45,13 +45,13 @@ func TestUnresolvedTypeRef(t *testing.T) {
 		require.NoError(t, err)
 		return xsd.NewValidator(schema).Validate(t.Context(), doc)
 	}
-	validateXMLWithOutput := func(t *testing.T, schema *xsd.Schema, xml string) (error, string) {
+	validateXMLWithOutput := func(t *testing.T, schema *xsd.Schema, xml string) (string, error) {
 		t.Helper()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 		var out string
 		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &out)
-		return err, out
+		return out, err
 	}
 
 	t.Run("missing base type", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestUnresolvedTypeRef(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		schema := compileOK(t, schemaXML)
-		err, out := validateXMLWithOutput(t, schema, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"><bad xsi:type="xs:string">ok</bad></root>`)
+		out, err := validateXMLWithOutput(t, schema, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"><bad xsi:type="xs:string">ok</bad></root>`)
 		require.ErrorIs(t, err, xsd.ErrValidationFailed)
 		require.Contains(t, out, wantMsg)
 		require.NotContains(t, out, "xsi:type definition")
