@@ -532,6 +532,16 @@ func (vc *validationContext) canonicalValueKey(ctx context.Context, raw string, 
 
 func (vc *validationContext) canonicalListKey(ctx context.Context, raw string, fieldNode helium.Node, item *TypeDef) string {
 	fields := value.XSDFields(raw)
+	// XSD 1.1 (cvc-identity-constraint / §3.11.4): an IDC field's actual value is a
+	// SEQUENCE, so a one-item list is the SAME sequence as the atomic value of that
+	// item — a singleton keyref list equals an atomic key (W3C saxonData Id id022).
+	// Unwrap a single-item list to its item's atomic key so it collides with the
+	// equal atomic value; a multi-item list keeps the length-tagged list key and
+	// can never equal an atomic (or a differently-sized list). Version11-gated: XSD
+	// 1.0 keeps the list wrapper for every list (byte-identical to origin).
+	if vc.version == Version11 && len(fields) == 1 {
+		return vc.canonicalValueKey(ctx, fields[0], fieldNode, item)
+	}
 	var b strings.Builder
 	b.WriteString("list")
 	b.WriteString(primitiveKeySeparator)
