@@ -666,17 +666,6 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 	}
 }
 
-// entryWildcardMatchesNS reports whether a wildcard first-set entry admits a
-// namespace, honoring an XSD 1.1 notNamespace constraint when the full *Wildcard
-// is available (it always is for entries built by this package) and falling back
-// to the string form otherwise.
-func entryWildcardMatchesNS(e firstSetEntry, ns string) bool {
-	if e.wc != nil {
-		return wildcardMatches(e.wc, ns)
-	}
-	return wildcardMatchesNS(e.wildcard, e.targetNS, ns)
-}
-
 // entryWildcardAllowsName reports whether a wildcard first-set entry admits an
 // element expanded name, honoring notQName/##defined constraints when the full
 // *Wildcard is available.
