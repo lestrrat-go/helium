@@ -472,7 +472,12 @@ type validationContext struct {
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
-	idcDocOrder   *ixpath.DocOrderCache
+	// allowXSD10LegacyGMonthInstance is set only for real instance-validation
+	// contexts. Compile-time schema literals, default/fixed constraints, and
+	// standalone TypeDef.Validate stay strict even when they carry diagnostic
+	// source metadata.
+	allowXSD10LegacyGMonthInstance bool
+	idcDocOrder                    *ixpath.DocOrderCache
 	// edcType is the complex type whose content model is currently being matched.
 	// It is set (and restored) by validateContentByType, so the wildcard
 	// Element-Declarations-Consistent check (validateWildcardElementConsistent) can
@@ -609,18 +614,19 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		version = schema.version
 	}
 	vc := &validationContext{
-		schema:           schema,
-		version:          version,
-		cfg:              cfg,
-		filename:         filename,
-		errorHandler:     handler,
-		idcDocOrder:      &ixpath.DocOrderCache{},
-		actualElemType:   make(map[*helium.Element]*TypeDef),
-		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
-		attrInheritable:  make(map[*helium.Attribute]struct{}),
-		assessedElemType: make(map[*helium.Element]*TypeDef),
-		actualAttrType:   make(map[*helium.Attribute]*TypeDef),
-		assessedAttrs:    make(map[*helium.Attribute]struct{}),
+		schema:                         schema,
+		version:                        version,
+		cfg:                            cfg,
+		filename:                       filename,
+		errorHandler:                   handler,
+		allowXSD10LegacyGMonthInstance: true,
+		idcDocOrder:                    &ixpath.DocOrderCache{},
+		actualElemType:                 make(map[*helium.Element]*TypeDef),
+		actualElemDecl:                 make(map[*helium.Element]*ElementDecl),
+		attrInheritable:                make(map[*helium.Attribute]struct{}),
+		assessedElemType:               make(map[*helium.Element]*TypeDef),
+		actualAttrType:                 make(map[*helium.Attribute]*TypeDef),
+		assessedAttrs:                  make(map[*helium.Attribute]struct{}),
 	}
 	if version == Version11 {
 		vc.assertAnnotations = make(TypeAnnotations)
@@ -1905,7 +1911,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// type is associated only for the fixed-value comparison just done), so
 			// skip the generic check to avoid validating the same value twice.
 			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
-				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
+				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -2328,7 +2334,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}}); err != nil {
+		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)

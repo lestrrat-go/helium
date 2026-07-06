@@ -124,6 +124,21 @@ func TestVersion10LegacyGMonthFacetLexicalRejected(t *testing.T) {
 	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 }
 
+func TestVersion10LegacyGMonthElementValueConstraintRejected(t *testing.T) {
+	for _, attr := range []string{`default="--03--"`, `fixed="--03--"`} {
+		t.Run(attr, func(t *testing.T) {
+			schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:gMonth" ` + attr + `/>
+</xs:schema>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+			require.NoError(t, err)
+			_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+			require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		})
+	}
+}
+
 // TestVersion11BuiltinTypes verifies the XSD 1.1-only built-in datatypes are
 // registered (and resolve) only in 1.1 mode, and validate per their lexical
 // space.

@@ -183,7 +183,7 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 
 	// Validate against the builtin type's lexical space.
 	if err := validateBuiltinValue(trimmed, builtinLocal, vc.version); err != nil {
-		if acceptsXSD10LegacyGMonthRuntime(trimmed, builtinLocal, td, elemName, line, vc) {
+		if acceptsXSD10LegacyGMonthInstance(trimmed, builtinLocal, td, vc) {
 			return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 		}
 		typeName := typeDisplayName(td)
@@ -208,17 +208,12 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 }
 
-func acceptsXSD10LegacyGMonthRuntime(value, builtinLocal string, td *TypeDef, elemName string, line int, vc *validationContext) bool {
-	if vc.version != Version10 || builtinLocal != lexicon.TypeGMonth {
+func acceptsXSD10LegacyGMonthInstance(value, builtinLocal string, td *TypeDef, vc *validationContext) bool {
+	if !vc.allowXSD10LegacyGMonthInstance || vc.version != Version10 || builtinLocal != lexicon.TypeGMonth {
 		return false
 	}
 	// XSTS bug-6901-era XSD 1.0 cases accept legacy "--MM--" instance values, but
-	// the same spelling remains invalid for schema facet literals. Runtime element
-	// and attribute validation passes an element name and source line; compile-time
-	// facet/default checks call validateValue with empty source metadata.
-	if elemName == "" || line == 0 {
-		return false
-	}
+	// the same spelling remains invalid for schema facet/default literals.
 	for cur := range baseChain(td) {
 		if !facetSetEmpty(cur.Facets) {
 			return false

@@ -672,10 +672,11 @@ func (vc *validationContext) typeAcceptsValue(ctx context.Context, td *TypeDef, 
 	// real schema. Mirrors the compile-time throwaway contexts that reach
 	// validateValue (built with schema: c.schema).
 	tvc := &validationContext{
-		errorHandler:  helium.NilErrorHandler{},
-		suppressDepth: 1,
-		version:       vc.version,
-		schema:        vc.schema,
+		errorHandler:                   helium.NilErrorHandler{},
+		suppressDepth:                  1,
+		version:                        vc.version,
+		schema:                         vc.schema,
+		allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance,
 	}
 	return validateValue(ctx, raw, fieldNodeNSContext(fieldNode), td, "", "", 0, tvc) == nil
 }
