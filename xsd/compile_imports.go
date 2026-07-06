@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/iolimit"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
@@ -1895,6 +1896,16 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			// this group would keep the stale Phase-A source from parseNamedAttribute
 			// Group and cite the redefined (base) file instead of the redefine.
 			c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.diagSource()}
+		default:
+			// The xs:redefine content model is
+			// (annotation | (simpleType | complexType | group | attributeGroup))* —
+			// any other XSD-namespace child (e.g. an <xs:element> or <xs:attribute>)
+			// is a schema-representation error (W3C sunData xsd003-1.e/xsd003-2.e).
+			// Foreign-namespace children are ignored. Version-INDEPENDENT.
+			if elem.URI() == lexicon.NamespaceXSD && c.filename != "" {
+				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elem.LocalName(),
+					"Element '{"+lexicon.NamespaceXSD+"}"+elem.LocalName()+"' is not allowed as a child of the redefine element."))
+			}
 		}
 	}
 

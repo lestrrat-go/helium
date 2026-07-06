@@ -359,6 +359,7 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 
 func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
 	c.checkWildcardAttrs(ctx, elem)
+	c.checkWildcardChildren(ctx, elem)
 
 	hasNS := hasAttr(elem, attrNamespace)
 	namespace := getAttr(elem, attrNamespace)
@@ -434,6 +435,33 @@ func (c *compiler) checkWildcardAttrs(ctx context.Context, elem *helium.Element)
 			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, local,
 				attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed."))
 		}
+	}
+}
+
+// checkWildcardChildren enforces the content model of an xs:any / xs:anyAttribute
+// wildcard (XSD §3.10.2): (annotation?). Any XSD-namespace element child other
+// than <xs:annotation> — e.g. a nested <xs:group> reference (W3C Group_w3c
+// groupO026) or an <xs:element> — is a schema-representation error.
+// Foreign-namespace children are ignored. Version-INDEPENDENT.
+func (c *compiler) checkWildcardChildren(ctx context.Context, elem *helium.Element) {
+	src := c.diagSource()
+	if src == "" {
+		return
+	}
+	local := elem.LocalName()
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if ce.URI() != lexicon.NamespaceXSD || isXSDElement(ce, elemAnnotation) {
+			continue
+		}
+		c.schemaError(ctx, schemaParserError(src, ce.Line(), ce.LocalName(), local,
+			"Element '{"+lexicon.NamespaceXSD+"}"+ce.LocalName()+"' is not allowed as a child of the '"+local+"' wildcard."))
 	}
 }
 
@@ -955,14 +983,15 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 	// Global attributes are always in the target namespace (per spec).
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
 
-	// A GLOBAL attribute declaration must not be in the XSI namespace (XSD 1.1
-	// Schema Component Constraint "no-xsi" / xs:attribute representation): the XSI
+	// A GLOBAL attribute declaration must not be in the XSI namespace (Schema
+	// Component Constraint "no-xsi" / xs:attribute representation): the XSI
 	// namespace is reserved for the four processor attributes and a schema may not
-	// add to it. This is gated on Version11: it is NEW in this PR and the opt-in
-	// contract requires 1.0 to stay byte-identical to origin/feat-xsd11, which has
-	// no global-attribute no-xsi check (the pre-existing check in check_elements.go
-	// covers only LOCAL qualified attributes and is left unchanged for 1.0).
-	if c.version == Version11 && c.filename != "" && qn.NS == lexicon.NamespaceXSI {
+	// add to it. Version-INDEPENDENT — a global attribute's {target namespace} is
+	// the schema targetNamespace, so a schema declaring one in the XSI namespace is
+	// illegal in both XSD 1.0 and 1.1 (W3C msMeta/Attribute_w3c attKa015). The
+	// pre-existing check in check_elements.go covers only LOCAL qualified
+	// attributes; this one covers the global form.
+	if c.filename != "" && qn.NS == lexicon.NamespaceXSI {
 		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
 			elem.LocalName(), elem.LocalName(), attrName,
 			"An attribute declaration must not be in the XSI namespace."))

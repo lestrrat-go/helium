@@ -430,23 +430,24 @@ func TestVersion11DefinedSiblingNoCrossTypeAlias(t *testing.T) {
 	}
 }
 
-// TestVersion10GlobalAttrXSINamespaceAllowed covers gauntlet finding
-// PR858-REVIEW-002: the GLOBAL-attribute no-xsi rejection is new in this PR and
-// 1.1-only; XSD 1.0 must stay byte-identical to origin (no such rejection). A
-// schema whose targetNamespace IS the XSI namespace declaring a global attribute
-// compiles under 1.0 and is rejected under 1.1.
+// TestVersion10GlobalAttrXSINamespaceAllowed verifies the GLOBAL-attribute
+// no-xsi rejection is version-INDEPENDENT: a global attribute's {target
+// namespace} is the schema targetNamespace, so a schema whose targetNamespace IS
+// the XSI namespace declaring a global attribute is illegal in BOTH XSD 1.0 and
+// 1.1 (W3C msMeta/Attribute_w3c attKa015). The XSI namespace is reserved for the
+// four processor attributes; a schema may not add to it.
 func TestVersion10GlobalAttrXSINamespaceAllowed(t *testing.T) {
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   targetNamespace="http://www.w3.org/2001/XMLSchema-instance">
   <xs:attribute name="foo" type="xs:string"/>
 </xs:schema>`
 
-	t.Run("1.0 does not reject a global attribute in the XSI namespace", func(t *testing.T) {
+	t.Run("1.0 rejects a global attribute in the XSI namespace", func(t *testing.T) {
 		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
 		require.NoError(t, err)
 		_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 
 	t.Run("1.1 rejects a global attribute in the XSI namespace", func(t *testing.T) {
