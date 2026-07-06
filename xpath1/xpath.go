@@ -277,7 +277,7 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 	if expr == nil || expr.ast == nil {
 		return nil, ErrNilExpression
 	}
-	ectx := newEvalContextWithConfig(node, e.cfg)
+	ectx := newEvalContextWithConfig(ctx, node, e.cfg)
 	return eval(ctx, ectx, expr.ast)
 }
 
@@ -346,7 +346,7 @@ func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, e
 	if e == nil || e.ast == nil {
 		return nil, ErrNilExpression
 	}
-	ectx := newEvalContextWithConfig(node, nil)
+	ectx := newEvalContextWithConfig(ctx, node, nil)
 	return eval(ctx, ectx, e.ast)
 }
 

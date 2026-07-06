@@ -9,6 +9,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
@@ -471,6 +472,7 @@ type validationContext struct {
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
+	idcDocOrder   *ixpath.DocOrderCache
 	// edcType is the complex type whose content model is currently being matched.
 	// It is set (and restored) by validateContentByType, so the wildcard
 	// Element-Declarations-Consistent check (validateWildcardElementConsistent) can
@@ -612,6 +614,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		cfg:              cfg,
 		filename:         filename,
 		errorHandler:     handler,
+		idcDocOrder:      &ixpath.DocOrderCache{},
 		actualElemType:   make(map[*helium.Element]*TypeDef),
 		actualElemDecl:   make(map[*helium.Element]*ElementDecl),
 		attrInheritable:  make(map[*helium.Attribute]struct{}),
