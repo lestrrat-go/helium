@@ -2657,7 +2657,7 @@ func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed strin
 	if isUrSimpleType(derivedTD) || isUrSimpleType(baseTD) {
 		return derivedFixed == baseFixed
 	}
-	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS, schema, version)
+	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS, schema, version, false)
 }
 
 // isUrSimpleType reports whether td is xs:anySimpleType, the simple ur-type. It

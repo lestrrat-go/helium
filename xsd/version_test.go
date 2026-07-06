@@ -139,6 +139,52 @@ func TestVersion10LegacyGMonthElementValueConstraintRejected(t *testing.T) {
 	}
 }
 
+func TestVersion10LegacyGMonthFixedValueComparison(t *testing.T) {
+	t.Run("element fixed", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:gMonth" fixed="--03"/>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+		require.NoError(t, err)
+	})
+
+	t.Run("attribute fixed", func(t *testing.T) {
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:complexType>
+      <xs:attribute name="m" type="xs:gMonth" fixed="--03"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v m="--03--"/>`)
+		require.NoError(t, err)
+	})
+}
+
+func TestVersion10LegacyGMonthIDCCanonicalValue(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="m" type="xs:gMonth" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="uniqueMonth">
+      <xs:selector xpath="m"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<root><m>--03</m><m>--04--</m></root>`)
+	require.NoError(t, err)
+
+	err = compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<root><m>--03</m><m>--03--</m></root>`)
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+}
+
 // TestVersion11BuiltinTypes verifies the XSD 1.1-only built-in datatypes are
 // registered (and resolve) only in 1.1 mode, and validate per their lexical
 // space.

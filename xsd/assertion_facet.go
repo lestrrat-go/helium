@@ -26,10 +26,14 @@ func buildValueSequence(ctx context.Context, value string, valueNS map[string]st
 	effTD := td
 	if td != nil && resolveVariety(td) == TypeVarietyUnion {
 		var schema *Schema
+		version := Version10
+		allowLegacyGMonth := false
 		if vc != nil {
 			schema = vc.schema
+			version = vc.version
+			allowLegacyGMonth = vc.allowXSD10LegacyGMonthInstance
 		}
-		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), schema, vc.version); active != nil {
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), schema, version, allowLegacyGMonth); active != nil {
 			effTD = active
 		}
 	}
@@ -56,10 +60,14 @@ func buildValueSequence(ctx context.Context, value string, valueNS map[string]st
 func typedAtomic(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, vc *validationContext) xpath3.AtomicValue {
 	if td != nil && resolveVariety(td) == TypeVarietyUnion {
 		var schema *Schema
+		version := Version10
+		allowLegacyGMonth := false
 		if vc != nil {
 			schema = vc.schema
+			version = vc.version
+			allowLegacyGMonth = vc.allowXSD10LegacyGMonthInstance
 		}
-		td = fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), schema, vc.version)
+		td = fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(td), schema, version, allowLegacyGMonth)
 	}
 	return atomicForType(value, valueNS, td)
 }

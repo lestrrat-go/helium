@@ -209,21 +209,26 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 }
 
 func acceptsXSD10LegacyGMonthInstance(value, builtinLocal string, td *TypeDef, vc *validationContext) bool {
-	if !vc.allowXSD10LegacyGMonthInstance || vc.version != Version10 || builtinLocal != lexicon.TypeGMonth {
-		return false
+	_, ok := xsd10LegacyGMonthCurrentLexicalForType(value, builtinLocal, td, vc.allowXSD10LegacyGMonthInstance, vc.version)
+	return ok
+}
+
+func xsd10LegacyGMonthCurrentLexicalForType(value, builtinLocal string, td *TypeDef, allow bool, version Version) (string, bool) {
+	if !allow || version != Version10 || builtinLocal != lexicon.TypeGMonth {
+		return "", false
 	}
 	// XSTS bug-6901-era XSD 1.0 cases accept legacy "--MM--" instance values, but
 	// the same spelling remains invalid for schema facet/default literals.
 	for cur := range baseChain(td) {
 		if !facetSetEmpty(cur.Facets) {
-			return false
+			return "", false
 		}
 	}
 	current, ok := xsd10LegacyGMonthCurrentLexical(value)
 	if !ok {
-		return false
+		return "", false
 	}
-	return validateBuiltinValue(current, builtinLocal, vc.version) == nil
+	return current, validateBuiltinValue(current, builtinLocal, version) == nil
 }
 
 func xsd10LegacyGMonthCurrentLexical(value string) (string, bool) {
@@ -300,7 +305,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		// fallback on a string leaf.
 		memberLocal := ""
 		memberWS := resolveWhiteSpace(cur)
-		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), nil, vc.version); active != nil {
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur), nil, vc.version, vc.allowXSD10LegacyGMonthInstance); active != nil {
 			memberLocal = builtinBaseLocal(active)
 			memberWS = resolveWhiteSpace(active)
 		}
@@ -357,7 +362,7 @@ func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string
 		if i < len(td.Facets.EnumerationNS) {
 			enumNS = td.Facets.EnumerationNS[i]
 		}
-		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.schema, vc.version) {
+		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 			return nil
 		}
 	}
@@ -529,7 +534,7 @@ func checkListEnumeration(ctx context.Context, value string, valueNS map[string]
 		if i < len(fs.EnumerationNS) {
 			enumNS = fs.EnumerationNS[i]
 		}
-		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.schema, vc.version) {
+		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 			return nil
 		}
 	}
