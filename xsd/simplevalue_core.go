@@ -149,6 +149,13 @@ func collapseSpaces(s string) string {
 
 // validateValue validates a text value against a simple type definition.
 func validateValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
+	if qn, ok := missingTypeRef(td); ok {
+		if vc != nil {
+			vc.reportValidityError(ctx, filename, line, elemName, missingTypeRefMessage(qn))
+		}
+		return fmt.Errorf("unresolved type definition")
+	}
+
 	// Apply whitespace normalization per the type's whiteSpace facet.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 
@@ -423,6 +430,11 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 		items = valuepkg.XSDFields(value)
 	}
 	itemCount := len(items)
+	itemType := resolveItemType(td)
+	if qn, ok := missingTypeRef(itemType); ok {
+		vc.reportValidityError(ctx, filename, line, elemName, missingTypeRefMessage(qn))
+		return fmt.Errorf("unresolved type definition")
+	}
 
 	// Check length facets using item count.
 	var facetErr error
@@ -451,7 +463,6 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 	// length facets are interpreted as item counts above; checkFacets would
 	// instead measure character length, so enumeration and pattern are applied
 	// here on their own rather than via the generic checkFacets path.
-	itemType := resolveItemType(td)
 	for cur := range baseChain(td) {
 		if cur.Facets == nil {
 			continue

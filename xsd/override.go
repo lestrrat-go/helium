@@ -287,6 +287,12 @@ func (c *compiler) registerMatchedChildren(ctx context.Context, entries []overri
 	for _, e := range entries {
 		mctx, ok := matched[e.key]
 		if !ok {
+			if e.key.sym == overrideSymType {
+				if c.droppedOverrideTypes == nil {
+					c.droppedOverrideTypes = make(map[QName]struct{})
+				}
+				c.droppedOverrideTypes[e.key.qn] = struct{}{}
+			}
 			continue
 		}
 		// Register under the DECLARING document's per-document @defaultAttributes AND

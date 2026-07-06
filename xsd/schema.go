@@ -364,6 +364,11 @@ type TypeDef struct {
 	// the base content type. It is not a source-level simpleType restriction, so
 	// checkSimpleTypeResolution skips it — the complex base is intentional here.
 	syntheticComplexBase bool
+	// missingTypeRef marks a recovery placeholder for a QName that did not
+	// resolve to a type definition. Some declarations are allowed to carry such a
+	// placeholder until validation selects them; fatal contexts still reject it at
+	// compile time.
+	missingTypeRef QName
 
 	// pendingDefaultOpenContent is the schema-level <xs:defaultOpenContent> active
 	// in THIS type's own schema document at parse time, captured only when the type

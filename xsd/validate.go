@@ -898,6 +898,9 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	if declType == nil {
 		return nil
 	}
+	if err := vc.rejectMissingTypeRef(ctx, elem, declType); err != nil {
+		return err
+	}
 
 	// XSD 1.1 conditional type assignment: the alternatives may select a
 	// different governing type. xsi:type (resolved next) still takes precedence.
@@ -942,6 +945,10 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 }
 
 func (vc *validationContext) validateElementContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	if err := vc.rejectMissingTypeRef(ctx, elem, td); err != nil {
+		return err
+	}
+
 	// XSD 1.1: a governing type of xs:error (selected by conditional type
 	// assignment, or referenced directly) has an empty value space, so any element
 	// it governs is invalid. This is the single choke point for every type-selection
@@ -969,6 +976,25 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 		return vc.checkAssertions(ctx, elem, edecl, td)
 	}
 	return nil
+}
+
+func (vc *validationContext) rejectMissingTypeRef(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+	qn, ok := missingTypeRef(td)
+	if !ok {
+		return nil
+	}
+	elemName := ""
+	line := 0
+	if elem != nil {
+		elemName = elemDisplayName(elem)
+		line = elem.Line()
+	}
+	vc.reportValidityError(ctx, vc.filename, line, elemName, missingTypeRefMessage(qn))
+	return fmt.Errorf("unresolved type definition")
+}
+
+func missingTypeRefMessage(qn QName) string {
+	return fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 }
 
 // rejectNonWhitespaceText reports a validity error and returns a non-nil error
@@ -1195,7 +1221,12 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		// through xs:anyType too: select the alternative type BEFORE resolving
 		// xsi:type (xsi:type still wins), mirroring the established order at the
 		// explicit-particle/wildcard match sites.
-		declType := vc.applyTypeAlternatives(ctx, ce, edecl, effectiveDeclType(edecl, vc.schema))
+		declType := effectiveDeclType(edecl, vc.schema)
+		if err := vc.rejectMissingTypeRef(ctx, ce, declType); err != nil {
+			contentErr = err
+			continue
+		}
+		declType = vc.applyTypeAlternatives(ctx, ce, edecl, declType)
 		td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
