@@ -155,9 +155,6 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				}
 				td = missingTypePlaceholder(qn)
 				c.schema.types[qn] = td
-			} else if _, missing := missingTypeRef(td); missing {
-				// A prior unresolved reference may have installed the placeholder.
-				// Element declarations can carry it until they are selected.
 			}
 			edecl.Type = td
 		}
