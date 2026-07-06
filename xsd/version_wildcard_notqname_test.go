@@ -26,6 +26,103 @@ func mustCompile11OK(t *testing.T, schemaXML string) {
 	require.NoError(t, err)
 }
 
+// TestVersion10DefaultWildcardNegatedConstraints covers the default compiler
+// path used by the XSD 1.0 conformance suite: negated wildcard constraints must
+// be parsed and enforced when they appear in the schema.
+func TestVersion10DefaultWildcardNegatedConstraints(t *testing.T) {
+	compileDefault := func(t *testing.T, schemaXML string) error {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		_, err = xsd.NewCompiler().Compile(t.Context(), doc)
+		return err
+	}
+
+	t.Run("namespace and notNamespace are mutually exclusive on element wildcard", func(t *testing.T) {
+		t.Parallel()
+		err := compileDefault(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##any" notNamespace="urn:x" processContents="skip"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
+	t.Run("namespace and notNamespace are mutually exclusive on attribute wildcard", func(t *testing.T) {
+		t.Parallel()
+		err := compileDefault(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute namespace="##any" notNamespace="urn:x" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
+	t.Run("notQName name must be in an admitted namespace", func(t *testing.T) {
+		t.Parallel()
+		err := compileDefault(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:b">
+  <xs:complexType name="c">
+    <xs:sequence>
+      <xs:any notNamespace="urn:b" notQName="b:blocked" processContents="skip"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="c"/>
+</xs:schema>`)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+	})
+
+	t.Run("anyAttribute notNamespace rejects excluded absent namespace", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:sequence/>
+      <xs:anyAttribute notNamespace="##local" processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		err := compileAndValidateV(t, xsd.NewCompiler(), schema, `<e local="x"/>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema,
+			`<e n:a="x" xmlns:n="urn:n"/>`))
+	})
+
+	t.Run("definedSibling excludes repeated sibling and substitution member", func(t *testing.T) {
+		t.Parallel()
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:element name="root" type="t:ct"/>
+  <xs:element name="b" type="xs:string"/>
+  <xs:element name="c" type="xs:string"/>
+  <xs:element name="d" substitutionGroup="t:b" type="xs:string"/>
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element ref="t:b"/>
+      <xs:any notQName="##definedSibling" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element ref="t:c"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+		require.NoError(t, compileAndValidateV(t, xsd.NewCompiler(), schema,
+			`<t:root xmlns:t="urn:t"><t:b>one</t:b><t:c>two</t:c></t:root>`))
+
+		errRepeat := compileAndValidateV(t, xsd.NewCompiler(), schema,
+			`<t:root xmlns:t="urn:t"><t:b>one</t:b><t:b>two</t:b><t:c>three</t:c></t:root>`)
+		require.ErrorIs(t, errRepeat, xsd.ErrValidationFailed)
+
+		errSubst := compileAndValidateV(t, xsd.NewCompiler(), schema,
+			`<t:root xmlns:t="urn:t"><t:b>one</t:b><t:d>two</t:d><t:c>three</t:c></t:root>`)
+		require.ErrorIs(t, errSubst, xsd.ErrValidationFailed)
+	})
+}
+
 // TestVersion11WildcardNotNamespace covers the XSD 1.1 @notNamespace constraint
 // on xs:anyAttribute and xs:any: it admits any namespace EXCEPT the listed ones
 // (with ##local = absent, ##targetNamespace = the schema TNS).
@@ -104,10 +201,10 @@ func TestVersion11WildcardNotQName(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 still admits xml:space (XML-namespace attrs always allowed)", func(t *testing.T) {
+	t.Run("1.0 still admits xml:space through special-attribute handling", func(t *testing.T) {
 		t.Parallel()
-		// In 1.0 @notQName is not recognized and xml: attributes are leniently
-		// allowed, so the same instance validates.
+		// In 1.0 xml: attributes are leniently allowed before wildcard matching,
+		// so the same instance validates even though @notQName is parsed.
 		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), attrSchema,
 			`<e xml:space="preserve"/>`)
 		require.NoError(t, err)
@@ -270,10 +367,11 @@ func TestVersion11AttrGroupWildcardIntersection(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 applies attribute-group wildcards while ignoring notNamespace", func(t *testing.T) {
+	t.Run("1.0 applies attribute-group wildcards with complete-wildcard aggregation", func(t *testing.T) {
 		t.Parallel()
-		// In 1.0 notNamespace is unrecognized, so both group wildcards behave as
-		// the default ##any and their complete wildcard admits the attribute.
+		// XSD 1.0 complete-wildcard aggregation still admits this attribute. Direct
+		// wildcard notNamespace enforcement in the default compiler is covered by
+		// TestVersion10DefaultWildcardNegatedConstraints.
 		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schema,
 			`<e m:adam="m" xmlns:m="http://adam.com/"/>`)
 		require.NoError(t, err)
