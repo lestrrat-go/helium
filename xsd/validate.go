@@ -875,18 +875,16 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// no-namespace schema declaring {}foo).
 	edecl, ok := vc.schema.LookupElement(local, ns)
 	if !ok {
-		// XSD 1.1 lax assessment (cvc-assess-elt.1.2): with no governing element
-		// declaration, an xsi:type attribute resolving to a known type definition
-		// governs the element. Assess it laxly against that type so its content is
-		// validated and PSVI type annotations are produced (matching the per-child
-		// wildcard/xs:anyType lax sites). Scoped to a lax fragment-validating caller
-		// (cfg.skipDatatypeIntegrity — the xslt3 source-validation path): a full
-		// standalone document validation keeps the strict "no matching global
-		// declaration" root policy (libxml2 parity). XSD 1.0 is byte-identical.
-		if vc.version == Version11 && vc.cfg != nil && vc.cfg.skipDatatypeIntegrity {
-			if _, hasType := vc.resolveXsiTypeQuiet(elem); hasType {
-				return vc.assessLaxElement(ctx, elem)
-			}
+		// With no governing element declaration, a present xsi:type can still supply
+		// the governing type definition. This is required for schemas that expose
+		// only global types and rely on the instance root's xsi:type. If no resolvable
+		// xsi:type is present, retain the strict no-root-declaration error.
+		td, err := vc.resolveXsiType(ctx, elem, nil, false)
+		if err != nil {
+			return err
+		}
+		if td != nil {
+			return vc.validateUndeclaredElementWithType(ctx, elem, td)
 		}
 		msg := "No matching global declaration available for the validation root."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), local, msg)
@@ -951,6 +949,21 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	}
 
 	return vc.validateElementContent(ctx, elem, edecl, td)
+}
+
+func (vc *validationContext) validateUndeclaredElementWithType(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+	if td != nil && td.Abstract {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, elem, td, true)
+	if td == nil {
+		return nil
+	}
+	if _, nilErr := vc.checkXsiNil(ctx, elem, nil); nilErr != nil {
+		return nilErr
+	}
+	return vc.validateElementContent(ctx, elem, nil, td)
 }
 
 func (vc *validationContext) validateElementContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
@@ -1185,18 +1198,7 @@ func (vc *validationContext) assessLaxElement(ctx context.Context, ce *helium.El
 	if !hasType {
 		return vc.annotateAnyTypeChildren(ctx, ce)
 	}
-	if actual != nil && actual.Abstract {
-		vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msgAbstractType)
-		return fmt.Errorf("abstract type")
-	}
-	vc.annotateElement(ctx, ce, actual, true)
-	if actual == nil {
-		return nil
-	}
-	if _, nilErr := vc.checkXsiNil(ctx, ce, nil); nilErr != nil {
-		return nilErr
-	}
-	return vc.validateElementContent(ctx, ce, nil, actual)
+	return vc.validateUndeclaredElementWithType(ctx, ce, actual)
 }
 
 // annotateAnyTypeChildren lax-validates the child elements of an xs:anyType (or
@@ -2877,10 +2879,6 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 
 	td, ok := vc.schema.LookupType(local, ns)
 	if !ok {
-		// Try with schema's target namespace.
-		td, ok = vc.schema.LookupType(local, vc.schema.TargetNamespace())
-	}
-	if !ok {
 		msg := fmt.Sprintf("The value '%s' of the xsi:type attribute does not resolve to a type definition.", xsiTypeVal)
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return nil, fmt.Errorf("xsi:type not found")
@@ -2938,9 +2936,6 @@ func (vc *validationContext) resolveXsiTypeQuiet(elem *helium.Element) (*TypeDef
 	}
 
 	td, ok := vc.schema.LookupType(local, ns)
-	if !ok {
-		td, ok = vc.schema.LookupType(local, vc.schema.TargetNamespace())
-	}
 	if !ok {
 		return nil, false
 	}
