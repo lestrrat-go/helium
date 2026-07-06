@@ -884,6 +884,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		c.loadedRedefinable[path] = &redefinableSet{
 			keys:      c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups),
 			consumed:  make(map[redefineKind]map[QName]struct{}),
+			groups:    c.computeRedefinableGroups(beforeGroups),
 			chameleon: incTargetNS == "",
 		}
 	}
@@ -959,6 +960,17 @@ func (c *compiler) computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrG
 	}
 }
 
+func (c *compiler) computeRedefinableGroups(beforeGroups map[QName]struct{}) map[QName]*ModelGroup {
+	groups := make(map[QName]*ModelGroup)
+	for qn, group := range c.schema.groups {
+		if _, existed := beforeGroups[qn]; existed {
+			continue
+		}
+		groups[qn] = group
+	}
+	return groups
+}
+
 // loadRedefine loads a schema via xs:redefine and processes override children.
 // It works like xs:include (merging original declarations) but then applies
 // redefinitions for complexType, simpleType, group, and attributeGroup children.
@@ -989,9 +1001,11 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	if _, seen := c.includeVisited[path]; seen {
 		rs := c.loadedRedefinable[path]
 		var phaseAKeys, consumed map[redefineKind]map[QName]struct{}
+		var phaseAGroups map[QName]*ModelGroup
 		if rs != nil {
 			phaseAKeys = rs.keys
 			consumed = rs.consumed
+			phaseAGroups = rs.groups
 		} else {
 			// The document was registered without a recorded redefinable set
 			// (e.g. the root schema seeded into includeVisited by CompileFile, or
@@ -1003,9 +1017,10 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				redefineKindGroup:       {},
 				redefineKindAttrGroup:   {},
 			}
+			phaseAGroups = map[QName]*ModelGroup{}
 		}
 		chameleon := rs != nil && rs.chameleon
-		return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, consumed, chameleon)
+		return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, consumed, chameleon, phaseAGroups)
 	}
 	c.includeVisited[path] = struct{}{}
 
@@ -1062,10 +1077,11 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		rs := &redefinableSet{
 			keys:      emptyKeys,
 			consumed:  make(map[redefineKind]map[QName]struct{}),
+			groups:    map[QName]*ModelGroup{},
 			chameleon: incTargetNS == "",
 		}
 		c.loadedRedefinable[path] = rs
-		return c.processRedefineOverrides(ctx, redefineElem, rs.keys, rs.consumed, rs.chameleon)
+		return c.processRedefineOverrides(ctx, redefineElem, rs.keys, rs.consumed, rs.chameleon, rs.groups)
 	}
 
 	// Check target namespace compatibility (same rules as include).
@@ -1195,9 +1211,11 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// validate its overrides against it (the delta cannot be recomputed once the
 	// components are merged), then process this redefine's overrides against it.
 	phaseAKeys := c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups)
+	phaseAGroups := c.computeRedefinableGroups(beforeGroups)
 	rs := &redefinableSet{
 		keys:      phaseAKeys,
 		consumed:  make(map[redefineKind]map[QName]struct{}),
+		groups:    phaseAGroups,
 		chameleon: incTargetNS == "",
 	}
 	c.loadedRedefinable[path] = rs
@@ -1227,7 +1245,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// open content (restored here), not the redefined document's Phase A value.
 	c.defaultOpenContent = savedDefaultOpenContent
 
-	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed, rs.chameleon)
+	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed, rs.chameleon, phaseAGroups)
 }
 
 // checkRedefineSelfDerivation enforces src-redefine.5: a <simpleType> or
@@ -1483,14 +1501,15 @@ func (c *compiler) validateComponentChildName(ctx context.Context, elem *helium.
 	return name, false
 }
 
-func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}, chameleon bool) error {
+func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}, chameleon bool, phaseAGroups map[QName]*ModelGroup) error {
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	phaseAGroups := make(map[QName]*ModelGroup, len(c.schema.groups))
-	maps.Copy(phaseAGroups, c.schema.groups)
+	if phaseAGroups == nil {
+		phaseAGroups = map[QName]*ModelGroup{}
+	}
 	c.redefine = &redefineState{
 		phaseAKeys: phaseAKeys,
 		seen:       make(map[redefineKind]map[QName]struct{}),
