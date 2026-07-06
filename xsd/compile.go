@@ -1627,13 +1627,15 @@ func lookupNS(elem *helium.Element, prefix string) string {
 	return ""
 }
 
-func parseOccurs(s string, defaultVal int) int {
-	if s == "unbounded" {
-		return Unbounded
-	}
+// parseOccurs parses a whitespace-collapsed integer facet value (totalDigits,
+// length, minLength, maxLength, fractionDigits), returning 0 for a value that is
+// not a plain integer. Occurrence attributes (minOccurs/maxOccurs) are parsed by
+// parseNonNegativeOccurs / parseParticleOccurs, which additionally accept the
+// "unbounded" keyword and clamp values too large for an int.
+func parseOccurs(s string) int {
 	n, err := strconv.Atoi(s)
 	if err != nil {
-		return defaultVal
+		return 0
 	}
 	return n
 }
