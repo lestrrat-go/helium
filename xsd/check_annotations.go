@@ -17,10 +17,12 @@ import (
 //     foreign element) and any non-whitespace character content is an error;
 //   - the only unqualified attribute allowed on xs:annotation is id (foreign
 //     namespaced attributes are allowed);
-//   - xs:appinfo allows only the unqualified attribute source;
+//   - xs:appinfo allows only the unqualified attribute source, whose value is
+//     xs:anyURI;
 //   - xs:documentation allows only the unqualified attribute source and the
-//     xml:lang attribute, whose value (after xs:language whiteSpace=collapse)
-//     must be a valid xs:language — an empty or whitespace-only value is invalid;
+//     xml:lang attribute; source is xs:anyURI and xml:lang (after xs:language
+//     whiteSpace=collapse) must be a valid xs:language — an empty or
+//     whitespace-only value is invalid;
 //   - every XSD element whose content model is (annotation?, ...) admits at most
 //     one xs:annotation child. Only xs:schema admits repeated annotations, so the
 //     "at most one" rule applies to every XSD-namespace element except xs:schema
@@ -166,6 +168,7 @@ func (c *compiler) checkAppinfo(ctx context.Context, elem *helium.Element, src s
 			continue
 		}
 		if attr.LocalName() == attrSource {
+			c.checkAnnotationSource(ctx, src, line, elemAppinfo, string(attr.Content()))
 			continue
 		}
 		c.schemaError(ctx, schemaParserError(src, line, elemAppinfo, elemAppinfo,
@@ -192,6 +195,7 @@ func (c *compiler) checkDocumentation(ctx context.Context, elem *helium.Element,
 			continue // other namespaced attributes are allowed
 		}
 		if name == attrSource {
+			c.checkAnnotationSource(ctx, src, line, elemDocumentation, string(attr.Content()))
 			continue
 		}
 		c.schemaError(ctx, schemaParserError(src, line, elemDocumentation, elemDocumentation,
@@ -205,5 +209,13 @@ func (c *compiler) checkDocumentation(ctx context.Context, elem *helium.Element,
 				helium.ClarkName(lexicon.NamespaceXML, lexicon.AttrLang),
 				"'"+langValue+"' is not a valid value of the atomic type 'xs:language'."))
 		}
+	}
+}
+
+func (c *compiler) checkAnnotationSource(ctx context.Context, src string, line int, elemName, raw string) {
+	collapsed := normalizeWhiteSpace(raw, "collapse")
+	if err := validateBuiltinValue(collapsed, lexicon.TypeAnyURI, c.version); err != nil {
+		c.schemaError(ctx, schemaParserErrorAttr(src, line, elemName, elemName, attrSource,
+			"'"+collapsed+"' is not a valid value of the atomic type 'xs:anyURI'."))
 	}
 }

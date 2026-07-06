@@ -254,6 +254,19 @@ func TestBuiltinTypeValidation(t *testing.T) {
 	}
 }
 
+func TestAnyURIValidationVersionSpecific(t *testing.T) {
+	valid10 := []string{"", "a", "urn:isbn:123", "http://example.com/a%20b", "../relative/path", "#frag", "日本語", "foo>bar", `foo"bar`, "has space"}
+	for _, v := range valid10 {
+		require.NoError(t, value.ValidateBuiltin(v, "anyURI", value.Version10), "XSD 1.0 anyURI %q", v)
+	}
+
+	invalid10 := []string{":a", "b:", "has\tcontrol", "bad%escape", "%", `\`, "^"}
+	for _, v := range invalid10 {
+		require.Error(t, value.ValidateBuiltin(v, "anyURI", value.Version10), "XSD 1.0 anyURI %q", v)
+		require.NoError(t, value.ValidateBuiltin(v, "anyURI", value.Version11), "XSD 1.1 anyURI %q", v)
+	}
+}
+
 func TestCalendarYearExpandedLexicalRejectsLeadingZeroes(t *testing.T) {
 	t.Parallel()
 

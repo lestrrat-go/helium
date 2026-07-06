@@ -98,7 +98,7 @@ func ValidateBuiltin(value, builtinLocal string, version Version) error {
 	case "NMTOKENS":
 		return validateSpaceSeparatedList(value, validateNMTOKEN)
 	case "anyURI":
-		return nil
+		return validateAnyURI(value, version)
 	default:
 		return nil
 	}
@@ -742,6 +742,38 @@ func validateToken(value string) error {
 		return fmt.Errorf("invalid token")
 	}
 	return nil
+}
+
+func validateAnyURI(value string, version Version) error {
+	if version == Version11 {
+		return nil
+	}
+	if value == "" {
+		return nil
+	}
+	if strings.HasPrefix(value, ":") || strings.HasSuffix(value, ":") {
+		return fmt.Errorf("invalid anyURI")
+	}
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if ch >= utf8.RuneSelf {
+			continue
+		}
+		if ch < ' ' || ch == 0x7f || strings.ContainsRune("\\^`", rune(ch)) {
+			return fmt.Errorf("invalid anyURI")
+		}
+		if ch == '%' {
+			if i+2 >= len(value) || !isHexDigit(value[i+1]) || !isHexDigit(value[i+2]) {
+				return fmt.Errorf("invalid anyURI")
+			}
+			i += 2
+		}
+	}
+	return nil
+}
+
+func isHexDigit(ch byte) bool {
+	return ('0' <= ch && ch <= '9') || ('A' <= ch && ch <= 'F') || ('a' <= ch && ch <= 'f')
 }
 
 func validateQName(value string) error {
