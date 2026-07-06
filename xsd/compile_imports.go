@@ -1359,6 +1359,20 @@ func (c *compiler) lookupGroupForRef(qn QName, groups map[QName]*ModelGroup) (*M
 	}
 	if qn.NS != "" {
 		grp, ok = groups[QName{Local: qn.Local}]
+		if ok {
+			return grp, true
+		}
+	}
+	return c.lookupGroupForRefFallback(qn)
+}
+
+func (c *compiler) lookupGroupForRefFallback(qn QName) (*ModelGroup, bool) {
+	grp, ok := c.schema.groups[qn]
+	if ok {
+		return grp, true
+	}
+	if qn.NS != "" {
+		grp, ok = c.schema.groups[QName{Local: qn.Local}]
 		return grp, ok
 	}
 	return nil, false

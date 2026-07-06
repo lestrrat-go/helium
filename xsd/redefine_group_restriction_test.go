@@ -95,6 +95,21 @@ func TestRedefineGroupRestriction(t *testing.T) {
 		require.Contains(t, compileErrors(t, main, base), wantMsg)
 	})
 
+	t.Run("resolves referenced preexisting group while checking original", func(t *testing.T) {
+		t.Parallel()
+		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:group ref="h"/></xs:sequence></xs:group>
+</xs:schema>`
+		main := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="h"><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  </xs:redefine>
+  <xs:element name="doc"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, main, base), wantMsg)
+	})
+
 	t.Run("referenced original group uses phase a even after earlier redefine", func(t *testing.T) {
 		t.Parallel()
 		base := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
