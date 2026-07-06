@@ -263,14 +263,18 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			}
 			return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 		}
-		// XTSE0220: namespace attribute must match the schema's targetNamespace.
-		// The schema-location WAS fetched and compiled, so it is authoritative:
-		// a namespace mismatch is a fatal XTSE0220, NOT a fetch miss. Falling
-		// back to a precompiled ImportSchemas entry here would silently mask an
-		// authoritative-but-wrong schema-location (fall open), the same unsound
-		// masking the fetch/content taxonomy above forbids — the precompiled
-		// fallback is reserved for a genuine fetch miss (no bytes fetched).
+		// XTSE0220: namespace attribute must be satisfied by an imported schema
+		// with the same targetNamespace. A successfully fetched schema-location
+		// remains authoritative for content validity (malformed/invalid schemas
+		// failed above), but if the fetched schema is for a different namespace it
+		// cannot satisfy this declaration. In that case a pre-compiled schema for
+		// the requested namespace may still satisfy the import; otherwise the
+		// mismatch is a static error.
 		if declaredNS != "" && schema.TargetNamespace() != declaredNS {
+			if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
+				c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
+				return nil
+			}
 			return staticError(errCodeXTSE0220,
 				"xsl:import-schema namespace %q does not match schema targetNamespace %q",
 				declaredNS, schema.TargetNamespace())

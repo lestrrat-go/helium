@@ -31,6 +31,13 @@ const isValidPrecompiledSchema = `<?xml version="1.0"?>
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
 
+const isValidOtherNamespaceSchema = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/other"
+           elementFormDefault="qualified">
+  <xs:element name="other" type="xs:string"/>
+</xs:schema>`
+
 const isImportSchemaStylesheet = `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -174,6 +181,59 @@ func TestImportSchemaFetchMissFallsBackToPrecompiled(t *testing.T) {
 	out, err := ss.Transform(src).Serialize(ctx)
 	require.NoError(t, err)
 	require.Contains(t, out, "out")
+}
+
+// A schema-location that is fetched and compiled, but whose target namespace
+// does not satisfy the xsl:import-schema/@namespace declaration, may still use
+// a registered pre-compiled schema for the requested namespace. The fetched
+// schema was content-valid, so this does not mask a malformed/invalid schema;
+// it only declines to use a valid schema for the wrong namespace.
+func TestImportSchemaNamespaceMismatchFallsBackToPrecompiled(t *testing.T) {
+	t.Parallel()
+
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/s.xsd"
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{schemaURI: isValidOtherNamespaceSchema}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(isImportSchemaStylesheet))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().
+		BaseURI(baseURI).
+		URIResolver(resolver).
+		ImportSchemas(isPrecompiledSchema(t)).
+		Compile(ctx, doc)
+	require.NoError(t, err,
+		"a content-valid schema-location for another namespace should not block a matching pre-compiled schema")
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
+// If a content-valid schema-location names the wrong target namespace and no
+// pre-compiled schema satisfies the requested namespace, the original namespace
+// mismatch remains a static error.
+func TestImportSchemaNamespaceMismatchWithoutPrecompiledErrors(t *testing.T) {
+	t.Parallel()
+
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/s.xsd"
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{schemaURI: isValidOtherNamespaceSchema}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(isImportSchemaStylesheet))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		BaseURI(baseURI).
+		URIResolver(resolver).
+		Compile(ctx, doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not match schema targetNamespace")
 }
 
 // opaqueResolveErrorResolver is a compile-time URIResolver whose Resolve returns
