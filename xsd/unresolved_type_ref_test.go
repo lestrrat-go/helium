@@ -89,6 +89,21 @@ func TestUnresolvedTypeRef(t *testing.T) {
 		require.ErrorIs(t, validateXML(t, schema, `<bad>1</bad>`), xsd.ErrValidationFailed)
 	})
 
+	t.Run("deferred missing list item type is not globally visible", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="myList">
+    <xs:list itemType="MissingItem"/>
+  </xs:simpleType>
+  <xs:element name="root" type="xs:anyType"/>
+  <xs:element name="bad" type="myList"/>
+</xs:schema>`
+		schema := compileOK(t, schemaXML)
+		_, ok := schema.LookupType("MissingItem", "")
+		require.False(t, ok)
+		require.NoError(t, validateXML(t, schema, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><unknown xsi:type="MissingItem">ok</unknown></root>`))
+	})
+
 	t.Run("missing union member type", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
