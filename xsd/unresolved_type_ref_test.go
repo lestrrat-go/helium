@@ -130,6 +130,19 @@ func TestUnresolvedTypeRef(t *testing.T) {
 		require.NotContains(t, out, "xsi:type definition")
 	})
 
+	t.Run("missing anyType child element type rejects before xsi type", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:anyType"/>
+  <xs:element name="bad" type="MissingType"/>
+</xs:schema>`
+		schema := compileOK(t, schemaXML)
+		out, err := validateXMLWithOutput(t, schema, `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"><bad xsi:type="xs:string">ok</bad></root>`)
+		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		require.Contains(t, out, wantMsg)
+		require.NotContains(t, out, "xsi:type definition")
+	})
+
 	// Inline (local) simpleTypes follow the same phase split as named types:
 	// unresolved bases and union members are compile-fatal, while an unresolved
 	// list item type is deferred until the inline list type validates a value.

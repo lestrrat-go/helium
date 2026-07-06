@@ -1221,7 +1221,12 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		// through xs:anyType too: select the alternative type BEFORE resolving
 		// xsi:type (xsi:type still wins), mirroring the established order at the
 		// explicit-particle/wildcard match sites.
-		declType := vc.applyTypeAlternatives(ctx, ce, edecl, effectiveDeclType(edecl, vc.schema))
+		declType := effectiveDeclType(edecl, vc.schema)
+		if err := vc.rejectMissingTypeRef(ctx, ce, declType); err != nil {
+			contentErr = err
+			continue
+		}
+		declType = vc.applyTypeAlternatives(ctx, ce, edecl, declType)
 		td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
 		if xsiErr != nil {
 			contentErr = xsiErr
