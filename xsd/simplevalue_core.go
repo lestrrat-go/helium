@@ -75,7 +75,11 @@ func resolveWhiteSpace(td *TypeDef) string {
 		// Check if we've reached a built-in type with known whitespace behavior.
 		if cur.Name.NS == lexicon.NamespaceXSD {
 			switch cur.Name.Local {
-			case "string":
+			case "string", lexicon.TypeAnySimpleType:
+				// xs:string has whiteSpace="preserve". xs:anySimpleType (the simple
+				// ur-type) has no whiteSpace facet and imposes no normalization, so a
+				// value is compared/validated verbatim — surrounding whitespace stays
+				// significant (e.g. a fixed value on an xs:anySimpleType element).
 				return "preserve"
 			case lexicon.TypeNormalizedString:
 				return "replace"
