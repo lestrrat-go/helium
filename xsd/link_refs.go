@@ -1025,6 +1025,19 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		for _, td := range derived {
 			c.finalizeEffectiveAttrs(ctx, td, merged, visiting)
 		}
+	} else {
+		// XSD 1.0: a restriction-derived complex type inherits each base attribute
+		// USE it does not redeclare or prohibit (§3.4.2 complex type {attribute
+		// uses}, restriction). The extension loop above already folds base
+		// attributes into extension types; this pass gives restriction types the
+		// same treatment so an inherited attribute carried on an instance is not
+		// falsely rejected. The base {attribute wildcard} is NOT inherited (a
+		// restriction's wildcard comes solely from its own content). Gated to 1.0
+		// (1.1 does this topologically in finalizeEffectiveAttrs).
+		inherited := make(map[*TypeDef]bool)
+		for _, td := range restrictionTypes {
+			c.inheritRestrictionAttrs10(td, inherited)
+		}
 	}
 
 	// XSD 1.1: resolve each complex type's effective {open content} — fold in the
@@ -3088,6 +3101,46 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 		td.AnyAttribute = base.AnyAttribute
 	case td.Derivation == DerivationExtension && base.AnyAttribute != nil:
 		td.AnyAttribute = c.extensionWildcardUnion(ctx, td, base.AnyAttribute, td.AnyAttribute)
+	}
+}
+
+// inheritRestrictionAttrs10 folds a restriction-derived complex type's
+// non-redeclared base attribute USES into its own effective {attribute uses} for
+// XSD 1.0 (§3.4.2.2, {attribute uses}). A base whose derivation is itself a
+// restriction is inherited FIRST (memoized recursion) so a
+// restriction-of-a-restriction carries the base's own inherited attributes too;
+// extension bases are already fully merged by the extension loop. A derived use
+// of the same expanded QName (including use="prohibited") overrides the base use,
+// so it is skipped. The base {attribute wildcard} is deliberately NOT inherited:
+// in XSD 1.0 a restriction's {attribute wildcard} is computed SOLELY from its own
+// content (the "complete wildcard" of its attributeGroups/anyAttribute), so an
+// empty restriction of a base carrying a wildcard has NO wildcard. This runs
+// after checkRestrictionAttrs, which validated the derivation against the base's
+// own declarations.
+func (c *compiler) inheritRestrictionAttrs10(td *TypeDef, inherited map[*TypeDef]bool) {
+	if td == nil || inherited[td] {
+		return
+	}
+	inherited[td] = true
+	base := td.BaseType
+	if base == nil {
+		return
+	}
+	if base.Derivation == DerivationRestriction {
+		c.inheritRestrictionAttrs10(base, inherited)
+	}
+	if len(base.Attributes) == 0 {
+		return
+	}
+	derivedByName := make(map[QName]struct{}, len(td.Attributes))
+	for _, au := range td.Attributes {
+		derivedByName[au.Name] = struct{}{}
+	}
+	for _, bau := range base.Attributes {
+		if _, redeclared := derivedByName[bau.Name]; redeclared {
+			continue
+		}
+		td.Attributes = append(td.Attributes, bau)
 	}
 }
 
