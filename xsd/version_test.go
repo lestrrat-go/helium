@@ -72,6 +72,58 @@ func TestVersionToggle(t *testing.T) {
 	})
 }
 
+func TestVersion10LegacyGMonthInstanceLexical(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:gMonth"/>
+</xs:schema>`
+
+	for _, instance := range []string{`<v>--03--</v>`, `<v>--05---05:00</v>`} {
+		t.Run("xsd10 accepts "+instance, func(t *testing.T) {
+			t.Parallel()
+			err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, instance)
+			require.NoError(t, err)
+		})
+
+		t.Run("xsd11 rejects "+instance, func(t *testing.T) {
+			t.Parallel()
+			err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version11), schemaXML, instance)
+			require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		})
+	}
+}
+
+func TestVersion10LegacyGMonthPatternRestrictionDoesNotAcceptLegacyLexical(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="xs:gMonth">
+        <xs:pattern value="--[0-9]{2}--"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schemaXML, `<v>--03--</v>`)
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+}
+
+func TestVersion10LegacyGMonthFacetLexicalRejected(t *testing.T) {
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v">
+    <xs:simpleType>
+      <xs:restriction base="xs:gMonth">
+        <xs:enumeration value="--10--"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	_, err = xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+}
+
 // TestVersion11BuiltinTypes verifies the XSD 1.1-only built-in datatypes are
 // registered (and resolve) only in 1.1 mode, and validate per their lexical
 // space.

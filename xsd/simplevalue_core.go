@@ -183,6 +183,9 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 
 	// Validate against the builtin type's lexical space.
 	if err := validateBuiltinValue(trimmed, builtinLocal, vc.version); err != nil {
+		if acceptsXSD10LegacyGMonthRuntime(trimmed, builtinLocal, td, elemName, line, vc) {
+			return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
+		}
 		typeName := typeDisplayName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
 		vc.reportValidityError(ctx, filename, line, elemName, msg)
@@ -203,6 +206,43 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 
 	// Validate facets along the type chain.
 	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
+}
+
+func acceptsXSD10LegacyGMonthRuntime(value, builtinLocal string, td *TypeDef, elemName string, line int, vc *validationContext) bool {
+	if vc.version != Version10 || builtinLocal != lexicon.TypeGMonth {
+		return false
+	}
+	// XSTS bug-6901-era XSD 1.0 cases accept legacy "--MM--" instance values, but
+	// the same spelling remains invalid for schema facet literals. Runtime element
+	// and attribute validation passes an element name and source line; compile-time
+	// facet/default checks call validateValue with empty source metadata.
+	if elemName == "" || line == 0 {
+		return false
+	}
+	for cur := range baseChain(td) {
+		if !facetSetEmpty(cur.Facets) {
+			return false
+		}
+	}
+	current, ok := xsd10LegacyGMonthCurrentLexical(value)
+	if !ok {
+		return false
+	}
+	return validateBuiltinValue(current, builtinLocal, vc.version) == nil
+}
+
+func xsd10LegacyGMonthCurrentLexical(value string) (string, bool) {
+	if len(value) < 6 || !strings.HasPrefix(value, "--") || value[4:6] != "--" {
+		return "", false
+	}
+	if value[2] < '0' || value[2] > '9' || value[3] < '0' || value[3] > '9' {
+		return "", false
+	}
+	tz := value[6:]
+	if tz != "" && tz != "Z" && !strings.HasPrefix(tz, "+") && !strings.HasPrefix(tz, "-") {
+		return "", false
+	}
+	return "--" + value[2:4] + tz, true
 }
 
 // resolveUnionMembers walks up the base type chain to find the union's member
