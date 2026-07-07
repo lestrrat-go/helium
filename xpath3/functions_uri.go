@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
@@ -18,23 +17,11 @@ func init() {
 }
 
 func fnEncodeForURI(ctx context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToStringOpt(ctx, args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	return SingleString(encodeForURI(s)), nil
-}
-
-// coerceArgToStringOpt extracts a string from xs:string? argument, validating
-// both cardinality (0 or 1) and type (string-derived, anyURI, untypedAtomic).
-func coerceArgToStringOpt(ctx context.Context, seq Sequence) (string, error) {
-	if seqLen(seq) == 0 {
-		return "", nil
-	}
-	if seq.Len() > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
-	}
-	return coerceArgToString(ctx, seq)
 }
 
 // encodeForURI percent-encodes all characters except unreserved characters
@@ -61,7 +48,7 @@ func isUnreservedChar(c byte) bool {
 }
 
 func fnIRIToURI(ctx context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToStringOpt(ctx, args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +223,7 @@ func unhexByte(c byte) int {
 }
 
 func fnEscapeHTMLURI(ctx context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToStringOpt(ctx, args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}

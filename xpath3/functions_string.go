@@ -283,11 +283,11 @@ func fnCodepointEqual(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
 		return validNilSequence, nil
 	}
-	s1, err := coerceArgToStringOpt(ctx, args[0])
+	s1, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
-	s2, err := coerceArgToStringOpt(ctx, args[1])
+	s2, err := coerceArgToString(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}

@@ -115,4 +115,32 @@ func TestStringArgCardinalityPreserved(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "x", av.StringVal())
 	})
+
+	// The xs:string?-argument URI/codepoint functions share the same
+	// atomize-then-count coercion: an empty-array member must flatten away
+	// rather than count as a second item (XPTY0004).
+	uriCases := []struct {
+		name, expr, want string
+	}{
+		{"encode-for-uri", `encode-for-uri(([], "a b"))`, "a%20b"},
+		{"iri-to-uri", `iri-to-uri(([], "a b"))`, "a%20b"},
+		{"escape-html-uri", `escape-html-uri(([], "a b"))`, "a b"},
+	}
+	for _, tc := range uriCases {
+		t.Run(tc.name+" empty array member flattens away", func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			av, ok := seq.Get(0).(xpath3.AtomicValue)
+			require.True(t, ok)
+			require.Equal(t, tc.want, av.StringVal())
+		})
+	}
+
+	t.Run("codepoint-equal empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `codepoint-equal(([], "abc"), "abc")`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, true, av.Value)
+	})
 }
