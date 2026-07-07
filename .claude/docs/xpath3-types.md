@@ -204,6 +204,8 @@ Per XPath 3.1 Section 2.6.2:
 - Atomic → identity
 - Function/map/array → error `FOTY0013`
 
+In the `fn:data` / typed-value accessor path (`atomizeForFnData`, `functions_node.go`), an element node's complex content kind (XDM 3.1 §5.15) selects a typed-value ACTION: **element-only** content has no typed value → error `FOTY0012`; **empty** content has typed value `()` → the item is SKIPPED (contributes no atoms, no error); **mixed** content still atomizes to `xs:untypedAtomic` and simple/simpleContent to its typed value. This fires only when the active `SchemaDeclarations` also implements the optional `ContentTypeKindProvider` (reached by type assertion; the xsd adapter `schemaDecls` implements it) and the annotation resolves. The content-kind check (`checkContentKindItem`, returning `(skip, err)`) is INTERLEAVED with atomization — threaded into `atomizeStreamCont` as an optional per-item pre-check — so it walks items in the SAME encounter order and with the SAME array recursion as atomization: the FIRST offending item wins (a map/function atomized earlier still raises `FOTY0013` before a later element-only element is reached), and element-only / empty nodes nested inside arrays are handled. Non-schema-aware nodes and every other `AtomizeItem` caller (string value, comparisons, casts) are unaffected — the check is scoped to `fn:data` (no provider ⇒ `atomizeForFnData` is exactly `AtomizeSequence`).
+
 ## SequenceType (used in `instance of`, `cast as`, etc.)
 
 ```go

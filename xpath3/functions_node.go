@@ -105,7 +105,7 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 	}
-	atoms, err := AtomizeSequence(args[0])
+	atoms, err := atomizeForFnData(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +114,82 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 		result[i] = a
 	}
 	return result, nil
+}
+
+// atomizeForFnData atomizes the fn:data argument, interleaving a content-kind
+// typed-value check with atomization per XDM 3.1 §5.15 / F&O fn:data: an element
+// whose schema type annotation resolves to ELEMENT-ONLY complex content has no
+// typed value and raises err:FOTY0012 (rather than fabricating an
+// xs:untypedAtomic from its string value); an element with EMPTY complex content
+// has typed value () and is skipped (contributes no atoms); mixed/simple content
+// and everything else atomize normally. The check is threaded through
+// atomizeStreamCont, so it walks items in the SAME encounter order and with the
+// SAME array recursion as atomization: the FIRST offending item wins (a
+// map/function atomized earlier still raises FOTY0013 before a later
+// element-only element), and element-only / empty nodes nested inside arrays are
+// handled. The check fires only when the active SchemaDeclarations implements the
+// optional ContentTypeKindProvider; without one this is exactly AtomizeSequence,
+// so other AtomizeItem callers (string value, comparisons, casts) are unaffected.
+func atomizeForFnData(ctx context.Context, seq Sequence) ([]AtomicValue, error) {
+	check := contentKindProvider(ctx)
+	if check == nil {
+		return AtomizeSequence(seq)
+	}
+	if seq == nil {
+		return nil, nil
+	}
+	result := make([]AtomicValue, 0, seq.Len())
+	_, err := atomizeStreamCont(seq, check, func(av AtomicValue) (bool, error) {
+		result = append(result, av)
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// contentKindProvider returns the active ContentTypeKindProvider for the fn:data
+// path, or nil when no schema-aware provider is configured (the common
+// non-schema-aware case, where fn:data is plain atomization).
+func contentKindProvider(ctx context.Context) ContentTypeKindProvider {
+	ec := getFnContext(ctx)
+	if ec == nil || ec.schemaDeclarations == nil {
+		return nil
+	}
+	provider, _ := ec.schemaDeclarations.(ContentTypeKindProvider)
+	return provider
+}
+
+// checkContentKindItem resolves the fn:data typed-value ACTION for one item
+// (XDM 3.1 §5.15). For an element node whose type annotation resolves (via the
+// ContentTypeKindProvider) to a complex content kind it returns: element-only →
+// err:FOTY0012 (no typed value); empty → skip=true (typed value (), no atoms).
+// Mixed/simple content, an unresolved annotation, and every non-element /
+// non-schema-aware item return skip=false, nil — left to normal atomization.
+func checkContentKindItem(provider ContentTypeKindProvider, item Item) (skip bool, err error) {
+	ni, ok := item.(NodeItem)
+	if !ok {
+		return false, nil
+	}
+	if ni.TypeAnnotation == "" || ni.Node == nil || ni.Node.Type() != helium.ElementNode {
+		return false, nil
+	}
+	kind, found := provider.SchemaTypeContentKind(ni.TypeAnnotation)
+	if !found {
+		return false, nil
+	}
+	switch kind {
+	case ContentTypeElementOnly:
+		return false, &XPathError{
+			Code:    errCodeFOTY0012,
+			Message: "fn:data: element with element-only complex content has no typed value",
+		}
+	case ContentTypeEmpty:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {

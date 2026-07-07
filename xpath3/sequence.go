@@ -123,7 +123,7 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 // callers distinguish a genuine atomization failure from a plain cardinality
 // rejection.
 func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
-	_, err := atomizeStreamCont(seq, yield)
+	_, err := atomizeStreamCont(seq, nil, yield)
 	return err
 }
 
@@ -133,7 +133,19 @@ func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
 // are atomized. Propagating the stop is what lets a caller's bounded-work cap
 // (e.g. a singleton-cardinality check) surface its own rejection rather than a
 // later member's atomization error (e.g. FOTY0013 from a map).
-func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (bool, error) {
+//
+// contentKindCheck, when non-nil (the fn:data / typed-value path only), is
+// consulted for each non-array item in encounter order BEFORE that item is
+// atomized, walking with the SAME order and array recursion as atomization. It
+// returns an ACTION per XDM 3.1 §5.15: an element whose type annotation resolves
+// to element-only complex content has no typed value and raises err:FOTY0012;
+// one with empty complex content has typed value () and is SKIPPED (contributes
+// no atoms); everything else atomizes normally. Because the check is interleaved
+// with atomization rather than pre-scanned, the FIRST offending item wins — a
+// map/function encountered earlier still raises FOTY0013 (from AtomizeItem)
+// before a later element-only element is reached — and element-only / empty
+// nodes nested inside arrays are handled too.
+func atomizeStreamCont(seq Sequence, contentKindCheck ContentTypeKindProvider, yield func(AtomicValue) (bool, error)) (bool, error) {
 	if seq == nil {
 		return true, nil
 	}
@@ -141,7 +153,7 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 		// XPath 3.1: atomizing an array flattens its members
 		if arr, ok := item.(ArrayItem); ok {
 			for _, member := range arr.members0() {
-				cont, err := atomizeStreamCont(member, yield)
+				cont, err := atomizeStreamCont(member, contentKindCheck, yield)
 				if err != nil {
 					return false, err
 				}
@@ -150,6 +162,15 @@ func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (boo
 				}
 			}
 			continue
+		}
+		if contentKindCheck != nil {
+			skip, err := checkContentKindItem(contentKindCheck, item)
+			if err != nil {
+				return false, err
+			}
+			if skip {
+				continue
+			}
 		}
 		// List types: split whitespace-separated tokens and atomize each.
 		if ni, ok := item.(NodeItem); ok {
