@@ -313,6 +313,12 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 		}
 	}
 
+	// validate=true() with duplicates='retain' cannot succeed: validation
+	// against the json result schema requires unique keys (FOJS0005).
+	if opts.validate && opts.duplicates == "retain" {
+		return opts, &XPathError{Code: errCodeFOJS0005, Message: "json-to-xml: 'validate' cannot be combined with duplicates='retain'"}
+	}
+
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
 	if v, found := m.Get(fbKey); found {
 		if seqLen(v) != 1 {

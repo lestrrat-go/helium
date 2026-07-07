@@ -192,6 +192,26 @@ func checkContentKindItem(provider ContentTypeKindProvider, item Item) (skip boo
 	}
 }
 
+// checkArgContentKind raises err:FOTY0012 when an item in a node argument that
+// a function atomizes (fn:normalize-space's xs:string? argument) is an element
+// with ELEMENT-ONLY complex content and thus has no typed value. It reuses the
+// same schema-aware ContentTypeKindProvider path as fn:data (checkContentKindItem)
+// and is a no-op when no provider is configured, so non-schema-aware behavior is
+// unchanged. The empty-content skip result is ignored here — only the FOTY0012
+// error is propagated.
+func checkArgContentKind(ctx context.Context, seq Sequence) error {
+	provider := contentKindProvider(ctx)
+	if provider == nil || seq == nil {
+		return nil
+	}
+	for i := range seq.Len() {
+		if _, err := checkContentKindItem(provider, seq.Get(i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	n, err := nodeArgOrCtx(ctx, args)
 	if err != nil {

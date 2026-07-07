@@ -114,6 +114,9 @@ namespace; `boolean` → `xs:boolean`), so no general XSD validation pass runs.
 `ec.typeAnnotations` (handed in by the caller and shared across concurrent
 `Evaluate` calls) is copied into a fresh per-evaluation map before the new nodes'
 annotations are merged in — the shared config map is never mutated.
+`validate:true()` with `duplicates:'retain'` is a dynamic error `FOJS0005`
+(`parseJSONToXMLOptions`): validation against the json result schema requires
+unique keys, so the combination cannot succeed.
 
 ### `functions_serialize.go`
 `serialize`
