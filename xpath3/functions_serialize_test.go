@@ -85,6 +85,17 @@ func TestSerialize_StandaloneMapBadValueXPTY0004(t *testing.T) {
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
 	require.Equal(t, "XPTY0004", xpErr.Code)
+
+	// A typed xs:string is not an xs:boolean member of union(xs:boolean,"omit"),
+	// and "yes"/"no" are not xs:boolean lexicals — both stay XPTY0004 (matching
+	// the readBool value space used by the other boolean serialize options).
+	for _, bad := range []string{"yes", "true"} {
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"standalone": "`+bad+`"})`)
+		require.Error(t, err, bad)
+		require.ErrorAs(t, err, &xpErr)
+		require.Equal(t, "XPTY0004", xpErr.Code, bad)
+	}
 }
 
 // A valid standalone map value ("omit") is accepted.

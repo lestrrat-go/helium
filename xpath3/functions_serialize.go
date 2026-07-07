@@ -347,6 +347,16 @@ func validateSerializeStandaloneMap(v Sequence) error {
 		if s == "omit" {
 			return nil
 		}
+		// An untypedAtomic may carry an xs:boolean lexical; accept the same
+		// value space the other boolean map options do (readBool): true/false/1/0.
+		// A TYPED xs:string is not an xs:boolean member of the union, and yes/no
+		// are not xs:boolean lexicals — both stay rejected.
+		if av.TypeName == TypeUntypedAtomic {
+			switch s {
+			case lexicon.ValueTrue, lexicon.ValueFalse, "1", "0":
+				return nil
+			}
+		}
 		return xerr
 	default:
 		return xerr
