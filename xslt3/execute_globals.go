@@ -87,15 +87,19 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	if gci == nil {
 		return nil
 	}
-	// The item actually used as the global context item: an explicit fn:transform
+	// The item actually used as the global context item: when the global context
+	// item is absent (use="absent", or fn:transform supplied neither a source-node
+	// nor an explicit item) there is none; otherwise an explicit fn:transform
 	// global-context-item (any item() — atomic/map/array/function or a node)
-	// overrides the source document node, so it is what must be type-checked
-	// against @as. Only fall back to the source document when no explicit option
-	// was supplied.
+	// overrides the source document node, which is the last-resort default. This
+	// is what must be type-checked against @as.
 	var ctxItem xpath3.Item
-	if ec.globalContextItem != nil {
+	switch {
+	case ec.globalContextAbsent:
+		ctxItem = nil
+	case ec.globalContextItem != nil:
 		ctxItem = ec.globalContextItem
-	} else if source != nil {
+	case source != nil:
 		ctxItem = xpath3.NodeItem{Node: source}
 	}
 	if ctxItem == nil {

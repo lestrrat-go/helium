@@ -494,20 +494,32 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
-	// An explicit global-context-item (fn:transform option) overrides the
-	// default global context item (the source document node) used when
-	// evaluating global variables/parameters, per F&O 3.1 (the option is an
-	// item()). When it is a node, global initialisers see it as "." (globalSourceNode)
-	// while the initial match selection still drives template matching independently.
-	// A non-node item (atomic/map/array/function) has no context node, so it is
-	// exposed through ec.contextItem for the duration of global evaluation only.
+	// Establish the global context item used when evaluating global
+	// variables/parameters, per F&O 3.1 §14.8 (the global-context-item option is
+	// an item()) and XSLT 3.0 §5.4.3.1 (xsl:global-context-item).
+	//   - use="absent": the global context item is absent regardless of any
+	//     supplied option, so a supplied global-context-item is NOT installed and
+	//     a global "." reference raises XPDY0002.
+	//   - an explicit global-context-item overrides the default (the source
+	//     document node). When it is a node, global initialisers see it as "."
+	//     (globalSourceNode) while the initial match selection still drives
+	//     template matching independently; a non-node item (atomic/map/array/
+	//     function) has no context node, so it is exposed through ec.contextItem
+	//     for the duration of global evaluation only.
+	//   - no source-node and no explicit item (cfg.globalContextAbsent): the
+	//     global context item is absent (XPDY0002 on "."; XTDE3086 if required).
 	restoreGlobalContextItem := false
-	if cfg != nil && cfg.globalContextItem != nil {
+	switch {
+	case ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent:
+		ec.globalContextAbsent = true
+	case cfg != nil && cfg.globalContextItem != nil:
 		ec.globalContextItem = cfg.globalContextItem
 		if _, isNode := cfg.globalContextItem.(xpath3.NodeItem); !isNode {
 			ec.contextItem = cfg.globalContextItem
 			restoreGlobalContextItem = true
 		}
+	case cfg != nil && cfg.globalContextAbsent:
+		ec.globalContextAbsent = true
 	}
 
 	// Store exec context in Go context for avt evaluation

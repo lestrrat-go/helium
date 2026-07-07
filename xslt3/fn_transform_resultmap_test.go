@@ -248,6 +248,94 @@ func TestFnTransformGlobalContextItemTypeCheck(t *testing.T) {
 	require.Contains(t, err.Error(), "XTTE0590")
 }
 
+// transformErr drives the standalone fn:transform and returns the error (nil on
+// success). vars supplies the let-bindings the expression reads.
+func transformErr(t *testing.T, expr string, vars map[string]xpath3.Sequence) error {
+	t.Helper()
+	_, err := evalTransform(t, expr, nil, vars, transformFns())
+	return err
+}
+
+// TestFnTransformGlobalContextItemCardinality covers F&O 3.1 §14.8: the
+// global-context-item option has required type item() — a present-but-empty or
+// multi-item value is an XPTY0004 type error, never silently absent/truncated.
+func TestFnTransformGlobalContextItemCardinality(t *testing.T) {
+	xsl := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:template name="main"><out>ok</out></xsl:template>
+</xsl:stylesheet>`
+	vars := xslXMLVars(xsl, "")
+
+	for _, tc := range []struct{ name, gci string }{
+		{"empty", "()"},
+		{"multi", "(1,2)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":` + tc.gci + `})?output`
+			err := transformErr(t, expr, vars)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "XPTY0004")
+		})
+	}
+}
+
+// TestFnTransformGlobalContextItemUse covers the xsl:global-context-item @use
+// modes crossed with the fn:transform source-node / global-context-item options
+// (XSLT 3.0 §5.4.3.1 + F&O 3.1 §14.8).
+func TestFnTransformGlobalContextItemUse(t *testing.T) {
+	// A global variable that captures "." and a named entry template.
+	tmpl := `<xsl:variable name="v" select="."/>
+<xsl:template name="main"><out><xsl:value-of select="$v"/></out></xsl:template>`
+	absentXSL := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:global-context-item use="absent"/>` + tmpl + `</xsl:stylesheet>`
+	requiredXSL := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:global-context-item use="required"/><xsl:template name="main"><out>ok</out></xsl:template></xsl:stylesheet>`
+
+	t.Run("absent-supplied-gci-ignored-global-dot-is-absent", func(t *testing.T) {
+		// use="absent": a supplied global-context-item is ignored, so the global
+		// "." reference has no context item → XPDY0002.
+		expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":42})?output`
+		err := transformErr(t, expr, xslXMLVars(absentXSL, ""))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XPDY0002")
+	})
+
+	t.Run("absent-with-source-node-global-dot-is-absent", func(t *testing.T) {
+		expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"source-node":parse-xml("<a/>")})?output`
+		err := transformErr(t, expr, xslXMLVars(absentXSL, ""))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XPDY0002")
+	})
+
+	t.Run("required-no-source-no-gci-raises-XTDE3086", func(t *testing.T) {
+		expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main")})?output`
+		err := transformErr(t, expr, xslXMLVars(requiredXSL, ""))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XTDE3086")
+	})
+
+	t.Run("required-with-source-node-ok", func(t *testing.T) {
+		expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"source-node":parse-xml("<a/>")})?output/out = "ok"`
+		require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(requiredXSL, "")))
+	})
+
+	t.Run("required-with-explicit-gci-ok", func(t *testing.T) {
+		expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":42})?output/out = "ok"`
+		require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(requiredXSL, "")))
+	})
+}
+
+// TestFnTransformGlobalContextItemNoLeak confirms an explicit non-node
+// global-context-item is visible to global variables ("." = the item) but does
+// NOT leak into template execution, where "." remains the matched source node.
+func TestFnTransformGlobalContextItemNoLeak(t *testing.T) {
+	xsl := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:variable name="v" select="."/>
+<xsl:template match="a"><out gv="{$v}" ctx="{name(.)}"/></xsl:template>
+</xsl:stylesheet>`
+	// gci=42 (atomic) → $v = 42; the template matches <a>, so name(.) = "a".
+	expr := `let $r := transform(map{"stylesheet-text":$xsl,"source-node":parse-xml("<a/>")/*,"global-context-item":42})?output
+	return $r/out/@gv = "42" and $r/out/@ctx = "a"`
+	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
+}
+
 // TestFnTransformSerializedNoTrailingNewline mirrors fn-transform-err-8: a
 // serialized principal result must not carry a spurious trailing newline, so an
 // ends-with test against the closing tag succeeds.

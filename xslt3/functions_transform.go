@@ -951,6 +951,16 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			fnTransformCfg.initialMatchSelection = sourceNode
 		}
 	}
+	// When neither a source-node / initial-match-selection nor an explicit
+	// global-context-item was supplied, the transformation has NO global context
+	// item (F&O 3.1 §14.8). A synthetic empty document is still substituted below
+	// as the navigable source tree for an initial-template/-function entry, but it
+	// must NOT masquerade as the global context item: a global "." reference then
+	// raises XPDY0002, and an xsl:global-context-item use="required" declaration
+	// raises XTDE3086.
+	if sourceDoc == nil && fnTransformCfg.globalContextItem == nil {
+		fnTransformCfg.globalContextAbsent = true
+	}
 	if sourceDoc == nil {
 		sourceDoc = helium.NewDefaultDocument()
 	}
@@ -1239,6 +1249,10 @@ func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
 		return err
 	}
 
+	if err := validateTransformGlobalContextItem(m); err != nil {
+		return err
+	}
+
 	for _, name := range []string{"stylesheet-params", "static-params", "template-params", "tunnel-params"} {
 		if err := validateTransformParamMap(name, transformMapSeq(m, name)); err != nil {
 			return err
@@ -1246,6 +1260,23 @@ func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
 	}
 
 	return checkTransformCapabilities(transformMapSeq(m, "requested-properties"))
+}
+
+// validateTransformGlobalContextItem enforces that the global-context-item
+// option, when the key is present in the map, holds EXACTLY ONE item (F&O 3.1
+// §14.8: its required type is item()). A present-but-empty or multi-item value
+// is an XPTY0004 type error — it must NOT be silently treated as absent or
+// truncated to its first item. An omitted key is fine (the global context item
+// then defaults to the source-node root, or is absent).
+func validateTransformGlobalContextItem(m xpath3.MapItem) error {
+	seq, ok := m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "global-context-item"})
+	if !ok {
+		return nil
+	}
+	if seq == nil || sequence.Len(seq) != 1 {
+		return dynamicError(errCodeXPTY0004, "fn:transform: global-context-item must be exactly one item")
+	}
+	return nil
 }
 
 // validateTransformXSLTVersion checks that the xslt-version option, when
