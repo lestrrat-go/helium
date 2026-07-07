@@ -45,8 +45,14 @@ type serializeOptions struct {
 }
 
 func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
+	// The default output method is xml (Serialization 3.1 §2 / F&O 3.1
+	// §18.9.1); adaptive is opt-in and must be requested explicitly. An empty
+	// method means "unspecified default (xml family)", which the dispatch
+	// treats like adaptive for atomic/map/array output but which the node-kind
+	// guard distinguishes from an explicit "adaptive" so serializing an
+	// attribute or namespace node under the default method raises SENR0001.
 	opts := serializeOptions{
-		method:        "adaptive",
+		method:        "",
 		itemSeparator: " ",
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
@@ -149,6 +155,11 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 		return opts, err
 	} else if found {
 		opts.encoding = encoding
+	}
+	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
+		if err := validateSerializeStandaloneMap(v); err != nil {
+			return opts, err
+		}
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "use-character-maps"}); found {
 		if err := validateSerializeCharacterMaps(v); err != nil {
@@ -306,6 +317,66 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 	}
 }
 
+// validateSerializeStandaloneMap validates the "standalone" option value in the
+// map form of fn:serialize. Its value space is union(xs:boolean, enum("omit"))
+// (F&O 3.1 §18.9.1). The map form does NOT whitespace-collapse the value, so a
+// string such as " omit " (with surrounding spaces) is not the "omit" enum
+// value and is a type error [err:XPTY0004].
+func validateSerializeStandaloneMap(v Sequence) error {
+	xerr := &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "standalone" must be xs:boolean or "omit"`}
+	// An empty-sequence value selects the parameter default (omit); it is not a
+	// bad value (F&O 3.1 §18.9.1; QT3 serialize-xml-131 supplies map{"standalone":()}).
+	if seqLen(v) == 0 {
+		return nil
+	}
+	if seqLen(v) != 1 {
+		return xerr
+	}
+	av, ok := v.Get(0).(AtomicValue)
+	if !ok {
+		return xerr
+	}
+	switch av.TypeName {
+	case TypeBoolean:
+		return nil
+	case TypeString, TypeUntypedAtomic:
+		s, err := atomicToString(av)
+		if err != nil {
+			return xerr
+		}
+		if s == "omit" {
+			return nil
+		}
+		// An untypedAtomic may carry an xs:boolean lexical; accept the same
+		// value space the other boolean map options do (readBool): true/false/1/0.
+		// A TYPED xs:string is not an xs:boolean member of the union, and yes/no
+		// are not xs:boolean lexicals — both stay rejected.
+		if av.TypeName == TypeUntypedAtomic {
+			switch s {
+			case lexicon.ValueTrue, lexicon.ValueFalse, "1", "0":
+				return nil
+			}
+		}
+		return xerr
+	default:
+		return xerr
+	}
+}
+
+// serializeNodeKindError reports err:SENR0001 when a bare attribute or namespace
+// node is serialized under a markup output method (xml/xhtml/html/text or the
+// unspecified default). Under the adaptive and json methods these node kinds are
+// serialized specially, so callers must not apply this guard for those methods.
+func serializeNodeKindError(item NodeItem) error {
+	if _, ok := item.Node.(*helium.Attribute); ok {
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize an attribute node using the xml output method"}
+	}
+	if item.Node != nil && item.Node.Type() == helium.NamespaceNode {
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a namespace node using the xml output method"}
+	}
+	return nil
+}
+
 func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 	if len(elem.Attributes()) != 0 {
 		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
@@ -439,6 +510,15 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return s, nil
 	case NodeItem:
+		// The default (empty) method is the xml family, under which an
+		// attribute or namespace node is a serialization error. An explicit
+		// method="adaptive" serializes them specially, so only guard when the
+		// method is not adaptive.
+		if opts.method != "adaptive" {
+			if err := serializeNodeKindError(v); err != nil {
+				return "", err
+			}
+		}
 		return serializeNodeItem(v, opts)
 	case MapItem:
 		return serializeAdaptiveMap(v, opts)
@@ -587,6 +667,11 @@ func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 		case FunctionItem:
 			return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 		case NodeItem:
+			// xml/xhtml/html/text output methods cannot serialize a bare
+			// attribute or namespace node [err:SENR0001].
+			if err := serializeNodeKindError(v); err != nil {
+				return "", err
+			}
 			text, err := serializeNodeItem(v, opts)
 			if err != nil {
 				return "", err

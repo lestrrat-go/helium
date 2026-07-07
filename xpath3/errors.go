@@ -45,6 +45,7 @@ const errCodeFOJS0005 = "FOJS0005"
 const errCodeFOJS0006 = "FOJS0006"
 const errCodeFOJS0007 = "FOJS0007"
 const errCodeFORG0002 = "FORG0002"
+const errCodeSENR0001 = "SENR0001"
 
 // Error message constants reused across the package.
 const (
