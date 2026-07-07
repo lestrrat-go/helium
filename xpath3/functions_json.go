@@ -30,15 +30,20 @@ type jsonOptions struct {
 }
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(args[0])
+	// Route empty detection through post-atomization: an empty array or a
+	// nilled/empty-content typed node atomizes to the empty sequence, which per
+	// F&O 3.1 makes fn:parse-json return the empty sequence — not an empty JSON
+	// string. A raw seqLen==0 gate would only catch a syntactically empty
+	// argument and let an atomized-empty one fall through to the "" path.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
+	if empty {
+		return validNilSequence, nil
+	}
 
-	opts, err := parseJSONOptions(args)
+	opts, err := parseJSONOptions(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 // parseJSONOptions extracts and validates options from the second argument.
-func parseJSONOptions(args []Sequence) (jsonOptions, error) {
+func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
 		duplicates: duplicatesUseFirst, // XPath spec default
 	}
@@ -107,17 +112,22 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 		}
 	}
 
-	// Parse "duplicates" option
+	// Parse "duplicates" option. Per the F&O 3.1 option (function) conversion
+	// rules (§2.5) its xs:string value is atomized FIRST — arrays flatten to
+	// their members, so an empty-array member contributes nothing — THEN the
+	// exactly-one cardinality is applied. A raw pre-atomization seqLen gate would
+	// wrongly reject e.g. map{"duplicates": ([], "use-first")}.
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
-		if seqLen(v) != 1 {
+		s, err := coerceArgToStringRequired(ctx, v)
+		if err != nil {
+			// An element-only-typed node has no typed value: surface err:FOTY0012
+			// rather than masking it as the FOJS0005 invalid-option error.
+			if isNoTypedValueError(err) {
+				return opts, err
+			}
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a single string"}
 		}
-		av, ok := v.Get(0).(AtomicValue)
-		if !ok {
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a string"}
-		}
-		s, _ := atomicToString(av)
 		switch s {
 		case duplicatesReject, duplicatesUseFirst, "use-last":
 			opts.duplicates = s
@@ -474,7 +484,7 @@ func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (st
 			if err != nil {
 				return "", err
 			}
-			repl, err = seqToStringErr(seq)
+			repl, err = seqToStringErr(ctx, seq)
 			if err != nil {
 				return "", err
 			}
@@ -546,12 +556,14 @@ func canonicalInvalidJSONEscape(raw string) string {
 }
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	uri, err := coerceArgToString(args[0])
+	// xs:string? URI argument: an atomized-empty value (empty array / nilled
+	// node) returns the empty sequence just like a syntactically empty one.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 
 	cfg := unparsedTextConfig(ctx)

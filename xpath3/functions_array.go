@@ -637,7 +637,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Optional collation (2nd arg)
 	var coll *collationImpl
 	if len(args) > 1 && seqLen(args[1]) > 0 {
-		uri, err := coerceArgToString(args[1])
+		uri, err := coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}

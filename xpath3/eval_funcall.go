@@ -303,9 +303,14 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 				copy(coerced, args)
 				for i, arg := range args {
 					if i < len(paramTypes) {
-						c, ok := coerceToSequenceType(ctx, arg, paramTypes[i], capturedEC)
-						if !ok {
-							return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
+						// coerceFuncallArg propagates a real typed error (FOTY0012 from
+						// atomizing an element-only node, FOTY0013, FORG0001, …) and
+						// maps only a plain mismatch to XPTY0004 — the boolean
+						// coerceToSequenceType would flatten FOTY0012 into a generic
+						// XPTY0004.
+						c, err := coerceFuncallArg(ctx, arg, paramTypes[i], e.Name, i, capturedEC)
+						if err != nil {
+							return nil, err
 						}
 						coerced[i] = c
 					}
@@ -355,10 +360,15 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 			innerCtx.vars = closedVars
 			for i, param := range e.Params {
 				arg := args[i]
-				// Apply function coercion rules if type specified
+				// Apply function coercion rules if type specified. Propagate a real
+				// typed error (FOTY0012 from atomizing an element-only node, FOTY0013,
+				// FORG0001, …) unchanged; map only a plain mismatch to XPTY0004.
 				if param.TypeHint != nil {
-					coerced, ok := coerceToSequenceType(ctx, arg, *param.TypeHint, &innerCtx)
-					if !ok {
+					coerced, err := coerceToSequenceTypeE(ctx, arg, *param.TypeHint, &innerCtx)
+					if err != nil && !errors.Is(err, errCoerceMismatch) {
+						return nil, err
+					}
+					if err != nil {
 						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
 					}
 					arg = coerced
@@ -369,10 +379,15 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 			if err != nil {
 				return nil, err
 			}
-			// Apply function coercion rules for return type if specified
+			// Apply function coercion rules for return type if specified. Propagate a
+			// real typed error (FOTY0012 from atomizing an element-only node result,
+			// FOTY0013, FORG0001, …); map only a plain mismatch to XPTY0004.
 			if e.ReturnType != nil {
-				coerced, ok := coerceToSequenceType(ctx, result, *e.ReturnType, &innerCtx)
-				if !ok {
+				coerced, err := coerceToSequenceTypeE(ctx, result, *e.ReturnType, &innerCtx)
+				if err != nil && !errors.Is(err, errCoerceMismatch) {
+					return nil, err
+				}
+				if err != nil {
 					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
 				}
 				result = coerced

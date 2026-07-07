@@ -14,8 +14,8 @@ func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
 }
 
-func fnSerialize(_ context.Context, args []Sequence) (Sequence, error) {
-	opts, err := parseSerializeOptions(args)
+func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
+	opts, err := parseSerializeOptions(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ type serializeOptions struct {
 	encoding            string
 }
 
-func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
+func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptions, error) {
 	// The default output method is xml (Serialization 3.1 §2 / F&O 3.1
 	// §18.9.1); adaptive is opt-in and must be requested explicitly. An empty
 	// method means "unspecified default (xml family)", which the dispatch
@@ -61,7 +61,7 @@ func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 
 	m, ok := args[1].Get(0).(MapItem)
 	if ok {
-		return parseSerializeOptionsMap(opts, m)
+		return parseSerializeOptionsMap(ctx, opts, m)
 	}
 	if seqLen(args[1]) != 1 {
 		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options must be a singleton"}
@@ -73,26 +73,7 @@ func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	return parseSerializeOptionsNode(opts, node.Node)
 }
 
-func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOptions, error) {
-	readString := func(name string) (string, bool, error) {
-		v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
-		if !found {
-			return "", false, nil
-		}
-		if seqLen(v) != 1 {
-			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
-		}
-		av, ok := v.Get(0).(AtomicValue)
-		if !ok {
-			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be atomic", name)}
-		}
-		s, err := atomicToString(av)
-		if err != nil {
-			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
-		}
-		return s, true, nil
-	}
-
+func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapItem) (serializeOptions, error) {
 	readBool := func(name string) (bool, bool, error) {
 		v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
 		if !found {
@@ -126,12 +107,12 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 		}
 	}
 
-	if method, found, err := readString("method"); err != nil {
+	if method, found, err := readSerializeStringOption(ctx, m, "method"); err != nil {
 		return opts, err
 	} else if found {
 		opts.method = method
 	}
-	if sep, found, err := readString("item-separator"); err != nil {
+	if sep, found, err := readSerializeStringOption(ctx, m, "item-separator"); err != nil {
 		return opts, err
 	} else if found {
 		opts.itemSeparator = sep
@@ -151,13 +132,13 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 	} else if found {
 		opts.allowDuplicateNames = allow
 	}
-	if encoding, found, err := readString("encoding"); err != nil {
+	if encoding, found, err := readSerializeStringOption(ctx, m, "encoding"); err != nil {
 		return opts, err
 	} else if found {
 		opts.encoding = encoding
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
-		if err := validateSerializeStandaloneMap(v); err != nil {
+		if err := validateSerializeStandaloneMap(ctx, v); err != nil {
 			return opts, err
 		}
 	}
@@ -168,6 +149,34 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 	}
 
 	return opts, nil
+}
+
+// readSerializeStringOption extracts a string-valued serialize option from the
+// option map, applying F&O 3.1 §2.5 option (function) conversion: it atomizes
+// the value FIRST — through the ctx-aware typed-value atomization, so an
+// element-only-typed node (which has no typed value) raises err:FOTY0012 and an
+// array (e.g. an empty-array member) flattens to its members — THEN enforces the
+// singleton cardinality. atomizeTypedValue keeps the atom's type (e.g. an
+// xs:QName "method" value), so atomicToString handles it unchanged; a raw
+// pre-atomization seqLen gate would wrongly reject map{"method": ([], "xml")}.
+// found is false only when the option key is absent.
+func readSerializeStringOption(ctx context.Context, m MapItem, name string) (string, bool, error) {
+	v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
+	if !found {
+		return "", false, nil
+	}
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return "", true, err
+	}
+	if len(atoms) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
+	}
+	s, err := atomicToString(atoms[0])
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
+	}
+	return s, true, nil
 }
 
 func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeOptions, error) {
@@ -330,20 +339,29 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 // (F&O 3.1 §18.9.1). The map form does NOT whitespace-collapse the value, so a
 // string such as " omit " (with surrounding spaces) is not the "omit" enum
 // value and is a type error [err:XPTY0004].
-func validateSerializeStandaloneMap(v Sequence) error {
+func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
 	xerr := &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "standalone" must be xs:boolean or "omit"`}
-	// An empty-sequence value selects the parameter default (omit); it is not a
-	// bad value (F&O 3.1 §18.9.1; QT3 serialize-xml-131 supplies map{"standalone":()}).
-	if seqLen(v) == 0 {
+	// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
+	// (e.g. an empty-array member) flattens to its members, THEN apply the
+	// singleton cardinality. An empty atomized value selects the parameter
+	// default (omit); it is not a bad value (QT3 serialize-xml-131 supplies
+	// map{"standalone":()}). Atomization is ctx-aware: an element-only-typed node
+	// has no typed value, so it surfaces err:FOTY0012 rather than being masked as
+	// the XPTY0004 bad-value error.
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		if isNoTypedValueError(err) {
+			return err
+		}
+		return xerr
+	}
+	if len(atoms) == 0 {
 		return nil
 	}
-	if seqLen(v) != 1 {
+	if len(atoms) > 1 {
 		return xerr
 	}
-	av, ok := v.Get(0).(AtomicValue)
-	if !ok {
-		return xerr
-	}
+	av := atoms[0]
 	switch av.TypeName {
 	case TypeBoolean:
 		return nil

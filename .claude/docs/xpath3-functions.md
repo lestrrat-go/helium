@@ -46,25 +46,62 @@ dynamically reachable, closing the function-lookup bypass of the static CTA gate
 Explicit prefixed names + `Q{uri}local` names NEVER fall back to `fn:` on miss.
 
 Typed helper coercions for `xs:string?` + `xs:integer` enforce cardinality.
-Sequences with length `> 1` → `XPTY0004`; helpers do not truncate to first item.
-Signature-sensitive string/regex/URI builtin call sites + `||` string coercion also enforce single-item cardinality and propagate atomization/type errors.
+The `xs:string?` helpers (`coerceArgToString`/`coerceArgToStringRequired` →
+`coerceAtomizedString`, plus `seqToStringErr` and the `||` `concatToString`
+path) atomize FIRST — arrays flatten to their members, list-typed nodes expand
+to their tokens — and count cardinality AFTER, so a length `> 1` becomes
+`XPTY0004` while an empty-array member flattens away (`f(([], "x"))` coerces to
+the single `"x"`, not `XPTY0004`). Helpers do not truncate to first item, and a
+raw pre-atomization `seqLen > 1` gate must NOT wrap them (it would pre-empt the
+flattening). This is why the signature-less doc/collection URI family
+(`fn:doc`/`fn:doc-available` via direct `coerceAtomizedString`,
+`fn:collection`/`fn:uri-collection` via `collectionURIArg`) and the URI builtins
+(`fn:encode-for-uri`/`iri-to-uri`/`escape-html-uri`) delegate cardinality
+entirely to the atomize-then-count string coercion. Emptiness is detected AFTER
+atomization too (via the `empty` result of `coerceAtomizedString`), so an
+empty-array or nilled/empty-content node argument yields the function's spec
+empty result (`()`), not the empty-string path.
+Signature-sensitive string/regex/URI builtin call sites + `||` string coercion
+also propagate atomization/type errors (`FOTY0012`/`FOTY0013`).
+
+The same rule governs **options-map string values** (F&O 3.1 §2.5 option/function
+conversion): an `xs:string` option value atomizes FIRST (an empty-array member
+flattens away) and cardinality applies AFTER, so `map{"opt": ([], "v")}` coerces
+to the single `"v"`, not `XPTY0004`. No raw pre-atomization `seqLen != 1` gate
+wraps these. `fn:json-to-xml`/`fn:parse-json`/`map:merge` `duplicates` route
+through `coerceArgToStringRequired`; `fn:serialize`'s string map parameters
+(`method`/`item-separator`/`encoding`, via `readSerializeStringOption`) and its
+`standalone` union value (`validateSerializeStandaloneMap`) atomize via the
+ctx-aware `atomizeTypedValue`/typed-value stream then enforce the singleton,
+keeping each atom's type (e.g. an `xs:QName` `method`) so the `atomicToString`/
+type checks are unchanged. Because atomization is content-kind-aware, an
+element-only-typed node used as an option value has no typed value and raises
+`FOTY0012`; every extractor lets that dynamic error surface (`isNoTypedValueError`)
+instead of masking it as its own bad-option error (`XPTY0004`/`FOJS0005`).
 
 `evalFunctionCall` (the static call path) enforces the declared parameter
 signature for every resolved function before invoking it: it looks up
 `paramTypes` via the `function_signatures.go` registry (then
 `TypedFunction`/`TypedFunctionByArity`) the same way `evalNamedFunctionRef`
-does, and runs `coerceToSequenceType(arg, paramTypes[i], ec)` per argument,
-raising `XPTY0004` on mismatch. Functions with no registered signature
-(`paramTypes == nil`) are not type-checked. `coerceToSequenceType` atomizes via
-`AtomizeSequence` (so list-typed nodes/arrays expand correctly) and falls back
-to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
+does, and runs `coerceFuncallArg(arg, paramTypes[i], ec)` per argument.
+Functions with no registered signature (`paramTypes == nil`) are not
+type-checked. `coerceFuncallArg` delegates to `coerceToSequenceTypeE`, which
+atomizes through `typedValueItemCheckFor(ec)` (so list-typed nodes/arrays expand
+correctly, arrays flatten before cardinality is applied, and atomizing an
+element-only-typed node raises `FOTY0012`) and falls back to
+`ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types. A plain type
+mismatch surfaces as `XPTY0004`; a genuine coercion/atomization error
+(`FOTY0012`, `FOTY0013`, `FORG0001`, …) propagates unchanged rather than being
+collapsed into `XPTY0004`. The same `coerceToSequenceTypeE` propagation applies
+to the inline-function parameter/return paths and `coerceFunctionItem`
+(`function-lookup`, dynamic function items).
 
 ## Functions by File
 
 ### `functions_node.go`
 `node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`, `outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
 
-`fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from `xsd.Validator.NilledElements`), else false. The same set drives two other nilled-aware behaviors: `fn:data` / atomization gives a nilled element the empty typed value `()` (via `fnDataItemCheck`, checked before content-kind), and an `element(name, type)` instance-of test excludes a nilled element while `element(name, type?)` matches it (`eval_path.go` `ElementTest`). Non-schema-aware evaluation leaves the set nil → every element is not-nilled.
+`fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from `xsd.Validator.NilledElements`), else false. The same set drives two other nilled-aware behaviors: `fn:data` / atomization gives a nilled element the empty typed value `()` (via `typedValueItemCheck`, checked before content-kind), and an `element(name, type)` instance-of test excludes a nilled element while `element(name, type?)` matches it (`eval_path.go` `ElementTest`). Non-schema-aware evaluation leaves the set nil → every element is not-nilled.
 
 `fn:id`/`fn:element-with-id` (`idLookup`) resolve is-id nodes from three sources: DTD-declared IDs (`GetElementByID`), type annotations whose name is xs:ID or a subtype (`annotationMatchesIDType`), and the PSVI is-id set supplied via `Evaluator.IDNodes` (`ec.idNodes`). The is-id set is required for cases the type name alone cannot express — a SINGLETON list of xs:ID and a union that selects an xs:ID-derived member (a multi-item list / non-ID union member is not is-id); the xsd validator computes it (`Validator.IDNodes`). `idElementsFromTypeAnnotations` unions annotation-derived and set-derived candidates, then `idNodeResult` maps each is-id node to its result (`fn:id` → the ID element / bearing element; `fn:element-with-id` → that element's parent).
 

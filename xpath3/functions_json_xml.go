@@ -20,19 +20,22 @@ func init() {
 }
 
 func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
+	// Coerce the xs:string? input FIRST so an atomized-empty argument (empty
+	// array / nilled node) returns the empty sequence \u2014 like a syntactically
+	// empty one \u2014 without parsing the options map, matching F&O 3.1.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+	if empty {
 		return validNilSequence, nil
 	}
 
-	opts, err := parseJSONToXMLOptions(args)
+	opts, err := parseJSONToXMLOptions(ctx, args)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := coerceArgToString(args[0])
-	if err != nil {
-		return nil, err
-	}
 	s = strings.TrimPrefix(s, "\uFEFF")
 	s, invalidEsc, err := preprocessJSONStringLiterals(s)
 	if err != nil {
@@ -230,7 +233,7 @@ func jsonSequenceToItem(seq Sequence) Item {
 	return seq.Get(0)
 }
 
-func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
+func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
 		duplicates: duplicatesUseFirst,
 	}
@@ -286,12 +289,21 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
-		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
-		}
-		s, err := coerceArgToString(v)
+		// The 'duplicates' option is an xs:string, converted with the F&O 3.1
+		// option (function) conversion rules (§2.5): atomize FIRST — arrays
+		// flatten to their members, so an empty-array member contributes nothing
+		// — THEN apply the exactly-one cardinality. coerceArgToStringRequired does
+		// exactly that (XPTY0004 on empty-after-atomization or >1-after-atomization),
+		// so no raw pre-atomization seqLen gate belongs here — one would wrongly
+		// reject e.g. map{"duplicates": ([], "use-first")}.
+		s, err := coerceArgToStringRequired(ctx, v)
 		if err != nil {
-			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be xs:string"}
+			// An element-only-typed node has no typed value: surface err:FOTY0012
+			// rather than masking it as the XPTY0004 bad-value error.
+			if isNoTypedValueError(err) {
+				return opts, err
+			}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
 		}
 		switch s {
 		case duplicatesReject, duplicatesUseFirst, "retain":

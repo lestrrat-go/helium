@@ -660,7 +660,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if compat {
 		picture, err = compatArgString(args[1])
 	} else {
-		picture, err = coerceArgToStringRequired(args[1])
+		picture, err = coerceArgToStringRequired(ctx, args[1])
 	}
 	if err != nil {
 		return nil, err
@@ -673,7 +673,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		if compat {
 			formatName, err = compatArgString(args[2])
 		} else {
-			formatName, err = coerceArgToString(args[2])
+			formatName, err = coerceArgToString(ctx, args[2])
 		}
 		if err != nil {
 			return nil, err

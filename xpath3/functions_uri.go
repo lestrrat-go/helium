@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
@@ -17,24 +16,12 @@ func init() {
 	registerFn("resolve-uri", 1, 2, fnResolveURI)
 }
 
-func fnEncodeForURI(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToStringOpt(args[0])
+func fnEncodeForURI(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	return SingleString(encodeForURI(s)), nil
-}
-
-// coerceArgToStringOpt extracts a string from xs:string? argument, validating
-// both cardinality (0 or 1) and type (string-derived, anyURI, untypedAtomic).
-func coerceArgToStringOpt(seq Sequence) (string, error) {
-	if seqLen(seq) == 0 {
-		return "", nil
-	}
-	if seq.Len() > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
-	}
-	return coerceArgToString(seq)
 }
 
 // encodeForURI percent-encodes all characters except unreserved characters
@@ -60,8 +47,8 @@ func isUnreservedChar(c byte) bool {
 		c == '-' || c == '_' || c == '.' || c == '~'
 }
 
-func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToStringOpt(args[0])
+func fnIRIToURI(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -87,16 +74,20 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	relative, err := coerceArgToString(args[0])
+	// fn:resolve-uri returns the empty sequence when the relative argument is
+	// empty. Detect emptiness AFTER atomization so an empty array or a
+	// nilled/empty-content typed node (which atomizes to the empty sequence, not
+	// to "") also yields () rather than resolving an empty relative reference.
+	relative, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
+	if empty {
+		return validNilSequence, nil
+	}
 	if relative == "" {
 		if len(args) >= 2 {
-			base, err := coerceArgToString(args[1])
+			base, err := coerceArgToString(ctx, args[1])
 			if err != nil {
 				return nil, err
 			}
@@ -111,7 +102,7 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	base := ""
 	baseFromContext := false
 	if len(args) >= 2 {
-		base, err = coerceArgToString(args[1])
+		base, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -235,8 +226,8 @@ func unhexByte(c byte) int {
 	}
 }
 
-func fnEscapeHTMLURI(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToStringOpt(args[0])
+func fnEscapeHTMLURI(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}

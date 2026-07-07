@@ -42,16 +42,18 @@ func wrapUnparsedTextError(err error) error {
 }
 
 func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	href, err := coerceArgToString(args[0])
+	// xs:string? href: an atomized-empty argument (empty array / nilled node)
+	// returns the empty sequence, like a syntactically empty one.
+	href, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
+	if empty {
+		return validNilSequence, nil
+	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding, err = coerceArgToString(args[1])
+		encoding, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -65,16 +67,18 @@ func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return SingleBoolean(false), nil
-	}
-	href, err := coerceArgToString(args[0])
+	// An empty href (syntactic or atomized-empty) makes the resource
+	// unavailable → false.
+	href, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
+	if empty {
+		return SingleBoolean(false), nil
+	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding, err = coerceArgToString(args[1])
+		encoding, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -85,16 +89,18 @@ func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, er
 }
 
 func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	href, err := coerceArgToString(args[0])
+	// xs:string? href: an atomized-empty argument returns the empty sequence,
+	// like a syntactically empty one.
+	href, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
+	if empty {
+		return validNilSequence, nil
+	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding, err = coerceArgToString(args[1])
+		encoding, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}

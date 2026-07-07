@@ -561,12 +561,20 @@ func coerceToSequenceTypeE(ctx context.Context, seq Sequence, st SequenceType, e
 	case OccurrenceExactlyOne, OccurrenceZeroOrOne:
 		maxAtoms = 1
 	}
-	// Atomize the sequence. atomizeStream correctly flattens arrays and
+	// Atomize the sequence. atomizeStreamCont correctly flattens arrays and
 	// expands list-typed nodes (e.g. xs:list of xs:decimal) into multiple
 	// atomic values — a per-item AtomizeItem would collapse those incorrectly.
+	// The typed-value pre-check makes atomization content-kind-aware in a
+	// schema-aware run: atomizing an element-only-typed node has no typed value
+	// and raises err:FOTY0012 (XDM 3.1 §5.15), and a nilled/empty-content element
+	// contributes no atoms. Because it runs during atomization (before the
+	// occurrence check), the array flattening and cardinality cap are unchanged —
+	// so an xs:string? parameter given ([], "x") still coerces to the single "x".
+	// Without a schema-aware provider the check is nil and this is byte-identical
+	// to plain atomizeStream.
 	var atoms []AtomicValue
 	tooMany := false
-	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+	_, err := atomizeStreamCont(seq, typedValueItemCheckFor(ec), func(av AtomicValue) (bool, error) {
 		atoms = append(atoms, av)
 		if maxAtoms > 0 && len(atoms) > maxAtoms {
 			tooMany = true
@@ -734,8 +742,14 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 			copy(callArgs, args)
 			if len(actual.ParamTypes) > 0 {
 				for i, arg := range args {
-					coerced, ok := coerceToSequenceType(ctx, arg, actual.ParamTypes[i], invokeCtx)
-					if !ok {
+					// Propagate a real typed error (FOTY0012 from atomizing an
+					// element-only node, FOTY0013, FORG0001, …); map only a plain
+					// mismatch to XPTY0004.
+					coerced, cerr := coerceToSequenceTypeE(ctx, arg, actual.ParamTypes[i], invokeCtx)
+					if cerr != nil && !errors.Is(cerr, errCoerceMismatch) {
+						return nil, cerr
+					}
+					if cerr != nil {
 						return nil, &XPathError{
 							Code:    lexicon.ErrXPTY0004,
 							Message: fmt.Sprintf("function argument %d does not match required type %v", i+1, actual.ParamTypes[i]),
@@ -750,8 +764,11 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 				return nil, err
 			}
 
-			coercedResult, ok := coerceToSequenceType(ctx, result, target.ReturnType, invokeCtx)
-			if !ok {
+			coercedResult, rerr := coerceToSequenceTypeE(ctx, result, target.ReturnType, invokeCtx)
+			if rerr != nil && !errors.Is(rerr, errCoerceMismatch) {
+				return nil, rerr
+			}
+			if rerr != nil {
 				return nil, &XPathError{
 					Code:    lexicon.ErrXPTY0004,
 					Message: fmt.Sprintf("function result does not match required type %v", target.ReturnType),

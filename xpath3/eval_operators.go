@@ -83,35 +83,34 @@ func evalConcatExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if err != nil {
 		return nil, err
 	}
-	ls, err := concatToString(left)
+	ls, err := concatToString(ctx, left)
 	if err != nil {
 		return nil, err
 	}
-	rs, err := concatToString(right)
+	rs, err := concatToString(ctx, right)
 	if err != nil {
 		return nil, err
 	}
 	return SingleString(ls + rs), nil
 }
 
-// concatToString converts a sequence to string for the || operator.
-// Raises FOTY0014 for function/map/array items that have no string value.
-func concatToString(seq Sequence) (string, error) {
+// concatToString converts a sequence to string for the || operator. Arrays are
+// flattened to their members during atomization; only function and map items,
+// which have no string value, raise FOTY0014.
+func concatToString(ctx context.Context, seq Sequence) (string, error) {
 	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	if seq.Len() > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "cannot get string value of sequence of length > 1"}
+	// seqToStringErr atomizes first (flattening arrays, so an empty-array member
+	// contributes nothing) and applies cardinality afterwards. Function and map
+	// items have no atomized string value for ||, so reject them up front.
+	for item := range seqItems(seq) {
+		switch item.(type) {
+		case FunctionItem, MapItem:
+			return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function or map item"}
+		}
 	}
-	switch seq.Get(0).(type) {
-	case FunctionItem:
-		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function item"}
-	case MapItem:
-		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of map item"}
-	case ArrayItem:
-		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of array item"}
-	}
-	return seqToStringErr(seq)
+	return seqToStringErr(ctx, seq)
 }
 
 // appendBounded appends src to dst, enforcing the configured sequence/node-set

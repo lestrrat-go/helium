@@ -120,7 +120,7 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 	}
-	atoms, err := atomizeForFnData(ctx, args[0])
+	atoms, err := atomizeTypedValue(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -131,24 +131,26 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-// atomizeForFnData atomizes the fn:data argument, interleaving a typed-value
-// check with atomization per XDM 3.1 §5.15 / F&O fn:data: a NILLED element has
+// atomizeTypedValue atomizes a sequence through the XDM 3.1 §5.15 typed-value
+// rules, interleaving a typed-value check with atomization: a NILLED element has
 // no typed value and is skipped (typed value ()); an element whose schema type
 // annotation resolves to ELEMENT-ONLY complex content has no typed value and
 // raises err:FOTY0012 (rather than fabricating an xs:untypedAtomic from its
 // string value); an element with EMPTY complex content has typed value () and is
 // skipped (contributes no atoms); mixed/simple content and everything else
-// atomize normally. The check is threaded through atomizeStreamCont, so it walks
-// items in the SAME encounter order and with the SAME array recursion as
-// atomization: the FIRST offending item wins (a map/function atomized earlier
-// still raises FOTY0013 before a later element-only element), and
-// nilled / element-only / empty nodes nested inside arrays are handled. The
-// check fires only when a nilled-element set is configured or the active
-// SchemaDeclarations implements the optional ContentTypeKindProvider; without
-// either this is exactly AtomizeSequence, so other AtomizeItem callers (string
-// value, comparisons, casts) are unaffected.
-func atomizeForFnData(ctx context.Context, seq Sequence) ([]AtomicValue, error) {
-	check := fnDataItemCheck(ctx)
+// atomize normally. It backs fn:data AND the xs:string?-argument function
+// conversion (coerceAtomizedString / seqToStringErr), since atomizing an
+// element-only node has no typed value for ANY caller per XDM. The check is
+// threaded through atomizeStreamCont, so it walks items in the SAME encounter
+// order and with the SAME array recursion as atomization: the FIRST offending
+// item wins (a map/function atomized earlier still raises FOTY0013 before a
+// later element-only element), and nilled / element-only / empty nodes nested
+// inside arrays are handled. The check fires only when a nilled-element set is
+// configured or the active SchemaDeclarations implements the optional
+// ContentTypeKindProvider; without either this is exactly AtomizeSequence, so
+// other AtomizeItem callers (comparisons, casts) are unaffected.
+func atomizeTypedValue(ctx context.Context, seq Sequence) ([]AtomicValue, error) {
+	check := typedValueItemCheck(ctx)
 	if check == nil {
 		return AtomizeSequence(seq)
 	}
@@ -173,15 +175,23 @@ func atomizeForFnData(ctx context.Context, seq Sequence) ([]AtomicValue, error) 
 // (e.g. FOTY0012) to reject the item.
 type atomizeItemCheck func(item Item) (skip bool, err error)
 
-// fnDataItemCheck builds the fn:data typed-value pre-check for the active
-// evaluation, combining the two schema-aware sources: the nilled-element set (a
+// typedValueItemCheck builds the typed-value pre-check for the active
+// evaluation, reading the evalContext stashed in ctx. It is the ctx-based entry
+// point for callers past the function boundary (fn:data, coerceAtomizedString);
+// the function-signature coercion, which runs BEFORE the fnContext is stashed in
+// ctx, uses typedValueItemCheckFor with its explicit ec instead.
+func typedValueItemCheck(ctx context.Context) atomizeItemCheck {
+	return typedValueItemCheckFor(getFnContext(ctx))
+}
+
+// typedValueItemCheckFor builds the typed-value pre-check from an explicit
+// evalContext, combining the two schema-aware sources: the nilled-element set (a
 // nilled element has no typed value → skipped) and the optional
 // ContentTypeKindProvider (element-only → FOTY0012, empty → skipped). It returns
-// nil when neither is configured, so non-schema-aware fn:data stays plain
-// atomization (AtomizeSequence). Nilled is checked first: a nilled element's
-// content type is irrelevant, its typed value is always ().
-func fnDataItemCheck(ctx context.Context) atomizeItemCheck {
-	ec := getFnContext(ctx)
+// nil when neither is configured, so non-schema-aware atomization stays plain
+// (AtomizeSequence). Nilled is checked first: a nilled element's content type is
+// irrelevant, its typed value is always ().
+func typedValueItemCheckFor(ec *evalContext) atomizeItemCheck {
 	if ec == nil {
 		return nil
 	}
@@ -291,7 +301,7 @@ func isInsignificantWhitespaceText(n helium.Node) bool {
 	}
 }
 
-// checkContentKindItem resolves the fn:data typed-value ACTION for one item
+// checkContentKindItem resolves the typed-value ACTION for one item
 // (XDM 3.1 §5.15). For an element node whose type annotation resolves (via the
 // ContentTypeKindProvider) to a complex content kind it returns: element-only →
 // err:FOTY0012 (no typed value); empty → skip=true (typed value (), no atoms).
@@ -313,7 +323,7 @@ func checkContentKindItem(provider ContentTypeKindProvider, item Item) (skip boo
 	case ContentTypeElementOnly:
 		return false, &XPathError{
 			Code:    errCodeFOTY0012,
-			Message: "fn:data: element with element-only complex content has no typed value",
+			Message: "element with element-only complex content has no typed value",
 		}
 	case ContentTypeEmpty:
 		return true, nil
@@ -580,7 +590,7 @@ func fnOutermost(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
-	langArg, err := coerceArgToString(args[0])
+	langArg, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -691,12 +701,14 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(args[0])
+	// xs:string? argument: an atomized-empty value (empty array / nilled node)
+	// returns the empty sequence, like a syntactically empty one.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 	ec := getFnContext(ctx)
 	parser := ec.xmlParser()
@@ -712,12 +724,14 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(args[0])
+	// xs:string? argument: an atomized-empty value returns the empty sequence,
+	// like a syntactically empty one.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 
 	s, err = stripXMLTextDeclaration(s)
@@ -1106,7 +1120,7 @@ func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
-	uri, hasURI, err := collectionURIArg(args, "fn:collection")
+	uri, hasURI, err := collectionURIArg(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1131,7 +1145,7 @@ func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
-	uri, hasURI, err := collectionURIArg(args, "fn:uri-collection")
+	uri, hasURI, err := collectionURIArg(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1161,12 +1175,16 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	uri, err := docURIArg(args[0], "fn:doc")
+	// xs:string? URI: an atomized-empty argument (empty array / nilled node)
+	// returns the empty sequence, like a syntactically empty one. Emptiness is
+	// tested AFTER atomization; a raw seqLen gate would miss the atomized-empty
+	// case and try to load an empty URI.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 	doc, err := loadDoc(ctx, uri)
 	if err != nil {
@@ -1176,12 +1194,13 @@ func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return SingleBoolean(false), nil
-	}
-	uri, err := docURIArg(args[0], "fn:doc-available")
+	// An empty URI (syntactic or atomized-empty) makes no document available.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return SingleBoolean(false), nil
 	}
 	_, err = loadDoc(ctx, uri)
 	return SingleBoolean(err == nil), nil
@@ -1250,20 +1269,21 @@ func clampInt64ToInt(n int64) int {
 	return int(n)
 }
 
-func docURIArg(seq Sequence, fnName string) (string, error) {
-	if seqLen(seq) > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
-	}
-	return coerceArgToString(seq)
-}
-
-func collectionURIArg(args []Sequence, fnName string) (string, bool, error) {
-	if len(args) == 0 || seqLen(args[0]) == 0 {
+func collectionURIArg(ctx context.Context, args []Sequence) (string, bool, error) {
+	if len(args) == 0 {
 		return "", false, nil
 	}
-	uri, err := docURIArg(args[0], fnName)
+	// xs:string? URI: atomize FIRST, then apply the singleton-or-empty
+	// cardinality. An atomized-empty argument (empty array / nilled node) is
+	// treated as "URI absent" — the same as a syntactically empty sequence — so
+	// the default collection is used. coerceAtomizedString raises XPTY0004 for a
+	// post-atomization length > 1, so no pre-atomization gate belongs here.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return "", false, err
+	}
+	if empty {
+		return "", false, nil
 	}
 	return uri, true, nil
 }

@@ -1047,12 +1047,17 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		require.Equal(t, int64(7), av.IntegerVal())
 	})
 
-	t.Run("non-coercible value still raises XPTY0004", func(t *testing.T) {
+	t.Run("non-coercible untypedAtomic surfaces the cast error", func(t *testing.T) {
+		// Function-conversion casts an xs:untypedAtomic argument to the xs:integer
+		// parameter type; the cast of "not-an-int" fails with FORG0001. That real
+		// dynamic error must surface unchanged — matching the direct f(...) and
+		// f#1(...) call paths — rather than being collapsed into a generic
+		// XPTY0004 type-mismatch by the function-item invocation path.
 		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(xs:untypedAtomic("not-an-int"))`)
 		require.NoError(t, err)
 		_, err = eval.Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FORG0001"})
 	})
 }
 

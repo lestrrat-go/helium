@@ -43,7 +43,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 
 	t := valAtom.TimeVal()
 
-	picture, err := coerceArgToStringRequired(args[1])
+	picture, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 	}
 	calendar := ""
 	if len(args) > 2 && seqLen(args[2]) > 0 {
-		lang, err = coerceArgToString(args[2])
+		lang, err = coerceArgToString(ctx, args[2])
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +63,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		}
 	}
 	if len(args) > 3 && seqLen(args[3]) > 0 {
-		calendar, err = coerceArgToString(args[3])
+		calendar, err = coerceArgToString(ctx, args[3])
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 	}
 
 	if len(args) > 4 && seqLen(args[4]) > 0 {
-		place, err := coerceArgToString(args[4])
+		place, err := coerceArgToString(ctx, args[4])
 		if err != nil {
 			return nil, err
 		}

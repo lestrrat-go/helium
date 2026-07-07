@@ -233,7 +233,7 @@ func isValidXML11Codepoint(cp int) bool {
 }
 
 func fnStringToCodepoints(ctx context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -264,40 +264,47 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
+	// fn:compare returns the empty sequence if either argument is empty. Detect
+	// emptiness AFTER atomization so an empty array or nilled/empty-content typed
+	// node (which atomizes to () rather than "") also yields () — a raw seqLen
+	// gate would let such a value fall through to comparing "" against the other.
+	s1, empty1, err := coerceAtomizedString(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+	s2, empty2, err := coerceAtomizedString(ctx, args[1])
+	if err != nil {
+		return nil, err
+	}
+	if empty1 || empty2 {
 		return validNilSequence, nil
-	}
-	s1, err := coerceArgToString(args[0])
-	if err != nil {
-		return nil, err
-	}
-	s2, err := coerceArgToString(args[1])
-	if err != nil {
-		return nil, err
 	}
 	cmp := coll.compare(s1, s2)
 	return SingleInteger(int64(cmp)), nil
 }
 
-func fnCodepointEqual(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
+func fnCodepointEqual(ctx context.Context, args []Sequence) (Sequence, error) {
+	// fn:codepoint-equal returns the empty sequence if either argument is empty,
+	// where "empty" is the post-atomization emptiness (empty array / nilled node
+	// atomize to () rather than "").
+	s1, empty1, err := coerceAtomizedString(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+	s2, empty2, err := coerceAtomizedString(ctx, args[1])
+	if err != nil {
+		return nil, err
+	}
+	if empty1 || empty2 {
 		return validNilSequence, nil
-	}
-	s1, err := coerceArgToStringOpt(args[0])
-	if err != nil {
-		return nil, err
-	}
-	s2, err := coerceArgToStringOpt(args[1])
-	if err != nil {
-		return nil, err
 	}
 	return SingleBoolean(s1 == s2), nil
 }
 
-func fnConcat(_ context.Context, args []Sequence) (Sequence, error) {
+func fnConcat(ctx context.Context, args []Sequence) (Sequence, error) {
 	var b strings.Builder
 	for _, arg := range args {
-		s, err := seqToStringErr(arg)
+		s, err := seqToStringErr(ctx, arg)
 		if err != nil {
 			return nil, err
 		}
@@ -319,7 +326,7 @@ func fnStringJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 			sep, _ = sv.Value.(string)
 		} else {
 			var err error
-			sep, err = coerceArgToStringRequired(args[1])
+			sep, err = coerceArgToStringRequired(ctx, args[1])
 			if err != nil {
 				return nil, err
 			}
@@ -344,8 +351,8 @@ func fnStringJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-func fnSubstring(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+func fnSubstring(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -399,11 +406,8 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
 		}
 	} else {
-		if seqLen(args[0]) > 1 {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", seqLen(args[0]))}
-		}
 		var err error
-		s, err = seqToStringErr(args[0])
+		s, err = seqToStringErr(ctx, args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -425,7 +429,7 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 		s = sv
 	} else {
 		var err error
-		s, err = coerceArgToString(args[0])
+		s, err = coerceArgToString(ctx, args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -433,15 +437,15 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(strings.Join(strings.Fields(s), " ")), nil
 }
 
-func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+func fnNormalizeUnicode(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 
 	formName := "NFC" // default
 	if len(args) > 1 {
-		form, err := coerceArgToStringRequired(args[1])
+		form, err := coerceArgToStringRequired(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -505,32 +509,32 @@ var (
 	xpathLowerCaser = cases.Lower(language.Und)
 )
 
-func fnUpperCase(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+func fnUpperCase(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	return SingleString(xpathUpperCaser.String(s)), nil
 }
 
-func fnLowerCase(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+func fnLowerCase(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	return SingleString(xpathLowerCaser.String(s)), nil
 }
 
-func fnTranslate(_ context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+func fnTranslate(ctx context.Context, args []Sequence) (Sequence, error) {
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
-	fromStr, err := coerceArgToStringRequired(args[1])
+	fromStr, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
-	toStr, err := coerceArgToStringRequired(args[2])
+	toStr, err := coerceArgToStringRequired(ctx, args[2])
 	if err != nil {
 		return nil, err
 	}
@@ -576,11 +580,11 @@ func collationStringPair(ctx context.Context, args []Sequence) (*collationImpl, 
 	if err != nil {
 		return nil, "", "", err
 	}
-	s1, err := coerceArgToString(args[0])
+	s1, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, "", "", err
 	}
-	s2, err := coerceArgToString(args[1])
+	s2, err := coerceArgToString(ctx, args[1])
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -653,16 +657,16 @@ func fnSubstringAfter(ctx context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(s[pos+matchLen:]), nil
 }
 
-func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMatches(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Per XPath spec, xs:string? argument: empty sequence is treated as "".
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:matches pattern must not be empty sequence"}
 	}
-	pattern, err := coerceArgToStringRequired(args[1])
+	pattern, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
@@ -671,7 +675,7 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 		if seqLen(args[2]) == 0 {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:matches flags must not be empty sequence"}
 		}
-		flags, err = coerceArgToStringRequired(args[2])
+		flags, err = coerceArgToStringRequired(ctx, args[2])
 		if err != nil {
 			return nil, err
 		}
@@ -704,7 +708,7 @@ func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -714,25 +718,25 @@ func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
 	return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: coll.key(s)}), nil
 }
 
-func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
+func fnReplace(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return SingleString(""), nil // input is xs:string? — empty yields ""
 	}
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:replace pattern must not be empty sequence"}
 	}
-	pattern, err := coerceArgToStringRequired(args[1])
+	pattern, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(args[2]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:replace replacement must not be empty sequence"}
 	}
-	replacement, err := coerceArgToStringRequired(args[2])
+	replacement, err := coerceArgToStringRequired(ctx, args[2])
 	if err != nil {
 		return nil, err
 	}
@@ -741,7 +745,7 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 		if seqLen(args[3]) == 0 {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:replace flags must not be empty sequence"}
 		}
-		flags, err = coerceArgToStringRequired(args[3])
+		flags, err = coerceArgToStringRequired(ctx, args[3])
 		if err != nil {
 			return nil, err
 		}
@@ -865,11 +869,11 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 	return b.String(), nil
 }
 
-func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
+func fnTokenize(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil // input is xs:string? — empty yields empty
 	}
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -890,7 +894,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:tokenize pattern must not be empty sequence"}
 	}
-	pattern, err := coerceArgToStringRequired(args[1])
+	pattern, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
@@ -899,7 +903,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 		if seqLen(args[2]) == 0 {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:tokenize flags must not be empty sequence"}
 		}
-		flags, err = coerceArgToStringRequired(args[2])
+		flags, err = coerceArgToStringRequired(ctx, args[2])
 		if err != nil {
 			return nil, err
 		}
@@ -969,17 +973,17 @@ func matchesXPathEmptyLine(s string) bool {
 }
 
 func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
-	pattern, err := coerceArgToStringRequired(args[1])
+	pattern, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
 	flags := ""
 	if len(args) > 2 {
-		flags, err = coerceArgToString(args[2])
+		flags, err = coerceArgToString(ctx, args[2])
 		if err != nil {
 			return nil, err
 		}
@@ -1772,7 +1776,7 @@ func fnContainsToken(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	token, err := coerceArgToStringRequired(args[1])
+	token, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1811,7 +1815,7 @@ func getCollation(ctx context.Context, args []Sequence, collationArgIdx int) (*c
 	} else if collationArgIdx >= len(args) || seqLen(args[collationArgIdx]) == 0 {
 		return codepointCollation, nil
 	}
-	uri, err := coerceArgToString(args[collationArgIdx])
+	uri, err := coerceArgToString(ctx, args[collationArgIdx])
 	if err != nil {
 		return nil, err
 	}

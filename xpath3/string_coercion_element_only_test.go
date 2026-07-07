@@ -1,0 +1,336 @@
+package xpath3_test
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/stretchr/testify/require"
+)
+
+// TestStringArgElementOnlyRaisesFOTY0012 verifies that passing an
+// element-only-typed node to an xs:string?-typed function argument raises
+// err:FOTY0012 (the element has no typed value), matching fn:data. Covers QT3
+// fn-string-length-23 (/*/string-length(.)) and fn-normalize-space-24
+// (/*/normalize-space(.)), plus fn:upper-case as a third representative.
+func TestStringArgElementOnlyRaisesFOTY0012(t *testing.T) {
+	doc := mustParseXML(t, `<root><child>hi</child></root>`)
+	root := doc.DocumentElement()
+	child := root.FirstChild() // <child>
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"):  xpath3.ContentTypeElementOnly,
+		xpath3.QAnnotation("urn:t", "mixedType"): xpath3.ContentTypeMixed,
+	}}
+
+	elementOnlyEval := func() xpath3.Evaluator {
+		return xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "rootType"),
+			}).
+			SchemaDeclarations(decls)
+	}
+
+	requireFOTY0012 := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = elementOnlyEval().Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0012", xerr.Code)
+	}
+
+	// string-length/1, normalize-space/1 and upper-case/1 each declare an
+	// xs:string? parameter, so the call is signature-coerced (the argument is
+	// atomized against the parameter type) before the function body runs.
+	// Atomizing an element-only-typed node has no typed value, so the coercion
+	// raises FOTY0012 for all three — the observable result is the same
+	// regardless of which body helper would otherwise stringify the argument.
+	t.Run("string-length element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `string-length(/*)`)
+	})
+
+	t.Run("normalize-space element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `normalize-space(/*)`)
+	})
+
+	t.Run("upper-case element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `upper-case(/*)`)
+	})
+
+	// A mixed-content node has a typed value (xs:untypedAtomic) → no FOTY0012.
+	t.Run("mixed-content node atomizes normally", func(t *testing.T) {
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "mixedType"),
+			}).
+			SchemaDeclarations(decls)
+		seq := evalExprWithEval(t, eval, doc, `string-length(/*)`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, int64(2), av.Value) // len("hi")
+	})
+
+	// An unannotated node atomizes to its string value unchanged.
+	t.Run("unannotated child atomizes normally", func(t *testing.T) {
+		_ = child
+		seq := evalExprWithEval(t, elementOnlyEval(), doc, `string-length(/*/child)`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, int64(2), av.Value) // "hi"
+	})
+}
+
+// TestStringArgCardinalityPreserved is the regression guard for the xs:string?
+// cardinality semantics: atomization happens FIRST (flattening arrays, so an
+// empty-array member contributes nothing), THEN cardinality is applied. An
+// earlier attempt that exposed the raw item stream broke this by counting an
+// empty array as an item pre-atomization. normalize-space(([], " x ")) must
+// therefore be "x", not XPTY0004.
+func TestStringArgCardinalityPreserved(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+
+	// Non-schema-aware path (byte-identical to before).
+	t.Run("empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `normalize-space(([], " x "))`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, "x", av.StringVal())
+	})
+
+	// Same under a schema-aware evaluator (the content-kind-aware atomization
+	// route must still flatten arrays before applying cardinality).
+	t.Run("empty array member flattens away (schema-aware)", func(t *testing.T) {
+		decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{}}
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			SchemaDeclarations(decls)
+		seq := evalExprWithEval(t, eval, doc, `normalize-space(([], " x "))`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, "x", av.StringVal())
+	})
+
+	// The xs:string?-argument URI/codepoint functions share the same
+	// atomize-then-count coercion: an empty-array member must flatten away
+	// rather than count as a second item (XPTY0004).
+	uriCases := []struct {
+		name, expr, want string
+	}{
+		{"encode-for-uri", `encode-for-uri(([], "a b"))`, "a%20b"},
+		{"iri-to-uri", `iri-to-uri(([], "a b"))`, "a%20b"},
+		{"escape-html-uri", `escape-html-uri(([], "a b"))`, "a b"},
+	}
+	for _, tc := range uriCases {
+		t.Run(tc.name+" empty array member flattens away", func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			av, ok := seq.Get(0).(xpath3.AtomicValue)
+			require.True(t, ok)
+			require.Equal(t, tc.want, av.StringVal())
+		})
+	}
+
+	t.Run("codepoint-equal empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `codepoint-equal(([], "abc"), "abc")`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, true, av.Value)
+	})
+
+	// The || operator (concatToString) atomizes before applying cardinality:
+	// an empty-array operand flattens away instead of counting as a second item.
+	t.Run("concat operator empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `([], "b") || "c"`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, "bc", av.StringVal())
+	})
+
+	// fn:string-length's optional argument shares the same atomize-then-count
+	// coercion: an empty-array member must flatten away, not raise XPTY0004.
+	t.Run("string-length empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `string-length(([], "abcd"))`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, int64(4), av.Value)
+	})
+}
+
+// TestDocFamilyCardinalityFlattens guards the doc/collection URI family (fn:doc,
+// fn:doc-available, fn:collection, fn:uri-collection) against the raw
+// pre-atomization cardinality gate. Their xs:string? URI argument must be
+// atomized FIRST — an empty-array member flattens away — THEN cardinality is
+// applied, so doc-available(([], "x")) resolves the single URI (yielding false
+// without a resolver) instead of raising XPTY0004. A genuinely too-long
+// argument (two atoms after flattening) still raises XPTY0004.
+func TestDocFamilyCardinalityFlattens(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+
+	t.Run("doc-available empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `doc-available(([], "http://example.com/x"))`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, false, av.Value) // no resolver ⇒ not available, NOT XPTY0004
+	})
+
+	t.Run("doc-available two atoms still XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`doc-available(("a", "b"))`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr))
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+}
+
+// TestStringCoercionAtomizedEmptyResult is the empty-side mirror of the
+// cardinality guard: a raw seqLen==0 gate placed BEFORE string coercion catches
+// only a SYNTACTICALLY empty argument. A non-empty sequence that ATOMIZES to
+// empty (an empty array, and by extension a nilled/empty-content typed node)
+// must take the SAME empty-result path — not fall through to the coercion's
+// "" and be treated as a real empty string. Each function's spec-defined
+// empty-argument result must therefore be identical for () and for [].
+func TestStringCoercionAtomizedEmptyResult(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+
+	// Functions whose spec empty-argument result is the empty sequence. Both a
+	// syntactically empty argument and an atomized-empty one (empty array) must
+	// yield an empty sequence.
+	emptyResultCases := []struct {
+		name, exprEmptyArray, exprEmptySeq string
+	}{
+		{"resolve-uri", `resolve-uri(([]), "http://x/")`, `resolve-uri((), "http://x/")`},
+		{"compare", `compare(([]), "x")`, `compare((), "x")`},
+		{"compare-second-arg", `compare("x", ([]))`, `compare("x", ())`},
+		{"codepoint-equal", `codepoint-equal(([]), "x")`, `codepoint-equal((), "x")`},
+		{"codepoint-equal-second-arg", `codepoint-equal("x", ([]))`, `codepoint-equal("x", ())`},
+		{"parse-json", `parse-json(([]))`, `parse-json(())`},
+		{"json-doc", `json-doc(([]))`, `json-doc(())`},
+		{"json-to-xml", `json-to-xml(([]))`, `json-to-xml(())`},
+		{"parse-xml", `parse-xml(([]))`, `parse-xml(())`},
+		{"parse-xml-fragment", `parse-xml-fragment(([]))`, `parse-xml-fragment(())`},
+		{"parse-ietf-date", `parse-ietf-date(([]))`, `parse-ietf-date(())`},
+		{"unparsed-text", `unparsed-text(([]))`, `unparsed-text(())`},
+		{"unparsed-text-lines", `unparsed-text-lines(([]))`, `unparsed-text-lines(())`},
+		{"doc", `doc(([]))`, `doc(())`},
+	}
+	// An empty XPath result is represented by a typed-nil Sequence, so tolerate
+	// nil while still rejecting any non-empty result.
+	requireEmpty := func(t *testing.T, expr string) {
+		t.Helper()
+		seq := evalExpr(t, doc, expr)
+		require.True(t, seq == nil || seq.Len() == 0, "want empty sequence for %q, got %v", expr, seq)
+	}
+	for _, tc := range emptyResultCases {
+		t.Run(tc.name+" atomized-empty yields empty sequence", func(t *testing.T) {
+			requireEmpty(t, tc.exprEmptyArray)
+		})
+		t.Run(tc.name+" syntactic-empty yields empty sequence", func(t *testing.T) {
+			requireEmpty(t, tc.exprEmptySeq)
+		})
+	}
+
+	// fn:doc-available and fn:unparsed-text-available return xs:boolean false
+	// (not the empty sequence) for an empty URI, whether syntactic or atomized.
+	boolFalseCases := []struct {
+		name, exprEmptyArray, exprEmptySeq string
+	}{
+		{"doc-available", `doc-available(([]))`, `doc-available(())`},
+		{"unparsed-text-available", `unparsed-text-available(([]))`, `unparsed-text-available(())`},
+	}
+	for _, tc := range boolFalseCases {
+		requireFalse := func(t *testing.T, expr string) {
+			t.Helper()
+			seq := evalExpr(t, doc, expr)
+			require.Equal(t, 1, seq.Len())
+			av, ok := seq.Get(0).(xpath3.AtomicValue)
+			require.True(t, ok)
+			require.Equal(t, false, av.Value)
+		}
+		t.Run(tc.name+" atomized-empty yields false", func(t *testing.T) {
+			requireFalse(t, tc.exprEmptyArray)
+		})
+		t.Run(tc.name+" syntactic-empty yields false", func(t *testing.T) {
+			requireFalse(t, tc.exprEmptySeq)
+		})
+	}
+
+	// A genuinely too-long argument (two atoms after flattening) is still a type
+	// error — the empty-side fix must not weaken the >1 cardinality check.
+	t.Run("compare two atoms still XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`compare(("a", "b"), "x")`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr))
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+}
+
+// TestDynamicCallElementOnlyRaisesFOTY0012 verifies that atomizing an
+// element-only-typed node against an xs:string? parameter surfaces the real
+// dynamic error err:FOTY0012 (the node has no typed value) rather than a
+// generic XPTY0004, across every function-item invocation path: a named
+// function reference (invoked via fn:for-each), fn:function-lookup, an inline
+// function parameter, and an inline function return type. Each path previously
+// collapsed the typed error into XPTY0004 by using the boolean
+// coerceToSequenceType; they now route through the error-propagating coercion.
+func TestDynamicCallElementOnlyRaisesFOTY0012(t *testing.T) {
+	doc := mustParseXML(t, `<root><child>hi</child></root>`)
+	root := doc.DocumentElement()
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
+	}}
+	newEval := func() xpath3.Evaluator {
+		return xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "rootType"),
+			}).
+			SchemaDeclarations(decls)
+	}
+
+	requireFOTY0012 := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = newEval().Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0012", xerr.Code)
+	}
+
+	// Named function reference invoked through a higher-order function.
+	t.Run("named ref via for-each", func(t *testing.T) {
+		requireFOTY0012(t, `for-each(/*, upper-case#1)`)
+	})
+
+	// fn:function-lookup dynamic invocation.
+	t.Run("function-lookup", func(t *testing.T) {
+		requireFOTY0012(t, `function-lookup(QName('http://www.w3.org/2005/xpath-functions','upper-case'), 1)(/*)`)
+	})
+
+	// Inline function parameter coercion.
+	t.Run("inline function parameter", func(t *testing.T) {
+		requireFOTY0012(t, `(function($x as xs:string?) { $x })(/*)`)
+	})
+
+	// Inline function return-type coercion.
+	t.Run("inline function return type", func(t *testing.T) {
+		requireFOTY0012(t, `(function($x) as xs:string? { $x })(/*)`)
+	})
+}
