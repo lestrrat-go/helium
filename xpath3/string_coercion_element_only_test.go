@@ -165,7 +165,7 @@ func TestStringArgCardinalityPreserved(t *testing.T) {
 	})
 }
 
-// TestDocFamilyCardinalityFlattens guards the docURIArg family (fn:doc,
+// TestDocFamilyCardinalityFlattens guards the doc/collection URI family (fn:doc,
 // fn:doc-available, fn:collection, fn:uri-collection) against the raw
 // pre-atomization cardinality gate. Their xs:string? URI argument must be
 // atomized FIRST — an empty-array member flattens away — THEN cardinality is
