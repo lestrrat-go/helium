@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="14399" failures="61" skipped="0" time="10.050">
-  <testsuite name="xsd10-conformance" tests="14399" failures="61" skipped="0" time="10.050">
+<testsuites tests="14399" failures="22" skipped="0" time="10.700">
+  <testsuite name="xsd10-conformance" tests="14399" failures="22" skipped="0" time="10.700">
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/boeingMeta/BoeingXSDTestSet.testSet/ipo1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/boeingMeta/BoeingXSDTestSet.testSet/ipo2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/boeingMeta/BoeingXSDTestSet.testSet/ipo3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/boeingMeta/BoeingXSDTestSet.testSet/ipo4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/boeingMeta/BoeingXSDTestSet.testSet/ipo5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/boeingMeta/BoeingXSDTestSet.testSet/ipo6" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/common/introspection.testSet/introspection" time="1.650"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/common/introspection.testSet/introspection" time="1.780"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/ibmMeta/anyAttribute.testSet/s3_10_6ii01" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/ibmMeta/anyAttribute.testSet/s3_10_6ii02" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/ibmMeta/anyAttribute.testSet/s3_10_6ii03" time="0.000"></testcase>
@@ -52,9 +52,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB006" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB007" time="0.000">
-      <failure message="msMeta/Additional_w3c.xml/addB007: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Additional_w3c.xml/addB007&#xA;    xsd11_harness_test.go:131: msMeta/Additional_w3c.xml/addB007: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Additional_w3c.xml/addB007 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB009" time="0.000">
       <failure message="msMeta/Additional_w3c.xml/addB009: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Additional_w3c.xml/addB009&#xA;    xsd11_harness_test.go:131: msMeta/Additional_w3c.xml/addB009: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Additional_w3c.xml/addB009 (0.00s)&#xA;</failure>
@@ -155,9 +153,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB107" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB108" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB109" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB110" time="0.000">
-      <failure message="msMeta/Additional_w3c.xml/addB110: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Additional_w3c.xml/addB110&#xA;    xsd11_harness_test.go:131: msMeta/Additional_w3c.xml/addB110: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Additional_w3c.xml/addB110 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB110" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB111" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB112" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB113" time="0.000"></testcase>
@@ -190,9 +186,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB147" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB148" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB149" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB150" time="0.000">
-      <failure message="msMeta/Additional_w3c.xml/addB150: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Additional_w3c.xml/addB150&#xA;    xsd11_harness_test.go:131: msMeta/Additional_w3c.xml/addB150: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Additional_w3c.xml/addB150 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB150" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB151" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB153" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/addB169.1" time="0.000"></testcase>
@@ -308,9 +302,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/memberType022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/memberType023" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/memberType024" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/test93160" time="0.000">
-      <failure message="msMeta/Additional_w3c.xml/test93160/test93160.i: instance validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Additional_w3c.xml/test93160&#xA;    xsd11_harness_test.go:131: msMeta/Additional_w3c.xml/test93160/test93160.i: instance validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Additional_w3c.xml/test93160 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Additional_w3c.xml/test93160" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Annotations_w3c.xml/annotA001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Annotations_w3c.xml/annotA002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Annotations_w3c.xml/annotA003" time="0.000"></testcase>
@@ -597,16 +589,12 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa014" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa015" time="0.000">
-      <failure message="msMeta/Attribute_w3c.xml/attKa015: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa015&#xA;    xsd11_harness_test.go:131: msMeta/Attribute_w3c.xml/attKa015: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa015 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKa015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb004" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb005" time="0.000">
-      <failure message="msMeta/Attribute_w3c.xml/attKb005: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb005&#xA;    xsd11_harness_test.go:131: msMeta/Attribute_w3c.xml/attKb005: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb005 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attKb008" time="0.000"></testcase>
@@ -746,14 +734,10 @@
     </testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attP032" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ002" time="0.000">
-      <failure message="msMeta/Attribute_w3c.xml/attQ002: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ002&#xA;    xsd11_harness_test.go:131: msMeta/Attribute_w3c.xml/attQ002: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ002 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ004" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ005" time="0.000">
-      <failure message="msMeta/Attribute_w3c.xml/attQ005: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ005&#xA;    xsd11_harness_test.go:131: msMeta/Attribute_w3c.xml/attQ005: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ005 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attQ008" time="0.000"></testcase>
@@ -793,9 +777,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ013b" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ014a" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ014b" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ015" time="0.000">
-      <failure message="msMeta/Attribute_w3c.xml/attZ015/attZ015.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ015&#xA;    xsd11_harness_test.go:131: msMeta/Attribute_w3c.xml/attZ015/attZ015.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ015 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Attribute_w3c.xml/attZ015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctA001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctA002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctA003" time="0.000"></testcase>
@@ -1043,9 +1025,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE018" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE019" time="0.000">
-      <failure message="msMeta/ComplexType_w3c.xml/ctE019/ctE019.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE019&#xA;    xsd11_harness_test.go:131: msMeta/ComplexType_w3c.xml/ctE019/ctE019.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE019 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctE019" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF003" time="0.000"></testcase>
@@ -1058,16 +1038,12 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF012" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF013" time="0.000">
-      <failure message="msMeta/ComplexType_w3c.xml/ctF013/ctF013.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF013&#xA;    xsd11_harness_test.go:131: msMeta/ComplexType_w3c.xml/ctF013/ctF013.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF013 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctF017" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG001" time="0.000">
-      <failure message="msMeta/ComplexType_w3c.xml/ctG001/ctG001.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG001&#xA;    xsd11_harness_test.go:131: msMeta/ComplexType_w3c.xml/ctG001/ctG001.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG001 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG004" time="0.000"></testcase>
@@ -1079,9 +1055,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG012" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG013" time="0.000">
-      <failure message="msMeta/ComplexType_w3c.xml/ctG013/ctG013.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG013&#xA;    xsd11_harness_test.go:131: msMeta/ComplexType_w3c.xml/ctG013/ctG013.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG013 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctG016" time="0.000"></testcase>
@@ -1325,9 +1299,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctO006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctO007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ001" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ002" time="0.000">
-      <failure message="msMeta/ComplexType_w3c.xml/ctZ002: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ002&#xA;    xsd11_harness_test.go:131: msMeta/ComplexType_w3c.xml/ctZ002: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ002 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ComplexType_w3c.xml/ctZ005" time="0.000"></testcase>
@@ -4197,13 +4169,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO021" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO023" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO024" time="0.000">
-      <failure message="msMeta/Group_w3c.xml/groupO024: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Group_w3c.xml/groupO024&#xA;    xsd11_harness_test.go:131: msMeta/Group_w3c.xml/groupO024: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Group_w3c.xml/groupO024 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO024" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO025" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO026" time="0.000">
-      <failure message="msMeta/Group_w3c.xml/groupO026: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Group_w3c.xml/groupO026&#xA;    xsd11_harness_test.go:131: msMeta/Group_w3c.xml/groupO026: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Group_w3c.xml/groupO026 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO026" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Group_w3c.xml/groupO027" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idA001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idA002" time="0.000"></testcase>
@@ -4718,9 +4686,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ014" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ015" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ016" time="0.000">
-      <failure message="msMeta/IdentityConstraint_w3c.xml/idJ016: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ016&#xA;    xsd11_harness_test.go:131: msMeta/IdentityConstraint_w3c.xml/idJ016: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ016 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ017" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idJ019" time="0.000"></testcase>
@@ -5040,9 +5006,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idL103" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ003" time="0.000">
-      <failure message="msMeta/IdentityConstraint_w3c.xml/idZ003: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ003&#xA;    xsd11_harness_test.go:131: msMeta/IdentityConstraint_w3c.xml/idZ003: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ003 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/IdentityConstraint_w3c.xml/idZ006" time="0.000"></testcase>
@@ -5441,9 +5405,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgS005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ003" time="0.000">
-      <failure message="msMeta/ModelGroups_w3c.xml/mgZ003/mgZ003.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ003&#xA;    xsd11_harness_test.go:131: msMeta/ModelGroups_w3c.xml/mgZ003/mgZ003.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ003 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/ModelGroups_w3c.xml/mgZ005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Notations_w3c.xml/notatA001" time="0.000"></testcase>
@@ -5804,9 +5766,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa020" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa021" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa022" time="0.000">
-      <failure message="msMeta/Particles_w3c.xml/particlesHa022: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa022&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesHa022: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa022 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa022" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa050" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa051" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHa052" time="0.000"></testcase>
@@ -5863,9 +5823,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb009" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb010" time="0.000">
-      <failure message="msMeta/Particles_w3c.xml/particlesHb010: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb010&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesHb010: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb010 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb010" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesHb011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesIa001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesIa002" time="0.000"></testcase>
@@ -6136,9 +6094,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesK008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL003" time="0.000">
-      <failure message="msMeta/Particles_w3c.xml/particlesL003: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL003&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesL003: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL003 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL006" time="0.000"></testcase>
@@ -6170,9 +6126,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesL032" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM003" time="0.000">
-      <failure message="msMeta/Particles_w3c.xml/particlesM003: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM003&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesM003: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM003 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM033" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM034" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesM035" time="0.000"></testcase>
@@ -6332,7 +6286,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT006" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT007" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT007" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT008" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT009" time="0.000">
       <failure message="msMeta/Particles_w3c.xml/particlesT009: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT009&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesT009: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesT009 (0.00s)&#xA;</failure>
@@ -6389,9 +6343,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ001" time="0.000">
       <failure message="msMeta/Particles_w3c.xml/particlesZ001: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ001&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesZ001: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ001 (0.00s)&#xA;</failure>
     </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ002" time="0.000">
-      <failure message="msMeta/Particles_w3c.xml/particlesZ002/particlesZ002.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ002&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesZ002/particlesZ002.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ002 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ007" time="0.000"></testcase>
@@ -6405,9 +6357,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ015" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ016" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ017" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ018" time="0.000">
-      <failure message="msMeta/Particles_w3c.xml/particlesZ018: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ018&#xA;    xsd11_harness_test.go:131: msMeta/Particles_w3c.xml/particlesZ018: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ018 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ018" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ020" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ021" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ022" time="0.000"></testcase>
@@ -6433,9 +6383,9 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ034_a1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ034_a2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ034_a3" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ034_b" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ034_b" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ035_a" time="0.010"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ036_a" time="7.790"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ036_a" time="8.330"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ036_b1" time="0.020"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ036_b2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Particles_w3c.xml/particlesZ036_c" time="0.000"></testcase>
@@ -8865,7 +8815,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS63" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS64" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS65" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS66" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS66" time="0.010"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS67" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS68" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reS69" time="0.000"></testcase>
@@ -9030,8 +8980,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ004i" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ004v" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ005i" time="0.100"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ005v" time="0.130"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ006i" time="0.100"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ005v" time="0.120"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ006i" time="0.110"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Regex_w3c.xml/reZ006v" time="0.100"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schA1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schA2" time="0.000"></testcase>
@@ -9092,9 +9042,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH2" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH3" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH4" time="0.000">
-      <failure message="msMeta/Schema_w3c.xml/schH4: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/Schema_w3c.xml/schH4&#xA;    xsd11_harness_test.go:131: msMeta/Schema_w3c.xml/schH4: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/Schema_w3c.xml/schH4 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/Schema_w3c.xml/schH9" time="0.000"></testcase>
@@ -9432,23 +9380,13 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ002" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ003" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ004" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ005" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ005: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ005&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ005: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ005 (0.00s)&#xA;</failure>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ006" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ006: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ006&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ006: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ006 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ005" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ008" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ009" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ009: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ009&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ009: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ009 (0.00s)&#xA;</failure>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ010" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ010: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ010&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ010: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ010 (0.00s)&#xA;</failure>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ011" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ011: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ011&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ011: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ011 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ009" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ010" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ011" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ012" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ013" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ014" time="0.000"></testcase>
@@ -9470,12 +9408,8 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ030" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ031" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ032" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ033" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ033: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ033&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ033: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ033 (0.00s)&#xA;</failure>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ034" time="0.000">
-      <failure message="msMeta/SimpleType_w3c.xml/stZ034: schema validity: expected true, got false (err=xsd: schema compilation failed)">=== RUN   TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ034&#xA;    xsd11_harness_test.go:131: msMeta/SimpleType_w3c.xml/stZ034: schema validity: expected true, got false (err=xsd: schema compilation failed)&#xA;--- FAIL: TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ034 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ033" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ034" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ035" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ036" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/msMeta/SimpleType_w3c.xml/stZ037" time="0.000"></testcase>
@@ -10398,7 +10332,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-double-pattern-7" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-double-pattern-8" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-double-pattern-9" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-double-whiteSpace" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-double-whiteSpace" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-duration-enumeration" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-duration-enumeration-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-duration-enumeration-2" time="0.000"></testcase>
@@ -10733,7 +10667,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-enumeration-6" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-enumeration-7" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-enumeration-8" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-enumeration-9" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-enumeration-9" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-maxExclusive" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-maxExclusive-1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/nistMeta/NISTXMLSchemaDatatypes.testSet/atomic-gYearMonth-maxExclusive-2" time="0.000"></testcase>
@@ -13923,9 +13857,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrDecl.testSet/ad_valconstr00201m3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrDecl.testSet/ad_valconstr00201m4" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrDecl.testSet/ad_valconstr00201m5" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrUse.testSet/au_attrdecl00101m1_n" time="0.000">
-      <failure message="sunMeta/AttrUse.testSet/au_attrdecl00101m1_n: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/sunMeta/AttrUse.testSet/au_attrdecl00101m1_n&#xA;    xsd11_harness_test.go:131: sunMeta/AttrUse.testSet/au_attrdecl00101m1_n: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/sunMeta/AttrUse.testSet/au_attrdecl00101m1_n (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrUse.testSet/au_attrdecl00101m1_n" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrUse.testSet/au_attrdecl00101m1_p" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrUse.testSet/au_required00101m1" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/AttrUse.testSet/au_valconstr00101m1" time="0.000"></testcase>
@@ -14477,27 +14409,17 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test003b" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test005" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test006" time="0.010"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test006" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test007" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test008" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test009" time="0.000">
-      <failure message="sunMeta/suntest.testSet/test009/test.11.v: instance validity: expected true, got false (err=xsd: validation failed)">=== RUN   TestXSD10W3C/sunMeta/suntest.testSet/test009&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/test009/test.11.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/test009/test.3.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/test009/test.5.v: instance validity: expected true, got false (err=xsd: validation failed)&#xA;--- FAIL: TestXSD10W3C/sunMeta/suntest.testSet/test009 (0.00s)&#xA;</failure>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd001" time="0.000">
-      <failure message="sunMeta/suntest.testSet/xsd001/xsd001.n04: instance validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/sunMeta/suntest.testSet/xsd001&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/xsd001/xsd001.n04: instance validity: expected false, got true (err=&lt;nil&gt;)&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/xsd001/xsd001.n05: instance validity: expected false, got true (err=&lt;nil&gt;)&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/xsd001/xsd001.n06: instance validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/sunMeta/suntest.testSet/xsd001 (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/test009" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd001" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd002" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003-1.e" time="0.000">
-      <failure message="sunMeta/suntest.testSet/xsd003-1.e: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/sunMeta/suntest.testSet/xsd003-1.e&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/xsd003-1.e: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/sunMeta/suntest.testSet/xsd003-1.e (0.00s)&#xA;</failure>
-    </testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003-2.e" time="0.000">
-      <failure message="sunMeta/suntest.testSet/xsd003-2.e: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/sunMeta/suntest.testSet/xsd003-2.e&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/xsd003-2.e: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/sunMeta/suntest.testSet/xsd003-2.e (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003-1.e" time="0.000"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003-2.e" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003a" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003b" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003b.e" time="0.000">
-      <failure message="sunMeta/suntest.testSet/xsd003b.e: schema validity: expected false, got true (err=&lt;nil&gt;)">=== RUN   TestXSD10W3C/sunMeta/suntest.testSet/xsd003b.e&#xA;    xsd11_harness_test.go:131: sunMeta/suntest.testSet/xsd003b.e: schema validity: expected false, got true (err=&lt;nil&gt;)&#xA;--- FAIL: TestXSD10W3C/sunMeta/suntest.testSet/xsd003b.e (0.00s)&#xA;</failure>
-    </testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd003b.e" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd004" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd005" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD10W3C/sunMeta/suntest.testSet/xsd006" time="0.000"></testcase>

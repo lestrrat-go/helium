@@ -81,3 +81,61 @@ func TestElementAttribute_ClosedAttrVocabulary(t *testing.T) {
 		})
 	}
 }
+
+// §3.2.2: `targetNamespace` and `inheritable` are XSD 1.1-ONLY additions to the
+// <xs:attribute> attribute vocabulary. In XSD 1.0 they are unknown attributes and
+// a schema carrying either is invalid (ibmData S3_2_3/s3_2_3si05); in XSD 1.1 the
+// vocabulary admits them so the "is not allowed" representation error must NOT
+// fire. Version-SPLIT (unlike the other closed-vocabulary attributes).
+func TestAttribute_XSD11OnlyVocabulary(t *testing.T) {
+	t.Parallel()
+
+	const shell = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t">
+  %s
+</xs:schema>`
+
+	reject := []struct {
+		name string
+		attr string
+		body string
+	}{
+		{"global-targetNamespace", "targetNamespace",
+			`<xs:attribute name="ga" type="xs:string" targetNamespace="urn:x"/>`},
+		{"global-inheritable", "inheritable",
+			`<xs:attribute name="ga" type="xs:string" inheritable="true"/>`},
+		{"local-targetNamespace", "targetNamespace",
+			`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="xs:anyType"><xs:attribute name="a" type="xs:string" targetNamespace="urn:x"/></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"local-inheritable", "inheritable",
+			`<xs:complexType name="ct"><xs:attribute name="a" type="xs:string" inheritable="true"/></xs:complexType>`},
+	}
+	for _, tc := range reject {
+		t.Run("xsd10-reject/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, errs, cerr := compileWith(t, xsd.Version10, fmt.Sprintf(shell, tc.body))
+			require.ErrorIs(t, cerr, xsd.ErrCompilationFailed,
+				"XSD 1.0 must reject the 1.1-only '%s' on xs:attribute: %s", tc.attr, errs)
+			require.Nil(t, schema)
+			require.Contains(t, errs, "'"+tc.attr+"' is not allowed")
+		})
+	}
+
+	// XSD 1.1 admits both: `inheritable` on a global attribute is unconditionally
+	// valid, so the schema compiles clean.
+	t.Run("xsd11-accept/global-inheritable", func(t *testing.T) {
+		t.Parallel()
+		_, errs, cerr := compileWith(t, xsd.Version11,
+			fmt.Sprintf(shell, `<xs:attribute name="ga" type="xs:string" inheritable="true"/>`))
+		require.NoError(t, cerr, "XSD 1.1 must accept inheritable on xs:attribute: %s", errs)
+	})
+
+	// XSD 1.1 must NOT raise the closed-vocabulary "is not allowed" error for
+	// targetNamespace (the schema may be invalid for OTHER reasons, but never that).
+	t.Run("xsd11-vocabulary-ok/local-targetNamespace", func(t *testing.T) {
+		t.Parallel()
+		_, errs, _ := compileWith(t, xsd.Version11,
+			fmt.Sprintf(shell, `<xs:complexType name="ct"><xs:complexContent><xs:restriction base="xs:anyType"><xs:attribute name="a" type="xs:string" targetNamespace="urn:x"/></xs:restriction></xs:complexContent></xs:complexType>`))
+		require.NotContains(t, errs, "'targetNamespace' is not allowed",
+			"XSD 1.1 vocabulary admits targetNamespace on xs:attribute")
+	})
+}
