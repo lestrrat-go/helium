@@ -17,10 +17,28 @@ func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
 }
 
+const errCodeSEPM0010 = "SEPM0010"
+
+// effectiveSerializeVersion returns the effective output version, defaulting an
+// unspecified version to "1.0".
+func (o serializeOptions) effectiveSerializeVersion() string {
+	if o.xmlVersion == "" {
+		return "1.0"
+	}
+	return o.xmlVersion
+}
+
 func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	opts, err := parseSerializeOptions(ctx, args)
 	if err != nil {
 		return nil, err
+	}
+
+	// Namespace undeclarations require XML/XHTML 1.1; requesting them at an
+	// effective output version of 1.0 is a static error (Serialization 3.1
+	// SEPM0010).
+	if opts.undeclarePrefixes && opts.effectiveSerializeVersion() != "1.1" {
+		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 
 	var result string
@@ -48,13 +66,19 @@ type serializeOptions struct {
 	allowDuplicateNames bool
 	encoding            string
 	// standalone is the resolved standalone pseudo-attribute request:
-	// "yes"/"no" force it, "omit" or "" leave it out.
+	// "yes"/"no" force it, "omit" forces omission. It defaults to "omit" (the
+	// Serialization 3.1 default), so a source declaration's standalone is not
+	// retained unless the parameter requests it.
 	standalone string
-	// undeclarePrefixes emits XML 1.1 namespace undeclarations (xmlns:pfx="").
+	// undeclarePrefixes requests XML 1.1 namespace undeclarations (xmlns:pfx="").
+	// It is honored only when the effective output version is 1.1; otherwise it
+	// is a SEPM0010 static error.
 	undeclarePrefixes bool
-	// cdataElements / suppressIndent hold element names (expanded {uri}local and
-	// bare local form) for the cdata-section-elements and suppress-indentation
-	// serialization parameters.
+	// xmlVersion is the requested output version parameter ("" = unspecified,
+	// treated as "1.0").
+	xmlVersion string
+	// cdataElements / suppressIndent hold the exact expanded {uri}local element
+	// names for the cdata-section-elements and suppress-indentation parameters.
 	cdataElements  map[string]struct{}
 	suppressIndent map[string]struct{}
 	// charMap is the resolved character map (use-character-maps).
@@ -71,6 +95,8 @@ func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptio
 	opts := serializeOptions{
 		method:        "",
 		itemSeparator: " ",
+		// The Serialization 3.1 default for the standalone parameter is "omit".
+		standalone: "omit",
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
@@ -164,6 +190,11 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else if found {
 		opts.undeclarePrefixes = undeclare
 	}
+	if version, found, err := readSerializeStringOption(ctx, m, "version"); err != nil {
+		return opts, err
+	} else if found {
+		opts.xmlVersion = version
+	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
 		standalone, err := resolveSerializeStandaloneMap(ctx, v)
 		if err != nil {
@@ -199,7 +230,9 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 // resolveSerializeQNameNames converts a serialization parameter whose value is a
 // sequence of xs:QName items (cdata-section-elements, suppress-indentation) into
 // the element-name key set the writer matches against: each QName contributes its
-// expanded {uri}local name (a no-namespace QName contributes its bare local name).
+// exact expanded {uri}local name (Clark notation; an explicit empty namespace is
+// "{}local"). Matching is by exact expanded name, so QName("","b") does not match
+// a namespaced <p:b>.
 func resolveSerializeQNameNames(v Sequence, name string) (map[string]struct{}, error) {
 	names := make(map[string]struct{})
 	for item := range seqItems(v) {
@@ -211,18 +244,9 @@ func resolveSerializeQNameNames(v Sequence, name string) (map[string]struct{}, e
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a sequence of xs:QName", name)}
 		}
-		names[nameKey(qn.URI, qn.Local)] = struct{}{}
+		names[helium.ClarkName(qn.URI, qn.Local)] = struct{}{}
 	}
 	return names, nil
-}
-
-// nameKey builds the writer's element-name key: the bare local name for the
-// no-namespace case, otherwise the expanded {uri}local form.
-func nameKey(uri, local string) string {
-	if uri == "" {
-		return local
-	}
-	return "{" + uri + "}" + local
 }
 
 // readSerializeStringOption extracts a string-valued serialize option from the
@@ -353,9 +377,14 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 				return opts, err
 			}
 			opts.suppressIndent = names
+		case "version":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.xmlVersion = strings.TrimSpace(value)
 		case "byte-order-mark", "doctype-public", "doctype-system",
-			"json-node-output-method", "media-type", "normalization-form",
-			"version":
+			"json-node-output-method", "media-type", "normalization-form":
 			if _, err := readSerializeParamValue(param); err != nil {
 				return opts, err
 			}
@@ -428,9 +457,12 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 
 // readSerializeParamQNameNames reads a cdata-section-elements or
 // suppress-indentation element-form parameter whose value attribute is a
-// whitespace-separated list of lexical QNames, resolving each prefix against the
-// parameter element's in-scope namespaces, and returns the writer's element-name
-// key set.
+// whitespace-separated list of lexical QNames, and returns the writer's exact
+// expanded-name key set. Prefixed names resolve their prefix against the
+// parameter element's in-scope namespaces; UNPREFIXED names resolve through the
+// in-scope DEFAULT namespace (per Serialization 3.1 these parameters use the
+// default namespace for unprefixed QNames), so the resulting key matches an
+// element in that same namespace.
 func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
@@ -440,16 +472,17 @@ func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, er
 	for token := range strings.FieldsSeq(value) {
 		prefix, local, hasPrefix := strings.Cut(token, ":")
 		if !hasPrefix {
-			// No colon: strings.Cut puts the whole token in prefix; it is a
-			// no-namespace name whose key is its bare local name.
-			names[prefix] = struct{}{}
+			// No colon: strings.Cut puts the whole token in prefix. Resolve
+			// through the in-scope default namespace (absent → no namespace).
+			uri, _ := lookupInScopeNamespace(elem, "")
+			names[helium.ClarkName(uri, prefix)] = struct{}{}
 			continue
 		}
 		uri, ok := lookupInScopeNamespace(elem, prefix)
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter uses unbound namespace prefix %q", prefix)}
 		}
-		names[nameKey(uri, local)] = struct{}{}
+		names[helium.ClarkName(uri, local)] = struct{}{}
 	}
 	return names, nil
 }
@@ -891,8 +924,14 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 		writer = writer.Standalone(true)
 	case lexicon.ValueNo:
 		writer = writer.Standalone(false)
+	default:
+		// "omit" (the default) or an empty-sequence value: force omission of the
+		// standalone pseudo-attribute, overriding the source declaration.
+		writer = writer.OmitStandalone()
 	}
-	if opts.undeclarePrefixes {
+	// undeclare-prefixes is honored only at output version 1.1 (fnSerialize has
+	// already rejected the 1.0 case with SEPM0010).
+	if opts.undeclarePrefixes && opts.effectiveSerializeVersion() == "1.1" {
 		writer = writer.AllowPrefixUndeclarations(true)
 	}
 	if len(opts.cdataElements) > 0 {
@@ -938,9 +977,11 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 
 func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
 	doc, ok := node.(*helium.Document)
-	if !ok {
-		// A non-document node is an HTML fragment: serialize without a DOCTYPE
-		// and without mutating the input tree.
+	if !ok || !htmlDocumentElementIsHTML(doc) {
+		// A non-document node, or a document whose document element is not <html>,
+		// is serialized under the html output method WITHOUT the HTML5 DOCTYPE and
+		// WITHOUT meta injection (Serialization 3.1: those apply to an html-rooted
+		// result). The input tree is not mutated.
 		var buf strings.Builder
 		hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true)
 		if err := hw.WriteTo(&buf, node); err != nil {
@@ -972,6 +1013,14 @@ func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) 
 		}
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// htmlDocumentElementIsHTML reports whether the document element's local name is
+// "html" (case-insensitive) — the condition under which the html output method
+// emits the HTML5 DOCTYPE and injects the Content-Type meta element.
+func htmlDocumentElementIsHTML(doc *helium.Document) bool {
+	root := doc.DocumentElement()
+	return root != nil && strings.EqualFold(root.LocalName(), "html")
 }
 
 // insertHTMLContentTypeMeta inserts a <meta http-equiv="Content-Type"> element

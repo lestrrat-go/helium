@@ -38,13 +38,15 @@ func TestSerialize_OptionsNode(t *testing.T) {
 
 // undeclare-prefixes is a valid yes/no boolean serialization parameter
 // (Serialization 3.1 §2); the element-options form must accept it (validated,
-// not necessarily honored) rather than raising XPTY0004 (W3C serialize-xml-035b,
-// serialize-xml-036b). An invalid value stays XPTY0004.
+// not raising XPTY0004; W3C serialize-xml-035b, serialize-xml-036b). An invalid
+// value stays XPTY0004. Because undeclarations require XML/XHTML 1.1, a "yes"
+// value is honored only when version="1.1"; at the default 1.0 it is SEPM0010.
 func TestSerialize_OptionsNodeUndeclarePrefixes(t *testing.T) {
-	build := func(value string) xpath3.Sequence {
+	build := func(value, version string) xpath3.Sequence {
 		t.Helper()
 		xml := `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">` +
 			`<output:method value="xml"/>` +
+			`<output:version value="` + version + `"/>` +
 			`<output:undeclare-prefixes value="` + value + `"/>` +
 			`</output:serialization-parameters>`
 		doc := mustParseXML(t, xml)
@@ -54,21 +56,30 @@ func TestSerialize_OptionsNodeUndeclarePrefixes(t *testing.T) {
 		return nodes.Sequence()
 	}
 
-	run := func(value string) error {
+	run := func(value, version string) error {
 		t.Helper()
 		doc := mustParseXML(t, `<root/>`)
 		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
-			"params": build(value),
+			"params": build(value, version),
 		})
 		_, err := eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
 		return err
 	}
 
-	require.NoError(t, run("yes"))
+	// A valid "yes" at version 1.1 is accepted.
+	require.NoError(t, run("yes", "1.1"))
 
-	err := run("maybe")
-	require.Error(t, err)
 	var xpErr *xpath3.XPathError
+
+	// A valid "yes" at version 1.0 is the SEPM0010 static error.
+	err := run("yes", "1.0")
+	require.Error(t, err)
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "SEPM0010", xpErr.Code)
+
+	// An invalid boolean value stays XPTY0004 (parse-time, before the version check).
+	err = run("maybe", "1.1")
+	require.Error(t, err)
 	require.ErrorAs(t, err, &xpErr)
 	require.Equal(t, "XPTY0004", xpErr.Code)
 }

@@ -50,23 +50,36 @@ type Writer struct {
 	// with its literal replacement string (XSLT/XQuery Serialization 3.1 §7
 	// character maps). Empty/nil disables the feature.
 	charMap map[rune]string
-	// cdataElements holds the element names (expanded {uri}local form, and the
-	// bare local name) whose direct text children are serialized as CDATA
-	// sections rather than escaped text (the cdata-section-elements
-	// serialization parameter). Empty/nil disables the feature.
+	// cdataElements holds the element names (expanded {uri}local form) whose
+	// direct text children are serialized as CDATA sections rather than escaped
+	// text (the cdata-section-elements serialization parameter). Matching is by
+	// exact expanded name. Empty/nil disables the feature.
 	cdataElements map[string]struct{}
-	// suppressIndent holds the element names (expanded {uri}local form, and the
-	// bare local name) whose subtree is serialized without indentation even when
-	// Format is enabled (the suppress-indentation serialization parameter).
-	// Empty/nil disables the feature.
+	// suppressIndent holds the element names (expanded {uri}local form) whose
+	// subtree is serialized without indentation even when Format is enabled (the
+	// suppress-indentation serialization parameter). Matching is by exact
+	// expanded name. Empty/nil disables the feature.
 	suppressIndent map[string]struct{}
-	// standaloneSet, when true, forces the standalone pseudo-attribute of the XML
-	// declaration to standaloneYes/No regardless of the document's own value
+	// standalone forces the standalone pseudo-attribute of the XML declaration
 	// (the standalone serialization parameter). It has no effect when the XML
-	// declaration is omitted.
-	standaloneSet bool
-	standaloneYes bool
+	// declaration is omitted. standalonePreserve (the zero value) keeps the
+	// document's own standalone status.
+	standalone standaloneMode
 }
+
+// standaloneMode controls how the writer emits the standalone pseudo-attribute
+// of the XML declaration.
+type standaloneMode int
+
+const (
+	// standalonePreserve emits the document's own standalone status.
+	standalonePreserve standaloneMode = iota
+	// standaloneForceOmit emits no standalone pseudo-attribute.
+	standaloneForceOmit
+	// standaloneForceYes / standaloneForceNo force the pseudo-attribute value.
+	standaloneForceYes
+	standaloneForceNo
+)
 
 // writeSession holds the mutable state for a single serialization pass.
 // It is created inside WriteTo and threaded through the internal helper
@@ -279,19 +292,19 @@ func (w Writer) CharacterMap(m map[rune]string) Writer {
 	return w
 }
 
-// CDATASectionElements names the elements (each as an expanded {uri}local name
-// and/or a bare local name) whose direct text children are serialized as CDATA
-// sections instead of escaped text (the cdata-section-elements serialization
-// parameter). A nil or empty map disables the feature.
+// CDATASectionElements names the elements (each as an expanded {uri}local name)
+// whose direct text children are serialized as CDATA sections instead of escaped
+// text (the cdata-section-elements serialization parameter). Matching is by exact
+// expanded name. A nil or empty map disables the feature.
 func (w Writer) CDATASectionElements(m map[string]struct{}) Writer {
 	w.cdataElements = m
 	return w
 }
 
-// SuppressIndentElements names the elements (each as an expanded {uri}local name
-// and/or a bare local name) whose subtree is serialized without indentation even
-// when Format is enabled (the suppress-indentation serialization parameter). A
-// nil or empty map disables the feature.
+// SuppressIndentElements names the elements (each as an expanded {uri}local name)
+// whose subtree is serialized without indentation even when Format is enabled
+// (the suppress-indentation serialization parameter). Matching is by exact
+// expanded name. A nil or empty map disables the feature.
 func (w Writer) SuppressIndentElements(m map[string]struct{}) Writer {
 	w.suppressIndent = m
 	return w
@@ -300,10 +313,23 @@ func (w Writer) SuppressIndentElements(m map[string]struct{}) Writer {
 // Standalone forces the standalone pseudo-attribute of the XML declaration:
 // v=true emits standalone="yes", v=false emits standalone="no". It overrides the
 // document's own standalone status and has no effect when the XML declaration is
-// omitted. When never called, the document's own standalone status is used.
+// omitted. When neither Standalone nor OmitStandalone is called, the document's
+// own standalone status is used.
 func (w Writer) Standalone(v bool) Writer {
-	w.standaloneSet = true
-	w.standaloneYes = v
+	if v {
+		w.standalone = standaloneForceYes
+	} else {
+		w.standalone = standaloneForceNo
+	}
+	return w
+}
+
+// OmitStandalone forces the XML declaration to carry no standalone
+// pseudo-attribute, overriding the document's own standalone status (the
+// standalone="omit" serialization parameter value). It has no effect when the
+// XML declaration is omitted.
+func (w Writer) OmitStandalone() Writer {
+	w.standalone = standaloneForceOmit
 	return w
 }
 
@@ -462,14 +488,15 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 	}
 
 	// A forced standalone (the serialization parameter) overrides the document's
-	// own standalone status; "omit" is expressed by leaving standaloneSet false.
-	if d.standaloneSet {
-		if d.standaloneYes {
-			d.writeString(out, ` standalone="`+lexicon.ValueYes+`"`)
-		} else {
-			d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
-		}
-	} else {
+	// own standalone status; standaloneForceOmit emits no pseudo-attribute.
+	switch d.standalone {
+	case standaloneForceOmit:
+		// emit nothing
+	case standaloneForceYes:
+		d.writeString(out, ` standalone="`+lexicon.ValueYes+`"`)
+	case standaloneForceNo:
+		d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
+	case standalonePreserve:
 		switch doc.Standalone() {
 		case StandaloneExplicitNo:
 			d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
@@ -754,36 +781,29 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	return d.err
 }
 
-// nodeNameKeys returns the expanded {uri}local name and the bare local name of a
-// node, used to match against the cdata-section-elements and suppress-
-// indentation name sets. A no-namespace node's expanded key equals its local
-// name.
-func nodeNameKeys(n Node) (string, string) {
+// nodeExpandedName returns the expanded {uri}local name of a node (Clark
+// notation, with an explicit empty namespace as "{}local"), used to match
+// against the cdata-section-elements and suppress-indentation name sets. Matching
+// is by exact expanded name — a no-namespace element must not match a
+// namespaced one with the same local name.
+func nodeExpandedName(n Node) string {
 	type uriLocal interface {
 		URI() string
 		LocalName() string
 	}
 	ul, ok := n.(uriLocal)
 	if !ok {
-		return n.Name(), n.Name()
+		return ClarkName("", n.Name())
 	}
-	local := ul.LocalName()
-	if uri := ul.URI(); uri != "" {
-		return "{" + uri + "}" + local, local
-	}
-	return local, local
+	return ClarkName(ul.URI(), ul.LocalName())
 }
 
-// matchesNameSet reports whether n's expanded or bare local name is present in
-// set. An empty set never matches.
+// matchesNameSet reports whether n's exact expanded name is present in set. An
+// empty set never matches.
 func matchesNameSet(set map[string]struct{}, n Node) bool {
 	if len(set) == 0 {
 		return false
 	}
-	clark, local := nodeNameKeys(n)
-	if _, ok := set[clark]; ok {
-		return true
-	}
-	_, ok := set[local]
+	_, ok := set[nodeExpandedName(n)]
 	return ok
 }

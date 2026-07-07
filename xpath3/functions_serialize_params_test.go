@@ -206,3 +206,69 @@ func TestSerialize_ApplyParams(t *testing.T) {
 		})
 	}
 }
+
+// TestSerialize_ParamNegativeCases locks in the spec-correctness boundaries the
+// applied serialization parameters must respect (gauntlet findings on
+// fix-qt3-serialize-params):
+//   - standalone: an explicit "omit" (and the Serialization default) forces the
+//     standalone pseudo-attribute OFF even when the source declaration carried
+//     standalone="yes".
+//   - cdata-section-elements / suppress-indentation match by EXACT expanded
+//     name: QName("","b") must not match a namespaced <p:b>.
+//   - undeclare-prefixes at output version 1.0 is a SEPM0010 static error.
+//   - method="html" emits the HTML5 DOCTYPE + Content-Type meta ONLY when the
+//     document element is <html>; an <article><head/> root gets neither.
+func TestSerialize_ParamNegativeCases(t *testing.T) {
+	t.Run("standalone omit drops a source standalone=yes", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root>text</root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"omit-xml-declaration":false(),"standalone":"omit"})`)
+		require.NoError(t, err)
+		require.NotContains(t, res.StringValue(), "standalone", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("standalone default drops a source standalone=yes", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root>text</root>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"omit-xml-declaration":false()})`)
+		require.NoError(t, err)
+		require.NotContains(t, res.StringValue(), "standalone", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("cdata QName no-namespace does not match namespaced element", func(t *testing.T) {
+		const src = `<doc><b>plain</b><p:b xmlns:p="urn:p">nsd</p:b></doc>`
+		doc := mustParseXML(t, src)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","cdata-section-elements":QName("","b")})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		// The no-namespace <b> is CDATA-wrapped; the namespaced <p:b> is not.
+		require.Contains(t, out, "CDATA[plain]", "output:\n%s", out)
+		require.NotContains(t, out, "CDATA[nsd]", "output:\n%s", out)
+	})
+
+	t.Run("undeclare-prefixes at version 1.0 is SEPM0010", func(t *testing.T) {
+		doc := mustParseXML(t, `<root xmlns:p="urn:p"/>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","version":"1.0","undeclare-prefixes":true()})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0010", xerr.Code)
+
+		// Absent version defaults to 1.0, so it is also SEPM0010.
+		_, err = evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","undeclare-prefixes":true()})`)
+		require.Error(t, err)
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0010", xerr.Code)
+	})
+
+	t.Run("html method on non-html root emits no doctype or meta", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><article><head/><body><p>Hi</p></body></article>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","html-version":5})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.NotRegexp(t, `(?i)DOCTYPE`, out, "output:\n%s", out)
+		require.NotContains(t, out, "<meta", "output:\n%s", out)
+	})
+}

@@ -166,24 +166,35 @@ Serialization parameters (map form and `output:serialization-parameters`
 element form) are both parsed and **applied**. String/boolean params
 (`method`/`item-separator`/`encoding`/`indent`/`omit-xml-declaration`/
 `allow-duplicate-names`) and these additional params drive the output:
-`standalone` (resolved to yes/no/omit → the XML-declaration pseudo-attribute),
-`undeclare-prefixes` (XML 1.1 `xmlns:pfx=""` undeclarations),
-`cdata-section-elements` and `suppress-indentation` (resolved to a
-`{uri}local`/bare-local name set), and `use-character-maps` (resolved to a
+`standalone` (resolved to yes/no/omit → the XML-declaration pseudo-attribute;
+the Serialization default is `omit`, so a source declaration's standalone is not
+retained unless the parameter requests yes/no), `undeclare-prefixes`
+(XML 1.1 `xmlns:pfx=""` undeclarations), `cdata-section-elements` and
+`suppress-indentation` (resolved to an EXACT expanded `{uri}local` name set —
+Clark notation with `{}local` for the no-namespace case; matching is by exact
+expanded name so `QName("","b")` never matches a namespaced `<p:b>`; the
+element form resolves an unprefixed lexical QName through the in-scope DEFAULT
+namespace, per the Serialization spec), and `use-character-maps` (resolved to a
 `map[rune]string`). The xml path builds a `helium.Writer` via
-`newSerializeXMLWriter` wiring `Standalone`/`AllowPrefixUndeclarations`/
-`CDATASectionElements`/`SuppressIndentElements`/`CharacterMap` — the shared
-`helium.Writer` (root `writer.go`/`writer_escape.go`) implements those knobs
-(character maps substitute a mapped rune with its raw replacement in text and
-attribute content; cdata-section-elements emit direct text children as CDATA;
-suppress-indentation disables indentation for the named subtree; `Standalone`
-forces the declaration pseudo-attribute). `method="html"` (`serializeHTMLSequence`)
-emits an HTML5 `<!DOCTYPE html>` and injects a `<meta http-equiv="Content-Type">`
-into `<head>` on a copy of the document (never mutating the input), then
-serializes via the `helium/html` writer. The map form defaults
-`omit-xml-declaration` to true (an empty map equals omitting the argument;
-W3C serialize-xml-127a); the element form keeps the Serialization-spec default
-(declaration emitted). Character maps are not applied on the html path.
+`newSerializeXMLWriter` wiring `Standalone`/`OmitStandalone`/
+`AllowPrefixUndeclarations`/`CDATASectionElements`/`SuppressIndentElements`/
+`CharacterMap` — the shared `helium.Writer` (root `writer.go`/`writer_escape.go`)
+implements those knobs (character maps substitute a mapped rune with its raw
+replacement in text and attribute content; cdata-section-elements emit direct
+text children as CDATA; suppress-indentation disables indentation for the named
+subtree; `Standalone` forces yes/no, `OmitStandalone` forces omission, matching
+by exact expanded name). `undeclare-prefixes` is honored only when the effective
+output `version` is 1.1; requesting it at an effective 1.0 (the default when
+`version` is unspecified) is the `SEPM0010` static error. `method="html"`
+(`serializeHTMLSequence`) emits an HTML5 `<!DOCTYPE html>` and injects a
+`<meta http-equiv="Content-Type">` into `<head>` — but ONLY when the document
+element's local name is `html` (case-insensitive); any other root (or a fragment
+node) is serialized under the html method with no DOCTYPE/meta. The doctype/meta
+work on a copy of the document (never mutating the input), then serialize via the
+`helium/html` writer. The map form defaults `omit-xml-declaration` to true (an
+empty map equals omitting the argument; W3C serialize-xml-127a); the element form
+keeps the Serialization-spec default (declaration emitted). Character maps are
+not applied on the html path.
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.
