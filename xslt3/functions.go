@@ -484,6 +484,20 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 // [Invocation.URIResolver] and/or [Invocation.HTTPClient]. Mirrors the
 // secure-by-default fn:doc retrieval landed in #417 for xpath3.
 func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI string) ([]byte, error) {
+	var resolver xpath3.URIResolver
+	var httpClient *http.Client
+	if ec.transformConfig != nil {
+		resolver = ec.transformConfig.uriResolver
+		httpClient = ec.transformConfig.httpClient
+	}
+	return retrieveBytesVia(ctx, resolvedURI, resolver, httpClient, ec.resourceLimit())
+}
+
+// retrieveBytesVia fetches resolvedURI through an explicit resolver/HTTP client
+// pair, honoring the per-resource read cap. It is the resolver-dispatch core
+// shared by (*execContext).retrieveDocumentBytes and the standalone
+// fn:transform implementation (resolverEntityLoader).
+func retrieveBytesVia(ctx context.Context, resolvedURI string, resolver xpath3.URIResolver, httpClient *http.Client, limit int64) ([]byte, error) {
 	// URI schemes are case-insensitive per RFC 3986; url.Parse lowercases
 	// .Scheme so the equality compares are scheme-correct regardless of
 	// how the caller spelled "HTTP" / "Https" / ...
@@ -491,14 +505,6 @@ func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI st
 	if u, err := url.Parse(resolvedURI); err == nil {
 		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
 	}
-	var resolver xpath3.URIResolver
-	var httpClient *http.Client
-	if ec.transformConfig != nil {
-		resolver = ec.transformConfig.uriResolver
-		httpClient = ec.transformConfig.httpClient
-	}
-
-	limit := ec.resourceLimit()
 
 	if isHTTP {
 		if httpClient != nil {
