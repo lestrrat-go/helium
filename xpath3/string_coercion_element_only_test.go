@@ -194,6 +194,91 @@ func TestDocFamilyCardinalityFlattens(t *testing.T) {
 	})
 }
 
+// TestStringCoercionAtomizedEmptyResult is the empty-side mirror of the
+// cardinality guard: a raw seqLen==0 gate placed BEFORE string coercion catches
+// only a SYNTACTICALLY empty argument. A non-empty sequence that ATOMIZES to
+// empty (an empty array, and by extension a nilled/empty-content typed node)
+// must take the SAME empty-result path — not fall through to the coercion's
+// "" and be treated as a real empty string. Each function's spec-defined
+// empty-argument result must therefore be identical for () and for [].
+func TestStringCoercionAtomizedEmptyResult(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+
+	// Functions whose spec empty-argument result is the empty sequence. Both a
+	// syntactically empty argument and an atomized-empty one (empty array) must
+	// yield an empty sequence.
+	emptyResultCases := []struct {
+		name, exprEmptyArray, exprEmptySeq string
+	}{
+		{"resolve-uri", `resolve-uri(([]), "http://x/")`, `resolve-uri((), "http://x/")`},
+		{"compare", `compare(([]), "x")`, `compare((), "x")`},
+		{"compare-second-arg", `compare("x", ([]))`, `compare("x", ())`},
+		{"codepoint-equal", `codepoint-equal(([]), "x")`, `codepoint-equal((), "x")`},
+		{"codepoint-equal-second-arg", `codepoint-equal("x", ([]))`, `codepoint-equal("x", ())`},
+		{"parse-json", `parse-json(([]))`, `parse-json(())`},
+		{"json-doc", `json-doc(([]))`, `json-doc(())`},
+		{"json-to-xml", `json-to-xml(([]))`, `json-to-xml(())`},
+		{"parse-xml", `parse-xml(([]))`, `parse-xml(())`},
+		{"parse-xml-fragment", `parse-xml-fragment(([]))`, `parse-xml-fragment(())`},
+		{"parse-ietf-date", `parse-ietf-date(([]))`, `parse-ietf-date(())`},
+		{"unparsed-text", `unparsed-text(([]))`, `unparsed-text(())`},
+		{"unparsed-text-lines", `unparsed-text-lines(([]))`, `unparsed-text-lines(())`},
+		{"doc", `doc(([]))`, `doc(())`},
+	}
+	// An empty XPath result is represented by a typed-nil Sequence, so tolerate
+	// nil while still rejecting any non-empty result.
+	requireEmpty := func(t *testing.T, expr string) {
+		t.Helper()
+		seq := evalExpr(t, doc, expr)
+		require.True(t, seq == nil || seq.Len() == 0, "want empty sequence for %q, got %v", expr, seq)
+	}
+	for _, tc := range emptyResultCases {
+		t.Run(tc.name+" atomized-empty yields empty sequence", func(t *testing.T) {
+			requireEmpty(t, tc.exprEmptyArray)
+		})
+		t.Run(tc.name+" syntactic-empty yields empty sequence", func(t *testing.T) {
+			requireEmpty(t, tc.exprEmptySeq)
+		})
+	}
+
+	// fn:doc-available and fn:unparsed-text-available return xs:boolean false
+	// (not the empty sequence) for an empty URI, whether syntactic or atomized.
+	boolFalseCases := []struct {
+		name, exprEmptyArray, exprEmptySeq string
+	}{
+		{"doc-available", `doc-available(([]))`, `doc-available(())`},
+		{"unparsed-text-available", `unparsed-text-available(([]))`, `unparsed-text-available(())`},
+	}
+	for _, tc := range boolFalseCases {
+		requireFalse := func(t *testing.T, expr string) {
+			t.Helper()
+			seq := evalExpr(t, doc, expr)
+			require.Equal(t, 1, seq.Len())
+			av, ok := seq.Get(0).(xpath3.AtomicValue)
+			require.True(t, ok)
+			require.Equal(t, false, av.Value)
+		}
+		t.Run(tc.name+" atomized-empty yields false", func(t *testing.T) {
+			requireFalse(t, tc.exprEmptyArray)
+		})
+		t.Run(tc.name+" syntactic-empty yields false", func(t *testing.T) {
+			requireFalse(t, tc.exprEmptySeq)
+		})
+	}
+
+	// A genuinely too-long argument (two atoms after flattening) is still a type
+	// error — the empty-side fix must not weaken the >1 cardinality check.
+	t.Run("compare two atoms still XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`compare(("a", "b"), "x")`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr))
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+}
+
 // TestDynamicCallElementOnlyRaisesFOTY0012 verifies that atomizing an
 // element-only-typed node against an xs:string? parameter surfaces the real
 // dynamic error err:FOTY0012 (the node has no typed value) rather than a

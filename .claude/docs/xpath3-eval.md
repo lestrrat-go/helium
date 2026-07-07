@@ -223,7 +223,8 @@ cancellation.
 Every path that coerces a USER-facing call argument/result routes through the
 error-propagating `coerceToSequenceTypeE` (directly, or via `coerceFuncallArg`),
 so a real dynamic error — `FOTY0012` (atomizing an element-only node),
-`FOTY0013` (atomizing a function/map/array), `FORG0001` (a failed
+`FOTY0013` (atomizing a function or map — an array flattens to its atomized
+members, but a function/map member still raises it), `FORG0001` (a failed
 untypedAtomic→target cast) — surfaces unchanged instead of being flattened into
 a generic `XPTY0004`. This covers the direct call path (`evalFunctionCall`),
 partial application, named function references and `fn:function-lookup`

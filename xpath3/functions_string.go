@@ -264,32 +264,39 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
+	// fn:compare returns the empty sequence if either argument is empty. Detect
+	// emptiness AFTER atomization so an empty array or nilled/empty-content typed
+	// node (which atomizes to () rather than "") also yields () — a raw seqLen
+	// gate would let such a value fall through to comparing "" against the other.
+	s1, empty1, err := coerceAtomizedString(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+	s2, empty2, err := coerceAtomizedString(ctx, args[1])
+	if err != nil {
+		return nil, err
+	}
+	if empty1 || empty2 {
 		return validNilSequence, nil
-	}
-	s1, err := coerceArgToString(ctx, args[0])
-	if err != nil {
-		return nil, err
-	}
-	s2, err := coerceArgToString(ctx, args[1])
-	if err != nil {
-		return nil, err
 	}
 	cmp := coll.compare(s1, s2)
 	return SingleInteger(int64(cmp)), nil
 }
 
 func fnCodepointEqual(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
+	// fn:codepoint-equal returns the empty sequence if either argument is empty,
+	// where "empty" is the post-atomization emptiness (empty array / nilled node
+	// atomize to () rather than "").
+	s1, empty1, err := coerceAtomizedString(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+	s2, empty2, err := coerceAtomizedString(ctx, args[1])
+	if err != nil {
+		return nil, err
+	}
+	if empty1 || empty2 {
 		return validNilSequence, nil
-	}
-	s1, err := coerceArgToString(ctx, args[0])
-	if err != nil {
-		return nil, err
-	}
-	s2, err := coerceArgToString(ctx, args[1])
-	if err != nil {
-		return nil, err
 	}
 	return SingleBoolean(s1 == s2), nil
 }

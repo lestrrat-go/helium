@@ -94,8 +94,9 @@ func evalConcatExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	return SingleString(ls + rs), nil
 }
 
-// concatToString converts a sequence to string for the || operator.
-// Raises FOTY0014 for function/map/array items that have no string value.
+// concatToString converts a sequence to string for the || operator. Arrays are
+// flattened to their members during atomization; only function and map items,
+// which have no string value, raise FOTY0014.
 func concatToString(ctx context.Context, seq Sequence) (string, error) {
 	if seqLen(seq) == 0 {
 		return "", nil

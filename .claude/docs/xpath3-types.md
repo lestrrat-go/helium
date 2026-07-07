@@ -202,7 +202,10 @@ Per XPath 3.1 Section 2.6.2:
 - Schema-derived node type → fallback to `AtomizedType` built-in base for atomization
 - Unannotated node → `xs:untypedAtomic` with `StringValue(node)`
 - Atomic → identity
-- Function/map/array → error `FOTY0013`
+- Array → flattened to the atomization of its members (recursively); a function or map member raises `FOTY0013`
+- Function/map → error `FOTY0013`
+
+The same flatten-arrays / error-on-function-or-map rule governs the `||` string-concatenation path (`concatToString`, `eval_operators.go`): array operands flatten to their atomized members, only function and map items raise `FOTY0014`.
 
 The typed-value atomizer (`atomizeTypedValue`, `functions_node.go`) applies a per-item pre-check (`typedValueItemCheck` / `typedValueItemCheckFor`, an `atomizeItemCheck`) that selects a typed-value ACTION per XDM 3.1 §5.15. **Nilled** elements come first: an element in the evaluator's `NilledElements` set has no typed value → the item is SKIPPED (typed value `()`), regardless of its content kind. Then, when the active `SchemaDeclarations` also implements the optional `ContentTypeKindProvider` (reached by type assertion; the xsd adapter `schemaDecls` implements it) and the annotation resolves, an element node's complex content kind selects: **element-only** content has no typed value → error `FOTY0012`; **empty** content has typed value `()` → SKIPPED (no atoms, no error); **mixed** content still atomizes to `xs:untypedAtomic` and simple/simpleContent to its typed value. The content-kind check (`checkContentKindItem`, returning `(skip, err)`) is INTERLEAVED with atomization — threaded into `atomizeStreamCont` as an optional per-item pre-check — so it walks items in the SAME encounter order and with the SAME array recursion as atomization: the FIRST offending item wins (a map/function atomized earlier still raises `FOTY0013` before a later element-only element is reached), and element-only / empty nodes nested inside arrays are handled.
 

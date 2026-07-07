@@ -14,12 +14,14 @@ func init() {
 }
 
 func fnParseIETFDate(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(ctx, args[0])
+	// xs:string? value: an atomized-empty argument (empty array / nilled node)
+	// returns the empty sequence, like a syntactically empty one.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 	t, err := parseIETFDate(s)
 	if err != nil {

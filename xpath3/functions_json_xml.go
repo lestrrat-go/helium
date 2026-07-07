@@ -20,7 +20,14 @@ func init() {
 }
 
 func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
+	// Coerce the xs:string? input FIRST so an atomized-empty argument (empty
+	// array / nilled node) returns the empty sequence \u2014 like a syntactically
+	// empty one \u2014 without parsing the options map, matching F&O 3.1.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+	if empty {
 		return validNilSequence, nil
 	}
 
@@ -29,10 +36,6 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	s, err := coerceArgToString(ctx, args[0])
-	if err != nil {
-		return nil, err
-	}
 	s = strings.TrimPrefix(s, "\uFEFF")
 	s, invalidEsc, err := preprocessJSONStringLiterals(s)
 	if err != nil {

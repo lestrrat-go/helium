@@ -30,12 +30,17 @@ type jsonOptions struct {
 }
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(ctx, args[0])
+	// Route empty detection through post-atomization: an empty array or a
+	// nilled/empty-content typed node atomizes to the empty sequence, which per
+	// F&O 3.1 makes fn:parse-json return the empty sequence — not an empty JSON
+	// string. A raw seqLen==0 gate would only catch a syntactically empty
+	// argument and let an atomized-empty one fall through to the "" path.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 
 	opts, err := parseJSONOptions(ctx, args)
@@ -551,12 +556,14 @@ func canonicalInvalidJSONEscape(raw string) string {
 }
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	uri, err := coerceArgToString(ctx, args[0])
+	// xs:string? URI argument: an atomized-empty value (empty array / nilled
+	// node) returns the empty sequence just like a syntactically empty one.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 
 	cfg := unparsedTextConfig(ctx)

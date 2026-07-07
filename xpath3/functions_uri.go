@@ -74,12 +74,16 @@ func fnIRIToURI(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	relative, err := coerceArgToString(ctx, args[0])
+	// fn:resolve-uri returns the empty sequence when the relative argument is
+	// empty. Detect emptiness AFTER atomization so an empty array or a
+	// nilled/empty-content typed node (which atomizes to the empty sequence, not
+	// to "") also yields () rather than resolving an empty relative reference.
+	relative, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 	if relative == "" {
 		if len(args) >= 2 {

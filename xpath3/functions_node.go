@@ -701,12 +701,14 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(ctx, args[0])
+	// xs:string? argument: an atomized-empty value (empty array / nilled node)
+	// returns the empty sequence, like a syntactically empty one.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 	ec := getFnContext(ctx)
 	parser := ec.xmlParser()
@@ -722,12 +724,14 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	s, err := coerceArgToString(ctx, args[0])
+	// xs:string? argument: an atomized-empty value returns the empty sequence,
+	// like a syntactically empty one.
+	s, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 
 	s, err = stripXMLTextDeclaration(s)
@@ -1116,7 +1120,7 @@ func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
-	uri, hasURI, err := collectionURIArg(ctx, args, "fn:collection")
+	uri, hasURI, err := collectionURIArg(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1141,7 +1145,7 @@ func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
-	uri, hasURI, err := collectionURIArg(ctx, args, "fn:uri-collection")
+	uri, hasURI, err := collectionURIArg(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1171,12 +1175,16 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	uri, err := docURIArg(ctx, args[0], "fn:doc")
+	// xs:string? URI: an atomized-empty argument (empty array / nilled node)
+	// returns the empty sequence, like a syntactically empty one. Emptiness is
+	// tested AFTER atomization; a raw seqLen gate would miss the atomized-empty
+	// case and try to load an empty URI.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 	doc, err := loadDoc(ctx, uri)
 	if err != nil {
@@ -1186,12 +1194,13 @@ func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return SingleBoolean(false), nil
-	}
-	uri, err := docURIArg(ctx, args[0], "fn:doc-available")
+	// An empty URI (syntactic or atomized-empty) makes no document available.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return SingleBoolean(false), nil
 	}
 	_, err = loadDoc(ctx, uri)
 	return SingleBoolean(err == nil), nil
@@ -1260,22 +1269,21 @@ func clampInt64ToInt(n int64) int {
 	return int(n)
 }
 
-func docURIArg(ctx context.Context, seq Sequence, _ string) (string, error) {
-	// xs:string? function coercion atomizes FIRST (flattening arrays, so an empty
-	// array member contributes nothing), THEN applies the singleton-or-empty
-	// cardinality. coerceArgToString does exactly that and raises XPTY0004 for a
-	// post-atomization length > 1, so no pre-atomization gate belongs here — a raw
-	// seqLen(seq) > 1 check would wrongly reject e.g. doc-available(([], "x")).
-	return coerceArgToString(ctx, seq)
-}
-
-func collectionURIArg(ctx context.Context, args []Sequence, fnName string) (string, bool, error) {
-	if len(args) == 0 || seqLen(args[0]) == 0 {
+func collectionURIArg(ctx context.Context, args []Sequence) (string, bool, error) {
+	if len(args) == 0 {
 		return "", false, nil
 	}
-	uri, err := docURIArg(ctx, args[0], fnName)
+	// xs:string? URI: atomize FIRST, then apply the singleton-or-empty
+	// cardinality. An atomized-empty argument (empty array / nilled node) is
+	// treated as "URI absent" — the same as a syntactically empty sequence — so
+	// the default collection is used. coerceAtomizedString raises XPTY0004 for a
+	// post-atomization length > 1, so no pre-atomization gate belongs here.
+	uri, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return "", false, err
+	}
+	if empty {
+		return "", false, nil
 	}
 	return uri, true, nil
 }
