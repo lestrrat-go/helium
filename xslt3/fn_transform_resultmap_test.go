@@ -50,12 +50,12 @@ func TestFnTransformResultMapKeying(t *testing.T) {
 		expr string
 	}{
 		{
-			// fn-transform-13 / 33 / 44: only secondary result documents, so no
-			// principal ("output") entry; three secondary entries survive after
-			// removing the (absent) base-output-uri key.
+			// fn-transform-13 / 33 / 44: only secondary result documents, so the
+			// original map has exactly the three secondary entries — no principal
+			// entry under "output" nor under the base output URI.
 			name: "no-principal-entry-when-only-secondary-docs",
-			expr: `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml($xml),"base-output-uri":"` + base + `"}) => map:remove("` + base + `")
-			return map:size($r)=3 and not(map:contains($r,"output"))`,
+			expr: `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml($xml),"base-output-uri":"` + base + `"})
+			return map:size($r)=3 and not(map:contains($r,"output")) and not(map:contains($r,"` + base + `"))`,
 		},
 		{
 			// fn-transform-13a / 37: secondary keys are the href resolved against
@@ -65,10 +65,11 @@ func TestFnTransformResultMapKeying(t *testing.T) {
 			return contains(string-join(map:keys($r)),"www.w3.org/fots/fn/transform/section2.html")`,
 		},
 		{
-			// fn-transform-33: same, serialized delivery.
+			// fn-transform-33: same, serialized delivery. Assert on the original
+			// map so a stray principal entry keyed by base-output-uri would fail.
 			name: "serialized-no-principal-entry",
-			expr: `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml($xml),"base-output-uri":"` + base + `","delivery-format":"serialized"}) => map:remove("` + base + `")
-			return map:size($r)=3 and not(map:contains($r,"output")) and contains(string-join(map:keys($r)),"section2")`,
+			expr: `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml($xml),"base-output-uri":"` + base + `","delivery-format":"serialized"})
+			return map:size($r)=3 and not(map:contains($r,"output")) and not(map:contains($r,"` + base + `")) and contains(string-join(map:keys($r)),"section2")`,
 		},
 	}
 
@@ -189,6 +190,39 @@ func TestFnTransformGlobalContextItem(t *testing.T) {
 			require.Equal(t, wantTrue, transformBool(t, tc.expr, vars))
 		})
 	}
+}
+
+// TestFnTransformNestedResultDocKey verifies that a nested xsl:result-document's
+// key is its href resolved against the ENCLOSING result document's dynamic
+// output URI, not the top-level base output URI.
+func TestFnTransformNestedResultDocKey(t *testing.T) {
+	xsl := `<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
+<xsl:template match='/'>
+<xsl:result-document href='outer/index.html'><p>outer</p>
+<xsl:result-document href='inner.html'><p>inner</p></xsl:result-document>
+</xsl:result-document>
+</xsl:template>
+</xsl:stylesheet>`
+	// The inner href resolves against the outer document's URI
+	// (http://example.com/base/outer/index.html), yielding
+	// http://example.com/base/outer/inner.html — NOT http://example.com/base/inner.html.
+	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>'),"base-output-uri":"http://example.com/base/main.xml"})
+	return map:contains($r,"http://example.com/base/outer/index.html")
+	   and map:contains($r,"http://example.com/base/outer/inner.html")
+	   and not(map:contains($r,"http://example.com/base/inner.html"))`
+	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
+}
+
+// TestFnTransformSerializedTextPreservesTrailingNewline guards that method="text"
+// serialized delivery keeps a legitimate trailing newline (only the xml-family
+// serializer's document-terminating newline artifact is trimmed).
+func TestFnTransformSerializedTextPreservesTrailingNewline(t *testing.T) {
+	xsl := "<xsl:stylesheet version=\"3.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">" +
+		"<xsl:output method=\"text\"/>" +
+		"<xsl:template name='main'>a\nb\n</xsl:template></xsl:stylesheet>"
+	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"delivery-format":"serialized"})?output
+	return $r = concat("a", codepoints-to-string(10), "b", codepoints-to-string(10))`
+	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
 }
 
 // TestFnTransformSerializedNoTrailingNewline mirrors fn-transform-err-8: a

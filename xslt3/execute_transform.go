@@ -496,12 +496,17 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// An explicit global-context-item (fn:transform option) overrides the
 	// default global context item (the source document node) used when
-	// evaluating global variables/parameters. When it is a node that is not the
-	// source document, global initialisers see it as "." while the initial match
-	// selection still drives template matching independently.
+	// evaluating global variables/parameters, per F&O 3.1 (the option is an
+	// item()). When it is a node, global initialisers see it as "." (globalSourceNode)
+	// while the initial match selection still drives template matching independently.
+	// A non-node item (atomic/map/array/function) has no context node, so it is
+	// exposed through ec.contextItem for the duration of global evaluation only.
+	restoreGlobalContextItem := false
 	if cfg != nil && cfg.globalContextItem != nil {
-		if ni, ok := cfg.globalContextItem.(xpath3.NodeItem); ok && ni.Node != nil {
-			ec.globalContextItemNode = ni.Node
+		ec.globalContextItem = cfg.globalContextItem
+		if _, isNode := cfg.globalContextItem.(xpath3.NodeItem); !isNode {
+			ec.contextItem = cfg.globalContextItem
+			restoreGlobalContextItem = true
 		}
 	}
 
@@ -536,6 +541,11 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// are non-recoverable and cannot be caught by xsl:try/xsl:catch.
 	if err := ec.evaluateAllGlobals(ctx); err != nil {
 		return nil, err
+	}
+	// The non-node global-context-item was exposed as ec.contextItem only for
+	// global evaluation; clear it so it does not leak into template execution.
+	if restoreGlobalContextItem {
+		ec.contextItem = nil
 	}
 
 	// Pre-compute accumulator states for the main source document so that

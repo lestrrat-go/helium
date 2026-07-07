@@ -251,8 +251,13 @@ func (ec *execContext) globalSourceNode() helium.Node {
 	if ec.globalContextAbsent {
 		return nil
 	}
-	if ec.globalContextItemNode != nil {
-		return normalizeNode(ec.globalContextItemNode)
+	if ni, ok := ec.globalContextItem.(xpath3.NodeItem); ok {
+		return normalizeNode(ni.Node)
+	}
+	if ec.globalContextItem != nil {
+		// A non-node global context item (atomic/map/array/function) has no
+		// context node; it is exposed via ec.contextItem instead.
+		return nil
 	}
 	return normalizeNode(ec.sourceDoc)
 }

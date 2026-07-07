@@ -276,9 +276,20 @@ type resultDocCollector struct {
 }
 
 func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Document, outDef *OutputDef) error {
-	c.results[href] = doc
+	// Key by the fully-resolved absolute output URI captured during execution
+	// (SetURL on the result document), NOT the raw href. A nested
+	// xsl:result-document resolves its href against the DYNAMIC current output
+	// URI of the enclosing result document, not the top-level base output URI, so
+	// re-resolving the raw href against the base here would key it wrongly.
+	key := href
+	if doc != nil {
+		if u := doc.URL(); u != "" {
+			key = u
+		}
+	}
+	c.results[key] = doc
 	if outDef != nil && c.outputDefs != nil {
-		c.outputDefs[href] = outDef
+		c.outputDefs[key] = outDef
 	}
 	return nil
 }
@@ -962,8 +973,10 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	// principal entry is emitted only when the transformation actually wrote
 	// principal output — a stylesheet that produces only secondary result
 	// documents (via xsl:result-document) has no principal entry (W3C bug 30209).
-	// Secondary result documents are keyed by their href resolved against the base
-	// output URI (an absolute URI).
+	// secondaryResults is keyed by each result document's fully-resolved absolute
+	// output URI (captured during execution via SetURL), which already resolves a
+	// nested href against its enclosing dynamic output URI — so those keys are
+	// used verbatim, never re-resolved against the top-level base output URI.
 	principalKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "output"}
 	if baseOutputURI != "" {
 		principalKey = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: baseOutputURI}
@@ -986,9 +999,8 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			result = result.Put(principalKey, seq)
 		}
 		// Secondary results are returned as document nodes in raw mode.
-		for href, doc := range secondaryResults {
-			key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: canonicalResultURIKey(href, baseOutputURI)}
-			result = result.Put(key, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
+		for uri, doc := range secondaryResults {
+			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
 		}
 	case "serialized":
 		// Serialized delivery: serialize the result document to a string. The
@@ -996,32 +1008,23 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		// parameters for the principal result.
 		if documentHasChildren(resultDoc) {
 			outDef := applySerializationParams(fnTransformCfg.resolvedOutputDef, serializationParamsSeq)
-			var buf bytes.Buffer
-			if err := SerializeResult(&buf, resultDoc, outDef); err != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", err)
+			s, serErr := serializeDeliveredResult(resultDoc, outDef)
+			if serErr != nil {
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", serErr)
 			}
-			// Trim the trailing newline the XML serializer appends to a document
-			// so the string value matches spec expectations.
-			result = result.Put(principalKey, xpath3.SingleString(strings.TrimRight(buf.String(), "\n")))
+			result = result.Put(principalKey, xpath3.SingleString(s))
 		}
 		// Serialize secondary results too.
-		for href, doc := range secondaryResults {
-			key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: canonicalResultURIKey(href, baseOutputURI)}
-			outDef := secondaryOutputDefs[href]
-			if outDef == nil {
-				outDef = ss.outputs[href]
-			}
+		for uri, doc := range secondaryResults {
+			outDef := secondaryOutputDefs[uri]
 			if outDef == nil {
 				outDef = ss.outputs[""]
 			}
-			var buf bytes.Buffer
-			if err := SerializeResult(&buf, doc, outDef); err != nil {
-				result = result.Put(key, xpath3.SingleString(""))
-			} else {
-				// Trim trailing newline added by the XML serializer's document
-				// serialization so the string value matches spec expectations.
-				result = result.Put(key, xpath3.SingleString(strings.TrimRight(buf.String(), "\n")))
+			s, serErr := serializeDeliveredResult(doc, outDef)
+			if serErr != nil {
+				s = ""
 			}
+			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.SingleString(s))
 		}
 	default:
 		// Default: return the result document
@@ -1029,9 +1032,8 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			result = result.Put(principalKey, xpath3.ItemSlice{xpath3.NodeItem{Node: resultDoc}})
 		}
 		// Add secondary results as document nodes.
-		for href, doc := range secondaryResults {
-			key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: canonicalResultURIKey(href, baseOutputURI)}
-			result = result.Put(key, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
+		for uri, doc := range secondaryResults {
+			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
 		}
 	}
 
@@ -1093,6 +1095,38 @@ func documentHasChildren(doc *helium.Document) bool {
 		return false
 	}
 	for range helium.Children(doc) {
+		return true
+	}
+	return false
+}
+
+// serializeDeliveredResult serializes doc to a string for the fn:transform
+// "serialized" delivery format. For the element-tree methods (xml/html/xhtml)
+// the helium document serializer appends a single trailing newline that is a
+// serialization artifact, not result content, so it is trimmed. For the
+// text/json/adaptive methods the output is the value itself — a trailing newline
+// there is legitimate content and is preserved.
+func serializeDeliveredResult(doc *helium.Document, outDef *OutputDef) (string, error) {
+	var buf bytes.Buffer
+	if err := SerializeResult(&buf, doc, outDef); err != nil {
+		return "", err
+	}
+	s := buf.String()
+	if !preservesTrailingNewline(outDef) {
+		s = strings.TrimSuffix(s, "\n")
+	}
+	return s, nil
+}
+
+// preservesTrailingNewline reports whether the serialization method treats a
+// trailing newline as significant output content (text/json/adaptive) rather
+// than as the element-tree serializer's document-terminating artifact.
+func preservesTrailingNewline(outDef *OutputDef) bool {
+	if outDef == nil {
+		return false // default (xml) method
+	}
+	switch outDef.Method {
+	case methodText, methodJSON, methodAdaptive:
 		return true
 	}
 	return false
