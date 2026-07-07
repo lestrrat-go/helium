@@ -30,6 +30,21 @@ func (c *compiler) deferMissingTypeRef(qn QName) bool {
 	if qn.NS != "" || isInvalidQName(qn) || c.deprecatedDatatypeQName(qn) {
 		return false
 	}
+	// The §5.3 unused-missing-component deferral for a NO-namespace ({}) missing
+	// type only applies to a schema that has NO targetNamespace of its own (Saxon
+	// Missing missing001/003/006): a genuinely no-namespace schema may carry an
+	// unused declaration whose {} type is filled in later. When the compiling
+	// (sub-)schema DOES declare a targetNamespace, an unprefixed reference with no
+	// in-scope default namespace resolves to {} (XML Namespaces; see resolveQName)
+	// but no {} component can exist for it to name — the reference is a genuine
+	// unresolved-type defect, not a deferrable unused component (W3C msMeta addB009).
+	// A chameleon-included no-targetNamespace document coerces its unprefixed refs
+	// into the including targetNamespace ({coercedTNS}name, NS != ""), so it never
+	// reaches this {} branch; only a genuine no-namespace schema (this sub-compiler's
+	// own targetNamespace empty) does.
+	if c.schema.targetNamespace != "" {
+		return false
+	}
 	if _, droppedOverrideType := c.droppedOverrideTypes[qn]; droppedOverrideType {
 		return false
 	}
@@ -3761,6 +3776,18 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrN
 	// to xs:string, not to {targetNamespace}string.
 	if defNS := lookupNS(elem, ""); defNS != "" {
 		ns = defNS
+	} else if elementDocDeclaresTargetNS(elem) {
+		// No in-scope default namespace: per XML Namespaces an unprefixed name with
+		// no default xmlns declaration is in NO namespace. When the owning schema
+		// document declares its OWN @targetNamespace (NOT a chameleon include), the
+		// name must therefore resolve to {} — it does NOT silently adopt the
+		// targetNamespace ns seeded above (W3C msMeta addB009: type="CatalogData"
+		// with no xmlns default does not bind {targetNamespace}CatalogData). Only a
+		// chameleon include — a document that declares no @targetNamespace of its
+		// own, whose unqualified declarations and refs are coerced into the including
+		// namespace as a unit — keeps the coerced targetNamespace, mirroring the
+		// unprefixed attribute @ref rule in parseAttributeUse.
+		ns = ""
 	}
 
 	c.rejectDeprecatedDatatypeNamespace(ctx, elem, ref, ns)

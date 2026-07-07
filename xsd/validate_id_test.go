@@ -392,7 +392,7 @@ func TestIDCXPathDefaultNamespaceEmptyOverride(t *testing.T) {
     targetNamespace="urn:x" xmlns:s="urn:x" xpathDefaultNamespace="##targetNamespace">
   <xs:element name="doc">
     <xs:complexType>
-      <xs:sequence><xs:element name="emp" type="empType" maxOccurs="unbounded"/></xs:sequence>
+      <xs:sequence><xs:element name="emp" type="s:empType" maxOccurs="unbounded"/></xs:sequence>
     </xs:complexType>
     <xs:unique name="u">
       <xs:selector xpath="emp" xpathDefaultNamespace=""/>

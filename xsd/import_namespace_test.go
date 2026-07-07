@@ -153,12 +153,12 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
 	t.Run("list itemType resolves against empty namespace", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			importMainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-  targetNamespace="urn:main">
+  xmlns:m="urn:main" targetNamespace="urn:main">
   <xs:import schemaLocation="other.xsd"/>
   <xs:simpleType name="myList">
     <xs:list itemType="t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myList"/>
+  <xs:element name="root" type="m:myList"/>
 </xs:schema>`)},
 			importOtherXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="t">
@@ -181,12 +181,12 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
 	t.Run("union memberTypes resolves against empty namespace", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			importMainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-  targetNamespace="urn:main">
+  xmlns:m="urn:main" targetNamespace="urn:main">
   <xs:import schemaLocation="other.xsd"/>
   <xs:simpleType name="myUnion">
     <xs:union memberTypes="xs:string t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myUnion"/>
+  <xs:element name="root" type="m:myUnion"/>
 </xs:schema>`)},
 			importOtherXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="t">
@@ -211,12 +211,12 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
 	t.Run("missing list itemType still errors", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			importMainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-  targetNamespace="urn:main">
+  xmlns:m="urn:main" targetNamespace="urn:main">
   <xs:import schemaLocation="other.xsd"/>
   <xs:simpleType name="myList">
     <xs:list itemType="missing"/>
   </xs:simpleType>
-  <xs:element name="root" type="myList"/>
+  <xs:element name="root" type="m:myList"/>
 </xs:schema>`)},
 			importOtherXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="t">
@@ -295,7 +295,7 @@ func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
   <xs:simpleType name="myList">
     <xs:list itemType="o:t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myList"/>
+  <xs:element name="root" type="m:myList"/>
 </xs:schema>`,
 		},
 		{
@@ -306,7 +306,7 @@ func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
   <xs:simpleType name="myUnion">
     <xs:union memberTypes="xs:string o:t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myUnion"/>
+  <xs:element name="root" type="m:myUnion"/>
 </xs:schema>`,
 		},
 	}
@@ -395,7 +395,7 @@ func TestCompile_DefaultNamespaceBoundRefNoEmptyNamespaceFallback(t *testing.T) 
   <xs:simpleType name="myList">
     <xs:list itemType="t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myList"/>
+  <xs:element name="root" type="m:myList"/>
 </xs:schema>`,
 		},
 		{
@@ -406,7 +406,7 @@ func TestCompile_DefaultNamespaceBoundRefNoEmptyNamespaceFallback(t *testing.T) 
   <xs:simpleType name="myUnion">
     <xs:union memberTypes="xs:string t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myUnion"/>
+  <xs:element name="root" type="m:myUnion"/>
 </xs:schema>`,
 		},
 	}
@@ -495,7 +495,7 @@ func TestCompile_QualifiedTargetNamespaceRefNoEmptyNamespaceFallback(t *testing.
   <xs:simpleType name="myList">
     <xs:list itemType="m:t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myList"/>
+  <xs:element name="root" type="m:myList"/>
 </xs:schema>`,
 		},
 		{
@@ -506,7 +506,7 @@ func TestCompile_QualifiedTargetNamespaceRefNoEmptyNamespaceFallback(t *testing.
   <xs:simpleType name="myUnion">
     <xs:union memberTypes="xs:string m:t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myUnion"/>
+  <xs:element name="root" type="m:myUnion"/>
 </xs:schema>`,
 		},
 		// Default namespace equal to the schema's own target namespace urn:main:
@@ -539,7 +539,7 @@ func TestCompile_QualifiedTargetNamespaceRefNoEmptyNamespaceFallback(t *testing.
   <xs:simpleType name="myList">
     <xs:list itemType="t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myList"/>
+  <xs:element name="root" type="m:myList"/>
 </xs:schema>`,
 		},
 		{
@@ -550,7 +550,7 @@ func TestCompile_QualifiedTargetNamespaceRefNoEmptyNamespaceFallback(t *testing.
   <xs:simpleType name="myUnion">
     <xs:union memberTypes="xs:string t"/>
   </xs:simpleType>
-  <xs:element name="root" type="myUnion"/>
+  <xs:element name="root" type="m:myUnion"/>
 </xs:schema>`,
 		},
 	}

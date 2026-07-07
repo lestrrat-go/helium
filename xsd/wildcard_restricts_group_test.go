@@ -856,7 +856,7 @@ func TestWildcardRestrictsGroupOpenContentCapacity(t *testing.T) {
   </xs:complexType>
   <xs:complexType name="derived">
     <xs:complexContent>
-      <xs:restriction base="base">
+      <xs:restriction base="t:base">
         <xs:openContent mode="interleave"><xs:any namespace="urn:x" processContents="strict"/></xs:openContent>
         <xs:sequence>
           <xs:any namespace="urn:x" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
@@ -1093,7 +1093,7 @@ func TestWildcardRestrictsChoiceDispatchSound(t *testing.T) {
   </xs:complexType>
   <xs:complexType name="derived">
     <xs:complexContent>
-      <xs:restriction base="base">
+      <xs:restriction base="t:base">
         <xs:choice>
           <xs:any namespace="##other" processContents="skip"/>
         </xs:choice>
@@ -1285,7 +1285,7 @@ func TestWildcardRestrictsAllSubstMemberSoundCompiles(t *testing.T) {
   </xs:complexType>
   <xs:complexType name="derived">
     <xs:complexContent>
-      <xs:restriction base="base">
+      <xs:restriction base="s:base">
         <xs:all>
           <xs:any namespace="urn:other" processContents="skip"/>
         </xs:all>
