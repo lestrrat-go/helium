@@ -141,6 +141,19 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 ### `functions_json.go`
 `parse-json`, `json-doc`
 
+The streaming JSON parser (`parseJSONValue`/`parseJSONToken`) is shared by
+`fn:parse-json`/`fn:json-doc` and `fn:json-to-xml`, but the two consumers type
+JSON numbers differently, gated by `jsonOptions.retainNumberLexical`:
+
+- `fn:parse-json` / `fn:json-doc` (flag false): per F&O 3.1 §17.5 JSON has a
+  single number type, so every JSON number becomes an `xs:double` (`jsonToXDM`),
+  including integral values like `0`/`-0` — never `xs:integer`.
+- `fn:json-to-xml` (flag true, set in `parseJSONToXMLOptions`): the `<number>`
+  element retains the number's EXACT lexical form (`23E0`, `0.23e+02`, `-0`,
+  `1000000000000` — never scientific notation), per F&O 3.1 / W3C bug 28179. The
+  parser yields a private `jsonLexicalNumber{lexical}` item that
+  `buildJSONToXMLTree` writes verbatim, bypassing the `xs:double` canonicalizer.
+
 ### `functions_json_xml.go`
 `json-to-xml`, `xml-to-json`
 

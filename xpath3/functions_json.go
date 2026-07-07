@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"strings"
 	"unicode/utf8"
 
@@ -27,7 +26,21 @@ type jsonOptions struct {
 	validate   bool // validate=true(): type-annotate the json-to-xml result tree
 	fallback   *FunctionItem
 	invalidEsc map[rune]string
+	// retainNumberLexical selects fn:json-to-xml's number handling: it retains a
+	// JSON number's exact lexical form in the <number> element (F&O 3.1, W3C bug
+	// 28179), whereas fn:parse-json/fn:json-doc (false) map every JSON number to
+	// the canonical xs:double.
+	retainNumberLexical bool
 }
+
+// jsonLexicalNumber carries a JSON number's exact lexical form for
+// fn:json-to-xml, which retains the source representation in the <number>
+// element rather than the canonical xs:double produced by fn:parse-json.
+type jsonLexicalNumber struct {
+	lexical string
+}
+
+func (jsonLexicalNumber) itemTag() {}
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Route empty detection through post-atomization: an empty array or a
@@ -331,6 +344,9 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 			}
 			return AtomicValue{TypeName: TypeString, Value: s}, nil
 		}
+		if num, ok := v.(json.Number); ok && opts.retainNumberLexical {
+			return jsonLexicalNumber{lexical: num.String()}, nil
+		}
 		return jsonToXDM(v)
 	}
 }
@@ -591,23 +607,15 @@ func jsonToXDM(v any) (Item, error) {
 	case bool:
 		return AtomicValue{TypeName: TypeBoolean, Value: val}, nil
 	case json.Number:
+		// Per F&O 3.1 §17.5, JSON has a single number type and every JSON
+		// number maps to an xs:double in the XDM result — including integral
+		// values such as 0/-0, which therefore become xs:double, not xs:integer.
 		s := val.String()
-		if strings.ContainsAny(s, ".eE") {
-			f, err := val.Float64()
-			if err != nil {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
-			}
-			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
+		f, err := val.Float64()
+		if err != nil {
+			return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
 		}
-		n, ok := new(big.Int).SetString(s, 10)
-		if !ok {
-			f, err := val.Float64()
-			if err != nil {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
-			}
-			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
-		}
-		return AtomicValue{TypeName: TypeInteger, Value: n}, nil
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case string:
 		return AtomicValue{TypeName: TypeString, Value: val}, nil
 	case []any:

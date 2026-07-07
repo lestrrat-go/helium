@@ -36,7 +36,10 @@ func TestOptionValueFlattenBeforeCardinality(t *testing.T) {
 		require.Equal(t, 1, seq.Len())
 		av, ok := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, ok)
-		require.Equal(t, int64(2), av.IntegerVal())
+		// Per F&O 3.1 §17.5 a JSON number is an xs:double; use-last resolves the
+		// duplicate key to the second value, 2.
+		require.Equal(t, xpath3.TypeDouble, av.TypeName)
+		require.Equal(t, float64(2), av.DoubleVal())
 	})
 
 	// fn:serialize string parameter (item-separator). Atomizing ([], "-") yields
