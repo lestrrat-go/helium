@@ -708,3 +708,20 @@ func TestCastableExprForms(t *testing.T) {
 		require.Equal(t, tc.expect, b, tc.expr)
 	}
 }
+
+func TestCastableExprAtomizationError(t *testing.T) {
+	// Atomizing a non-atomizable operand (map/array/function) is a type error
+	// (FOTY0013) that must PROPAGATE from `castable as`, not be swallowed into a
+	// false result — W3C QT3 CastableAs666/668.
+	for _, expr := range []string{
+		`map{} castable as xs:integer`,
+		// A nested array that flattens to reach a map still atomizes to FOTY0013.
+		`[[], (), [[3, map{}]]] castable as xs:integer`,
+	} {
+		_, err := evaluate(t.Context(), nil, expr)
+		require.Error(t, err, expr)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "%s: error must be *xpath3.XPathError, got %T: %v", expr, err, err)
+		require.Equal(t, "FOTY0013", xerr.Code, expr)
+	}
+}
