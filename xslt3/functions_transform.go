@@ -620,7 +620,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	}
 
 	// Unhandled fn:transform options (processor-specific or optional):
-	//   requested-properties, vendor-options, cache, post-process, serialization-params
+	//   vendor-options, cache
 	stylesheetLoc := getStr("stylesheet-location")
 	packageName := getStr("package-name")
 	packageVersion := getStr("package-version")
@@ -766,33 +766,33 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		ssNodeSeq := getSeq("stylesheet-node")
 		if ssNodeSeq != nil && sequence.Len(ssNodeSeq) > 0 {
 			if ni, ok := ssNodeSeq.Get(0).(xpath3.NodeItem); ok {
-				// Find the document containing this node
-				var doc *helium.Document
-				n := ni.Node
-				for n != nil {
-					if d, ok := n.(*helium.Document); ok {
-						doc = d
-						break
-					}
-					n = n.Parent()
-				}
-				if doc == nil {
+				owner := owningDocument(ni.Node)
+				if owner == nil {
 					return nil, dynamicError(errCodeFOXT0003, "fn:transform: stylesheet-node is not part of a document")
 				}
 				// Base URI for resolving relative xsl:include/xsl:import inside the
-				// stylesheet node. Default to the node's own document base URI; the
-				// stylesheet-base-uri option (a relative value resolved against the
-				// call's static base URI) overrides it when supplied.
-				baseURI := helium.NodeGetBase(doc, ni.Node)
+				// stylesheet node, taken from the original node. Default to the node's
+				// own document base URI; the stylesheet-base-uri option (a relative
+				// value resolved against the call's static base URI) overrides it.
+				baseURI := helium.NodeGetBase(owner, ni.Node)
 				if stylesheetBaseURI != "" {
 					baseURI = resolveStylesheetLocation(cfg.baseURI, stylesheetBaseURI)
+				}
+				// Choose the document to compile. When stylesheet-node is an element
+				// that is not its owner's document element (a simplified/literal-result
+				// stylesheet supplied as a fragment child, or an element embedded in a
+				// larger tree), compile from that element as the stylesheet root rather
+				// than the owning document (whose document element is a different node).
+				compileDoc, prepErr := stylesheetNodeCompileDocument(ni.Node, owner)
+				if prepErr != nil {
+					return nil, dynamicErrorCause(errCodeFOXT0003, prepErr, "fn:transform: cannot prepare stylesheet node: %v", prepErr)
 				}
 				compiler := nestedCompiler
 				if baseURI != "" {
 					compiler = compiler.BaseURI(baseURI)
 				}
 				var compileErr error
-				ss, compileErr = compiler.Compile(ctx, doc)
+				ss, compileErr = compiler.Compile(ctx, compileDoc)
 				if compileErr != nil {
 					return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet: %v", compileErr)
 				}
@@ -1016,7 +1016,91 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		}
 	}
 
+	// Apply the post-process callback (F&O 3.1 §14.8.3), when supplied, to each
+	// delivered result value (the principal "output" entry and each secondary
+	// result). Its return value replaces the value in the result map.
+	if pp, ok := transformPostProcess(m); ok {
+		processed, ppErr := applyTransformPostProcess(ctx, pp, result, baseOutputURI)
+		if ppErr != nil {
+			return nil, ppErr
+		}
+		result = processed
+	}
+
 	return xpath3.ItemSlice{result}, nil
+}
+
+// transformPostProcess returns the post-process function item from the
+// fn:transform options map, or ok=false when the option is absent or is not a
+// function item.
+func transformPostProcess(m xpath3.MapItem) (xpath3.FunctionItem, bool) {
+	seq := transformMapSeq(m, "post-process")
+	if !transformOptionPresent(seq) {
+		return xpath3.FunctionItem{}, false
+	}
+	fi, ok := seq.Get(0).(xpath3.FunctionItem)
+	return fi, ok
+}
+
+// applyTransformPostProcess invokes the post-process callback once per result
+// entry, passing (result-URI, result-value), and returns a new result map whose
+// values are the callback return values. The principal "output" entry is passed
+// the base output URI; each secondary entry is passed its href key.
+func applyTransformPostProcess(ctx context.Context, fi xpath3.FunctionItem, result xpath3.MapItem, baseOutputURI string) (xpath3.MapItem, error) {
+	if fi.Invoke == nil {
+		return result, nil
+	}
+	out := xpath3.MapItem{}
+	for _, key := range result.Keys() {
+		value, _ := result.Get(key)
+		uri := baseOutputURI
+		if s, err := xpath3.AtomicToString(key); err == nil && s != "output" {
+			uri = s
+		}
+		processed, err := fi.Invoke(ctx, []xpath3.Sequence{xpath3.SingleString(uri), value})
+		if err != nil {
+			return xpath3.MapItem{}, err
+		}
+		out = out.Put(key, processed)
+	}
+	return out, nil
+}
+
+// owningDocument walks up from n to the helium document that contains it,
+// returning nil when n is not part of any document.
+func owningDocument(n helium.Node) *helium.Document {
+	for n != nil {
+		if d, ok := n.(*helium.Document); ok {
+			return d
+		}
+		n = n.Parent()
+	}
+	return nil
+}
+
+// stylesheetNodeCompileDocument returns the document that fn:transform should
+// compile for a stylesheet-node value. When n is an element that is not owner's
+// document element (a simplified/literal-result stylesheet supplied as a
+// fragment child, or an element nested in a larger tree), a fresh document is
+// built with a deep copy of that element as its document element, so the element
+// itself becomes the stylesheet root. Otherwise owner is compiled unchanged.
+func stylesheetNodeCompileDocument(n helium.Node, owner *helium.Document) (*helium.Document, error) {
+	elem, ok := n.(*helium.Element)
+	if !ok {
+		return owner, nil
+	}
+	if de := owner.DocumentElement(); de != nil && helium.Node(de) == n {
+		return owner, nil
+	}
+	doc := helium.NewDefaultDocument()
+	copied, err := helium.CopyNode(elem, doc)
+	if err != nil {
+		return nil, err
+	}
+	if err := doc.AddChild(copied); err != nil {
+		return nil, err
+	}
+	return doc, nil
 }
 
 // transformOptionPresent reports whether a sequence-valued fn:transform option
