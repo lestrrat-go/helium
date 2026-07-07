@@ -9,12 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStringArgElementOnlyRaisesFOTY0012 verifies that atomizing an
-// element-only-typed node as an xs:string?-argument raises err:FOTY0012 (the
-// element has no typed value), matching fn:data. Covers QT3
+// TestStringArgElementOnlyRaisesFOTY0012 verifies that passing an
+// element-only-typed node to an xs:string?-typed function argument raises
+// err:FOTY0012 (the element has no typed value), matching fn:data. Covers QT3
 // fn-string-length-23 (/*/string-length(.)) and fn-normalize-space-24
-// (/*/normalize-space(.)), and — for the generic function-conversion route —
-// any other xs:string?-argument function (fn:upper-case).
+// (/*/normalize-space(.)), plus fn:upper-case as a third representative.
 func TestStringArgElementOnlyRaisesFOTY0012(t *testing.T) {
 	doc := mustParseXML(t, `<root><child>hi</child></root>`)
 	root := doc.DocumentElement()
@@ -44,18 +43,20 @@ func TestStringArgElementOnlyRaisesFOTY0012(t *testing.T) {
 		require.Equal(t, "FOTY0012", xerr.Code)
 	}
 
-	// fn:string-length uses seqToStringErr / AtomizeSequence.
+	// string-length/1, normalize-space/1 and upper-case/1 each declare an
+	// xs:string? parameter, so the call is signature-coerced (the argument is
+	// atomized against the parameter type) before the function body runs.
+	// Atomizing an element-only-typed node has no typed value, so the coercion
+	// raises FOTY0012 for all three — the observable result is the same
+	// regardless of which body helper would otherwise stringify the argument.
 	t.Run("string-length element-only raises FOTY0012", func(t *testing.T) {
 		requireFOTY0012(t, `string-length(/*)`)
 	})
 
-	// fn:normalize-space uses coerceArgToString / atomizeStream.
 	t.Run("normalize-space element-only raises FOTY0012", func(t *testing.T) {
 		requireFOTY0012(t, `normalize-space(/*)`)
 	})
 
-	// Spec-consistency for the generic function-conversion route: any
-	// xs:string?-arg function atomizing an element-only node raises FOTY0012.
 	t.Run("upper-case element-only raises FOTY0012", func(t *testing.T) {
 		requireFOTY0012(t, `upper-case(/*)`)
 	})

@@ -227,10 +227,11 @@ so a real dynamic error — `FOTY0012` (atomizing an element-only node),
 members, but a function/map member still raises it), `FORG0001` (a failed
 untypedAtomic→target cast) — surfaces unchanged instead of being flattened into
 a generic `XPTY0004`. This covers the direct call path (`evalFunctionCall`),
-partial application, named function references and `fn:function-lookup`
-(`functions_hof.go`), inline-function parameter AND return-type coercion
-(`eval_funcall.go`), and function-item→function-type adaptation
-(`coerceFunctionItem`, `eval_types.go`). Only the PUBLIC boolean wrappers
+partial application and named function references (`partialApply` /
+`evalNamedFunctionRef`, `eval_funcall.go`), `fn:function-lookup`
+(`lookupFunctionItem`, `functions_hof.go`), inline-function parameter AND
+return-type coercion (`evalInlineFunctionExpr`, `eval_funcall.go`), and
+function-item→function-type adaptation (`coerceFunctionItem`, `eval_types.go`). Only the PUBLIC boolean wrappers
 `CoerceToSequenceType`/`CoerceToSequenceTypeContext` discard the specific error
 (they are type predicates returning `(Sequence, bool)`); `instance of` /
 `castable` / `treat` type tests likewise stay boolean, where a mismatch is the
