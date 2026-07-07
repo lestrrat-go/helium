@@ -168,6 +168,35 @@ func TestParseJSON_NumbersAreDouble(t *testing.T) {
 	require.Equal(t, wantTrue, r.StringValue())
 }
 
+// fn:json-to-xml retains a JSON number's EXACT lexical form in the <number>
+// element (F&O 3.1, W3C bug 28179 / QT3 json-to-xml-030/031/033) — the opposite
+// of fn:parse-json, which canonicalizes every number to xs:double. In
+// particular a large integer must NOT be rendered in scientific notation, and
+// -0 must be retained. This locks the split between the two consumers of the
+// shared JSON parser so the parse-json xs:double change cannot leak into
+// json-to-xml's number representation.
+func TestJSONToXML_NumbersRetainLexicalForm(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		want string
+	}{
+		{"large integer no scientific notation", `{"a": 1000000000000}`, "1000000000000"},
+		{"negative zero retained", `-0`, "-0"},
+		{"upper-case exponent retained", `23E0`, "23E0"},
+		{"lower-case exponent with sign retained", `0.23e+02`, "0.23e+02"},
+		{"plain zero", `0`, "0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := `json-to-xml("` + escapeForXPathString(tc.json) + `")//*:number/string()`
+			r, err := evaluate(t.Context(), nil, expr)
+			require.NoError(t, err, expr)
+			require.Equal(t, tc.want, r.StringValue(), "json-to-xml must retain lexical form for %s", tc.json)
+		})
+	}
+}
+
 // fn:json-to-xml shares the same streaming parser and must be bounded too.
 func TestJSONToXML_DeepNestingBounded(t *testing.T) {
 	depth := xpath3.DefaultMaxRecursionDepth + 1

@@ -136,6 +136,8 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		_ = v
 	case ArrayItem:
 		name = jsonKindArray
+	case jsonLexicalNumber:
+		name = lexicon.TypeNumber
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
@@ -165,6 +167,13 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	switch v := item.(type) {
 	case nil:
 		return elem, nil
+	case jsonLexicalNumber:
+		// Retain the JSON number's exact lexical form (e.g. 23E0, 0.23e+02, -0,
+		// 1000000000000) rather than the canonical xs:double, per F&O 3.1 (bug
+		// 28179).
+		if err := elem.AppendText([]byte(v.lexical)); err != nil {
+			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append numeric value: %v", err)}
+		}
 	case MapItem:
 		if err := v.forEach0(func(key AtomicValue, value Sequence) error {
 			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(value), opts, false, annotations)
@@ -235,7 +244,8 @@ func jsonSequenceToItem(seq Sequence) Item {
 
 func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
-		duplicates: duplicatesUseFirst,
+		duplicates:          duplicatesUseFirst,
+		retainNumberLexical: true,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil

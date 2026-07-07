@@ -26,7 +26,21 @@ type jsonOptions struct {
 	validate   bool // validate=true(): type-annotate the json-to-xml result tree
 	fallback   *FunctionItem
 	invalidEsc map[rune]string
+	// retainNumberLexical selects fn:json-to-xml's number handling: it retains a
+	// JSON number's exact lexical form in the <number> element (F&O 3.1, W3C bug
+	// 28179), whereas fn:parse-json/fn:json-doc (false) map every JSON number to
+	// the canonical xs:double.
+	retainNumberLexical bool
 }
+
+// jsonLexicalNumber carries a JSON number's exact lexical form for
+// fn:json-to-xml, which retains the source representation in the <number>
+// element rather than the canonical xs:double produced by fn:parse-json.
+type jsonLexicalNumber struct {
+	lexical string
+}
+
+func (jsonLexicalNumber) itemTag() {}
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Route empty detection through post-atomization: an empty array or a
@@ -329,6 +343,9 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 				return nil, err
 			}
 			return AtomicValue{TypeName: TypeString, Value: s}, nil
+		}
+		if num, ok := v.(json.Number); ok && opts.retainNumberLexical {
+			return jsonLexicalNumber{lexical: num.String()}, nil
 		}
 		return jsonToXDM(v)
 	}
