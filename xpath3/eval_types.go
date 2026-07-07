@@ -246,7 +246,15 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	// castable to a single atomic type.
 	atoms, err := atomizeSingletonOperand(seq)
 	if err != nil {
-		return SingleBoolean(false), nil //nolint:nilerr // castable returns false on atomization failure
+		// Atomizing a function/map/array is a type error (FOTY0013) that
+		// PROPAGATES from `castable as` rather than making it false — the operand
+		// isn't a bad lexical, it's not atomizable at all (F&O 3.1 §19.1; QT3
+		// CastableAs666/668). Other atomization failures mean "not castable".
+		var xpErr *XPathError
+		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
+			return nil, err
+		}
+		return SingleBoolean(false), nil
 	}
 	if len(atoms) == 0 {
 		return SingleBoolean(e.AllowEmpty), nil
