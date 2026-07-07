@@ -54,7 +54,8 @@ type evaluatorCfg struct {
 	size                   int
 	contextItem            Item
 	typeAnnotations        map[helium.Node]string
-	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
+	preservedIDAnnotations map[helium.Node]string   // ID/IDREF annotations preserved after input-type-annotations="strip"
+	idNodes                map[helium.Node]struct{} // PSVI is-id nodes (from xsd validation); supplements the type-annotation is-id check for list/union types
 	variableResolver       VariableResolver
 	functionResolver       FunctionResolver
 	strictPrefixes         bool
@@ -312,6 +313,22 @@ func (e Evaluator) PreservedIDAnnotations(annotations map[helium.Node]string) Ev
 	return e
 }
 
+// IDNodes sets the PSVI is-id node set for schema-aware fn:id / fn:element-with-id.
+// A node in this set is treated as an is-id node in addition to those whose type
+// annotation is xs:ID or derived from it, so a schema-validated element/attribute
+// whose is-id property arises from a SINGLETON list of xs:ID or a union that
+// selects an xs:ID-derived member (neither of which is a name-level subtype of
+// xs:ID) is recognized. The map is cloned unless EvalBorrowing is set.
+func (e Evaluator) IDNodes(ids map[helium.Node]struct{}) Evaluator {
+	e = e.clone()
+	if e.borrowing() {
+		e.cfg.idNodes = ids
+	} else {
+		e.cfg.idNodes = maps.Clone(ids)
+	}
+	return e
+}
+
 // SchemaDeclarations sets the schema declarations provider.
 func (e Evaluator) SchemaDeclarations(d SchemaDeclarations) Evaluator {
 	e = e.clone()
@@ -470,6 +487,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.typeAnnotations = cfg.typeAnnotations
 	ec.schemaDeclarations = cfg.schemaDeclarations
 	ec.preservedIDAnnotations = cfg.preservedIDAnnotations
+	ec.idNodes = cfg.idNodes
 	ec.strictPrefixes = cfg.strictPrefixes
 	ec.qnameValueNoDefaultNS = cfg.qnameValueNoDefaultNS
 	ec.allowXML11Chars = cfg.allowXML11Chars

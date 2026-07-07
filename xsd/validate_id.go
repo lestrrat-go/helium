@@ -195,6 +195,98 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 	return col.valid
 }
 
+// collectIDNodes records every node whose PSVI is-id property is true into out.
+// It mirrors validateIDIDREF's walk over assessed ID-family elements and
+// attributes, but applies the XDM 3.1 is-id rule (valueIsID) rather than
+// entering values into a uniqueness table: an atomic xs:ID, a SINGLETON list of
+// xs:ID, or a union that selects an xs:ID-derived member is is-id; a multi-item
+// list, or a union selecting a non-ID member, is not. The recorded node is the
+// is-id node itself — an ID-typed element (its owning element is that element)
+// or an ID attribute — matching XDM, which fn:id / fn:element-with-id consume.
+//
+// This runs even for a fragment-validating caller (skipDatatypeIntegrity), and
+// in both XSD 1.0 and 1.1, because is-id is a version-independent PSVI property
+// distinct from document-wide ID uniqueness.
+func (vc *validationContext) collectIDNodes(ctx context.Context, doc *helium.Document, out IDNodes) {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+		if n.Type() != helium.ElementNode {
+			return nil
+		}
+		elem, ok := helium.AsNode[*helium.Element](n)
+		if !ok {
+			return nil
+		}
+
+		// Element simple content typed as ID (directly, or as a singleton
+		// list / selected union member). The child-element and nilled guards
+		// match validateIDIDREF: an element with child elements has no valid
+		// simple value, and a confirmed-nilled element has no value at all.
+		td := vc.elementTypeForID(elem)
+		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) && !hasChildElement(elem) {
+			hostDecl := vc.idcHostDecl(elem)
+			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
+				raw := elemTextContent(elem)
+				if raw == "" && hostDecl != nil {
+					if hostDecl.Fixed != nil {
+						raw = *hostDecl.Fixed
+					} else if hostDecl.Default != nil {
+						raw = *hostDecl.Default
+					}
+				}
+				if vc.valueIsID(ctx, td, raw, elem) {
+					out[elem] = struct{}{}
+				}
+			}
+		}
+
+		// Attributes typed as ID (directly, or as a singleton list / selected
+		// union member).
+		for _, a := range elem.Attributes() {
+			if vc.isSpecialAttr(a) {
+				if _, assessed := vc.assessedAttrs[a]; !assessed {
+					continue
+				}
+			}
+			atd := vc.attrTypeForID(a)
+			if atd == nil || !idFamilyType(atd) {
+				continue
+			}
+			if vc.valueIsID(ctx, atd, a.Value(), a) {
+				out[a] = struct{}{}
+			}
+		}
+		return nil
+	}))
+}
+
+// valueIsID reports whether raw, validated against td, has the XDM is-id
+// property: its actual value is a SINGLE value of type xs:ID or a type derived
+// from xs:ID by restriction. A list is is-id only when it is a singleton whose
+// item is xs:ID-derived; a union is is-id only when the SELECTED member is
+// xs:ID-derived (an integer/non-ID member is not). fieldNode supplies namespace
+// context for union active-member resolution.
+func (vc *validationContext) valueIsID(ctx context.Context, td *TypeDef, raw string, fieldNode helium.Node) bool {
+	switch resolveVariety(td) {
+	case TypeVarietyList:
+		item := resolveItemType(td)
+		if item == nil {
+			return false
+		}
+		fields := value.XSDFields(raw)
+		if len(fields) != 1 {
+			return false
+		}
+		return vc.valueIsID(ctx, item, fields[0], fieldNode)
+	case TypeVarietyUnion:
+		if m := vc.unionActiveMember(ctx, raw, fieldNode, td); m != nil {
+			return vc.valueIsID(ctx, m, raw, fieldNode)
+		}
+		return false
+	default:
+		return builtinBaseLocal(td) == "ID"
+	}
+}
+
 // idFamilyType reports whether td involves xs:ID or xs:IDREF anywhere in its
 // variety structure, so the (more expensive) recursive decomposition is only run
 // for types that can actually contribute ID/IDREF values.

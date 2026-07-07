@@ -68,6 +68,7 @@ func (e Evaluator) ContextItem(item Item) Evaluator
 // Schema / typing
 func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
 func (e Evaluator) PreservedIDAnnotations(annotations map[helium.Node]string) Evaluator
+func (e Evaluator) IDNodes(ids map[helium.Node]struct{}) Evaluator // PSVI is-id nodes (from xsd Validator.IDNodes); a node here is is-id for fn:id/fn:element-with-id even when its type name is not a subtype of xs:ID (singleton list of xs:ID, or a union selecting an xs:ID-derived member)
 func (e Evaluator) SchemaDeclarations(d SchemaDeclarations) Evaluator
 func (e Evaluator) StrictPrefixes() Evaluator
 func (e Evaluator) QNameValueNoDefaultNamespace() Evaluator // XSD: unprefixed QName/NOTATION node VALUE atomizes to no namespace (off by default)

@@ -775,6 +775,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	if cfg.nilledElements != nil && *cfg.nilledElements == nil {
 		*cfg.nilledElements = make(NilledElements)
 	}
+	// Initialize is-id nodes map if requested.
+	if cfg.idNodes != nil && *cfg.idNodes == nil {
+		*cfg.idNodes = make(IDNodes)
+	}
 
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -850,6 +854,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if !vc.validateEntities(ctx, doc) {
 			valid = false
 		}
+	}
+
+	// PSVI is-id observation. Independent of skipDatatypeIntegrity (it records a
+	// per-node property, it does not enforce document integrity) and of version
+	// (is-id is version-independent). Only runs when a collector was supplied.
+	if cfg.idNodes != nil {
+		vc.collectIDNodes(ctx, doc, *cfg.idNodes)
 	}
 
 	return valid
