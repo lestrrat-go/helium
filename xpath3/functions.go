@@ -335,15 +335,19 @@ func seqToStringErr(ctx context.Context, seq Sequence) (string, error) {
 	return atomicToString(atoms[0])
 }
 
-// isNoTypedValueError reports whether err is the err:FOTY0012 raised when an
-// element-only-typed node (which has no typed value) is atomized. Option
-// extractors that otherwise map a conversion failure to their own bad-value
-// error code (XPTY0004 / FOJS0005) must let this dynamic error surface unchanged
-// rather than masking it, so that atomizing such a node as an option value
-// reports FOTY0012 consistently with fn:data and the xs:string? coercion.
+// isNoTypedValueError reports whether err is an atomization error for a value
+// that has no atomizable typed value: err:FOTY0012 (an element-only-typed node)
+// or err:FOTY0013 (a function or map item). Option extractors that otherwise map
+// a conversion failure to their own bad-value error code (XPTY0004 / FOJS0005)
+// must let these dynamic errors surface unchanged rather than masking them, so
+// that atomizing such a value as an option value reports FOTY0012/FOTY0013
+// consistently with fn:data and the xs:string? coercion.
 func isNoTypedValueError(err error) bool {
 	var xerr *XPathError
-	return errors.As(err, &xerr) && xerr.Code == errCodeFOTY0012
+	if !errors.As(err, &xerr) {
+		return false
+	}
+	return xerr.Code == errCodeFOTY0012 || xerr.Code == errCodeFOTY0013
 }
 
 // coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.

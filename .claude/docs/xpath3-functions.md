@@ -54,9 +54,13 @@ to their tokens — and count cardinality AFTER, so a length `> 1` becomes
 the single `"x"`, not `XPTY0004`). Helpers do not truncate to first item, and a
 raw pre-atomization `seqLen > 1` gate must NOT wrap them (it would pre-empt the
 flattening). This is why the signature-less doc/collection URI family
-(`docURIArg`, backing `fn:doc`/`fn:doc-available`/`fn:collection`/
-`fn:uri-collection`) and the URI builtins (`fn:encode-for-uri`/`iri-to-uri`/
-`escape-html-uri`) delegate cardinality entirely to `coerceArgToString`.
+(`fn:doc`/`fn:doc-available` via direct `coerceAtomizedString`,
+`fn:collection`/`fn:uri-collection` via `collectionURIArg`) and the URI builtins
+(`fn:encode-for-uri`/`iri-to-uri`/`escape-html-uri`) delegate cardinality
+entirely to the atomize-then-count string coercion. Emptiness is detected AFTER
+atomization too (via the `empty` result of `coerceAtomizedString`), so an
+empty-array or nilled/empty-content node argument yields the function's spec
+empty result (`()`), not the empty-string path.
 Signature-sensitive string/regex/URI builtin call sites + `||` string coercion
 also propagate atomization/type errors (`FOTY0012`/`FOTY0013`).
 

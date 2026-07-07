@@ -254,3 +254,37 @@ func TestOptionMapElementOnlyRaisesFOTY0012(t *testing.T) {
 		requireFOTY0012(t, `json-to-xml('{}', map{"duplicates": /*})`)
 	})
 }
+
+// TestOptionMapFunctionValueRaisesFOTY0013 verifies the companion propagation:
+// a function/map item used as a string-valued option value has no atomizable
+// typed value, so atomizing it raises err:FOTY0013 — the extractors must let it
+// surface rather than masking it as their own bad-option error (FOJS0005 /
+// XPTY0004 / SEPM0016). No schema wiring is needed since the value is a function
+// item regardless of content-kind.
+func TestOptionMapFunctionValueRaisesFOTY0013(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+
+	requireFOTY0013 := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0013", xerr.Code)
+	}
+
+	t.Run("map:merge duplicates function item", func(t *testing.T) {
+		requireFOTY0013(t, `map:merge((map{"a": 1}), map{"duplicates": true#0})`)
+	})
+	t.Run("parse-json duplicates function item", func(t *testing.T) {
+		requireFOTY0013(t, `parse-json('{}', map{"duplicates": true#0})`)
+	})
+	t.Run("json-to-xml duplicates function item", func(t *testing.T) {
+		requireFOTY0013(t, `json-to-xml('{}', map{"duplicates": true#0})`)
+	})
+	t.Run("serialize standalone function item", func(t *testing.T) {
+		requireFOTY0013(t, `serialize(/*, map{"standalone": true#0})`)
+	})
+}
