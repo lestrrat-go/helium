@@ -898,7 +898,7 @@ func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *ev
 	if ec == nil || len(tokens) == 0 {
 		return nil
 	}
-	if ec.typeAnnotations == nil && ec.preservedIDAnnotations == nil {
+	if ec.typeAnnotations == nil && ec.preservedIDAnnotations == nil && ec.idNodes == nil {
 		return nil
 	}
 
@@ -907,59 +907,74 @@ func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *ev
 		wanted[token] = struct{}{}
 	}
 
-	seen := make(map[helium.Node]struct{})
-	var nodes []helium.Node
-
-	// Check both regular type annotations and preserved ID annotations
-	// (the latter are kept when input-type-annotations="strip" removes
-	// regular annotations but preserves is-id/is-idref properties).
+	// Gather every candidate is-id node exactly once. A node is an is-id node
+	// when its type annotation is xs:ID (or derived from it) OR the xsd validator
+	// flagged it in the PSVI is-id set — the latter covers a singleton list of
+	// xs:ID and a union that selects an xs:ID-derived member, neither of which is
+	// a name-level subtype of xs:ID. Both regular and preserved ID annotations are
+	// consulted (the latter are kept when input-type-annotations="strip" removes
+	// regular annotations but retains the is-id/is-idref properties).
+	candidates := make(map[helium.Node]struct{})
 	for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
 		for node, typeName := range annMap {
-			if !annotationMatchesIDType(typeName, ec) {
-				continue
-			}
-			if ixpath.DocumentRoot(node) != doc {
-				continue
-			}
-
-			switch typed := node.(type) {
-			case *helium.Attribute:
-				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
-					continue
-				}
-				parent, ok := typed.Parent().(*helium.Element)
-				if !ok {
-					continue
-				}
-				if _, dup := seen[parent]; dup {
-					continue
-				}
-				seen[parent] = struct{}{}
-				nodes = append(nodes, parent)
-			case *helium.Element:
-				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
-					continue
-				}
-				// fn:id returns the is-id element itself; fn:element-with-id
-				// returns the element that CONTAINS the is-id element, i.e. its
-				// parent.
-				result := helium.Node(typed)
-				if elementWithID {
-					parent, ok := typed.Parent().(*helium.Element)
-					if !ok {
-						continue
-					}
-					result = parent
-				}
-				if _, dup := seen[result]; dup {
-					continue
-				}
-				seen[result] = struct{}{}
-				nodes = append(nodes, result)
+			if annotationMatchesIDType(typeName, ec) {
+				candidates[node] = struct{}{}
 			}
 		}
 	}
+	for node := range ec.idNodes {
+		candidates[node] = struct{}{}
+	}
+
+	seen := make(map[helium.Node]struct{})
+	var nodes []helium.Node
+	for node := range candidates {
+		if ixpath.DocumentRoot(node) != doc {
+			continue
+		}
+		result, ok := idNodeResult(node, wanted, elementWithID)
+		if !ok {
+			continue
+		}
+		if _, dup := seen[result]; dup {
+			continue
+		}
+		seen[result] = struct{}{}
+		nodes = append(nodes, result)
+	}
 	return nodes
+}
+
+// idNodeResult maps an is-id node to the node fn:id / fn:element-with-id should
+// return for it, or (nil, false) when the node's value is not among wanted (or
+// it has no element parent where one is required). For an ID attribute both
+// functions return the bearing element. For an ID-typed element, fn:id returns
+// that element itself and fn:element-with-id (elementWithID) returns its parent.
+func idNodeResult(node helium.Node, wanted map[string]struct{}, elementWithID bool) (helium.Node, bool) {
+	switch typed := node.(type) {
+	case *helium.Attribute:
+		if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+			return nil, false
+		}
+		parent, ok := typed.Parent().(*helium.Element)
+		if !ok {
+			return nil, false
+		}
+		return parent, true
+	case *helium.Element:
+		if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+			return nil, false
+		}
+		if elementWithID {
+			parent, ok := typed.Parent().(*helium.Element)
+			if !ok {
+				return nil, false
+			}
+			return parent, true
+		}
+		return typed, true
+	}
+	return nil, false
 }
 
 func annotationMatchesIDType(typeName string, ec *evalContext) bool {
