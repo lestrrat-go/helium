@@ -94,6 +94,12 @@ func TestSerialize_StandaloneMapValidOK(t *testing.T) {
 	_, err := evaluate(t.Context(), doc,
 		`serialize(., map{"omit-xml-declaration": true(), "standalone": "omit"})`)
 	require.NoError(t, err)
+
+	// An empty-sequence value selects the default and must NOT error (QT3
+	// serialize-xml-131).
+	_, err = evaluate(t.Context(), doc,
+		`serialize(., map{"omit-xml-declaration": true(), "standalone": ()})`)
+	require.NoError(t, err)
 }
 
 // xml-to-json with an options map exercises parseXMLToJSONOptions.

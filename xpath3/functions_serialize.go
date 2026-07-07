@@ -324,6 +324,11 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 // value and is a type error [err:XPTY0004].
 func validateSerializeStandaloneMap(v Sequence) error {
 	xerr := &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "standalone" must be xs:boolean or "omit"`}
+	// An empty-sequence value selects the parameter default (omit); it is not a
+	// bad value (F&O 3.1 §18.9.1; QT3 serialize-xml-131 supplies map{"standalone":()}).
+	if seqLen(v) == 0 {
+		return nil
+	}
 	if seqLen(v) != 1 {
 		return xerr
 	}
