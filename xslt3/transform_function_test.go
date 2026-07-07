@@ -64,6 +64,19 @@ func (r mapURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(content)), nil
 }
 
+// recordingRejectResolver records every URI it is asked for and refuses to
+// serve any of them. It lets a test prove which URI the compiler attempted to
+// load (e.g. a raw relative href when no base URI was applied) rather than only
+// observing that resolution failed.
+type recordingRejectResolver struct {
+	requested []string
+}
+
+func (r *recordingRejectResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	r.requested = append(r.requested, uri)
+	return nil, fmt.Errorf("recordingRejectResolver: refusing %q", uri)
+}
+
 // includedTemplateStylesheet is served as an xsl:include target; its match="/"
 // template echoes the source root element name.
 const includedTemplateStylesheet = `<?xml version="1.0"?>
@@ -97,16 +110,43 @@ func TestTransformFunctionStylesheetBaseURI(t *testing.T) {
 		}
 	}
 
-	// Without a supplied base URI the relative include is unresolvable, so the
-	// nested compile fails (matches fn-transform-err-9 / XTSE0165 semantics).
-	t.Run("StylesheetTextNoBaseErrors", func(t *testing.T) {
+	// With no stylesheet-base-uri and no call static base URI, the relative
+	// include href gets no base applied, so the compiler attempts to load the
+	// RAW relative "sub/inc.xsl". A recording resolver proves that unbased URI is
+	// what is attempted (not a resolver-file-absence for some based URI) and
+	// that the transform then fails — the genuine no-usable-base path that
+	// fn-transform-err-9 exercises. (helium reports XTSE0165 when NO resolver at
+	// all is configured; here a resolver is present but the unbased relative URI
+	// is unresolvable regardless.)
+	t.Run("StylesheetTextNoBaseAttemptsRawRelative", func(t *testing.T) {
+		rec := &recordingRejectResolver{}
+		fns := map[xpath3.QualifiedName]xpath3.Function{
+			{URI: xpath3.NSFn, Name: "transform"}: xslt3.TransformFunction(xslt3.WithTransformURIResolver(rec)),
+		}
 		_, err := evalTransform(t,
 			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized'})?output`,
 			sourceDoc,
 			map[string]xpath3.Sequence{"ss": xpath3.SingleString(includingStylesheet)},
-			fnsWith(),
+			fns,
 		)
 		require.Error(t, err)
+		// The unbased relative href is what the compiler tried to load — never an
+		// absolute/based URI. This distinguishes the no-base path from mere
+		// resolver-file-absence.
+		require.Equal(t, []string{"sub/inc.xsl"}, rec.requested)
+	})
+
+	// With no resolver at all, the relative include cannot be loaded and the
+	// nested compile fails with the specific XTSE0165 (opt-in resolver) error.
+	t.Run("StylesheetTextNoResolverXTSE0165", func(t *testing.T) {
+		_, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized'})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(includingStylesheet)},
+			transformFns(),
+		)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XTSE0165")
 	})
 
 	// stylesheet-base-uri (absolute) supplies the base for the inline text so the
