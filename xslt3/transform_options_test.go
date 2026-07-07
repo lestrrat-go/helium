@@ -249,6 +249,16 @@ const htmlOutputStylesheet = `<?xml version="1.0"?>
   <xsl:template match="/"><html><body><br/></body></html></xsl:template>
 </xsl:stylesheet>`
 
+// htmlExplicitBadVersionStylesheet declares xsl:output method="html"
+// version="1.0" explicitly (an unsupported html version). serialization-params
+// that omit version must NOT clear this explicit base version, so SESU0007 must
+// still fire.
+const htmlExplicitBadVersionStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="html" version="1.0"/>
+  <xsl:template match="/"><html><body><br/></body></html></xsl:template>
+</xsl:stylesheet>`
+
 // TestTransformSerializationParams proves sub-fix 4: the serialization-params
 // option is applied to the serialized delivery output (QT3 fn-transform-30/31).
 func TestTransformSerializationParams(t *testing.T) {
@@ -346,6 +356,21 @@ func TestTransformSerializationParams(t *testing.T) {
 			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized', 'serialization-params': map{'method': 'html', 'version': '1.0'}})?output`,
 			sourceDoc,
 			map[string]xpath3.Sequence{"ss": xpath3.SingleString(htmlOutputStylesheet)},
+			transformFns(),
+		)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "SESU0007")
+	})
+
+	// An EXPLICIT base stylesheet version (<xsl:output method="html"
+	// version="1.0"/>) must survive serialization-params that omit version: the
+	// html-method version reset applies only to an inherited (non-explicit)
+	// version, so SESU0007 must still fire here.
+	t.Run("ExplicitBaseVersionSurvivesUnrelatedParams", func(t *testing.T) {
+		_, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized', 'serialization-params': map{'indent': true()}})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(htmlExplicitBadVersionStylesheet)},
 			transformFns(),
 		)
 		require.Error(t, err)

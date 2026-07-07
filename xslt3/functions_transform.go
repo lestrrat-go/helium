@@ -1238,10 +1238,13 @@ func applySerializationParams(base *OutputDef, seq xpath3.Sequence) *OutputDef {
 	// The version parameter's default is method-dependent, so an inherited xml
 	// version="1.0" must not carry into an html/xhtml method selected via
 	// serialization-params. When these params switch the method to html/xhtml
-	// without also supplying an explicit version, unset Version so the
+	// without supplying an explicit version — and the base stylesheet did not
+	// declare one either (VersionRaw empty) — unset Version so the
 	// method-appropriate serialization default applies instead of the inherited
-	// "1.0" (which the html method rejects with SESU0007).
-	if !versionExplicit && out.MethodExplicit && (out.Method == methodHTML || out.Method == methodXHTML) {
+	// "1.0" (which the html method rejects with SESU0007). An explicit base
+	// version (e.g. <xsl:output method="html" version="1.0"/>) is preserved so
+	// it still raises SESU0007.
+	if !versionExplicit && out.VersionRaw == "" && out.MethodExplicit && (out.Method == methodHTML || out.Method == methodXHTML) {
 		out.Version = ""
 	}
 	return out
