@@ -87,17 +87,28 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	if gci == nil {
 		return nil
 	}
-	if source == nil {
+	// The item actually used as the global context item: an explicit fn:transform
+	// global-context-item (any item() — atomic/map/array/function or a node)
+	// overrides the source document node, so it is what must be type-checked
+	// against @as. Only fall back to the source document when no explicit option
+	// was supplied.
+	var ctxItem xpath3.Item
+	if ec.globalContextItem != nil {
+		ctxItem = ec.globalContextItem
+	} else if source != nil {
+		ctxItem = xpath3.NodeItem{Node: source}
+	}
+	if ctxItem == nil {
 		if gci.Use == ctxItemRequired {
-			return dynamicError(errCodeXTDE3086, "global-context-item use=\"required\" but no source document was supplied")
+			return dynamicError(errCodeXTDE3086, "global-context-item use=\"required\" but no global context item was supplied")
 		}
 		return nil
 	}
 	if gci.As == "" {
 		return nil
 	}
-	// Validate the supplied global context item (the source document node)
-	// against the declared sequence type using the namespace-aware type
+	// Validate the supplied global context item against the declared sequence
+	// type using the namespace-aware type
 	// machinery, so that prefixed element tests like
 	// document-node(element(p:root)) compare both local name and namespace
 	// rather than local name alone. Prefixes and the default element namespace
@@ -118,7 +129,7 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	}()
 
 	st := parseSequenceType(gci.As)
-	seq := xpath3.ItemSlice{xpath3.NodeItem{Node: source}}
+	seq := xpath3.ItemSlice{ctxItem}
 	if _, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
 		return err
 	}

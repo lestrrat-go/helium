@@ -225,6 +225,29 @@ func TestFnTransformSerializedTextPreservesTrailingNewline(t *testing.T) {
 	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
 }
 
+// TestFnTransformGlobalContextItemTypeCheck verifies that an explicit
+// fn:transform global-context-item (an item(), here an atomic value) is what
+// gets type-checked against xsl:global-context-item/@as — not the source
+// document. An integer matches as="xs:integer"; a string is an XTTE0590 error.
+func TestFnTransformGlobalContextItemTypeCheck(t *testing.T) {
+	xsl := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:global-context-item as="xs:integer"/>
+<xsl:template name="main"><out>ok</out></xsl:template>
+</xsl:stylesheet>`
+	vars := xslXMLVars(xsl, "")
+
+	// An integer global-context-item matches as="xs:integer".
+	okExpr := `let $r := transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":42})?output
+	return $r/out = "ok"`
+	require.Equal(t, wantTrue, transformBool(t, okExpr, vars))
+
+	// A string global-context-item does not match as="xs:integer" → XTTE0590.
+	badExpr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":"hello"})?output`
+	_, err := evalTransform(t, badExpr, nil, vars, transformFns())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "XTTE0590")
+}
+
 // TestFnTransformSerializedNoTrailingNewline mirrors fn-transform-err-8: a
 // serialized principal result must not carry a spurious trailing newline, so an
 // ends-with test against the closing tag succeeds.
