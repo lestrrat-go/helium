@@ -240,6 +240,25 @@ const methodTextOutputStylesheet = `<?xml version="1.0"?>
   <xsl:template match="/"><out><a><b>x</b></a></out></xsl:template>
 </xsl:stylesheet>`
 
+// htmlOutputStylesheet has an <html> root that emits an empty <br/> element and
+// declares NO xsl:output. It lets serialization-params map{'method':'html'}
+// switch the output method to html (QT3 fn-transform-31): the html serializer
+// emits the void <br> element without a self-closing slash.
+const htmlOutputStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><html><body><br/></body></html></xsl:template>
+</xsl:stylesheet>`
+
+// htmlExplicitBadVersionStylesheet declares xsl:output method="html"
+// version="1.0" explicitly (an unsupported html version). serialization-params
+// that omit version must NOT clear this explicit base version, so SESU0007 must
+// still fire.
+const htmlExplicitBadVersionStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="html" version="1.0"/>
+  <xsl:template match="/"><html><body><br/></body></html></xsl:template>
+</xsl:stylesheet>`
+
 // TestTransformSerializationParams proves sub-fix 4: the serialization-params
 // option is applied to the serialized delivery output (QT3 fn-transform-30/31).
 func TestTransformSerializationParams(t *testing.T) {
@@ -307,5 +326,54 @@ func TestTransformSerializationParams(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, reset, "<out")
 		require.Contains(t, reset, "<b>x</b>")
+	})
+
+	// QT3 fn-transform-31: serialization-params map{'method':'html'} over a
+	// stylesheet with no xsl:output must switch to html serialization (void
+	// <br> element, no self-closing slash) without raising SESU0007. The base
+	// output def carries the inherited xml version "1.0"; because the method is
+	// switched to html via serialization-params without an explicit version,
+	// the version must not carry over and trigger the SESU0007 html-version
+	// check.
+	t.Run("MethodHTMLResetsInheritedVersion", func(t *testing.T) {
+		out, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized', 'serialization-params': map{'method': 'html'}})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(htmlOutputStylesheet)},
+			transformFns(),
+		)
+		require.NoError(t, err)
+		require.Contains(t, out, "<br>")
+		require.NotContains(t, out, "<br/>")
+		require.NotContains(t, out, "<br />")
+	})
+
+	// An EXPLICIT version="1.0" alongside method="html" must still raise
+	// SESU0007: html only supports versions 4.0/4.01/5.0. The version reset
+	// applies only when the serialization-params map omits version.
+	t.Run("MethodHTMLExplicitBadVersionErrors", func(t *testing.T) {
+		_, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized', 'serialization-params': map{'method': 'html', 'version': '1.0'}})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(htmlOutputStylesheet)},
+			transformFns(),
+		)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "SESU0007")
+	})
+
+	// An EXPLICIT base stylesheet version (<xsl:output method="html"
+	// version="1.0"/>) must survive serialization-params that omit version: the
+	// html-method version reset applies only to an inherited (non-explicit)
+	// version, so SESU0007 must still fire here.
+	t.Run("ExplicitBaseVersionSurvivesUnrelatedParams", func(t *testing.T) {
+		_, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized', 'serialization-params': map{'indent': true()}})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(htmlExplicitBadVersionStylesheet)},
+			transformFns(),
+		)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "SESU0007")
 	})
 }
