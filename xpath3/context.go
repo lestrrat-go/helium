@@ -97,6 +97,36 @@ type SchemaDeclarations interface {
 	UnionMemberTypes(typeName string) []string
 }
 
+// ContentTypeKind classifies the content type of a schema type, mirroring the
+// XSD content-type kinds. It is reported by the optional ContentTypeKindProvider
+// so the fn:data / typed-value accessor path can detect element-only content,
+// which has no typed value.
+type ContentTypeKind int
+
+// ContentTypeKind values.
+const (
+	ContentTypeEmpty       ContentTypeKind = iota // element has no content
+	ContentTypeSimple                             // text-only (simple) content
+	ContentTypeElementOnly                        // child elements only, no character data
+	ContentTypeMixed                              // elements interleaved with character data
+)
+
+// ContentTypeKindProvider is an OPTIONAL companion interface to
+// SchemaDeclarations. A SchemaDeclarations implementation MAY also implement it
+// to report the content-type kind of a (complex) schema type. The fn:data /
+// typed-value accessor path type-asserts the active SchemaDeclarations to this
+// interface and, when an element node's type annotation resolves to a complex
+// type with element-only content, raises err:FOTY0012 — element-only content
+// has no typed value (XDM 3.1 §5.15). Implementations that do not provide this
+// interface are unaffected: atomization keeps its non-schema-aware behavior, and
+// mixed/simple/empty content still atomizes normally.
+type ContentTypeKindProvider interface {
+	// SchemaTypeContentKind returns the content-type kind for the schema type
+	// named typeName (annotation format: "xs:local" or "Q{ns}local") and whether
+	// the type was found.
+	SchemaTypeContentKind(typeName string) (kind ContentTypeKind, ok bool)
+}
+
 // withFnContext stores the evalContext in a context.Context so built-in
 // functions can access the evaluation state (position, size, context node).
 func withFnContext(ctx context.Context, ec *evalContext) context.Context {

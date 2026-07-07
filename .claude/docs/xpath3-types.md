@@ -204,6 +204,8 @@ Per XPath 3.1 Section 2.6.2:
 - Atomic → identity
 - Function/map/array → error `FOTY0013`
 
+In the `fn:data` / typed-value accessor path (`checkElementOnlyTypedValue`, `functions_node.go`), an element node whose schema type annotation resolves to a complex type with **element-only** content has no typed value (XDM 3.1 §5.15) → error `FOTY0012`. This fires only when the active `SchemaDeclarations` also implements the optional `ContentTypeKindProvider` (reached by type assertion; the xsd adapter `schemaDecls` implements it) and the annotation is element-only. Mixed content still atomizes to `xs:untypedAtomic`, simple/simpleContent to its typed value, and empty content is unchanged; non-schema-aware nodes and every other `AtomizeItem` caller (string value, comparisons, casts) are unaffected — the check is scoped to `fn:data`.
+
 ## SequenceType (used in `instance of`, `cast as`, etc.)
 
 ```go

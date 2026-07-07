@@ -206,6 +206,10 @@ type CollectionResolver interface {
 type VariableResolver interface { /* lazy variable lookup */ }
 type FunctionResolver interface { /* lazy function lookup */ }
 type SchemaDeclarations interface { /* schema-aware type info */ }
+// OPTIONAL companion to SchemaDeclarations. A provider may also implement it so
+// the fn:data / typed-value path can raise FOTY0012 for element-only content
+// (no typed value). Reached via type assertion; non-implementers are unaffected.
+type ContentTypeKindProvider interface { SchemaTypeContentKind(typeName string) (ContentTypeKind, bool) }
 
 type DecimalFormat = icu.DecimalFormat
 type DocOrderCache = internal/xpath.DocOrderCache
@@ -303,6 +307,6 @@ func (e *XPathError) Error() string
 func (e *XPathError) Is(target error) bool
 ```
 
-Standard codes: `XPTY0004` (type error), `FOER0000` (general), `FOTY0013` (atomization context), `FOAR0001` (division by zero), `FOAR0002` (numeric overflow/underflow, e.g. round precision past the non-terminating cap), `FOAY0001` (array index out of bounds), `FOMX0001` (map duplicate key reject).
+Standard codes: `XPTY0004` (type error), `FOER0000` (general), `FOTY0012` (typed value undefined — fn:data on element-only complex content), `FOTY0013` (atomization context), `FOAR0001` (division by zero), `FOAR0002` (numeric overflow/underflow, e.g. round precision past the non-terminating cap), `FOAY0001` (array index out of bounds), `FOMX0001` (map duplicate key reject).
 
 `try-catch` matches `*XPathError` by code. Non-`*XPathError` errors propagate through unchanged.

@@ -287,6 +287,31 @@ func (d schemaDecls) UnionMemberTypes(typeName string) []string {
 	return out
 }
 
+// SchemaTypeContentKind implements the optional xpath3.ContentTypeKindProvider
+// interface. It reports the content-type kind of the type named typeName
+// (annotation format) so the fn:data / typed-value accessor path can raise
+// err:FOTY0012 when atomizing an element whose complex type has element-only
+// content (element-only content has no typed value). It reads the RAW type's
+// ContentType (not the narrowed simpleContent effective type) so an element-only
+// complex type is reported as such.
+func (d schemaDecls) SchemaTypeContentKind(typeName string) (xpath3.ContentTypeKind, bool) {
+	td, ok := d.lookupTypeName(typeName)
+	if !ok {
+		return 0, false
+	}
+	switch td.ContentType {
+	case ContentTypeEmpty:
+		return xpath3.ContentTypeEmpty, true
+	case ContentTypeSimple:
+		return xpath3.ContentTypeSimple, true
+	case ContentTypeElementOnly:
+		return xpath3.ContentTypeElementOnly, true
+	case ContentTypeMixed:
+		return xpath3.ContentTypeMixed, true
+	}
+	return 0, false
+}
+
 // annotationParts parses an annotation-format type name. "xs:local" returns
 // (local, XSD namespace); "Q{ns}local" returns (local, ns); a bare name returns
 // (name, "").

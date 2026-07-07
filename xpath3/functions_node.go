@@ -105,6 +105,9 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 	}
+	if err := checkElementOnlyTypedValue(ctx, args[0]); err != nil {
+		return nil, err
+	}
 	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
 		return nil, err
@@ -114,6 +117,44 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 		result[i] = a
 	}
 	return result, nil
+}
+
+// checkElementOnlyTypedValue raises err:FOTY0012 for any node in seq whose
+// schema type annotation resolves to a complex type with ELEMENT-ONLY content:
+// such an element has no typed value (XDM 3.1 §5.15 / F&O fn:data), so the
+// typed-value accessor must fail rather than fabricate an xs:untypedAtomic from
+// the node's string value. It fires only when the active SchemaDeclarations
+// implements the optional ContentTypeKindProvider and the annotation is
+// element-only — mixed (untypedAtomic), simple (typed value), and empty content,
+// and every non-schema-aware node, are left to normal atomization. The check is
+// scoped to the fn:data / typed-value path; other AtomizeItem callers (string
+// value, comparisons, casts) are unaffected.
+func checkElementOnlyTypedValue(ctx context.Context, seq Sequence) error {
+	ec := getFnContext(ctx)
+	if ec == nil || ec.schemaDeclarations == nil {
+		return nil
+	}
+	provider, ok := ec.schemaDeclarations.(ContentTypeKindProvider)
+	if !ok {
+		return nil
+	}
+	for item := range seqItems(seq) {
+		ni, ok := item.(NodeItem)
+		if !ok {
+			continue
+		}
+		if ni.TypeAnnotation == "" || ni.Node == nil || ni.Node.Type() != helium.ElementNode {
+			continue
+		}
+		kind, found := provider.SchemaTypeContentKind(ni.TypeAnnotation)
+		if found && kind == ContentTypeElementOnly {
+			return &XPathError{
+				Code:    errCodeFOTY0012,
+				Message: "fn:data: element with element-only complex content has no typed value",
+			}
+		}
+	}
+	return nil
 }
 
 func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
