@@ -624,7 +624,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	stylesheetLoc := getStr("stylesheet-location")
 	packageName := getStr("package-name")
 	packageVersion := getStr("package-version")
-	initialTemplate := getStr("initial-template")
+	initialTemplate := getQNameStr("initial-template")
 	initialMode := getStr("initial-mode")
 	initialFunction := getQNameStr("initial-function")
 	deliveryFormat := getStr("delivery-format")
@@ -643,6 +643,14 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	templateParamsSeq := getSeq("template-params")
 	tunnelParamsSeq := getSeq("tunnel-params")
 	functionParamsSeq := getSeq("function-params")
+	serializationParamsSeq := getSeq("serialization-params")
+
+	// Validate the option map before doing any work (F&O 3.1 §14.8.3). These
+	// checks are independent of the compiled stylesheet; the no-invocation check
+	// runs post-compile (it depends on the presence of xsl:initial-template).
+	if err := validateTransformOptions(m, deliveryFormat); err != nil {
+		return nil, err
+	}
 
 	// The nested compiler inherits the outer stylesheet's configuration (or, for
 	// the standalone path, the TransformOption values), including the effective
@@ -966,9 +974,11 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			result = result.Put(hrefKey, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
 		}
 	case "serialized":
-		// Serialized delivery: serialize the result document to a string.
+		// Serialized delivery: serialize the result document to a string. The
+		// serialization-params option overrides the stylesheet's own xsl:output
+		// parameters for the principal result.
 		if resultDoc != nil {
-			outDef := fnTransformCfg.resolvedOutputDef
+			outDef := applySerializationParams(fnTransformCfg.resolvedOutputDef, serializationParamsSeq)
 			var buf bytes.Buffer
 			if err := SerializeResult(&buf, resultDoc, outDef); err != nil {
 				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", err)
@@ -1007,4 +1017,340 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	}
 
 	return xpath3.ItemSlice{result}, nil
+}
+
+// transformOptionPresent reports whether a sequence-valued fn:transform option
+// is present and non-empty.
+func transformOptionPresent(seq xpath3.Sequence) bool {
+	return seq != nil && sequence.Len(seq) > 0
+}
+
+// transformMapSeq returns the raw sequence bound to a string-keyed fn:transform
+// option, or nil when the key is absent.
+func transformMapSeq(m xpath3.MapItem, key string) xpath3.Sequence {
+	seq, ok := m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: key})
+	if !ok {
+		return nil
+	}
+	return seq
+}
+
+// transformCapabilities is helium's advertised value for each XSLT-namespace
+// requested-property that fn:transform can reason about. supports-streaming is
+// false: helium materializes source documents into a DOM rather than streaming.
+var transformCapabilities = map[string]bool{
+	"is-schema-aware":                  true,
+	"supports-serialization":           true,
+	"supports-backwards-compatibility": true,
+	"supports-namespace-axis":          true,
+	"supports-dynamic-evaluation":      true,
+	"supports-higher-order-functions":  true,
+	"supports-streaming":               false,
+}
+
+// validateTransformOptions enforces the fn:transform option-map constraints that
+// are independent of the compiled stylesheet (F&O 3.1 §14.8.3): exactly one
+// stylesheet source, mutually-exclusive invocation options, a legal
+// delivery-format, correctly-typed option values, and satisfiable requested
+// properties. The no-invocation check is applied post-compile in run(), because
+// it depends on the presence of an xsl:initial-template default template.
+func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
+	sources := 0
+	for _, k := range []string{"stylesheet-location", "stylesheet-node", "stylesheet-text", "package-name"} {
+		if transformOptionPresent(transformMapSeq(m, k)) {
+			sources++
+		}
+	}
+	if sources != 1 {
+		return dynamicError(errCodeFOXT0002, "fn:transform: exactly one of stylesheet-location, stylesheet-node, stylesheet-text, package-name must be supplied (got %d)", sources)
+	}
+
+	entryPoints := 0
+	for _, k := range []string{"initial-template", "initial-mode", "initial-function"} {
+		if transformOptionPresent(transformMapSeq(m, k)) {
+			entryPoints++
+		}
+	}
+	if entryPoints > 1 {
+		return dynamicError(errCodeFOXT0002, "fn:transform: at most one of initial-template, initial-mode, initial-function may be supplied")
+	}
+
+	if transformOptionPresent(transformMapSeq(m, "source-node")) && transformOptionPresent(transformMapSeq(m, "initial-match-selection")) {
+		return dynamicError(errCodeFOXT0002, "fn:transform: source-node and initial-match-selection are mutually exclusive")
+	}
+
+	switch deliveryFormat {
+	case "", "document", "serialized", lexicon.OutputRaw:
+	default:
+		return dynamicError(errCodeFOXT0002, "fn:transform: delivery-format %q is not one of document, serialized, raw", deliveryFormat)
+	}
+
+	if err := validateTransformXSLTVersion(m); err != nil {
+		return err
+	}
+
+	for _, name := range []string{"stylesheet-params", "static-params", "template-params", "tunnel-params"} {
+		if err := validateTransformParamMap(name, transformMapSeq(m, name)); err != nil {
+			return err
+		}
+	}
+
+	return checkTransformCapabilities(transformMapSeq(m, "requested-properties"))
+}
+
+// validateTransformXSLTVersion checks that the xslt-version option, when
+// present, is a numeric value (an XPTY0004 type error otherwise).
+func validateTransformXSLTVersion(m xpath3.MapItem) error {
+	seq := transformMapSeq(m, "xslt-version")
+	if !transformOptionPresent(seq) {
+		return nil
+	}
+	av, err := xpath3.AtomizeItem(seq.Get(0))
+	if err != nil {
+		return dynamicError(errCodeXPTY0004, "fn:transform: xslt-version: %v", err)
+	}
+	if !av.IsNumeric() {
+		return dynamicError(errCodeXPTY0004, "fn:transform: xslt-version must be a numeric value")
+	}
+	return nil
+}
+
+// validateTransformParamMap checks that a parameter-map option
+// (stylesheet-params, static-params, template-params, tunnel-params), when
+// present, is a map whose keys are all xs:QName. A non-map value is an XPTY0004
+// type error; a non-QName key is FOXT0002.
+func validateTransformParamMap(name string, seq xpath3.Sequence) error {
+	if !transformOptionPresent(seq) {
+		return nil
+	}
+	sm, ok := seq.Get(0).(xpath3.MapItem)
+	if !ok {
+		return dynamicError(errCodeXPTY0004, "fn:transform: %s must be a map", name)
+	}
+	for _, key := range sm.Keys() {
+		if key.TypeName != xpath3.TypeQName {
+			return dynamicError(errCodeFOXT0002, "fn:transform: %s keys must be supplied as QNames", name)
+		}
+	}
+	return nil
+}
+
+// checkTransformCapabilities inspects the requested-properties option and raises
+// FOXT0006 when a recognized XSLT-namespace property is requested with a value
+// helium cannot satisfy. Non-map values are XPTY0004; properties outside the
+// XSLT namespace, or ones helium does not model, are ignored.
+func checkTransformCapabilities(seq xpath3.Sequence) error {
+	if !transformOptionPresent(seq) {
+		return nil
+	}
+	sm, ok := seq.Get(0).(xpath3.MapItem)
+	if !ok {
+		return dynamicError(errCodeXPTY0004, "fn:transform: requested-properties must be a map")
+	}
+	for _, key := range sm.Keys() {
+		qv, ok := key.Value.(xpath3.QNameValue)
+		if !ok || qv.URI != lexicon.NamespaceXSLT {
+			continue
+		}
+		want, known := transformCapabilities[qv.Local]
+		if !known {
+			continue
+		}
+		val, ok := sm.Get(key)
+		if !ok {
+			continue
+		}
+		got, ok := transformSeqBool(val)
+		if !ok {
+			continue
+		}
+		if got != want {
+			return dynamicError(errCodeFOXT0006, "fn:transform: requested property %q cannot be satisfied", qv.Local)
+		}
+	}
+	return nil
+}
+
+// transformSeqBool extracts a boolean value from a single-item sequence,
+// accepting the full xs:boolean space that helium recognizes: an xs:boolean
+// atomic item, or the string / xs:untypedAtomic lexical forms true/false/1/0/
+// yes/no (parsed via parseXSDBool). Any other value reports ok=false.
+func transformSeqBool(seq xpath3.Sequence) (bool, bool) {
+	if !transformOptionPresent(seq) {
+		return false, false
+	}
+	av, err := xpath3.AtomizeItem(seq.Get(0))
+	if err != nil {
+		return false, false
+	}
+	if b, ok := av.Value.(bool); ok {
+		return b, true
+	}
+	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic {
+		return false, false
+	}
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return false, false
+	}
+	return parseXSDBool(s)
+}
+
+// applySerializationParams returns an OutputDef with the fn:transform
+// serialization-params option applied over base. base is returned unchanged when
+// no params are supplied. Recognized keys (string or fn/output-namespace QName)
+// map to the corresponding OutputDef fields.
+func applySerializationParams(base *OutputDef, seq xpath3.Sequence) *OutputDef {
+	if !transformOptionPresent(seq) {
+		return base
+	}
+	sm, ok := seq.Get(0).(xpath3.MapItem)
+	if !ok {
+		return base
+	}
+	out := cloneOutputDef(base)
+	if out == nil {
+		out = defaultOutputDef()
+	}
+	for _, key := range sm.Keys() {
+		name := serializationParamName(key)
+		if name == "" {
+			continue
+		}
+		val, ok := sm.Get(key)
+		if !ok {
+			continue
+		}
+		// A recognized parameter present with an empty-sequence value overrides
+		// the inherited xsl:output value by resetting the parameter to its
+		// serialization default (F&O 3.1 §14.8.3), rather than leaving the
+		// inherited value in place.
+		if !transformOptionPresent(val) {
+			resetSerializationParam(out, name)
+			continue
+		}
+		applySerializationParam(out, name, val)
+	}
+	return out
+}
+
+// resetSerializationParam resets a recognized serialization parameter (by local
+// name) to its serialization default on out. An unrecognized name is ignored.
+func resetSerializationParam(out *OutputDef, name string) {
+	switch name {
+	case "method":
+		out.Method = methodXML
+		out.MethodExplicit = false
+	case "indent":
+		out.Indent = false
+	case "omit-xml-declaration":
+		out.OmitDeclaration = false
+		out.OmitDeclarationExplicit = false
+	case "byte-order-mark":
+		out.ByteOrderMark = false
+	case "undeclare-prefixes":
+		out.UndeclarePrefixes = false
+	case "encoding":
+		out.Encoding = lexicon.EncodingUTF8U
+	case "version":
+		out.Version = lexicon.XSLTVersion10
+	case "standalone":
+		out.Standalone = ""
+	case "media-type":
+		out.MediaType = ""
+	case "doctype-public":
+		out.DoctypePublic = ""
+	case "doctype-system":
+		out.DoctypeSystem = ""
+	case "item-separator":
+		out.ItemSeparator = nil
+	}
+}
+
+// serializationParamName returns the local name of a serialization-params map
+// key, which may be supplied either as an xs:string or as an xs:QName in the
+// serialization-parameter (fn/output) namespace.
+func serializationParamName(key xpath3.AtomicValue) string {
+	if qv, ok := key.Value.(xpath3.QNameValue); ok {
+		return qv.Local
+	}
+	s, err := xpath3.AtomicToString(key)
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// applySerializationParam applies a single serialization parameter (identified
+// by its local name) to out.
+func applySerializationParam(out *OutputDef, name string, val xpath3.Sequence) {
+	switch name {
+	case "method":
+		if s, ok := transformSeqString(val); ok {
+			out.Method = s
+			out.MethodExplicit = true
+		}
+	case "indent":
+		if b, ok := transformSeqBool(val); ok {
+			out.Indent = b
+		}
+	case "omit-xml-declaration":
+		if b, ok := transformSeqBool(val); ok {
+			out.OmitDeclaration = b
+			out.OmitDeclarationExplicit = true
+		}
+	case "byte-order-mark":
+		if b, ok := transformSeqBool(val); ok {
+			out.ByteOrderMark = b
+		}
+	case "undeclare-prefixes":
+		if b, ok := transformSeqBool(val); ok {
+			out.UndeclarePrefixes = b
+		}
+	case "encoding":
+		if s, ok := transformSeqString(val); ok {
+			out.Encoding = s
+		}
+	case "version":
+		if s, ok := transformSeqString(val); ok {
+			out.Version = s
+		}
+	case "standalone":
+		if s, ok := transformSeqString(val); ok {
+			out.Standalone = s
+		}
+	case "media-type":
+		if s, ok := transformSeqString(val); ok {
+			out.MediaType = s
+		}
+	case "doctype-public":
+		if s, ok := transformSeqString(val); ok {
+			out.DoctypePublic = s
+		}
+	case "doctype-system":
+		if s, ok := transformSeqString(val); ok {
+			out.DoctypeSystem = s
+		}
+	case "item-separator":
+		if s, ok := transformSeqString(val); ok {
+			out.ItemSeparator = &s
+		}
+	}
+}
+
+// transformSeqString extracts a string value from a single-item sequence,
+// reporting whether extraction succeeded.
+func transformSeqString(seq xpath3.Sequence) (string, bool) {
+	if !transformOptionPresent(seq) {
+		return "", false
+	}
+	av, err := xpath3.AtomizeItem(seq.Get(0))
+	if err != nil {
+		return "", false
+	}
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return "", false
+	}
+	return s, true
 }
