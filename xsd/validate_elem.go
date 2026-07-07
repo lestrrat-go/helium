@@ -481,6 +481,15 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 // 1.0 and 1.1 matchers so the per-child content validation is identical.
 func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child childElem, edecl *ElementDecl) error {
 	actualDecl := resolveSubstDecl(child, edecl, vc.schema)
+	// cvc-elt.2: the resolved element declaration must not be abstract. The XSD 1.0
+	// xs:all matcher (matchAll10) maps an element member's own name directly, so a
+	// child that IS the abstract declaration reaches here; reject it (only a
+	// concrete substitution-group member may appear). The 1.1 matcher already
+	// filters this at allMemberForChild, so this never fires there.
+	if actualDecl.Abstract {
+		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractElement)
+		return fmt.Errorf("abstract element")
+	}
 	declType := effectiveDeclType(actualDecl, vc.schema)
 	if err := vc.rejectMissingTypeRef(ctx, child.elem, declType); err != nil {
 		return err
@@ -1232,6 +1241,18 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 	edecl := lookupElemDecl(child.elem, vc.schema)
 	if edecl == nil {
 		if wc.ProcessContents == ProcessStrict {
+			// cvc-assess-elt: with no matching global element declaration, a
+			// resolvable xsi:type still supplies a ·governing type definition·, so the
+			// element is assessed against it rather than rejected (XSD §3.3.4 /
+			// §3.4.4.3; matches Xerces/Saxon and the W3C strict-wildcard-with-xsi:type
+			// cases). Only when NEITHER a declaration NOR a usable xsi:type is present
+			// does the strict wildcard fail.
+			if actual, ok := vc.resolveXsiTypeQuiet(child.elem); ok {
+				if err := vc.validateWildcardElementConsistent(ctx, edcScope, child, actual); err != nil {
+					return err
+				}
+				return vc.validateUndeclaredElementWithType(ctx, child.elem, actual)
+			}
 			msg := "No matching global declaration available, but demanded by the strict wildcard."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
 			// Strict assessment FAILED (no declaration), so the element AND its whole

@@ -2771,6 +2771,17 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 		return fmt.Errorf("element not nillable")
 	}
 
+	// cvc-elt.3.2.2 (version-independent): a nilled element must have no fixed
+	// {value constraint} — a fixed value and xsi:nil are contradictory. The
+	// declaration may still legally carry the fixed value (the schema is valid); it
+	// is only the combination with an actual xsi:nil="true" instance that is
+	// invalid.
+	if edecl.Fixed != nil {
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
+			"The element cannot be nilled because there is a fixed value constraint defined for it.")
+		return fmt.Errorf("nilled element with fixed value constraint")
+	}
+
 	// Record the element as nilled for PSVI consumers (e.g. fn:nilled()).
 	if vc.cfg != nil && vc.cfg.nilledElements != nil {
 		(*vc.cfg.nilledElements)[elem] = struct{}{}
