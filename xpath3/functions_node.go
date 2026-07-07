@@ -277,22 +277,18 @@ func (ec *evalContext) isElementOnlyContent(n helium.Node, provider ContentTypeK
 	return ok && kind == ContentTypeElementOnly
 }
 
-// isInsignificantWhitespaceText reports whether n is a text node whose content is
-// entirely XSD whitespace (space, tab, CR, LF). CDATA sections are never
-// insignificant. Such a node, when a child of an element-only element, is not
-// part of that element's string value.
+// isInsignificantWhitespaceText reports whether n is a text or CDATA-section node
+// whose content is entirely XSD whitespace (space, tab, CR, LF). XSD treats
+// whitespace-only text and CDATA identically for element-only content, and
+// ixpath.StringValue includes CDATA as a text descendant, so both are skipped
+// when a child of an element-only element (not part of its string value).
 func isInsignificantWhitespaceText(n helium.Node) bool {
-	if n.Type() != helium.TextNode {
+	switch n.Type() {
+	case helium.TextNode, helium.CDATASectionNode:
+		return xmlchar.IsAllSpace(n.Content())
+	default:
 		return false
 	}
-	for _, c := range n.Content() {
-		switch c {
-		case ' ', '\t', '\r', '\n':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // checkContentKindItem resolves the fn:data typed-value ACTION for one item

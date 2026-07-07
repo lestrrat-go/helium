@@ -66,6 +66,38 @@ func TestStringValueElementOnlyStripsWhitespace_Mock(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "\n\tx\n\ty\n", av.StringVal())
 	})
+
+	// A whitespace-only CDATA-section child of an element-only element is
+	// insignificant too (XSD treats whitespace text and CDATA identically for
+	// element-only content, and dm:string-value includes CDATA descendants), so
+	// string()/string-length()/normalize-space() must skip it as well.
+	t.Run("element-only strips whitespace-only cdata child", func(t *testing.T) {
+		cdataDoc := mustParseXML(t, "<root><a>x</a><![CDATA[\n\t]]><b>y</b></root>")
+		cdataRoot := cdataDoc.DocumentElement()
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				cdataRoot: xpath3.QAnnotation("urn:t", "rootType"),
+			}).
+			SchemaDeclarations(decls)
+
+		strSeq := evalExprWithEval(t, eval, cdataDoc, `/*/string()`)
+		require.Equal(t, 1, strSeq.Len())
+		sav, ok := strSeq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, "xy", sav.StringVal())
+
+		lenSeq := evalExprWithEval(t, eval, cdataDoc, `/*/string-length()`)
+		require.Equal(t, 1, lenSeq.Len())
+		lav, ok := lenSeq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, int64(2), lav.IntegerVal())
+
+		nsSeq := evalExprWithEval(t, eval, cdataDoc, `/*/normalize-space()`)
+		require.Equal(t, 1, nsSeq.Len())
+		nav, ok := nsSeq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, "xy", nav.StringVal())
+	})
 }
 
 // TestStringValueElementOnlyStripsWhitespace_XSD exercises the real xsd adapter
