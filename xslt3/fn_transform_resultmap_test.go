@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -211,6 +212,32 @@ func TestFnTransformNestedResultDocKey(t *testing.T) {
 	   and map:contains($r,"http://example.com/base/outer/inner.html")
 	   and not(map:contains($r,"http://example.com/base/inner.html"))`
 	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
+}
+
+// TestFnTransformRelativeBaseOutputURIResolvedAgainstStaticBase verifies that a
+// RELATIVE base-output-uri is resolved against the fn:transform call's static
+// base URI (F&O 3.1 §14.8), so both the principal and secondary result-map keys
+// are absolute URIs.
+func TestFnTransformRelativeBaseOutputURIResolvedAgainstStaticBase(t *testing.T) {
+	xsl := `<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
+<xsl:template match='/'><p>principal</p><xsl:result-document href='s.xml'><s/></xsl:result-document></xsl:template>
+</xsl:stylesheet>`
+	// The static base URI is supplied to the standalone fn:transform via
+	// WithTransformBaseURI; the relative base-output-uri "out/doc.xml" resolves
+	// against it to http://example.com/base/out/doc.xml.
+	fns := map[xpath3.QualifiedName]xpath3.Function{
+		{URI: xpath3.NSFn, Name: "transform"}: xslt3.TransformFunction(
+			xslt3.WithTransformBaseURI("http://example.com/base/main.xsl"),
+		),
+	}
+	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>'),"base-output-uri":"out/doc.xml"})
+	return map:contains($r,"http://example.com/base/out/doc.xml")
+	   and map:contains($r,"http://example.com/base/out/s.xml")
+	   and $r("http://example.com/base/out/doc.xml")//p = "principal"
+	   and $r("http://example.com/base/out/s.xml")//s`
+	got, err := evalTransform(t, expr, nil, xslXMLVars(xsl, ""), fns)
+	require.NoError(t, err)
+	require.Equal(t, wantTrue, got)
 }
 
 // TestFnTransformNestedCollidingHrefKeys verifies that two nested

@@ -639,7 +639,19 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	initialMode := getStr("initial-mode")
 	initialFunction := getQNameStr("initial-function")
 	deliveryFormat := getStr("delivery-format")
+	// base-output-uri (F&O 3.1 §14.8): a relative reference is resolved ONCE
+	// against the fn:transform call's static base URI (cfg.baseURI — the base URI
+	// of the calling stylesheet element for the in-stylesheet path, or
+	// WithTransformBaseURI for the standalone path). Resolving it here means the
+	// principal result-map key, the currentOutputURI seed, and every secondary
+	// result-document URI that chains off it are all absolute. An already-absolute
+	// value is a no-op; when no static base is available a relative value is left
+	// relative (F&O leaves the outcome to the undefined static base URI — best
+	// effort, using the SAME resolver as the secondary keys for consistency).
 	baseOutputURI := getStr("base-output-uri")
+	if baseOutputURI != "" {
+		baseOutputURI = canonicalResultURIKey(baseOutputURI, cfg.baseURI)
+	}
 	// stylesheet-base-uri (F&O 3.1): the base URI used to resolve relative
 	// references (xsl:include/xsl:import) inside a stylesheet supplied via
 	// stylesheet-text or stylesheet-node. A relative value is itself resolved
