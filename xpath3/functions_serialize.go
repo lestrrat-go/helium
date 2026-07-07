@@ -18,7 +18,10 @@ func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
 }
 
-const errCodeSEPM0010 = "SEPM0010"
+const (
+	errCodeSEPM0009 = "SEPM0009"
+	errCodeSEPM0010 = "SEPM0010"
+)
 
 // effectiveSerializeVersion returns the effective output version, defaulting an
 // unspecified version to "1.0".
@@ -33,6 +36,15 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	opts, err := parseSerializeOptions(ctx, args)
 	if err != nil {
 		return nil, err
+	}
+
+	// A standalone declaration is impossible without an XML declaration, so
+	// requesting omit-xml-declaration=yes together with a standalone value of
+	// yes/no is a static error (Serialization 3.1 §5.1.6, SEPM0009). This uses
+	// the EFFECTIVE omit-xml-declaration (including the map-form default of true)
+	// and the RESOLVED standalone value (omit vs yes/no).
+	if opts.omitXMLDeclaration && (opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo) {
+		return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with a standalone value of yes/no"}
 	}
 
 	// Namespace undeclarations require XML/XHTML 1.1; requesting them at an

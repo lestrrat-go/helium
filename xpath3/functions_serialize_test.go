@@ -26,7 +26,6 @@ func TestSerialize_OptionsNode(t *testing.T) {
 		Evaluate(t.Context(), mustCompile(t, `.`), paramsElem)
 	require.NoError(t, err)
 
-	const paramsVar = "params"
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
 		paramsVar: nodes.Sequence(),
 	})
@@ -60,7 +59,7 @@ func TestSerialize_OptionsNodeUndeclarePrefixes(t *testing.T) {
 		t.Helper()
 		doc := mustParseXML(t, `<root/>`)
 		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
-			"params": build(value, version),
+			paramsVar: build(value, version),
 		})
 		_, err := eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
 		return err

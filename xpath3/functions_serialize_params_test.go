@@ -222,7 +222,7 @@ func TestSerialize_ApplyParams(t *testing.T) {
 				paramsRes, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 					Evaluate(t.Context(), mustCompile(t, `.`), paramsDoc.DocumentElement())
 				require.NoError(t, err)
-				eval = eval.Variables(map[string]xpath3.Sequence{"params": paramsRes.Sequence()})
+				eval = eval.Variables(map[string]xpath3.Sequence{paramsVar: paramsRes.Sequence()})
 			}
 
 			res, err := eval.Evaluate(t.Context(), mustCompile(t, tc.expr), doc)
@@ -359,7 +359,7 @@ func TestSerialize_OutputVersionAndNsResolution(t *testing.T) {
 			Evaluate(t.Context(), mustCompile(t, `.`), params.DocumentElement())
 		require.NoError(t, err)
 		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-			Variables(map[string]xpath3.Sequence{"params": res0.Sequence()})
+			Variables(map[string]xpath3.Sequence{paramsVar: res0.Sequence()})
 		res, err := eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
 		require.NoError(t, err)
 		out := res.StringValue()
@@ -378,12 +378,69 @@ func TestSerialize_OutputVersionAndNsResolution(t *testing.T) {
 			Evaluate(t.Context(), mustCompile(t, `.`), params.DocumentElement())
 		require.NoError(t, err)
 		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-			Variables(map[string]xpath3.Sequence{"params": res0.Sequence()})
+			Variables(map[string]xpath3.Sequence{paramsVar: res0.Sequence()})
 		doc := mustParseXML(t, `<root/>`)
 		_, err = eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
 		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+}
+
+// TestSerialize_SEPM0009 covers Serialization 3.1 §5.1.6: requesting
+// omit-xml-declaration=yes together with a standalone value of yes/no is a
+// static error (a standalone declaration is impossible without an XML
+// declaration). The map-form default of omit-xml-declaration=true makes an
+// explicit standalone yes/no conflict; "omit"/absent standalone, or an explicit
+// omit-xml-declaration=false, do not.
+func TestSerialize_SEPM0009(t *testing.T) {
+	doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root/>`)
+
+	requireSEPM0009 := func(t *testing.T, expr string) {
+		t.Helper()
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0009", xerr.Code)
+	}
+
+	requireNoError := func(t *testing.T, expr string) {
+		t.Helper()
+		_, err := evaluate(t.Context(), doc, expr)
+		require.NoError(t, err)
+	}
+
+	t.Run("map default omit + standalone true is SEPM0009", func(t *testing.T) {
+		requireSEPM0009(t, `serialize(., map{"standalone": true()})`)
+	})
+	t.Run("map default omit + standalone false is SEPM0009", func(t *testing.T) {
+		requireSEPM0009(t, `serialize(., map{"standalone": false()})`)
+	})
+	t.Run("map default omit + standalone omit is allowed", func(t *testing.T) {
+		requireNoError(t, `serialize(., map{"standalone": "omit"})`)
+	})
+	t.Run("map default omit + absent standalone is allowed", func(t *testing.T) {
+		requireNoError(t, `serialize(., map{})`)
+	})
+	t.Run("explicit omit=false + standalone true is allowed", func(t *testing.T) {
+		requireNoError(t, `serialize(., map{"omit-xml-declaration": false(), "standalone": true()})`)
+	})
+
+	t.Run("element form omit=yes + standalone yes is SEPM0009", func(t *testing.T) {
+		params := mustParseXML(t, `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">`+
+			`<output:omit-xml-declaration value="yes"/><output:standalone value="yes"/>`+
+			`</output:serialization-parameters>`)
+		res0, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), mustCompile(t, `.`), params.DocumentElement())
+		require.NoError(t, err)
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Variables(map[string]xpath3.Sequence{paramsVar: res0.Sequence()})
+		_, err = eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0009", xerr.Code)
 	})
 }

@@ -16,6 +16,9 @@ const (
 	testMutated  = "mutated"
 	testValue    = "test"
 	testExpr1Ne2 = "1 != 2"
+	// paramsVar is the variable name bound to serialization-parameters elements
+	// in fn:serialize element-options tests.
+	paramsVar = "params"
 )
 
 // evaluate is a test helper: compile + evaluate in one call.
