@@ -494,6 +494,17 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
+	// An explicit global-context-item (fn:transform option) overrides the
+	// default global context item (the source document node) used when
+	// evaluating global variables/parameters. When it is a node that is not the
+	// source document, global initialisers see it as "." while the initial match
+	// selection still drives template matching independently.
+	if cfg != nil && cfg.globalContextItem != nil {
+		if ni, ok := cfg.globalContextItem.(xpath3.NodeItem); ok && ni.Node != nil {
+			ec.globalContextItemNode = ni.Node
+		}
+	}
+
 	// Store exec context in Go context for avt evaluation
 	ctx = withExecContext(ctx, ec)
 

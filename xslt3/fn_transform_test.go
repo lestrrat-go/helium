@@ -242,7 +242,7 @@ func TestFnTransformBaseOutputURI(t *testing.T) {
       'base-output-uri': 'http://example.com/output.xml',
       'delivery-format': 'serialized'
     })"/>
-    <result><xsl:value-of select="$result('output')"/></result>
+    <result><xsl:value-of select="$result('http://example.com/output.xml')"/></result>
   </xsl:template>
 </xsl:stylesheet>`)
 
@@ -255,6 +255,8 @@ func TestFnTransformBaseOutputURI(t *testing.T) {
 	if idx := strings.Index(cleaned, "?>"); idx >= 0 {
 		cleaned = cleaned[idx+2:]
 	}
+	// The principal result is keyed by the base output URI (not "output") when
+	// base-output-uri is supplied (F&O 3.1 §14.8.3).
 	require.Contains(t, cleaned, "http://example.com/output.xml")
 }
 
@@ -491,10 +493,13 @@ func TestFnTransformInitialMatchSelectionResultDocument(t *testing.T) {
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-resultdoc.xsl"))).
 		Serialize(t.Context())
 	require.NoError(t, err)
-	// Principal output is present (XML-escaped inside the <entry> wrapper).
+	// Principal output is present (XML-escaped inside the <entry> wrapper),
+	// keyed by the base output URI.
+	require.Contains(t, out, `key="http://example.com/output.xml"`)
 	require.Contains(t, out, "&lt;principal&gt;alpha&lt;/principal&gt;")
-	// The secondary xsl:result-document appears in the result map keyed by href.
-	require.Contains(t, out, `key="secondary.xml"`)
+	// The secondary xsl:result-document appears in the result map keyed by its
+	// href resolved against the base output URI (an absolute URI).
+	require.Contains(t, out, `key="http://example.com/secondary.xml"`)
 	require.Contains(t, out, "&lt;secondary&gt;alpha&lt;/secondary&gt;")
 }
 

@@ -251,6 +251,9 @@ func (ec *execContext) globalSourceNode() helium.Node {
 	if ec.globalContextAbsent {
 		return nil
 	}
+	if ec.globalContextItemNode != nil {
+		return normalizeNode(ec.globalContextItemNode)
+	}
 	return normalizeNode(ec.sourceDoc)
 }
 

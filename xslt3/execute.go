@@ -121,6 +121,7 @@ type execContext struct {
 	docOrderCache                *xpath3.DocOrderCache                    // shared document-order cache for consistent cross-document ordering
 	packageVarCache              map[*variable]xpath3.Sequence            // cache for package-scoped variable evaluations
 	globalContextAbsent          bool                                     // true when global context item is absent (select evaluated to empty)
+	globalContextItemNode        helium.Node                              // explicit global context item node (overrides sourceDoc); nil = use sourceDoc
 	traceWriter                  io.Writer                                // destination for fn:trace output (nil = os.Stderr)
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change

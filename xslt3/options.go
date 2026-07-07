@@ -82,6 +82,7 @@ type transformConfig struct {
 	traceWriter           io.Writer     // destination for fn:trace output (nil = os.Stderr)
 	resolvedOutputDef     *OutputDef    // resolved primary output def (set by executeTransform)
 	globalContextSelect   string        // XPath for global context item (evaluated after strip-space)
+	globalContextItem     xpath3.Item   // explicit global context item (fn:transform global-context-item option)
 	maxResourceBytes      int64         // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
 	// allowExternalEntities opts into the legacy permissive parse of runtime
 	// documents loaded via fn:doc/document()/xsl:source-document/xsl:merge
