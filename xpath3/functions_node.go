@@ -1260,10 +1260,12 @@ func clampInt64ToInt(n int64) int {
 	return int(n)
 }
 
-func docURIArg(ctx context.Context, seq Sequence, fnName string) (string, error) {
-	if seqLen(seq) > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
-	}
+func docURIArg(ctx context.Context, seq Sequence, _ string) (string, error) {
+	// xs:string? function coercion atomizes FIRST (flattening arrays, so an empty
+	// array member contributes nothing), THEN applies the singleton-or-empty
+	// cardinality. coerceArgToString does exactly that and raises XPTY0004 for a
+	// post-atomization length > 1, so no pre-atomization gate belongs here — a raw
+	// seqLen(seq) > 1 check would wrongly reject e.g. doc-available(([], "x")).
 	return coerceArgToString(ctx, seq)
 }
 

@@ -144,3 +144,87 @@ func TestStringArgCardinalityPreserved(t *testing.T) {
 		require.Equal(t, true, av.Value)
 	})
 }
+
+// TestDocFamilyCardinalityFlattens guards the docURIArg family (fn:doc,
+// fn:doc-available, fn:collection, fn:uri-collection) against the raw
+// pre-atomization cardinality gate. Their xs:string? URI argument must be
+// atomized FIRST — an empty-array member flattens away — THEN cardinality is
+// applied, so doc-available(([], "x")) resolves the single URI (yielding false
+// without a resolver) instead of raising XPTY0004. A genuinely too-long
+// argument (two atoms after flattening) still raises XPTY0004.
+func TestDocFamilyCardinalityFlattens(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+
+	t.Run("doc-available empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `doc-available(([], "http://example.com/x"))`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, false, av.Value) // no resolver ⇒ not available, NOT XPTY0004
+	})
+
+	t.Run("doc-available two atoms still XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`doc-available(("a", "b"))`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr))
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+}
+
+// TestDynamicCallElementOnlyRaisesFOTY0012 verifies that atomizing an
+// element-only-typed node against an xs:string? parameter surfaces the real
+// dynamic error err:FOTY0012 (the node has no typed value) rather than a
+// generic XPTY0004, across every function-item invocation path: a named
+// function reference (invoked via fn:for-each), fn:function-lookup, an inline
+// function parameter, and an inline function return type. Each path previously
+// collapsed the typed error into XPTY0004 by using the boolean
+// coerceToSequenceType; they now route through the error-propagating coercion.
+func TestDynamicCallElementOnlyRaisesFOTY0012(t *testing.T) {
+	doc := mustParseXML(t, `<root><child>hi</child></root>`)
+	root := doc.DocumentElement()
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
+	}}
+	newEval := func() xpath3.Evaluator {
+		return xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "rootType"),
+			}).
+			SchemaDeclarations(decls)
+	}
+
+	requireFOTY0012 := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = newEval().Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0012", xerr.Code)
+	}
+
+	// Named function reference invoked through a higher-order function.
+	t.Run("named ref via for-each", func(t *testing.T) {
+		requireFOTY0012(t, `for-each(/*, upper-case#1)`)
+	})
+
+	// fn:function-lookup dynamic invocation.
+	t.Run("function-lookup", func(t *testing.T) {
+		requireFOTY0012(t, `function-lookup(QName('http://www.w3.org/2005/xpath-functions','upper-case'), 1)(/*)`)
+	})
+
+	// Inline function parameter coercion.
+	t.Run("inline function parameter", func(t *testing.T) {
+		requireFOTY0012(t, `(function($x as xs:string?) { $x })(/*)`)
+	})
+
+	// Inline function return-type coercion.
+	t.Run("inline function return type", func(t *testing.T) {
+		requireFOTY0012(t, `(function($x) as xs:string? { $x })(/*)`)
+	})
+}

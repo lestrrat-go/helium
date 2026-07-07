@@ -46,8 +46,19 @@ dynamically reachable, closing the function-lookup bypass of the static CTA gate
 Explicit prefixed names + `Q{uri}local` names NEVER fall back to `fn:` on miss.
 
 Typed helper coercions for `xs:string?` + `xs:integer` enforce cardinality.
-Sequences with length `> 1` → `XPTY0004`; helpers do not truncate to first item.
-Signature-sensitive string/regex/URI builtin call sites + `||` string coercion also enforce single-item cardinality and propagate atomization/type errors.
+The `xs:string?` helpers (`coerceArgToString`/`coerceArgToStringRequired` →
+`coerceAtomizedString`, plus `seqToStringErr` and the `||` `concatToString`
+path) atomize FIRST — arrays flatten to their members, list-typed nodes expand
+to their tokens — and count cardinality AFTER, so a length `> 1` becomes
+`XPTY0004` while an empty-array member flattens away (`f(([], "x"))` coerces to
+the single `"x"`, not `XPTY0004`). Helpers do not truncate to first item, and a
+raw pre-atomization `seqLen > 1` gate must NOT wrap them (it would pre-empt the
+flattening). This is why the signature-less doc/collection URI family
+(`docURIArg`, backing `fn:doc`/`fn:doc-available`/`fn:collection`/
+`fn:uri-collection`) and the URI builtins (`fn:encode-for-uri`/`iri-to-uri`/
+`escape-html-uri`) delegate cardinality entirely to `coerceArgToString`.
+Signature-sensitive string/regex/URI builtin call sites + `||` string coercion
+also propagate atomization/type errors (`FOTY0012`/`FOTY0013`).
 
 `evalFunctionCall` (the static call path) enforces the declared parameter
 signature for every resolved function before invoking it: it looks up

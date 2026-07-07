@@ -742,8 +742,14 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 			copy(callArgs, args)
 			if len(actual.ParamTypes) > 0 {
 				for i, arg := range args {
-					coerced, ok := coerceToSequenceType(ctx, arg, actual.ParamTypes[i], invokeCtx)
-					if !ok {
+					// Propagate a real typed error (FOTY0012 from atomizing an
+					// element-only node, FOTY0013, FORG0001, …); map only a plain
+					// mismatch to XPTY0004.
+					coerced, cerr := coerceToSequenceTypeE(ctx, arg, actual.ParamTypes[i], invokeCtx)
+					if cerr != nil && !errors.Is(cerr, errCoerceMismatch) {
+						return nil, cerr
+					}
+					if cerr != nil {
 						return nil, &XPathError{
 							Code:    lexicon.ErrXPTY0004,
 							Message: fmt.Sprintf("function argument %d does not match required type %v", i+1, actual.ParamTypes[i]),
@@ -758,8 +764,11 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 				return nil, err
 			}
 
-			coercedResult, ok := coerceToSequenceType(ctx, result, target.ReturnType, invokeCtx)
-			if !ok {
+			coercedResult, rerr := coerceToSequenceTypeE(ctx, result, target.ReturnType, invokeCtx)
+			if rerr != nil && !errors.Is(rerr, errCoerceMismatch) {
+				return nil, rerr
+			}
+			if rerr != nil {
 				return nil, &XPathError{
 					Code:    lexicon.ErrXPTY0004,
 					Message: fmt.Sprintf("function result does not match required type %v", target.ReturnType),

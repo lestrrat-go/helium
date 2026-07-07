@@ -431,9 +431,13 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 			copy(coerced, callArgs)
 			for i, arg := range callArgs {
 				if i < len(paramTypes) {
-					c, ok := coerceToSequenceType(ctx, arg, paramTypes[i], capturedEC)
-					if !ok {
-						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", qv.Local, i+1, paramTypes[i])}
+					// coerceFuncallArg surfaces a real typed error (FOTY0012 from
+					// atomizing an element-only node, FOTY0013, FORG0001, …) and maps
+					// only a plain mismatch to XPTY0004 — the boolean
+					// coerceToSequenceType would collapse FOTY0012 into XPTY0004.
+					c, err := coerceFuncallArg(ctx, arg, paramTypes[i], qv.Local, i, capturedEC)
+					if err != nil {
+						return nil, err
 					}
 					coerced[i] = c
 				}

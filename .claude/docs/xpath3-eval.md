@@ -220,6 +220,21 @@ so atomizing an element-only-typed node arg against an atomic parameter raises
 `context.Context` so the schema-aware cast it may trigger participates in
 cancellation.
 
+Every path that coerces a USER-facing call argument/result routes through the
+error-propagating `coerceToSequenceTypeE` (directly, or via `coerceFuncallArg`),
+so a real dynamic error — `FOTY0012` (atomizing an element-only node),
+`FOTY0013` (atomizing a function/map/array), `FORG0001` (a failed
+untypedAtomic→target cast) — surfaces unchanged instead of being flattened into
+a generic `XPTY0004`. This covers the direct call path (`evalFunctionCall`),
+partial application, named function references and `fn:function-lookup`
+(`functions_hof.go`), inline-function parameter AND return-type coercion
+(`eval_funcall.go`), and function-item→function-type adaptation
+(`coerceFunctionItem`, `eval_types.go`). Only the PUBLIC boolean wrappers
+`CoerceToSequenceType`/`CoerceToSequenceTypeContext` discard the specific error
+(they are type predicates returning `(Sequence, bool)`); `instance of` /
+`castable` / `treat` type tests likewise stay boolean, where a mismatch is the
+correct result and raises nothing.
+
 A user-defined UNION used as a required item type (e.g. an `xsl:function`
 `as="u"` parameter, reached across an `xsl:use-package`/`xsl:original` boundary)
 matches value-first: `atomicMatchesTargetType` — the shared gate for `instance
