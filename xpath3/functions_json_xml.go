@@ -286,12 +286,16 @@ func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, e
 
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
-		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
-		}
-		s, err := coerceArgToString(ctx, v)
+		// The 'duplicates' option is an xs:string, converted with the F&O 3.1
+		// option (function) conversion rules (§2.5): atomize FIRST — arrays
+		// flatten to their members, so an empty-array member contributes nothing
+		// — THEN apply the exactly-one cardinality. coerceArgToStringRequired does
+		// exactly that (XPTY0004 on empty-after-atomization or >1-after-atomization),
+		// so no raw pre-atomization seqLen gate belongs here — one would wrongly
+		// reject e.g. map{"duplicates": ([], "use-first")}.
+		s, err := coerceArgToStringRequired(ctx, v)
 		if err != nil {
-			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be xs:string"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
 		}
 		switch s {
 		case duplicatesReject, duplicatesUseFirst, "retain":

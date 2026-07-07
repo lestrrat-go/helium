@@ -38,7 +38,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	opts, err := parseJSONOptions(args)
+	opts, err := parseJSONOptions(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 // parseJSONOptions extracts and validates options from the second argument.
-func parseJSONOptions(args []Sequence) (jsonOptions, error) {
+func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
 		duplicates: duplicatesUseFirst, // XPath spec default
 	}
@@ -107,17 +107,17 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 		}
 	}
 
-	// Parse "duplicates" option
+	// Parse "duplicates" option. Per the F&O 3.1 option (function) conversion
+	// rules (§2.5) its xs:string value is atomized FIRST — arrays flatten to
+	// their members, so an empty-array member contributes nothing — THEN the
+	// exactly-one cardinality is applied. A raw pre-atomization seqLen gate would
+	// wrongly reject e.g. map{"duplicates": ([], "use-first")}.
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
-		if seqLen(v) != 1 {
+		s, err := coerceArgToStringRequired(ctx, v)
+		if err != nil {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a single string"}
 		}
-		av, ok := v.Get(0).(AtomicValue)
-		if !ok {
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a string"}
-		}
-		s, _ := atomicToString(av)
 		switch s {
 		case duplicatesReject, duplicatesUseFirst, "use-last":
 			opts.duplicates = s

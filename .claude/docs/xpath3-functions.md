@@ -60,6 +60,17 @@ flattening). This is why the signature-less doc/collection URI family
 Signature-sensitive string/regex/URI builtin call sites + `||` string coercion
 also propagate atomization/type errors (`FOTY0012`/`FOTY0013`).
 
+The same rule governs **options-map string values** (F&O 3.1 §2.5 option/function
+conversion): an `xs:string` option value atomizes FIRST (an empty-array member
+flattens away) and cardinality applies AFTER, so `map{"opt": ([], "v")}` coerces
+to the single `"v"`, not `XPTY0004`. No raw pre-atomization `seqLen != 1` gate
+wraps these. `fn:json-to-xml`/`fn:parse-json` `duplicates` route through
+`coerceArgToStringRequired`; `fn:serialize`'s string map parameters
+(`method`/`item-separator`/`encoding`, via `readString`) and its
+`standalone` union value (`validateSerializeStandaloneMap`) atomize via
+`AtomizeSequence` then enforce the singleton, keeping each atom's type (e.g. an
+`xs:QName` `method`) so the existing `atomicToString`/type checks are unchanged.
+
 `evalFunctionCall` (the static call path) enforces the declared parameter
 signature for every resolved function before invoking it: it looks up
 `paramTypes` via the `function_signatures.go` registry (then

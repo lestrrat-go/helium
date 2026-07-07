@@ -79,14 +79,19 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 		if !found {
 			return "", false, nil
 		}
-		if seqLen(v) != 1 {
+		// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
+		// (e.g. an empty-array member) flattens to its members, THEN enforce the
+		// singleton cardinality. AtomizeSequence keeps the atom's type (e.g. the
+		// xs:QName "method" value), so atomicToString handles it unchanged. A raw
+		// pre-atomization seqLen gate would wrongly reject map{"method": ([], "xml")}.
+		atoms, err := AtomizeSequence(v)
+		if err != nil {
+			return "", true, err
+		}
+		if len(atoms) != 1 {
 			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
 		}
-		av, ok := v.Get(0).(AtomicValue)
-		if !ok {
-			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be atomic", name)}
-		}
-		s, err := atomicToString(av)
+		s, err := atomicToString(atoms[0])
 		if err != nil {
 			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
 		}
@@ -332,18 +337,22 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 // value and is a type error [err:XPTY0004].
 func validateSerializeStandaloneMap(v Sequence) error {
 	xerr := &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "standalone" must be xs:boolean or "omit"`}
-	// An empty-sequence value selects the parameter default (omit); it is not a
-	// bad value (F&O 3.1 §18.9.1; QT3 serialize-xml-131 supplies map{"standalone":()}).
-	if seqLen(v) == 0 {
+	// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
+	// (e.g. an empty-array member) flattens to its members, THEN apply the
+	// singleton cardinality. An empty atomized value selects the parameter
+	// default (omit); it is not a bad value (QT3 serialize-xml-131 supplies
+	// map{"standalone":()}).
+	atoms, err := AtomizeSequence(v)
+	if err != nil {
+		return xerr
+	}
+	if len(atoms) == 0 {
 		return nil
 	}
-	if seqLen(v) != 1 {
+	if len(atoms) > 1 {
 		return xerr
 	}
-	av, ok := v.Get(0).(AtomicValue)
-	if !ok {
-		return xerr
-	}
+	av := atoms[0]
 	switch av.TypeName {
 	case TypeBoolean:
 		return nil
