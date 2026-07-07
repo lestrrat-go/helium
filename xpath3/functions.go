@@ -356,6 +356,16 @@ func coerceArgToString(seq Sequence) (string, error) {
 	return s, err
 }
 
+// coerceArgToStringCont is coerceArgToString for fn:normalize-space: it threads the
+// active fn:data content-kind provider (contentKindProvider(ctx), nil in the common
+// non-schema-aware case) through atomization so an element-only-typed node argument
+// — including one nested in an array — raises FOTY0012 while atomizing, matching
+// fn:data. A nil provider makes it identical to coerceArgToString.
+func coerceArgToStringCont(ctx context.Context, seq Sequence) (string, error) {
+	s, _, err := coerceAtomizedStringCont(seq, contentKindProvider(ctx))
+	return s, err
+}
+
 // coerceAtomizedString performs XPath function conversion to xs:string?: it
 // atomizes the argument FIRST (arrays flatten to their members, list-typed nodes
 // expand to their tokens), THEN checks cardinality. Atomization is streamed and
@@ -363,9 +373,21 @@ func coerceArgToString(seq Sequence) (string, error) {
 // without materializing it. Returns empty=true when the atomized sequence is
 // empty (the caller decides whether that is "" or an error).
 func coerceAtomizedString(seq Sequence) (value string, empty bool, err error) {
+	return coerceAtomizedStringCont(seq, nil)
+}
+
+// coerceAtomizedStringCont is coerceAtomizedString with an optional fn:data-style
+// content-kind check (ContentTypeKindProvider) threaded through atomization. When
+// non-nil the check is INTERLEAVED with atomization exactly as on the fn:data path
+// (atomizeStreamCont): an element-only-typed node argument — including one nested
+// in an array — raises err:FOTY0012 in encounter order (atomization precedes the
+// cardinality check), and an empty-content node is skipped. A nil provider is
+// byte-identical to plain atomizeStream, so coerceArgToString and every other
+// caller are unaffected. Used by fn:normalize-space.
+func coerceAtomizedStringCont(seq Sequence, provider ContentTypeKindProvider) (value string, empty bool, err error) {
 	var first AtomicValue
 	var count int
-	if serr := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+	if _, serr := atomizeStreamCont(seq, provider, func(av AtomicValue) (bool, error) {
 		count++
 		if count == 1 {
 			first = av

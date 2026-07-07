@@ -421,11 +421,8 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		s = sv
 	} else {
-		if err := checkArgContentKind(ctx, args[0]); err != nil {
-			return nil, err
-		}
 		var err error
-		s, err = coerceArgToString(args[0])
+		s, err = coerceArgToStringCont(ctx, args[0])
 		if err != nil {
 			return nil, err
 		}
