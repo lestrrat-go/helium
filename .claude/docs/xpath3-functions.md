@@ -71,7 +71,7 @@ to the single `"v"`, not `XPTY0004`. No raw pre-atomization `seqLen != 1` gate
 wraps these. `fn:json-to-xml`/`fn:parse-json`/`map:merge` `duplicates` route
 through `coerceArgToStringRequired`; `fn:serialize`'s string map parameters
 (`method`/`item-separator`/`encoding`, via `readSerializeStringOption`) and its
-`standalone` union value (`validateSerializeStandaloneMap`) atomize via the
+`standalone` union value (`resolveSerializeStandaloneMap`) atomize via the
 ctx-aware `atomizeTypedValue`/typed-value stream then enforce the singleton,
 keeping each atom's type (e.g. an `xs:QName` `method`) so the `atomicToString`/
 type checks are unchanged. Because atomization is content-kind-aware, an
@@ -161,6 +161,29 @@ unique keys, so the combination cannot succeed.
 
 ### `functions_serialize.go`
 `serialize`
+
+Serialization parameters (map form and `output:serialization-parameters`
+element form) are both parsed and **applied**. String/boolean params
+(`method`/`item-separator`/`encoding`/`indent`/`omit-xml-declaration`/
+`allow-duplicate-names`) and these additional params drive the output:
+`standalone` (resolved to yes/no/omit → the XML-declaration pseudo-attribute),
+`undeclare-prefixes` (XML 1.1 `xmlns:pfx=""` undeclarations),
+`cdata-section-elements` and `suppress-indentation` (resolved to a
+`{uri}local`/bare-local name set), and `use-character-maps` (resolved to a
+`map[rune]string`). The xml path builds a `helium.Writer` via
+`newSerializeXMLWriter` wiring `Standalone`/`AllowPrefixUndeclarations`/
+`CDATASectionElements`/`SuppressIndentElements`/`CharacterMap` — the shared
+`helium.Writer` (root `writer.go`/`writer_escape.go`) implements those knobs
+(character maps substitute a mapped rune with its raw replacement in text and
+attribute content; cdata-section-elements emit direct text children as CDATA;
+suppress-indentation disables indentation for the named subtree; `Standalone`
+forces the declaration pseudo-attribute). `method="html"` (`serializeHTMLSequence`)
+emits an HTML5 `<!DOCTYPE html>` and injects a `<meta http-equiv="Content-Type">`
+into `<head>` on a copy of the document (never mutating the input), then
+serializes via the `helium/html` writer. The map form defaults
+`omit-xml-declaration` to true (an empty map equals omitting the argument;
+W3C serialize-xml-127a); the element form keeps the Serialization-spec default
+(declaration emitted). Character maps are not applied on the html path.
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.

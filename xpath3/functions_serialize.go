@@ -7,8 +7,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+const serializeMethodHTML = "html"
 
 func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
@@ -26,6 +29,8 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		result, err = serializeAdaptiveSequence(args[0], opts)
 	case "json":
 		result, err = serializeJSONSequence(args[0], opts)
+	case serializeMethodHTML:
+		result, err = serializeHTMLSequence(args[0], opts)
 	default:
 		result, err = serializeXMLSequence(args[0], opts)
 	}
@@ -42,6 +47,18 @@ type serializeOptions struct {
 	omitXMLDeclaration  bool
 	allowDuplicateNames bool
 	encoding            string
+	// standalone is the resolved standalone pseudo-attribute request:
+	// "yes"/"no" force it, "omit" or "" leave it out.
+	standalone string
+	// undeclarePrefixes emits XML 1.1 namespace undeclarations (xmlns:pfx="").
+	undeclarePrefixes bool
+	// cdataElements / suppressIndent hold element names (expanded {uri}local and
+	// bare local form) for the cdata-section-elements and suppress-indentation
+	// serialization parameters.
+	cdataElements  map[string]struct{}
+	suppressIndent map[string]struct{}
+	// charMap is the resolved character map (use-character-maps).
+	charMap map[rune]string
 }
 
 func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptions, error) {
@@ -122,6 +139,11 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else if found {
 		opts.indent = indent
 	}
+	// The map form of fn:serialize defaults omit-xml-declaration to true:
+	// supplying an empty map has the same effect as omitting the argument, and
+	// the XML declaration is omitted unless the option requests otherwise
+	// (F&O 3.1 §18.9.1; W3C serialize-xml-127a).
+	opts.omitXMLDeclaration = true
 	if omit, found, err := readBool("omit-xml-declaration"); err != nil {
 		return opts, err
 	} else if found {
@@ -137,18 +159,70 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else if found {
 		opts.encoding = encoding
 	}
+	if undeclare, found, err := readBool("undeclare-prefixes"); err != nil {
+		return opts, err
+	} else if found {
+		opts.undeclarePrefixes = undeclare
+	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
-		if err := validateSerializeStandaloneMap(ctx, v); err != nil {
+		standalone, err := resolveSerializeStandaloneMap(ctx, v)
+		if err != nil {
 			return opts, err
 		}
+		opts.standalone = standalone
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "use-character-maps"}); found {
-		if err := validateSerializeCharacterMaps(v); err != nil {
+		charMap, err := resolveSerializeCharacterMaps(v)
+		if err != nil {
 			return opts, err
 		}
+		opts.charMap = charMap
+	}
+	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "cdata-section-elements"}); found {
+		names, err := resolveSerializeQNameNames(v, "cdata-section-elements")
+		if err != nil {
+			return opts, err
+		}
+		opts.cdataElements = names
+	}
+	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "suppress-indentation"}); found {
+		names, err := resolveSerializeQNameNames(v, "suppress-indentation")
+		if err != nil {
+			return opts, err
+		}
+		opts.suppressIndent = names
 	}
 
 	return opts, nil
+}
+
+// resolveSerializeQNameNames converts a serialization parameter whose value is a
+// sequence of xs:QName items (cdata-section-elements, suppress-indentation) into
+// the element-name key set the writer matches against: each QName contributes its
+// expanded {uri}local name (a no-namespace QName contributes its bare local name).
+func resolveSerializeQNameNames(v Sequence, name string) (map[string]struct{}, error) {
+	names := make(map[string]struct{})
+	for item := range seqItems(v) {
+		av, ok := item.(AtomicValue)
+		if !ok || av.TypeName != TypeQName {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a sequence of xs:QName", name)}
+		}
+		qn, ok := av.Value.(QNameValue)
+		if !ok {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a sequence of xs:QName", name)}
+		}
+		names[nameKey(qn.URI, qn.Local)] = struct{}{}
+	}
+	return names, nil
+}
+
+// nameKey builds the writer's element-name key: the bare local name for the
+// no-namespace case, otherwise the expanded {uri}local form.
+func nameKey(uri, local string) string {
+	if uri == "" {
+		return local
+	}
+	return "{" + uri + "}" + local
 }
 
 // readSerializeStringOption extracts a string-valued serialize option from the
@@ -256,33 +330,47 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			}
 			opts.allowDuplicateNames = value
 		case "undeclare-prefixes":
-			// undeclare-prefixes is a yes/no boolean serialization parameter
-			// (Serialization 3.1 §2). helium does not emit XML 1.1 namespace
-			// undeclarations, so the value is validated and ignored — matching
-			// the map form, which accepts it without honoring the behavior.
-			if _, err := readSerializeParamYesNo(param); err != nil {
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.undeclarePrefixes = value
 		case "encoding":
 			value, err := readSerializeParamValue(param)
 			if err != nil {
 				return opts, err
 			}
 			opts.encoding = value
-		case "byte-order-mark", "cdata-section-elements", "doctype-public", "doctype-system",
+		case "cdata-section-elements":
+			names, err := readSerializeParamQNameNames(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.cdataElements = names
+		case "suppress-indentation":
+			names, err := readSerializeParamQNameNames(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.suppressIndent = names
+		case "byte-order-mark", "doctype-public", "doctype-system",
 			"json-node-output-method", "media-type", "normalization-form",
-			"suppress-indentation", "version":
+			"version":
 			if _, err := readSerializeParamValue(param); err != nil {
 				return opts, err
 			}
 		case "standalone":
-			if _, err := readSerializeParamStandalone(param); err != nil {
+			value, err := readSerializeParamStandalone(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.standalone = value
 		case "use-character-maps":
-			if err := validateSerializeCharacterMapsElement(param); err != nil {
+			charMap, err := resolveSerializeCharacterMapsElement(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.charMap = charMap
 		default:
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("unsupported serialize parameter %q", param.LocalName())}
 		}
@@ -321,25 +409,75 @@ func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
 	}
 }
 
+// readSerializeParamStandalone reads and normalizes the element-form
+// "standalone" parameter. The element form whitespace-collapses the value
+// (Serialization 3.1), so " no " is the "no" enum value; it returns the
+// collapsed "yes"/"no"/"omit".
 func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
 		return "", err
 	}
-	switch strings.ToLower(strings.TrimSpace(value)) {
+	switch collapsed := strings.ToLower(strings.TrimSpace(value)); collapsed {
 	case lexicon.ValueYes, lexicon.ValueNo, "omit":
-		return value, nil
+		return collapsed, nil
 	default:
 		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
 	}
 }
 
-// validateSerializeStandaloneMap validates the "standalone" option value in the
-// map form of fn:serialize. Its value space is union(xs:boolean, enum("omit"))
-// (F&O 3.1 §18.9.1). The map form does NOT whitespace-collapse the value, so a
-// string such as " omit " (with surrounding spaces) is not the "omit" enum
-// value and is a type error [err:XPTY0004].
-func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
+// readSerializeParamQNameNames reads a cdata-section-elements or
+// suppress-indentation element-form parameter whose value attribute is a
+// whitespace-separated list of lexical QNames, resolving each prefix against the
+// parameter element's in-scope namespaces, and returns the writer's element-name
+// key set.
+func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, error) {
+	value, err := readSerializeParamValue(elem)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{})
+	for token := range strings.FieldsSeq(value) {
+		prefix, local, hasPrefix := strings.Cut(token, ":")
+		if !hasPrefix {
+			// No colon: strings.Cut puts the whole token in prefix; it is a
+			// no-namespace name whose key is its bare local name.
+			names[prefix] = struct{}{}
+			continue
+		}
+		uri, ok := lookupInScopeNamespace(elem, prefix)
+		if !ok {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter uses unbound namespace prefix %q", prefix)}
+		}
+		names[nameKey(uri, local)] = struct{}{}
+	}
+	return names, nil
+}
+
+// lookupInScopeNamespace resolves prefix against the in-scope namespace
+// declarations of elem, walking up its ancestors.
+func lookupInScopeNamespace(elem helium.Node, prefix string) (string, bool) {
+	for node := elem; node != nil; node = node.Parent() {
+		nser, ok := node.(helium.Namespacer)
+		if !ok {
+			continue
+		}
+		for _, ns := range nser.Namespaces() {
+			if ns.Prefix() == prefix {
+				return ns.URI(), true
+			}
+		}
+	}
+	return "", false
+}
+
+// resolveSerializeStandaloneMap validates and resolves the "standalone" option
+// value in the map form of fn:serialize. Its value space is
+// union(xs:boolean, enum("omit")) (F&O 3.1 §18.9.1). The map form does NOT
+// whitespace-collapse the value, so a string such as " omit " (with surrounding
+// spaces) is not the "omit" enum value and is a type error [err:XPTY0004]. It
+// returns "yes"/"no"/"omit", or "" to select the parameter default (omit).
+func resolveSerializeStandaloneMap(ctx context.Context, v Sequence) (string, error) {
 	xerr := &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "standalone" must be xs:boolean or "omit"`}
 	// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
 	// (e.g. an empty-array member) flattens to its members, THEN apply the
@@ -351,27 +489,30 @@ func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
 	atoms, err := atomizeTypedValue(ctx, v)
 	if err != nil {
 		if isNoTypedValueError(err) {
-			return err
+			return "", err
 		}
-		return xerr
+		return "", xerr
 	}
 	if len(atoms) == 0 {
-		return nil
+		return "", nil
 	}
 	if len(atoms) > 1 {
-		return xerr
+		return "", xerr
 	}
 	av := atoms[0]
 	switch av.TypeName {
 	case TypeBoolean:
-		return nil
+		if av.BooleanVal() {
+			return lexicon.ValueYes, nil
+		}
+		return lexicon.ValueNo, nil
 	case TypeString, TypeUntypedAtomic:
 		s, err := atomicToString(av)
 		if err != nil {
-			return xerr
+			return "", xerr
 		}
 		if s == "omit" {
-			return nil
+			return "omit", nil
 		}
 		// An untypedAtomic may carry an xs:boolean lexical; accept the same
 		// value space the other boolean map options do (readBool): true/false/1/0.
@@ -379,13 +520,15 @@ func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
 		// are not xs:boolean lexicals — both stay rejected.
 		if av.TypeName == TypeUntypedAtomic {
 			switch s {
-			case lexicon.ValueTrue, lexicon.ValueFalse, "1", "0":
-				return nil
+			case lexicon.ValueTrue, "1":
+				return lexicon.ValueYes, nil
+			case lexicon.ValueFalse, "0":
+				return lexicon.ValueNo, nil
 			}
 		}
-		return xerr
+		return "", xerr
 	default:
-		return xerr
+		return "", xerr
 	}
 }
 
@@ -403,37 +546,40 @@ func serializeNodeKindError(item NodeItem) error {
 	return nil
 }
 
-func validateSerializeCharacterMapsElement(elem *helium.Element) error {
+// resolveSerializeCharacterMapsElement validates the element form of
+// use-character-maps and builds the rune→replacement map from its
+// output:character-map children.
+func resolveSerializeCharacterMapsElement(elem *helium.Element) (map[rune]string, error) {
 	if len(elem.Attributes()) != 0 {
-		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
 	}
-	seen := make(map[string]struct{})
+	result := make(map[rune]string)
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) == "" {
 				continue
 			}
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps must not contain text"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps must not contain text"}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			continue
 		case helium.ElementNode:
 		default:
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps has invalid child node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps has invalid child node"}
 		}
 
 		charMap, _ := helium.AsNode[*helium.Element](child)
 		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps children must be output:character-map"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
 		if hasNonWhitespaceContent(charMap) {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map must not have child content"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map must not have child content"}
 		}
 
 		var character, mapString string
 		for _, attr := range charMap.Attributes() {
 			if attr.URI() != "" {
-				return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map attributes must be unqualified"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map attributes must be unqualified"}
 			}
 			switch attr.LocalName() {
 			case "character":
@@ -441,21 +587,22 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 			case "map-string":
 				mapString = attr.Value()
 			default:
-				return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map has unsupported attribute"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map has unsupported attribute"}
 			}
 		}
 		if character == "" || mapString == "" {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map requires character and map-string"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map requires character and map-string"}
 		}
 		if utf8.RuneCountInString(character) != 1 {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map character must be a single character"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map character must be a single character"}
 		}
-		if _, exists := seen[character]; exists {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map entries must be unique"}
+		key := []rune(character)[0]
+		if _, exists := result[key]; exists {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map entries must be unique"}
 		}
-		seen[character] = struct{}{}
+		result[key] = mapString
 	}
-	return nil
+	return result, nil
 }
 
 func hasNonWhitespaceContent(elem *helium.Element) bool {
@@ -474,15 +621,20 @@ func hasNonWhitespaceContent(elem *helium.Element) bool {
 	return false
 }
 
-func validateSerializeCharacterMaps(v Sequence) error {
+// resolveSerializeCharacterMaps validates the map form of the use-character-maps
+// option and builds the rune→replacement map. Keys must be single-character
+// strings and values strings (option (function) conventions apply — a QName key
+// is err:XPTY0004; W3C serialize-xml-139/139b).
+func resolveSerializeCharacterMaps(v Sequence) (map[rune]string, error) {
 	if seqLen(v) != 1 {
-		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
 	}
 	m, ok := v.Get(0).(MapItem)
 	if !ok {
-		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
 	}
-	return m.forEach0(func(key AtomicValue, value Sequence) error {
+	charMap := make(map[rune]string)
+	err := m.forEach0(func(key AtomicValue, value Sequence) error {
 		if key.TypeName != TypeString && key.TypeName != TypeUntypedAtomic {
 			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps keys must be strings"}
 		}
@@ -497,9 +649,17 @@ func validateSerializeCharacterMaps(v Sequence) error {
 		if !ok || (av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic) {
 			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps values must be strings"}
 		}
-		_, err = atomicToString(av)
-		return err
+		mapString, err := atomicToString(av)
+		if err != nil {
+			return err
+		}
+		charMap[[]rune(keyString)[0]] = mapString
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return charMap, nil
 }
 
 func serializeAdaptiveSequence(seq Sequence, opts serializeOptions) (string, error) {
@@ -714,37 +874,182 @@ func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 	return strings.Join(parts, opts.itemSeparator), nil
 }
 
-func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
-	switch n := item.Node.(type) {
-	case *helium.Attribute:
-		return fmt.Sprintf(`%s="%s"`, n.Name(), n.Value()), nil
-	case *helium.Document:
-		writer := helium.NewWriter()
-		if opts.omitXMLDeclaration {
-			writer = writer.XMLDeclaration(false)
+// newSerializeXMLWriter builds a helium.Writer configured from the serialization
+// options for the xml output method: omit-xml-declaration, indent, standalone,
+// undeclare-prefixes, cdata-section-elements, suppress-indentation, and character
+// maps.
+func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
+	writer := helium.NewWriter()
+	if opts.omitXMLDeclaration {
+		writer = writer.XMLDeclaration(false)
+	}
+	if opts.indent {
+		writer = writer.Format(true)
+	}
+	switch opts.standalone {
+	case lexicon.ValueYes:
+		writer = writer.Standalone(true)
+	case lexicon.ValueNo:
+		writer = writer.Standalone(false)
+	}
+	if opts.undeclarePrefixes {
+		writer = writer.AllowPrefixUndeclarations(true)
+	}
+	if len(opts.cdataElements) > 0 {
+		writer = writer.CDATASectionElements(opts.cdataElements)
+	}
+	if len(opts.suppressIndent) > 0 {
+		writer = writer.SuppressIndentElements(opts.suppressIndent)
+	}
+	if len(opts.charMap) > 0 {
+		writer = writer.CharacterMap(opts.charMap)
+	}
+	return writer
+}
+
+// serializeHTMLSequence serializes a sequence under the html output method.
+// A document node is serialized with an HTML5 <!DOCTYPE html> and a
+// <meta http-equiv="Content-Type"> injected into <head>; any other node is
+// serialized as an HTML fragment (no DOCTYPE). Character maps are not applied on
+// the HTML path.
+func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) {
+	parts := make([]string, 0, seqLen(seq))
+	for item := range seqItems(seq) {
+		node, ok := item.(NodeItem)
+		if !ok {
+			s, err := serializeAdaptiveItem(item, opts)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, s)
+			continue
 		}
-		if opts.indent {
-			writer = writer.Format(true)
-		}
-		var buf strings.Builder
-		if err := writer.WriteTo(&buf, n); err != nil {
+		if err := serializeNodeKindError(node); err != nil {
 			return "", err
 		}
-		return strings.TrimSuffix(buf.String(), "\n"), nil
-	default:
+		text, err := serializeHTMLNode(node.Node, opts)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, opts.itemSeparator), nil
+}
+
+func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
+	doc, ok := node.(*helium.Document)
+	if !ok {
+		// A non-document node is an HTML fragment: serialize without a DOCTYPE
+		// and without mutating the input tree.
 		var buf strings.Builder
-		writer := helium.NewWriter()
-		if opts.omitXMLDeclaration {
-			writer = writer.XMLDeclaration(false)
-		}
-		if opts.indent {
-			writer = writer.Format(true)
-		}
-		if err := writer.WriteTo(&buf, item.Node); err != nil {
+		hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true)
+		if err := hw.WriteTo(&buf, node); err != nil {
 			return "", err
 		}
 		return strings.TrimSuffix(buf.String(), "\n"), nil
 	}
+
+	// Work on a copy so the <meta> injection never mutates the caller's tree.
+	clone, err := helium.CopyDoc(doc)
+	if err != nil {
+		return "", err
+	}
+	insertHTMLContentTypeMeta(clone, opts.encoding)
+
+	var buf strings.Builder
+	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true)
+	doctypeEmitted := false
+	for child := range helium.Children(clone) {
+		if child.Type() == helium.DTDNode {
+			continue
+		}
+		if child.Type() == helium.ElementNode && !doctypeEmitted {
+			buf.WriteString("<!DOCTYPE html>\n")
+			doctypeEmitted = true
+		}
+		if err := hw.WriteTo(&buf, child); err != nil {
+			return "", err
+		}
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// insertHTMLContentTypeMeta inserts a <meta http-equiv="Content-Type"> element
+// as the first child of the document's <head>, unless one already exists. The
+// encoding defaults to UTF-8. It mutates the given document, so callers pass a
+// copy.
+func insertHTMLContentTypeMeta(doc *helium.Document, encoding string) {
+	root := doc.DocumentElement()
+	if root == nil {
+		return
+	}
+	var head *helium.Element
+	for child := range helium.Children(root) {
+		e, ok := child.(*helium.Element)
+		if ok && strings.EqualFold(e.LocalName(), "head") {
+			head = e
+			break
+		}
+	}
+	if head == nil {
+		return
+	}
+	if htmlHeadHasContentTypeMeta(head) {
+		return
+	}
+	enc := encoding
+	if enc == "" {
+		enc = lexicon.EncodingUTF8U
+	}
+	meta := doc.CreateElement("meta")
+	if headURI := head.URI(); headURI != "" {
+		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
+	}
+	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
+	_ = meta.SetLiteralAttribute("content", "text/html; charset="+enc)
+
+	// Detach the current children, add meta first, then re-add them, so meta
+	// becomes the head's first child.
+	var children []helium.Node
+	for child := head.FirstChild(); child != nil; {
+		next := child.NextSibling()
+		mut, ok := child.(helium.MutableNode)
+		if ok {
+			helium.UnlinkNode(mut)
+			children = append(children, child)
+		}
+		child = next
+	}
+	_ = head.AddChild(meta)
+	for _, child := range children {
+		_ = head.AddChild(child)
+	}
+}
+
+func htmlHeadHasContentTypeMeta(head *helium.Element) bool {
+	for child := range helium.Children(head) {
+		e, ok := child.(*helium.Element)
+		if !ok || !strings.EqualFold(e.LocalName(), "meta") {
+			continue
+		}
+		for _, attr := range e.Attributes() {
+			if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
+	if attr, ok := item.Node.(*helium.Attribute); ok {
+		return fmt.Sprintf(`%s="%s"`, attr.Name(), attr.Value()), nil
+	}
+	var buf strings.Builder
+	if err := newSerializeXMLWriter(opts).WriteTo(&buf, item.Node); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
 func encodeJSONStringForSerialization(s, encoding string) string {

@@ -225,7 +225,7 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 			for achld := range Children(attr) {
 				if achld.Type() == TextNode {
 					// Read-only escape pass: use the internal slice without a copy.
-					d.check(escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars, d.xml11))
+					d.check(escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil))
 				} else {
 					d.check(d.writeNode(out, achld))
 				}
@@ -236,17 +236,17 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 
 	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
 		d.writeString(out, ` id="`)
-		d.check(escapeAttrValue(out, nameAttr.Content(), d.escapeNonASCII, d.rejectInvalidChars, d.xml11))
+		d.check(escapeAttrValue(out, nameAttr.Content(), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)
 	}
 
 	if langAttr != nil && xmlLangAttr == nil {
 		d.writeString(out, ` xml:lang="`)
-		d.check(escapeAttrValue(out, langAttr.Content(), d.escapeNonASCII, d.rejectInvalidChars, d.xml11))
+		d.check(escapeAttrValue(out, langAttr.Content(), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)
 	} else if xmlLangAttr != nil && langAttr == nil {
 		d.writeString(out, ` lang="`)
-		d.check(escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII, d.rejectInvalidChars, d.xml11))
+		d.check(escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)
 	}
 	return d.err
