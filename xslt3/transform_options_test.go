@@ -15,6 +15,12 @@ const (
 	wantXPTY0004 = "XPTY0004"
 )
 
+// XSLT-namespace requested-property local names asserted by the capability table.
+const (
+	propSupportsStreaming = "supports-streaming"
+	propIsSchemaAware     = "is-schema-aware"
+)
+
 // nsInitialTemplateStylesheet declares a named template in a non-empty
 // namespace (app:main). It exercises the initial-template QName resolution: a
 // QName-valued initial-template option must keep its namespace so the
@@ -158,13 +164,21 @@ func TestTransformRequestedProperties(t *testing.T) {
 		value    string
 	}{
 		// fn-transform-71: request a non-schema-aware processor.
-		{"NonSchemaAware", "is-schema-aware", "false()"},
+		{"NonSchemaAware", propIsSchemaAware, "false()"},
 		// fn-transform-73: request no backwards-compatibility support.
 		{"NoBackwardsCompatibility", "supports-backwards-compatibility", "false()"},
 		// fn-transform-75: request no namespace-axis support.
 		{"NoNamespaceAxis", "supports-namespace-axis", "false()"},
 		// fn-transform-77: request streaming support (helium does not stream).
-		{"Streaming", "supports-streaming", "true()"},
+		{"Streaming", propSupportsStreaming, "true()"},
+		// A boolean requested as the xs:string lexical form "yes" is honored the
+		// same as true() — an unsatisfiable streaming request still raises.
+		{"StreamingYesString", propSupportsStreaming, `'yes'`},
+		// The "1" lexical form is likewise a true value.
+		{"StreamingOneString", propSupportsStreaming, `'1'`},
+		// A false-valued property requested as "no" against an advertised-true
+		// capability is also unsatisfiable.
+		{"NoSchemaAwareNoString", propIsSchemaAware, `'no'`},
 	}
 
 	for _, tc := range unsatisfiable {
@@ -186,10 +200,14 @@ func TestTransformRequestedProperties(t *testing.T) {
 		property string
 		value    string
 	}{
-		{"SchemaAware", "is-schema-aware", "true()"},
+		{"SchemaAware", propIsSchemaAware, "true()"},
 		{"BackwardsCompatibility", "supports-backwards-compatibility", "true()"},
 		{"NamespaceAxis", "supports-namespace-axis", "true()"},
-		{"NoStreaming", "supports-streaming", "false()"},
+		{"NoStreaming", propSupportsStreaming, "false()"},
+		// The xs:string lexical forms of a satisfiable request must also succeed.
+		{"NoStreamingNoString", propSupportsStreaming, `'no'`},
+		{"NoStreamingZeroString", propSupportsStreaming, `'0'`},
+		{"SchemaAwareYesString", propIsSchemaAware, `'yes'`},
 	}
 
 	for _, tc := range satisfiable {
@@ -209,6 +227,16 @@ func TestTransformRequestedProperties(t *testing.T) {
 // serialization parameter produces observably different output.
 const nestedOutputStylesheet = `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><a><b>x</b></a></out></xsl:template>
+</xsl:stylesheet>`
+
+// methodTextOutputStylesheet declares xsl:output method="text" so the inherited
+// serialization method differs from the "xml" default. It lets a
+// serialization-params entry present with an empty-sequence value be observed
+// resetting the method back to its default.
+const methodTextOutputStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="text"/>
   <xsl:template match="/"><out><a><b>x</b></a></out></xsl:template>
 </xsl:stylesheet>`
 
@@ -250,5 +278,34 @@ func TestTransformSerializationParams(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.Equal(t, "x", strings.TrimSpace(out))
+	})
+
+	// A serialization-params entry present with an empty-sequence value resets
+	// that parameter to its serialization default, overriding the inherited
+	// xsl:output value. Here method="text" from the stylesheet is reset to the
+	// "xml" default, so element markup reappears in the output.
+	t.Run("EmptySequenceResetsToDefault", func(t *testing.T) {
+		// Baseline: inherited method="text" emits only the text node.
+		inherited, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized'})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(methodTextOutputStylesheet)},
+			transformFns(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, "x", strings.TrimSpace(inherited))
+		require.NotContains(t, inherited, "<out")
+
+		// method: () resets the method to its "xml" default instead of leaving
+		// the inherited text method in place, so the element markup is emitted.
+		reset, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized', 'serialization-params': map{'method': ()}})?output`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(methodTextOutputStylesheet)},
+			transformFns(),
+		)
+		require.NoError(t, err)
+		require.Contains(t, reset, "<out")
+		require.Contains(t, reset, "<b>x</b>")
 	})
 }

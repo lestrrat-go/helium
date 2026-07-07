@@ -1172,7 +1172,9 @@ func checkTransformCapabilities(seq xpath3.Sequence) error {
 }
 
 // transformSeqBool extracts a boolean value from a single-item sequence,
-// reporting whether extraction succeeded.
+// accepting the full xs:boolean space that helium recognizes: an xs:boolean
+// atomic item, or the string / xs:untypedAtomic lexical forms true/false/1/0/
+// yes/no (parsed via parseXSDBool). Any other value reports ok=false.
 func transformSeqBool(seq xpath3.Sequence) (bool, bool) {
 	if !transformOptionPresent(seq) {
 		return false, false
@@ -1181,8 +1183,17 @@ func transformSeqBool(seq xpath3.Sequence) (bool, bool) {
 	if err != nil {
 		return false, false
 	}
-	b, ok := av.Value.(bool)
-	return b, ok
+	if b, ok := av.Value.(bool); ok {
+		return b, true
+	}
+	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic {
+		return false, false
+	}
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return false, false
+	}
+	return parseXSDBool(s)
 }
 
 // applySerializationParams returns an OutputDef with the fn:transform
@@ -1210,9 +1221,50 @@ func applySerializationParams(base *OutputDef, seq xpath3.Sequence) *OutputDef {
 		if !ok {
 			continue
 		}
+		// A recognized parameter present with an empty-sequence value overrides
+		// the inherited xsl:output value by resetting the parameter to its
+		// serialization default (F&O 3.1 §14.8.3), rather than leaving the
+		// inherited value in place.
+		if !transformOptionPresent(val) {
+			resetSerializationParam(out, name)
+			continue
+		}
 		applySerializationParam(out, name, val)
 	}
 	return out
+}
+
+// resetSerializationParam resets a recognized serialization parameter (by local
+// name) to its serialization default on out. An unrecognized name is ignored.
+func resetSerializationParam(out *OutputDef, name string) {
+	switch name {
+	case "method":
+		out.Method = methodXML
+		out.MethodExplicit = false
+	case "indent":
+		out.Indent = false
+	case "omit-xml-declaration":
+		out.OmitDeclaration = false
+		out.OmitDeclarationExplicit = false
+	case "byte-order-mark":
+		out.ByteOrderMark = false
+	case "undeclare-prefixes":
+		out.UndeclarePrefixes = false
+	case "encoding":
+		out.Encoding = lexicon.EncodingUTF8U
+	case "version":
+		out.Version = lexicon.XSLTVersion10
+	case "standalone":
+		out.Standalone = ""
+	case "media-type":
+		out.MediaType = ""
+	case "doctype-public":
+		out.DoctypePublic = ""
+	case "doctype-system":
+		out.DoctypeSystem = ""
+	case "item-separator":
+		out.ItemSeparator = nil
+	}
 }
 
 // serializationParamName returns the local name of a serialization-params map
