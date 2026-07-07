@@ -143,4 +143,46 @@ func TestFnDataElementOnlyRaisesFOTY0012_XSD(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "hi", av.StringVal())
 	})
+
+	// data([/*]) wraps the element-only root in an array. AtomizeSequence
+	// recursively flattens array members, so the element-only node must still be
+	// detected and raise FOTY0012 — a check that only scanned the TOP-LEVEL
+	// sequence (whose sole item is the array, not a node) would wrongly succeed.
+	t.Run("element-only inside array raises FOTY0012", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`data([/*])`)
+		require.NoError(t, err)
+		_, err = eval.Evaluate(ctx, compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0012", xerr.Code)
+	})
+}
+
+// TestFnDataElementOnlyErrorOrder verifies that fn:data reports the FIRST
+// offending item in encounter order: data((map{}, <element-only>)) must raise
+// FOTY0013 for the earlier map — the atomization error that occurs first — NOT
+// FOTY0012 for the later element-only element. A pre-scan for element-only nodes
+// (ahead of atomization) would incorrectly surface FOTY0012.
+func TestFnDataElementOnlyErrorOrder(t *testing.T) {
+	doc := mustParseXML(t, `<root><child>hi</child></root>`)
+	root := doc.DocumentElement()
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
+	}}
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		TypeAnnotations(map[helium.Node]string{
+			root: xpath3.QAnnotation("urn:t", "rootType"),
+		}).
+		SchemaDeclarations(decls)
+
+	compiled, err := xpath3.NewCompiler().Compile(`data((map{}, /*))`)
+	require.NoError(t, err)
+	_, err = eval.Evaluate(t.Context(), compiled, doc)
+	require.Error(t, err)
+	var xerr *xpath3.XPathError
+	require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+	require.Equal(t, "FOTY0013", xerr.Code)
 }
