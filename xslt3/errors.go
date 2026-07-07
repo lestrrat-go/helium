@@ -16,6 +16,7 @@ const (
 	errCodeFOXT0002 = "FOXT0002" // fn:transform missing required option or resolver
 	errCodeFOXT0003 = "FOXT0003" // fn:transform stylesheet/package/serialization failure
 	errCodeFOXT0004 = "FOXT0004" // fn:transform recursion depth exceeded
+	errCodeFOXT0006 = "FOXT0006" // fn:transform requested property cannot be satisfied
 
 	// SEPM/SERE/SESU — Serialization errors
 	errCodeSEPM0004 = "SEPM0004" // version/standalone constraint violation
