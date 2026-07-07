@@ -131,6 +131,43 @@ func TestParseJSON_Bounded(t *testing.T) {
 	})
 }
 
+// Per F&O 3.1 §17.5 JSON has a single number type, so every JSON number in a
+// fn:parse-json / fn:json-doc result is an xs:double — including integral
+// values such as 0 and -0 (QT3 json-doc-032, json-doc-033). The value is
+// preserved (0 stays 0), only the type is xs:double, so deep-equal to the
+// xs:integer literal 0 still holds via numeric promotion.
+func TestParseJSON_NumbersAreDouble(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+	}{
+		{"zero", "0"},           // json-doc-032
+		{"negative zero", "-0"}, // json-doc-033
+		{"positive integer", "1"},
+		{"negative integer", "-5"},
+		{"non-integral", "2.5"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := `parse-json("` + escapeForXPathString(tc.json) + `") instance of xs:double`
+			r, err := evaluate(t.Context(), nil, expr)
+			require.NoError(t, err, expr)
+			require.Equal(t, wantTrue, r.StringValue(), "expected xs:double for %s", tc.json)
+		})
+	}
+
+	// Value is preserved for the integral cases: deep-equal to the xs:integer
+	// literal 0 still holds (numeric promotion), matching json-doc-032's
+	// assert-deep-eq 0.
+	r, err := evaluate(t.Context(), nil, `deep-equal(parse-json("0"), 0)`)
+	require.NoError(t, err)
+	require.Equal(t, wantTrue, r.StringValue())
+
+	r, err = evaluate(t.Context(), nil, `deep-equal(parse-json("-0"), 0)`)
+	require.NoError(t, err)
+	require.Equal(t, wantTrue, r.StringValue())
+}
+
 // fn:json-to-xml shares the same streaming parser and must be bounded too.
 func TestJSONToXML_DeepNestingBounded(t *testing.T) {
 	depth := xpath3.DefaultMaxRecursionDepth + 1

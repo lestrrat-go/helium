@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"strings"
 	"unicode/utf8"
 
@@ -591,23 +590,15 @@ func jsonToXDM(v any) (Item, error) {
 	case bool:
 		return AtomicValue{TypeName: TypeBoolean, Value: val}, nil
 	case json.Number:
+		// Per F&O 3.1 §17.5, JSON has a single number type and every JSON
+		// number maps to an xs:double in the XDM result — including integral
+		// values such as 0/-0, which therefore become xs:double, not xs:integer.
 		s := val.String()
-		if strings.ContainsAny(s, ".eE") {
-			f, err := val.Float64()
-			if err != nil {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
-			}
-			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
+		f, err := val.Float64()
+		if err != nil {
+			return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
 		}
-		n, ok := new(big.Int).SetString(s, 10)
-		if !ok {
-			f, err := val.Float64()
-			if err != nil {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
-			}
-			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
-		}
-		return AtomicValue{TypeName: TypeInteger, Value: n}, nil
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case string:
 		return AtomicValue{TypeName: TypeString, Value: val}, nil
 	case []any:

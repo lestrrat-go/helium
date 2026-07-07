@@ -141,6 +141,12 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 ### `functions_json.go`
 `parse-json`, `json-doc`
 
+Per F&O 3.1 §17.5 JSON has a single number type: every JSON number in a
+`fn:parse-json` / `fn:json-doc` XDM result is an `xs:double` (`jsonToXDM`),
+including integral values like `0`/`-0` — never `xs:integer`. `fn:json-to-xml`
+is unaffected: it keeps the number's lexical form as the `<number>` element's
+string value (`functions_json_xml.go`), a separate representation.
+
 ### `functions_json_xml.go`
 `json-to-xml`, `xml-to-json`
 
