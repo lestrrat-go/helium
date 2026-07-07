@@ -34,6 +34,43 @@ func TestSerialize_OptionsNode(t *testing.T) {
 	require.Contains(t, res.StringValue(), "hello")
 }
 
+// undeclare-prefixes is a valid yes/no boolean serialization parameter
+// (Serialization 3.1 §2); the element-options form must accept it (validated,
+// not necessarily honored) rather than raising XPTY0004 (W3C serialize-xml-035b,
+// serialize-xml-036b). An invalid value stays XPTY0004.
+func TestSerialize_OptionsNodeUndeclarePrefixes(t *testing.T) {
+	build := func(value string) xpath3.Sequence {
+		t.Helper()
+		xml := `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">` +
+			`<output:method value="xml"/>` +
+			`<output:undeclare-prefixes value="` + value + `"/>` +
+			`</output:serialization-parameters>`
+		doc := mustParseXML(t, xml)
+		nodes, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), mustCompile(t, `.`), doc.DocumentElement())
+		require.NoError(t, err)
+		return nodes.Sequence()
+	}
+
+	run := func(value string) error {
+		t.Helper()
+		doc := mustParseXML(t, `<root/>`)
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+			"params": build(value),
+		})
+		_, err := eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
+		return err
+	}
+
+	require.NoError(t, run("yes"))
+
+	err := run("maybe")
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
 func mustCompile(t *testing.T, expr string) *xpath3.Expression {
 	t.Helper()
 	c, err := xpath3.NewCompiler().Compile(expr)

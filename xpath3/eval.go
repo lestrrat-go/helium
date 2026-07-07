@@ -66,6 +66,7 @@ type evalContext struct {
 	typeAnnotations        map[helium.Node]string   // node → xs:... type (from xslt3 schema awareness)
 	nilledElements         map[helium.Node]struct{} // elements confirmed nilled (xsi:nil="true") by XSD validation
 	preservedIDAnnotations map[helium.Node]string   // ID/IDREF annotations preserved after input-type-annotations="strip"
+	idNodes                map[helium.Node]struct{} // PSVI is-id nodes (from xsd validation); supplements the type-annotation is-id check for list/union types
 	variableResolver       VariableResolver         // lazy resolver for variables not in static scope
 	functionResolver       FunctionResolver         // lazy resolver for functions (not visible to function-lookup)
 	strictPrefixes         bool                     // skip defaultPrefixNS fallback in prefix validation

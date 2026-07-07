@@ -95,6 +95,13 @@ type validateConfig struct {
 	errorHandler   helium.ErrorHandler
 	annotations    *TypeAnnotations
 	nilledElements *NilledElements
+	// idNodes, when non-nil, collects the nodes (attributes and elements) whose
+	// PSVI is-id property is true, following the XDM 3.1 definition: an atomic
+	// value of type xs:ID (or a type derived from it), a SINGLETON list whose
+	// item type is xs:ID-derived, or a union whose SELECTED member is xs:ID-derived.
+	// It is a validation OBSERVATION, independent of skipDatatypeIntegrity and of
+	// XSD version, consumed by xpath3 fn:id / fn:element-with-id.
+	idNodes *IDNodes
 	// skipDatatypeIntegrity, when true, suppresses the document-wide
 	// value-space integrity walks: the xs:ID / xs:IDREF / xs:IDREFS
 	// uniqueness+referential-integrity walk (version-independent — runs in both
@@ -114,6 +121,15 @@ type TypeAnnotations map[helium.Node]string
 // NilledElements tracks elements whose xsi:nil="true" was confirmed valid
 // during schema validation (i.e. the element declaration is nillable).
 type NilledElements map[*helium.Element]struct{}
+
+// IDNodes tracks nodes (ID attributes and ID-typed elements) whose PSVI is-id
+// property is true, as determined during schema validation. A node is an is-id
+// node when its actual validated content is a single value of type xs:ID or a
+// type derived from xs:ID by restriction: an atomic xs:ID, a SINGLETON list
+// whose item type is xs:ID-derived, or a union whose SELECTED member is
+// xs:ID-derived. A multi-item list, or a union that selects a non-ID member, is
+// NOT is-id. Consumed by xpath3 fn:id / fn:element-with-id.
+type IDNodes map[helium.Node]struct{}
 
 // Compiler compiles XSD documents into Schema values.
 // It uses clone-on-write semantics: each builder method returns
@@ -367,6 +383,19 @@ func (v Validator) Annotations(ann *TypeAnnotations) Validator {
 func (v Validator) NilledElements(ne *NilledElements) Validator {
 	v = v.clone()
 	v.cfg.nilledElements = ne
+	return v
+}
+
+// IDNodes enables collection of the PSVI is-id nodes during validation: every
+// attribute or element whose actual validated content is a single value of type
+// xs:ID or derived from xs:ID (including a singleton list of xs:ID and a union
+// that selects an xs:ID-derived member). The caller must provide a non-nil
+// pointer to an IDNodes value; the map is populated during validation. The walk
+// is a PSVI observation, so it runs independently of
+// SkipDatatypeIntegrityChecks and of the XSD version.
+func (v Validator) IDNodes(ids *IDNodes) Validator {
+	v = v.clone()
+	v.cfg.idNodes = ids
 	return v
 }
 
