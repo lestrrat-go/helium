@@ -489,7 +489,7 @@ func TestFixedValueSpaceUnionNotationCrossMember(t *testing.T) {
 
 	t.Run("element/different-members-same-notation", func(t *testing.T) {
 		t.Parallel()
-		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + notationNS + `" xmlns:p="` + notationNS + `" xmlns:q="` + notationNS + `">
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="` + notationNS + `" targetNamespace="` + notationNS + `" xmlns:p="` + notationNS + `" xmlns:q="` + notationNS + `">
 ` + typeDefs + `
   <xs:element name="root" type="pOrQNotation" fixed="p:jpeg"/>
 </xs:schema>`
@@ -514,7 +514,7 @@ func TestFixedValueSpaceUnionNotationCrossMember(t *testing.T) {
   <xs:simpleType name="pOrQNotation">
     <xs:union memberTypes="pNotation qNotation"/>
   </xs:simpleType>`
-		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + notationNS + `" xmlns:p="` + notationNS + `" xmlns:q="` + notationNS + `">
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="` + notationNS + `" targetNamespace="` + notationNS + `" xmlns:p="` + notationNS + `" xmlns:q="` + notationNS + `">
 ` + typeDefsPng + `
   <xs:element name="root" type="pOrQNotation" fixed="p:jpeg"/>
 </xs:schema>`

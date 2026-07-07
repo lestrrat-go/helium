@@ -348,7 +348,7 @@ func TestNotationEnumeration(t *testing.T) {
       <xs:enumeration value="p:png"/>
     </xs:restriction>
   </xs:simpleType>
-  <xs:element name="n" type="imageNotation"/>
+  <xs:element name="n" type="p:imageNotation"/>
 </xs:schema>`
 
 	t.Run("enumeration-derived unbound prefix rejected", func(t *testing.T) {
