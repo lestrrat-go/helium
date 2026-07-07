@@ -964,15 +964,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	}
 
 	// COMMIT POINT: body and every post-body validation step succeeded. Publish
-	// all staged per-href state atomically, then mark the transaction committed
-	// so the deferred rollback leaves the usedResultURIs reservation in place.
+	// all staged per-URI state atomically, then mark the transaction committed so
+	// the deferred rollback leaves the usedResultURIs reservation in place. Storage
+	// keys on the RESOLVED canonical absolute output URI (dupKey == tmpDoc.URL() ==
+	// ec.currentOutputURI), NOT the raw href: two NESTED xsl:result-documents with
+	// the same relative href under different enclosing output URIs resolve to
+	// distinct absolute URIs and must not overwrite each other. The raw href is
+	// preserved separately for the public ResultDocumentHandler.
 	if stagedItems != nil {
-		ec.resultDocItems[href] = stagedItems
+		ec.resultDocItems[dupKey] = stagedItems
 	}
 	if stagedOutDef != nil {
-		ec.resultDocOutputDefs[href] = stagedOutDef
+		ec.resultDocOutputDefs[dupKey] = stagedOutDef
 	}
-	ec.resultDocuments[href] = tmpDoc
+	ec.resultDocuments[dupKey] = tmpDoc
+	ec.resultDocHrefs[dupKey] = href
 	committed = true
 	return nil
 }

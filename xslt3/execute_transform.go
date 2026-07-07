@@ -260,6 +260,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		resultDocuments:     make(map[string]*helium.Document),
 		resultDocItems:      make(map[string]xpath3.Sequence),
 		resultDocOutputDefs: make(map[string]*OutputDef),
+		resultDocHrefs:      make(map[string]string),
 		usedResultURIs:      make(map[string]struct{}),
 		defaultValidation:   ss.defaultValidation,
 		defaultCollation:    ss.defaultCollation,
@@ -757,18 +758,21 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// For secondary result documents with json/adaptive method, serialize
 	// captured items into the document so the handler receives the complete output.
-	for href, items := range ec.resultDocItems {
+	// Keys here are the RESOLVED absolute output URI (the same key used across
+	// resultDocItems/resultDocuments/resultDocOutputDefs).
+	for uri, items := range ec.resultDocItems {
 		if items == nil || sequence.Len(items) == 0 {
 			continue
 		}
-		doc := ec.resultDocuments[href]
+		doc := ec.resultDocuments[uri]
 		if doc == nil {
 			doc = helium.NewDefaultDocument()
-			ec.resultDocuments[href] = doc
+			doc.SetURL(uri)
+			ec.resultDocuments[uri] = doc
 		}
 		// Serialize items into a text node in the document.
 		var buf strings.Builder
-		outDef := ec.resultDocOutputDefs[href]
+		outDef := ec.resultDocOutputDefs[uri]
 		if outDef == nil {
 			outDef = ss.outputs[""] // fallback to default
 		}
@@ -780,11 +784,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
-	// Deliver secondary result documents to the receiver.
+	// Deliver secondary result documents to the receiver. The map is keyed by the
+	// resolved absolute output URI (which is also doc.URL()), while the public
+	// handler receives the raw href as written on xsl:result-document.
 	if cfg != nil && cfg.resultDocHandler != nil {
-		for href, doc := range ec.resultDocuments {
-			outDef := ec.resultDocOutputDefs[href]
-			if err := cfg.resultDocHandler.HandleResultDocument(href, doc, outDef); err != nil {
+		for uri, doc := range ec.resultDocuments {
+			outDef := ec.resultDocOutputDefs[uri]
+			if err := cfg.resultDocHandler.HandleResultDocument(ec.resultDocHrefs[uri], doc, outDef); err != nil {
 				return nil, err
 			}
 		}

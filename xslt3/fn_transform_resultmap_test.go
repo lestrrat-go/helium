@@ -213,6 +213,41 @@ func TestFnTransformNestedResultDocKey(t *testing.T) {
 	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
 }
 
+// TestFnTransformNestedCollidingHrefKeys verifies that two nested
+// xsl:result-documents writing the SAME relative href under DIFFERENT enclosing
+// output URIs resolve to distinct absolute URIs and both survive in the result
+// map (no storage overwrite), each with its own content.
+func TestFnTransformNestedCollidingHrefKeys(t *testing.T) {
+	xsl := `<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
+<xsl:template match='/'>
+<xsl:result-document href='dir1/index.html'><xsl:result-document href='x.xml'><v>one</v></xsl:result-document></xsl:result-document>
+<xsl:result-document href='dir2/index.html'><xsl:result-document href='x.xml'><v>two</v></xsl:result-document></xsl:result-document>
+</xsl:template>
+</xsl:stylesheet>`
+	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>'),"base-output-uri":"http://example.com/base/main.xml"})
+	return map:contains($r,"http://example.com/base/dir1/x.xml")
+	   and map:contains($r,"http://example.com/base/dir2/x.xml")
+	   and $r("http://example.com/base/dir1/x.xml")//v = "one"
+	   and $r("http://example.com/base/dir2/x.xml")//v = "two"`
+	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
+}
+
+// TestFnTransformSameAbsoluteURITwiceRaisesXTDE1490 confirms that two
+// result-documents whose hrefs resolve to the SAME absolute output URI still
+// collide (XTDE1490), even through the resolved-URI storage keying.
+func TestFnTransformSameAbsoluteURITwiceRaisesXTDE1490(t *testing.T) {
+	xsl := `<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
+<xsl:template match='/'>
+<xsl:result-document href='sub/x.xml'><a/></xsl:result-document>
+<xsl:result-document href='sub/nested/../x.xml'><b/></xsl:result-document>
+</xsl:template>
+</xsl:stylesheet>`
+	expr := `fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>'),"base-output-uri":"http://example.com/base/main.xml"})`
+	err := transformErr(t, expr, xslXMLVars(xsl, ""))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "XTDE1490")
+}
+
 // TestFnTransformSerializedTextPreservesTrailingNewline guards that method="text"
 // serialized delivery keeps a legitimate trailing newline (only the xml-family
 // serializer's document-terminating newline artifact is trimmed).

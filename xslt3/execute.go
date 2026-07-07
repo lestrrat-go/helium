@@ -87,9 +87,10 @@ type execContext struct {
 	preservedIDAnnotations       map[helium.Node]string        // ID/IDREF annotations preserved after input-type-annotations="strip"
 	nilledElements               map[*helium.Element]struct{}  // elements with xsi:nil="true" confirmed by XSD validation
 	validatedDocs                map[*helium.Document]struct{} // documents that have been schema-validated
-	resultDocuments              map[string]*helium.Document   // secondary result documents keyed by href
-	resultDocItems               map[string]xpath3.Sequence    // secondary result document items for json/adaptive serialization
-	resultDocOutputDefs          map[string]*OutputDef         // effective output definition per secondary result document
+	resultDocuments              map[string]*helium.Document   // secondary result documents keyed by RESOLVED canonical absolute output URI
+	resultDocItems               map[string]xpath3.Sequence    // secondary result document items for json/adaptive serialization, keyed by RESOLVED URI
+	resultDocOutputDefs          map[string]*OutputDef         // effective output definition per secondary result document, keyed by RESOLVED URI
+	resultDocHrefs               map[string]string             // RESOLVED URI → the raw href as written on xsl:result-document, for the public ResultDocumentHandler
 	usedResultURIs               map[string]struct{}           // URIs already written by xsl:result-document (includes "")
 	insideResultDocPrimary       bool                          // true while executing result-document body targeting primary URI
 	currentResultDocMethod       string                        // effective output method during result-document body execution
