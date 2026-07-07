@@ -153,12 +153,95 @@ func atomizeForFnData(ctx context.Context, seq Sequence) ([]AtomicValue, error) 
 // path, or nil when no schema-aware provider is configured (the common
 // non-schema-aware case, where fn:data is plain atomization).
 func contentKindProvider(ctx context.Context) ContentTypeKindProvider {
-	ec := getFnContext(ctx)
+	return getFnContext(ctx).contentKindProvider()
+}
+
+// nodeStringValue returns the XPath dm:string-value of a node. In a schema-aware
+// run it strips INSIGNIFICANT whitespace: a whitespace-only text-node child of an
+// element whose type annotation resolves (via the ContentTypeKindProvider) to
+// ELEMENT-ONLY complex content is not part of the string value (XDM 3.1 PSVI
+// construction). Without a provider/annotations, or for any element that is not
+// element-only, this is byte-identical to ixpath.StringValue.
+func (ec *evalContext) nodeStringValue(n helium.Node) string {
+	if n == nil {
+		return ""
+	}
+	provider := ec.contentKindProvider()
+	if provider == nil || ec.typeAnnotations == nil {
+		return ixpath.StringValue(n)
+	}
+	switch n.Type() {
+	case helium.DocumentNode, helium.ElementNode:
+		// only element/document nodes can contain element-only descendants
+	default:
+		return ixpath.StringValue(n)
+	}
+	var b strings.Builder
+	ec.appendSchemaStringValue(&b, n, provider)
+	return b.String()
+}
+
+// contentKindProvider returns the active ContentTypeKindProvider for this
+// evalContext, or nil when no schema-aware provider is configured.
+func (ec *evalContext) contentKindProvider() ContentTypeKindProvider {
 	if ec == nil || ec.schemaDeclarations == nil {
 		return nil
 	}
 	provider, _ := ec.schemaDeclarations.(ContentTypeKindProvider)
 	return provider
+}
+
+// appendSchemaStringValue walks descendants in document order (iteratively, so a
+// deep tree does not truncate) concatenating text/CDATA content. A whitespace-only
+// text-node child of an element-only element is skipped as insignificant.
+func (ec *evalContext) appendSchemaStringValue(b *strings.Builder, root helium.Node, provider ContentTypeKindProvider) {
+	stack := []helium.Node{root}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		switch cur.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			b.Write(cur.Content())
+		}
+
+		elementOnly := cur.Type() == helium.ElementNode && ec.isElementOnlyContent(cur, provider)
+		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
+			if elementOnly && isInsignificantWhitespaceText(child) {
+				continue
+			}
+			stack = append(stack, child)
+		}
+	}
+}
+
+// isElementOnlyContent reports whether n's resolved type annotation is an
+// element-only complex content type.
+func (ec *evalContext) isElementOnlyContent(n helium.Node, provider ContentTypeKindProvider) bool {
+	ann := ec.typeAnnotations[n]
+	if ann == "" {
+		return false
+	}
+	kind, ok := provider.SchemaTypeContentKind(ann)
+	return ok && kind == ContentTypeElementOnly
+}
+
+// isInsignificantWhitespaceText reports whether n is a text node whose content is
+// entirely XSD whitespace (space, tab, CR, LF). CDATA sections are never
+// insignificant. Such a node, when a child of an element-only element, is not
+// part of that element's string value.
+func isInsignificantWhitespaceText(n helium.Node) bool {
+	if n.Type() != helium.TextNode {
+		return false
+	}
+	for _, c := range n.Content() {
+		switch c {
+		case ' ', '\t', '\r', '\n':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // checkContentKindItem resolves the fn:data typed-value ACTION for one item

@@ -79,6 +79,9 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	// NOT the typed/atomized value. This preserves lexical forms like "003"
 	// even when the node is typed as xs:integer.
 	if ni, ok := item.(NodeItem); ok {
+		if fc := getFnContext(ctx); fc != nil {
+			return SingleString(fc.nodeStringValue(ni.Node)), nil
+		}
 		return SingleString(ixpath.StringValue(ni.Node)), nil
 	}
 	a, err := AtomizeItem(item)
