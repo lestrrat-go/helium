@@ -62,18 +62,19 @@ type evalContext struct {
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
 	httpClient             *http.Client
-	maxResourceBytes       int64                  // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc (0 = unparsedtext default)
-	typeAnnotations        map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
-	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
-	variableResolver       VariableResolver       // lazy resolver for variables not in static scope
-	functionResolver       FunctionResolver       // lazy resolver for functions (not visible to function-lookup)
-	strictPrefixes         bool                   // skip defaultPrefixNS fallback in prefix validation
-	qnameValueNoDefaultNS  bool                   // XSD: an unprefixed QName/NOTATION VALUE atomizes to no namespace
-	schemaDeclarations     SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
-	allowXML11Chars        bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
-	xpath10Compat          bool                   // XPath 1.0 compatibility mode (XSLT backwards-compatible processing)
-	traceWriter            io.Writer              // destination for fn:trace output (nil = os.Stderr)
-	parser                 *helium.Parser         // injected parser for fn:parse-xml, fn:parse-xml-fragment, fn:doc (nil = default helium.NewParser)
+	maxResourceBytes       int64                    // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc (0 = unparsedtext default)
+	typeAnnotations        map[helium.Node]string   // node → xs:... type (from xslt3 schema awareness)
+	nilledElements         map[helium.Node]struct{} // elements confirmed nilled (xsi:nil="true") by XSD validation
+	preservedIDAnnotations map[helium.Node]string   // ID/IDREF annotations preserved after input-type-annotations="strip"
+	variableResolver       VariableResolver         // lazy resolver for variables not in static scope
+	functionResolver       FunctionResolver         // lazy resolver for functions (not visible to function-lookup)
+	strictPrefixes         bool                     // skip defaultPrefixNS fallback in prefix validation
+	qnameValueNoDefaultNS  bool                     // XSD: an unprefixed QName/NOTATION VALUE atomizes to no namespace
+	schemaDeclarations     SchemaDeclarations       // schema element/attribute declarations for schema-element()/schema-attribute() tests
+	allowXML11Chars        bool                     // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
+	xpath10Compat          bool                     // XPath 1.0 compatibility mode (XSLT backwards-compatible processing)
+	traceWriter            io.Writer                // destination for fn:trace output (nil = os.Stderr)
+	parser                 *helium.Parser           // injected parser for fn:parse-xml, fn:parse-xml-fragment, fn:doc (nil = default helium.NewParser)
 }
 
 // xmlParser returns the injected helium.Parser when one is configured,
