@@ -173,9 +173,11 @@ retained unless the parameter requests yes/no), `undeclare-prefixes`
 `suppress-indentation` (resolved to an EXACT expanded `{uri}local` name set —
 Clark notation with `{}local` for the no-namespace case; matching is by exact
 expanded name so `QName("","b")` never matches a namespaced `<p:b>`; the
-element form resolves an unprefixed lexical QName through the in-scope DEFAULT
-namespace, per the Serialization spec), and `use-character-maps` (resolved to a
-`map[rune]string`). The xml path builds a `helium.Writer` via
+element form accepts a QName OR an `Q{uri}local` EQName per the Serialization
+schema, resolving an unprefixed lexical QName through the in-scope DEFAULT
+namespace), and `use-character-maps` (resolved to a `map[rune]string`; an element
+form `output:character-map` requires only `@character` — an absent or empty
+`@map-string` maps the character to the empty replacement, i.e. deletion). The xml path builds a `helium.Writer` via
 `newSerializeXMLWriter` wiring `Standalone`/`OmitStandalone`/
 `AllowPrefixUndeclarations`/`CDATASectionElements`/`SuppressIndentElements`/
 `CharacterMap` — the shared `helium.Writer` (root `writer.go`/`writer_escape.go`)

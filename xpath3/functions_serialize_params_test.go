@@ -172,6 +172,44 @@ func TestSerialize_ApplyParams(t *testing.T) {
 			expr:      `serialize(., map{"method":"html","html-version":5})`,
 			matches:   []string{`DOCTYPE (HTML|html)`, `<meta http-equiv`},
 		},
+		{
+			// Element-form cdata-section-elements accepts an EQName Q{uri}local
+			// and matches by exact expanded name: the namespaced <p:b> is CDATA,
+			// the no-namespace <b> is not.
+			name:      "element-form cdata EQName Q{uri}local matches namespaced element",
+			sourceXML: `<doc><b>plain</b><p:b xmlns:p="urn:p">nsd</p:b></doc>`,
+			paramsXML: `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">` +
+				`<output:method value="xml"/><output:cdata-section-elements value="Q{urn:p}b"/>` +
+				`</output:serialization-parameters>`,
+			expr:     exprSerializeWithParams,
+			contains: []string{"CDATA[nsd]"},
+			absent:   []string{"CDATA[plain]"},
+		},
+		{
+			// Element-form use-character-maps: an empty @map-string maps the
+			// character to an empty replacement (deletion).
+			name:      "element-form use-character-maps empty map-string deletes char",
+			sourceXML: `<e>xax</e>`,
+			paramsXML: `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">` +
+				`<output:method value="xml"/><output:omit-xml-declaration value="yes"/>` +
+				`<output:use-character-maps><output:character-map character="x" map-string=""/></output:use-character-maps>` +
+				`</output:serialization-parameters>`,
+			expr:     exprSerializeWithParams,
+			contains: []string{"<e>a</e>"},
+			absent:   []string{"x"},
+		},
+		{
+			// An ABSENT @map-string is equivalent to an empty one (deletion).
+			name:      "element-form use-character-maps absent map-string deletes char",
+			sourceXML: `<e>xax</e>`,
+			paramsXML: `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">` +
+				`<output:method value="xml"/><output:omit-xml-declaration value="yes"/>` +
+				`<output:use-character-maps><output:character-map character="x"/></output:use-character-maps>` +
+				`</output:serialization-parameters>`,
+			expr:     exprSerializeWithParams,
+			contains: []string{"<e>a</e>"},
+			absent:   []string{"x"},
+		},
 	}
 
 	for _, tc := range cases {

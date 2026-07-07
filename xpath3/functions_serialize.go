@@ -457,12 +457,12 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 
 // readSerializeParamQNameNames reads a cdata-section-elements or
 // suppress-indentation element-form parameter whose value attribute is a
-// whitespace-separated list of lexical QNames, and returns the writer's exact
-// expanded-name key set. Prefixed names resolve their prefix against the
-// parameter element's in-scope namespaces; UNPREFIXED names resolve through the
-// in-scope DEFAULT namespace (per Serialization 3.1 these parameters use the
-// default namespace for unprefixed QNames), so the resulting key matches an
-// element in that same namespace.
+// whitespace-separated list of names, and returns the writer's exact expanded-
+// name key set. Per the Serialization 3.1 schema each token is a QName OR an
+// EQName: an `Q{uri}local` EQName supplies its namespace directly; a prefixed
+// lexical QName resolves its prefix against the parameter element's in-scope
+// namespaces; an UNPREFIXED lexical QName resolves through the in-scope DEFAULT
+// namespace (these parameters use the default namespace for unprefixed QNames).
 func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
@@ -470,21 +470,48 @@ func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, er
 	}
 	names := make(map[string]struct{})
 	for token := range strings.FieldsSeq(value) {
-		prefix, local, hasPrefix := strings.Cut(token, ":")
-		if !hasPrefix {
-			// No colon: strings.Cut puts the whole token in prefix. Resolve
-			// through the in-scope default namespace (absent → no namespace).
-			uri, _ := lookupInScopeNamespace(elem, "")
-			names[helium.ClarkName(uri, prefix)] = struct{}{}
-			continue
+		key, err := resolveSerializeNameToken(elem, token)
+		if err != nil {
+			return nil, err
 		}
-		uri, ok := lookupInScopeNamespace(elem, prefix)
-		if !ok {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter uses unbound namespace prefix %q", prefix)}
-		}
-		names[helium.ClarkName(uri, local)] = struct{}{}
+		names[key] = struct{}{}
 	}
 	return names, nil
+}
+
+// resolveSerializeNameToken resolves one cdata-section-elements /
+// suppress-indentation name token (a QName or an `Q{uri}local` EQName) to its
+// exact expanded {uri}local key.
+func resolveSerializeNameToken(elem *helium.Element, token string) (string, error) {
+	if uri, local, ok := parseEQNameToken(token); ok {
+		return helium.ClarkName(uri, local), nil
+	}
+	prefix, local, hasPrefix := strings.Cut(token, ":")
+	if !hasPrefix {
+		// No colon: strings.Cut puts the whole token in prefix. Resolve through
+		// the in-scope default namespace (absent → no namespace).
+		uri, _ := lookupInScopeNamespace(elem, "")
+		return helium.ClarkName(uri, prefix), nil
+	}
+	uri, ok := lookupInScopeNamespace(elem, prefix)
+	if !ok {
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter uses unbound namespace prefix %q", prefix)}
+	}
+	return helium.ClarkName(uri, local), nil
+}
+
+// parseEQNameToken recognizes an EQName of the form `Q{uri}local`, returning the
+// namespace URI and local name. The URI part cannot contain "{" or "}" (XPath
+// EQName grammar), so the first "}" after "Q{" ends it.
+func parseEQNameToken(token string) (string, string, bool) {
+	if !strings.HasPrefix(token, "Q{") {
+		return "", "", false
+	}
+	uri, local, ok := strings.Cut(token[2:], "}")
+	if !ok {
+		return "", "", false
+	}
+	return uri, local, true
 }
 
 // lookupInScopeNamespace resolves prefix against the in-scope namespace
@@ -609,7 +636,12 @@ func resolveSerializeCharacterMapsElement(elem *helium.Element) (map[rune]string
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map must not have child content"}
 		}
 
+		// map-string is an xs:string: an absent OR empty value maps the character
+		// to the EMPTY replacement (deletion), so presence is tracked separately
+		// from value and an empty value is not rejected. Only the character
+		// attribute is required (and must be a single character).
 		var character, mapString string
+		var hasCharacter bool
 		for _, attr := range charMap.Attributes() {
 			if attr.URI() != "" {
 				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map attributes must be unqualified"}
@@ -617,16 +649,14 @@ func resolveSerializeCharacterMapsElement(elem *helium.Element) (map[rune]string
 			switch attr.LocalName() {
 			case "character":
 				character = attr.Value()
+				hasCharacter = true
 			case "map-string":
 				mapString = attr.Value()
 			default:
 				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map has unsupported attribute"}
 			}
 		}
-		if character == "" || mapString == "" {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map requires character and map-string"}
-		}
-		if utf8.RuneCountInString(character) != 1 {
+		if !hasCharacter || utf8.RuneCountInString(character) != 1 {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map character must be a single character"}
 		}
 		key := []rune(character)[0]
