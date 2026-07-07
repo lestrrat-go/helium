@@ -75,11 +75,18 @@ wraps these. `fn:json-to-xml`/`fn:parse-json` `duplicates` route through
 signature for every resolved function before invoking it: it looks up
 `paramTypes` via the `function_signatures.go` registry (then
 `TypedFunction`/`TypedFunctionByArity`) the same way `evalNamedFunctionRef`
-does, and runs `coerceToSequenceType(arg, paramTypes[i], ec)` per argument,
-raising `XPTY0004` on mismatch. Functions with no registered signature
-(`paramTypes == nil`) are not type-checked. `coerceToSequenceType` atomizes via
-`AtomizeSequence` (so list-typed nodes/arrays expand correctly) and falls back
-to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
+does, and runs `coerceFuncallArg(arg, paramTypes[i], ec)` per argument.
+Functions with no registered signature (`paramTypes == nil`) are not
+type-checked. `coerceFuncallArg` delegates to `coerceToSequenceTypeE`, which
+atomizes through `typedValueItemCheckFor(ec)` (so list-typed nodes/arrays expand
+correctly, arrays flatten before cardinality is applied, and atomizing an
+element-only-typed node raises `FOTY0012`) and falls back to
+`ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types. A plain type
+mismatch surfaces as `XPTY0004`; a genuine coercion/atomization error
+(`FOTY0012`, `FOTY0013`, `FORG0001`, …) propagates unchanged rather than being
+collapsed into `XPTY0004`. The same `coerceToSequenceTypeE` propagation applies
+to the inline-function parameter/return paths and `coerceFunctionItem`
+(`function-lookup`, dynamic function items).
 
 ## Functions by File
 
