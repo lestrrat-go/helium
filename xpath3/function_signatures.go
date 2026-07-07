@@ -87,11 +87,7 @@ func init() {
 	registerSig("upper-case", 1, strQParam, strQToStr)
 	registerSig("lower-case", 1, strQParam, strQToStr)
 	registerSig("normalize-space", 0, nil, strQToStr)
-	// arity-1 takes item()? (not xs:string?) so the node argument reaches
-	// fnNormalizeSpace UN-atomized: the function runs the fn:data content-kind
-	// check (element-only content ⇒ FOTY0012) before performing the xs:string?
-	// function-conversion atomization itself via coerceArgToString.
-	registerSig("normalize-space", 1, []SequenceType{stItem(OccurrenceZeroOrOne)}, strQToStr)
+	registerSig("normalize-space", 1, strQParam, strQToStr)
 	registerSig("normalize-unicode", 1, strQParam, strQToStr)
 	registerSig("normalize-unicode", 2, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceExactlyOne)}, strQToStr)
 	registerSig("concat", 2, []SequenceType{stItem(OccurrenceZeroOrMore), stItem(OccurrenceZeroOrMore)}, stAtomic(TypeString, OccurrenceExactlyOne))

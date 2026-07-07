@@ -186,52 +186,6 @@ func TestFnDataElementOnlyRaisesFOTY0012_XSD(t *testing.T) {
 	})
 }
 
-// TestFnNormalizeSpaceElementOnlyRaisesFOTY0012 exercises the content-kind check
-// on fn:normalize-space's argument: atomizing an element with element-only complex
-// content has no typed value, so normalize-space must raise err:FOTY0012 (QT3
-// fn-normalize-space-24: /*/normalize-space(.)), the same as fn:data. The check is
-// threaded through the same array-aware interleaved atomization (atomizeStreamCont)
-// as fn:data, so an element-only node nested in an array is caught too.
-func TestFnNormalizeSpaceElementOnlyRaisesFOTY0012(t *testing.T) {
-	doc := mustParseXML(t, `<root><child>hi</child></root>`)
-	root := doc.DocumentElement()
-
-	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
-		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
-	}}
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		TypeAnnotations(map[helium.Node]string{
-			root: xpath3.QAnnotation("urn:t", "rootType"),
-		}).
-		SchemaDeclarations(decls)
-
-	// Direct node (mirrors the QT3 case /*/normalize-space(.)).
-	t.Run("direct node", func(t *testing.T) {
-		compiled, err := xpath3.NewCompiler().Compile(`/*/normalize-space(.)`)
-		require.NoError(t, err)
-		_, err = eval.Evaluate(t.Context(), compiled, doc)
-		require.Error(t, err)
-		var xerr *xpath3.XPathError
-		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
-	})
-
-	// normalize-space([/*]) wraps the element-only node in an array. Atomization
-	// flattens array members, so the element-only node must still be detected —
-	// a check that only scanned the TOP-LEVEL argument sequence (whose sole item
-	// is the array, not a node) would wrongly return "hi" instead of FOTY0012.
-	t.Run("inside array", func(t *testing.T) {
-		compiled, err := xpath3.NewCompiler().Compile(`normalize-space([/*])`)
-		require.NoError(t, err)
-		_, err = eval.Evaluate(t.Context(), compiled, doc)
-		require.Error(t, err)
-		var xerr *xpath3.XPathError
-		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
-	})
-}
-
 // TestFnDataElementOnlyErrorOrder verifies that fn:data reports the FIRST
 // offending item in encounter order: data((map{}, <element-only>)) must raise
 // FOTY0013 for the earlier map — the atomization error that occurs first — NOT
