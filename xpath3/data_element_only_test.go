@@ -50,6 +50,7 @@ func TestFnDataElementOnlyRaisesFOTY0012_Mock(t *testing.T) {
 	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
 		xpath3.QAnnotation("urn:t", "rootType"):  xpath3.ContentTypeElementOnly,
 		xpath3.QAnnotation("urn:t", "mixedType"): xpath3.ContentTypeMixed,
+		xpath3.QAnnotation("urn:t", "emptyType"): xpath3.ContentTypeEmpty,
 	}}
 
 	t.Run("element-only raises FOTY0012", func(t *testing.T) {
@@ -66,6 +67,32 @@ func TestFnDataElementOnlyRaisesFOTY0012_Mock(t *testing.T) {
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
 		require.Equal(t, "FOTY0012", xerr.Code)
+	})
+
+	// An empty-content complex type has typed value () per XDM 3.1 §5.15, so
+	// fn:data must contribute NO atoms (empty sequence), not xs:untypedAtomic("").
+	t.Run("empty content yields empty sequence", func(t *testing.T) {
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "emptyType"),
+			}).
+			SchemaDeclarations(decls)
+
+		seq := evalExprWithEval(t, eval, doc, `data(/*)`)
+		require.Equal(t, 0, seq.Len())
+	})
+
+	// The same holds when the empty-content element is nested inside an array:
+	// AtomizeSequence flattens array members, so the skip must apply there too.
+	t.Run("empty content inside array yields empty sequence", func(t *testing.T) {
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "emptyType"),
+			}).
+			SchemaDeclarations(decls)
+
+		seq := evalExprWithEval(t, eval, doc, `data([/*])`)
+		require.Equal(t, 0, seq.Len())
 	})
 
 	t.Run("mixed content atomizes normally", func(t *testing.T) {
