@@ -64,6 +64,8 @@ to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
 ### `functions_node.go`
 `node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`, `outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
 
+`fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from `xsd.Validator.NilledElements`), else false. The same set drives two other nilled-aware behaviors: `fn:data` / atomization gives a nilled element the empty typed value `()` (via `fnDataItemCheck`, checked before content-kind), and an `element(name, type)` instance-of test excludes a nilled element while `element(name, type?)` matches it (`eval_path.go` `ElementTest`). Non-schema-aware evaluation leaves the set nil → every element is not-nilled.
+
 `fn:id`/`fn:element-with-id` (`idLookup`) resolve is-id nodes from three sources: DTD-declared IDs (`GetElementByID`), type annotations whose name is xs:ID or a subtype (`annotationMatchesIDType`), and the PSVI is-id set supplied via `Evaluator.IDNodes` (`ec.idNodes`). The is-id set is required for cases the type name alone cannot express — a SINGLETON list of xs:ID and a union that selects an xs:ID-derived member (a multi-item list / non-ID union member is not is-id); the xsd validator computes it (`Validator.IDNodes`). `idElementsFromTypeAnnotations` unions annotation-derived and set-derived candidates, then `idNodeResult` maps each is-id node to its result (`fn:id` → the ID element / bearing element; `fn:element-with-id` → that element's parent).
 
 ### `functions_string.go`
@@ -116,6 +118,9 @@ namespace; `boolean` → `xs:boolean`), so no general XSD validation pass runs.
 `ec.typeAnnotations` (handed in by the caller and shared across concurrent
 `Evaluate` calls) is copied into a fresh per-evaluation map before the new nodes'
 annotations are merged in — the shared config map is never mutated.
+`validate:true()` with `duplicates:'retain'` is a dynamic error `FOJS0005`
+(`parseJSONToXMLOptions`): validation against the json result schema requires
+unique keys, so the combination cannot succeed.
 
 ### `functions_serialize.go`
 `serialize`

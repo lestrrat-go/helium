@@ -64,6 +64,7 @@ type evalContext struct {
 	httpClient             *http.Client
 	maxResourceBytes       int64                    // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc (0 = unparsedtext default)
 	typeAnnotations        map[helium.Node]string   // node → xs:... type (from xslt3 schema awareness)
+	nilledElements         map[helium.Node]struct{} // elements confirmed nilled (xsi:nil="true") by XSD validation
 	preservedIDAnnotations map[helium.Node]string   // ID/IDREF annotations preserved after input-type-annotations="strip"
 	idNodes                map[helium.Node]struct{} // PSVI is-id nodes (from xsd validation); supplements the type-annotation is-id check for list/union types
 	variableResolver       VariableResolver         // lazy resolver for variables not in static scope
@@ -192,12 +193,12 @@ func (ec *evalContext) contextStringValue() (string, bool) {
 			return s, true
 		}
 		if ni, ok := ec.contextItem.(NodeItem); ok {
-			return ixpath.StringValue(ni.Node), true
+			return ec.nodeStringValue(ni.Node), true
 		}
 		return "", false
 	}
 	if ec.node != nil {
-		return ixpath.StringValue(ec.node), true
+		return ec.nodeStringValue(ec.node), true
 	}
 	return "", false
 }

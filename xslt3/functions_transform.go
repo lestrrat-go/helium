@@ -629,6 +629,13 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	initialFunction := getQNameStr("initial-function")
 	deliveryFormat := getStr("delivery-format")
 	baseOutputURI := getStr("base-output-uri")
+	// stylesheet-base-uri (F&O 3.1): the base URI used to resolve relative
+	// references (xsl:include/xsl:import) inside a stylesheet supplied via
+	// stylesheet-text or stylesheet-node. A relative value is itself resolved
+	// against the call's static base URI (cfg.baseURI). When present it
+	// overrides cfg.baseURI (for stylesheet-text) and the node's own document
+	// base URI (for stylesheet-node).
+	stylesheetBaseURI := getStr("stylesheet-base-uri")
 	initialMatchSel := getSeq("initial-match-selection")
 	sourceNode := getSeq("source-node")
 	stylesheetParamsSeq := getSeq("stylesheet-params")
@@ -726,8 +733,13 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		}
 	} else if stylesheetText := getStr("stylesheet-text"); stylesheetText != "" {
 		// stylesheet-text: the stylesheet source is supplied inline as a string.
-		// Parse it (base URI = the static base URI) and compile.
+		// Parse it and compile. The base URI comes from the stylesheet-base-uri
+		// option when supplied (a relative value resolved against the call's
+		// static base URI); otherwise it falls back to the call's static base URI.
 		baseURI := cfg.baseURI
+		if stylesheetBaseURI != "" {
+			baseURI = resolveStylesheetLocation(cfg.baseURI, stylesheetBaseURI)
+		}
 		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, []byte(stylesheetText), baseURI, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet-text: %v", parseErr)
@@ -759,8 +771,20 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 				if doc == nil {
 					return nil, dynamicError(errCodeFOXT0003, "fn:transform: stylesheet-node is not part of a document")
 				}
+				// Base URI for resolving relative xsl:include/xsl:import inside the
+				// stylesheet node. Default to the node's own document base URI; the
+				// stylesheet-base-uri option (a relative value resolved against the
+				// call's static base URI) overrides it when supplied.
+				baseURI := helium.NodeGetBase(doc, ni.Node)
+				if stylesheetBaseURI != "" {
+					baseURI = resolveStylesheetLocation(cfg.baseURI, stylesheetBaseURI)
+				}
+				compiler := nestedCompiler
+				if baseURI != "" {
+					compiler = compiler.BaseURI(baseURI)
+				}
 				var compileErr error
-				ss, compileErr = nestedCompiler.Compile(ctx, doc)
+				ss, compileErr = compiler.Compile(ctx, doc)
 				if compileErr != nil {
 					return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet: %v", compileErr)
 				}

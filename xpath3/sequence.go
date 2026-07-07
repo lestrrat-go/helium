@@ -137,15 +137,16 @@ func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
 // contentKindCheck, when non-nil (the fn:data / typed-value path only), is
 // consulted for each non-array item in encounter order BEFORE that item is
 // atomized, walking with the SAME order and array recursion as atomization. It
-// returns an ACTION per XDM 3.1 §5.15: an element whose type annotation resolves
-// to element-only complex content has no typed value and raises err:FOTY0012;
-// one with empty complex content has typed value () and is SKIPPED (contributes
-// no atoms); everything else atomizes normally. Because the check is interleaved
+// returns an ACTION per XDM 3.1 §5.15: a NILLED element has no typed value and
+// is SKIPPED (typed value ()); an element whose type annotation resolves to
+// element-only complex content has no typed value and raises err:FOTY0012; one
+// with empty complex content has typed value () and is SKIPPED (contributes no
+// atoms); everything else atomizes normally. Because the check is interleaved
 // with atomization rather than pre-scanned, the FIRST offending item wins — a
 // map/function encountered earlier still raises FOTY0013 (from AtomizeItem)
-// before a later element-only element is reached — and element-only / empty
-// nodes nested inside arrays are handled too.
-func atomizeStreamCont(seq Sequence, contentKindCheck ContentTypeKindProvider, yield func(AtomicValue) (bool, error)) (bool, error) {
+// before a later element-only element is reached — and element-only / empty /
+// nilled nodes nested inside arrays are handled too.
+func atomizeStreamCont(seq Sequence, contentKindCheck atomizeItemCheck, yield func(AtomicValue) (bool, error)) (bool, error) {
 	if seq == nil {
 		return true, nil
 	}
@@ -164,7 +165,7 @@ func atomizeStreamCont(seq Sequence, contentKindCheck ContentTypeKindProvider, y
 			continue
 		}
 		if contentKindCheck != nil {
-			skip, err := checkContentKindItem(contentKindCheck, item)
+			skip, err := contentKindCheck(item)
 			if err != nil {
 				return false, err
 			}

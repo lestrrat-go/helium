@@ -37,6 +37,18 @@ func TestParseJSON_TopLevelScalars(t *testing.T) {
 	require.Equal(t, "", r.StringValue())
 }
 
+// fn:json-to-xml with validate:true() and duplicates:'retain' cannot succeed:
+// validation against the json result schema requires unique keys, so the
+// combination is a dynamic error err:FOJS0005 (QT3 json-to-xml-error-042).
+func TestJSONToXML_ValidateRetainDuplicates_FOJS0005(t *testing.T) {
+	_, err := evaluate(t.Context(), nil,
+		`json-to-xml('{"A":1, "A":2}', map{'validate':true(), 'duplicates':'retain'})`)
+	require.Error(t, err)
+	var xerr *xpath3.XPathError
+	require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+	require.Equal(t, "FOJS0005", xerr.Code)
+}
+
 // escapeForXPathString doubles embedded double-quotes for an XPath "..." literal.
 func escapeForXPathString(s string) string {
 	out := make([]rune, 0, len(s))

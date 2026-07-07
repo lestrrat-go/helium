@@ -67,6 +67,7 @@ func (e Evaluator) ContextItem(item Item) Evaluator
 
 // Schema / typing
 func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
+func (e Evaluator) NilledElements(nodes map[helium.Node]struct{}) Evaluator // PSVI [nil] set
 func (e Evaluator) PreservedIDAnnotations(annotations map[helium.Node]string) Evaluator
 func (e Evaluator) IDNodes(ids map[helium.Node]struct{}) Evaluator // PSVI is-id nodes (from xsd Validator.IDNodes); a node here is is-id for fn:id/fn:element-with-id even when its type name is not a subtype of xs:ID (singleton list of xs:ID, or a union selecting an xs:ID-derived member)
 func (e Evaluator) SchemaDeclarations(d SchemaDeclarations) Evaluator
@@ -88,6 +89,17 @@ unbounded body: `fn:unparsed-text` / `fn:unparsed-text-lines` surface the
 over-cap error as `FOUT1170` (`fn:unparsed-text-available` returns false), while
 `fn:doc` / `fn:json-doc` surface it as a retrieval error `FODC0002` (`fn:doc-available`
 returns false).
+
+`NilledElements(map[helium.Node]struct{})` carries the PSVI [nil] property: the
+set of element nodes whose `xsi:nil="true"` an XSD validation confirmed valid
+(`xsd.Validator.NilledElements`, keyed by `*helium.Element`, converted to
+`helium.Node`). It is additive and non-breaking — nil for non-schema-aware
+evaluation, where every element is not-nilled. When configured it drives three
+nilled-aware behaviors: `fn:nilled` returns true for a member element, `fn:data`
+/ atomization gives a member element the empty typed value `()` (a nilled
+element has no typed value), and an `element(name, type)` instance-of test
+EXCLUDES a member element while `element(name, type?)` still matches it. See the
+type-system doc (atomization) and functions doc (`fn:nilled`).
 
 ## Expression
 

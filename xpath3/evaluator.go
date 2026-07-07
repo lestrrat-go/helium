@@ -54,6 +54,7 @@ type evaluatorCfg struct {
 	size                   int
 	contextItem            Item
 	typeAnnotations        map[helium.Node]string
+	nilledElements         map[helium.Node]struct{} // elements whose xsi:nil="true" was confirmed by XSD validation
 	preservedIDAnnotations map[helium.Node]string   // ID/IDREF annotations preserved after input-type-annotations="strip"
 	idNodes                map[helium.Node]struct{} // PSVI is-id nodes (from xsd validation); supplements the type-annotation is-id check for list/union types
 	variableResolver       VariableResolver
@@ -299,6 +300,24 @@ func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
 	return e
 }
 
+// NilledElements sets the set of element nodes whose xsi:nil="true" was
+// confirmed valid by XSD validation (the element declaration is nillable). It
+// makes fn:nilled return true for those elements, gives them the empty typed
+// value () under fn:data / atomization (a nilled element has no typed value),
+// and excludes them from an element(name, type) instance-of test (a nilled
+// element matches element(name, type?) but not element(name, type)). The map is
+// cloned unless EvalBorrowing is set. Non-schema-aware evaluation leaves it nil
+// and behavior is unchanged.
+func (e Evaluator) NilledElements(nodes map[helium.Node]struct{}) Evaluator {
+	e = e.clone()
+	if e.borrowing() {
+		e.cfg.nilledElements = nodes
+	} else {
+		e.cfg.nilledElements = maps.Clone(nodes)
+	}
+	return e
+}
+
 // PreservedIDAnnotations sets the preserved ID/IDREF annotations map for use
 // by fn:id and fn:idref when input-type-annotations="strip" has removed the
 // regular type annotations. The is-id and is-idref properties are preserved
@@ -485,6 +504,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 
 	// schema / typing
 	ec.typeAnnotations = cfg.typeAnnotations
+	ec.nilledElements = cfg.nilledElements
 	ec.schemaDeclarations = cfg.schemaDeclarations
 	ec.preservedIDAnnotations = cfg.preservedIDAnnotations
 	ec.idNodes = cfg.idNodes
