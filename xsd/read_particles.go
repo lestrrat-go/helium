@@ -602,6 +602,13 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				Term:      sub,
 			})
 		case isXSDElement(ce, elemAny):
+			// XSD 1.0 xs:all content is (annotation?, element*): a wildcard is not
+			// an admissible particle. The 1.1 relaxation ((element | any | group))
+			// admits it. Mirror the group-ref-in-all stray rejection below.
+			if compositor == CompositorAll && c.version != Version11 {
+				reportStray(ce)
+				continue
+			}
 			p := c.parseWildcard(ctx, ce)
 			mg.Particles = append(mg.Particles, p)
 		case isXSDElement(ce, elemGroup):

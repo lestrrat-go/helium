@@ -378,11 +378,12 @@ func TestVersion11AttrGroupWildcardIntersection(t *testing.T) {
 	})
 }
 
-// TestVersion10MatchAllWildcardRegression guards the XSD 1.0 matchAll path
-// (gauntlet finding 1): a wildcard inside xs:all is an XSD 1.1-only feature, so
-// in 1.0 a child admitted only by such a wildcard must still be REJECTED (the
-// pre-feature behavior), while 1.1 accepts it. A wildcard-only xs:all compiles
-// in both versions (no element competes for UPA), so it isolates matchAll.
+// TestVersion10MatchAllWildcardRegression guards the version split for a wildcard
+// inside xs:all: it is an XSD 1.1-only feature, so in 1.0 the schema is a
+// schema-representation error and must be REJECTED at compile (Structures §3.8.2:
+// the 1.0 xs:all content model is (annotation?, element*); W3C sunData
+// particles00104m1), while 1.1 compiles it and accepts a child the wildcard
+// admits.
 func TestVersion10MatchAllWildcardRegression(t *testing.T) {
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="t">
@@ -393,10 +394,12 @@ func TestVersion10MatchAllWildcardRegression(t *testing.T) {
   <xs:element name="e" type="t"/>
 </xs:schema>`
 
-	t.Run("1.0 rejects wildcard-in-all content (byte-identical pre-feature)", func(t *testing.T) {
+	t.Run("1.0 rejects wildcard-in-all schema at compile", func(t *testing.T) {
 		t.Parallel()
-		err := compileAndValidateV(t, xsd.NewCompiler().Version(xsd.Version10), schema, `<e><b/></e>`)
-		require.ErrorIs(t, err, xsd.ErrValidationFailed)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err)
+		_, cerr := xsd.NewCompiler().Version(xsd.Version10).Compile(t.Context(), doc)
+		require.ErrorIs(t, cerr, xsd.ErrCompilationFailed)
 	})
 
 	t.Run("1.1 accepts wildcard-in-all content", func(t *testing.T) {
