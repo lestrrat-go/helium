@@ -1,8 +1,10 @@
 package xpath3_test
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -163,4 +165,92 @@ func TestXMLToJSON_OptionsMap(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
+}
+
+// TestSerialize_OptionElementOnlyRaisesFOTY0012 verifies that a string-valued
+// fn:serialize option (method / item-separator / encoding / standalone) whose
+// map value is an element-only-typed node surfaces err:FOTY0012 — the node has
+// no typed value, so option (function) conversion cannot atomize it to a string.
+// This guards that option-map string extraction threads the ctx-aware
+// typed-value atomization rather than plain AtomizeSequence.
+func TestSerialize_OptionElementOnlyRaisesFOTY0012(t *testing.T) {
+	doc := mustParseXML(t, `<root><child>hi</child></root>`)
+	root := doc.DocumentElement()
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
+	}}
+	newEval := func() xpath3.Evaluator {
+		return xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "rootType"),
+			}).
+			SchemaDeclarations(decls)
+	}
+
+	requireFOTY0012 := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = newEval().Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0012", xerr.Code)
+	}
+
+	t.Run("method element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `serialize("x", map{"method": /*})`)
+	})
+	t.Run("item-separator element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `serialize("x", map{"item-separator": /*})`)
+	})
+	t.Run("encoding element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `serialize("x", map{"encoding": /*})`)
+	})
+	t.Run("standalone element-only raises FOTY0012", func(t *testing.T) {
+		requireFOTY0012(t, `serialize("x", map{"standalone": /*})`)
+	})
+}
+
+// TestOptionMapElementOnlyRaisesFOTY0012 locks in the proactive sweep: every
+// string-valued OPTION-MAP extractor that atomizes its value must surface
+// err:FOTY0012 for an element-only-typed node (no typed value) rather than
+// masking it as the function's own bad-option error (FOJS0005 / XPTY0004).
+// Covers map:merge, fn:parse-json, and fn:json-to-xml "duplicates" options.
+func TestOptionMapElementOnlyRaisesFOTY0012(t *testing.T) {
+	doc := mustParseXML(t, `<root><child>hi</child></root>`)
+	root := doc.DocumentElement()
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
+	}}
+	newEval := func() xpath3.Evaluator {
+		return xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(map[helium.Node]string{
+				root: xpath3.QAnnotation("urn:t", "rootType"),
+			}).
+			SchemaDeclarations(decls)
+	}
+
+	requireFOTY0012 := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = newEval().Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FOTY0012", xerr.Code)
+	}
+
+	t.Run("map:merge duplicates element-only", func(t *testing.T) {
+		requireFOTY0012(t, `map:merge((map{"a": 1}), map{"duplicates": /*})`)
+	})
+	t.Run("parse-json duplicates element-only", func(t *testing.T) {
+		requireFOTY0012(t, `parse-json('{}', map{"duplicates": /*})`)
+	})
+	t.Run("json-to-xml duplicates element-only", func(t *testing.T) {
+		requireFOTY0012(t, `json-to-xml('{}', map{"duplicates": /*})`)
+	})
 }

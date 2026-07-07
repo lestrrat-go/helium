@@ -31,7 +31,7 @@ func extractMap(seq Sequence) (MapItem, error) {
 	return m, nil
 }
 
-func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMapMerge(ctx context.Context, args []Sequence) (Sequence, error) {
 	duplicates := MergeUseFirst
 	if len(args) > 1 {
 		if seqLen(args[1]) == 0 {
@@ -52,7 +52,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 			// So xs:string subtypes (xs:NCName, ...), xs:anyURI, xs:untypedAtomic,
 			// and a single-item array all coerce to a string. An empty, multi-item,
 			// or non-convertible value is a FOJS0005 error (not XPTY0004).
-			s, convErr := coerceDuplicatesOption(val)
+			s, convErr := coerceDuplicatesOption(ctx, val)
 			if convErr != nil {
 				return nil, convErr
 			}
@@ -93,11 +93,13 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 // xs:string (and subtypes), and xs:anyURI (and subtypes) are accepted; any other
 // atomic type — even a custom type whose Go payload happens to be a string — is a
 // FOJS0005 error rather than being silently accepted. A single-item array still
-// flattens to its member via atomization.
-func coerceDuplicatesOption(val Sequence) (string, error) {
+// flattens to its member via atomization. Atomization is ctx-aware: an
+// element-only-typed node has no typed value, so it surfaces err:FOTY0012
+// unchanged rather than being masked as the FOJS0005 invalid-option error.
+func coerceDuplicatesOption(ctx context.Context, val Sequence) (string, error) {
 	var first AtomicValue
 	count := 0
-	err := atomizeStream(val, func(av AtomicValue) (bool, error) {
+	_, err := atomizeStreamCont(val, typedValueItemCheck(ctx), func(av AtomicValue) (bool, error) {
 		count++
 		if count == 1 {
 			first = av
@@ -106,6 +108,9 @@ func coerceDuplicatesOption(val Sequence) (string, error) {
 		return false, nil
 	})
 	if err != nil {
+		if isNoTypedValueError(err) {
+			return "", err
+		}
 		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", err)}
 	}
 	if count != 1 {

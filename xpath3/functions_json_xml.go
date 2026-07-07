@@ -295,6 +295,11 @@ func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, e
 		// reject e.g. map{"duplicates": ([], "use-first")}.
 		s, err := coerceArgToStringRequired(ctx, v)
 		if err != nil {
+			// An element-only-typed node has no typed value: surface err:FOTY0012
+			// rather than masking it as the XPTY0004 bad-value error.
+			if isNoTypedValueError(err) {
+				return opts, err
+			}
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
 		}
 		switch s {

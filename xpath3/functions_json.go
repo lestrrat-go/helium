@@ -116,6 +116,11 @@ func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error)
 	if v, found := m.Get(dupKey); found {
 		s, err := coerceArgToStringRequired(ctx, v)
 		if err != nil {
+			// An element-only-typed node has no typed value: surface err:FOTY0012
+			// rather than masking it as the FOJS0005 invalid-option error.
+			if isNoTypedValueError(err) {
+				return opts, err
+			}
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a single string"}
 		}
 		switch s {

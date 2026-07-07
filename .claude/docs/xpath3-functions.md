@@ -64,12 +64,16 @@ The same rule governs **options-map string values** (F&O 3.1 §2.5 option/functi
 conversion): an `xs:string` option value atomizes FIRST (an empty-array member
 flattens away) and cardinality applies AFTER, so `map{"opt": ([], "v")}` coerces
 to the single `"v"`, not `XPTY0004`. No raw pre-atomization `seqLen != 1` gate
-wraps these. `fn:json-to-xml`/`fn:parse-json` `duplicates` route through
-`coerceArgToStringRequired`; `fn:serialize`'s string map parameters
-(`method`/`item-separator`/`encoding`, via `readString`) and its
-`standalone` union value (`validateSerializeStandaloneMap`) atomize via
-`AtomizeSequence` then enforce the singleton, keeping each atom's type (e.g. an
-`xs:QName` `method`) so the existing `atomicToString`/type checks are unchanged.
+wraps these. `fn:json-to-xml`/`fn:parse-json`/`map:merge` `duplicates` route
+through `coerceArgToStringRequired`; `fn:serialize`'s string map parameters
+(`method`/`item-separator`/`encoding`, via `readSerializeStringOption`) and its
+`standalone` union value (`validateSerializeStandaloneMap`) atomize via the
+ctx-aware `atomizeTypedValue`/typed-value stream then enforce the singleton,
+keeping each atom's type (e.g. an `xs:QName` `method`) so the `atomicToString`/
+type checks are unchanged. Because atomization is content-kind-aware, an
+element-only-typed node used as an option value has no typed value and raises
+`FOTY0012`; every extractor lets that dynamic error surface (`isNoTypedValueError`)
+instead of masking it as its own bad-option error (`XPTY0004`/`FOJS0005`).
 
 `evalFunctionCall` (the static call path) enforces the declared parameter
 signature for every resolved function before invoking it: it looks up
