@@ -64,6 +64,8 @@ to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
 ### `functions_node.go`
 `node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`, `outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
 
+`fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from `xsd.Validator.NilledElements`), else false. The same set drives two other nilled-aware behaviors: `fn:data` / atomization gives a nilled element the empty typed value `()` (via `fnDataItemCheck`, checked before content-kind), and an `element(name, type)` instance-of test excludes a nilled element while `element(name, type?)` matches it (`eval_path.go` `ElementTest`). Non-schema-aware evaluation leaves the set nil → every element is not-nilled.
+
 ### `functions_string.go`
 `codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (partial; result DOM built with helium)
 
@@ -114,6 +116,9 @@ namespace; `boolean` → `xs:boolean`), so no general XSD validation pass runs.
 `ec.typeAnnotations` (handed in by the caller and shared across concurrent
 `Evaluate` calls) is copied into a fresh per-evaluation map before the new nodes'
 annotations are merged in — the shared config map is never mutated.
+`validate:true()` with `duplicates:'retain'` is a dynamic error `FOJS0005`
+(`parseJSONToXMLOptions`): validation against the json result schema requires
+unique keys, so the combination cannot succeed.
 
 ### `functions_serialize.go`
 `serialize`

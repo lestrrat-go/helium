@@ -83,12 +83,27 @@ func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return validNilSequence, nil
 	}
-	// Schema-validated nilled checking is handled by the XSLT engine
-	// override. This default implementation returns false for elements.
+	// fn:nilled returns the nilled property of an element node, else () for a
+	// non-element. The nilled property is the PSVI [nil] property: true only for
+	// an element that the XSD validator confirmed carried a valid xsi:nil="true"
+	// (recorded in the evaluator's NilledElements set). Without a schema-aware
+	// nilled set every element is not-nilled → false.
 	if n.Type() == helium.ElementNode {
-		return SingleBoolean(false), nil
+		return SingleBoolean(nodeIsNilled(ctx, n)), nil
 	}
 	return validNilSequence, nil
+}
+
+// nodeIsNilled reports whether node n is in the active evaluation's
+// schema-derived nilled-element set. It is safe when no set is configured
+// (non-schema-aware evaluation): it returns false.
+func nodeIsNilled(ctx context.Context, n helium.Node) bool {
+	ec := getFnContext(ctx)
+	if ec == nil || ec.nilledElements == nil {
+		return false
+	}
+	_, ok := ec.nilledElements[n]
+	return ok
 }
 
 func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -116,22 +131,24 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-// atomizeForFnData atomizes the fn:data argument, interleaving a content-kind
-// typed-value check with atomization per XDM 3.1 §5.15 / F&O fn:data: an element
-// whose schema type annotation resolves to ELEMENT-ONLY complex content has no
-// typed value and raises err:FOTY0012 (rather than fabricating an
-// xs:untypedAtomic from its string value); an element with EMPTY complex content
-// has typed value () and is skipped (contributes no atoms); mixed/simple content
-// and everything else atomize normally. The check is threaded through
-// atomizeStreamCont, so it walks items in the SAME encounter order and with the
-// SAME array recursion as atomization: the FIRST offending item wins (a
-// map/function atomized earlier still raises FOTY0013 before a later
-// element-only element), and element-only / empty nodes nested inside arrays are
-// handled. The check fires only when the active SchemaDeclarations implements the
-// optional ContentTypeKindProvider; without one this is exactly AtomizeSequence,
-// so other AtomizeItem callers (string value, comparisons, casts) are unaffected.
+// atomizeForFnData atomizes the fn:data argument, interleaving a typed-value
+// check with atomization per XDM 3.1 §5.15 / F&O fn:data: a NILLED element has
+// no typed value and is skipped (typed value ()); an element whose schema type
+// annotation resolves to ELEMENT-ONLY complex content has no typed value and
+// raises err:FOTY0012 (rather than fabricating an xs:untypedAtomic from its
+// string value); an element with EMPTY complex content has typed value () and is
+// skipped (contributes no atoms); mixed/simple content and everything else
+// atomize normally. The check is threaded through atomizeStreamCont, so it walks
+// items in the SAME encounter order and with the SAME array recursion as
+// atomization: the FIRST offending item wins (a map/function atomized earlier
+// still raises FOTY0013 before a later element-only element), and
+// nilled / element-only / empty nodes nested inside arrays are handled. The
+// check fires only when a nilled-element set is configured or the active
+// SchemaDeclarations implements the optional ContentTypeKindProvider; without
+// either this is exactly AtomizeSequence, so other AtomizeItem callers (string
+// value, comparisons, casts) are unaffected.
 func atomizeForFnData(ctx context.Context, seq Sequence) ([]AtomicValue, error) {
-	check := contentKindProvider(ctx)
+	check := fnDataItemCheck(ctx)
 	if check == nil {
 		return AtomizeSequence(seq)
 	}
@@ -149,11 +166,55 @@ func atomizeForFnData(ctx context.Context, seq Sequence) ([]AtomicValue, error) 
 	return result, nil
 }
 
-// contentKindProvider returns the active ContentTypeKindProvider for the fn:data
-// path, or nil when no schema-aware provider is configured (the common
-// non-schema-aware case, where fn:data is plain atomization).
-func contentKindProvider(ctx context.Context) ContentTypeKindProvider {
-	return getFnContext(ctx).contentKindProvider()
+// atomizeItemCheck is a per-item pre-check consulted by atomizeStreamCont (the
+// fn:data / typed-value path only) BEFORE an item is atomized, in the same
+// encounter order and array recursion as atomization. It returns skip=true when
+// the item has typed value () and contributes no atoms, or a non-nil error
+// (e.g. FOTY0012) to reject the item.
+type atomizeItemCheck func(item Item) (skip bool, err error)
+
+// fnDataItemCheck builds the fn:data typed-value pre-check for the active
+// evaluation, combining the two schema-aware sources: the nilled-element set (a
+// nilled element has no typed value → skipped) and the optional
+// ContentTypeKindProvider (element-only → FOTY0012, empty → skipped). It returns
+// nil when neither is configured, so non-schema-aware fn:data stays plain
+// atomization (AtomizeSequence). Nilled is checked first: a nilled element's
+// content type is irrelevant, its typed value is always ().
+func fnDataItemCheck(ctx context.Context) atomizeItemCheck {
+	ec := getFnContext(ctx)
+	if ec == nil {
+		return nil
+	}
+	provider := ec.contentKindProvider()
+	nilled := ec.nilledElements
+	if provider == nil && len(nilled) == 0 {
+		return nil
+	}
+	return func(item Item) (bool, error) {
+		ni, ok := item.(NodeItem)
+		if !ok {
+			return false, nil
+		}
+		if ni.Node != nil && ni.Node.Type() == helium.ElementNode {
+			if _, isNilled := nilled[ni.Node]; isNilled {
+				return true, nil
+			}
+		}
+		if provider != nil {
+			return checkContentKindItem(provider, item)
+		}
+		return false, nil
+	}
+}
+
+// contentKindProvider returns the active ContentTypeKindProvider for this
+// evalContext, or nil when no schema-aware provider is configured.
+func (ec *evalContext) contentKindProvider() ContentTypeKindProvider {
+	if ec == nil || ec.schemaDeclarations == nil {
+		return nil
+	}
+	provider, _ := ec.schemaDeclarations.(ContentTypeKindProvider)
+	return provider
 }
 
 // nodeStringValue returns the XPath dm:string-value of a node. In a schema-aware
@@ -179,16 +240,6 @@ func (ec *evalContext) nodeStringValue(n helium.Node) string {
 	var b strings.Builder
 	ec.appendSchemaStringValue(&b, n, provider)
 	return b.String()
-}
-
-// contentKindProvider returns the active ContentTypeKindProvider for this
-// evalContext, or nil when no schema-aware provider is configured.
-func (ec *evalContext) contentKindProvider() ContentTypeKindProvider {
-	if ec == nil || ec.schemaDeclarations == nil {
-		return nil
-	}
-	provider, _ := ec.schemaDeclarations.(ContentTypeKindProvider)
-	return provider
 }
 
 // appendSchemaStringValue walks descendants in document order (iteratively, so a

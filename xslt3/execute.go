@@ -402,6 +402,26 @@ func (ec *execContext) isNilled(elem *helium.Element) bool {
 	return ok
 }
 
+// nilledElementNodes returns the confirmed-nilled elements as a helium.Node-keyed
+// set for forwarding into the xpath3 evaluator (xpath3.Evaluator.NilledElements),
+// or nil when there is nothing to forward. This is what makes fn:data (a nilled
+// element has typed value ()) and an element(name, type) instance-of test
+// nilled-aware inside xpath3-evaluated expressions, consistent with xslt3's own
+// nilled tracking. Under input-type-annotations="strip" the source type
+// annotations are removed, so the PSVI nilled property is likewise unavailable
+// and this returns nil — matching fnNilled's strip handling and the
+// type-annotation forwarding, which forwards an emptied annotation map.
+func (ec *execContext) nilledElementNodes() map[helium.Node]struct{} {
+	if len(ec.nilledElements) == 0 || ec.stylesheet.inputTypeAnnotations == validationStrip {
+		return nil
+	}
+	out := make(map[helium.Node]struct{}, len(ec.nilledElements))
+	for elem := range ec.nilledElements {
+		out[elem] = struct{}{}
+	}
+	return out
+}
+
 // deepTransferAnnotations recursively copies type annotations from a source
 // subtree to a destination subtree. The trees must have the same structure.
 func (ec *execContext) deepTransferAnnotations(src, dst helium.Node) {
@@ -1312,6 +1332,9 @@ func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 		Functions(ec.xsltFunctions(), ec.xsltFunctionsNS())
 	if ec.typeAnnotations != nil {
 		eval = eval.TypeAnnotations(ec.typeAnnotations)
+	}
+	if nilled := ec.nilledElementNodes(); nilled != nil {
+		eval = eval.NilledElements(nilled)
 	}
 	if ec.preservedIDAnnotations != nil {
 		eval = eval.PreservedIDAnnotations(ec.preservedIDAnnotations)

@@ -1011,6 +1011,9 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	if ec.typeAnnotations != nil {
 		eval = eval.TypeAnnotations(ec.typeAnnotations)
 	}
+	if nilled := ec.nilledElementNodes(); nilled != nil {
+		eval = eval.NilledElements(nilled)
+	}
 	if ec.preservedIDAnnotations != nil {
 		eval = eval.PreservedIDAnnotations(ec.preservedIDAnnotations)
 	}

@@ -685,6 +685,14 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 					return false
 				}
 			}
+			// element(name, type) without ? does not match a nilled element;
+			// element(name, type?) with ? matches even when nilled. A nilled
+			// element has no typed value, so it cannot satisfy a specific type.
+			if !test.Nillable && ec != nil && ec.nilledElements != nil {
+				if _, nilled := ec.nilledElements[n]; nilled {
+					return false
+				}
+			}
 		}
 		return true
 	case AttributeTest:
