@@ -77,11 +77,11 @@ func aggregateTypeFamilyByName(typeName string) string {
 // resolveCollationArg resolves the optional collation argument at args[idx].
 // Returns nil collation (use default) if the argument is absent or is the
 // codepoint collation.
-func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
+func resolveCollationArg(ctx context.Context, args []Sequence, idx int) (*collationImpl, error) {
 	if len(args) <= idx || seqLen(args[idx]) == 0 {
 		return validNilCollation, nil
 	}
-	uri, err := coerceArgToString(args[idx])
+	uri, err := coerceArgToString(ctx, args[idx])
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +92,8 @@ func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
 }
 
 // validateCollationArg checks if the collation argument at args[idx] is supported.
-func validateCollationArg(args []Sequence, idx int) error {
-	_, err := resolveCollationArg(args, idx)
+func validateCollationArg(ctx context.Context, args []Sequence, idx int) error {
+	_, err := resolveCollationArg(ctx, args, idx)
 	return err
 }
 
@@ -614,7 +614,7 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
-	if err := validateCollationArg(args, 1); err != nil {
+	if err := validateCollationArg(ctx, args, 1); err != nil {
 		return nil, err
 	}
 	coll, err := getCollation(ctx, args, 1)

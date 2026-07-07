@@ -19,7 +19,7 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	// $picture is a required, exactly-one xs:string. Validate it before the
 	// empty-$value short-circuit so an empty or oversized picture raises
 	// XPTY0004 rather than panicking on picSeq.Get(0).
-	picture, err := coerceArgToStringRequired(args[1])
+	picture, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
 	}

@@ -33,7 +33,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +474,7 @@ func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (st
 			if err != nil {
 				return "", err
 			}
-			repl, err = seqToStringErr(seq)
+			repl, err = seqToStringErr(ctx, seq)
 			if err != nil {
 				return "", err
 			}
@@ -549,7 +549,7 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
-	uri, err := coerceArgToString(args[0])
+	uri, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}

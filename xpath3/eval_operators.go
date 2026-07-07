@@ -83,11 +83,11 @@ func evalConcatExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if err != nil {
 		return nil, err
 	}
-	ls, err := concatToString(left)
+	ls, err := concatToString(ctx, left)
 	if err != nil {
 		return nil, err
 	}
-	rs, err := concatToString(right)
+	rs, err := concatToString(ctx, right)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func evalConcatExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 
 // concatToString converts a sequence to string for the || operator.
 // Raises FOTY0014 for function/map/array items that have no string value.
-func concatToString(seq Sequence) (string, error) {
+func concatToString(ctx context.Context, seq Sequence) (string, error) {
 	if seqLen(seq) == 0 {
 		return "", nil
 	}
@@ -111,7 +111,7 @@ func concatToString(seq Sequence) (string, error) {
 	case ArrayItem:
 		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of array item"}
 	}
-	return seqToStringErr(seq)
+	return seqToStringErr(ctx, seq)
 }
 
 // appendBounded appends src to dst, enforcing the configured sequence/node-set

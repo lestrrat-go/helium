@@ -24,12 +24,12 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 
-	opts, err := parseJSONToXMLOptions(args)
+	opts, err := parseJSONToXMLOptions(ctx, args)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func jsonSequenceToItem(seq Sequence) Item {
 	return seq.Get(0)
 }
 
-func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
+func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
 		duplicates: duplicatesUseFirst,
 	}
@@ -289,7 +289,7 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
 		}
-		s, err := coerceArgToString(v)
+		s, err := coerceArgToString(ctx, v)
 		if err != nil {
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be xs:string"}
 		}

@@ -13,11 +13,11 @@ func init() {
 	registerFn("parse-ietf-date", 1, 1, fnParseIETFDate)
 }
 
-func fnParseIETFDate(_ context.Context, args []Sequence) (Sequence, error) {
+func fnParseIETFDate(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
-	s, err := coerceArgToString(args[0])
+	s, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}

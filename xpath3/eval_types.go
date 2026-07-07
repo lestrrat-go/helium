@@ -561,12 +561,20 @@ func coerceToSequenceTypeE(ctx context.Context, seq Sequence, st SequenceType, e
 	case OccurrenceExactlyOne, OccurrenceZeroOrOne:
 		maxAtoms = 1
 	}
-	// Atomize the sequence. atomizeStream correctly flattens arrays and
+	// Atomize the sequence. atomizeStreamCont correctly flattens arrays and
 	// expands list-typed nodes (e.g. xs:list of xs:decimal) into multiple
 	// atomic values — a per-item AtomizeItem would collapse those incorrectly.
+	// The typed-value pre-check makes atomization content-kind-aware in a
+	// schema-aware run: atomizing an element-only-typed node has no typed value
+	// and raises err:FOTY0012 (XDM 3.1 §5.15), and a nilled/empty-content element
+	// contributes no atoms. Because it runs during atomization (before the
+	// occurrence check), the array flattening and cardinality cap are unchanged —
+	// so an xs:string? parameter given ([], "x") still coerces to the single "x".
+	// Without a schema-aware provider the check is nil and this is byte-identical
+	// to plain atomizeStream.
 	var atoms []AtomicValue
 	tooMany := false
-	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+	_, err := atomizeStreamCont(seq, typedValueItemCheckFor(ec), func(av AtomicValue) (bool, error) {
 		atoms = append(atoms, av)
 		if maxAtoms > 0 && len(atoms) > maxAtoms {
 			tooMany = true

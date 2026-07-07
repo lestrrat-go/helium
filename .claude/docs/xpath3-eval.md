@@ -211,8 +211,11 @@ stream via `atomizeSingletonOperand` and apply the singleton-or-empty cardinalit
 to the atomized result. A single schema-typed node whose typed value is a
 list/union expands consistently with `data()`; a more-than-one-atom operand
 raises cast XPTY0004 or makes `castable` false. Function-call args are handled
-separately by signature coercion (`coerceToSequenceTypeE`, which also atomizes
-via `atomizeStream`). Its whole `coerceToSequenceType`/`coerceFuncallArg`/public
+separately by signature coercion (`coerceToSequenceTypeE`, which atomizes via
+`atomizeStreamCont` with the typed-value pre-check `typedValueItemCheckFor(ec)`,
+so atomizing an element-only-typed node arg against an atomic parameter raises
+`FOTY0012` — cardinality still applies after atomization). Its whole
+`coerceToSequenceType`/`coerceFuncallArg`/public
 `CoerceToSequenceType`+`CoerceToSequenceTypeContext` family threads a
 `context.Context` so the schema-aware cast it may trigger participates in
 cancellation.

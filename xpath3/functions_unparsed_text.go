@@ -45,13 +45,13 @@ func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
-	href, err := coerceArgToString(args[0])
+	href, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding, err = coerceArgToString(args[1])
+		encoding, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -68,13 +68,13 @@ func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, er
 	if seqLen(args[0]) == 0 {
 		return SingleBoolean(false), nil
 	}
-	href, err := coerceArgToString(args[0])
+	href, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding, err = coerceArgToString(args[1])
+		encoding, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -88,13 +88,13 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
-	href, err := coerceArgToString(args[0])
+	href, err := coerceArgToString(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding, err = coerceArgToString(args[1])
+		encoding, err = coerceArgToString(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}

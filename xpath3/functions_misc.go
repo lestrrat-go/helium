@@ -83,8 +83,8 @@ func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnEnvironmentVariable(_ context.Context, args []Sequence) (Sequence, error) {
-	name, err := coerceArgToStringRequired(args[0])
+func fnEnvironmentVariable(ctx context.Context, args []Sequence) (Sequence, error) {
+	name, err := coerceArgToStringRequired(ctx, args[0])
 	if err != nil {
 		return nil, err
 	}

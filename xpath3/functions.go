@@ -315,11 +315,14 @@ func registerNSExt(uri, name string, minArity, maxArity int, fn func(context.Con
 
 // seqToStringErr atomizes the argument to a string, propagating errors.
 // For list-typed nodes, atomization may produce multiple items → XPTY0004.
-func seqToStringErr(seq Sequence) (string, error) {
+// Atomization is content-kind-aware in a schema-aware run (atomizeTypedValue):
+// atomizing an element-only-typed node raises err:FOTY0012 (it has no typed
+// value); a nilled/empty-content element contributes no atoms.
+func seqToStringErr(ctx context.Context, seq Sequence) (string, error) {
 	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	atoms, err := AtomizeSequence(seq)
+	atoms, err := atomizeTypedValue(ctx, seq)
 	if err != nil {
 		return "", err
 	}
@@ -337,8 +340,8 @@ func seqToStringErr(seq Sequence) (string, error) {
 // string parameters). Cardinality is checked after atomization, so a value such as
 // an empty array — which atomizes to the empty sequence — is rejected, while
 // ([], "x") (which atomizes to the single string "x") is accepted.
-func coerceArgToStringRequired(seq Sequence) (string, error) {
-	s, empty, err := coerceAtomizedString(seq)
+func coerceArgToStringRequired(ctx context.Context, seq Sequence) (string, error) {
+	s, empty, err := coerceAtomizedString(ctx, seq)
 	if err != nil {
 		return "", err
 	}
@@ -351,8 +354,8 @@ func coerceArgToStringRequired(seq Sequence) (string, error) {
 // coerceArgToString applies XPath 3.1 function coercion rules for xs:string? params.
 // Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
 // Rejects all other types with XPTY0004.
-func coerceArgToString(seq Sequence) (string, error) {
-	s, _, err := coerceAtomizedString(seq)
+func coerceArgToString(ctx context.Context, seq Sequence) (string, error) {
+	s, _, err := coerceAtomizedString(ctx, seq)
 	return s, err
 }
 
@@ -362,10 +365,18 @@ func coerceArgToString(seq Sequence) (string, error) {
 // stops as soon as a second item appears, so a too-long sequence is rejected
 // without materializing it. Returns empty=true when the atomized sequence is
 // empty (the caller decides whether that is "" or an error).
-func coerceAtomizedString(seq Sequence) (value string, empty bool, err error) {
+//
+// Atomization is content-kind-aware in a schema-aware run: it routes through
+// atomizeStreamCont with the typed-value pre-check (typedValueItemCheck), so
+// atomizing an element-only-typed node raises err:FOTY0012 (it has no typed
+// value) and a nilled/empty-content element contributes no atoms — cardinality
+// is still applied AFTER atomization, so an empty-array member flattens away
+// and ([], "x") stays a single "x". Without a schema-aware provider the check
+// is nil and this is byte-identical to plain atomizeStream.
+func coerceAtomizedString(ctx context.Context, seq Sequence) (value string, empty bool, err error) {
 	var first AtomicValue
 	var count int
-	if serr := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+	if _, serr := atomizeStreamCont(seq, typedValueItemCheck(ctx), func(av AtomicValue) (bool, error) {
 		count++
 		if count == 1 {
 			first = av
@@ -540,7 +551,7 @@ func init() {
 	registerFn("trace", 1, 2, fnTrace)
 }
 
-func fnError(_ context.Context, args []Sequence) (Sequence, error) {
+func fnError(ctx context.Context, args []Sequence) (Sequence, error) {
 	code := QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: errCodeFOER0000}
 	msg := "error() called"
 	if len(args) > 0 {
@@ -554,7 +565,7 @@ func fnError(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	if len(args) > 1 {
 		var err error
-		msg, err = coerceArgToStringRequired(args[1])
+		msg, err = coerceArgToStringRequired(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -590,7 +601,7 @@ func fnTrace(ctx context.Context, args []Sequence) (Sequence, error) {
 	label := ""
 	if len(args) > 1 {
 		var err error
-		label, err = coerceArgToStringRequired(args[1])
+		label, err = coerceArgToStringRequired(ctx, args[1])
 		if err != nil {
 			return nil, err
 		}
