@@ -22,8 +22,17 @@ Measured against the W3C XML Schema Test Suite:
 
 | Mode | Pass | Skip | Fail | Total | Pass/Total | Collections |
 |------|-----:|-----:|-----:|------:|-----------:|-------------|
-| **XSD 1.0** (default) | 14,377 | 0 | 22 | 14,399 | 99.85% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
+| **XSD 1.0** (default) | 14,383 | 16 | 0 | 14,399 | 99.89% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
 | **XSD 1.1** | 1,049 | 0 | 0 | 1,049 | 100.00% | IBM, Saxon, Oracle, W3C-WG |
+
+Zero cases fail unexpectedly. The 16 XSD 1.0 "Skip" cases are documented xfails
+(`expectations/xsd10.json` in the sibling `helium-w3c-tests` module): W3C
+tests that are spec-disputed/queried (bugzilla 4126/4133/4135/4952/4957,
+w3c/xsdtests#11), 1.0-vs-1.1 particle-restriction subsumption tradeoffs that
+XSD 1.1 abolished, or libxml2-parity divergences where helium's behaviour is
+correct. `summary-xsd10.md` counts them as passing because the harness treats a
+documented xfail as an expected outcome; the table above lists them separately
+for transparency.
 
 The 1.0-era collections (Microsoft, NIST, Sun, Boeing) contain no 1.1-tagged
 cases, so they are not part of the 1.1 run.
