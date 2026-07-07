@@ -100,16 +100,14 @@ func concatToString(ctx context.Context, seq Sequence) (string, error) {
 	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	if seq.Len() > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "cannot get string value of sequence of length > 1"}
-	}
-	switch seq.Get(0).(type) {
-	case FunctionItem:
-		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function item"}
-	case MapItem:
-		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of map item"}
-	case ArrayItem:
-		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of array item"}
+	// seqToStringErr atomizes first (flattening arrays, so an empty-array member
+	// contributes nothing) and applies cardinality afterwards. Function and map
+	// items have no atomized string value for ||, so reject them up front.
+	for item := range seqItems(seq) {
+		switch item.(type) {
+		case FunctionItem, MapItem:
+			return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function or map item"}
+		}
 	}
 	return seqToStringErr(ctx, seq)
 }

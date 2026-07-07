@@ -143,6 +143,26 @@ func TestStringArgCardinalityPreserved(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, true, av.Value)
 	})
+
+	// The || operator (concatToString) atomizes before applying cardinality:
+	// an empty-array operand flattens away instead of counting as a second item.
+	t.Run("concat operator empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `([], "b") || "c"`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, "bc", av.StringVal())
+	})
+
+	// fn:string-length's optional argument shares the same atomize-then-count
+	// coercion: an empty-array member must flatten away, not raise XPTY0004.
+	t.Run("string-length empty array member flattens away", func(t *testing.T) {
+		seq := evalExpr(t, doc, `string-length(([], "abcd"))`)
+		require.Equal(t, 1, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, int64(4), av.Value)
+	})
 }
 
 // TestDocFamilyCardinalityFlattens guards the docURIArg family (fn:doc,

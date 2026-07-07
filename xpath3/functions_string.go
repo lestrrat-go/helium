@@ -399,9 +399,6 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
 		}
 	} else {
-		if seqLen(args[0]) > 1 {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", seqLen(args[0]))}
-		}
 		var err error
 		s, err = seqToStringErr(ctx, args[0])
 		if err != nil {
