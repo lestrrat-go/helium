@@ -65,6 +65,12 @@ type Writer struct {
 	// declaration is omitted. standalonePreserve (the zero value) keeps the
 	// document's own standalone status.
 	standalone standaloneMode
+	// outputVersion overrides the effective output XML version (the version
+	// serialization parameter). Empty keeps the document's own version. It drives
+	// BOTH the version pseudo-attribute of the XML declaration AND the XML 1.1
+	// serialization rules (restricted-character references, namespace
+	// undeclarations), so the declaration and escaping stay consistent.
+	outputVersion string
 }
 
 // standaloneMode controls how the writer emits the standalone pseudo-attribute
@@ -333,6 +339,28 @@ func (w Writer) OmitStandalone() Writer {
 	return w
 }
 
+// OutputVersion overrides the effective output XML version (the version
+// serialization parameter, e.g. "1.0" or "1.1"), driving BOTH the version
+// pseudo-attribute of the XML declaration AND the XML 1.1 serialization rules
+// (restricted-character references and namespace undeclarations). An empty
+// string keeps the document's own version, leaving default output byte-identical.
+func (w Writer) OutputVersion(v string) Writer {
+	w.outputVersion = v
+	return w
+}
+
+// effectiveVersion returns the version driving serialization: the OutputVersion
+// override when set, otherwise the document's own version (defaulting to "1.0").
+func (d Writer) effectiveVersion(doc *Document) string {
+	if d.outputVersion != "" {
+		return d.outputVersion
+	}
+	if doc != nil && doc.version != "" {
+		return doc.version
+	}
+	return "1.0"
+}
+
 // writeCDATASplit emits c as one or more CDATA sections, splitting on any "]]>"
 // sequence so the output stays well-formed (the "]]" is kept in one section and
 // the ">" starts the next). Empty content emits an empty CDATA section. Used for
@@ -415,14 +443,19 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 		return d.writeDoc(out, doc)
 	}
 	s := writeSession{Writer: d, escapeNonASCII: !d.noEscapeNonASCII}
+	// A bare element carries no document version, so only an explicit
+	// OutputVersion("1.1") override enables XML 1.1 serialization here; without
+	// it, output stays byte-identical to the prior behavior.
+	s.xml11 = d.outputVersion == "1.1"
 	return s.writeNode(out, node)
 }
 
 func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	s := writeSession{Writer: d}
-	// An XML 1.1 document may carry restricted control characters; serialize
-	// them as decimal character references. XML 1.0 output is unaffected.
-	s.xml11 = doc.version == "1.1"
+	// An XML 1.1 document (or an OutputVersion("1.1") override) may carry
+	// restricted control characters; serialize them as decimal character
+	// references. XML 1.0 output is unaffected.
+	s.xml11 = d.effectiveVersion(doc) == "1.1"
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
@@ -477,11 +510,7 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 		return nil
 	}
 	d.writeString(out, `<?xml version="`)
-	version := doc.Version()
-	if version == "" {
-		version = "1.0"
-	}
-	d.writeString(out, version+`"`)
+	d.writeString(out, d.effectiveVersion(doc)+`"`)
 
 	if encoding := doc.encoding; encoding != "" {
 		d.writeString(out, ` encoding="`+encoding+`"`)

@@ -174,20 +174,28 @@ retained unless the parameter requests yes/no), `undeclare-prefixes`
 Clark notation with `{}local` for the no-namespace case; matching is by exact
 expanded name so `QName("","b")` never matches a namespaced `<p:b>`; the
 element form accepts a QName OR an `Q{uri}local` EQName per the Serialization
-schema, resolving an unprefixed lexical QName through the in-scope DEFAULT
-namespace), and `use-character-maps` (resolved to a `map[rune]string`; an element
-form `output:character-map` requires only `@character` — an absent or empty
-`@map-string` maps the character to the empty replacement, i.e. deletion). The xml path builds a `helium.Writer` via
-`newSerializeXMLWriter` wiring `Standalone`/`OmitStandalone`/
-`AllowPrefixUndeclarations`/`CDATASectionElements`/`SuppressIndentElements`/
-`CharacterMap` — the shared `helium.Writer` (root `writer.go`/`writer_escape.go`)
-implements those knobs (character maps substitute a mapped rune with its raw
-replacement in text and attribute content; cdata-section-elements emit direct
-text children as CDATA; suppress-indentation disables indentation for the named
-subtree; `Standalone` forces yes/no, `OmitStandalone` forces omission, matching
-by exact expanded name). `undeclare-prefixes` is honored only when the effective
-output `version` is 1.1; requesting it at an effective 1.0 (the default when
-`version` is unspecified) is the `SEPM0010` static error. `method="html"`
+schema, validating NCName parts, resolving an unprefixed lexical QName through
+the in-scope DEFAULT namespace, binding the reserved `xml` prefix implicitly, and
+treating `xmlns:p=""` as an UNDECLARATION that leaves `p` unbound rather than
+bound to the empty URI), and `use-character-maps` (resolved to a `map[rune]string`;
+an element form `output:character-map` requires only `@character` — an absent or
+empty `@map-string` maps the character to the empty replacement, i.e. deletion).
+The xml path builds a `helium.Writer` via `newSerializeXMLWriter` wiring
+`OutputVersion`/`Standalone`/`OmitStandalone`/`AllowPrefixUndeclarations`/
+`CDATASectionElements`/`SuppressIndentElements`/`CharacterMap` — the shared
+`helium.Writer` (root `writer.go`/`writer_escape.go`) implements those knobs
+(character maps substitute a mapped rune with its raw replacement in text and
+attribute content; cdata-section-elements emit direct text children as CDATA;
+suppress-indentation disables indentation for the named subtree; `Standalone`
+forces yes/no, `OmitStandalone` forces omission, matching by exact expanded name).
+The effective output `version` (the `version` param, default `1.0`) drives BOTH
+the XML declaration text AND the XML 1.1 escaping/undeclaration rules via
+`Writer.OutputVersion`, so a source document's own version is overridden and the
+declaration and escaping stay consistent (`Writer.OutputVersion("")` — every
+non-`fn:serialize` caller — keeps the document's version, byte-identical).
+`undeclare-prefixes` is honored only when that effective version is 1.1;
+requesting it at an effective 1.0 (the default when `version` is unspecified) is
+the `SEPM0010` static error. `method="html"`
 (`serializeHTMLSequence`) emits an HTML5 `<!DOCTYPE html>` and injects a
 `<meta http-equiv="Content-Type">` into `<head>` — but ONLY when the document
 element's local name is `html` (case-insensitive); any other root (or a fragment

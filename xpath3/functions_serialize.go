@@ -9,6 +9,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 const serializeMethodHTML = "html"
@@ -481,17 +482,29 @@ func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, er
 
 // resolveSerializeNameToken resolves one cdata-section-elements /
 // suppress-indentation name token (a QName or an `Q{uri}local` EQName) to its
-// exact expanded {uri}local key.
+// exact expanded {uri}local key. NCName parts are validated before resolution.
 func resolveSerializeNameToken(elem *helium.Element, token string) (string, error) {
+	badName := func() error {
+		return &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter has an invalid name %q", token)}
+	}
 	if uri, local, ok := parseEQNameToken(token); ok {
+		if !xmlchar.IsValidNCName(local) {
+			return "", badName()
+		}
 		return helium.ClarkName(uri, local), nil
 	}
 	prefix, local, hasPrefix := strings.Cut(token, ":")
 	if !hasPrefix {
 		// No colon: strings.Cut puts the whole token in prefix. Resolve through
 		// the in-scope default namespace (absent → no namespace).
+		if !xmlchar.IsValidNCName(prefix) {
+			return "", badName()
+		}
 		uri, _ := lookupInScopeNamespace(elem, "")
 		return helium.ClarkName(uri, prefix), nil
+	}
+	if !xmlchar.IsValidNCName(prefix) || !xmlchar.IsValidNCName(local) {
+		return "", badName()
 	}
 	uri, ok := lookupInScopeNamespace(elem, prefix)
 	if !ok {
@@ -515,17 +528,30 @@ func parseEQNameToken(token string) (string, string, bool) {
 }
 
 // lookupInScopeNamespace resolves prefix against the in-scope namespace
-// declarations of elem, walking up its ancestors.
+// declarations of elem, walking up its ancestors. The reserved "xml" prefix is
+// always bound (no declaration required). For a non-default prefix, an empty URI
+// is an UNDECLARATION (XML 1.1 namespace masking): the prefix becomes unbound and
+// the masking hides any ancestor binding. The default prefix ("") may be bound to
+// the empty URI (xmlns="" = no default namespace), which is a valid state.
 func lookupInScopeNamespace(elem helium.Node, prefix string) (string, bool) {
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML, true
+	}
 	for node := elem; node != nil; node = node.Parent() {
 		nser, ok := node.(helium.Namespacer)
 		if !ok {
 			continue
 		}
 		for _, ns := range nser.Namespaces() {
-			if ns.Prefix() == prefix {
-				return ns.URI(), true
+			if ns.Prefix() != prefix {
+				continue
 			}
+			uri := ns.URI()
+			if prefix != "" && uri == "" {
+				// Undeclaration: the prefix is unbound from here up (masking).
+				return "", false
+			}
+			return uri, true
 		}
 	}
 	return "", false
@@ -938,11 +964,15 @@ func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 }
 
 // newSerializeXMLWriter builds a helium.Writer configured from the serialization
-// options for the xml output method: omit-xml-declaration, indent, standalone,
-// undeclare-prefixes, cdata-section-elements, suppress-indentation, and character
-// maps.
+// options for the xml output method: version, omit-xml-declaration, indent,
+// standalone, undeclare-prefixes, cdata-section-elements, suppress-indentation,
+// and character maps.
 func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	writer := helium.NewWriter()
+	// The effective output version (version param, default "1.0") drives the XML
+	// declaration text AND the XML 1.1 escaping/undeclaration behavior, so they
+	// stay consistent regardless of the source document's own version.
+	writer = writer.OutputVersion(opts.effectiveSerializeVersion())
 	if opts.omitXMLDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}

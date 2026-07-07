@@ -310,3 +310,80 @@ func TestSerialize_ParamNegativeCases(t *testing.T) {
 		require.NotContains(t, out, "<meta", "output:\n%s", out)
 	})
 }
+
+// TestSerialize_OutputVersionAndNsResolution covers the effective-output-version
+// override and the element-form QName-resolver namespace semantics (gauntlet
+// findings on fix-qt3-serialize-params):
+//   - the version serialization parameter drives the XML declaration text
+//     regardless of the source document's own version;
+//   - an unspecified/1.0 version with undeclare-prefixes is SEPM0010, while
+//     version 1.1 emits a 1.1 declaration and allows undeclarations;
+//   - the reserved xml prefix is always bound;
+//   - xmlns:p="" undeclares (masks) the prefix p, leaving p:local unbound.
+func TestSerialize_OutputVersionAndNsResolution(t *testing.T) {
+	t.Run("version param overrides a 1.0 source declaration to 1.1", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.1"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `version="1.1"`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("version param overrides a 1.1 source declaration to 1.0", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.1" encoding="UTF-8"?><root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.0"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `version="1.0"`, "output:\n%s", out)
+		require.NotContains(t, out, `version="1.1"`, "output:\n%s", out)
+	})
+
+	t.Run("version 1.1 emits 1.1 declaration and allows undeclarations", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.1" encoding="UTF-8"?>`+
+			`<p:chapter xmlns:p="urn:p"><section xmlns:p=""><para/></section></p:chapter>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.1","undeclare-prefixes":true()})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `version="1.1"`, "output:\n%s", out)
+		require.Regexp(t, `section xmlns:p=["']["']`, out, "output:\n%s", out)
+	})
+
+	t.Run("element-form xml:foo resolves to the XML namespace", func(t *testing.T) {
+		doc := mustParseXML(t, `<doc><xml:foo>hi</xml:foo><bar>no</bar></doc>`)
+		params := mustParseXML(t, `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">`+
+			`<output:method value="xml"/><output:cdata-section-elements value="xml:foo"/>`+
+			`</output:serialization-parameters>`)
+		res0, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), mustCompile(t, `.`), params.DocumentElement())
+		require.NoError(t, err)
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Variables(map[string]xpath3.Sequence{"params": res0.Sequence()})
+		res, err := eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "CDATA[hi]", "output:\n%s", out)
+		require.NotContains(t, out, "CDATA[no]", "output:\n%s", out)
+	})
+
+	t.Run("element-form xmlns:p= undeclaration leaves p unbound", func(t *testing.T) {
+		// The params document is XML 1.1 so xmlns:p="" (undeclaring a non-default
+		// prefix) is well-formed; the masking makes p:foo an unbound-prefix error.
+		params := mustParseXML(t, `<?xml version="1.1"?>`+
+			`<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization" xmlns:p="urn:p">`+
+			`<output:cdata-section-elements xmlns:p="" value="p:foo"/>`+
+			`</output:serialization-parameters>`)
+		res0, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), mustCompile(t, `.`), params.DocumentElement())
+		require.NoError(t, err)
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Variables(map[string]xpath3.Sequence{"params": res0.Sequence()})
+		doc := mustParseXML(t, `<root/>`)
+		_, err = eval.Evaluate(t.Context(), mustCompile(t, `serialize(., $params)`), doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+}
