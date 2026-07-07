@@ -246,6 +246,14 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 				return opts, err
 			}
 			opts.allowDuplicateNames = value
+		case "undeclare-prefixes":
+			// undeclare-prefixes is a yes/no boolean serialization parameter
+			// (Serialization 3.1 §2). helium does not emit XML 1.1 namespace
+			// undeclarations, so the value is validated and ignored — matching
+			// the map form, which accepts it without honoring the behavior.
+			if _, err := readSerializeParamYesNo(param); err != nil {
+				return opts, err
+			}
 		case "encoding":
 			value, err := readSerializeParamValue(param)
 			if err != nil {
