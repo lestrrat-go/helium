@@ -192,12 +192,12 @@ func (ec *evalContext) contextStringValue() (string, bool) {
 			return s, true
 		}
 		if ni, ok := ec.contextItem.(NodeItem); ok {
-			return ixpath.StringValue(ni.Node), true
+			return ec.nodeStringValue(ni.Node), true
 		}
 		return "", false
 	}
 	if ec.node != nil {
-		return ixpath.StringValue(ec.node), true
+		return ec.nodeStringValue(ec.node), true
 	}
 	return "", false
 }
