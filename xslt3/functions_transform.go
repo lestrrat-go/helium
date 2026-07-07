@@ -3,6 +3,8 @@ package xslt3
 import (
 	"bytes"
 	"context"
+	"io"
+	"net/http"
 	"path"
 	"strings"
 
@@ -353,9 +355,198 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	return c
 }
 
-// fnTransform implements fn:transform() — dynamically compile and execute
-// an XSLT stylesheet.
+// transformFnConfig carries the resolvers, resource caps, parser, and
+// external-entity posture that the fn:transform implementation needs. It
+// decouples the shared implementation (run) from the running execution context,
+// so both the in-stylesheet path (ec.fnTransform) and the standalone
+// TransformFunction feed the same logic.
+type transformFnConfig struct {
+	// baseURI resolves a relative stylesheet-location.
+	baseURI string
+	// nestedCompiler is the pre-configured compiler used to compile the
+	// dynamically-loaded stylesheet/package/stylesheet-text.
+	nestedCompiler Compiler
+	// stylesheetResolver reads an explicit stylesheet-location.
+	stylesheetResolver URIResolver
+	// packageResolver resolves a package-name/package-version.
+	packageResolver PackageResolver
+	// importSchemas are pre-compiled schemas passed to the nested compiler
+	// (standalone construction only; the in-stylesheet path folds these into
+	// nestedCompiler via newNestedCompiler).
+	importSchemas []*xsd.Schema
+	// innerURIResolver serves fn:doc/document()/fn:unparsed-text evaluated
+	// inside the dynamically-run stylesheet, and external-entity loading during
+	// its parse.
+	innerURIResolver xpath3.URIResolver
+	// httpClient is the opt-in HTTP client for the inner transform's resource
+	// retrieval.
+	httpClient *http.Client
+	// maxResourceBytes is the per-resource read cap (0 = default, <0 = unbounded).
+	maxResourceBytes int64
+	// allowExternalEntities opts into the legacy permissive external-entity parse.
+	allowExternalEntities bool
+	// parseParser is the base parser governing parse policy for the nested
+	// stylesheet parse (nil = hardened default).
+	parseParser *helium.Parser
+	// entityLoader loads external entities referenced during the nested
+	// stylesheet parse.
+	entityLoader externalEntityLoader
+}
+
+// compileURIResolverAdapter adapts an xpath3.URIResolver (ResolveURI) to the
+// compile-time xslt3 URIResolver (Resolve), so a single resolver supplied to
+// TransformFunction serves both stylesheet-module loading and fn:doc.
+type compileURIResolverAdapter struct {
+	r xpath3.URIResolver
+}
+
+func (a compileURIResolverAdapter) Resolve(uri string) (io.ReadCloser, error) {
+	return a.r.ResolveURI(uri)
+}
+
+// resolverEntityLoader is an externalEntityLoader backed by an
+// xpath3.URIResolver / HTTP client pair, used by the standalone fn:transform
+// path when parsing a dynamically-loaded stylesheet.
+type resolverEntityLoader struct {
+	resolver   xpath3.URIResolver
+	httpClient *http.Client
+	limit      int64
+}
+
+func (l resolverEntityLoader) retrieve(ctx context.Context, uri string) ([]byte, error) {
+	return retrieveBytesVia(ctx, uri, l.resolver, l.httpClient, l.limit)
+}
+
+// TransformOption configures the fn:transform implementation returned by
+// [TransformFunction].
+type TransformOption interface {
+	applyTransform(*transformFnConfig)
+}
+
+type transformOptionFunc func(*transformFnConfig)
+
+func (f transformOptionFunc) applyTransform(c *transformFnConfig) { f(c) }
+
+// WithTransformURIResolver sets the resolver used to read a stylesheet-location
+// and to resolve resources (fn:doc/document()/fn:unparsed-text and external
+// entities) referenced while compiling and running the transformed stylesheet.
+// Resource access is opt-in: without a resolver, stylesheet-location and fn:doc
+// fail (FOXT0003 / FODC0002).
+func WithTransformURIResolver(r xpath3.URIResolver) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.innerURIResolver = r })
+}
+
+// WithTransformPackageResolver sets the resolver used for the package-name /
+// package-version options.
+func WithTransformPackageResolver(r PackageResolver) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.packageResolver = r })
+}
+
+// WithTransformHTTPClient sets an opt-in HTTP client for retrieving http(s)
+// resources inside the transformed stylesheet.
+func WithTransformHTTPClient(client *http.Client) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.httpClient = client })
+}
+
+// WithTransformBaseURI sets the base URI against which a relative
+// stylesheet-location (and stylesheet-text base) is resolved.
+func WithTransformBaseURI(uri string) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.baseURI = uri })
+}
+
+// WithTransformMaxResourceBytes sets the per-resource read cap (0 = default,
+// negative = unbounded).
+func WithTransformMaxResourceBytes(n int64) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.maxResourceBytes = n })
+}
+
+// WithTransformAllowExternalEntities opts into the legacy permissive parse of
+// the dynamically-loaded stylesheet and runtime documents (resolver-mediated
+// external entity / DTD loading). Default false: XXE is blocked.
+func WithTransformAllowExternalEntities(v bool) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.allowExternalEntities = v })
+}
+
+// WithTransformParser sets the base parser governing parse policy for the
+// dynamically-loaded stylesheet and runtime source parses.
+func WithTransformParser(p helium.Parser) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) {
+		pp := p
+		c.parseParser = &pp
+	})
+}
+
+// WithTransformImportSchemas supplies pre-compiled schemas to the nested
+// compiler for xsl:import-schema resolution.
+func WithTransformImportSchemas(schemas ...*xsd.Schema) TransformOption {
+	return transformOptionFunc(func(c *transformFnConfig) { c.importSchemas = schemas })
+}
+
+// TransformFunction returns an [xpath3.Function] implementing fn:transform()
+// that can be registered on a standalone xpath3.Evaluator via
+// Evaluator.Functions (in the fn: namespace, name "transform"), so callers that
+// drive xpath3 directly — with no outer running stylesheet — can invoke
+// fn:transform. It shares its implementation with the in-stylesheet fn:transform
+// (ec.fnTransform); the deps the in-stylesheet path inherits from its execution
+// context are supplied here explicitly through TransformOption values.
+func TransformFunction(options ...TransformOption) xpath3.Function {
+	cfg := &transformFnConfig{}
+	for _, o := range options {
+		o.applyTransform(cfg)
+	}
+	// Adapt the xpath3 resolver to a compile-time module resolver for the
+	// nested compile and stylesheet-location reads.
+	if cfg.innerURIResolver != nil && cfg.stylesheetResolver == nil {
+		cfg.stylesheetResolver = compileURIResolverAdapter{r: cfg.innerURIResolver}
+	}
+	c := NewCompiler()
+	if cfg.stylesheetResolver != nil {
+		c = c.URIResolver(cfg.stylesheetResolver)
+	}
+	if cfg.packageResolver != nil {
+		c = c.PackageResolver(cfg.packageResolver)
+	}
+	if len(cfg.importSchemas) > 0 {
+		c = c.ImportSchemas(cfg.importSchemas...)
+	}
+	c = c.MaxResourceBytes(cfg.maxResourceBytes).AllowExternalEntities(cfg.allowExternalEntities)
+	if cfg.parseParser != nil {
+		c = c.Parser(*cfg.parseParser)
+	}
+	cfg.nestedCompiler = c
+	if cfg.entityLoader == nil {
+		cfg.entityLoader = resolverEntityLoader{resolver: cfg.innerURIResolver, httpClient: cfg.httpClient, limit: cfg.maxResourceBytes}.retrieve
+	}
+	return &xsltFunc{min: 1, max: 1, fn: cfg.run}
+}
+
+// fnTransform implements fn:transform() for the in-stylesheet path. It builds a
+// transformFnConfig from the running execution context — inheriting the outer
+// stylesheet's resolvers, resource cap, parser, and external-entity posture —
+// and delegates to the shared implementation (run), so the in-stylesheet and
+// standalone (TransformFunction) paths run identical logic.
 func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	cfg := &transformFnConfig{
+		baseURI:               ec.stylesheet.baseURI,
+		nestedCompiler:        ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit()).AllowExternalEntities(ec.allowExternalEntities()),
+		stylesheetResolver:    ec.stylesheet.uriResolver,
+		packageResolver:       ec.stylesheet.packageResolver,
+		maxResourceBytes:      ec.resourceLimit(),
+		allowExternalEntities: ec.allowExternalEntities(),
+		parseParser:           ec.injectedParser(),
+		entityLoader:          ec.retrieveDocumentBytes,
+	}
+	if ec.transformConfig != nil {
+		cfg.innerURIResolver = ec.transformConfig.uriResolver
+		cfg.httpClient = ec.transformConfig.httpClient
+	}
+	return cfg.run(ctx, args)
+}
+
+// run is the shared fn:transform implementation — it dynamically compiles and
+// executes an XSLT stylesheet from the options map, using the resolvers and
+// resource policy carried on cfg.
+func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	// Check recursion depth
 	depth := 0
 	if d, ok := ctx.Value(transformDepthKey{}).(int); ok {
@@ -446,14 +637,12 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	tunnelParamsSeq := getSeq("tunnel-params")
 	functionParamsSeq := getSeq("function-params")
 
-	// Build a compiler that inherits the outer stylesheet's configuration.
-	// Apply the outer Invocation's effective per-resource read cap so that
-	// resources loaded while COMPILING the nested stylesheet/package
-	// (its include/import/schema/param-doc reads) honor the same
-	// MaxResourceBytes override rather than falling back to the default.
-	nestedCompiler := ec.stylesheet.newNestedCompiler().
-		MaxResourceBytes(ec.resourceLimit()).
-		AllowExternalEntities(ec.allowExternalEntities())
+	// The nested compiler inherits the outer stylesheet's configuration (or, for
+	// the standalone path, the TransformOption values), including the effective
+	// per-resource read cap so that resources loaded while COMPILING the nested
+	// stylesheet/package (its include/import/schema/param-doc reads) honor the
+	// same MaxResourceBytes override rather than falling back to the default.
+	nestedCompiler := cfg.nestedCompiler
 
 	// Apply static-params from the options map to the nested compiler.
 	// Static params affect both compile time (use-when, shadow attributes)
@@ -478,18 +667,18 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	var ss *Stylesheet
 	if stylesheetLoc != "" {
 		// Resolve relative to the current stylesheet base URI.
-		loc := resolveStylesheetLocation(ec.stylesheet.baseURI, stylesheetLoc)
+		loc := resolveStylesheetLocation(cfg.baseURI, stylesheetLoc)
 		var data []byte
 		baseURI := loc
-		if ec.stylesheet.uriResolver == nil {
+		if cfg.stylesheetResolver == nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: no URIResolver configured (filesystem access is opt-in)", stylesheetLoc)
 		}
-		rc, resolveErr := ec.stylesheet.uriResolver.Resolve(loc)
+		rc, resolveErr := cfg.stylesheetResolver.Resolve(loc)
 		if resolveErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
 		}
 		var readErr error
-		data, readErr = readResourceBounded(rc, ec.resourceLimit())
+		data, readErr = readResourceBounded(rc, cfg.maxResourceBytes)
 		// Close right after reading rather than deferring: the rest of this
 		// function parses, compiles and runs the stylesheet, and we must not
 		// hold the source handle open across that work.
@@ -497,7 +686,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, ec.injectedParser(), data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes, ec.resourceLimit())
+		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, data, baseURI, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
@@ -509,7 +698,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	} else if packageName != "" {
 		// Resolve via package-name / package-version using the PackageResolver
 		// stored on the compiled stylesheet (set at compile time).
-		resolver := ec.stylesheet.packageResolver
+		resolver := cfg.packageResolver
 		if resolver == nil {
 			return nil, dynamicError(errCodeFOXT0002, "fn:transform: package-name specified but no PackageResolver available")
 		}
@@ -517,12 +706,12 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if resolveErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve package %q (version %q): %v", packageName, packageVersion, resolveErr)
 		}
-		data, readErr := readResourceBounded(rc, ec.resourceLimit())
+		data, readErr := readResourceBounded(rc, cfg.maxResourceBytes)
 		_ = rc.Close()
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, ec.injectedParser(), data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes, ec.resourceLimit())
+		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, data, location, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}
@@ -534,6 +723,23 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		ss, compileErr = compiler.Compile(ctx, doc)
 		if compileErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
+		}
+	} else if stylesheetText := getStr("stylesheet-text"); stylesheetText != "" {
+		// stylesheet-text: the stylesheet source is supplied inline as a string.
+		// Parse it (base URI = the static base URI) and compile.
+		baseURI := cfg.baseURI
+		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, []byte(stylesheetText), baseURI, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
+		if parseErr != nil {
+			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet-text: %v", parseErr)
+		}
+		compiler := nestedCompiler
+		if baseURI != "" {
+			compiler = compiler.BaseURI(baseURI)
+		}
+		var compileErr error
+		ss, compileErr = compiler.Compile(ctx, doc)
+		if compileErr != nil {
+			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet-text: %v", compileErr)
 		}
 	} else {
 		// Check for stylesheet-node
@@ -563,7 +769,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	}
 
 	if ss == nil {
-		return nil, dynamicError(errCodeFOXT0002, "fn:transform: no stylesheet specified (stylesheet-location, stylesheet-node, or package-name required)")
+		return nil, dynamicError(errCodeFOXT0002, "fn:transform: no stylesheet specified (stylesheet-location, stylesheet-node, stylesheet-text, or package-name required)")
 	}
 
 	// Determine the source document
@@ -596,23 +802,21 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		baseOutputURI:    baseOutputURI,
 		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
 	}
-	if ec.transformConfig != nil {
-		fnTransformCfg.uriResolver = ec.transformConfig.uriResolver
-		fnTransformCfg.httpClient = ec.transformConfig.httpClient
-	}
+	fnTransformCfg.uriResolver = cfg.innerURIResolver
+	fnTransformCfg.httpClient = cfg.httpClient
 	// Inherit the outer Invocation's effective per-resource read cap so that
 	// fn:doc / fn:unparsed-text / fn:json-doc inside the inner transform honor
 	// the same MaxResourceBytes override. Without this the inner reads would
 	// silently fall back to the default cap, ignoring Invocation.MaxResourceBytes.
-	fnTransformCfg.maxResourceBytes = ec.resourceLimit()
+	fnTransformCfg.maxResourceBytes = cfg.maxResourceBytes
 	// Inherit the outer Invocation's external-entity opt-in so doc() /
 	// xsl:source-document inside the nested transform see the same posture as the
 	// caller. Without this the nested transform would force the secure (blocked)
 	// parse even when the outer invocation opted in.
-	fnTransformCfg.allowExternalEntities = ec.allowExternalEntities()
+	fnTransformCfg.allowExternalEntities = cfg.allowExternalEntities
 	// Inherit the injected base parser so nested-transform runtime parses use the
 	// same parse policy as the caller.
-	fnTransformCfg.parser = ec.injectedParser()
+	fnTransformCfg.parser = cfg.parseParser
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {
