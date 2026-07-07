@@ -118,7 +118,7 @@ func TestRestrictionAttrInheritance10(t *testing.T) {
 		// base carrying anyAttribute; in XSD 1.0 the restriction's wildcard is
 		// computed solely from its own content, so it has NONE — an instance
 		// attribute the base wildcard would admit is rejected.
-		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:a" targetNamespace="urn:foo" elementFormDefault="qualified">
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:foo" xmlns:a="urn:a" targetNamespace="urn:foo" elementFormDefault="qualified">
   <xs:complexType name="base">
     <xs:anyAttribute namespace="urn:a urn:b" processContents="skip"/>
   </xs:complexType>

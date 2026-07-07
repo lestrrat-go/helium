@@ -28,7 +28,7 @@ func compileFSV11(t *testing.T, fsys fstest.MapFS, mainXSD string) error {
 func TestVersion11ImportedGroupWildcardNoPanic(t *testing.T) {
 	fsys := fstest.MapFS{
 		importMainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-  xmlns:imp="urn:imp" targetNamespace="urn:main">
+  xmlns="urn:main" xmlns:imp="urn:imp" targetNamespace="urn:main">
   <xs:import namespace="urn:imp" schemaLocation="imp.xsd"/>
   <xs:complexType name="t">
     <xs:sequence/>
