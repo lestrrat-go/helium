@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="1049" failures="0" skipped="0" time="0.160">
-  <testsuite name="xsd11-conformance" tests="1049" failures="0" skipped="0" time="0.160">
+<testsuites tests="1049" failures="0" skipped="0" time="0.150">
+  <testsuite name="xsd11-conformance" tests="1049" failures="0" skipped="0" time="0.150">
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/allGroup.testSet/s3_3_6ii01" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/allGroup.testSet/s3_3_6ii02" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/ibmMeta/allGroup.testSet/s3_3_6ii03" time="0.000"></testcase>
@@ -550,7 +550,7 @@
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reH20" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reH21" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reK88" time="0.000"></testcase>
-    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reZ006i" time="0.150"></testcase>
+    <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Regex_w3c.xml/reZ006i" time="0.140"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Schema_w3c.xml/schL3" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/Schema_w3c.xml/schL5" time="0.000"></testcase>
     <testcase classname="github.com/lestrrat-go/helium-w3c-tests/xsd" name="TestXSD11W3C/msMeta/SimpleType_w3c.xml/stE053" time="0.000"></testcase>
