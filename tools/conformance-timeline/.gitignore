@@ -1,0 +1,4 @@
+results/*.xml
+results/*.log
+results/*.work
+results/*.work.sum
