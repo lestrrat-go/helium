@@ -1361,6 +1361,27 @@ func TestSerialize_EncodingDeclarationAndDoctypeSystemQuotes(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, res.StringValue(), `<!DOCTYPE root SYSTEM "a'b">`, "output:\n%s", res.StringValue())
 	})
+
+	t.Run("html doctype-system containing a double quote is single-quoted", func(t *testing.T) {
+		// html output method + a doctype-system value that contains only a double
+		// quote (valid: SEPM0016 rejects only BOTH quotes). The SYSTEM literal must
+		// be apostrophe-enclosed (SYSTEM 'a"b'), not the malformed SYSTEM "a"b".
+		doc := mustParseXML(t, `<html><head/><body/></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","doctype-system":"a""b"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `<!DOCTYPE html SYSTEM 'a"b'>`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("html doctype-public plus doctype-system with a double quote", func(t *testing.T) {
+		// PUBLIC id is double-quoted (a PubidLiteral can never hold a "), while the
+		// following SYSTEM literal switches to apostrophes for its embedded quote.
+		doc := mustParseXML(t, `<html><head/><body/></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","doctype-public":"-//X//EN","doctype-system":"a""b"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `<!DOCTYPE html PUBLIC "-//X//EN" 'a"b'>`, "output:\n%s", res.StringValue())
+	})
 }
 
 // TestSerialize_JSONCharacterMapsAndNormalization covers Serialization 3.1

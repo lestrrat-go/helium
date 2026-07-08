@@ -1796,18 +1796,19 @@ func htmlDoctype(opts serializeOptions) string {
 		b.WriteString("<!DOCTYPE ")
 		b.WriteString(rootName)
 		if opts.doctypePublic != "" {
+			// A PubidLiteral (XML SystemLiteral's public-id sibling) can never
+			// contain a double quote (it is not a PubidChar), so double-quoting the
+			// public id is always well-formed.
 			b.WriteString(` PUBLIC "`)
 			b.WriteString(opts.doctypePublic)
 			b.WriteString(`"`)
 			if opts.doctypeSystem != "" {
-				b.WriteString(` "`)
-				b.WriteString(opts.doctypeSystem)
-				b.WriteString(`"`)
+				b.WriteByte(' ')
+				writeDoctypeSystemLiteral(&b, opts.doctypeSystem)
 			}
 		} else {
-			b.WriteString(` SYSTEM "`)
-			b.WriteString(opts.doctypeSystem)
-			b.WriteString(`"`)
+			b.WriteString(` SYSTEM `)
+			writeDoctypeSystemLiteral(&b, opts.doctypeSystem)
 		}
 		b.WriteString(">\n")
 		return b.String()
@@ -1816,6 +1817,24 @@ func htmlDoctype(opts serializeOptions) string {
 		return "<!DOCTYPE html>\n"
 	}
 	return `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">` + "\n"
+}
+
+// writeDoctypeSystemLiteral writes a doctype-system value as a well-formed XML
+// SystemLiteral, choosing the enclosing quote character by content: apostrophes
+// when the value contains a double quote, else double quotes. Serialization 3.1
+// §7.4.6 requires the system identifier be enclosed in quotation marks (#x22) OR
+// apostrophes (#x27) — it does not mandate double quotes — and SEPM0016 rejects
+// only a value containing BOTH, so a value with just a `"` (e.g. `a"b`) must be
+// single-quoted (`'a"b'`) rather than emitted as malformed `"a"b"`. This mirrors
+// helium's dtdQuoteChar used by the xml output method's DOCTYPE path (writer_dtd.go).
+func writeDoctypeSystemLiteral(b *strings.Builder, sys string) {
+	quote := byte('"')
+	if strings.ContainsRune(sys, '"') {
+		quote = '\''
+	}
+	b.WriteByte(quote)
+	b.WriteString(sys)
+	b.WriteByte(quote)
 }
 
 // serializeHTMLIsVersion5 reports whether the effective html-version selects
