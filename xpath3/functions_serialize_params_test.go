@@ -980,12 +980,13 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, `<e>`+composed+`</e>`, res.StringValue())
 	})
-	t.Run("json ignores normalization-form (not applicable)", func(t *testing.T) {
-		// The decomposed sequence must survive unchanged: json does not normalize.
+	t.Run("json applies normalization-form to string content", func(t *testing.T) {
+		// normalization-form IS applicable to the json output method (§9.1.9): the
+		// decomposed sequence composes under NFC.
 		res, err := evaluate(t.Context(), nil,
 			`serialize("`+decomposed+`", map{"method":"json","normalization-form":"NFC"})`)
 		require.NoError(t, err)
-		require.Equal(t, `"`+decomposed+`"`, res.StringValue())
+		require.Equal(t, `"`+composed+`"`, res.StringValue())
 	})
 
 	t.Run("json-node-output-method text over a node is unsupported SEPM0016", func(t *testing.T) {
@@ -1031,10 +1032,20 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.ErrorAs(t, err, &xerr)
 		require.Equal(t, "XPTY0004", xerr.Code)
 	})
-	t.Run("map-form no-namespace builtin QName method is accepted", func(t *testing.T) {
+	t.Run("map-form no-namespace QName method (even builtin local) is invalid XPTY0004", func(t *testing.T) {
+		// F&O 3.1: an xs:QName method value must have a non-absent namespace;
+		// built-in methods are supplied as strings, so QName("","text") is invalid.
 		doc := mustParseXML(t, `<root>hi</root>`)
-		res, err := evaluate(t.Context(), doc,
+		_, err := evaluate(t.Context(), doc,
 			`serialize(., map{"method":QName("","text")})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+	t.Run("map-form string builtin method is accepted", func(t *testing.T) {
+		doc := mustParseXML(t, `<root>hi</root>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"text"})`)
 		require.NoError(t, err)
 		require.Equal(t, "hi", res.StringValue())
 	})
@@ -1153,16 +1164,19 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.ErrorAs(t, err, &xerr)
 		require.Equal(t, "SEPM0016", xerr.Code)
 	})
-	t.Run("json-node-output-method no-namespace domain token text over a node is SEPM0016", func(t *testing.T) {
+	// F&O 3.1: an xs:QName json-node-output-method value must have a non-absent
+	// namespace, so ANY no-namespace QName (domain token, xml, or otherwise) is an
+	// invalid value [XPTY0004]; the built-in values are supplied as strings.
+	t.Run("json-node-output-method no-namespace QName (domain token text) is XPTY0004", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
 		_, err := evaluate(t.Context(), doc,
 			`serialize(., map{"method":"json","json-node-output-method":QName("","text")})`)
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, "XPTY0004", xerr.Code)
 	})
-	t.Run("json-node-output-method no-namespace non-domain QName is invalid XPTY0004", func(t *testing.T) {
+	t.Run("json-node-output-method no-namespace QName (non-domain) is XPTY0004", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
 		_, err := evaluate(t.Context(), doc,
 			`serialize(., map{"method":"json","json-node-output-method":QName("","custom")})`)
@@ -1171,10 +1185,19 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.ErrorAs(t, err, &xerr)
 		require.Equal(t, "XPTY0004", xerr.Code)
 	})
-	t.Run("json-node-output-method no-namespace xml (default) over a node is fine", func(t *testing.T) {
+	t.Run("json-node-output-method no-namespace QName xml is XPTY0004", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":QName("","xml")})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+	t.Run("json-node-output-method string xml (default) over a node is fine", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
 		res, err := evaluate(t.Context(), doc,
-			`serialize(., map{"method":"json","json-node-output-method":QName("","xml")})`)
+			`serialize(., map{"method":"json","json-node-output-method":"xml"})`)
 		require.NoError(t, err)
 		require.Contains(t, res.StringValue(), "<a>x", "output:\n%s", res.StringValue())
 	})
@@ -1233,5 +1256,58 @@ func TestSerialize_EncodingDeclarationAndDoctypeSystemQuotes(t *testing.T) {
 			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"doctype-system":"a'b"})`)
 		require.NoError(t, err)
 		require.Contains(t, res.StringValue(), `<!DOCTYPE root SYSTEM "a'b">`, "output:\n%s", res.StringValue())
+	})
+}
+
+// TestSerialize_JSONCharacterMapsAndNormalization covers Serialization 3.1
+// §9.1.11 / §9.1.9: use-character-maps AND normalization-form ARE applicable to
+// the json output method (matching Saxon). A mapped character is replaced by its
+// verbatim replacement instead of being JSON-escaped, the replacement is neither
+// re-escaped nor normalized (§11), and normalization applies to the JSON string
+// content.
+func TestSerialize_JSONCharacterMapsAndNormalization(t *testing.T) {
+	t.Run("character map replaces a character in a JSON string value", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize("x", map{"method":"json","use-character-maps":map{"x":"y"}})`)
+		require.NoError(t, err)
+		require.Equal(t, `"y"`, res.StringValue())
+	})
+
+	t.Run("character map prevents JSON escaping of a slash (Saxon example)", func(t *testing.T) {
+		// Default json escaping renders "/" as "\/"; a char map "/"->"/" emits the
+		// verbatim replacement instead, so the output is an unescaped "/".
+		res, err := evaluate(t.Context(), nil,
+			`serialize("a/b", map{"method":"json","use-character-maps":map{"/":"/"}})`)
+		require.NoError(t, err)
+		require.Equal(t, `"a/b"`, res.StringValue())
+	})
+
+	t.Run("character map applies to JSON object keys", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(map{"x":1}, map{"method":"json","use-character-maps":map{"x":"y"}})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `"y"`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("character map replacement in JSON is not re-escaped", func(t *testing.T) {
+		// In XPath a string literal does NOT process backslash escapes, so "\n" is
+		// the two characters backslash+n; the char map emits it verbatim, NOT
+		// re-escaped to a doubled backslash. Output is "\n" (quote, backslash, n,
+		// quote).
+		res, err := evaluate(t.Context(), nil,
+			`serialize("x", map{"method":"json","use-character-maps":map{"x":"\n"}})`)
+		require.NoError(t, err)
+		require.Equal(t, "\"\\n\"", res.StringValue())
+	})
+
+	t.Run("char-map replacement in JSON is not normalized", func(t *testing.T) {
+		// Input "X" + decomposed "é"; map X -> decomposed "é"; NFC. The source é
+		// composes to U+00E9, but the X replacement stays decomposed "e"+U+0301
+		// (verbatim, §11).
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string((88, 101, 769)), `+
+				`map{"method":"json","normalization-form":"NFC","use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		require.Equal(t, "\"e\u0301\u00e9\"", res.StringValue())
 	})
 }

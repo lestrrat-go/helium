@@ -272,19 +272,24 @@ of the items with the `item-separator` and no markup (character maps applied,
 no SENR0001 node-kind restriction); `xhtml` is serialized as `xml` — a defensible
 approximation, as helium implements no XHTML-specific serialization rules.
 
-**Normalization + spec-honest gaps (no silent wrong output).** `normalization-form`
-is APPLIED to the serialized output for the methods that support it
-(xml/xhtml/html/text/default) — `NFC`/`NFD`/`NFKC`/`NFKD` via
-`golang.org/x/text/unicode/norm` (`applySerializeNormalization`, the last
-serialization step); `none`/`""` is a no-op; the W3C-specific `fully-normalized`
-form is not provided by that package and is the `SESU0011` unsupported-normalization
-error. It is NOT applicable to the `json`/`adaptive` methods (Serialization 3.1
-§9.1.9), which ignore it. A character-map REPLACEMENT string is NOT subjected to
-Unicode Normalization (Serialization 3.1 §11): when a normalization pass and a
-character map are BOTH in force, `withCharMapSentinels` substitutes each mapped key
-with a unique sentinel rune (Supplementary Private Use Area-A, unaffected by
-normalization) during serialization, then `expandCharMapSentinels` restores the
-verbatim replacement AFTER normalization — so replacements pass through
+**Normalization + character maps (all methods incl. JSON).** `normalization-form`
+is APPLIED to the serialized output for the methods that support it —
+xml/xhtml/html/text, the unspecified default, AND `json` (Serialization 3.1
+§9.1.9) — `NFC`/`NFD`/`NFKC`/`NFKD` via `golang.org/x/text/unicode/norm`
+(`applySerializeNormalization`, the last serialization step); `none`/`""` is a
+no-op; the W3C-specific `fully-normalized` form is not provided by that package and
+is the `SESU0011` unsupported-normalization error. Only the `adaptive` method
+ignores it. `use-character-maps` is likewise applicable to the `json` output
+method (§9.1.11, matching Saxon): a mapped character is replaced by its verbatim
+replacement in JSON string content (values and object keys) INSTEAD of being
+JSON-escaped — e.g. a map `"/"→"/"` prevents escaping `/` as `\/`
+(`encodeJSONStringForSerialization` consults `opts.charMap`). A character-map
+REPLACEMENT string is NOT subjected to Unicode Normalization or re-escaping
+(Serialization 3.1 §11): when a normalization pass and a character map are BOTH in
+force, `withCharMapSentinels` substitutes each mapped key with a unique sentinel
+rune (Supplementary Private Use Area-A, unaffected by normalization) during
+serialization (XML/HTML/text/json alike), then `expandCharMapSentinels` restores
+the verbatim replacement AFTER normalization — so replacements pass through
 un-normalized while the surrounding content is normalized. `json-node-output-method`
 is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
@@ -293,10 +298,7 @@ narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 would change a node's serialization is an explicit `SEPM0016` unsupported-feature
 error when a node is actually serialized under json (helium has no nested-node JSON
 serialization for the other methods) — never silent xml. When no node is serialized
-under json it is a harmless no-op. Character maps (`use-character-maps`) are NOT
-applicable to the `json` output method (Serialization 3.1 §9.1.11: "The
-use-character-maps parameter is not applicable to the JSON output method"), so the
-json string paths intentionally do not consult `opts.charMap`.
+under json it is a harmless no-op.
 
 **Value validation (Serialization 3.1 schema types), map AND element form.** Every
 recognized parameter is applied, a spec-justified no-op, or a documented gap, and
@@ -304,12 +306,14 @@ its value is schema-type validated consistently across both forms: booleans/
 `yes-no-omit` accept `{yes,no,true,false,1,0}` (+ `omit`), uppercase rejected;
 `method` as a built-in method or a prefixed-QName/EQName extension (bare
 non-built-in NCName invalid; the map form additionally accepts an `xs:QName` value,
-where a namespaced QName is an extension → `SEPM0016`, a no-namespace QName must be
-a built-in token, else `XPTY0004`); `json-node-output-method` against its narrower
+where a namespaced QName is an extension → `SEPM0016` — but per F&O 3.1 an
+`xs:QName` method value MUST have a non-absent namespace, so ANY no-namespace
+QName, even `QName("","xml")`, is `XPTY0004`: built-in methods are supplied as
+strings, not no-namespace QNames); `json-node-output-method` against its narrower
 `{xml,html,xhtml,text}`-or-extension domain (map form also `xs:QName`-aware, via
-`resolveSerializeJSONNodeMethodMap` — a namespaced QName is an extension, a
-no-namespace QName must be a domain token, keeping its namespace instead of
-stringifying to the local part); `html-version` as `xs:decimal`
+`resolveSerializeJSONNodeMethodMap` — same F&O rule: a namespaced QName is an
+extension, and a no-namespace QName value is `XPTY0004`, keeping its namespace
+instead of stringifying to the local part); `html-version` as `xs:decimal`
 (`isValidXSDecimal`); `normalization-form` against
 `{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as a supported XML
 output version (else `SESU0013`). The map-form `cdata-section-elements` /

@@ -275,11 +275,11 @@ type serializeOptions struct {
 
 // methodAppliesNormalization reports whether the output method applies the
 // normalization-form parameter. Per Serialization 3.1 it is a parameter of the
-// xml/xhtml/html/text output methods (and the unspecified default); it is NOT
-// applicable to the json (§9.1.9) or adaptive methods, which ignore it.
+// xml/xhtml/html/text AND json (§9.1.9) output methods and the unspecified
+// default; the adaptive method ignores it.
 func (o serializeOptions) methodAppliesNormalization() bool {
 	switch o.method {
-	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML, serializeMethodText:
+	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML, serializeMethodText, serializeMethodJSON:
 		return true
 	}
 	return false
@@ -613,12 +613,11 @@ func resolveSerializeMethodMap(ctx context.Context, m MapItem) (string, bool, er
 			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "method" is not a valid xs:QName`}
 		}
 		if qn.URI == "" {
-			// A no-namespace QName must name a built-in method token; any other
-			// no-namespace name is an invalid value.
-			if isBuiltinSerializeMethod(qn.Local) {
-				return qn.Local, true, nil
-			}
-			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", qn.Local)}
+			// F&O 3.1: if an xs:QName is supplied for the method option it MUST have
+			// a non-absent namespace URI — built-in methods (xml/html/…) are
+			// specified as STRINGS, not no-namespace QName values. So a no-namespace
+			// QName (even QName("","xml")) is an invalid method value [err:XPTY0004].
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method: an xs:QName value must have a non-absent namespace, got %q", qn.Local)}
 		}
 		// A namespaced QName names an extension method: preserve its namespace as
 		// an EQName so it is never a built-in token and the SEPM0016 dispatch check
@@ -666,11 +665,10 @@ func resolveSerializeJSONNodeMethodMap(ctx context.Context, m MapItem) (string, 
 			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "json-node-output-method" is not a valid xs:QName`}
 		}
 		if qn.URI == "" {
-			// A no-namespace QName must name a domain token (xml/html/xhtml/text).
-			if serializeJSONNodeOutputMethodValid(qn.Local) {
-				return qn.Local, true, nil
-			}
-			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", qn.Local)}
+			// F&O 3.1: an xs:QName supplied for json-node-output-method MUST have a
+			// non-absent namespace URI (built-in values are strings), so a
+			// no-namespace QName (even QName("","xml")) is invalid [err:XPTY0004].
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method: an xs:QName value must have a non-absent namespace, got %q", qn.Local)}
 		}
 		// A namespaced QName is an extension: carry it as an EQName.
 		return "Q{" + qn.URI + "}" + qn.Local, true, nil
@@ -1503,7 +1501,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 					return err
 				}
 			}
-			parts = append(parts, `"`+encodeJSONStringContent(keyText)+`":`+valueSeparator(opts.indent)+valText)
+			parts = append(parts, `"`+encodeJSONStringForSerialization(keyText, opts.encoding, opts.charMap)+`":`+valueSeparator(opts.indent)+valText)
 			return nil
 		})
 		if err != nil {
@@ -1523,7 +1521,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return `"` + encodeJSONStringContent(text) + `"`, nil
+		return `"` + encodeJSONStringForSerialization(text, opts.encoding, opts.charMap) + `"`, nil
 	case FunctionItem:
 		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item as JSON"}
 	default:
@@ -1552,16 +1550,14 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// Character maps and Unicode normalization are BOTH inapplicable to the
-		// json output method, per the verbatim Serialization 3.1 text:
-		//   §9.1.11: "The use-character-maps parameter is not applicable to the
-		//            JSON output method."
-		//   §9.1.9:  "The normalization-form parameter is not applicable to the
-		//            JSON output method."
-		// So opts.charMap is intentionally not consulted here (only JSON string
-		// escaping applies), and applySerializeNormalization skips the json method
-		// via methodAppliesNormalization.
-		return `"` + encodeJSONStringForSerialization(s, opts.encoding) + `"`, nil
+		// use-character-maps (§9.1.11) and normalization-form (§9.1.9) ARE
+		// applicable to the json output method (Serialization 3.1; matching Saxon,
+		// e.g. a character map that maps "/"→"/" prevents JSON-escaping it as "\/").
+		// A mapped character is replaced by its verbatim replacement instead of
+		// being JSON-escaped; when normalization is also in force fnSerialize routes
+		// the map through sentinel runes so a replacement is neither re-escaped nor
+		// normalized (§11), then normalizes the json output.
+		return `"` + encodeJSONStringForSerialization(s, opts.encoding, opts.charMap) + `"`, nil
 	}
 }
 
@@ -1970,15 +1966,23 @@ func documentWithDoctype(doc *helium.Document, opts serializeOptions) (*helium.D
 	return clone, nil
 }
 
-func encodeJSONStringForSerialization(s, encoding string) string {
-	if encoding == "" || strings.EqualFold(encoding, "utf-8") || strings.EqualFold(encoding, "utf8") {
-		return encodeJSONStringContent(s)
-	}
-
+// encodeJSONStringForSerialization escapes s as JSON string content for the json
+// output method, honoring the encoding parameter (a non-UTF-8 encoding escapes
+// non-ASCII as \u sequences) and the use-character-maps parameter: a mapped
+// character is replaced by its replacement string INSTEAD of being JSON-escaped,
+// and the replacement is emitted verbatim (not re-escaped), per Serialization 3.1
+// §9.1.11 (use-character-maps applies to the JSON output method) / §11. A nil/empty
+// charMap disables mapping.
+func encodeJSONStringForSerialization(s, encoding string, charMap map[rune]string) string {
+	utf8Out := encoding == "" || strings.EqualFold(encoding, "utf-8") || strings.EqualFold(encoding, "utf8")
 	var b strings.Builder
 	for _, r := range s {
+		if repl, ok := charMap[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
 		switch {
-		case r <= 0x7F:
+		case utf8Out || r <= 0x7F:
 			appendSerializedJSONStringRune(&b, r)
 		case r <= 0xFFFF:
 			fmt.Fprintf(&b, `\u%04X`, r)
