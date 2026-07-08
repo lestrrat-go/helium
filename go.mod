@@ -7,7 +7,7 @@ toolchain go1.26.5
 require (
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.39.0
+	golang.org/x/text v0.40.0
 )
 
 require (
