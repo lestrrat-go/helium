@@ -310,6 +310,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// canonical key never makes the primary collide with itself.
 		ec.canonicalPrimaryURI = canonicalResultURIKey(cfg.baseOutputURI, "")
 		ec.usedResultURIs[ec.canonicalPrimaryURI] = struct{}{}
+	} else if cfg != nil && cfg.outputBaseURI != "" {
+		// No base-output-uri was supplied, so the principal output has no declared
+		// URI (no canonicalPrimaryURI reservation; the principal result-map key
+		// stays "output"). Secondary xsl:result-document output URIs still resolve
+		// against the best available base — the call's effective static base URI —
+		// so their result-map keys are absolute whenever any base exists.
+		ec.currentOutputURI = cfg.outputBaseURI
 	}
 	// Make the transform config (and thus its URIResolver) available before
 	// any runtime resource loading. initGlobalVars also assigns this; setting

@@ -260,6 +260,35 @@ func TestFnTransformInStylesheetBaseOutputURIUsesCallSiteBase(t *testing.T) {
 	require.Contains(t, out, ">true</result>")
 }
 
+// TestFnTransformInStylesheetSecondaryKeyAbsoluteWithoutBaseOutputURI verifies
+// that, with base-output-uri OMITTED, an in-stylesheet fn:transform still keys
+// secondary result documents by absolute URIs resolved against the call-site
+// effective static base URI (honoring xml:base). The module base is empty, so
+// only the call-site xml:base yields the expected absolute secondary key.
+func TestFnTransformInStylesheetSecondaryKeyAbsoluteWithoutBaseOutputURI(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner"/>
+  <xsl:template match="/" xml:base="http://example.com/callsite/">
+    <xsl:variable name="r" select="transform(map{
+      'stylesheet-text': $inner,
+      'source-node': .
+    })"/>
+    <result><xsl:value-of select="map:contains($r, 'http://example.com/callsite/s.xml')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inner := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"><xsl:result-document href="s.xml"><s/></xsl:result-document></xsl:template></xsl:stylesheet>`
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner", xpath3.SingleString(inner)).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, ">true</result>")
+}
+
 func TestFnTransformBaseOutputURI(t *testing.T) {
 	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"

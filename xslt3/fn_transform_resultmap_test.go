@@ -225,16 +225,30 @@ func TestFnTransformRelativeBaseOutputURIResolvedAgainstStaticBase(t *testing.T)
 	// The static base URI is supplied to the standalone fn:transform via
 	// WithTransformBaseURI; the relative base-output-uri "out/doc.xml" resolves
 	// against it to http://example.com/base/out/doc.xml.
-	fns := map[xpath3.QualifiedName]xpath3.Function{
-		{URI: xpath3.NSFn, Name: "transform"}: xslt3.TransformFunction(
-			xslt3.WithTransformBaseURI("http://example.com/base/main.xsl"),
-		),
-	}
+	fns := transformFnsWith(xslt3.WithTransformBaseURI("http://example.com/base/main.xsl"))
 	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>'),"base-output-uri":"out/doc.xml"})
 	return map:contains($r,"http://example.com/base/out/doc.xml")
 	   and map:contains($r,"http://example.com/base/out/s.xml")
 	   and $r("http://example.com/base/out/doc.xml")//p = "principal"
 	   and $r("http://example.com/base/out/s.xml")//s`
+	got, err := evalTransform(t, expr, nil, xslXMLVars(xsl, ""), fns)
+	require.NoError(t, err)
+	require.Equal(t, wantTrue, got)
+}
+
+// TestFnTransformSecondaryKeyAbsoluteWithoutBaseOutputURI verifies that when
+// base-output-uri is OMITTED, secondary result-document keys are still absolute
+// URIs (resolved against the call's static base, here WithTransformBaseURI),
+// while the principal key stays the literal "output" (F&O 3.1 §14.8).
+func TestFnTransformSecondaryKeyAbsoluteWithoutBaseOutputURI(t *testing.T) {
+	xsl := `<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
+<xsl:template match='/'><p>principal</p><xsl:result-document href='s.xml'><s/></xsl:result-document></xsl:template>
+</xsl:stylesheet>`
+	fns := transformFnsWith(xslt3.WithTransformBaseURI("http://example.com/call/main.xsl"))
+	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>')})
+	return map:contains($r,"output")
+	   and map:contains($r,"http://example.com/call/s.xml")
+	   and not(map:contains($r,"s.xml"))`
 	got, err := evalTransform(t, expr, nil, xslXMLVars(xsl, ""), fns)
 	require.NoError(t, err)
 	require.Equal(t, wantTrue, got)

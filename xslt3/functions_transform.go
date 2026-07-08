@@ -855,11 +855,25 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	// Invocation enabled it.
 	secondaryResults := make(map[string]*helium.Document)
 	secondaryOutputDefs := make(map[string]*OutputDef)
+	// The PRINCIPAL result-map key is "output" when base-output-uri is absent, or
+	// the resolved base-output-uri when present (fnTransformCfg.baseOutputURI). The
+	// base for RESOLVING secondary result-document output URIs is decoupled: it is
+	// the resolved base-output-uri when present, else the call's effective static
+	// base URI (cfg.baseURI), so secondary result-map keys are absolute whenever
+	// ANY base exists. Only when there is genuinely no base at all (no
+	// base-output-uri AND no static base — e.g. a standalone call with no
+	// WithTransformBaseURI) does a secondary key remain best-effort relative; the
+	// spec cannot require an absolute URI when no base is available.
+	outputBaseURI := baseOutputURI
+	if outputBaseURI == "" {
+		outputBaseURI = cfg.baseURI
+	}
 	fnTransformCfg := &transformConfig{
 		initialTemplate:  initialTemplate,
 		initialMode:      initialMode,
 		initialFunction:  initialFunction,
 		baseOutputURI:    baseOutputURI,
+		outputBaseURI:    outputBaseURI,
 		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
 	}
 	fnTransformCfg.uriResolver = cfg.innerURIResolver

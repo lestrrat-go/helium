@@ -44,8 +44,14 @@ func evalTransform(t *testing.T, expr string, sourceDoc *helium.Document, vars m
 }
 
 func transformFns() map[xpath3.QualifiedName]xpath3.Function {
+	return transformFnsWith()
+}
+
+// transformFnsWith registers the standalone fn:transform (built with the given
+// options) under the fn:transform QName for a bare xpath3.Evaluator.
+func transformFnsWith(opts ...xslt3.TransformOption) map[xpath3.QualifiedName]xpath3.Function {
 	return map[xpath3.QualifiedName]xpath3.Function{
-		{URI: xpath3.NSFn, Name: "transform"}: xslt3.TransformFunction(),
+		{URI: xpath3.NSFn, Name: "transform"}: xslt3.TransformFunction(opts...),
 	}
 }
 
@@ -120,9 +126,7 @@ func TestTransformFunctionStylesheetBaseURI(t *testing.T) {
 	// is unresolvable regardless.)
 	t.Run("StylesheetTextNoBaseAttemptsRawRelative", func(t *testing.T) {
 		rec := &recordingRejectResolver{}
-		fns := map[xpath3.QualifiedName]xpath3.Function{
-			{URI: xpath3.NSFn, Name: "transform"}: xslt3.TransformFunction(xslt3.WithTransformURIResolver(rec)),
-		}
+		fns := transformFnsWith(xslt3.WithTransformURIResolver(rec))
 		_, err := evalTransform(t,
 			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'serialized'})?output`,
 			sourceDoc,
