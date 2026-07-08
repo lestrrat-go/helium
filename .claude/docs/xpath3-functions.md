@@ -269,6 +269,34 @@ internal-subset DTD named after the document element on a COPY via
 between the declaration and the root). The map form defaults `omit-xml-declaration`
 to true (an empty map equals omitting the argument; W3C serialize-xml-127a); the
 element form keeps the Serialization-spec default (declaration emitted).
+The DTD / internal subset of a SOURCE document node is NOT part of the XDM data
+model (a document node's children are element/PI/comment/text nodes only), so
+`fn:serialize` never reproduces it: `newSerializeXMLWriter` sets
+`Writer.IncludeDTD(opts.doctypeSystem != "")`, dropping any source DTD unless a
+`doctype-system` param is present (in which case the writer emits the freshly
+injected empty-internal-subset DTD from the doctype path). W3C
+fn-doc-25/26/29, parse-xml-006/008/009/013.
+
+**In-scope namespaces on an isolated element.** `fn:serialize` serializes an
+element as if it were the root of a tree, so an element selected from a larger
+document must carry the namespace declarations for EVERY namespace in scope on
+it — including those inherited from ancestors OUTSIDE the serialized subtree (in
+XDM an element node's namespace nodes comprise ALL its in-scope namespaces, and
+the XML output method emits a declaration for each, matching Saxon). helium's DOM
+stores only the declarations literal on each element, so `serializeNodeItem`
+routes an `*helium.Element` through `elementWithInScopeNamespaces`: an element
+with no inherited in-scope namespace is returned unchanged (byte-identical — a
+document root, root element, or standalone element), otherwise a namespace-
+complete deep COPY is serialized. `inheritedInScopeNamespaces` walks the
+ancestor chain collecting each PREFIXED (non-empty prefix + non-empty URI)
+declaration not shadowed closer to the element and not already on it; the
+over-declaring deep copy re-declares the element's own/active namespaces and the
+inherited prefixes are added on top. Only prefixed declarations are force-added
+(a prefixed decl never rebinds the element's own name); the default (empty-prefix)
+namespace and undeclarations are left to the copy's active-namespace binding. This
+runs BEFORE the doctype handling so `applyDoctype` copies the namespace-complete
+element. W3C fn-union-node-args-015/016/017, fn-intersect-node-args-015/016,
+XQueryComment002.
 
 **SEPM0009** (`fnSerialize`, gated to `methodEmitsXMLDeclaration` — the xml/xhtml/
 default methods) fires when `omit-xml-declaration=yes` AND EITHER (a) `standalone`

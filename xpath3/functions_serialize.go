@@ -1829,6 +1829,17 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	// declaration). When the param is unset it is empty, and the writer keeps the
 	// document's own encoding, leaving default output byte-identical.
 	writer = writer.OutputEncoding(opts.encoding)
+	// The DTD / internal subset of a source document node is NOT part of the XDM
+	// data model (an XDM document node's children are element/PI/comment/text
+	// nodes only), so fn:serialize must never reproduce it. A document type
+	// declaration is emitted ONLY when the doctype-system parameter is specified
+	// (Serialization 3.1 §5.1.7: the XML output method MUST output a document type
+	// declaration immediately before the first element; the internal subset MUST be
+	// empty). When doctype-system is set, serializeNodeItem/applyDoctype inject a
+	// fresh empty-internal-subset DTD carrying the requested identifiers, and the
+	// writer must emit that; otherwise any DTD present on the source tree is
+	// dropped.
+	writer = writer.IncludeDTD(opts.doctypeSystem != "")
 	if opts.omitXMLDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
@@ -2188,6 +2199,26 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 		return fmt.Sprintf(`%s="%s"`, attr.Name(), attr.Value()), nil
 	}
 	node := item.Node
+	// fn:serialize serializes the node as if it were the root of a tree, so an
+	// element selected from a larger document must carry the namespace
+	// declarations for every namespace in scope on it — including those inherited
+	// from ancestors that are NOT part of the serialized subtree. In XDM an
+	// element node's namespace nodes comprise ALL its in-scope namespaces, and the
+	// XML output method emits a namespace declaration for each. helium's DOM stores
+	// only the declarations that appear literally on each element, so an isolated
+	// element would otherwise drop its inherited (ancestor-declared) namespaces and
+	// serialize with unbound prefixes. elementWithInScopeNamespaces returns the
+	// element unchanged when it has no inherited in-scope namespaces (a document
+	// root, or a standalone element — byte-identical), otherwise a namespace-
+	// complete deep copy. This runs before the doctype handling so applyDoctype
+	// copies the namespace-complete element.
+	if elem, ok := node.(*helium.Element); ok {
+		aug, err := elementWithInScopeNamespaces(elem)
+		if err != nil {
+			return "", err
+		}
+		node = aug
+	}
 	// The xml method emits a document type declaration when doctype-system is
 	// specified (Serialization 3.1 §5.1.7: "If the doctype-system parameter is
 	// specified, the XML output method MUST output a document type declaration
@@ -2269,6 +2300,83 @@ func wrapElementInDocument(elem *helium.Element) (*helium.Document, error) {
 		return nil, err
 	}
 	return dst, nil
+}
+
+// elementWithInScopeNamespaces returns elem unchanged when it inherits no
+// in-scope namespace declarations from ancestors outside itself, otherwise a
+// deep copy carrying those inherited declarations so the serialized element is
+// namespace-complete (fn:serialize serializes an element as if it were the root
+// of a tree; the element's in-scope namespaces become namespace declarations on
+// it). Only PREFIXED namespaces with a non-empty URI are added: a prefixed
+// declaration never rebinds the element's own name, so adding one is always
+// safe, while the default (empty-prefix) namespace and namespace undeclarations
+// are handled by the deep copy's own active-namespace binding and are not
+// force-added here (adding an inherited default could rebind a no-namespace
+// element). Declarations that already appear on the element are left to the copy.
+func elementWithInScopeNamespaces(elem *helium.Element) (helium.Node, error) {
+	inherited := inheritedInScopeNamespaces(elem)
+	if len(inherited) == 0 {
+		return elem, nil
+	}
+	dst := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	copied, err := helium.CopyNode(elem, dst)
+	if err != nil {
+		return nil, err
+	}
+	copyElem, ok := copied.(*helium.Element)
+	if !ok {
+		return elem, nil
+	}
+	// The over-declaring deep copy already re-declares the element's active
+	// namespace and its literal declarations; add only the inherited prefixes it
+	// does not already carry.
+	declared := map[string]struct{}{}
+	for _, ns := range copyElem.Namespaces() {
+		declared[ns.Prefix()] = struct{}{}
+	}
+	for _, ns := range inherited {
+		if _, dup := declared[ns.Prefix()]; dup {
+			continue
+		}
+		if err := copyElem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+			return nil, err
+		}
+		declared[ns.Prefix()] = struct{}{}
+	}
+	return copyElem, nil
+}
+
+// inheritedInScopeNamespaces returns the namespace declarations that are in
+// scope on elem by virtue of an ANCESTOR declaration (i.e. not declared on elem
+// itself), with a non-empty prefix and non-empty URI, closest-ancestor wins per
+// prefix. A prefix declared on elem itself shadows any ancestor declaration and
+// is omitted (the copy already reproduces elem's own declarations).
+func inheritedInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
+	seen := map[string]struct{}{}
+	// elem's own declarations shadow ancestors and are reproduced by the copy, so
+	// seed the seen set with them (they are never re-added as "inherited").
+	for _, ns := range elem.Namespaces() {
+		seen[ns.Prefix()] = struct{}{}
+	}
+	var result []*helium.Namespace
+	for cur := elem.Parent(); cur != nil; cur = cur.Parent() {
+		e, ok := cur.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for _, ns := range e.Namespaces() {
+			prefix := ns.Prefix()
+			if prefix == "" || ns.URI() == "" {
+				continue
+			}
+			if _, dup := seen[prefix]; dup {
+				continue
+			}
+			seen[prefix] = struct{}{}
+			result = append(result, ns)
+		}
+	}
+	return result
 }
 
 // encodeJSONStringForSerialization escapes s as JSON string content for the json
