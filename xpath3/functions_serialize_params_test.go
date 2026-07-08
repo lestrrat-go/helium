@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
@@ -757,25 +758,43 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.Equal(t, "XPTY0004", xerr.Code)
 	})
 
-	t.Run("map-form method extension QName is accepted", func(t *testing.T) {
+	t.Run("map-form extension-method QName is unsupported (SEPM0016)", func(t *testing.T) {
+		// An extension method is a valid method-type value, but helium implements
+		// no extension output methods, so it is an unsupported value rather than a
+		// silent fall-through to the xml method.
 		doc := mustParseXML(t, `<root/>`)
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"ex:custom","omit-xml-declaration":true()})`)
-		require.NoError(t, err)
-	})
-
-	t.Run("omit-xml-declaration=yes with doctype-system is SEPM0009", func(t *testing.T) {
-		doc := mustParseXML(t, `<root/>`)
-		_, err := evaluate(t.Context(), doc,
-			`serialize(., map{"omit-xml-declaration":true(),"doctype-system":"x.dtd"})`)
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0009", xerr.Code)
+		require.Equal(t, "SEPM0016", xerr.Code)
 	})
 
-	t.Run("map default omit with doctype-system is SEPM0009", func(t *testing.T) {
+	// Per Serialization 3.1 SEPM0009, the doctype-system sub-condition is gated on
+	// version != "1.0": a DOCTYPE without an XML declaration is well-formed in XML
+	// 1.0, so omit-xml-declaration=yes + doctype-system at version 1.0 is NOT an
+	// error and emits the DOCTYPE.
+	t.Run("omit=yes + doctype-system at version 1.0 emits DOCTYPE, no error", func(t *testing.T) {
 		doc := mustParseXML(t, `<root/>`)
-		_, err := evaluate(t.Context(), doc, `serialize(., map{"doctype-system":"x.dtd"})`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"omit-xml-declaration":true(),"doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE root SYSTEM "x.dtd">`, "output:\n%s", out)
+		require.NotContains(t, out, "<?xml", "output:\n%s", out)
+	})
+
+	t.Run("map default omit + doctype-system at version 1.0 emits DOCTYPE, no error", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `<!DOCTYPE root SYSTEM "x.dtd">`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("omit=yes + doctype-system at version 1.1 is SEPM0009", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"omit-xml-declaration":true(),"version":"1.1","doctype-system":"x.dtd"})`)
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
@@ -804,5 +823,113 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)
 		require.NoError(t, err)
+	})
+}
+
+// TestSerialize_MethodVersionAndCharMapAudit locks in the spec-correctness fixes
+// from the exhaustive param audit: method-value validation (bare non-built-in
+// NCName and unsupported extension methods both error, never silent XML), the
+// narrower json-node-output-method domain, XML output-version validation
+// (SESU0013), doctype-public ignored without doctype-system, character maps
+// applied to the html output method, and full replacement of stale Content-Type
+// metas.
+func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
+	requireCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, code, xerr.Code)
+	}
+
+	t.Run("map-form method bogus bare NCName errors", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"method":"bogus"})`, "XPTY0004")
+	})
+	t.Run("map-form method extension QName is unsupported SEPM0016", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"method":"ex:custom","omit-xml-declaration":true()})`, "SEPM0016")
+	})
+	t.Run("map-form method EQName extension is unsupported SEPM0016", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"method":"Q{urn:x}custom","omit-xml-declaration":true()})`, "SEPM0016")
+	})
+	t.Run("element-form method bogus bare NCName is XPTY0004", func(t *testing.T) {
+		_, err := runElementFormParams(t, `<root/>`,
+			`<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">`+
+				`<output:method value="bogus"/></output:serialization-parameters>`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+
+	t.Run("map-form json-node-output-method rejects json", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"json-node-output-method":"json"})`, "XPTY0004")
+	})
+	t.Run("map-form json-node-output-method rejects adaptive", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"json-node-output-method":"adaptive"})`, "XPTY0004")
+	})
+	t.Run("map-form json-node-output-method accepts text", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"json-node-output-method":"text"})`)
+		require.NoError(t, err)
+	})
+
+	t.Run("map-form version bogus is SESU0013", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"bogus"})`, "SESU0013")
+	})
+	t.Run("map-form version 1.2 unsupported is SESU0013", func(t *testing.T) {
+		requireCode(t, `serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.2"})`, "SESU0013")
+	})
+	t.Run("element-form version bogus is SESU0013", func(t *testing.T) {
+		_, err := runElementFormParams(t, `<root/>`,
+			`<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">`+
+				`<output:method value="xml"/><output:version value="bogus"/></output:serialization-parameters>`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SESU0013", xerr.Code)
+	})
+	t.Run("map-form version 1.1 is accepted", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.1"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `version="1.1"`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("XML doctype-public WITHOUT doctype-system injects no DTD", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"doctype-public":"-//EX//DTD//EN"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.NotContains(t, out, "<!DOCTYPE", "output:\n%s", out)
+	})
+
+	t.Run("html output applies character maps to text and attributes", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?>`+
+			`<html><head/><body><p title="x">xml</p></body></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","include-content-type":false(),"use-character-maps":map{"x":"j"}})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "<p title=\"j\">jml</p>", "output:\n%s", out)
+	})
+
+	t.Run("html replaces every stale Content-Type meta (trimmed, case-insensitive)", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head>`+
+			`<meta http-equiv=" Content-Type " content="text/html; charset=iso-8859-1"/>`+
+			`<meta http-equiv="CONTENT-TYPE" content="text/html; charset=us-ascii"/>`+
+			`</head><body/></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","media-type":"application/xhtml+xml"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "application/xhtml+xml; charset=UTF-8", "output:\n%s", out)
+		require.NotContains(t, out, "iso-8859-1", "output:\n%s", out)
+		require.NotContains(t, out, "us-ascii", "output:\n%s", out)
+		// Exactly one Content-Type meta remains.
+		require.Equal(t, 1, strings.Count(strings.ToLower(out), "http-equiv"), "output:\n%s", out)
 	})
 }

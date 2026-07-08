@@ -56,6 +56,7 @@ func (w Writer) WriteTo(out io.Writer, node helium.Node) error {
 		noEscapeURIAttributes: cfg.noEscapeURIAttributes,
 		escapeControlChars:    cfg.escapeControlChars,
 		nullNamespaceHTMLOnly: cfg.nullNamespaceHTMLOnly,
+		charMap:               cfg.charMap,
 	}
 	return d.dumpNode(out, node)
 }
@@ -106,6 +107,10 @@ type htmlDumper struct {
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
 	nullNamespaceHTMLOnly bool
+	// charMap substitutes a mapped rune in text and attribute-value content with
+	// its literal (unescaped) replacement string (Serialization 3.1 character
+	// maps). Empty/nil disables the feature.
+	charMap map[rune]string
 	// err is a sticky serialization error. Once set, all checked write
 	// helpers become no-ops and terminal methods return it. This mirrors
 	// the writeSession sticky-error pattern in writer.go so that a writer
@@ -363,8 +368,12 @@ func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
 	if parent != nil && parent.Type() == helium.ElementNode {
 		parentName := strings.ToLower(parent.Name())
 		if desc := lookupElement(parentName); desc != nil && desc.dataMode >= dataRawText {
-			// Raw text element: no escaping
-			d.writeBytes(out, n.Content())
+			// Raw text element: no escaping (character maps still apply).
+			if len(d.charMap) == 0 {
+				d.writeBytes(out, n.Content())
+			} else {
+				d.check(writeHTMLCharMapped(out, n.Content(), d.charMap))
+			}
 			return d.err
 		}
 	}
@@ -373,20 +382,59 @@ func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
 	if d.err != nil {
 		return d.err
 	}
-	d.check(htmlEscapeText(out, n.Content(), d.escapeControlChars))
+	d.check(htmlEscapeText(out, n.Content(), d.escapeControlChars, d.charMap))
 	return d.err
+}
+
+// writeHTMLCharMapped writes s to w, substituting each character-map rune with
+// its literal (unescaped) replacement string. With a nil/empty map it writes s
+// unchanged.
+func writeHTMLCharMapped(w io.Writer, s []byte, charMap map[rune]string) error {
+	if len(charMap) == 0 {
+		_, err := w.Write(s)
+		return err
+	}
+	last := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		if repl, ok := charMap[r]; ok {
+			if _, err := w.Write(s[last:i]); err != nil {
+				return err
+			}
+			if _, err := io.WriteString(w, repl); err != nil {
+				return err
+			}
+			i += width
+			last = i
+			continue
+		}
+		i += width
+	}
+	_, err := w.Write(s[last:])
+	return err
 }
 
 // htmlEscapeText escapes &, <, > in text content for HTML output.
 // Unlike XML escaping, \n, \r, \t are NOT escaped.
 // When escCtrl is true, characters in the U+007F-U+009F range are emitted
 // as hexadecimal numeric character references (HTML5 serialization).
-func htmlEscapeText(w io.Writer, s []byte, escCtrl bool) error {
+func htmlEscapeText(w io.Writer, s []byte, escCtrl bool, charMap map[rune]string) error {
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		if repl, ok := charMap[r]; ok {
+			// Character map: emit the literal replacement verbatim (not escaped).
+			if _, err := w.Write(s[last : i-width]); err != nil {
+				return err
+			}
+			if _, err := io.WriteString(w, repl); err != nil {
+				return err
+			}
+			last = i
+			continue
+		}
 		switch {
 		case r == '&':
 			esc = htmlAttrEscAmp
@@ -427,10 +475,22 @@ func htmlEscapeText(w io.Writer, s []byte, escCtrl bool) error {
 // For URI attributes: escapes only & and " (matching libxml2's htmlAttrDumpOutput).
 // Non-ASCII characters with named HTML4 entities are output as &name;
 // unless noEntityEnc is true (used by XSLT HTML output which emits UTF-8 directly).
-func htmlEscapeAttrValue(w io.Writer, s string, isURI bool, noEntityEnc bool) error {
+func htmlEscapeAttrValue(w io.Writer, s string, isURI bool, noEntityEnc bool, charMap map[rune]string) error {
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRuneInString(s[i:])
+		if repl, ok := charMap[r]; ok {
+			// Character map: emit the literal replacement verbatim (not escaped).
+			if _, err := io.WriteString(w, s[last:i]); err != nil {
+				return err
+			}
+			if _, err := io.WriteString(w, repl); err != nil {
+				return err
+			}
+			i += width
+			last = i
+			continue
+		}
 		var esc []byte
 		switch {
 		case r == '&':
@@ -686,7 +746,7 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 
 		d.writeString(out, "=\"")
 		if d.err == nil {
-			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase))
+			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, d.charMap))
 		}
 		d.writeString(out, "\"")
 	}

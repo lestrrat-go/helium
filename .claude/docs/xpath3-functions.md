@@ -185,8 +185,10 @@ form `output:character-map` requires only `@character` — an absent or empty
 element-form value parsing follows the Serialization 3.1 schema types: the
 boolean/`yes-no-omit` families accept the full lowercase lexical space
 (`yes`/`no`/`true`/`false`/`1`/`0`, plus `omit` for standalone; uppercase and
-NBSP-padded forms are rejected — `serializeBooleanValue`), `method` validates
-against the built-in methods or a QName/EQName extension name, and the recognized
+NBSP-padded forms are rejected — `serializeBooleanValue`), `method` validates as
+a built-in method OR a prefixed-QName/non-null-EQName EXTENSION name — a bare
+non-built-in NCName (e.g. `bogus`) is invalid (`serializeMethodValid` /
+`isExtensionMethodName`) — and the recognized
 but unapplied parameters (`byte-order-mark`, `escape-uri-attributes`,
 `include-content-type`, `html-version`, `json-node-output-method`, `media-type`,
 `normalization-form`, `doctype-public`, `doctype-system`) are validated and
@@ -216,25 +218,41 @@ under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
 is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
 a PUBLIC/SYSTEM declaration, otherwise HTML5 (`html-version` ≥ 5, the default)
 yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration; the
-Content-Type meta uses the `media-type` param (default `text/html`) and UPDATES an
-existing `<meta http-equiv="Content-Type">` in place (rather than leaving a stale
-one) so a `media-type` change is honored. The doctype/meta work on a copy of the
-document (never mutating the input), then serialize via the `helium/html` writer.
-The `xml` method applies `doctype-public`/`doctype-system` too: `serializeNodeItem`
-injects an internal-subset DTD (named after the document element) on a COPY via
+Content-Type meta uses the `media-type` param (default `text/html`) and
+`insertHTMLContentTypeMeta` DISCARDS every existing `<meta http-equiv=
+"Content-Type">` (matched case-insensitively and whitespace-trimmed via
+`isHTMLContentTypeMeta`/`removeHTMLContentTypeMetas`) before inserting the
+computed one as the head's first child, so no stale declaration survives. The
+doctype/meta work on a copy of the document (never mutating the input), then
+serialize via the `helium/html` writer. Character maps ARE applied on the html
+path (text + attribute content) via the `helium/html` `Writer.CharacterMap` knob.
+The `xml` method emits `doctype-public`/`doctype-system` ONLY when
+`doctype-system` is present — per Serialization 3.1 §5.1 `doctype-public` MUST be
+ignored unless `doctype-system` is also specified (`serializeNodeItem` injects an
+internal-subset DTD named after the document element on a COPY via
 `documentWithDoctype`, so the XML writer emits `<!DOCTYPE name PUBLIC/SYSTEM ...>`
-between the declaration and the root. The map form defaults `omit-xml-declaration`
+between the declaration and the root). The map form defaults `omit-xml-declaration`
 to true (an empty map equals omitting the argument; W3C serialize-xml-127a); the
-element form keeps the Serialization-spec default (declaration emitted). Character
-maps are not applied on the html path.
+element form keeps the Serialization-spec default (declaration emitted).
 
 **SEPM0009** (`fnSerialize`, gated to `methodEmitsXMLDeclaration` — the xml/xhtml/
-default methods) fires when `omit-xml-declaration=yes` AND (`standalone` is yes/no
-OR `doctype-system` is present): neither a standalone nor a document-type
-declaration is possible without an XML declaration (Serialization 3.1 §5.1). It
-uses the EFFECTIVE omit (incl. the map-form default true) and resolved standalone,
-so `serialize(., map{"doctype-system":"x"})` is SEPM0009 while the html method
-(no XML declaration) is unaffected.
+default methods) fires when `omit-xml-declaration=yes` AND EITHER (a) `standalone`
+is yes/no, OR (b) the effective `version` is other than `1.0` AND `doctype-system`
+is present. Both sub-conditions are gated on `omit-xml-declaration=yes`; the
+`doctype-system` sub-condition is ADDITIONALLY gated on `version != "1.0"` (a
+DOCTYPE without an XML declaration is well-formed in XML 1.0), so
+`serialize(., map{"omit-xml-declaration":true(),"doctype-system":"x"})` at the
+default version 1.0 emits the DOCTYPE and is NOT an error, while the same at
+`version":"1.1"` is SEPM0009. It uses the EFFECTIVE omit (incl. the map-form
+default true) and resolved standalone. The html method (no XML declaration) is
+unaffected.
+
+An extension `method` (a prefixed QName) passes value validation but is an
+UNSUPPORTED value: helium implements no extension output methods, so `fnSerialize`
+raises `SEPM0016` at dispatch rather than silently falling through to xml. The
+`version` param, for the XML-declaration-emitting methods, is validated as a
+supported XML output version (`1.0`/`1.1`); any other value is `SESU0013`
+(`isSupportedXMLOutputVersion`), not a bogus version pseudo-attribute.
 
 **Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
 applied as above; `text` (`serializeTextSequence`) concatenates the string values
@@ -245,18 +263,28 @@ approximation, as helium implements no XHTML-specific serialization rules.
 **Spec-honest gaps (no silent wrong output).** `normalization-form` other than
 `none`/`""` is the `SESU0011` unsupported-normalization serialization error
 (helium performs no Unicode normalization), not silently-unnormalized output.
-`json-node-output-method` is validated but only its default (`xml`) is honored — a
+`json-node-output-method` is validated against its OWN narrower domain
+(`xml`/`html`/`xhtml`/`text` or an extension QName — NOT `json`/`adaptive`, via
+`serializeJSONNodeOutputMethodValid`) but only its default (`xml`) is honored — a
 node embedded in JSON is always serialized with the xml method (helium has no
 nested-node JSON serialization for html/xhtml/text); this is a documented
-no-op limitation flagged at the call site.
+no-op limitation flagged at the call site. Character maps (`use-character-maps`)
+are NOT applicable to the `json` output method (Serialization 3.1 §9.1.11), so the
+json string paths intentionally do not consult `opts.charMap`.
 
 **Value validation (Serialization 3.1 schema types), map AND element form.** Every
 recognized parameter is applied, a spec-justified no-op, or a documented gap, and
 its value is schema-type validated consistently across both forms: booleans/
 `yes-no-omit` accept `{yes,no,true,false,1,0}` (+ `omit`), uppercase rejected;
-`method`/`json-node-output-method` validate as a built-in method or a QName/EQName;
-`html-version` as `xs:decimal` (`isValidXSDecimal`); `normalization-form` against
-`{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as the output version.
+`method` as a built-in method or a prefixed-QName/EQName extension (bare
+non-built-in NCName invalid); `json-node-output-method` against its narrower
+`{xml,html,xhtml,text}`-or-extension domain; `html-version` as `xs:decimal`
+(`isValidXSDecimal`); `normalization-form` against
+`{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as a supported XML
+output version (else `SESU0013`). The map-form `cdata-section-elements` /
+`suppress-indentation` values atomize FIRST (`resolveSerializeQNameNames` via
+`atomizeTypedValue`), so an ARRAY value flattens to its member xs:QNames (W3C
+serialize-xml-106a).
 `byte-order-mark` validated as boolean and ignored (UTF-8 emits no BOM);
 `media-type` applied to the html meta; `doctype-public`/`doctype-system` applied
 to the html doctype. Content whitespace checks use `isXSDWhitespaceOnly`

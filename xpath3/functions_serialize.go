@@ -16,6 +16,7 @@ import (
 
 const (
 	serializeMethodHTML     = "html"
+	serializeMethodText     = "text"
 	serializeMethodAdaptive = "adaptive"
 	serializeStandaloneOmit = "omit"
 )
@@ -27,7 +28,9 @@ func init() {
 const (
 	errCodeSEPM0009 = "SEPM0009"
 	errCodeSEPM0010 = "SEPM0010"
+	errCodeSEPM0016 = "SEPM0016"
 	errCodeSESU0011 = "SESU0011"
+	errCodeSESU0013 = "SESU0013"
 )
 
 // serializeNormalizationSupported reports whether helium can produce the
@@ -64,16 +67,40 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	// Neither a standalone declaration nor a document type declaration is
-	// possible without an XML declaration, so requesting omit-xml-declaration=yes
-	// together with a standalone value other than omit OR a doctype-system value
-	// is a static error (Serialization 3.1 §5.1, SEPM0009). This uses the
-	// EFFECTIVE omit-xml-declaration (including the map-form default of true) and
-	// the RESOLVED standalone value; it applies only to methods that emit an XML
-	// declaration (xml/xhtml/default).
-	if opts.methodEmitsXMLDeclaration() && opts.omitXMLDeclaration &&
-		(opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo || opts.doctypeSystem != "") {
-		return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with standalone=yes/no or a doctype-system value"}
+	// An extension method (a prefixed QName) is a valid method-type value but
+	// helium implements no extension output methods, so it is an unsupported
+	// value (SEPM0016) rather than a silent fall-through to the xml method. The
+	// built-in methods and the unspecified default ("") dispatch below.
+	if opts.method != "" && !isBuiltinSerializeMethod(opts.method) {
+		return nil, &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("output method %q is not supported", opts.method)}
+	}
+
+	// The version parameter, for the methods that emit an XML declaration, must
+	// name an XML version the serializer supports (1.0 or 1.1); any other value
+	// is the SESU0013 unsupported-version serialization error rather than a
+	// bogus version pseudo-attribute. It also drives the XML 1.1 escaping /
+	// undeclaration rules, so it must be validated even when the declaration is
+	// omitted.
+	if opts.methodEmitsXMLDeclaration() && opts.xmlVersion != "" && !isSupportedXMLOutputVersion(opts.xmlVersion) {
+		return nil, &XPathError{Code: errCodeSESU0013, Message: fmt.Sprintf("XML output version %q is not supported", opts.xmlVersion)}
+	}
+
+	// SEPM0009 (Serialization 3.1): when the omit-xml-declaration parameter is
+	// yes, it is an error if (a) the standalone parameter has a value other than
+	// omit, OR (b) the version parameter has a value other than 1.0 AND the
+	// doctype-system parameter is specified. Both sub-conditions are gated on
+	// omit-xml-declaration=yes. It applies only to methods that emit an XML
+	// declaration (xml/xhtml/default); this uses the EFFECTIVE
+	// omit-xml-declaration (the map-form default of true) and the RESOLVED
+	// standalone value. A DOCTYPE without an XML declaration is well-formed in
+	// XML 1.0, so omit + doctype-system at version 1.0 is NOT an error.
+	if opts.methodEmitsXMLDeclaration() && opts.omitXMLDeclaration {
+		if opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo {
+			return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with standalone=yes/no"}
+		}
+		if opts.effectiveSerializeVersion() != "1.0" && opts.doctypeSystem != "" {
+			return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with a doctype-system value at version other than 1.0"}
+		}
 	}
 
 	// Namespace undeclarations require XML/XHTML 1.1; requesting them at an
@@ -98,7 +125,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		result, err = serializeJSONSequence(args[0], opts)
 	case serializeMethodHTML:
 		result, err = serializeHTMLSequence(args[0], opts)
-	case "text":
+	case serializeMethodText:
 		result, err = serializeTextSequence(args[0], opts)
 	default:
 		// The xml method (and xhtml, serialized as XML — a defensible
@@ -312,7 +339,7 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	}
 	if jn, found, err := readSerializeStringOption(ctx, m, "json-node-output-method"); err != nil {
 		return opts, err
-	} else if found && !serializeMethodValid(jn) {
+	} else if found && !serializeJSONNodeOutputMethodValid(jn) {
 		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", jn)}
 	}
 	if nf, found, err := readSerializeStringOption(ctx, m, "normalization-form"); err != nil {
@@ -338,14 +365,14 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 		opts.charMap = charMap
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "cdata-section-elements"}); found {
-		names, err := resolveSerializeQNameNames(v, "cdata-section-elements")
+		names, err := resolveSerializeQNameNames(ctx, v, "cdata-section-elements")
 		if err != nil {
 			return opts, err
 		}
 		opts.cdataElements = names
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "suppress-indentation"}); found {
-		names, err := resolveSerializeQNameNames(v, "suppress-indentation")
+		names, err := resolveSerializeQNameNames(ctx, v, "suppress-indentation")
 		if err != nil {
 			return opts, err
 		}
@@ -361,11 +388,18 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 // exact expanded {uri}local name (Clark notation; an explicit empty namespace is
 // "{}local"). Matching is by exact expanded name, so QName("","b") does not match
 // a namespaced <p:b>.
-func resolveSerializeQNameNames(v Sequence, name string) (map[string]struct{}, error) {
+func resolveSerializeQNameNames(ctx context.Context, v Sequence, name string) (map[string]struct{}, error) {
+	// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
+	// value (W3C serialize-xml-106a supplies [QName(...), ...]) flattens to its
+	// members and each member atomizes to its xs:QName, THEN require every atom to
+	// be an xs:QName.
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return nil, err
+	}
 	names := make(map[string]struct{})
-	for item := range seqItems(v) {
-		av, ok := item.(AtomicValue)
-		if !ok || av.TypeName != TypeQName {
+	for _, av := range atoms {
+		if av.TypeName != TypeQName {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a sequence of xs:QName", name)}
 		}
 		qn, ok := av.Value.(QNameValue)
@@ -585,8 +619,9 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			if err != nil {
 				return opts, err
 			}
-			// json-node-output-method-type: xml|html|xhtml|text or a QName/EQName.
-			if !serializeMethodValid(strings.Trim(value, xsdWhitespaceCutset)) {
+			// json-node-output-method-type: xml|html|xhtml|text or an extension QName
+			// (NOT json/adaptive — a narrower domain than the method parameter).
+			if !serializeJSONNodeOutputMethodValid(strings.Trim(value, xsdWhitespaceCutset)) {
 				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter json-node-output-method has an invalid value %q", value)}
 			}
 		case "normalization-form":
@@ -663,6 +698,14 @@ func allASCIIDigits(s string) bool {
 	return true
 }
 
+// isSupportedXMLOutputVersion reports whether v is an XML output version the
+// serializer supports. helium serializes XML 1.0 and 1.1; any other value
+// (including a malformed one or an unsupported version such as "1.2") is the
+// SESU0013 unsupported-version error.
+func isSupportedXMLOutputVersion(v string) bool {
+	return v == "1.0" || v == "1.1"
+}
+
 // serializeNormalizationFormValid reports whether v is a valid normalization-form
 // value: one of the Unicode normalization forms, "none", or empty.
 func serializeNormalizationFormValid(v string) bool {
@@ -673,21 +716,53 @@ func serializeNormalizationFormValid(v string) bool {
 	return false
 }
 
-// serializeMethodValid reports whether v is a valid method-type value: one of
-// the built-in output methods, or a QName / EQName naming an extension method.
-func serializeMethodValid(v string) bool {
+// isBuiltinSerializeMethod reports whether v names a built-in output method that
+// helium implements.
+func isBuiltinSerializeMethod(v string) bool {
 	switch v {
-	case "xml", serializeMethodHTML, "xhtml", "text", "json", serializeMethodAdaptive:
+	case "xml", serializeMethodHTML, "xhtml", serializeMethodText, "json", serializeMethodAdaptive:
 		return true
 	}
-	if _, local, ok := parseEQNameToken(v); ok {
-		return xmlchar.IsValidNCName(local)
+	return false
+}
+
+// isExtensionMethodName reports whether v is a syntactically valid extension
+// method name: a lexical QName WITH a prefix (its expanded name has a non-null
+// namespace), or an `Q{uri}local` EQName with a NON-EMPTY namespace URI. A bare
+// NCName (null namespace) is NOT an extension method — per Serialization 3.1 the
+// method-type restricts extension methods to prefixed QNames, so an unprefixed
+// value must be one of the built-in tokens.
+func isExtensionMethodName(v string) bool {
+	if uri, local, ok := parseEQNameToken(v); ok {
+		return uri != "" && xmlchar.IsValidNCName(local)
 	}
 	prefix, local, hasPrefix := strings.Cut(v, ":")
-	if hasPrefix {
-		return xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local)
+	if !hasPrefix {
+		return false
 	}
-	return xmlchar.IsValidNCName(v)
+	return xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local)
+}
+
+// serializeMethodValid reports whether v is a valid method-type value: a
+// built-in output method, or a prefixed QName / non-null EQName naming an
+// extension method. A bare non-built-in NCName (e.g. "bogus") is NOT valid.
+// Note: passing validation does not imply the method is SUPPORTED — an extension
+// method is valid but unimplemented, and fnSerialize rejects it at dispatch
+// rather than silently falling through to the xml method.
+func serializeMethodValid(v string) bool {
+	return isBuiltinSerializeMethod(v) || isExtensionMethodName(v)
+}
+
+// serializeJSONNodeOutputMethodValid reports whether v is a valid
+// json-node-output-method value. Per Serialization 3.1 §9.1 its domain is the
+// tokens xml|html|xhtml|text (NOT json or adaptive) or a prefixed extension
+// QName — a SEPARATE, narrower domain than the method parameter.
+func serializeJSONNodeOutputMethodValid(v string) bool {
+	switch v {
+	case "xml", serializeMethodHTML, "xhtml", serializeMethodText:
+		return true
+	}
+	return isExtensionMethodName(v)
 }
 
 func readSerializeParamValue(elem *helium.Element) (string, error) {
@@ -1243,6 +1318,9 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// Character maps (use-character-maps) are NOT applicable to the json
+		// output method (Serialization 3.1 §9.1.11), so opts.charMap is
+		// intentionally not consulted here — only JSON string escaping applies.
 		return `"` + encodeJSONStringForSerialization(s, opts.encoding) + `"`, nil
 	}
 }
@@ -1371,8 +1449,8 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 // serializeHTMLSequence serializes a sequence under the html output method.
 // A document node is serialized with an HTML5 <!DOCTYPE html> and a
 // <meta http-equiv="Content-Type"> injected into <head>; any other node is
-// serialized as an HTML fragment (no DOCTYPE). Character maps are not applied on
-// the HTML path.
+// serialized as an HTML fragment (no DOCTYPE). Character maps (use-character-maps)
+// are applied to text and attribute content.
 func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, seqLen(seq))
 	for item := range seqItems(seq) {
@@ -1399,7 +1477,7 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 
 func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
 	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
-		EscapeURIAttributes(opts.escapeURIAttributes)
+		EscapeURIAttributes(opts.escapeURIAttributes).CharacterMap(opts.charMap)
 
 	doc, ok := node.(*helium.Document)
 	if !ok || !htmlDocumentElementIsHTML(doc) {
@@ -1501,10 +1579,13 @@ func htmlDocumentElementIsHTML(doc *helium.Document) bool {
 	return root != nil && strings.EqualFold(root.LocalName(), "html")
 }
 
-// insertHTMLContentTypeMeta inserts a <meta http-equiv="Content-Type"> element
-// as the first child of the document's <head>, unless one already exists. The
-// encoding defaults to UTF-8 and the media type to text/html. It mutates the
-// given document, so callers pass a copy.
+// insertHTMLContentTypeMeta discards EVERY existing Content-Type meta element in
+// the document's <head> and inserts a freshly-computed
+// <meta http-equiv="Content-Type" content="{media-type}; charset={encoding}"> as
+// the head's first child (Serialization 3.1 §4/§7 include-content-type: an
+// existing meta is discarded and the computed one added). The encoding defaults
+// to UTF-8 and the media type to text/html. It mutates the given document, so
+// callers pass a copy.
 func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string) {
 	root := doc.DocumentElement()
 	if root == nil {
@@ -1531,13 +1612,10 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	}
 	contentValue := mt + "; charset=" + enc
 
-	// If a Content-Type meta already exists, UPDATE its content attribute to the
-	// computed media-type/charset (so a media-type param is honored even for a
-	// source that already declares text/html) rather than leaving the stale one.
-	if existing := htmlHeadContentTypeMeta(head); existing != nil {
-		_ = existing.SetLiteralAttribute("content", contentValue)
-		return
-	}
+	// Discard every stale Content-Type meta (matched case-insensitively and
+	// whitespace-trimmed) so no conflicting declaration survives, regardless of
+	// its position or how many exist.
+	removeHTMLContentTypeMetas(head)
 
 	meta := doc.CreateElement("meta")
 	if headURI := head.URI(); headURI != "" {
@@ -1564,21 +1642,39 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	}
 }
 
-// htmlHeadContentTypeMeta returns the existing <meta http-equiv="Content-Type">
-// child of head, or nil if none exists.
-func htmlHeadContentTypeMeta(head *helium.Element) *helium.Element {
-	for child := range helium.Children(head) {
-		e, ok := child.(*helium.Element)
-		if !ok || !strings.EqualFold(e.LocalName(), "meta") {
-			continue
-		}
-		for _, attr := range e.Attributes() {
-			if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
-				return e
+// removeHTMLContentTypeMetas unlinks every <meta http-equiv="Content-Type"> child
+// of head so a stale Content-Type declaration cannot survive the freshly-inserted
+// one.
+func removeHTMLContentTypeMetas(head *helium.Element) {
+	for child := head.FirstChild(); child != nil; {
+		next := child.NextSibling()
+		if isHTMLContentTypeMeta(child) {
+			if mut, ok := child.(helium.MutableNode); ok {
+				helium.UnlinkNode(mut)
 			}
 		}
+		child = next
 	}
-	return nil
+}
+
+// isHTMLContentTypeMeta reports whether n is a <meta> element whose http-equiv
+// attribute is "Content-Type", compared case-insensitively after trimming
+// surrounding whitespace so " Content-Type " and "CONTENT-TYPE" both match.
+func isHTMLContentTypeMeta(n helium.Node) bool {
+	e, ok := n.(*helium.Element)
+	if !ok || !strings.EqualFold(e.LocalName(), "meta") {
+		return false
+	}
+	for _, attr := range e.Attributes() {
+		if attr.URI() != "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(attr.LocalName()), "http-equiv") &&
+			strings.EqualFold(strings.TrimSpace(attr.Value()), "Content-Type") {
+			return true
+		}
+	}
+	return false
 }
 
 func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
@@ -1586,10 +1682,12 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 		return fmt.Sprintf(`%s="%s"`, attr.Name(), attr.Value()), nil
 	}
 	node := item.Node
-	// The xml method emits a document type declaration for the doctype-public /
-	// doctype-system parameters when serializing a document node. It is injected
-	// as an internal subset on a COPY so the caller's tree is never mutated.
-	if doc, ok := node.(*helium.Document); ok && (opts.doctypePublic != "" || opts.doctypeSystem != "") {
+	// The xml method emits a document type declaration when serializing a
+	// document node ONLY if doctype-system is specified — per Serialization 3.1
+	// §5.1 the doctype-public parameter MUST be ignored unless doctype-system is
+	// also present (public is an optional additive). It is injected as an
+	// internal subset on a COPY so the caller's tree is never mutated.
+	if doc, ok := node.(*helium.Document); ok && opts.doctypeSystem != "" {
 		withDT, err := documentWithDoctype(doc, opts)
 		if err != nil {
 			return "", err
