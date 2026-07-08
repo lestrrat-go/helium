@@ -1294,13 +1294,19 @@ func serializeNodeKindError(item NodeItem) error {
 // serializeItemKindError reports err:SENR0001 for every item kind that sequence
 // normalization (Serialization 3.1 §2) rejects under the markup output methods
 // (xml/xhtml/html/text and the unspecified default): a bare attribute node, a
-// namespace node, OR a function item. It returns nil for any other item. The
-// adaptive and json methods serialize these kinds specially, so callers must not
-// apply this guard for those methods.
+// namespace node, OR a function item. Maps and arrays ARE function items in XDM,
+// so they are rejected too. It returns nil for any other item. The adaptive and
+// json methods serialize these kinds specially (json serializes maps/arrays; both
+// handle function items their own way), so callers must not apply this guard for
+// those methods.
 func serializeItemKindError(item Item) error {
 	switch v := item.(type) {
 	case NodeItem:
 		return serializeNodeKindError(v)
+	case MapItem:
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a map under this output method"}
+	case ArrayItem:
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize an array under this output method"}
 	case FunctionItem:
 		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
 	}
@@ -1445,6 +1451,18 @@ func serializeAdaptiveSequence(seq Sequence, opts serializeOptions) (string, err
 }
 
 func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
+	// serializeAdaptiveItem serves BOTH the explicit adaptive method and the
+	// unspecified default method (the xml family). Under the default method
+	// sequence normalization (Serialization 3.1 §2) rejects a bare attribute node,
+	// a namespace node, or a function item — which in XDM includes maps and arrays
+	// — with SENR0001. The explicit adaptive method (and the nested map/array
+	// serialization, which passes method="adaptive") serializes all of these its
+	// own way, so this guard applies only when the method is not adaptive.
+	if opts.method != serializeMethodAdaptive {
+		if err := serializeItemKindError(item); err != nil {
+			return "", err
+		}
+	}
 	switch v := item.(type) {
 	case AtomicValue:
 		if v.TypeName == TypeBoolean {
@@ -1466,28 +1484,14 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return s, nil
 	case NodeItem:
-		// The default (empty) method is the xml family, under which an
-		// attribute or namespace node is a serialization error. An explicit
-		// method="adaptive" serializes them specially, so only guard when the
-		// method is not adaptive.
-		if opts.method != serializeMethodAdaptive {
-			if err := serializeNodeKindError(v); err != nil {
-				return "", err
-			}
-		}
 		return serializeNodeItem(v, opts)
 	case MapItem:
 		return serializeAdaptiveMap(v, opts)
 	case ArrayItem:
 		return serializeAdaptiveArray(v, opts)
 	case FunctionItem:
-		// The unspecified default method is the xml family, under which sequence
-		// normalization (Serialization 3.1 §2) rejects a function item [err:SENR0001].
-		// An explicit method="adaptive" handles a function item its own way (helium
-		// emits no adaptive function representation, so FOER0000).
-		if opts.method != serializeMethodAdaptive {
-			return "", &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
-		}
+		// Only reachable under the explicit adaptive method (the default method is
+		// rejected above). helium emits no adaptive function representation.
 		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 	default:
 		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T", item)}

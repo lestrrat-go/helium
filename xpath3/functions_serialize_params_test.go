@@ -1572,6 +1572,64 @@ func TestSerialize_FunctionItemSENR0001(t *testing.T) {
 	}
 }
 
+// TestSerialize_MapArraySENR0001 verifies that a map or array input is a
+// serialization error [err:SENR0001] under every markup output method
+// (xml/xhtml/html/text and the unspecified default): maps and arrays ARE function
+// items in XDM, so sequence normalization (Serialization 3.1 §2) rejects them.
+// The json output method legitimately serializes maps/arrays, and the adaptive
+// method serializes them its own way — both must keep working.
+func TestSerialize_MapArraySENR0001(t *testing.T) {
+	requireSENR0001 := func(t *testing.T, expr string) {
+		t.Helper()
+		doc := mustParseXML(t, `<root>text</root>`)
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SENR0001", xerr.Code)
+	}
+
+	for _, input := range []struct{ name, expr string }{
+		{"map", `map{"a":1}`},
+		{"array", `[1]`},
+	} {
+		for _, method := range []string{"xml", "xhtml", "html", "text"} {
+			t.Run(input.name+" method="+method, func(t *testing.T) {
+				requireSENR0001(t, `serialize(`+input.expr+`, map{"method":"`+method+`"})`)
+			})
+		}
+		t.Run(input.name+" default method", func(t *testing.T) {
+			requireSENR0001(t, `serialize(`+input.expr+`)`)
+		})
+	}
+
+	// json and adaptive must still serialize maps and arrays (NOT SENR0001).
+	t.Run("json still serializes a map", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		res, err := evaluate(t.Context(), doc, `serialize(map{"a":1}, map{"method":"json"})`)
+		require.NoError(t, err)
+		require.Equal(t, `{"a":1}`, res.StringValue())
+	})
+	t.Run("json still serializes an array", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		res, err := evaluate(t.Context(), doc, `serialize([1,2], map{"method":"json"})`)
+		require.NoError(t, err)
+		require.Equal(t, `[1,2]`, res.StringValue())
+	})
+	t.Run("adaptive still serializes a map", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		res, err := evaluate(t.Context(), doc, `serialize(map{"a":1}, map{"method":"adaptive"})`)
+		require.NoError(t, err)
+		require.Equal(t, `map{"a":1}`, res.StringValue())
+	})
+	t.Run("adaptive still serializes an array", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		res, err := evaluate(t.Context(), doc, `serialize([1], map{"method":"adaptive"})`)
+		require.NoError(t, err)
+		require.Equal(t, `[1]`, res.StringValue())
+	})
+}
+
 // TestSerialize_HTMLDoctypeNonHTMLRoot verifies Serialization 3.1 §7.4.6: an
 // explicitly specified doctype-system/doctype-public makes the html output method
 // emit a document type declaration (named "html", not the document element's name)

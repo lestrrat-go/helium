@@ -294,12 +294,16 @@ applied as above; `text` (`serializeTextSequence`) concatenates the string value
 of the items with the `item-separator` and no markup (character maps applied);
 `xhtml` is serialized as `xml` — a defensible approximation, as helium implements
 no XHTML-specific serialization rules. Sequence normalization (Serialization 3.1
-§2) rejects an attribute node, a namespace node, OR a function item with
-`SENR0001` under EVERY markup method — `xml`/`xhtml`/`html`/`text` and the
-unspecified default — via the shared `serializeItemKindError` guard (which
-delegates node kinds to `serializeNodeKindError`); a function item does NOT fall
-through to adaptive serialization under the html method. The `adaptive` and `json`
-methods are exempt (they keep their own function-item handling, `FOER0000`).
+§2) rejects an attribute node, a namespace node, OR a function item — which in XDM
+includes maps and arrays — with `SENR0001` under EVERY markup method —
+`xml`/`xhtml`/`html`/`text` and the unspecified default — via the shared
+`serializeItemKindError` guard (which delegates node kinds to
+`serializeNodeKindError`); a map/array/function does NOT fall through to adaptive
+serialization under the html method, nor is it accepted by the unspecified default
+(which dispatches through `serializeAdaptiveItem`, guarded when the method is not
+adaptive). The `adaptive` and `json` methods are exempt: `json` serializes maps
+and arrays as JSON, `adaptive` serializes maps/arrays its own way, and both keep
+`FOER0000` for a bare function item.
 
 **Normalization + character maps (all methods incl. JSON).** `normalization-form`
 is APPLIED for the methods that support it — xml/xhtml/html/text, the unspecified
