@@ -68,3 +68,24 @@ func TestExternalSubsetTextDeclWithVersion(t *testing.T) {
 	require.NotNil(t, parsed)
 	require.Equal(t, "versioned", string(parsed.DocumentElement().Content()))
 }
+
+// A malformed TextDecl in the external subset (here version-only: EncodingDecl is
+// required in a TextDecl) must be rejected AND the error must locate the external
+// DTD file, matching every other declaration error reported from that resource.
+func TestExternalSubsetTextDeclMalformedReportsFile(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<?xml version="1.0"?>
+<!ELEMENT doc (#PCDATA)>
+`
+	fsys := fstest.MapFS{extSubsetName: &fstest.MapFile{Data: []byte(dtd)}}
+	_, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(extSubsetDoc()))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), extSubsetName,
+		"a malformed external-subset TextDecl error must name the DTD file")
+}
