@@ -12,7 +12,11 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
-const serializeMethodHTML = "html"
+const (
+	serializeMethodHTML     = "html"
+	serializeMethodAdaptive = "adaptive"
+	serializeStandaloneOmit = "omit"
+)
 
 func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
@@ -56,7 +60,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	var result string
 	switch opts.method {
-	case "", "adaptive":
+	case "", serializeMethodAdaptive:
 		result, err = serializeAdaptiveSequence(args[0], opts)
 	case "json":
 		result, err = serializeJSONSequence(args[0], opts)
@@ -109,7 +113,7 @@ func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptio
 		method:        "",
 		itemSeparator: " ",
 		// The Serialization 3.1 default for the standalone parameter is "omit".
-		standalone: "omit",
+		standalone: serializeStandaloneOmit,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
@@ -341,7 +345,13 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			if err != nil {
 				return opts, err
 			}
-			opts.method = value
+			// method-type is a union of the built-in method tokens and a QName /
+			// EQName naming an extension method (XSD-whitespace-collapsed).
+			method := strings.Trim(value, xsdWhitespaceCutset)
+			if !serializeMethodValid(method) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter method has an invalid value %q", value)}
+			}
+			opts.method = method
 		case "item-separator":
 			value, err := readSerializeParamValue(param)
 			if err != nil {
@@ -396,8 +406,16 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 				return opts, err
 			}
 			opts.xmlVersion = strings.TrimSpace(value)
-		case "byte-order-mark", "doctype-public", "doctype-system",
+		case "byte-order-mark", "escape-uri-attributes", "include-content-type":
+			// yes-no boolean parameters helium does not apply (HTML/XHTML or BOM);
+			// validate the boolean lexical space and ignore.
+			if _, err := readSerializeParamYesNo(param); err != nil {
+				return opts, err
+			}
+		case "doctype-public", "doctype-system", "html-version",
 			"json-node-output-method", "media-type", "normalization-form":
+			// Recognized parameters helium does not apply; validate the element
+			// structure (single unqualified value attribute, no content) and ignore.
 			if _, err := readSerializeParamValue(param); err != nil {
 				return opts, err
 			}
@@ -421,6 +439,23 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	return opts, nil
 }
 
+// serializeMethodValid reports whether v is a valid method-type value: one of
+// the built-in output methods, or a QName / EQName naming an extension method.
+func serializeMethodValid(v string) bool {
+	switch v {
+	case "xml", serializeMethodHTML, "xhtml", "text", "json", serializeMethodAdaptive:
+		return true
+	}
+	if _, local, ok := parseEQNameToken(v); ok {
+		return xmlchar.IsValidNCName(local)
+	}
+	prefix, local, hasPrefix := strings.Cut(v, ":")
+	if hasPrefix {
+		return xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local)
+	}
+	return xmlchar.IsValidNCName(v)
+}
+
 func readSerializeParamValue(elem *helium.Element) (string, error) {
 	if hasNonWhitespaceContent(elem) {
 		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter must not have child content"}
@@ -436,36 +471,57 @@ func readSerializeParamValue(elem *helium.Element) (string, error) {
 	return attr.Value(), nil
 }
 
+// xsdWhitespaceCutset is the XSD list / whiteSpace-collapse whitespace set
+// (#x20, #x9, #xA, #xD). Element-form enumeration/boolean/QNames values are
+// token-derived, so leading/trailing runs of these characters are stripped —
+// but NBSP and other Unicode whitespace are NOT whitespace and must remain in
+// the value (where they then fail lexical validation).
+const xsdWhitespaceCutset = " \t\r\n"
+
+// serializeBooleanValue normalizes a Serialization 3.1 boolean lexical to
+// "yes"/"no". The value space (after collapsing leading/trailing XSD whitespace)
+// is the full xs:boolean lexical space plus the yes/no synonyms:
+// {yes, no, true, false, 1, 0}. ok is false for any other value — including
+// uppercase forms (xs:boolean is lowercase-only) and NBSP-padded values.
+func serializeBooleanValue(value string) (string, bool) {
+	switch strings.Trim(value, xsdWhitespaceCutset) {
+	case lexicon.ValueYes, lexicon.ValueTrue, "1":
+		return lexicon.ValueYes, true
+	case lexicon.ValueNo, lexicon.ValueFalse, "0":
+		return lexicon.ValueNo, true
+	}
+	return "", false
+}
+
 func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
 		return false, err
 	}
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case lexicon.ValueYes, "true", "1":
-		return true, nil
-	case lexicon.ValueNo, "false", "0":
-		return false, nil
-	default:
-		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
+	norm, ok := serializeBooleanValue(value)
+	if !ok {
+		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be a boolean (yes/no/true/false/1/0)", elem.LocalName())}
 	}
+	return norm == lexicon.ValueYes, nil
 }
 
 // readSerializeParamStandalone reads and normalizes the element-form
-// "standalone" parameter. The element form whitespace-collapses the value
-// (Serialization 3.1), so " no " is the "no" enum value; it returns the
-// collapsed "yes"/"no"/"omit".
+// "standalone" parameter, whose schema type is yes-no-omit-type: the boolean
+// lexical space {yes, no, true, false, 1, 0} plus "omit" (Serialization 3.1).
+// The value is XSD-whitespace-collapsed, so " no " is the "no" value; it returns
+// the normalized "yes"/"no"/"omit".
 func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
 		return "", err
 	}
-	switch collapsed := strings.ToLower(strings.TrimSpace(value)); collapsed {
-	case lexicon.ValueYes, lexicon.ValueNo, "omit":
-		return collapsed, nil
-	default:
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
+	if strings.Trim(value, xsdWhitespaceCutset) == serializeStandaloneOmit {
+		return serializeStandaloneOmit, nil
 	}
+	if norm, ok := serializeBooleanValue(value); ok {
+		return norm, nil
+	}
+	return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize parameter "standalone" must be yes/no/omit or a boolean (true/false/1/0)`}
 }
 
 // readSerializeParamQNameNames reads a cdata-section-elements or
@@ -482,7 +538,10 @@ func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, er
 		return nil, err
 	}
 	names := make(map[string]struct{})
-	for token := range strings.FieldsSeq(value) {
+	// QNames-type is an xs:list, so tokens split ONLY on XSD list whitespace
+	// (#x20/#x9/#xA/#xD) — NBSP and other Unicode whitespace stay inside the token
+	// and then fail NCName validation, rather than being silently split.
+	for _, token := range xsdListFields(value) {
 		key, err := resolveSerializeNameToken(elem, token)
 		if err != nil {
 			return nil, err
@@ -526,14 +585,16 @@ func resolveSerializeNameToken(elem *helium.Element, token string) (string, erro
 }
 
 // parseEQNameToken recognizes an EQName of the form `Q{uri}local`, returning the
-// namespace URI and local name. The URI part cannot contain "{" or "}" (XPath
-// EQName grammar), so the first "}" after "Q{" ends it.
+// namespace URI and local name. Per the grammar `Q\{[^{}]*\}...` the URI part
+// admits neither "{" nor "}"; the first "}" after "Q{" ends it (so the URI never
+// contains "}"), and a "{" inside the URI part means the token is not a
+// well-formed EQName (the caller then rejects it as an invalid name).
 func parseEQNameToken(token string) (string, string, bool) {
 	if !strings.HasPrefix(token, "Q{") {
 		return "", "", false
 	}
 	uri, local, ok := strings.Cut(token[2:], "}")
-	if !ok {
+	if !ok || strings.ContainsRune(uri, '{') {
 		return "", "", false
 	}
 	return uri, local, true
@@ -609,8 +670,8 @@ func resolveSerializeStandaloneMap(ctx context.Context, v Sequence) (string, err
 		if err != nil {
 			return "", xerr
 		}
-		if s == "omit" {
-			return "omit", nil
+		if s == serializeStandaloneOmit {
+			return serializeStandaloneOmit, nil
 		}
 		// An untypedAtomic may carry an xs:boolean lexical; accept the same
 		// value space the other boolean map options do (readBool): true/false/1/0.
@@ -801,7 +862,7 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		// attribute or namespace node is a serialization error. An explicit
 		// method="adaptive" serializes them specially, so only guard when the
 		// method is not adaptive.
-		if opts.method != "adaptive" {
+		if opts.method != serializeMethodAdaptive {
 			if err := serializeNodeKindError(v); err != nil {
 				return "", err
 			}
@@ -825,7 +886,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 		if err != nil {
 			return err
 		}
-		valText, err := serializeAdaptiveSequence(value, serializeOptions{method: "adaptive", itemSeparator: ","})
+		valText, err := serializeAdaptiveSequence(value, serializeOptions{method: serializeMethodAdaptive, itemSeparator: ","})
 		if err != nil {
 			return err
 		}
@@ -841,7 +902,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 func serializeAdaptiveArray(a ArrayItem, _ serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
 	for _, member := range a.members0() {
-		text, err := serializeAdaptiveSequence(member, serializeOptions{method: "adaptive", itemSeparator: ","})
+		text, err := serializeAdaptiveSequence(member, serializeOptions{method: serializeMethodAdaptive, itemSeparator: ","})
 		if err != nil {
 			return "", err
 		}

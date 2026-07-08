@@ -444,3 +444,105 @@ func TestSerialize_SEPM0009(t *testing.T) {
 		require.Equal(t, "SEPM0009", xerr.Code)
 	})
 }
+
+// runElementFormParams parses an output:serialization-parameters element, binds
+// it to $params, and runs serialize(., $params) over the given source, returning
+// the serialized string and any error.
+func runElementFormParams(t *testing.T, sourceXML, paramsXML string) (string, error) {
+	t.Helper()
+	doc := mustParseXML(t, sourceXML)
+	params := mustParseXML(t, paramsXML)
+	res0, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), mustCompile(t, `.`), params.DocumentElement())
+	require.NoError(t, err)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(map[string]xpath3.Sequence{paramsVar: res0.Sequence()})
+	r, err := eval.Evaluate(t.Context(), mustCompile(t, exprSerializeWithParams), doc)
+	if err != nil {
+		return "", err
+	}
+	return r.StringValue(), nil
+}
+
+// TestSerialize_ElementFormSchemaTypes locks in the element-form option parser's
+// conformance to the Serialization 3.1 schema types (gauntlet findings): the
+// boolean/yes-no-omit lexical space (true/false/1/0 accepted, uppercase
+// rejected), XSD-list-whitespace splitting of QName lists (NBSP stays in the
+// token and fails validation), and EQName brace rejection.
+func TestSerialize_ElementFormSchemaTypes(t *testing.T) {
+	const paramsOpen = `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">`
+	const paramsClose = `</output:serialization-parameters>`
+
+	requireXPTY0004 := func(t *testing.T, paramsXML string) {
+		t.Helper()
+		_, err := runElementFormParams(t, `<root/>`, paramsXML)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	}
+
+	requireSEPM0009 := func(t *testing.T, standaloneValue string) {
+		t.Helper()
+		p := paramsOpen +
+			`<output:omit-xml-declaration value="yes"/>` +
+			`<output:standalone value="` + standaloneValue + `"/>` + paramsClose
+		_, err := runElementFormParams(t, `<root/>`, p)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0009", xerr.Code, "standalone=%q", standaloneValue)
+	}
+
+	// Finding 1: element-form standalone now accepts the boolean lexical families
+	// true/1 (→yes) and false/0 (→no); with omit-xml-declaration=yes each reaches
+	// the SEPM0009 conflict check.
+	for _, v := range []string{"true", "1", "false", "0", "yes", "no"} {
+		t.Run("standalone "+v+" + omit=yes is SEPM0009", func(t *testing.T) {
+			requireSEPM0009(t, v)
+		})
+	}
+
+	t.Run("standalone true normalizes to yes in the declaration", func(t *testing.T) {
+		out, err := runElementFormParams(t, `<root/>`, paramsOpen+
+			`<output:omit-xml-declaration value="no"/><output:standalone value="true"/>`+paramsClose)
+		require.NoError(t, err)
+		require.Contains(t, out, `standalone="yes"`, "output:\n%s", out)
+	})
+
+	// A yes-no boolean accepts true/1 but rejects uppercase (xs:boolean is
+	// lowercase-only).
+	t.Run("indent true is accepted", func(t *testing.T) {
+		_, err := runElementFormParams(t, `<a><b>x</b></a>`, paramsOpen+
+			`<output:method value="xml"/><output:indent value="true"/>`+paramsClose)
+		require.NoError(t, err)
+	})
+	t.Run("indent YES uppercase is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+`<output:indent value="YES"/>`+paramsClose)
+	})
+	t.Run("standalone TRUE uppercase is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+`<output:standalone value="TRUE"/>`+paramsClose)
+	})
+
+	// Finding 2: an NBSP inside a QName-list token is not a list separator, so the
+	// token "a b" stays whole and fails NCName validation.
+	t.Run("NBSP in QName-list token is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+
+			"<output:cdata-section-elements value=\"a b\"/>"+paramsClose)
+	})
+
+	// Finding 3: an EQName with a brace inside the URI part is not well-formed.
+	t.Run("EQName with brace in URI is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+
+			`<output:cdata-section-elements value="Q{a{b}c"/>`+paramsClose)
+	})
+
+	// Previously-unrecognized but schema-valid parameters are accepted (validated
+	// and ignored), not rejected as unsupported.
+	t.Run("escape-uri-attributes and include-content-type are accepted", func(t *testing.T) {
+		_, err := runElementFormParams(t, `<root/>`, paramsOpen+
+			`<output:method value="xml"/><output:escape-uri-attributes value="yes"/>`+
+			`<output:include-content-type value="no"/><output:html-version value="5.0"/>`+paramsClose)
+		require.NoError(t, err)
+	})
+}

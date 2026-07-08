@@ -173,13 +173,24 @@ retained unless the parameter requests yes/no), `undeclare-prefixes`
 `suppress-indentation` (resolved to an EXACT expanded `{uri}local` name set —
 Clark notation with `{}local` for the no-namespace case; matching is by exact
 expanded name so `QName("","b")` never matches a namespaced `<p:b>`; the
-element form accepts a QName OR an `Q{uri}local` EQName per the Serialization
-schema, validating NCName parts, resolving an unprefixed lexical QName through
-the in-scope DEFAULT namespace, binding the reserved `xml` prefix implicitly, and
-treating `xmlns:p=""` as an UNDECLARATION that leaves `p` unbound rather than
-bound to the empty URI), and `use-character-maps` (resolved to a `map[rune]string`;
-an element form `output:character-map` requires only `@character` — an absent or
-empty `@map-string` maps the character to the empty replacement, i.e. deletion).
+element form is an `xs:list` of QName-OR-`Q{uri}local`-EQName, split ONLY on XSD
+list whitespace (`#x20/#x9/#xA/#xD` via `xsdListFields`, so an NBSP stays in the
+token and fails validation), validating NCName parts, rejecting an EQName with a
+brace in the URI part, resolving an unprefixed lexical QName through the in-scope
+DEFAULT namespace, binding the reserved `xml` prefix implicitly, and treating
+`xmlns:p=""` as an UNDECLARATION that leaves `p` unbound rather than bound to the
+empty URI), and `use-character-maps` (resolved to a `map[rune]string`; an element
+form `output:character-map` requires only `@character` — an absent or empty
+`@map-string` maps the character to the empty replacement, i.e. deletion). The
+element-form value parsing follows the Serialization 3.1 schema types: the
+boolean/`yes-no-omit` families accept the full lowercase lexical space
+(`yes`/`no`/`true`/`false`/`1`/`0`, plus `omit` for standalone; uppercase and
+NBSP-padded forms are rejected — `serializeBooleanValue`), `method` validates
+against the built-in methods or a QName/EQName extension name, and the recognized
+but unapplied parameters (`byte-order-mark`, `escape-uri-attributes`,
+`include-content-type`, `html-version`, `json-node-output-method`, `media-type`,
+`normalization-form`, `doctype-public`, `doctype-system`) are validated and
+ignored rather than rejected as unsupported.
 The xml path builds a `helium.Writer` via `newSerializeXMLWriter` wiring
 `OutputVersion`/`Standalone`/`OmitStandalone`/`AllowPrefixUndeclarations`/
 `CDATASectionElements`/`SuppressIndentElements`/`CharacterMap` — the shared
