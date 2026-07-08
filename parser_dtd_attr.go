@@ -356,6 +356,13 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 		return
 	}
 	key := elemName + ":" + attrName
+	// XML 1.0 §3.3: the first declaration of an attribute is binding. The parse
+	// loop invokes this for every <!ATTLIST> declaration, including an ignored
+	// duplicate; keeping the first-seen type ensures a later duplicate's type
+	// cannot change how the attribute's explicit values are normalized.
+	if _, ok := ctx.attsSpecial[key]; ok {
+		return
+	}
 	ctx.attsSpecial[key] = typ
 }
 
@@ -389,28 +396,28 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 		return
 	}
 
+	// Duplicate detection runs BEFORE validating this declaration's default
+	// value: XML 1.0 §3.3 says a later declaration for the same attribute is
+	// ignored ENTIRELY, so its (possibly invalid) default must not be validated
+	// or abort the parse. The internal subset takes precedence over the external
+	// one; a repeat within the same subset keeps the first declaration. This is a
+	// validity warning, not a fatal error (libxml2 warns "already defined" and
+	// continues).
+	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) > 0 {
+		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
+			return
+		}
+	}
+	if existing, ok := dtd.LookupAttribute(name, prefix, elem); ok {
+		return existing, nil
+	}
+
 	if defvalue != "" {
 		if err = validateAttributeValueInternal(dtd.doc, atype, defvalue); err != nil {
 			err = fmt.Errorf("attribute %s of %s: invalid default value: %s", elem, name, err)
 			ctx.valid = false
 			return
 		}
-	}
-
-	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) > 0 {
-		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
-			return
-		}
-	}
-
-	// XML 1.0 §3.3: when more than one definition is provided for the same
-	// attribute of a given element type, the first declaration is binding and
-	// later declarations are ignored. A repeated <!ATTLIST> for an attribute
-	// already declared in this subset is therefore a validity warning, not a
-	// fatal error (libxml2 warns "already defined" and continues); keep the first
-	// declaration and ignore the duplicate.
-	if existing, ok := dtd.LookupAttribute(name, prefix, elem); ok {
-		return existing, nil
 	}
 
 	attr = newAttributeDecl()
