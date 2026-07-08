@@ -770,7 +770,10 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 		}
 	}
 	if err := sub.switchEncoding(); err != nil {
-		return nil, err
+		// Wrap through sub.error so the failure (e.g. an unsupported declared
+		// encoding) carries srcURI, matching the parseTextDecl branch; otherwise
+		// it would be rewrapped at the caller's location and lose the source file.
+		return nil, sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
@@ -779,7 +782,7 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 	}
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
-		return nil, err
+		return nil, sub.error(ctx, err)
 	}
 	return rest, nil
 }

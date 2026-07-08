@@ -89,3 +89,24 @@ func TestExternalSubsetTextDeclMalformedReportsFile(t *testing.T) {
 	require.Contains(t, err.Error(), extSubsetName,
 		"a malformed external-subset TextDecl error must name the DTD file")
 }
+
+// An unsupported encoding declared in the external-subset TextDecl must also fail
+// with the DTD file located — the error travels the switchEncoding branch, not
+// parseTextDecl, so it must be wrapped with the source URI too.
+func TestExternalSubsetTextDeclUnsupportedEncodingReportsFile(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<?xml encoding="X-UNKNOWN-ENC"?>
+<!ELEMENT doc (#PCDATA)>
+`
+	fsys := fstest.MapFS{extSubsetName: &fstest.MapFile{Data: []byte(dtd)}}
+	_, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(extSubsetDoc()))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), extSubsetName,
+		"an unsupported external-subset TextDecl encoding error must name the DTD file")
+}
