@@ -649,9 +649,9 @@ func fnNamespaceURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return SingleString(""), nil
+		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ""}), nil
 	}
-	return SingleString(ixpath.NodeNamespaceURI(n)), nil
+	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ixpath.NodeNamespaceURI(n)}), nil
 }
 
 func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
