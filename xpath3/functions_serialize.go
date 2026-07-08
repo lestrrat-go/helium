@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -100,6 +101,15 @@ type serializeOptions struct {
 	suppressIndent map[string]struct{}
 	// charMap is the resolved character map (use-character-maps).
 	charMap map[rune]string
+	// HTML output-method parameters (applied by serializeHTMLNode).
+	// includeContentType / escapeURIAttributes default to true.
+	includeContentType  bool
+	escapeURIAttributes bool
+	// htmlVersion is the requested html-version ("" = default 5.0). doctypePublic
+	// / doctypeSystem are the requested DOCTYPE identifiers.
+	htmlVersion   string
+	doctypePublic string
+	doctypeSystem string
 }
 
 func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptions, error) {
@@ -114,6 +124,9 @@ func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptio
 		itemSeparator: " ",
 		// The Serialization 3.1 default for the standalone parameter is "omit".
 		standalone: serializeStandaloneOmit,
+		// include-content-type and escape-uri-attributes default to yes.
+		includeContentType:  true,
+		escapeURIAttributes: true,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
@@ -207,10 +220,35 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else if found {
 		opts.undeclarePrefixes = undeclare
 	}
+	if include, found, err := readBool("include-content-type"); err != nil {
+		return opts, err
+	} else if found {
+		opts.includeContentType = include
+	}
+	if escape, found, err := readBool("escape-uri-attributes"); err != nil {
+		return opts, err
+	} else if found {
+		opts.escapeURIAttributes = escape
+	}
 	if version, found, err := readSerializeStringOption(ctx, m, "version"); err != nil {
 		return opts, err
 	} else if found {
 		opts.xmlVersion = version
+	}
+	if hv, found, err := readSerializeNumberOption(m, "html-version"); err != nil {
+		return opts, err
+	} else if found {
+		opts.htmlVersion = hv
+	}
+	if pub, found, err := readSerializeStringOption(ctx, m, "doctype-public"); err != nil {
+		return opts, err
+	} else if found {
+		opts.doctypePublic = pub
+	}
+	if sys, found, err := readSerializeStringOption(ctx, m, "doctype-system"); err != nil {
+		return opts, err
+	} else if found {
+		opts.doctypeSystem = sys
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
 		standalone, err := resolveSerializeStandaloneMap(ctx, v)
@@ -266,6 +304,29 @@ func resolveSerializeQNameNames(v Sequence, name string) (map[string]struct{}, e
 	return names, nil
 }
 
+// readSerializeNumberOption extracts a numeric-valued serialize option
+// (html-version, an xs:decimal) from the option map as its canonical string
+// form. A non-numeric value is err:XPTY0004. found is false only when the key is
+// absent.
+func readSerializeNumberOption(m MapItem, name string) (string, bool, error) {
+	v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
+	if !found {
+		return "", false, nil
+	}
+	if seqLen(v) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single number", name)}
+	}
+	av, ok := v.Get(0).(AtomicValue)
+	if !ok || !av.IsNumeric() {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be numeric", name)}
+	}
+	s, err := atomicToString(av)
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be numeric", name)}
+	}
+	return s, true, nil
+}
+
 // readSerializeStringOption extracts a string-valued serialize option from the
 // option map, applying F&O 3.1 §2.5 option (function) conversion: it atomizes
 // the value FIRST — through the ctx-aware typed-value atomization, so an
@@ -310,7 +371,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			if strings.TrimSpace(string(child.Content())) == "" {
+			if isXSDWhitespaceOnly(string(child.Content())) {
 				continue
 			}
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options root must not contain text"}
@@ -405,17 +466,66 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			if err != nil {
 				return opts, err
 			}
-			opts.xmlVersion = strings.TrimSpace(value)
-		case "byte-order-mark", "escape-uri-attributes", "include-content-type":
-			// yes-no boolean parameters helium does not apply (HTML/XHTML or BOM);
+			opts.xmlVersion = strings.Trim(value, xsdWhitespaceCutset)
+		case "byte-order-mark":
+			// A yes-no boolean helium does not apply (UTF-8 output emits no BOM);
 			// validate the boolean lexical space and ignore.
 			if _, err := readSerializeParamYesNo(param); err != nil {
 				return opts, err
 			}
-		case "doctype-public", "doctype-system", "html-version",
-			"json-node-output-method", "media-type", "normalization-form":
-			// Recognized parameters helium does not apply; validate the element
-			// structure (single unqualified value attribute, no content) and ignore.
+		case "escape-uri-attributes":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.escapeURIAttributes = value
+		case "include-content-type":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.includeContentType = value
+		case "html-version":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			hv := strings.Trim(value, xsdWhitespaceCutset)
+			if !isValidXSDecimal(hv) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter html-version must be an xs:decimal, got %q", value)}
+			}
+			opts.htmlVersion = hv
+		case "doctype-public":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.doctypePublic = value
+		case "doctype-system":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.doctypeSystem = value
+		case "json-node-output-method":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			// json-node-output-method-type: xml|html|xhtml|text or a QName/EQName.
+			if !serializeMethodValid(strings.Trim(value, xsdWhitespaceCutset)) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter json-node-output-method has an invalid value %q", value)}
+			}
+		case "normalization-form":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			if !serializeNormalizationFormValid(strings.Trim(value, xsdWhitespaceCutset)) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter normalization-form has an invalid value %q", value)}
+			}
+		case "media-type":
+			// A string-type parameter helium does not apply; validate structure.
 			if _, err := readSerializeParamValue(param); err != nil {
 				return opts, err
 			}
@@ -437,6 +547,54 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	}
 
 	return opts, nil
+}
+
+// isXSDWhitespaceOnly reports whether s is empty or consists only of XSD
+// whitespace (#x20/#x9/#xA/#xD). NBSP and other Unicode whitespace are NOT
+// whitespace, so content containing them is significant.
+func isXSDWhitespaceOnly(s string) bool {
+	return strings.Trim(s, xsdWhitespaceCutset) == ""
+}
+
+// isValidXSDecimal reports whether s is a valid xs:decimal lexical form: an
+// optional sign followed by digits with an optional fractional part (no
+// exponent). Used to validate the html-version parameter.
+func isValidXSDecimal(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] == '+' || s[0] == '-' {
+		s = s[1:]
+	}
+	intPart, fracPart, _ := strings.Cut(s, ".")
+	// A second "." (e.g. "5.0.0") leaves a "." in fracPart — reject it. A lone
+	// "." with no digits either side is invalid; "5." and ".5" are valid.
+	if strings.IndexByte(fracPart, '.') >= 0 {
+		return false
+	}
+	if intPart == "" && fracPart == "" {
+		return false
+	}
+	return allASCIIDigits(intPart) && allASCIIDigits(fracPart)
+}
+
+func allASCIIDigits(s string) bool {
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// serializeNormalizationFormValid reports whether v is a valid normalization-form
+// value: one of the Unicode normalization forms, "none", or empty.
+func serializeNormalizationFormValid(v string) bool {
+	switch v {
+	case "", "none", "NFC", "NFD", "NFKC", "NFKD", "fully-normalized":
+		return true
+	}
+	return false
 }
 
 // serializeMethodValid reports whether v is a valid method-type value: one of
@@ -716,7 +874,7 @@ func resolveSerializeCharacterMapsElement(elem *helium.Element) (map[rune]string
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			if strings.TrimSpace(string(child.Content())) == "" {
+			if isXSDWhitespaceOnly(string(child.Content())) {
 				continue
 			}
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps must not contain text"}
@@ -771,7 +929,7 @@ func hasNonWhitespaceContent(elem *helium.Element) bool {
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			if strings.TrimSpace(string(child.Content())) != "" {
+			if !isXSDWhitespaceOnly(string(child.Content())) {
 				return true
 			}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
@@ -1109,14 +1267,17 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 }
 
 func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
+	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
+		EscapeURIAttributes(opts.escapeURIAttributes)
+
 	doc, ok := node.(*helium.Document)
 	if !ok || !htmlDocumentElementIsHTML(doc) {
 		// A non-document node, or a document whose document element is not <html>,
-		// is serialized under the html output method WITHOUT the HTML5 DOCTYPE and
+		// is serialized under the html output method WITHOUT the DOCTYPE and
 		// WITHOUT meta injection (Serialization 3.1: those apply to an html-rooted
-		// result). The input tree is not mutated.
+		// result). The input tree is not mutated. escape-uri-attributes still
+		// applies.
 		var buf strings.Builder
-		hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true)
 		if err := hw.WriteTo(&buf, node); err != nil {
 			return "", err
 		}
@@ -1128,17 +1289,20 @@ func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	insertHTMLContentTypeMeta(clone, opts.encoding)
+	// include-content-type (default yes) controls the Content-Type meta injection.
+	if opts.includeContentType {
+		insertHTMLContentTypeMeta(clone, opts.encoding)
+	}
 
+	doctype := htmlDoctype(opts, clone)
 	var buf strings.Builder
-	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true)
 	doctypeEmitted := false
 	for child := range helium.Children(clone) {
 		if child.Type() == helium.DTDNode {
 			continue
 		}
 		if child.Type() == helium.ElementNode && !doctypeEmitted {
-			buf.WriteString("<!DOCTYPE html>\n")
+			buf.WriteString(doctype)
 			doctypeEmitted = true
 		}
 		if err := hw.WriteTo(&buf, child); err != nil {
@@ -1146,6 +1310,56 @@ func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) 
 		}
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// htmlDoctype computes the DOCTYPE declaration (with trailing newline) for the
+// html output method: an explicit doctype-public/doctype-system produces a
+// PUBLIC/SYSTEM declaration; otherwise HTML5 (html-version ≥ 5, the default)
+// produces `<!DOCTYPE html>` and HTML 4 produces the HTML 4.01 declaration.
+func htmlDoctype(opts serializeOptions, doc *helium.Document) string {
+	if opts.doctypePublic != "" || opts.doctypeSystem != "" {
+		rootName := serializeMethodHTML
+		if root := doc.DocumentElement(); root != nil {
+			rootName = root.Name()
+		}
+		var b strings.Builder
+		b.WriteString("<!DOCTYPE ")
+		b.WriteString(rootName)
+		if opts.doctypePublic != "" {
+			b.WriteString(` PUBLIC "`)
+			b.WriteString(opts.doctypePublic)
+			b.WriteString(`"`)
+			if opts.doctypeSystem != "" {
+				b.WriteString(` "`)
+				b.WriteString(opts.doctypeSystem)
+				b.WriteString(`"`)
+			}
+		} else {
+			b.WriteString(` SYSTEM "`)
+			b.WriteString(opts.doctypeSystem)
+			b.WriteString(`"`)
+		}
+		b.WriteString(">\n")
+		return b.String()
+	}
+	if serializeHTMLIsVersion5(opts) {
+		return "<!DOCTYPE html>\n"
+	}
+	return `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">` + "\n"
+}
+
+// serializeHTMLIsVersion5 reports whether the effective html-version selects
+// HTML5 serialization (version ≥ 5). The default (unspecified) html-version is
+// 5.0; an unparseable value is treated permissively as HTML5.
+func serializeHTMLIsVersion5(opts serializeOptions) bool {
+	if opts.htmlVersion == "" {
+		return true
+	}
+	v, err := strconv.ParseFloat(opts.htmlVersion, 64)
+	if err != nil {
+		return true
+	}
+	return v >= 5
 }
 
 // htmlDocumentElementIsHTML reports whether the document element's local name is

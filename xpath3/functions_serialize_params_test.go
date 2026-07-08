@@ -546,3 +546,104 @@ func TestSerialize_ElementFormSchemaTypes(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestSerialize_HTMLParamsApplied verifies the html output-method parameters are
+// APPLIED (not merely recognized): include-content-type, escape-uri-attributes,
+// and html-version (doctype selection).
+func TestSerialize_HTMLParamsApplied(t *testing.T) {
+	const srcHTMLHead = `<?xml version="1.0" encoding="UTF-8"?><html><head/><body><p>Hi</p></body></html>`
+
+	t.Run("include-content-type=no suppresses the meta element", func(t *testing.T) {
+		doc := mustParseXML(t, srcHTMLHead)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","include-content-type":false()})`)
+		require.NoError(t, err)
+		require.NotContains(t, res.StringValue(), "<meta", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("include-content-type default injects the meta element", func(t *testing.T) {
+		doc := mustParseXML(t, srcHTMLHead)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<meta", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("escape-uri-attributes=no leaves URI attributes unescaped", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?>`+
+			`<html><head/><body><a href="a b|c">x</a></body></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","escape-uri-attributes":false()})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `href="a b|c"`, "output:\n%s", res.StringValue())
+
+		res2, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","escape-uri-attributes":true()})`)
+		require.NoError(t, err)
+		require.Contains(t, res2.StringValue(), `href="a%20b|c"`, "output:\n%s", res2.StringValue())
+	})
+
+	t.Run("html-version 5 emits the HTML5 doctype", func(t *testing.T) {
+		doc := mustParseXML(t, srcHTMLHead)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","html-version":5.0})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<!DOCTYPE html>", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("html-version 4.0 emits the HTML 4.01 doctype", func(t *testing.T) {
+		doc := mustParseXML(t, srcHTMLHead)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","html-version":4.0})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "DTD HTML 4.01", "output:\n%s", out)
+		require.NotContains(t, out, "<!DOCTYPE html>", "output:\n%s", out)
+	})
+}
+
+// TestSerialize_ElementFormValueValidation verifies the element-form value
+// schema-type validation for previously shape-only-checked parameters, and the
+// XSD-whitespace content checks (NBSP is significant).
+func TestSerialize_ElementFormValueValidation(t *testing.T) {
+	const paramsOpen = `<output:serialization-parameters xmlns:output="http://www.w3.org/2010/xslt-xquery-serialization">`
+	const paramsClose = `</output:serialization-parameters>`
+
+	requireXPTY0004 := func(t *testing.T, paramsXML string) {
+		t.Helper()
+		_, err := runElementFormParams(t, `<root/>`, paramsXML)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	}
+	requireOK := func(t *testing.T, paramsXML string) {
+		t.Helper()
+		_, err := runElementFormParams(t, `<root/>`, paramsXML)
+		require.NoError(t, err)
+	}
+
+	t.Run("html-version bogus is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+`<output:html-version value="bogus"/>`+paramsClose)
+	})
+	t.Run("html-version decimal is accepted", func(t *testing.T) {
+		requireOK(t, paramsOpen+`<output:html-version value="4.01"/>`+paramsClose)
+	})
+	t.Run("json-node-output-method bad value is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+`<output:json-node-output-method value="not a qname"/>`+paramsClose)
+	})
+	t.Run("json-node-output-method xml is accepted", func(t *testing.T) {
+		requireOK(t, paramsOpen+`<output:json-node-output-method value="xml"/>`+paramsClose)
+	})
+	t.Run("normalization-form bogus is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+`<output:normalization-form value="bogus"/>`+paramsClose)
+	})
+	t.Run("normalization-form NFC is accepted", func(t *testing.T) {
+		requireOK(t, paramsOpen+`<output:normalization-form value="NFC"/>`+paramsClose)
+	})
+
+	// Finding 3: NBSP is not XSD whitespace, so NBSP-only content is significant.
+	t.Run("NBSP-only text in serialization-parameters is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+" "+paramsClose)
+	})
+	t.Run("NBSP-only content in a parameter element is XPTY0004", func(t *testing.T) {
+		requireXPTY0004(t, paramsOpen+"<output:method value=\"xml\"> </output:method>"+paramsClose)
+	})
+}

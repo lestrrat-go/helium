@@ -206,16 +206,32 @@ declaration and escaping stay consistent (`Writer.OutputVersion("")` — every
 non-`fn:serialize` caller — keeps the document's version, byte-identical).
 `undeclare-prefixes` is honored only when that effective version is 1.1;
 requesting it at an effective 1.0 (the default when `version` is unspecified) is
-the `SEPM0010` static error. `method="html"`
-(`serializeHTMLSequence`) emits an HTML5 `<!DOCTYPE html>` and injects a
-`<meta http-equiv="Content-Type">` into `<head>` — but ONLY when the document
-element's local name is `html` (case-insensitive); any other root (or a fragment
-node) is serialized under the html method with no DOCTYPE/meta. The doctype/meta
-work on a copy of the document (never mutating the input), then serialize via the
-`helium/html` writer. The map form defaults `omit-xml-declaration` to true (an
-empty map equals omitting the argument; W3C serialize-xml-127a); the element form
-keeps the Serialization-spec default (declaration emitted). Character maps are
-not applied on the html path.
+the `SEPM0010` static error. `method="html"` (`serializeHTMLSequence` /
+`serializeHTMLNode`) emits its DOCTYPE and injects a `<meta http-equiv=
+"Content-Type">` into `<head>` — but ONLY when the document element's local name
+is `html` (case-insensitive); any other root (or a fragment node) is serialized
+under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
+`include-content-type` (default yes) gates the meta injection; `escape-uri-attributes`
+(default yes) selects `helium/html` `Writer.EscapeURIAttributes`; and the DOCTYPE
+is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
+a PUBLIC/SYSTEM declaration, otherwise HTML5 (`html-version` ≥ 5, the default)
+yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration. The
+doctype/meta work on a copy of the document (never mutating the input), then
+serialize via the `helium/html` writer. The map form defaults `omit-xml-declaration`
+to true (an empty map equals omitting the argument; W3C serialize-xml-127a); the
+element form keeps the Serialization-spec default (declaration emitted). Character
+maps are not applied on the html path.
+
+**Element-form value validation (Serialization 3.1 schema types).** Every
+recognized parameter is either applied or a spec-justified no-op, and its value
+is schema-type validated: booleans/`yes-no-omit` accept `{yes,no,true,false,1,0}`
+(+ `omit`), uppercase rejected; `method`/`json-node-output-method` validate as a
+built-in method or a QName/EQName; `html-version` as `xs:decimal` (`isValidXSDecimal`);
+`normalization-form` against `{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`;
+`version` as the output version. `byte-order-mark`, `media-type`, `doctype-public`,
+`doctype-system` are validated for structure. Content whitespace checks use
+`isXSDWhitespaceOnly` (`#x20/#x9/#xA/#xD` only) so NBSP-only content is
+significant, not ignorable.
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.
