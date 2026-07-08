@@ -1110,6 +1110,13 @@ type analyzeStringGroup struct {
 // character-class subexpressions, and non-capturing groups are handled so the
 // static nesting is exact even when two patterns produce identical match spans
 // (e.g. "(b)(x?)" siblings vs "(b(x?))" nested).
+//
+// The XPath 3.1 "x" flag (F&O 3.1 §5.6.1.1) removes unescaped whitespace (#x9,
+// #xA, #xD, #x20) OUTSIDE character-class expressions before matching; it does
+// NOT enable "#" comments (a Perl/Java extension absent from XPath 3.1 — "#" is
+// a literal). So under the "x" flag whitespace is skipped when deciding whether
+// a "(" opens a non-capturing "(?…" group (e.g. "( ?:…)" collapses to "(?:…)"),
+// keeping the derived group count aligned with the compiled pattern.
 func analyzeStringGroupParents(pattern, flags string) []int {
 	extended := strings.ContainsRune(flags, 'x')
 	rs := []rune(pattern)
@@ -1133,12 +1140,6 @@ func analyzeStringGroupParents(pattern, flags string) []int {
 			continue
 		}
 		switch c {
-		case '#':
-			if extended {
-				for i+1 < len(rs) && rs[i+1] != '\n' {
-					i++
-				}
-			}
 		case '[':
 			inClass = true
 			classStart = i + 1
@@ -1146,7 +1147,13 @@ func analyzeStringGroupParents(pattern, flags string) []int {
 				classStart = i + 2
 			}
 		case '(':
-			if i+1 < len(rs) && rs[i+1] == '?' {
+			j := i + 1
+			if extended {
+				for j < len(rs) && isRegexXFlagWhitespace(rs[j]) {
+					j++
+				}
+			}
+			if j < len(rs) && rs[j] == '?' {
 				stack = append(stack, 0)
 				continue
 			}
@@ -1169,6 +1176,12 @@ func analyzeStringGroupParents(pattern, flags string) []int {
 	return parents
 }
 
+// isRegexXFlagWhitespace reports whether r is whitespace removed by the XPath/XSD
+// regex "x" flag (#x9, #xA, #xD, #x20).
+func isRegexXFlagWhitespace(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
 // buildAnalyzeStringMatch populates matchElem with the fn:group hierarchy and
 // interleaved text for one regex match. m is the submatch-index slice
 // (m[0],m[1] = whole match; m[2g],m[2g+1] = group g); groupParents gives the
@@ -1178,9 +1191,15 @@ func analyzeStringGroupParents(pattern, flags string) []int {
 // that did not participate in the match (start < 0) produces no fn:group element.
 func buildAnalyzeStringMatch(doc *helium.Document, matchElem *helium.Element, s string, m []int, groupParents []int) error {
 	root := &analyzeStringGroup{nr: 0, start: m[0], end: m[1]}
-	nodes := make([]*analyzeStringGroup, len(groupParents)+1)
+	// Size the node table off the MATCH's group count, never off groupParents:
+	// if the static parenthesis analysis and the compiled regex ever disagree on
+	// the group count, this must not index out of range — analyzeStringParentOf
+	// then treats an unknown group as a direct child of the match (flat), which is
+	// well-formed, rather than panicking.
+	numGroups := len(m)/2 - 1
+	nodes := make([]*analyzeStringGroup, numGroups+1)
 	nodes[0] = root
-	for g := 1; g < len(m)/2; g++ {
+	for g := 1; g <= numGroups; g++ {
 		gs, ge := m[2*g], m[2*g+1]
 		if gs < 0 {
 			continue // group did not participate in the match
@@ -1190,14 +1209,14 @@ func buildAnalyzeStringMatch(doc *helium.Document, matchElem *helium.Element, s 
 	// Attach each participating group under its nearest participating ancestor.
 	// Groups are numbered in opening-paren (document) order, so appending in that
 	// order keeps sibling groups in document order.
-	for g := 1; g < len(nodes); g++ {
+	for g := 1; g <= numGroups; g++ {
 		node := nodes[g]
 		if node == nil {
 			continue
 		}
 		parent := root
-		for p := groupParents[g-1]; p > 0; p = groupParents[p-1] {
-			if nodes[p] != nil {
+		for p := analyzeStringParentOf(groupParents, g); p > 0; p = analyzeStringParentOf(groupParents, p) {
+			if p < len(nodes) && nodes[p] != nil {
 				parent = nodes[p]
 				break
 			}
@@ -1205,6 +1224,15 @@ func buildAnalyzeStringMatch(doc *helium.Document, matchElem *helium.Element, s 
 		parent.children = append(parent.children, node)
 	}
 	return renderAnalyzeStringGroup(doc, matchElem, root, s)
+}
+
+// analyzeStringParentOf returns the static parent group number of group g, or 0
+// (a direct child of the match) when g is outside the derived parents table.
+func analyzeStringParentOf(groupParents []int, g int) int {
+	if g >= 1 && g <= len(groupParents) {
+		return groupParents[g-1]
+	}
+	return 0
 }
 
 // renderAnalyzeStringGroup emits, into parent, the text spans of node not covered

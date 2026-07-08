@@ -136,6 +136,22 @@ func TestAnalyzeString_NestedGroups(t *testing.T) {
 			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">b<fn:group nr="2"/></fn:group></fn:match><fn:non-match>anana</fn:non-match></fn:analyze-string-result>`,
 		},
 		{
+			// "#" is a LITERAL regex character under the "x" flag (XPath 3.1 has
+			// no "#" comments), and "(a)" is a real capturing group. This must not
+			// panic (regression: a "#"-comment misread dropped the group, so the
+			// derived group count fell short of the match's and indexed out of range).
+			name: "x-flag hash is literal not a comment",
+			expr: `fn:serialize(fn:analyze-string("#a", "#(a)", "x"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match>#<fn:group nr="1">a</fn:group></fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// The "x" flag removes unescaped whitespace, so "( a )" nested in
+			// "( (b) )" is the same as "((b))": group 2 nested in group 1.
+			name: "x-flag whitespace nested groups",
+			expr: `fn:serialize(fn:analyze-string("b", "( (b) )", "x"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1"><fn:group nr="2">b</fn:group></fn:group></fn:match></fn:analyze-string-result>`,
+		},
+		{
 			// QT3 analyzeString-017: the sibling counterpart of 017a — identical
 			// match spans but separate parentheses, so the empty group 2 is a
 			// SIBLING of group 1, not nested. Nesting is a static property of the
