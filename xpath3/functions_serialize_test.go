@@ -130,6 +130,115 @@ func TestSerialize_ItemSeparatorNormalization(t *testing.T) {
 	})
 }
 
+// The DTD / internal subset of a source document node is not part of the XDM
+// data model, so fn:serialize (xml method) must never reproduce it. With no
+// doctype-system parameter, serializing a document that has a DOCTYPE / internal
+// subset emits no <!DOCTYPE> (Serialization 3.1 §5.1.7; W3C parse-xml-006/008,
+// fn-doc-25/26/29).
+func TestSerialize_NoSourceDoctypeLeak(t *testing.T) {
+	run := func(t *testing.T, xml string) string {
+		t.Helper()
+		doc := mustParseXML(t, xml)
+		res, err := evaluate(t.Context(), doc, `serialize(.)`)
+		require.NoError(t, err)
+		return res.StringValue()
+	}
+
+	t.Run("external subset (SYSTEM)", func(t *testing.T) {
+		out := run(t, `<!DOCTYPE root SYSTEM "x.dtd">`+"\n"+`<root><child/></root>`)
+		require.NotContains(t, out, "DOCTYPE")
+		require.Contains(t, out, "<root><child/></root>")
+	})
+	t.Run("internal subset", func(t *testing.T) {
+		out := run(t, `<!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a>foo</a>`)
+		require.NotContains(t, out, "DOCTYPE")
+		require.Contains(t, out, "<a>foo</a>")
+	})
+
+	// With doctype-system specified, the DOCTYPE IS emitted (from the parameter,
+	// not the source tree), naming the document element with an empty internal
+	// subset.
+	t.Run("doctype-system emits DOCTYPE", func(t *testing.T) {
+		doc := mustParseXML(t, `<!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a>foo</a>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"doctype-system":"here.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE a SYSTEM "here.dtd">`)
+		require.Contains(t, out, "<a>foo</a>")
+		require.NotContains(t, out, "ELEMENT")
+	})
+}
+
+// fn:serialize serializes an element as if it were the root of a tree, so an
+// element selected from a larger document must carry the namespace declarations
+// for every namespace in scope on it — including those inherited from ancestors
+// outside the serialized subtree (XDM: an element node's namespace nodes are ALL
+// its in-scope namespaces; W3C fn-union-node-args-015/016/017,
+// fn-intersect-node-args-015/016, XQueryComment002).
+func TestSerialize_IsolatedElementInScopeNamespaces(t *testing.T) {
+	t.Run("used inherited prefix is declared", func(t *testing.T) {
+		doc := mustParseXML(t, `<a xmlns:p="urn:P"><p:b/></a>`)
+		res, err := evaluate(t.Context(), doc, `serialize(/a/*[1])`)
+		require.NoError(t, err)
+		require.Equal(t, `<p:b xmlns:p="urn:P"/>`, res.StringValue())
+	})
+
+	// All in-scope namespaces are declared, including ones inherited but not used
+	// by the element itself (matching Saxon / the XDM data model).
+	t.Run("unused inherited prefixes are also declared", func(t *testing.T) {
+		doc := mustParseXML(t,
+			`<atomic:root xmlns:atomic="urn:A" xmlns:foo="urn:F" xmlns:xsi="urn:X">`+
+				`<atomic:integer>12</atomic:integer></atomic:root>`)
+		res, err := evaluate(t.Context(), doc, `serialize(/*/*[1])`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `xmlns:atomic="urn:A"`)
+		require.Contains(t, out, `xmlns:foo="urn:F"`)
+		require.Contains(t, out, `xmlns:xsi="urn:X"`)
+		require.Contains(t, out, `>12</atomic:integer>`)
+	})
+
+	// A document root (no element ancestor) is serialized byte-identically — no
+	// spurious extra declarations.
+	t.Run("document root is unchanged", func(t *testing.T) {
+		doc := mustParseXML(t, `<a xmlns:p="urn:P"><p:b/></a>`)
+		res, err := evaluate(t.Context(), doc, `serialize(.)`)
+		require.NoError(t, err)
+		require.Equal(t, "<?xml version=\"1.0\"?>\n"+`<a xmlns:p="urn:P"><p:b/></a>`, res.StringValue())
+	})
+
+	// The document root ELEMENT (not the document node) also has no element
+	// ancestor, so it too is serialized without spurious extra declarations.
+	t.Run("root element is unchanged", func(t *testing.T) {
+		doc := mustParseXML(t, `<a xmlns:p="urn:P"><p:b/></a>`)
+		res, err := evaluate(t.Context(), doc, `serialize(/a)`)
+		require.NoError(t, err)
+		require.Equal(t, `<a xmlns:p="urn:P"><p:b/></a>`, res.StringValue())
+	})
+
+	// An ancestor that UNDECLARES a prefix (XML 1.1 xmlns:p="") removes it from
+	// the inner element's in-scope namespace set, so a further-out ancestor's
+	// binding for the same prefix must NOT be resurrected on the serialized
+	// element: the nearest declaration (the undeclaration) decides the prefix
+	// (XDM namespace-node rules; fn-in-scope-prefixes-29).
+	t.Run("xml 1.1 undeclaration is not resurrected", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.1"?><outer xmlns:p="urn"><mid xmlns:p=""><child/></mid></outer>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(/*/*/*[1], map{"version":"1.1","undeclare-prefixes":true()})`)
+		require.NoError(t, err)
+		require.Equal(t, `<child/>`, res.StringValue())
+	})
+
+	// The symmetric positive case: an outer prefix binding with NO inner
+	// undeclaration IS inherited onto the serialized element.
+	t.Run("outer binding without inner undeclaration is inherited", func(t *testing.T) {
+		doc := mustParseXML(t, `<outer xmlns:p="urn"><mid><child/></mid></outer>`)
+		res, err := evaluate(t.Context(), doc, `serialize(/*/*/*[1])`)
+		require.NoError(t, err)
+		require.Equal(t, `<child xmlns:p="urn"/>`, res.StringValue())
+	})
+}
+
 // fn:serialize with no serialization parameters uses the xml output method
 // (adaptive is opt-in), under which serializing an attribute or namespace node
 // is err:SENR0001 (W3C serialize-xml-002/011/012).
