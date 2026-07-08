@@ -76,7 +76,7 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `elem *Element` — current element
 
 ### DTD & Entities
-- `attsSpecial map[string]enum.AttributeType` — special attributes from DTD
+- `attsSpecial map[string]enum.AttributeType` — special attributes from DTD. `parseAttribute()` sets its value-normalize flag from this map (a non-CDATA tokenized type collapses whitespace); `xml:id` additionally forces normalization unconditionally (it is implicitly `xs:ID` even with no DTD declaration, per the xml:id Recommendation §4 + XML §3.3.3 tokenized-type normalization), so its stored DOM value is trimmed and internal-space-collapsed and is what `GetElementByID`/`fn:id`/the XPath string-value resolve. This is a DELIBERATE XPath-3.1 / xml:id-§4 conformance divergence from libxml2, which normalizes `xml:id` only when it is DTD-declared ID and leaves undeclared-`xml:id` normalization as a documented open issue (it does not do it). It is verified to leave every libxml2-compat / c14n / serialization golden byte-identical (no parity fixture carries a normalizable-whitespace `xml:id`).
 - `attsDefault map[string][]*Attribute` — default attributes from DTD
 - `inSubset int` — 0=not in subset, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (set by SubstituteEntities(true))

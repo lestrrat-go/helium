@@ -1012,6 +1012,19 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	if ok && attType != enum.AttrInvalid {
 		normalize = true
 	}
+	// xml:id normalization (xml:id Recommendation §4 + XML §3.3.3 tokenized-type
+	// normalization): an xml:id attribute is implicitly xs:ID, so its value is
+	// trimmed and internal space runs are collapsed even with NO DTD declaration.
+	// This is a DELIBERATE XPath-3.1 / xml:id-§4 conformance choice, NOT libxml2
+	// parity: libxml2 normalizes xml:id ONLY when it is DTD-declared ID and leaves
+	// undeclared-xml:id normalization as a documented open issue (it does not do
+	// it). Verified to leave every libxml2-compat / c14n / serialization golden
+	// byte-identical (no parity fixture carries a normalizable-whitespace xml:id).
+	// The normalized value is what GetElementByID / fn:id / the XPath string-value
+	// of the attribute observe.
+	if p == lexicon.PrefixXML && l == "id" {
+		normalize = true
+	}
 	pctx.skipBlanks(ctx)
 
 	cur := pctx.getCursor()

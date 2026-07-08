@@ -140,6 +140,33 @@ func TestGetElementByID(t *testing.T) {
 			"SetSkipIDs(false) must restore resolution against the existing ID table")
 		require.NotNil(t, doc.GetElementByID("child-id"))
 	})
+
+	t.Run("xml:id value is whitespace-normalized", func(t *testing.T) {
+		t.Parallel()
+		// xml:id is implicitly xs:ID, so its value undergoes tokenized-type
+		// normalization: leading/trailing whitespace stripped and internal
+		// whitespace runs (incl. TAB/CR/LF) collapsed to a single space. The
+		// stored DOM value must be the normalized form so a serialized element
+		// carries the collapsed id (xml:id Recommendation §4).
+		const input = "<root>\n  <a xml:id=\"  \t\n  first  \"/>\n" +
+			"  <b xml:id=\"mid\tdle\"/>\n</root>"
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		a := doc.GetElementByID("first")
+		require.NotNil(t, a, "collapsed xml:id must be resolvable")
+		require.Equal(t, "a", a.LocalName())
+		for _, attr := range a.Attributes() {
+			if attr.Name() == lexicon.QNameXMLID {
+				require.Equal(t, "first", attr.Value(),
+					"stored xml:id value must be collapsed and trimmed")
+			}
+		}
+
+		b := doc.GetElementByID("mid dle")
+		require.NotNil(t, b, "internal-whitespace xml:id collapses to a single space")
+		require.Equal(t, "b", b.LocalName())
+	})
 }
 
 func TestDocProperties(t *testing.T) {
