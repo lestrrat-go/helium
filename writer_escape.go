@@ -169,7 +169,24 @@ func isInCharacterRange(r rune) bool {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, xml11 bool) error {
+// writeCharMapReplacement flushes s[last:cut] to w and writes the raw
+// (unescaped) character-map replacement, returning the new value of last (the
+// byte offset just past the mapped character). It is shared by escapeText and
+// escapeAttrValue so a character map substitutes a mapped rune with its literal
+// replacement string, per XSLT/XQuery Serialization 3.1 §7 (character maps are
+// applied as the final step and the replacement is emitted verbatim, not
+// re-escaped).
+func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl string) (int, error) {
+	if _, err := w.Write(s[last:cut]); err != nil {
+		return last, err
+	}
+	if _, err := io.WriteString(w, repl); err != nil {
+		return last, err
+	}
+	return next, nil
+}
+
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
 	var esc []byte
 	var hbuf [8]byte
 	var dbuf [12]byte
@@ -177,6 +194,14 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, 
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		if repl, ok := charMap[r]; ok {
+			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl)
+			if err != nil {
+				return err
+			}
+			last = newLast
+			continue
+		}
 		switch r {
 		case '"':
 			esc = esc_quot
@@ -241,7 +266,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, 
 	return nil
 }
 
-func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInvalidChars, xml11 bool) error {
+func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
 	var esc []byte
 	var hbuf [8]byte
 	var dbuf [12]byte
@@ -249,6 +274,14 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInva
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		if repl, ok := charMap[r]; ok {
+			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl)
+			if err != nil {
+				return err
+			}
+			last = newLast
+			continue
+		}
 		switch r {
 		case '&':
 			esc = esc_amp

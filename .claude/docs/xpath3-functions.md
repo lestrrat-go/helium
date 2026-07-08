@@ -70,11 +70,14 @@ flattens away) and cardinality applies AFTER, so `map{"opt": ([], "v")}` coerces
 to the single `"v"`, not `XPTY0004`. No raw pre-atomization `seqLen != 1` gate
 wraps these. `fn:json-to-xml`/`fn:parse-json`/`map:merge` `duplicates` route
 through `coerceArgToStringRequired`; `fn:serialize`'s string map parameters
-(`method`/`item-separator`/`encoding`, via `readSerializeStringOption`) and its
-`standalone` union value (`validateSerializeStandaloneMap`) atomize via the
-ctx-aware `atomizeTypedValue`/typed-value stream then enforce the singleton,
-keeping each atom's type (e.g. an `xs:QName` `method`) so the `atomicToString`/
-type checks are unchanged. Because atomization is content-kind-aware, an
+(`item-separator`/`encoding`, via `readSerializeStringOption`), its `method`
+union-of-string-or-QName (`resolveSerializeMethodMap` — which inspects the ATOM so
+a namespaced `xs:QName` keeps its namespace as an extension EQName instead of being
+stringified to its local part), and its `standalone` union value
+(`resolveSerializeStandaloneMap`) atomize via the ctx-aware
+`atomizeTypedValue`/typed-value stream then enforce the singleton, keeping each
+atom's type so the `atomicToString`/type checks are unchanged. Because atomization
+is content-kind-aware, an
 element-only-typed node used as an option value has no typed value and raises
 `FOTY0012`; every extractor lets that dynamic error surface (`isNoTypedValueError`)
 instead of masking it as its own bad-option error (`XPTY0004`/`FOJS0005`).
@@ -174,6 +177,177 @@ unique keys, so the combination cannot succeed.
 
 ### `functions_serialize.go`
 `serialize`
+
+Serialization parameters (map form and `output:serialization-parameters`
+element form) are both parsed and **applied**. String/boolean params
+(`method`/`item-separator`/`encoding`/`indent`/`omit-xml-declaration`/
+`allow-duplicate-names`) and these additional params drive the output:
+`standalone` (resolved to yes/no/omit → the XML-declaration pseudo-attribute;
+the Serialization default is `omit`, so a source declaration's standalone is not
+retained unless the parameter requests yes/no), `undeclare-prefixes`
+(XML 1.1 `xmlns:pfx=""` undeclarations), `cdata-section-elements` and
+`suppress-indentation` (resolved to an EXACT expanded `{uri}local` name set —
+Clark notation with `{}local` for the no-namespace case; matching is by exact
+expanded name so `QName("","b")` never matches a namespaced `<p:b>`; the
+element form is an `xs:list` of QName-OR-`Q{uri}local`-EQName, split ONLY on XSD
+list whitespace (`#x20/#x9/#xA/#xD` via `xsdListFields`, so an NBSP stays in the
+token and fails validation), validating NCName parts, rejecting an EQName with a
+brace in the URI part, resolving an unprefixed lexical QName through the in-scope
+DEFAULT namespace, binding the reserved `xml` prefix implicitly, and treating
+`xmlns:p=""` as an UNDECLARATION that leaves `p` unbound rather than bound to the
+empty URI), and `use-character-maps` (resolved to a `map[rune]string`; an element
+form `output:character-map` requires only `@character` — an absent or empty
+`@map-string` maps the character to the empty replacement, i.e. deletion). The
+element-form value parsing follows the Serialization 3.1 schema types: the
+boolean/`yes-no-omit` families accept the full lowercase lexical space
+(`yes`/`no`/`true`/`false`/`1`/`0`, plus `omit` for standalone; uppercase and
+NBSP-padded forms are rejected — `serializeBooleanValue`), `method` validates as
+a built-in method OR a prefixed-QName/non-null-EQName EXTENSION name — a bare
+non-built-in NCName (e.g. `bogus`) is invalid (`serializeMethodValid` /
+`isExtensionMethodName`) — and the recognized
+but unapplied parameters (`byte-order-mark`, `escape-uri-attributes`,
+`include-content-type`, `html-version`, `json-node-output-method`, `media-type`,
+`normalization-form`, `doctype-public`, `doctype-system`) are validated and
+ignored rather than rejected as unsupported.
+The xml path builds a `helium.Writer` via `newSerializeXMLWriter` wiring
+`OutputVersion`/`Standalone`/`OmitStandalone`/`AllowPrefixUndeclarations`/
+`CDATASectionElements`/`SuppressIndentElements`/`CharacterMap` — the shared
+`helium.Writer` (root `writer.go`/`writer_escape.go`) implements those knobs
+(character maps substitute a mapped rune with its raw replacement in text and
+attribute content; cdata-section-elements emit direct text children as CDATA;
+suppress-indentation disables indentation for the named subtree; `Standalone`
+forces yes/no, `OmitStandalone` forces omission, matching by exact expanded name).
+The effective output `version` (the `version` param, default `1.0`) drives BOTH
+the XML declaration text AND the XML 1.1 escaping/undeclaration rules via
+`Writer.OutputVersion`, so a source document's own version is overridden and the
+declaration and escaping stay consistent (`Writer.OutputVersion("")` — every
+non-`fn:serialize` caller — keeps the document's version, byte-identical).
+`undeclare-prefixes` is honored only when that effective version is 1.1;
+requesting it at an effective 1.0 (the default when `version` is unspecified) is
+the `SEPM0010` static error. `method="html"` (`serializeHTMLSequence` /
+`serializeHTMLNode`) emits its DOCTYPE and injects a `<meta http-equiv=
+"Content-Type">` into `<head>` — but ONLY when the document element's local name
+is `html` (case-insensitive); any other root (or a fragment node) is serialized
+under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
+`include-content-type` (default yes) gates the meta injection; `escape-uri-attributes`
+(default yes) selects `helium/html` `Writer.EscapeURIAttributes`; and the DOCTYPE
+is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
+a PUBLIC/SYSTEM declaration whose DOCTYPE name is the fixed token `html` (the
+html-method / HTML5 doctype rule — never the source element's arbitrary case, so
+`<HtMl>` still emits `<!DOCTYPE html …>`), otherwise HTML5 (`html-version` ≥ 5, the default)
+yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration; the
+Content-Type meta uses the `media-type` param (default `text/html`) and
+`insertHTMLContentTypeMeta` DISCARDS every existing `<meta http-equiv=
+"Content-Type">` (matched case-insensitively and whitespace-trimmed via
+`isHTMLContentTypeMeta`/`removeHTMLContentTypeMetas`) before inserting the
+computed one as the head's first child, so no stale declaration survives. The
+doctype/meta work on a copy of the document (never mutating the input), then
+serialize via the `helium/html` writer. Character maps ARE applied on the html
+path (text + attribute content) via the `helium/html` `Writer.CharacterMap` knob;
+per Serialization 3.1 §7 (character-expansion phase) a URI attribute value that is
+URI-escaped (`escape-uri-attributes=yes`, the default) SKIPS character mapping, so
+character maps apply to non-URI attributes normally and to URI attributes only
+when escaping is disabled. The `helium` XML writer's XHTML serialization path
+(`writer_xhtml.go`) likewise applies `Writer.CharacterMap` to XHTML attribute
+values (including the synthesized id-from-name / xml:lang attributes); it performs
+no URI percent-encoding, so the §7 URI exclusion is not reachable there.
+The `xml` method emits `doctype-public`/`doctype-system` ONLY when
+`doctype-system` is present — per Serialization 3.1 §5.1 `doctype-public` MUST be
+ignored unless `doctype-system` is also specified (`serializeNodeItem` injects an
+internal-subset DTD named after the document element on a COPY via
+`documentWithDoctype`, so the XML writer emits `<!DOCTYPE name PUBLIC/SYSTEM ...>`
+between the declaration and the root). The map form defaults `omit-xml-declaration`
+to true (an empty map equals omitting the argument; W3C serialize-xml-127a); the
+element form keeps the Serialization-spec default (declaration emitted).
+
+**SEPM0009** (`fnSerialize`, gated to `methodEmitsXMLDeclaration` — the xml/xhtml/
+default methods) fires when `omit-xml-declaration=yes` AND EITHER (a) `standalone`
+is yes/no, OR (b) the effective `version` is other than `1.0` AND `doctype-system`
+is present. Both sub-conditions are gated on `omit-xml-declaration=yes`; the
+`doctype-system` sub-condition is ADDITIONALLY gated on `version != "1.0"` (a
+DOCTYPE without an XML declaration is well-formed in XML 1.0), so
+`serialize(., map{"omit-xml-declaration":true(),"doctype-system":"x"})` at the
+default version 1.0 emits the DOCTYPE and is NOT an error, while the same at
+`version":"1.1"` is SEPM0009. It uses the EFFECTIVE omit (incl. the map-form
+default true) and resolved standalone. The html method (no XML declaration) is
+unaffected.
+
+An extension `method` (a prefixed QName) passes value validation but is an
+UNSUPPORTED value: helium implements no extension output methods, so `fnSerialize`
+raises `SEPM0016` at dispatch rather than silently falling through to xml. The
+`version` param, for the XML-declaration-emitting methods, is validated as a
+supported XML output version (`1.0`/`1.1`); any other value is `SESU0013`
+(`isSupportedXMLOutputVersion`), not a bogus version pseudo-attribute.
+
+**Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
+applied as above; `text` (`serializeTextSequence`) concatenates the string values
+of the items with the `item-separator` and no markup (character maps applied,
+no SENR0001 node-kind restriction); `xhtml` is serialized as `xml` — a defensible
+approximation, as helium implements no XHTML-specific serialization rules.
+
+**Normalization + character maps (all methods incl. JSON).** `normalization-form`
+is APPLIED to the serialized output for the methods that support it —
+xml/xhtml/html/text, the unspecified default, AND `json` (Serialization 3.1
+§9.1.9) — `NFC`/`NFD`/`NFKC`/`NFKD` via `golang.org/x/text/unicode/norm`
+(`applySerializeNormalization`, the last serialization step); `none`/`""` is a
+no-op; the W3C-specific `fully-normalized` form is not provided by that package and
+is the `SESU0011` unsupported-normalization error. Only the `adaptive` method
+ignores it. `use-character-maps` is likewise applicable to the `json` output
+method (§9.1.11, matching Saxon): a mapped character is replaced by its verbatim
+replacement in JSON string content (values and object keys) INSTEAD of being
+JSON-escaped — e.g. a map `"/"→"/"` prevents escaping `/` as `\/`
+(`encodeJSONStringForSerialization` consults `opts.charMap`). A character-map
+REPLACEMENT string is NOT subjected to Unicode Normalization or re-escaping
+(Serialization 3.1 §11): when a normalization pass and a character map are BOTH in
+force, `withCharMapSentinels` substitutes each mapped key with a unique sentinel
+rune (Supplementary Private Use Area-A, unaffected by normalization) during
+serialization (XML/HTML/text/json alike), then `expandCharMapSentinels` restores
+the verbatim replacement AFTER normalization — so replacements pass through
+un-normalized while the surrounding content is normalized. `json-node-output-method`
+is validated against its OWN
+narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
+`json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default
+(`xml`) is honored, so a non-default value (`html`/`xhtml`/`text`/extension) that
+would change a node's serialization is an explicit `SEPM0016` unsupported-feature
+error when a node is actually serialized under json (helium has no nested-node JSON
+serialization for the other methods) — never silent xml. When no node is serialized
+under json it is a harmless no-op.
+
+**Value validation (Serialization 3.1 schema types), map AND element form.** Every
+recognized parameter is applied, a spec-justified no-op, or a documented gap, and
+its value is schema-type validated consistently across both forms: booleans/
+`yes-no-omit` accept `{yes,no,true,false,1,0}` (+ `omit`), uppercase rejected;
+`method` as a built-in method or a prefixed-QName/EQName extension (bare
+non-built-in NCName invalid; the map form additionally accepts an `xs:QName` value,
+where a namespaced QName is an extension → `SEPM0016` — but per F&O 3.1 an
+`xs:QName` method value MUST have a non-absent namespace, so ANY no-namespace
+QName, even `QName("","xml")`, is `XPTY0004`: built-in methods are supplied as
+strings, not no-namespace QNames); `json-node-output-method` against its narrower
+`{xml,html,xhtml,text}`-or-extension domain (map form also `xs:QName`-aware, via
+`resolveSerializeJSONNodeMethodMap` — same F&O rule: a namespaced QName is an
+extension, and a no-namespace QName value is `XPTY0004`, keeping its namespace
+instead of stringifying to the local part); `html-version` as `xs:decimal`
+(`isValidXSDecimal`); `normalization-form` against
+`{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as a supported XML
+output version (else `SESU0013`). The map-form `cdata-section-elements` /
+`suppress-indentation` values atomize FIRST (`resolveSerializeQNameNames` via
+`atomizeTypedValue`), so an ARRAY value flattens to its member xs:QNames (W3C
+serialize-xml-106a).
+`byte-order-mark` validated as boolean and ignored (UTF-8 emits no BOM);
+`media-type` applied to the html meta; `doctype-public`/`doctype-system` applied
+to the html/xml doctype — but a `doctype-system` value containing BOTH a `"` and a
+`'` cannot be an XML SystemLiteral, so it is the `SEPM0016` invalid-value error
+(Serialization 3.1 §3), not malformed output. The `encoding` param drives the XML
+declaration's encoding pseudo-attribute (§5.1.6: the declaration includes an
+encoding declaration) via `Writer.OutputEncoding` — the map form defaults it to
+`UTF-8` so the declaration always carries `encoding="…"`, while the element form
+falls back to the document's own encoding when the param is absent. Content
+whitespace checks use `isXSDWhitespaceOnly`
+(`#x20/#x9/#xA/#xD` only) so NBSP-only content is significant, not ignorable.
+A map-form option entry present with the EMPTY SEQUENCE selects that parameter's
+DEFAULT (F&O 3.1 fn:serialize present-empty = use default, not an error), across
+every map option type — the bool/string/number/method/json-node-method/character-map
+readers report a present-empty value as not-found so the caller keeps its default.
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.

@@ -46,7 +46,50 @@ type Writer struct {
 	noEscapeNonASCII   bool
 	allowPrefixUndecl  bool // emit xmlns:prefix="" undeclarations (XML 1.1)
 	rejectInvalidChars bool // error (SERE0006) instead of replacing XML-invalid chars
+	// charMap substitutes a mapped rune in text and attribute-value content
+	// with its literal replacement string (XSLT/XQuery Serialization 3.1 §7
+	// character maps). Empty/nil disables the feature.
+	charMap map[rune]string
+	// cdataElements holds the element names (expanded {uri}local form) whose
+	// direct text children are serialized as CDATA sections rather than escaped
+	// text (the cdata-section-elements serialization parameter). Matching is by
+	// exact expanded name. Empty/nil disables the feature.
+	cdataElements map[string]struct{}
+	// suppressIndent holds the element names (expanded {uri}local form) whose
+	// subtree is serialized without indentation even when Format is enabled (the
+	// suppress-indentation serialization parameter). Matching is by exact
+	// expanded name. Empty/nil disables the feature.
+	suppressIndent map[string]struct{}
+	// standalone forces the standalone pseudo-attribute of the XML declaration
+	// (the standalone serialization parameter). It has no effect when the XML
+	// declaration is omitted. standalonePreserve (the zero value) keeps the
+	// document's own standalone status.
+	standalone standaloneMode
+	// outputVersion overrides the effective output XML version (the version
+	// serialization parameter). Empty keeps the document's own version. It drives
+	// BOTH the version pseudo-attribute of the XML declaration AND the XML 1.1
+	// serialization rules (restricted-character references, namespace
+	// undeclarations), so the declaration and escaping stay consistent.
+	outputVersion string
+	// outputEncoding overrides the encoding pseudo-attribute of the XML
+	// declaration (the encoding serialization parameter). Empty keeps the
+	// document's own encoding, leaving default output byte-identical.
+	outputEncoding string
 }
+
+// standaloneMode controls how the writer emits the standalone pseudo-attribute
+// of the XML declaration.
+type standaloneMode int
+
+const (
+	// standalonePreserve emits the document's own standalone status.
+	standalonePreserve standaloneMode = iota
+	// standaloneForceOmit emits no standalone pseudo-attribute.
+	standaloneForceOmit
+	// standaloneForceYes / standaloneForceNo force the pseudo-attribute value.
+	standaloneForceYes
+	standaloneForceNo
+)
 
 // writeSession holds the mutable state for a single serialization pass.
 // It is created inside WriteTo and threaded through the internal helper
@@ -59,6 +102,14 @@ type writeSession struct {
 	encoding       string // document encoding, used for XHTML meta injection
 	indent         int    // current indent depth (used when format is true)
 	err            error  // sticky write error; once set, further writes are skipped
+	// cdataText reports that the element currently being serialized is a
+	// cdata-section-element, so its direct text children are emitted as CDATA
+	// sections rather than escaped text.
+	cdataText bool
+	// suppressDepth > 0 means the current subtree descends from a
+	// suppress-indentation element, so indentation is disabled for it even when
+	// format is enabled.
+	suppressDepth int
 }
 
 // writeString writes str to out, recording the first error encountered into
@@ -242,6 +293,126 @@ func (w Writer) RejectInvalidChars(v bool) Writer {
 	return w
 }
 
+// CharacterMap installs a character map: each mapped rune appearing in text or
+// attribute-value content is replaced by its literal replacement string,
+// emitted verbatim (not re-escaped), per XSLT/XQuery Serialization 3.1 §7. A nil
+// or empty map disables the feature.
+func (w Writer) CharacterMap(m map[rune]string) Writer {
+	w.charMap = m
+	return w
+}
+
+// CDATASectionElements names the elements (each as an expanded {uri}local name)
+// whose direct text children are serialized as CDATA sections instead of escaped
+// text (the cdata-section-elements serialization parameter). Matching is by exact
+// expanded name. A nil or empty map disables the feature.
+func (w Writer) CDATASectionElements(m map[string]struct{}) Writer {
+	w.cdataElements = m
+	return w
+}
+
+// SuppressIndentElements names the elements (each as an expanded {uri}local name)
+// whose subtree is serialized without indentation even when Format is enabled
+// (the suppress-indentation serialization parameter). Matching is by exact
+// expanded name. A nil or empty map disables the feature.
+func (w Writer) SuppressIndentElements(m map[string]struct{}) Writer {
+	w.suppressIndent = m
+	return w
+}
+
+// Standalone forces the standalone pseudo-attribute of the XML declaration:
+// v=true emits standalone="yes", v=false emits standalone="no". It overrides the
+// document's own standalone status and has no effect when the XML declaration is
+// omitted. When neither Standalone nor OmitStandalone is called, the document's
+// own standalone status is used.
+func (w Writer) Standalone(v bool) Writer {
+	if v {
+		w.standalone = standaloneForceYes
+	} else {
+		w.standalone = standaloneForceNo
+	}
+	return w
+}
+
+// OmitStandalone forces the XML declaration to carry no standalone
+// pseudo-attribute, overriding the document's own standalone status (the
+// standalone="omit" serialization parameter value). It has no effect when the
+// XML declaration is omitted.
+func (w Writer) OmitStandalone() Writer {
+	w.standalone = standaloneForceOmit
+	return w
+}
+
+// OutputVersion overrides the effective output XML version (the version
+// serialization parameter, e.g. "1.0" or "1.1"), driving BOTH the version
+// pseudo-attribute of the XML declaration AND the XML 1.1 serialization rules
+// (restricted-character references and namespace undeclarations). An empty
+// string keeps the document's own version, leaving default output byte-identical.
+func (w Writer) OutputVersion(v string) Writer {
+	w.outputVersion = v
+	return w
+}
+
+// effectiveVersion returns the version driving serialization: the OutputVersion
+// override when set, otherwise the document's own version (defaulting to "1.0").
+func (d Writer) effectiveVersion(doc *Document) string {
+	if d.outputVersion != "" {
+		return d.outputVersion
+	}
+	if doc != nil && doc.version != "" {
+		return doc.version
+	}
+	return "1.0"
+}
+
+// OutputEncoding overrides the encoding pseudo-attribute of the XML declaration
+// (the encoding serialization parameter). An empty string keeps the document's
+// own encoding, leaving default output byte-identical.
+func (w Writer) OutputEncoding(v string) Writer {
+	w.outputEncoding = v
+	return w
+}
+
+// effectiveEncoding returns the encoding driving the XML-declaration
+// pseudo-attribute: the OutputEncoding override when set, otherwise the
+// document's own encoding.
+func (d Writer) effectiveEncoding(doc *Document) string {
+	if d.outputEncoding != "" {
+		return d.outputEncoding
+	}
+	if doc != nil {
+		return doc.encoding
+	}
+	return ""
+}
+
+// writeCDATASplit emits c as one or more CDATA sections, splitting on any "]]>"
+// sequence so the output stays well-formed (the "]]" is kept in one section and
+// the ">" starts the next). Empty content emits an empty CDATA section. Used for
+// both explicit CDATA-section nodes and the text children of a
+// cdata-section-element.
+func (s *writeSession) writeCDATASplit(out io.Writer, c []byte) {
+	if len(c) == 0 {
+		s.writeString(out, "<![CDATA[]]>")
+		return
+	}
+	start := 0
+	for i := 0; i+2 < len(c); i++ {
+		if c[i] == ']' && c[i+1] == ']' && c[i+2] == '>' {
+			end := i + 2
+			s.writeString(out, "<![CDATA[")
+			s.writeBytes(out, c[start:end])
+			s.writeString(out, "]]>")
+			start = end
+		}
+	}
+	if start < len(c) {
+		s.writeString(out, "<![CDATA[")
+		s.writeBytes(out, c[start:])
+		s.writeString(out, "]]>")
+	}
+}
+
 func (s *writeSession) indentStr() string {
 	if s.indentString == "" {
 		return "  "
@@ -297,14 +468,19 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 		return d.writeDoc(out, doc)
 	}
 	s := writeSession{Writer: d, escapeNonASCII: !d.noEscapeNonASCII}
+	// A bare element carries no document version, so only an explicit
+	// OutputVersion("1.1") override enables XML 1.1 serialization here; without
+	// it, output stays byte-identical to the prior behavior.
+	s.xml11 = d.outputVersion == "1.1"
 	return s.writeNode(out, node)
 }
 
 func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	s := writeSession{Writer: d}
-	// An XML 1.1 document may carry restricted control characters; serialize
-	// them as decimal character references. XML 1.0 output is unaffected.
-	s.xml11 = doc.version == "1.1"
+	// An XML 1.1 document (or an OutputVersion("1.1") override) may carry
+	// restricted control characters; serialize them as decimal character
+	// references. XML 1.0 output is unaffected.
+	s.xml11 = d.effectiveVersion(doc) == "1.1"
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
@@ -359,21 +535,28 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 		return nil
 	}
 	d.writeString(out, `<?xml version="`)
-	version := doc.Version()
-	if version == "" {
-		version = "1.0"
-	}
-	d.writeString(out, version+`"`)
+	d.writeString(out, d.effectiveVersion(doc)+`"`)
 
-	if encoding := doc.encoding; encoding != "" {
+	if encoding := d.effectiveEncoding(doc); encoding != "" {
 		d.writeString(out, ` encoding="`+encoding+`"`)
 	}
 
-	switch doc.Standalone() {
-	case StandaloneExplicitNo:
-		d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
-	case StandaloneExplicitYes:
+	// A forced standalone (the serialization parameter) overrides the document's
+	// own standalone status; standaloneForceOmit emits no pseudo-attribute.
+	switch d.standalone {
+	case standaloneForceOmit:
+		// emit nothing
+	case standaloneForceYes:
 		d.writeString(out, ` standalone="`+lexicon.ValueYes+`"`)
+	case standaloneForceNo:
+		d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
+	case standalonePreserve:
+		switch doc.Standalone() {
+		case StandaloneExplicitNo:
+			d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
+		case StandaloneExplicitYes:
+			d.writeString(out, ` standalone="`+lexicon.ValueYes+`"`)
+		}
 	}
 	d.writeString(out, "?>\n")
 	return d.err
@@ -459,36 +642,21 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if _, err := out.Write(c); err != nil {
 				return err
 			}
+		} else if d.cdataText {
+			// The parent element is a cdata-section-element: emit the text as
+			// one or more CDATA sections instead of escaping it.
+			d.writeCDATASplit(out, c)
 		} else {
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars, d.xml11); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
 				return err
 			}
 		}
-		return nil // no recursing down
+		return d.err // no recursing down
 	case CDATASectionNode:
 		// Mirrors xmlsave.c XML_CDATA_SECTION_NODE handling.
 		// Splits content on "]]>" sequences so the output is well-formed.
 		// Read-only serialization: use the internal slice without a copy.
-		c := rawContent(n)
-		if len(c) == 0 {
-			d.writeString(out, "<![CDATA[]]>")
-		} else {
-			start := 0
-			for i := 0; i+2 < len(c); i++ {
-				if c[i] == ']' && c[i+1] == ']' && c[i+2] == '>' {
-					end := i + 2
-					d.writeString(out, "<![CDATA[")
-					d.writeBytes(out, c[start:end])
-					d.writeString(out, "]]>")
-					start = end
-				}
-			}
-			if start < len(c) {
-				d.writeString(out, "<![CDATA[")
-				d.writeBytes(out, c[start:])
-				d.writeString(out, "]]>")
-			}
-		}
+		d.writeCDATASplit(out, rawContent(n))
 		return d.err
 	case ElementDeclNode:
 		if edecl, ok := AsNode[*ElementDecl](n); ok {
@@ -579,7 +747,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars, d.xml11); err != nil {
+					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
 						return err
 					}
 				} else {
@@ -612,9 +780,22 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 
 	d.writeString(out, ">")
 
+	// suppress-indentation: an element named in the suppress set (and its whole
+	// subtree) is serialized without indentation even when format is on. cdata-
+	// section-elements: an element named in the cdata set has its direct text
+	// children emitted as CDATA sections. Both flags are saved/restored around
+	// the children so sibling and ancestor state is unaffected.
+	elemSuppressed := d.suppressDepth > 0 || matchesNameSet(d.suppressIndent, n)
+	effFormat := d.format && !elemSuppressed
+	savedCDATA := d.cdataText
+	d.cdataText = matchesNameSet(d.cdataElements, n)
+	if elemSuppressed {
+		d.suppressDepth++
+	}
+
 	if n.FirstChild() != nil {
-		textOnly := d.format && hasOnlyTextChildren(n)
-		if d.format && !textOnly {
+		textOnly := effFormat && hasOnlyTextChildren(n)
+		if effFormat && !textOnly {
 			d.writeString(out, "\n")
 			d.indent++
 		}
@@ -622,20 +803,29 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// a corrupt (cyclic) child list terminates the descent instead of
 		// spinning; this matches the doc-level and attribute loops above.
 		for child := range Children(n) {
-			if d.format && !textOnly {
+			if effFormat && !textOnly {
 				d.writeIndent(out)
 			}
 			if err := d.writeNode(out, child); err != nil {
+				d.cdataText = savedCDATA
+				if elemSuppressed {
+					d.suppressDepth--
+				}
 				return err
 			}
-			if d.format && !textOnly {
+			if effFormat && !textOnly {
 				d.writeString(out, "\n")
 			}
 		}
-		if d.format && !textOnly {
+		if effFormat && !textOnly {
 			d.indent--
 			d.writeIndent(out)
 		}
+	}
+
+	d.cdataText = savedCDATA
+	if elemSuppressed {
+		d.suppressDepth--
 	}
 
 	d.writeString(out, "</")
@@ -643,4 +833,31 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	d.writeString(out, ">")
 
 	return d.err
+}
+
+// nodeExpandedName returns the expanded {uri}local name of a node (Clark
+// notation, with an explicit empty namespace as "{}local"), used to match
+// against the cdata-section-elements and suppress-indentation name sets. Matching
+// is by exact expanded name — a no-namespace element must not match a
+// namespaced one with the same local name.
+func nodeExpandedName(n Node) string {
+	type uriLocal interface {
+		URI() string
+		LocalName() string
+	}
+	ul, ok := n.(uriLocal)
+	if !ok {
+		return ClarkName("", n.Name())
+	}
+	return ClarkName(ul.URI(), ul.LocalName())
+}
+
+// matchesNameSet reports whether n's exact expanded name is present in set. An
+// empty set never matches.
+func matchesNameSet(set map[string]struct{}, n Node) bool {
+	if len(set) == 0 {
+		return false
+	}
+	_, ok := set[nodeExpandedName(n)]
+	return ok
 }

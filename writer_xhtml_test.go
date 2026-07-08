@@ -63,3 +63,33 @@ func TestSerializeXHTMLFormatted(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "<html")
 }
+
+// TestSerializeXHTMLCharacterMap verifies Writer.CharacterMap applies to XHTML
+// attribute values (including the synthesized id-from-name attribute) and text
+// content in the XHTML serialization path (Serialization 3.1 §6). This XHTML path
+// performs no URI percent-encoding, so character maps apply to every attribute.
+func TestSerializeXHTMLCharacterMap(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>t</title></head>
+<body><a name="foo" title="foo">foo</a></body>
+</html>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err, "parse XHTML document")
+
+	var buf strings.Builder
+	err = helium.NewWriter().CharacterMap(map[rune]string{'o': "0"}).WriteTo(&buf, doc)
+	require.NoError(t, err, "serialize XHTML with character map")
+	out := buf.String()
+
+	// The character map ('o' -> "0") applies to the source attribute values, the
+	// synthesized id (derived from @name on <a>), and text content.
+	require.Contains(t, out, `name="f00"`, "output:\n%s", out)
+	require.Contains(t, out, `title="f00"`, "output:\n%s", out)
+	require.Contains(t, out, `id="f00"`, "output:\n%s", out)
+	require.Contains(t, out, `>f00<`, "output:\n%s", out)
+}

@@ -43,3 +43,4 @@ testdata/saxon/source/
 !THIRD_PARTY_NOTICES.md
 !AGENTS.md
 !CLAUDE.md
+.review-gauntlet/

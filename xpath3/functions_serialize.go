@@ -3,15 +3,72 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"golang.org/x/text/unicode/norm"
+)
+
+const (
+	serializeMethodXML      = "xml"
+	serializeMethodXHTML    = "xhtml"
+	serializeMethodHTML     = "html"
+	serializeMethodText     = "text"
+	serializeMethodJSON     = "json"
+	serializeMethodAdaptive = "adaptive"
+	serializeStandaloneOmit = "omit"
 )
 
 func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
+}
+
+const (
+	errCodeSEPM0009 = "SEPM0009"
+	errCodeSEPM0010 = "SEPM0010"
+	errCodeSEPM0016 = "SEPM0016"
+	errCodeSESU0011 = "SESU0011"
+	errCodeSESU0013 = "SESU0013"
+)
+
+// effectiveSerializeVersion returns the effective output version, defaulting an
+// unspecified version to "1.0".
+func (o serializeOptions) effectiveSerializeVersion() string {
+	if o.xmlVersion == "" {
+		return "1.0"
+	}
+	return o.xmlVersion
+}
+
+// methodEmitsXMLDeclaration reports whether the output method produces an XML
+// declaration (the xml and xhtml methods, and the unspecified default). The
+// omit-xml-declaration / standalone / SEPM0009 rules apply only to these; for
+// html/json/text/adaptive an XML declaration is never produced.
+func (o serializeOptions) methodEmitsXMLDeclaration() bool {
+	switch o.method {
+	case "", serializeMethodXML, serializeMethodXHTML:
+		return true
+	}
+	return false
+}
+
+// methodEmitsDoctype reports whether the output method emits a document type
+// declaration from the doctype-system / doctype-public parameters (the xml,
+// xhtml, and html methods, and the unspecified xml default). doctype-system is
+// applicable to these methods (Serialization 3.1 §5.1.7 for xml/xhtml, §7.4.6 for
+// html) and is ignored by the text/json/adaptive methods.
+func (o serializeOptions) methodEmitsDoctype() bool {
+	switch o.method {
+	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML:
+		return true
+	}
+	return false
 }
 
 func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -20,19 +77,169 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
+	// An extension method (a prefixed QName) is a valid method-type value but
+	// helium implements no extension output methods, so it is an unsupported
+	// value (SEPM0016) rather than a silent fall-through to the xml method. The
+	// built-in methods and the unspecified default ("") dispatch below.
+	if opts.method != "" && !isBuiltinSerializeMethod(opts.method) {
+		return nil, &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("output method %q is not supported", opts.method)}
+	}
+
+	// The version parameter, for the methods that emit an XML declaration, must
+	// name an XML version the serializer supports (1.0 or 1.1); any other value
+	// is the SESU0013 unsupported-version serialization error rather than a
+	// bogus version pseudo-attribute. It also drives the XML 1.1 escaping /
+	// undeclaration rules, so it must be validated even when the declaration is
+	// omitted.
+	if opts.methodEmitsXMLDeclaration() && opts.xmlVersion != "" && !isSupportedXMLOutputVersion(opts.xmlVersion) {
+		return nil, &XPathError{Code: errCodeSESU0013, Message: fmt.Sprintf("XML output version %q is not supported", opts.xmlVersion)}
+	}
+
+	// A doctype-system value MUST NOT contain BOTH an apostrophe (#x27) and a
+	// quotation mark (#x22) — it could not be written as an XML SystemLiteral. Per
+	// Serialization 3.1 §3 that is an invalid parameter value (SEPM0016), rather
+	// than silently emitting a malformed DOCTYPE. doctype-system is applicable only
+	// to the xml, xhtml, and html output methods (§5.1.7 / §7.4.6) — text/json/
+	// adaptive ignore it — so the SystemLiteral check is gated to the methods that
+	// actually emit a DOCTYPE.
+	if opts.methodEmitsDoctype() && strings.ContainsRune(opts.doctypeSystem, '"') && strings.ContainsRune(opts.doctypeSystem, '\'') {
+		return nil, &XPathError{Code: errCodeSEPM0016, Message: "doctype-system must not contain both a quotation mark and an apostrophe"}
+	}
+
+	// SEPM0009 (Serialization 3.1): when the omit-xml-declaration parameter is
+	// yes, it is an error if (a) the standalone parameter has a value other than
+	// omit, OR (b) the version parameter has a value other than 1.0 AND the
+	// doctype-system parameter is specified. Both sub-conditions are gated on
+	// omit-xml-declaration=yes. It applies only to methods that emit an XML
+	// declaration (xml/xhtml/default); this uses the EFFECTIVE
+	// omit-xml-declaration (the map-form default of true) and the RESOLVED
+	// standalone value. A DOCTYPE without an XML declaration is well-formed in
+	// XML 1.0, so omit + doctype-system at version 1.0 is NOT an error.
+	if opts.methodEmitsXMLDeclaration() && opts.omitXMLDeclaration {
+		if opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo {
+			return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with standalone=yes/no"}
+		}
+		if opts.effectiveSerializeVersion() != "1.0" && opts.doctypeSystem != "" {
+			return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with a doctype-system value at version other than 1.0"}
+		}
+	}
+
+	// Namespace undeclarations require XML/XHTML 1.1; requesting them at an
+	// effective output version of 1.0 is a static error (Serialization 3.1 §5.1.8
+	// SEPM0010). undeclare-prefixes is applicable ONLY to the xml and xhtml output
+	// methods (and the unspecified xml default) — for html/text/json/adaptive it is
+	// silently ignored, no error — so SEPM0010 is gated to that method family
+	// (methodEmitsXMLDeclaration covers exactly {"", xml, xhtml}).
+	if opts.methodEmitsXMLDeclaration() && opts.undeclarePrefixes && opts.effectiveSerializeVersion() != "1.1" {
+		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
+	}
+
+	// Serialization 3.1 §11: a character-map replacement string is NOT subjected
+	// to Unicode Normalization. When BOTH a normalization pass and a character map
+	// are in force, substitute each mapped key with a unique SENTINEL rune during
+	// serialization, normalize (sentinels — Supplementary Private Use Area-A — are
+	// unaffected by normalization), then expand each sentinel to its verbatim
+	// replacement AFTER normalization, so replacements pass through un-normalized.
+	dispatchOpts := opts
+	var charMapSentinels map[rune]string
+	if opts.methodAppliesNormalization() && serializeNormalizationActive(opts.normalizationForm) && len(opts.charMap) > 0 {
+		dispatchOpts, charMapSentinels = withCharMapSentinels(opts)
+	}
+
 	var result string
-	switch opts.method {
-	case "", "adaptive":
-		result, err = serializeAdaptiveSequence(args[0], opts)
-	case "json":
-		result, err = serializeJSONSequence(args[0], opts)
+	switch dispatchOpts.method {
+	case "", serializeMethodAdaptive:
+		result, err = serializeAdaptiveSequence(args[0], dispatchOpts)
+	case serializeMethodJSON:
+		result, err = serializeJSONSequence(args[0], dispatchOpts)
+	case serializeMethodHTML:
+		result, err = serializeHTMLSequence(args[0], dispatchOpts)
+	case serializeMethodText:
+		result, err = serializeTextSequence(args[0], dispatchOpts)
 	default:
-		result, err = serializeXMLSequence(args[0], opts)
+		// The xml method (and xhtml, serialized as XML — a defensible
+		// approximation, since helium implements no XHTML-specific rules).
+		result, err = serializeXMLSequence(args[0], dispatchOpts)
 	}
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply the requested Unicode normalization to the serialized output (the
+	// last step, for the methods that support normalization-form). json/adaptive
+	// ignore the parameter; "fully-normalized" is the SESU0011 unsupported form.
+	result, err = applySerializeNormalization(result, dispatchOpts)
+	if err != nil {
+		return nil, err
+	}
+	if charMapSentinels != nil {
+		result = expandCharMapSentinels(result, charMapSentinels)
+	}
 	return SingleString(result), nil
+}
+
+// serializeNormalizationActive reports whether the normalization-form parameter
+// requests an actual Unicode normalization (anything other than none/"").
+func serializeNormalizationActive(form string) bool {
+	return form != "" && form != "none"
+}
+
+// withCharMapSentinels returns a copy of opts whose character map substitutes each
+// mapped key with a unique SENTINEL rune (from Supplementary Private Use Area-A,
+// U+F0000+, which Unicode normalization never alters), together with the
+// sentinel→replacement table for post-normalization expansion. This keeps a
+// character-map replacement string out of the normalization pass (Serialization
+// 3.1 §11: replacement strings are not subjected to Unicode Normalization).
+func withCharMapSentinels(opts serializeOptions) (serializeOptions, map[rune]string) {
+	sentinelMap := make(map[rune]string, len(opts.charMap))
+	replacements := make(map[rune]string, len(opts.charMap))
+	next := rune(0xF0000)
+	for key, repl := range opts.charMap {
+		sentinelMap[key] = string(next)
+		replacements[next] = repl
+		next++
+	}
+	opts.charMap = sentinelMap
+	return opts, replacements
+}
+
+// expandCharMapSentinels replaces each sentinel rune in s with its verbatim
+// character-map replacement string (the final step, after normalization).
+func expandCharMapSentinels(s string, replacements map[rune]string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if repl, ok := replacements[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// applySerializeNormalization applies the normalization-form parameter to the
+// serialized string. none/"" is a no-op; NFC/NFD/NFKC/NFKD are applied via
+// golang.org/x/text/unicode/norm; the W3C-specific "fully-normalized" form is
+// not provided by that package and is the SESU0011 unsupported-normalization
+// serialization error. The parameter is not applicable to the json/adaptive
+// methods, which ignore it (Serialization 3.1 §9.1.9).
+func applySerializeNormalization(s string, opts serializeOptions) (string, error) {
+	form := opts.normalizationForm
+	if form == "" || form == "none" || !opts.methodAppliesNormalization() {
+		return s, nil
+	}
+	switch form {
+	case "NFC":
+		return norm.NFC.String(s), nil
+	case "NFD":
+		return norm.NFD.String(s), nil
+	case "NFKC":
+		return norm.NFKC.String(s), nil
+	case "NFKD":
+		return norm.NFKD.String(s), nil
+	}
+	return "", &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", form)}
 }
 
 type serializeOptions struct {
@@ -42,6 +249,59 @@ type serializeOptions struct {
 	omitXMLDeclaration  bool
 	allowDuplicateNames bool
 	encoding            string
+	// standalone is the resolved standalone pseudo-attribute request:
+	// "yes"/"no" force it, "omit" forces omission. It defaults to "omit" (the
+	// Serialization 3.1 default), so a source declaration's standalone is not
+	// retained unless the parameter requests it.
+	standalone string
+	// undeclarePrefixes requests XML 1.1 namespace undeclarations (xmlns:pfx="").
+	// It is honored only when the effective output version is 1.1; otherwise it
+	// is a SEPM0010 static error.
+	undeclarePrefixes bool
+	// xmlVersion is the requested output version parameter ("" = unspecified,
+	// treated as "1.0").
+	xmlVersion string
+	// cdataElements / suppressIndent hold the exact expanded {uri}local element
+	// names for the cdata-section-elements and suppress-indentation parameters.
+	cdataElements  map[string]struct{}
+	suppressIndent map[string]struct{}
+	// charMap is the resolved character map (use-character-maps).
+	charMap map[rune]string
+	// HTML output-method parameters (applied by serializeHTMLNode).
+	// includeContentType / escapeURIAttributes default to true.
+	includeContentType  bool
+	escapeURIAttributes bool
+	// htmlVersion is the requested html-version ("" = default 5.0). doctypePublic
+	// / doctypeSystem are the requested DOCTYPE identifiers.
+	htmlVersion   string
+	doctypePublic string
+	doctypeSystem string
+	// mediaType is the media-type parameter ("" = default "text/html"), used in
+	// the html Content-Type meta element.
+	mediaType string
+	// normalizationForm is the requested Unicode normalization form ("" / "none"
+	// = no normalization). NFC/NFD/NFKC/NFKD are applied to the serialized output
+	// for the methods that support normalization; "fully-normalized" is the
+	// SESU0011 unsupported-normalization serialization error; the parameter is not
+	// applicable to (ignored by) the json/adaptive methods.
+	normalizationForm string
+	// jsonNodeOutputMethod is the requested json-node-output-method value ("" =
+	// the default xml). helium serializes a node embedded in JSON only with the
+	// xml method, so any other value that would change node serialization is an
+	// unsupported-feature error when a node is actually serialized under json.
+	jsonNodeOutputMethod string
+}
+
+// methodAppliesNormalization reports whether the output method applies the
+// normalization-form parameter. Per Serialization 3.1 it is a parameter of the
+// xml/xhtml/html/text AND json (§9.1.9) output methods and the unspecified
+// default; the adaptive method ignores it.
+func (o serializeOptions) methodAppliesNormalization() bool {
+	switch o.method {
+	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML, serializeMethodText, serializeMethodJSON:
+		return true
+	}
+	return false
 }
 
 func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptions, error) {
@@ -54,6 +314,11 @@ func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptio
 	opts := serializeOptions{
 		method:        "",
 		itemSeparator: " ",
+		// The Serialization 3.1 default for the standalone parameter is "omit".
+		standalone: serializeStandaloneOmit,
+		// include-content-type and escape-uri-attributes default to yes.
+		includeContentType:  true,
+		escapeURIAttributes: true,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
@@ -74,9 +339,19 @@ func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptio
 }
 
 func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapItem) (serializeOptions, error) {
+	// The Serialization 3.1 default encoding is UTF-8; the map form applies it so
+	// the XML declaration carries an encoding declaration (§5.1.6) even when the
+	// encoding option is absent (an explicit value below overrides it).
+	opts.encoding = lexicon.EncodingUTF8U
 	readBool := func(name string) (bool, bool, error) {
 		v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
 		if !found {
+			return false, false, nil
+		}
+		// A map entry present with the empty sequence selects the parameter's
+		// DEFAULT (F&O 3.1 fn:serialize: present-empty = use default, not an
+		// error), so report it as not-found and let the caller keep its default.
+		if seqLen(v) == 0 {
 			return false, false, nil
 		}
 		if seqLen(v) != 1 {
@@ -107,7 +382,7 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 		}
 	}
 
-	if method, found, err := readSerializeStringOption(ctx, m, "method"); err != nil {
+	if method, found, err := resolveSerializeMethodMap(ctx, m); err != nil {
 		return opts, err
 	} else if found {
 		opts.method = method
@@ -122,6 +397,11 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else if found {
 		opts.indent = indent
 	}
+	// The map form of fn:serialize defaults omit-xml-declaration to true:
+	// supplying an empty map has the same effect as omitting the argument, and
+	// the XML declaration is omitted unless the option requests otherwise
+	// (F&O 3.1 §18.9.1; W3C serialize-xml-127a).
+	opts.omitXMLDeclaration = true
 	if omit, found, err := readBool("omit-xml-declaration"); err != nil {
 		return opts, err
 	} else if found {
@@ -137,18 +417,153 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else if found {
 		opts.encoding = encoding
 	}
+	if undeclare, found, err := readBool("undeclare-prefixes"); err != nil {
+		return opts, err
+	} else if found {
+		opts.undeclarePrefixes = undeclare
+	}
+	if include, found, err := readBool("include-content-type"); err != nil {
+		return opts, err
+	} else if found {
+		opts.includeContentType = include
+	}
+	if escape, found, err := readBool("escape-uri-attributes"); err != nil {
+		return opts, err
+	} else if found {
+		opts.escapeURIAttributes = escape
+	}
+	if version, found, err := readSerializeStringOption(ctx, m, "version"); err != nil {
+		return opts, err
+	} else if found {
+		opts.xmlVersion = version
+	}
+	if hv, found, err := readSerializeNumberOption(m, "html-version"); err != nil {
+		return opts, err
+	} else if found {
+		opts.htmlVersion = hv
+	}
+	if pub, found, err := readSerializeStringOption(ctx, m, "doctype-public"); err != nil {
+		return opts, err
+	} else if found {
+		opts.doctypePublic = pub
+	}
+	if sys, found, err := readSerializeStringOption(ctx, m, "doctype-system"); err != nil {
+		return opts, err
+	} else if found {
+		opts.doctypeSystem = sys
+	}
+	if mt, found, err := readSerializeStringOption(ctx, m, "media-type"); err != nil {
+		return opts, err
+	} else if found {
+		opts.mediaType = mt
+	}
+	// Validation parity with the element form for the recognized-but-unapplied
+	// (or limitation) parameters, so an invalid value is rejected consistently.
+	if _, found, err := readBool("byte-order-mark"); err != nil {
+		return opts, err
+	} else {
+		_ = found // validated (boolean lexical space) and ignored (UTF-8 emits no BOM)
+	}
+	if jn, found, err := resolveSerializeJSONNodeMethodMap(ctx, m); err != nil {
+		return opts, err
+	} else if found {
+		opts.jsonNodeOutputMethod = jn
+	}
+	if nf, found, err := readSerializeStringOption(ctx, m, "normalization-form"); err != nil {
+		return opts, err
+	} else if found {
+		if !serializeNormalizationFormValid(nf) {
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option normalization-form has an invalid value %q", nf)}
+		}
+		opts.normalizationForm = nf
+	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
-		if err := validateSerializeStandaloneMap(ctx, v); err != nil {
+		standalone, err := resolveSerializeStandaloneMap(ctx, v)
+		if err != nil {
 			return opts, err
 		}
+		opts.standalone = standalone
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "use-character-maps"}); found {
-		if err := validateSerializeCharacterMaps(v); err != nil {
+		charMap, err := resolveSerializeCharacterMaps(v)
+		if err != nil {
 			return opts, err
 		}
+		opts.charMap = charMap
+	}
+	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "cdata-section-elements"}); found {
+		names, err := resolveSerializeQNameNames(ctx, v, "cdata-section-elements")
+		if err != nil {
+			return opts, err
+		}
+		opts.cdataElements = names
+	}
+	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "suppress-indentation"}); found {
+		names, err := resolveSerializeQNameNames(ctx, v, "suppress-indentation")
+		if err != nil {
+			return opts, err
+		}
+		opts.suppressIndent = names
 	}
 
 	return opts, nil
+}
+
+// resolveSerializeQNameNames converts a serialization parameter whose value is a
+// sequence of xs:QName items (cdata-section-elements, suppress-indentation) into
+// the element-name key set the writer matches against: each QName contributes its
+// exact expanded {uri}local name (Clark notation; an explicit empty namespace is
+// "{}local"). Matching is by exact expanded name, so QName("","b") does not match
+// a namespaced <p:b>.
+func resolveSerializeQNameNames(ctx context.Context, v Sequence, name string) (map[string]struct{}, error) {
+	// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
+	// value (W3C serialize-xml-106a supplies [QName(...), ...]) flattens to its
+	// members and each member atomizes to its xs:QName, THEN require every atom to
+	// be an xs:QName.
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{})
+	for _, av := range atoms {
+		if av.TypeName != TypeQName {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a sequence of xs:QName", name)}
+		}
+		qn, ok := av.Value.(QNameValue)
+		if !ok {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a sequence of xs:QName", name)}
+		}
+		names[helium.ClarkName(qn.URI, qn.Local)] = struct{}{}
+	}
+	return names, nil
+}
+
+// readSerializeNumberOption extracts a numeric-valued serialize option
+// (html-version, an xs:decimal) from the option map as its canonical string
+// form. A non-numeric value is err:XPTY0004. found is false only when the key is
+// absent.
+func readSerializeNumberOption(m MapItem, name string) (string, bool, error) {
+	v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
+	if !found {
+		return "", false, nil
+	}
+	// A map entry present with the empty sequence selects the parameter's DEFAULT
+	// (present-empty = use default, not an error); report it as not-found.
+	if seqLen(v) == 0 {
+		return "", false, nil
+	}
+	if seqLen(v) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single number", name)}
+	}
+	av, ok := v.Get(0).(AtomicValue)
+	if !ok || !av.IsNumeric() {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be numeric", name)}
+	}
+	s, err := atomicToString(av)
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be numeric", name)}
+	}
+	return s, true, nil
 }
 
 // readSerializeStringOption extracts a string-valued serialize option from the
@@ -169,12 +584,120 @@ func readSerializeStringOption(ctx context.Context, m MapItem, name string) (str
 	if err != nil {
 		return "", true, err
 	}
+	// A map entry present with the empty sequence selects the parameter's DEFAULT
+	// (present-empty = use default, not an error); report it as not-found.
+	if len(atoms) == 0 {
+		return "", false, nil
+	}
 	if len(atoms) != 1 {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
 	}
 	s, err := atomicToString(atoms[0])
 	if err != nil {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
+	}
+	return s, true, nil
+}
+
+// resolveSerializeMethodMap resolves the map-form "method" option, whose value is
+// an xs:string OR xs:QName (F&O 3.1 §18.9.1). It inspects the ATOM so a
+// namespaced QName keeps its namespace instead of being stringified to its local
+// part: a no-namespace value must be a built-in method token (else err:XPTY0004),
+// and a value with a non-null namespace (a namespaced QName, or a prefixed-QName
+// string) names an EXTENSION method — a valid value helium does not implement,
+// which the SEPM0016 dispatch check reports as unsupported (the extension name is
+// carried as an EQName so it is never mistaken for a built-in token). found is
+// false only when the "method" key is absent.
+func resolveSerializeMethodMap(ctx context.Context, m MapItem) (string, bool, error) {
+	v, present := m.Get(AtomicValue{TypeName: TypeString, Value: "method"})
+	if !present {
+		return "", false, nil
+	}
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return "", true, err
+	}
+	// A "method" entry present with the empty sequence selects the default method
+	// (present-empty = use default, not an error); report it as not-found.
+	if len(atoms) == 0 {
+		return "", false, nil
+	}
+	if len(atoms) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "method" must be a singleton`}
+	}
+	av := atoms[0]
+	if av.TypeName == TypeQName {
+		qn, ok := av.Value.(QNameValue)
+		if !ok {
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "method" is not a valid xs:QName`}
+		}
+		if qn.URI == "" {
+			// F&O 3.1: if an xs:QName is supplied for the method option it MUST have
+			// a non-absent namespace URI — built-in methods (xml/html/…) are
+			// specified as STRINGS, not no-namespace QName values. So a no-namespace
+			// QName (even QName("","xml")) is an invalid method value [err:XPTY0004].
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method: an xs:QName value must have a non-absent namespace, got %q", qn.Local)}
+		}
+		// A namespaced QName names an extension method: preserve its namespace as
+		// an EQName so it is never a built-in token and the SEPM0016 dispatch check
+		// reports it as unsupported.
+		return "Q{" + qn.URI + "}" + qn.Local, true, nil
+	}
+	s, err := atomicToString(av)
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option method has an invalid value"}
+	}
+	if !serializeMethodValid(s) {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", s)}
+	}
+	return s, true, nil
+}
+
+// resolveSerializeJSONNodeMethodMap resolves the map-form "json-node-output-method"
+// option, whose value is an xs:string OR xs:QName over the narrower domain
+// xml|html|xhtml|text (or an extension QName). Like resolveSerializeMethodMap it
+// inspects the ATOM so a namespaced QName keeps its namespace (an extension,
+// carried as an EQName — only its default xml is honored, so a non-default value
+// over a serialized node is the SEPM0016 honest-error) instead of being
+// stringified to its local part. A no-namespace QName must name a domain token,
+// else err:XPTY0004. found is false when the key is absent or present-empty
+// (present-empty selects the default).
+func resolveSerializeJSONNodeMethodMap(ctx context.Context, m MapItem) (string, bool, error) {
+	v, present := m.Get(AtomicValue{TypeName: TypeString, Value: "json-node-output-method"})
+	if !present {
+		return "", false, nil
+	}
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return "", true, err
+	}
+	if len(atoms) == 0 {
+		return "", false, nil
+	}
+	if len(atoms) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "json-node-output-method" must be a singleton`}
+	}
+	av := atoms[0]
+	if av.TypeName == TypeQName {
+		qn, ok := av.Value.(QNameValue)
+		if !ok {
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "json-node-output-method" is not a valid xs:QName`}
+		}
+		if qn.URI == "" {
+			// F&O 3.1: an xs:QName supplied for json-node-output-method MUST have a
+			// non-absent namespace URI (built-in values are strings), so a
+			// no-namespace QName (even QName("","xml")) is invalid [err:XPTY0004].
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method: an xs:QName value must have a non-absent namespace, got %q", qn.Local)}
+		}
+		// A namespaced QName is an extension: carry it as an EQName.
+		return "Q{" + qn.URI + "}" + qn.Local, true, nil
+	}
+	s, err := atomicToString(av)
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option json-node-output-method has an invalid value"}
+	}
+	if !serializeJSONNodeOutputMethodValid(s) {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", s)}
 	}
 	return s, true, nil
 }
@@ -195,7 +718,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			if strings.TrimSpace(string(child.Content())) == "" {
+			if isXSDWhitespaceOnly(string(child.Content())) {
 				continue
 			}
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options root must not contain text"}
@@ -230,7 +753,13 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			if err != nil {
 				return opts, err
 			}
-			opts.method = value
+			// method-type is a union of the built-in method tokens and a QName /
+			// EQName naming an extension method (XSD-whitespace-collapsed).
+			method := strings.Trim(value, xsdWhitespaceCutset)
+			if !serializeMethodValid(method) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter method has an invalid value %q", value)}
+			}
+			opts.method = method
 		case "item-separator":
 			value, err := readSerializeParamValue(param)
 			if err != nil {
@@ -256,39 +785,226 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			}
 			opts.allowDuplicateNames = value
 		case "undeclare-prefixes":
-			// undeclare-prefixes is a yes/no boolean serialization parameter
-			// (Serialization 3.1 §2). helium does not emit XML 1.1 namespace
-			// undeclarations, so the value is validated and ignored — matching
-			// the map form, which accepts it without honoring the behavior.
-			if _, err := readSerializeParamYesNo(param); err != nil {
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.undeclarePrefixes = value
 		case "encoding":
 			value, err := readSerializeParamValue(param)
 			if err != nil {
 				return opts, err
 			}
 			opts.encoding = value
-		case "byte-order-mark", "cdata-section-elements", "doctype-public", "doctype-system",
-			"json-node-output-method", "media-type", "normalization-form",
-			"suppress-indentation", "version":
-			if _, err := readSerializeParamValue(param); err != nil {
+		case "cdata-section-elements":
+			names, err := readSerializeParamQNameNames(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.cdataElements = names
+		case "suppress-indentation":
+			names, err := readSerializeParamQNameNames(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.suppressIndent = names
+		case "version":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.xmlVersion = strings.Trim(value, xsdWhitespaceCutset)
+		case "byte-order-mark":
+			// A yes-no boolean helium does not apply (UTF-8 output emits no BOM);
+			// validate the boolean lexical space and ignore.
+			if _, err := readSerializeParamYesNo(param); err != nil {
+				return opts, err
+			}
+		case "escape-uri-attributes":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.escapeURIAttributes = value
+		case "include-content-type":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.includeContentType = value
+		case "html-version":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			hv := strings.Trim(value, xsdWhitespaceCutset)
+			if !isValidXSDecimal(hv) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter html-version must be an xs:decimal, got %q", value)}
+			}
+			opts.htmlVersion = hv
+		case "doctype-public":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.doctypePublic = value
+		case "doctype-system":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.doctypeSystem = value
+		case "json-node-output-method":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			// json-node-output-method-type: xml|html|xhtml|text or an extension QName
+			// (NOT json/adaptive — a narrower domain than the method parameter).
+			jn := strings.Trim(value, xsdWhitespaceCutset)
+			if !serializeJSONNodeOutputMethodValid(jn) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter json-node-output-method has an invalid value %q", value)}
+			}
+			opts.jsonNodeOutputMethod = jn
+		case "normalization-form":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			nf := strings.Trim(value, xsdWhitespaceCutset)
+			if !serializeNormalizationFormValid(nf) {
+				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter normalization-form has an invalid value %q", value)}
+			}
+			opts.normalizationForm = nf
+		case "media-type":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.mediaType = value
 		case "standalone":
-			if _, err := readSerializeParamStandalone(param); err != nil {
+			value, err := readSerializeParamStandalone(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.standalone = value
 		case "use-character-maps":
-			if err := validateSerializeCharacterMapsElement(param); err != nil {
+			charMap, err := resolveSerializeCharacterMapsElement(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.charMap = charMap
 		default:
 			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("unsupported serialize parameter %q", param.LocalName())}
 		}
 	}
 
 	return opts, nil
+}
+
+// isXSDWhitespaceOnly reports whether s is empty or consists only of XSD
+// whitespace (#x20/#x9/#xA/#xD). NBSP and other Unicode whitespace are NOT
+// whitespace, so content containing them is significant.
+func isXSDWhitespaceOnly(s string) bool {
+	return strings.Trim(s, xsdWhitespaceCutset) == ""
+}
+
+// isValidXSDecimal reports whether s is a valid xs:decimal lexical form: an
+// optional sign followed by digits with an optional fractional part (no
+// exponent). Used to validate the html-version parameter.
+func isValidXSDecimal(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] == '+' || s[0] == '-' {
+		s = s[1:]
+	}
+	intPart, fracPart, _ := strings.Cut(s, ".")
+	// A second "." (e.g. "5.0.0") leaves a "." in fracPart — reject it. A lone
+	// "." with no digits either side is invalid; "5." and ".5" are valid.
+	if strings.IndexByte(fracPart, '.') >= 0 {
+		return false
+	}
+	if intPart == "" && fracPart == "" {
+		return false
+	}
+	return allASCIIDigits(intPart) && allASCIIDigits(fracPart)
+}
+
+func allASCIIDigits(s string) bool {
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isSupportedXMLOutputVersion reports whether v is an XML output version the
+// serializer supports. helium serializes XML 1.0 and 1.1; any other value
+// (including a malformed one or an unsupported version such as "1.2") is the
+// SESU0013 unsupported-version error.
+func isSupportedXMLOutputVersion(v string) bool {
+	return v == "1.0" || v == "1.1"
+}
+
+// serializeNormalizationFormValid reports whether v is a valid normalization-form
+// value: one of the Unicode normalization forms, "none", or empty.
+func serializeNormalizationFormValid(v string) bool {
+	switch v {
+	case "", "none", "NFC", "NFD", "NFKC", "NFKD", "fully-normalized":
+		return true
+	}
+	return false
+}
+
+// isBuiltinSerializeMethod reports whether v names a built-in output method that
+// helium implements.
+func isBuiltinSerializeMethod(v string) bool {
+	switch v {
+	case serializeMethodXML, serializeMethodHTML, serializeMethodXHTML, serializeMethodText, serializeMethodJSON, serializeMethodAdaptive:
+		return true
+	}
+	return false
+}
+
+// isExtensionMethodName reports whether v is a syntactically valid extension
+// method name: a lexical QName WITH a prefix (its expanded name has a non-null
+// namespace), or an `Q{uri}local` EQName with a NON-EMPTY namespace URI. A bare
+// NCName (null namespace) is NOT an extension method — per Serialization 3.1 the
+// method-type restricts extension methods to prefixed QNames, so an unprefixed
+// value must be one of the built-in tokens.
+func isExtensionMethodName(v string) bool {
+	if uri, local, ok := parseEQNameToken(v); ok {
+		return uri != "" && xmlchar.IsValidNCName(local)
+	}
+	prefix, local, hasPrefix := strings.Cut(v, ":")
+	if !hasPrefix {
+		return false
+	}
+	return xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local)
+}
+
+// serializeMethodValid reports whether v is a valid method-type value: a
+// built-in output method, or a prefixed QName / non-null EQName naming an
+// extension method. A bare non-built-in NCName (e.g. "bogus") is NOT valid.
+// Note: passing validation does not imply the method is SUPPORTED — an extension
+// method is valid but unimplemented, and fnSerialize rejects it at dispatch
+// rather than silently falling through to the xml method.
+func serializeMethodValid(v string) bool {
+	return isBuiltinSerializeMethod(v) || isExtensionMethodName(v)
+}
+
+// serializeJSONNodeOutputMethodValid reports whether v is a valid
+// json-node-output-method value. Per Serialization 3.1 §9.1 its domain is the
+// tokens xml|html|xhtml|text (NOT json or adaptive) or a prefixed extension
+// QName — a SEPARATE, narrower domain than the method parameter.
+func serializeJSONNodeOutputMethodValid(v string) bool {
+	switch v {
+	case serializeMethodXML, serializeMethodHTML, serializeMethodXHTML, serializeMethodText:
+		return true
+	}
+	return isExtensionMethodName(v)
 }
 
 func readSerializeParamValue(elem *helium.Element) (string, error) {
@@ -306,40 +1022,172 @@ func readSerializeParamValue(elem *helium.Element) (string, error) {
 	return attr.Value(), nil
 }
 
+// xsdWhitespaceCutset is the XSD list / whiteSpace-collapse whitespace set
+// (#x20, #x9, #xA, #xD). Element-form enumeration/boolean/QNames values are
+// token-derived, so leading/trailing runs of these characters are stripped —
+// but NBSP and other Unicode whitespace are NOT whitespace and must remain in
+// the value (where they then fail lexical validation).
+const xsdWhitespaceCutset = " \t\r\n"
+
+// serializeBooleanValue normalizes a Serialization 3.1 boolean lexical to
+// "yes"/"no". The value space (after collapsing leading/trailing XSD whitespace)
+// is the full xs:boolean lexical space plus the yes/no synonyms:
+// {yes, no, true, false, 1, 0}. ok is false for any other value — including
+// uppercase forms (xs:boolean is lowercase-only) and NBSP-padded values.
+func serializeBooleanValue(value string) (string, bool) {
+	switch strings.Trim(value, xsdWhitespaceCutset) {
+	case lexicon.ValueYes, lexicon.ValueTrue, "1":
+		return lexicon.ValueYes, true
+	case lexicon.ValueNo, lexicon.ValueFalse, "0":
+		return lexicon.ValueNo, true
+	}
+	return "", false
+}
+
 func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
 		return false, err
 	}
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case lexicon.ValueYes, "true", "1":
-		return true, nil
-	case lexicon.ValueNo, "false", "0":
-		return false, nil
-	default:
-		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
+	norm, ok := serializeBooleanValue(value)
+	if !ok {
+		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be a boolean (yes/no/true/false/1/0)", elem.LocalName())}
 	}
+	return norm == lexicon.ValueYes, nil
 }
 
+// readSerializeParamStandalone reads and normalizes the element-form
+// "standalone" parameter, whose schema type is yes-no-omit-type: the boolean
+// lexical space {yes, no, true, false, 1, 0} plus "omit" (Serialization 3.1).
+// The value is XSD-whitespace-collapsed, so " no " is the "no" value; it returns
+// the normalized "yes"/"no"/"omit".
 func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 	value, err := readSerializeParamValue(elem)
 	if err != nil {
 		return "", err
 	}
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case lexicon.ValueYes, lexicon.ValueNo, "omit":
-		return value, nil
-	default:
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
+	if strings.Trim(value, xsdWhitespaceCutset) == serializeStandaloneOmit {
+		return serializeStandaloneOmit, nil
 	}
+	if norm, ok := serializeBooleanValue(value); ok {
+		return norm, nil
+	}
+	return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize parameter "standalone" must be yes/no/omit or a boolean (true/false/1/0)`}
 }
 
-// validateSerializeStandaloneMap validates the "standalone" option value in the
-// map form of fn:serialize. Its value space is union(xs:boolean, enum("omit"))
-// (F&O 3.1 §18.9.1). The map form does NOT whitespace-collapse the value, so a
-// string such as " omit " (with surrounding spaces) is not the "omit" enum
-// value and is a type error [err:XPTY0004].
-func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
+// readSerializeParamQNameNames reads a cdata-section-elements or
+// suppress-indentation element-form parameter whose value attribute is a
+// whitespace-separated list of names, and returns the writer's exact expanded-
+// name key set. Per the Serialization 3.1 schema each token is a QName OR an
+// EQName: an `Q{uri}local` EQName supplies its namespace directly; a prefixed
+// lexical QName resolves its prefix against the parameter element's in-scope
+// namespaces; an UNPREFIXED lexical QName resolves through the in-scope DEFAULT
+// namespace (these parameters use the default namespace for unprefixed QNames).
+func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, error) {
+	value, err := readSerializeParamValue(elem)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{})
+	// QNames-type is an xs:list, so tokens split ONLY on XSD list whitespace
+	// (#x20/#x9/#xA/#xD) — NBSP and other Unicode whitespace stay inside the token
+	// and then fail NCName validation, rather than being silently split.
+	for _, token := range xsdListFields(value) {
+		key, err := resolveSerializeNameToken(elem, token)
+		if err != nil {
+			return nil, err
+		}
+		names[key] = struct{}{}
+	}
+	return names, nil
+}
+
+// resolveSerializeNameToken resolves one cdata-section-elements /
+// suppress-indentation name token (a QName or an `Q{uri}local` EQName) to its
+// exact expanded {uri}local key. NCName parts are validated before resolution.
+func resolveSerializeNameToken(elem *helium.Element, token string) (string, error) {
+	badName := func() error {
+		return &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter has an invalid name %q", token)}
+	}
+	if uri, local, ok := parseEQNameToken(token); ok {
+		if !xmlchar.IsValidNCName(local) {
+			return "", badName()
+		}
+		return helium.ClarkName(uri, local), nil
+	}
+	prefix, local, hasPrefix := strings.Cut(token, ":")
+	if !hasPrefix {
+		// No colon: strings.Cut puts the whole token in prefix. Resolve through
+		// the in-scope default namespace (absent → no namespace).
+		if !xmlchar.IsValidNCName(prefix) {
+			return "", badName()
+		}
+		uri, _ := lookupInScopeNamespace(elem, "")
+		return helium.ClarkName(uri, prefix), nil
+	}
+	if !xmlchar.IsValidNCName(prefix) || !xmlchar.IsValidNCName(local) {
+		return "", badName()
+	}
+	uri, ok := lookupInScopeNamespace(elem, prefix)
+	if !ok {
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter uses unbound namespace prefix %q", prefix)}
+	}
+	return helium.ClarkName(uri, local), nil
+}
+
+// parseEQNameToken recognizes an EQName of the form `Q{uri}local`, returning the
+// namespace URI and local name. Per the grammar `Q\{[^{}]*\}...` the URI part
+// admits neither "{" nor "}"; the first "}" after "Q{" ends it (so the URI never
+// contains "}"), and a "{" inside the URI part means the token is not a
+// well-formed EQName (the caller then rejects it as an invalid name).
+func parseEQNameToken(token string) (string, string, bool) {
+	if !strings.HasPrefix(token, "Q{") {
+		return "", "", false
+	}
+	uri, local, ok := strings.Cut(token[2:], "}")
+	if !ok || strings.ContainsRune(uri, '{') {
+		return "", "", false
+	}
+	return uri, local, true
+}
+
+// lookupInScopeNamespace resolves prefix against the in-scope namespace
+// declarations of elem, walking up its ancestors. The reserved "xml" prefix is
+// always bound (no declaration required). For a non-default prefix, an empty URI
+// is an UNDECLARATION (XML 1.1 namespace masking): the prefix becomes unbound and
+// the masking hides any ancestor binding. The default prefix ("") may be bound to
+// the empty URI (xmlns="" = no default namespace), which is a valid state.
+func lookupInScopeNamespace(elem helium.Node, prefix string) (string, bool) {
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML, true
+	}
+	for node := elem; node != nil; node = node.Parent() {
+		nser, ok := node.(helium.Namespacer)
+		if !ok {
+			continue
+		}
+		for _, ns := range nser.Namespaces() {
+			if ns.Prefix() != prefix {
+				continue
+			}
+			uri := ns.URI()
+			if prefix != "" && uri == "" {
+				// Undeclaration: the prefix is unbound from here up (masking).
+				return "", false
+			}
+			return uri, true
+		}
+	}
+	return "", false
+}
+
+// resolveSerializeStandaloneMap validates and resolves the "standalone" option
+// value in the map form of fn:serialize. Its value space is
+// union(xs:boolean, enum("omit")) (F&O 3.1 §18.9.1). The map form does NOT
+// whitespace-collapse the value, so a string such as " omit " (with surrounding
+// spaces) is not the "omit" enum value and is a type error [err:XPTY0004]. It
+// returns "yes"/"no"/"omit", or "" to select the parameter default (omit).
+func resolveSerializeStandaloneMap(ctx context.Context, v Sequence) (string, error) {
 	xerr := &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "standalone" must be xs:boolean or "omit"`}
 	// Option (function) conversion (F&O 3.1 §2.5): atomize FIRST so an array
 	// (e.g. an empty-array member) flattens to its members, THEN apply the
@@ -351,27 +1199,30 @@ func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
 	atoms, err := atomizeTypedValue(ctx, v)
 	if err != nil {
 		if isNoTypedValueError(err) {
-			return err
+			return "", err
 		}
-		return xerr
+		return "", xerr
 	}
 	if len(atoms) == 0 {
-		return nil
+		return "", nil
 	}
 	if len(atoms) > 1 {
-		return xerr
+		return "", xerr
 	}
 	av := atoms[0]
 	switch av.TypeName {
 	case TypeBoolean:
-		return nil
+		if av.BooleanVal() {
+			return lexicon.ValueYes, nil
+		}
+		return lexicon.ValueNo, nil
 	case TypeString, TypeUntypedAtomic:
 		s, err := atomicToString(av)
 		if err != nil {
-			return xerr
+			return "", xerr
 		}
-		if s == "omit" {
-			return nil
+		if s == serializeStandaloneOmit {
+			return serializeStandaloneOmit, nil
 		}
 		// An untypedAtomic may carry an xs:boolean lexical; accept the same
 		// value space the other boolean map options do (readBool): true/false/1/0.
@@ -379,13 +1230,15 @@ func validateSerializeStandaloneMap(ctx context.Context, v Sequence) error {
 		// are not xs:boolean lexicals — both stay rejected.
 		if av.TypeName == TypeUntypedAtomic {
 			switch s {
-			case lexicon.ValueTrue, lexicon.ValueFalse, "1", "0":
-				return nil
+			case lexicon.ValueTrue, "1":
+				return lexicon.ValueYes, nil
+			case lexicon.ValueFalse, "0":
+				return lexicon.ValueNo, nil
 			}
 		}
-		return xerr
+		return "", xerr
 	default:
-		return xerr
+		return "", xerr
 	}
 }
 
@@ -403,66 +1256,73 @@ func serializeNodeKindError(item NodeItem) error {
 	return nil
 }
 
-func validateSerializeCharacterMapsElement(elem *helium.Element) error {
+// resolveSerializeCharacterMapsElement validates the element form of
+// use-character-maps and builds the rune→replacement map from its
+// output:character-map children.
+func resolveSerializeCharacterMapsElement(elem *helium.Element) (map[rune]string, error) {
 	if len(elem.Attributes()) != 0 {
-		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
 	}
-	seen := make(map[string]struct{})
+	result := make(map[rune]string)
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			if strings.TrimSpace(string(child.Content())) == "" {
+			if isXSDWhitespaceOnly(string(child.Content())) {
 				continue
 			}
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps must not contain text"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps must not contain text"}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			continue
 		case helium.ElementNode:
 		default:
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps has invalid child node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps has invalid child node"}
 		}
 
 		charMap, _ := helium.AsNode[*helium.Element](child)
 		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps children must be output:character-map"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
 		if hasNonWhitespaceContent(charMap) {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map must not have child content"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map must not have child content"}
 		}
 
+		// map-string is an xs:string: an absent OR empty value maps the character
+		// to the EMPTY replacement (deletion), so presence is tracked separately
+		// from value and an empty value is not rejected. Only the character
+		// attribute is required (and must be a single character).
 		var character, mapString string
+		var hasCharacter bool
 		for _, attr := range charMap.Attributes() {
 			if attr.URI() != "" {
-				return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map attributes must be unqualified"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map attributes must be unqualified"}
 			}
 			switch attr.LocalName() {
 			case "character":
 				character = attr.Value()
+				hasCharacter = true
 			case "map-string":
 				mapString = attr.Value()
 			default:
-				return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map has unsupported attribute"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map has unsupported attribute"}
 			}
 		}
-		if character == "" || mapString == "" {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map requires character and map-string"}
+		if !hasCharacter || utf8.RuneCountInString(character) != 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map character must be a single character"}
 		}
-		if utf8.RuneCountInString(character) != 1 {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map character must be a single character"}
+		key := []rune(character)[0]
+		if _, exists := result[key]; exists {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map entries must be unique"}
 		}
-		if _, exists := seen[character]; exists {
-			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map entries must be unique"}
-		}
-		seen[character] = struct{}{}
+		result[key] = mapString
 	}
-	return nil
+	return result, nil
 }
 
 func hasNonWhitespaceContent(elem *helium.Element) bool {
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			if strings.TrimSpace(string(child.Content())) != "" {
+			if !isXSDWhitespaceOnly(string(child.Content())) {
 				return true
 			}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
@@ -474,15 +1334,26 @@ func hasNonWhitespaceContent(elem *helium.Element) bool {
 	return false
 }
 
-func validateSerializeCharacterMaps(v Sequence) error {
+// resolveSerializeCharacterMaps validates the map form of the use-character-maps
+// option and builds the rune→replacement map. Keys must be single-character
+// strings and values strings (option (function) conventions apply — a QName key
+// is err:XPTY0004; W3C serialize-xml-139/139b).
+func resolveSerializeCharacterMaps(v Sequence) (map[rune]string, error) {
+	// A use-character-maps entry present with the empty sequence selects the
+	// default (no character map); present-empty = use default, not an error. An
+	// empty (non-nil) map disables the feature just like a nil one.
+	if seqLen(v) == 0 {
+		return map[rune]string{}, nil
+	}
 	if seqLen(v) != 1 {
-		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
 	}
 	m, ok := v.Get(0).(MapItem)
 	if !ok {
-		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
 	}
-	return m.forEach0(func(key AtomicValue, value Sequence) error {
+	charMap := make(map[rune]string)
+	err := m.forEach0(func(key AtomicValue, value Sequence) error {
 		if key.TypeName != TypeString && key.TypeName != TypeUntypedAtomic {
 			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps keys must be strings"}
 		}
@@ -497,9 +1368,17 @@ func validateSerializeCharacterMaps(v Sequence) error {
 		if !ok || (av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic) {
 			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps values must be strings"}
 		}
-		_, err = atomicToString(av)
-		return err
+		mapString, err := atomicToString(av)
+		if err != nil {
+			return err
+		}
+		charMap[[]rune(keyString)[0]] = mapString
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return charMap, nil
 }
 
 func serializeAdaptiveSequence(seq Sequence, opts serializeOptions) (string, error) {
@@ -540,7 +1419,7 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		// attribute or namespace node is a serialization error. An explicit
 		// method="adaptive" serializes them specially, so only guard when the
 		// method is not adaptive.
-		if opts.method != "adaptive" {
+		if opts.method != serializeMethodAdaptive {
 			if err := serializeNodeKindError(v); err != nil {
 				return "", err
 			}
@@ -564,7 +1443,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 		if err != nil {
 			return err
 		}
-		valText, err := serializeAdaptiveSequence(value, serializeOptions{method: "adaptive", itemSeparator: ","})
+		valText, err := serializeAdaptiveSequence(value, serializeOptions{method: serializeMethodAdaptive, itemSeparator: ","})
 		if err != nil {
 			return err
 		}
@@ -580,7 +1459,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 func serializeAdaptiveArray(a ArrayItem, _ serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
 	for _, member := range a.members0() {
-		text, err := serializeAdaptiveSequence(member, serializeOptions{method: "adaptive", itemSeparator: ","})
+		text, err := serializeAdaptiveSequence(member, serializeOptions{method: serializeMethodAdaptive, itemSeparator: ","})
 		if err != nil {
 			return "", err
 		}
@@ -641,7 +1520,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 					return err
 				}
 			}
-			parts = append(parts, `"`+encodeJSONStringContent(keyText)+`":`+valueSeparator(opts.indent)+valText)
+			parts = append(parts, `"`+encodeJSONStringForSerialization(keyText, opts.encoding, opts.charMap)+`":`+valueSeparator(opts.indent)+valText)
 			return nil
 		})
 		if err != nil {
@@ -649,11 +1528,19 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return formatJSONComposite("{", "}", parts, 0, opts.indent), nil
 	case NodeItem:
+		// helium serializes a node embedded in JSON only with the xml method (the
+		// json-node-output-method default). A non-default value (html/xhtml/text or
+		// an extension) would change the node's serialization, which helium does
+		// not implement — so rather than silently emitting xml, it is an explicit
+		// unsupported-feature error (SEPM0016). The empty/"xml" default is honored.
+		if m := opts.jsonNodeOutputMethod; m != "" && m != lexicon.PrefixXML {
+			return "", &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("json-node-output-method %q is not supported for a node embedded in JSON", m)}
+		}
 		text, err := serializeNodeItem(v, serializeOptions{method: lexicon.PrefixXML, omitXMLDeclaration: true})
 		if err != nil {
 			return "", err
 		}
-		return `"` + encodeJSONStringContent(text) + `"`, nil
+		return `"` + encodeJSONStringForSerialization(text, opts.encoding, opts.charMap) + `"`, nil
 	case FunctionItem:
 		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item as JSON"}
 	default:
@@ -682,8 +1569,65 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return `"` + encodeJSONStringForSerialization(s, opts.encoding) + `"`, nil
+		// use-character-maps (§9.1.11) and normalization-form (§9.1.9) ARE
+		// applicable to the json output method (Serialization 3.1; matching Saxon,
+		// e.g. a character map that maps "/"→"/" prevents JSON-escaping it as "\/").
+		// A mapped character is replaced by its verbatim replacement instead of
+		// being JSON-escaped; when normalization is also in force fnSerialize routes
+		// the map through sentinel runes so a replacement is neither re-escaped nor
+		// normalized (§11), then normalizes the json output.
+		return `"` + encodeJSONStringForSerialization(s, opts.encoding, opts.charMap) + `"`, nil
 	}
+}
+
+// serializeTextSequence implements the text output method (Serialization 3.1
+// §8): the concatenation of the string values of the items, with the
+// item-separator between adjacent items and no markup. A node contributes its
+// string value (an attribute or namespace node its value — the text method has
+// no SENR0001 node-kind restriction); an atomic its lexical form. Character maps
+// apply to the resulting text.
+func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) {
+	parts := make([]string, 0, seqLen(seq))
+	for item := range seqItems(seq) {
+		s, err := serializeTextItem(item)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, s)
+	}
+	return applyCharMapToString(strings.Join(parts, opts.itemSeparator), opts.charMap), nil
+}
+
+func serializeTextItem(item Item) (string, error) {
+	switch v := item.(type) {
+	case AtomicValue:
+		return atomicToString(v)
+	case NodeItem:
+		return ixpath.StringValue(v.Node), nil
+	case FunctionItem:
+		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
+	default:
+		// A map or array has no string value; it can only be serialized with the
+		// json or adaptive method.
+		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T using the text output method", item)}
+	}
+}
+
+// applyCharMapToString substitutes each mapped rune in s with its replacement
+// string (used by the text output method, where the whole output is text).
+func applyCharMapToString(s string, charMap map[rune]string) string {
+	if len(charMap) == 0 {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if repl, ok := charMap[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
@@ -714,48 +1658,410 @@ func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 	return strings.Join(parts, opts.itemSeparator), nil
 }
 
-func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
-	switch n := item.Node.(type) {
-	case *helium.Attribute:
-		return fmt.Sprintf(`%s="%s"`, n.Name(), n.Value()), nil
-	case *helium.Document:
-		writer := helium.NewWriter()
-		if opts.omitXMLDeclaration {
-			writer = writer.XMLDeclaration(false)
-		}
-		if opts.indent {
-			writer = writer.Format(true)
-		}
-		var buf strings.Builder
-		if err := writer.WriteTo(&buf, n); err != nil {
-			return "", err
-		}
-		return strings.TrimSuffix(buf.String(), "\n"), nil
+// newSerializeXMLWriter builds a helium.Writer configured from the serialization
+// options for the xml output method: version, encoding, omit-xml-declaration,
+// indent, standalone, undeclare-prefixes, cdata-section-elements,
+// suppress-indentation, and character maps.
+func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
+	writer := helium.NewWriter()
+	// The effective output version (version param, default "1.0") drives the XML
+	// declaration text AND the XML 1.1 escaping/undeclaration behavior, so they
+	// stay consistent regardless of the source document's own version.
+	writer = writer.OutputVersion(opts.effectiveSerializeVersion())
+	// The encoding param drives the encoding pseudo-attribute of the XML
+	// declaration (Serialization 3.1 §5.1.6: the declaration includes an encoding
+	// declaration). When the param is unset it is empty, and the writer keeps the
+	// document's own encoding, leaving default output byte-identical.
+	writer = writer.OutputEncoding(opts.encoding)
+	if opts.omitXMLDeclaration {
+		writer = writer.XMLDeclaration(false)
+	}
+	if opts.indent {
+		writer = writer.Format(true)
+	}
+	switch opts.standalone {
+	case lexicon.ValueYes:
+		writer = writer.Standalone(true)
+	case lexicon.ValueNo:
+		writer = writer.Standalone(false)
 	default:
+		// "omit" (the default) or an empty-sequence value: force omission of the
+		// standalone pseudo-attribute, overriding the source declaration.
+		writer = writer.OmitStandalone()
+	}
+	// undeclare-prefixes is honored only at output version 1.1 (fnSerialize has
+	// already rejected the 1.0 case with SEPM0010).
+	if opts.undeclarePrefixes && opts.effectiveSerializeVersion() == "1.1" {
+		writer = writer.AllowPrefixUndeclarations(true)
+	}
+	if len(opts.cdataElements) > 0 {
+		writer = writer.CDATASectionElements(opts.cdataElements)
+	}
+	if len(opts.suppressIndent) > 0 {
+		writer = writer.SuppressIndentElements(opts.suppressIndent)
+	}
+	if len(opts.charMap) > 0 {
+		writer = writer.CharacterMap(opts.charMap)
+	}
+	return writer
+}
+
+// serializeHTMLSequence serializes a sequence under the html output method.
+// A document node is serialized with an HTML5 <!DOCTYPE html> and a
+// <meta http-equiv="Content-Type"> injected into <head>; any other node is
+// serialized as an HTML fragment (no DOCTYPE). Character maps (use-character-maps)
+// are applied to text and attribute content.
+func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) {
+	parts := make([]string, 0, seqLen(seq))
+	for item := range seqItems(seq) {
+		node, ok := item.(NodeItem)
+		if !ok {
+			s, err := serializeAdaptiveItem(item, opts)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, s)
+			continue
+		}
+		if err := serializeNodeKindError(node); err != nil {
+			return "", err
+		}
+		text, err := serializeHTMLNode(node.Node, opts)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, opts.itemSeparator), nil
+}
+
+func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
+	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
+		EscapeURIAttributes(opts.escapeURIAttributes).CharacterMap(opts.charMap)
+
+	doc, ok := node.(*helium.Document)
+	if !ok || !htmlDocumentElementIsHTML(doc) {
+		// A non-document node, or a document whose document element is not <html>,
+		// is serialized under the html output method WITHOUT the DOCTYPE and
+		// WITHOUT meta injection (Serialization 3.1: those apply to an html-rooted
+		// result). The input tree is not mutated. escape-uri-attributes still
+		// applies.
 		var buf strings.Builder
-		writer := helium.NewWriter()
-		if opts.omitXMLDeclaration {
-			writer = writer.XMLDeclaration(false)
-		}
-		if opts.indent {
-			writer = writer.Format(true)
-		}
-		if err := writer.WriteTo(&buf, item.Node); err != nil {
+		if err := hw.WriteTo(&buf, node); err != nil {
 			return "", err
 		}
 		return strings.TrimSuffix(buf.String(), "\n"), nil
+	}
+
+	// Work on a copy so the <meta> injection never mutates the caller's tree.
+	clone, err := helium.CopyDoc(doc)
+	if err != nil {
+		return "", err
+	}
+	// include-content-type (default yes) controls the Content-Type meta injection.
+	if opts.includeContentType {
+		insertHTMLContentTypeMeta(clone, opts.encoding, opts.mediaType)
+	}
+
+	doctype := htmlDoctype(opts)
+	var buf strings.Builder
+	doctypeEmitted := false
+	for child := range helium.Children(clone) {
+		if child.Type() == helium.DTDNode {
+			continue
+		}
+		if child.Type() == helium.ElementNode && !doctypeEmitted {
+			buf.WriteString(doctype)
+			doctypeEmitted = true
+		}
+		if err := hw.WriteTo(&buf, child); err != nil {
+			return "", err
+		}
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// htmlDoctype computes the DOCTYPE declaration (with trailing newline) for the
+// html output method: an explicit doctype-public/doctype-system produces a
+// PUBLIC/SYSTEM declaration; otherwise HTML5 (html-version ≥ 5, the default)
+// produces `<!DOCTYPE html>` and HTML 4 produces the HTML 4.01 declaration.
+func htmlDoctype(opts serializeOptions) string {
+	if opts.doctypePublic != "" || opts.doctypeSystem != "" {
+		// The html output method's DOCTYPE name is the fixed token "html" (per the
+		// Serialization 3.1 html output method / HTML5 doctype rule — the name is
+		// always html/HTML), NOT the document element's own (possibly mixed-case)
+		// name. So a source root <HtMl> still emits `<!DOCTYPE html ...>`.
+		rootName := serializeMethodHTML
+		var b strings.Builder
+		b.WriteString("<!DOCTYPE ")
+		b.WriteString(rootName)
+		if opts.doctypePublic != "" {
+			// A PubidLiteral (XML SystemLiteral's public-id sibling) can never
+			// contain a double quote (it is not a PubidChar), so double-quoting the
+			// public id is always well-formed.
+			b.WriteString(` PUBLIC "`)
+			b.WriteString(opts.doctypePublic)
+			b.WriteString(`"`)
+			if opts.doctypeSystem != "" {
+				b.WriteByte(' ')
+				writeDoctypeSystemLiteral(&b, opts.doctypeSystem)
+			}
+		} else {
+			b.WriteString(` SYSTEM `)
+			writeDoctypeSystemLiteral(&b, opts.doctypeSystem)
+		}
+		b.WriteString(">\n")
+		return b.String()
+	}
+	if serializeHTMLIsVersion5(opts) {
+		return "<!DOCTYPE html>\n"
+	}
+	return `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">` + "\n"
+}
+
+// writeDoctypeSystemLiteral writes a doctype-system value as a well-formed XML
+// SystemLiteral, choosing the enclosing quote character by content: apostrophes
+// when the value contains a double quote, else double quotes. Serialization 3.1
+// §7.4.6 requires the system identifier be enclosed in quotation marks (#x22) OR
+// apostrophes (#x27) — it does not mandate double quotes — and SEPM0016 rejects
+// only a value containing BOTH, so a value with just a `"` (e.g. `a"b`) must be
+// single-quoted (`'a"b'`) rather than emitted as malformed `"a"b"`. This mirrors
+// helium's dtdQuoteChar used by the xml output method's DOCTYPE path (writer_dtd.go).
+func writeDoctypeSystemLiteral(b *strings.Builder, sys string) {
+	quote := byte('"')
+	if strings.ContainsRune(sys, '"') {
+		quote = '\''
+	}
+	b.WriteByte(quote)
+	b.WriteString(sys)
+	b.WriteByte(quote)
+}
+
+// serializeHTMLIsVersion5 reports whether the effective html-version selects
+// HTML5 serialization (version ≥ 5). The default (unspecified) html-version is
+// 5.0; an unparseable value is treated permissively as HTML5.
+func serializeHTMLIsVersion5(opts serializeOptions) bool {
+	if opts.htmlVersion == "" {
+		return true
+	}
+	v, err := strconv.ParseFloat(opts.htmlVersion, 64)
+	if err != nil {
+		return true
+	}
+	return v >= 5
+}
+
+// htmlDocumentElementIsHTML reports whether the document element's local name is
+// "html" (case-insensitive) — the condition under which the html output method
+// emits the HTML5 DOCTYPE and injects the Content-Type meta element.
+func htmlDocumentElementIsHTML(doc *helium.Document) bool {
+	root := doc.DocumentElement()
+	return root != nil && strings.EqualFold(root.LocalName(), "html")
+}
+
+// insertHTMLContentTypeMeta discards EVERY existing Content-Type meta element in
+// the document's <head> and inserts a freshly-computed
+// <meta http-equiv="Content-Type" content="{media-type}; charset={encoding}"> as
+// the head's first child (Serialization 3.1 §4/§7 include-content-type: an
+// existing meta is discarded and the computed one added). The encoding defaults
+// to UTF-8 and the media type to text/html. It mutates the given document, so
+// callers pass a copy.
+func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string) {
+	root := doc.DocumentElement()
+	if root == nil {
+		return
+	}
+	var head *helium.Element
+	for child := range helium.Children(root) {
+		e, ok := child.(*helium.Element)
+		if ok && strings.EqualFold(e.LocalName(), "head") {
+			head = e
+			break
+		}
+	}
+	if head == nil {
+		return
+	}
+	enc := encoding
+	if enc == "" {
+		enc = lexicon.EncodingUTF8U
+	}
+	mt := mediaType
+	if mt == "" {
+		mt = "text/html"
+	}
+	contentValue := mt + "; charset=" + enc
+
+	// Discard every stale Content-Type meta (matched case-insensitively and
+	// whitespace-trimmed) so no conflicting declaration survives, regardless of
+	// its position or how many exist.
+	removeHTMLContentTypeMetas(head)
+
+	meta := doc.CreateElement("meta")
+	if headURI := head.URI(); headURI != "" {
+		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
+	}
+	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
+	_ = meta.SetLiteralAttribute("content", contentValue)
+
+	// Detach the current children, add meta first, then re-add them, so meta
+	// becomes the head's first child.
+	var children []helium.Node
+	for child := head.FirstChild(); child != nil; {
+		next := child.NextSibling()
+		mut, ok := child.(helium.MutableNode)
+		if ok {
+			helium.UnlinkNode(mut)
+			children = append(children, child)
+		}
+		child = next
+	}
+	_ = head.AddChild(meta)
+	for _, child := range children {
+		_ = head.AddChild(child)
 	}
 }
 
-func encodeJSONStringForSerialization(s, encoding string) string {
-	if encoding == "" || strings.EqualFold(encoding, "utf-8") || strings.EqualFold(encoding, "utf8") {
-		return encodeJSONStringContent(s)
+// removeHTMLContentTypeMetas unlinks every <meta http-equiv="Content-Type"> child
+// of head so a stale Content-Type declaration cannot survive the freshly-inserted
+// one.
+func removeHTMLContentTypeMetas(head *helium.Element) {
+	for child := head.FirstChild(); child != nil; {
+		next := child.NextSibling()
+		if isHTMLContentTypeMeta(child) {
+			if mut, ok := child.(helium.MutableNode); ok {
+				helium.UnlinkNode(mut)
+			}
+		}
+		child = next
 	}
+}
 
+// isHTMLContentTypeMeta reports whether n is a <meta> element whose http-equiv
+// attribute is "Content-Type", compared case-insensitively after trimming
+// surrounding whitespace so " Content-Type " and "CONTENT-TYPE" both match.
+func isHTMLContentTypeMeta(n helium.Node) bool {
+	e, ok := n.(*helium.Element)
+	if !ok || !strings.EqualFold(e.LocalName(), "meta") {
+		return false
+	}
+	for _, attr := range e.Attributes() {
+		if attr.URI() != "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(attr.LocalName()), "http-equiv") &&
+			strings.EqualFold(strings.TrimSpace(attr.Value()), "Content-Type") {
+			return true
+		}
+	}
+	return false
+}
+
+func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
+	if attr, ok := item.Node.(*helium.Attribute); ok {
+		return fmt.Sprintf(`%s="%s"`, attr.Name(), attr.Value()), nil
+	}
+	node := item.Node
+	// The xml method emits a document type declaration when doctype-system is
+	// specified (Serialization 3.1 §5.1.7: "If the doctype-system parameter is
+	// specified, the XML output method MUST output a document type declaration
+	// immediately before the first element"). doctype-public is additive and MUST
+	// be ignored unless doctype-system is present, so both are gated on
+	// doctypeSystem alone. fn:serialize performs sequence normalization
+	// (Serialization 3.1 §2), which wraps the node sequence in a document node, so
+	// the DOCTYPE applies to an ELEMENT input too — not only a document node. The
+	// node is copied into a fresh document (the caller's tree is never mutated) and
+	// the DOCTYPE is injected as its internal subset, named after the document
+	// element. A node with no document element (bare text/comment/PI) has no name
+	// to declare, so no DOCTYPE is emitted and the node serializes unchanged.
+	if opts.doctypeSystem != "" {
+		withDT, err := applyDoctype(node, opts)
+		if err != nil {
+			return "", err
+		}
+		node = withDT
+	}
+	var buf strings.Builder
+	if err := newSerializeXMLWriter(opts).WriteTo(&buf, node); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// applyDoctype returns the node that serializeNodeItem should serialize with the
+// requested doctype-system / doctype-public applied. fn:serialize performs
+// sequence normalization (Serialization 3.1 §2, step S7 "construct a new
+// sequence … that consists of a single document node and copy all the items …
+// as children of that document node"), so a DOCTYPE applies to a document node
+// AND to a bare element input: the node is deep-copied into a fresh document
+// (the caller's tree is never mutated) and an internal-subset DTD carrying the
+// requested identifiers is injected, named after the document element. Per
+// Serialization 3.1 §5.1.7 the internal subset MUST be empty, so any pre-existing
+// internal subset on a copied document is replaced (its system/public identifiers
+// and declarations do not leak through). A node with no document element (bare
+// text/comment/PI, or a document without a root element) has no name to declare,
+// so it is returned unchanged and no DOCTYPE is emitted.
+func applyDoctype(node helium.Node, opts serializeOptions) (helium.Node, error) {
+	var clone *helium.Document
+	switch n := node.(type) {
+	case *helium.Document:
+		c, err := helium.CopyDoc(n)
+		if err != nil {
+			return nil, err
+		}
+		clone = c
+	case *helium.Element:
+		c, err := wrapElementInDocument(n)
+		if err != nil {
+			return nil, err
+		}
+		clone = c
+	default:
+		return node, nil
+	}
+	root := clone.DocumentElement()
+	if root == nil {
+		return node, nil
+	}
+	clone.RemoveInternalSubset()
+	if _, err := clone.CreateInternalSubset(root.Name(), opts.doctypePublic, opts.doctypeSystem); err != nil {
+		return nil, err
+	}
+	return clone, nil
+}
+
+// wrapElementInDocument returns a fresh document node holding a deep COPY of elem
+// as its document element (fn:serialize sequence normalization, Serialization 3.1
+// §2), so a DOCTYPE can be injected without mutating the caller's tree.
+func wrapElementInDocument(elem *helium.Element) (*helium.Document, error) {
+	dst := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	copied, err := helium.CopyNode(elem, dst)
+	if err != nil {
+		return nil, err
+	}
+	if err := dst.AddChild(copied); err != nil {
+		return nil, err
+	}
+	return dst, nil
+}
+
+// encodeJSONStringForSerialization escapes s as JSON string content for the json
+// output method, honoring the encoding parameter (a non-UTF-8 encoding escapes
+// non-ASCII as \u sequences) and the use-character-maps parameter: a mapped
+// character is replaced by its replacement string INSTEAD of being JSON-escaped,
+// and the replacement is emitted verbatim (not re-escaped), per Serialization 3.1
+// §9.1.11 (use-character-maps applies to the JSON output method) / §11. A nil/empty
+// charMap disables mapping.
+func encodeJSONStringForSerialization(s, encoding string, charMap map[rune]string) string {
+	utf8Out := encoding == "" || strings.EqualFold(encoding, "utf-8") || strings.EqualFold(encoding, "utf8")
 	var b strings.Builder
 	for _, r := range s {
+		if repl, ok := charMap[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
 		switch {
-		case r <= 0x7F:
+		case utf8Out || r <= 0x7F:
 			appendSerializedJSONStringRune(&b, r)
 		case r <= 0xFFFF:
 			fmt.Fprintf(&b, `\u%04X`, r)

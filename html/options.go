@@ -121,6 +121,16 @@ func (w Writer) EscapeControlChars(v bool) Writer {
 	return w
 }
 
+// CharacterMap installs a character map: each mapped rune appearing in text or
+// attribute-value content is replaced by its literal replacement string, emitted
+// verbatim (not re-escaped), per XSLT/XQuery Serialization 3.1 §7 (character maps
+// apply to the html output method). A nil or empty map disables the feature,
+// leaving output byte-identical.
+func (w Writer) CharacterMap(m map[rune]string) Writer {
+	w.charMap = m
+	return w
+}
+
 // NullNamespaceHTMLOnly controls whether an element is recognized as an HTML
 // void element (serialized with no closing tag) only when it is in no
 // namespace. When true, an otherwise-void element (e.g. <meta>) in a non-null
@@ -141,4 +151,8 @@ type dumpConfig struct {
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
 	nullNamespaceHTMLOnly bool
+	// charMap substitutes a mapped rune in text and attribute-value content with
+	// its literal replacement string (Serialization 3.1 character maps).
+	// Empty/nil disables the feature.
+	charMap map[rune]string
 }
