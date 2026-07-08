@@ -1503,3 +1503,203 @@ func TestSerialize_JSONCharacterMapsAndNormalization(t *testing.T) {
 		require.Equal(t, "\"e\u0301\u00e9\"", res.StringValue())
 	})
 }
+
+// TestSerialize_TextMethodSENR0001 verifies that sequence normalization
+// (Serialization 3.1 §2 — "It is a serialization error [err:SENR0001] if an item
+// … is an attribute node, a namespace node or a function item") applies to the
+// text output method too: such items are rejected with SENR0001 rather than
+// silently contributing their string value. This routes through the same
+// serializeItemKindError checkpoint the xml/xhtml/html methods use.
+func TestSerialize_TextMethodSENR0001(t *testing.T) {
+	requireSENR0001 := func(t *testing.T, src, expr string) {
+		t.Helper()
+		doc := mustParseXML(t, src)
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SENR0001", xerr.Code)
+	}
+
+	t.Run("attribute node", func(t *testing.T) {
+		requireSENR0001(t, `<root id="x">text</root>`, `serialize(/root/@id, map{"method":"text"})`)
+	})
+	t.Run("namespace node", func(t *testing.T) {
+		requireSENR0001(t, `<root xmlns:p="urn:p">text</root>`, `serialize(/root/namespace::*[local-name()='p'], map{"method":"text"})`)
+	})
+	t.Run("function item", func(t *testing.T) {
+		requireSENR0001(t, `<root>text</root>`, `serialize(true#0, map{"method":"text"})`)
+	})
+}
+
+// TestSerialize_FunctionItemSENR0001 verifies that a function-item input is a
+// serialization error [err:SENR0001] under EVERY markup output method
+// (xml/xhtml/html and the unspecified default) — sequence normalization
+// (Serialization 3.1 §2) rejects function items for all of them, not just text.
+// The adaptive and json methods are exempt (they keep their own function-item
+// handling), so they stay FOER0000.
+func TestSerialize_FunctionItemSENR0001(t *testing.T) {
+	requireCode := func(t *testing.T, method, wantCode string) {
+		t.Helper()
+		doc := mustParseXML(t, `<root>text</root>`)
+		expr := `serialize(true#0, map{"method":"` + method + `"})`
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, wantCode, xerr.Code, "method=%s", method)
+	}
+
+	for _, method := range []string{"xml", "xhtml", "html", "text"} {
+		t.Run(method+" raises SENR0001", func(t *testing.T) {
+			requireCode(t, method, "SENR0001")
+		})
+	}
+	// The unspecified default (xml family) also raises SENR0001.
+	t.Run("default method raises SENR0001", func(t *testing.T) {
+		doc := mustParseXML(t, `<root>text</root>`)
+		_, err := evaluate(t.Context(), doc, `serialize(true#0)`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SENR0001", xerr.Code)
+	})
+	// adaptive and json are exempt from the SENR0001 sequence-normalization guard.
+	for _, method := range []string{"adaptive", "json"} {
+		t.Run(method+" is exempt (FOER0000)", func(t *testing.T) {
+			requireCode(t, method, "FOER0000")
+		})
+	}
+}
+
+// TestSerialize_MapSENR0001AndArrayFlattening verifies sequence normalization
+// (Serialization 3.1 §2) for maps and arrays under the markup output methods
+// (xml/xhtml/html/text and the unspecified default). A MAP is a function item, so
+// it is a serialization error [err:SENR0001]; an ARRAY is NOT — it is flattened
+// (recursively) into its members, which serialize as if supplied directly. The
+// json output method serializes maps/arrays natively, and the adaptive method
+// serializes them its own way — both must keep working (no flattening, no
+// SENR0001).
+func TestSerialize_MapSENR0001AndArrayFlattening(t *testing.T) {
+	markupMethods := []string{"xml", "xhtml", "html", "text"}
+
+	requireSENR0001 := func(t *testing.T, expr string) {
+		t.Helper()
+		doc := mustParseXML(t, `<root>text</root>`)
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SENR0001", xerr.Code)
+	}
+	requireEquals := func(t *testing.T, expr, want string) {
+		t.Helper()
+		doc := mustParseXML(t, `<r><a/><b/></r>`)
+		res, err := evaluate(t.Context(), doc, expr)
+		require.NoError(t, err)
+		require.Equal(t, want, res.StringValue())
+	}
+
+	// A map is still SENR0001 under every markup method + the unspecified default.
+	for _, method := range markupMethods {
+		t.Run("map method="+method+" is SENR0001", func(t *testing.T) {
+			requireSENR0001(t, `serialize(map{"a":1}, map{"method":"`+method+`"})`)
+		})
+	}
+	t.Run("map default method is SENR0001", func(t *testing.T) {
+		requireSENR0001(t, `serialize(map{"a":1})`)
+	})
+
+	// An array is flattened into its members (NOT SENR0001) under every markup
+	// method + the unspecified default. Atomic members serialize space-separated.
+	for _, method := range markupMethods {
+		t.Run("array of atomics method="+method+" flattens", func(t *testing.T) {
+			requireEquals(t, `serialize([1,2,3], map{"method":"`+method+`"})`, "1 2 3")
+		})
+	}
+	t.Run("array of atomics default method flattens", func(t *testing.T) {
+		requireEquals(t, `serialize([1,2,3])`, "1 2 3")
+	})
+	t.Run("nested array flattens recursively", func(t *testing.T) {
+		requireEquals(t, `serialize([1,[2,3],4], map{"method":"xml"})`, "1 2 3 4")
+	})
+	t.Run("array of element nodes serializes the elements", func(t *testing.T) {
+		doc := mustParseXML(t, `<r><a/><b/></r>`)
+		res, err := evaluate(t.Context(), doc, `serialize([/r/a, /r/b], map{"method":"xml"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "<a/>", "output:\n%s", out)
+		require.Contains(t, out, "<b/>", "output:\n%s", out)
+	})
+	// A map member inside an array is still SENR0001 after the array is flattened.
+	t.Run("array containing a map member is SENR0001", func(t *testing.T) {
+		requireSENR0001(t, `serialize([1, map{"a":1}], map{"method":"xml"})`)
+	})
+
+	// json and adaptive keep native map/array handling (no flattening, no SENR0001).
+	t.Run("json serializes a map", func(t *testing.T) {
+		requireEquals(t, `serialize(map{"a":1}, map{"method":"json"})`, `{"a":1}`)
+	})
+	t.Run("json serializes an array", func(t *testing.T) {
+		requireEquals(t, `serialize([1,2], map{"method":"json"})`, `[1,2]`)
+	})
+	t.Run("adaptive serializes a map", func(t *testing.T) {
+		requireEquals(t, `serialize(map{"a":1}, map{"method":"adaptive"})`, `map{"a":1}`)
+	})
+	t.Run("adaptive serializes an array", func(t *testing.T) {
+		requireEquals(t, `serialize([1], map{"method":"adaptive"})`, `[1]`)
+	})
+}
+
+// TestSerialize_HTMLDoctypeNonHTMLRoot verifies Serialization 3.1 §7.4.6: an
+// explicitly specified doctype-system/doctype-public makes the html output method
+// emit a document type declaration (named "html", not the document element's name)
+// immediately before the first element, regardless of the document element's name
+// or whether the input is a bare element. With no explicit doctype a
+// non-html-rooted node stays a fragment — the default <!DOCTYPE html> is emitted
+// only for an <html>-rooted document.
+func TestSerialize_HTMLDoctypeNonHTMLRoot(t *testing.T) {
+	t.Run("non-html document + doctype-system emits DOCTYPE html", func(t *testing.T) {
+		doc := mustParseXML(t, `<page><body><p>Hi</p></body></page>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE html SYSTEM "about:legacy-compat">`, "output:\n%s", out)
+		// The DOCTYPE name is the fixed token "html", never the root element name.
+		require.NotContains(t, out, "<!DOCTYPE page", "output:\n%s", out)
+	})
+
+	t.Run("bare non-html element + doctype-public/system emits DOCTYPE html", func(t *testing.T) {
+		doc := mustParseXML(t, `<page><body><p>Hi</p></body></page>`)
+		root := doc.DocumentElement() // a bare element, not a document node
+		res, err := evaluate(t.Context(), root,
+			`serialize(., map{"method":"html","doctype-public":"-//X//DTD//EN","doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE html PUBLIC "-//X//DTD//EN" "x.dtd">`, "output:\n%s", out)
+		require.Contains(t, out, "<body>", "output:\n%s", out)
+	})
+
+	t.Run("non-html root without explicit doctype stays a fragment", func(t *testing.T) {
+		doc := mustParseXML(t, `<page><body><p>Hi</p></body></page>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html"})`)
+		require.NoError(t, err)
+		require.NotContains(t, res.StringValue(), "<!DOCTYPE", "output:\n%s", res.StringValue())
+	})
+
+	// Sequence normalization (Serialization 3.1 §2) wraps the whole sequence in a
+	// SINGLE document node, so a multi-element sequence gets exactly ONE DOCTYPE,
+	// immediately before the first element — never one per item.
+	t.Run("multi-element sequence + doctype-system emits a single DOCTYPE", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><a>A</a><b>B</b></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize((/root/a, /root/b), map{"method":"html","doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Equal(t, 1, strings.Count(out, "<!DOCTYPE"), "expected exactly one DOCTYPE, output:\n%s", out)
+		require.Contains(t, out, `<!DOCTYPE html SYSTEM "x.dtd">`, "output:\n%s", out)
+		// The single DOCTYPE precedes both elements.
+		require.Regexp(t, `(?s)<!DOCTYPE html SYSTEM "x\.dtd">.*<a>A</a>.*<b>B</b>`, out)
+	})
+}

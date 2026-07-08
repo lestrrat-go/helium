@@ -159,7 +159,14 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	var result string
 	switch dispatchOpts.method {
-	case "", serializeMethodAdaptive:
+	case "":
+		// The unspecified default is the xml family: sequence normalization
+		// (Serialization 3.1 §2) flattens array inputs into their members. It
+		// otherwise reuses the adaptive machinery, whose node-kind guard treats the
+		// default method as a markup method (SENR0001 for attribute/namespace/map/
+		// function items).
+		result, err = serializeAdaptiveSequence(flattenSerializeArrays(args[0]), dispatchOpts)
+	case serializeMethodAdaptive:
 		result, err = serializeAdaptiveSequence(args[0], dispatchOpts)
 	case serializeMethodJSON:
 		result, err = serializeJSONSequence(args[0], dispatchOpts)
@@ -314,9 +321,9 @@ type serializeOptions struct {
 	mediaType string
 	// normalizationForm is the requested Unicode normalization form ("" / "none"
 	// = no normalization). NFC/NFD/NFKC/NFKD are applied to the serialized output
-	// for the methods that support normalization; "fully-normalized" is the
-	// SESU0011 unsupported-normalization serialization error; the parameter is not
-	// applicable to (ignored by) the json/adaptive methods.
+	// for the methods that support normalization — xml/xhtml/html/text and json
+	// (§9.1.9); "fully-normalized" is the SESU0011 unsupported-normalization
+	// serialization error; only the adaptive method ignores the parameter.
 	normalizationForm string
 	// jsonNodeOutputMethod is the requested json-node-output-method value ("" =
 	// the default xml). helium serializes a node embedded in JSON only with the
@@ -1277,16 +1284,69 @@ func resolveSerializeStandaloneMap(ctx context.Context, v Sequence) (string, err
 
 // serializeNodeKindError reports err:SENR0001 when a bare attribute or namespace
 // node is serialized under a markup output method (xml/xhtml/html/text or the
-// unspecified default). Under the adaptive and json methods these node kinds are
-// serialized specially, so callers must not apply this guard for those methods.
+// unspecified default). Sequence normalization (Serialization 3.1 §2) rejects
+// these node kinds before any of those output methods run. Under the adaptive and
+// json methods these node kinds are serialized specially, so callers must not
+// apply this guard for those methods.
 func serializeNodeKindError(item NodeItem) error {
 	if _, ok := item.Node.(*helium.Attribute); ok {
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize an attribute node using the xml output method"}
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize an attribute node under this output method"}
 	}
 	if item.Node != nil && item.Node.Type() == helium.NamespaceNode {
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a namespace node using the xml output method"}
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a namespace node under this output method"}
 	}
 	return nil
+}
+
+// serializeItemKindError reports err:SENR0001 for every item kind that sequence
+// normalization (Serialization 3.1 §2) rejects under the markup output methods
+// (xml/xhtml/html/text and the unspecified default): a bare attribute node, a
+// namespace node, OR a function item — INCLUDING a map (a map is a function item),
+// but NOT an array. Arrays are flattened into their members by
+// flattenSerializeArrays before this guard runs, so an array is never a rejected
+// kind. It returns nil for any other item. The adaptive and json methods serialize
+// these kinds specially (json serializes maps/arrays; both handle function items
+// their own way), so callers must not apply this guard for those methods.
+func serializeItemKindError(item Item) error {
+	switch v := item.(type) {
+	case NodeItem:
+		return serializeNodeKindError(v)
+	case MapItem:
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a map under this output method"}
+	case FunctionItem:
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
+	}
+	return nil
+}
+
+// flattenSerializeArrays implements the array-flattening step of sequence
+// normalization (Serialization 3.1 §2): an array supplied to a markup output
+// method (xml/xhtml/html/text and the unspecified default) is replaced by its
+// member items, RECURSIVELY (nested arrays flatten too), and those members are
+// serialized as if they had been supplied directly. A map is NOT flattened (it is
+// a function item, rejected by serializeItemKindError). The json and adaptive
+// methods keep their native array handling and must NOT call this. When the
+// sequence contains no array the input is returned unchanged.
+func flattenSerializeArrays(seq Sequence) Sequence {
+	hasArray := false
+	for item := range seqItems(seq) {
+		if _, ok := item.(ArrayItem); ok {
+			hasArray = true
+			break
+		}
+	}
+	if !hasArray {
+		return seq
+	}
+	out := make(ItemSlice, 0, seqLen(seq))
+	for item := range seqItems(seq) {
+		if arr, ok := item.(ArrayItem); ok {
+			out = append(out, arr.Flatten().Materialize()...)
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // resolveSerializeCharacterMapsElement validates the element form of
@@ -1427,6 +1487,18 @@ func serializeAdaptiveSequence(seq Sequence, opts serializeOptions) (string, err
 }
 
 func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
+	// serializeAdaptiveItem serves BOTH the explicit adaptive method and the
+	// unspecified default method (the xml family). Under the default method
+	// sequence normalization (Serialization 3.1 §2) rejects a bare attribute node,
+	// a namespace node, or a function item — which in XDM includes maps and arrays
+	// — with SENR0001. The explicit adaptive method (and the nested map/array
+	// serialization, which passes method="adaptive") serializes all of these its
+	// own way, so this guard applies only when the method is not adaptive.
+	if opts.method != serializeMethodAdaptive {
+		if err := serializeItemKindError(item); err != nil {
+			return "", err
+		}
+	}
 	switch v := item.(type) {
 	case AtomicValue:
 		if v.TypeName == TypeBoolean {
@@ -1448,21 +1520,14 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return s, nil
 	case NodeItem:
-		// The default (empty) method is the xml family, under which an
-		// attribute or namespace node is a serialization error. An explicit
-		// method="adaptive" serializes them specially, so only guard when the
-		// method is not adaptive.
-		if opts.method != serializeMethodAdaptive {
-			if err := serializeNodeKindError(v); err != nil {
-				return "", err
-			}
-		}
 		return serializeNodeItem(v, opts)
 	case MapItem:
 		return serializeAdaptiveMap(v, opts)
 	case ArrayItem:
 		return serializeAdaptiveArray(v, opts)
 	case FunctionItem:
+		// Only reachable under the explicit adaptive method (the default method is
+		// rejected above). helium emits no adaptive function representation.
 		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 	default:
 		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T", item)}
@@ -1616,10 +1681,14 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 // serializeTextSequence implements the text output method (Serialization 3.1
 // §8): the concatenation of the string values of the items, with the
 // item-separator between adjacent items and no markup. A node contributes its
-// string value (an attribute or namespace node its value — the text method has
-// no SENR0001 node-kind restriction); an atomic its lexical form. Character maps
-// apply to the resulting text.
+// string value; an atomic its lexical form. Sequence normalization (Serialization
+// 3.1 §2) applies to the text method too, so an attribute node, a namespace node,
+// or a function item is a serialization error [err:SENR0001]. Character maps apply
+// to the resulting text.
 func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
+	// their members before serialization.
+	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
 	for item := range seqItems(seq) {
 		s, err := serializeTextItem(item)
@@ -1632,13 +1701,17 @@ func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) 
 }
 
 func serializeTextItem(item Item) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute node,
+	// a namespace node, or a function item with SENR0001 before the text output
+	// method runs.
+	if err := serializeItemKindError(item); err != nil {
+		return "", err
+	}
 	switch v := item.(type) {
 	case AtomicValue:
 		return atomicToString(v)
 	case NodeItem:
 		return ixpath.StringValue(v.Node), nil
-	case FunctionItem:
-		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 	default:
 		// A map or array has no string value; it can only be serialized with the
 		// json or adaptive method.
@@ -1664,17 +1737,19 @@ func applyCharMapToString(s string, charMap map[rune]string) string {
 }
 
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
+	// their members before serialization.
+	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
 	for item := range seqItems(seq) {
+		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
+		// node, a namespace node, or a function item under the xml/xhtml methods
+		// [err:SENR0001] before serialization.
+		if err := serializeItemKindError(item); err != nil {
+			return "", err
+		}
 		switch v := item.(type) {
-		case FunctionItem:
-			return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 		case NodeItem:
-			// xml/xhtml/html/text output methods cannot serialize a bare
-			// attribute or namespace node [err:SENR0001].
-			if err := serializeNodeKindError(v); err != nil {
-				return "", err
-			}
 			text, err := serializeNodeItem(v, opts)
 			if err != nil {
 				return "", err
@@ -1752,13 +1827,30 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 }
 
 // serializeHTMLSequence serializes a sequence under the html output method.
-// A document node is serialized with an HTML5 <!DOCTYPE html> and a
-// <meta http-equiv="Content-Type"> injected into <head>; any other node is
-// serialized as an HTML fragment (no DOCTYPE). Character maps (use-character-maps)
-// are applied to text and attribute content.
+// Sequence normalization (Serialization 3.1 §2) wraps the WHOLE sequence in a
+// single document node, so the html method emits at most ONE DOCTYPE for the
+// entire sequence — immediately before the first element (§7.4.6). An html-rooted
+// document contributes the default <!DOCTYPE html> (or an explicit doctype) plus a
+// <meta http-equiv="Content-Type"> injected into <head>; a non-html-rooted
+// document or a bare element contributes a DOCTYPE only when doctype-public/
+// doctype-system is specified; any node with no element (or once a prior item has
+// emitted the DOCTYPE) is a plain HTML fragment. The doctypeEmitted flag threads
+// that "at most once" rule across the item loop. Character maps (use-character-
+// maps) are applied to text and attribute content.
 func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
+	// their members before serialization.
+	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
+	doctypeEmitted := false
 	for item := range seqItems(seq) {
+		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
+		// node, a namespace node, or a function item under the html method
+		// [err:SENR0001] — a function item must NOT fall through to adaptive
+		// serialization.
+		if err := serializeItemKindError(item); err != nil {
+			return "", err
+		}
 		node, ok := item.(NodeItem)
 		if !ok {
 			s, err := serializeAdaptiveItem(item, opts)
@@ -1768,63 +1860,100 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 			parts = append(parts, s)
 			continue
 		}
-		if err := serializeNodeKindError(node); err != nil {
-			return "", err
-		}
-		text, err := serializeHTMLNode(node.Node, opts)
+		text, emitted, err := serializeHTMLNode(node.Node, opts, !doctypeEmitted)
 		if err != nil {
 			return "", err
+		}
+		if emitted {
+			doctypeEmitted = true
 		}
 		parts = append(parts, text)
 	}
 	return strings.Join(parts, opts.itemSeparator), nil
 }
 
-func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
+// serializeHTMLNode serializes a single node under the html output method,
+// reporting whether it emitted the DOCTYPE. allowDoctype is false once a prior
+// item in the sequence already emitted one, so the DOCTYPE appears at most once
+// for the whole sequence (Serialization 3.1 §2/§7.4.6). This node emits a DOCTYPE
+// only when allowDoctype is true AND either the document element is <html> (the
+// default <!DOCTYPE html> / HTML 4.01 declaration, html-version-gated) or
+// doctype-public/doctype-system was explicitly specified (any root, or a bare
+// element — §7.4.6). The include-content-type <meta> injection applies only to an
+// html-rooted document (a fragment / non-html root has no <head>).
+func serializeHTMLNode(node helium.Node, opts serializeOptions, allowDoctype bool) (string, bool, error) {
 	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
 		EscapeURIAttributes(opts.escapeURIAttributes).CharacterMap(opts.charMap).
 		Normalization(opts.normalizationForm)
 
-	doc, ok := node.(*helium.Document)
-	if !ok || !htmlDocumentElementIsHTML(doc) {
-		// A non-document node, or a document whose document element is not <html>,
-		// is serialized under the html output method WITHOUT the DOCTYPE and
-		// WITHOUT meta injection (Serialization 3.1: those apply to an html-rooted
-		// result). The input tree is not mutated. escape-uri-attributes still
-		// applies.
-		var buf strings.Builder
-		if err := hw.WriteTo(&buf, node); err != nil {
-			return "", err
-		}
-		return strings.TrimSuffix(buf.String(), "\n"), nil
+	doc, isDoc := node.(*helium.Document)
+	htmlRooted := isDoc && htmlDocumentElementIsHTML(doc)
+	explicitDoctype := opts.doctypePublic != "" || opts.doctypeSystem != ""
+	emitDoctype := allowDoctype && (htmlRooted || explicitDoctype)
+
+	if !htmlRooted {
+		// A non-html-rooted document, a bare element, or a fragment node. The input
+		// tree is not mutated (no meta injection — there is no <head>).
+		// escape-uri-attributes still applies.
+		return writeHTMLNodeTree(hw, node, opts, emitDoctype)
 	}
 
-	// Work on a copy so the <meta> injection never mutates the caller's tree.
+	// An html-rooted document: inject the Content-Type meta on a COPY (never
+	// mutating the caller's tree), then serialize, emitting the DOCTYPE unless the
+	// sequence already emitted one.
 	clone, err := helium.CopyDoc(doc)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	// include-content-type (default yes) controls the Content-Type meta injection.
 	if opts.includeContentType {
 		insertHTMLContentTypeMeta(clone, opts.encoding, opts.mediaType)
 	}
+	return writeHTMLNodeTree(hw, clone, opts, emitDoctype)
+}
 
-	doctype := htmlDoctype(opts)
+// writeHTMLNodeTree serializes node under the html writer, reporting whether it
+// emitted a DOCTYPE. When emitDoctype is true it writes the computed DOCTYPE
+// (htmlDoctype) immediately before the first element (Serialization 3.1 §7.4.6);
+// otherwise no DOCTYPE is written. A document node's children are written in order
+// (its DTD node skipped, the DOCTYPE inserted before the first element child); a
+// bare element is written after the DOCTYPE; any other single node (text/comment/
+// PI) has no first element, so no DOCTYPE is written even when emitDoctype is true
+// (and it reports false so a later item in the sequence can still emit one).
+func writeHTMLNodeTree(hw htmlpkg.Writer, node helium.Node, opts serializeOptions, emitDoctype bool) (string, bool, error) {
+	var doctype string
+	if emitDoctype {
+		doctype = htmlDoctype(opts)
+	}
 	var buf strings.Builder
-	doctypeEmitted := false
-	for child := range helium.Children(clone) {
-		if child.Type() == helium.DTDNode {
-			continue
+	emitted := false
+	switch n := node.(type) {
+	case *helium.Document:
+		for child := range helium.Children(n) {
+			if child.Type() == helium.DTDNode {
+				continue
+			}
+			if emitDoctype && !emitted && child.Type() == helium.ElementNode {
+				buf.WriteString(doctype)
+				emitted = true
+			}
+			if err := hw.WriteTo(&buf, child); err != nil {
+				return "", false, err
+			}
 		}
-		if child.Type() == helium.ElementNode && !doctypeEmitted {
+	case *helium.Element:
+		if emitDoctype {
 			buf.WriteString(doctype)
-			doctypeEmitted = true
+			emitted = true
 		}
-		if err := hw.WriteTo(&buf, child); err != nil {
-			return "", err
+		if err := hw.WriteTo(&buf, n); err != nil {
+			return "", false, err
+		}
+	default:
+		if err := hw.WriteTo(&buf, node); err != nil {
+			return "", false, err
 		}
 	}
-	return strings.TrimSuffix(buf.String(), "\n"), nil
+	return strings.TrimSuffix(buf.String(), "\n"), emitted, nil
 }
 
 // htmlDoctype computes the DOCTYPE declaration (with trailing newline) for the
