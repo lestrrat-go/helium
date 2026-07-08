@@ -219,7 +219,9 @@ under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
 `include-content-type` (default yes) gates the meta injection; `escape-uri-attributes`
 (default yes) selects `helium/html` `Writer.EscapeURIAttributes`; and the DOCTYPE
 is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
-a PUBLIC/SYSTEM declaration, otherwise HTML5 (`html-version` ≥ 5, the default)
+a PUBLIC/SYSTEM declaration whose DOCTYPE name is the fixed token `html` (the
+html-method / HTML5 doctype rule — never the source element's arbitrary case, so
+`<HtMl>` still emits `<!DOCTYPE html …>`), otherwise HTML5 (`html-version` ≥ 5, the default)
 yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration; the
 Content-Type meta uses the `media-type` param (default `text/html`) and
 `insertHTMLContentTypeMeta` DISCARDS every existing `<meta http-equiv=

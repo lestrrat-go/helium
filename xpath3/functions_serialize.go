@@ -1731,7 +1731,7 @@ func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) 
 		insertHTMLContentTypeMeta(clone, opts.encoding, opts.mediaType)
 	}
 
-	doctype := htmlDoctype(opts, clone)
+	doctype := htmlDoctype(opts)
 	var buf strings.Builder
 	doctypeEmitted := false
 	for child := range helium.Children(clone) {
@@ -1753,12 +1753,13 @@ func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) 
 // html output method: an explicit doctype-public/doctype-system produces a
 // PUBLIC/SYSTEM declaration; otherwise HTML5 (html-version ≥ 5, the default)
 // produces `<!DOCTYPE html>` and HTML 4 produces the HTML 4.01 declaration.
-func htmlDoctype(opts serializeOptions, doc *helium.Document) string {
+func htmlDoctype(opts serializeOptions) string {
 	if opts.doctypePublic != "" || opts.doctypeSystem != "" {
+		// The html output method's DOCTYPE name is the fixed token "html" (per the
+		// Serialization 3.1 html output method / HTML5 doctype rule — the name is
+		// always html/HTML), NOT the document element's own (possibly mixed-case)
+		// name. So a source root <HtMl> still emits `<!DOCTYPE html ...>`.
 		rootName := serializeMethodHTML
-		if root := doc.DocumentElement(); root != nil {
-			rootName = root.Name()
-		}
 		var b strings.Builder
 		b.WriteString("<!DOCTYPE ")
 		b.WriteString(rootName)

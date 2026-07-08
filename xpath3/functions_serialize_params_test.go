@@ -1179,3 +1179,17 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.Contains(t, res.StringValue(), "<a>x", "output:\n%s", res.StringValue())
 	})
 }
+
+// TestSerialize_HTMLDoctypeNameFixedHTML verifies the html output method's
+// explicit DOCTYPE uses the spec-mandated name "html" (HTML5 / Serialization 3.1
+// html-method doctype rule), NOT the source document element's arbitrary case, so
+// a mixed-case <HtMl> root still emits `<!DOCTYPE html ...>`.
+func TestSerialize_HTMLDoctypeNameFixedHTML(t *testing.T) {
+	doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><HtMl><head/><body/></HtMl>`)
+	res, err := evaluate(t.Context(), doc,
+		`serialize(., map{"method":"html","include-content-type":false(),"doctype-system":"about:legacy-compat"})`)
+	require.NoError(t, err)
+	out := res.StringValue()
+	require.Contains(t, out, `<!DOCTYPE html SYSTEM "about:legacy-compat">`, "output:\n%s", out)
+	require.NotContains(t, out, "DOCTYPE HtMl", "output:\n%s", out)
+}
