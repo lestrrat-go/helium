@@ -1,5 +1,7 @@
 package html
 
+import "golang.org/x/text/unicode/norm"
+
 // parseConfig holds configuration for the HTML parser.
 type parseConfig struct {
 	noImplied bool
@@ -131,6 +133,19 @@ func (w Writer) CharacterMap(m map[rune]string) Writer {
 	return w
 }
 
+// Normalization requests Unicode normalization of text-node and attribute-value
+// character content (the normalization-form serialization parameter). form is one
+// of "NFC", "NFD", "NFKC", "NFKD"; "", "none", or any other value disables it,
+// leaving output byte-identical. Normalization is scoped to text and attribute
+// nodes (Serialization 3.1 §4 character-expansion phase) — element/attribute
+// names, comments, PIs, and the DOCTYPE are never normalized. A character map is
+// expected to carry normalization-inert replacements (fn:serialize substitutes
+// sentinel runes), so a mapped character's replacement is not normalized.
+func (w Writer) Normalization(form string) Writer {
+	w.normForm, w.normalize = htmlNormalizationForm(form)
+	return w
+}
+
 // NullNamespaceHTMLOnly controls whether an element is recognized as an HTML
 // void element (serialized with no closing tag) only when it is in no
 // namespace. When true, an otherwise-void element (e.g. <meta>) in a non-null
@@ -155,4 +170,10 @@ type dumpConfig struct {
 	// its literal replacement string (Serialization 3.1 character maps).
 	// Empty/nil disables the feature.
 	charMap map[rune]string
+	// normalize / normForm request Unicode normalization of text-node and
+	// attribute-value character content (the normalization-form serialization
+	// parameter, Serialization 3.1 §4). Scoped to text and attribute nodes; false
+	// by default, keeping output byte-identical.
+	normalize bool
+	normForm  norm.Form
 }

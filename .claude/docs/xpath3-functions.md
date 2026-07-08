@@ -211,7 +211,7 @@ but unapplied parameters (`byte-order-mark`, `escape-uri-attributes`,
 ignored rather than rejected as unsupported.
 The xml path builds a `helium.Writer` via `newSerializeXMLWriter` wiring
 `OutputVersion`/`Standalone`/`OmitStandalone`/`AllowPrefixUndeclarations`/
-`CDATASectionElements`/`SuppressIndentElements`/`CharacterMap` — the shared
+`CDATASectionElements`/`SuppressIndentElements`/`CharacterMap`/`Normalization` — the shared
 `helium.Writer` (root `writer.go`/`writer_escape.go`) implements those knobs
 (character maps substitute a mapped rune with its raw replacement in text and
 attribute content; cdata-section-elements emit direct text children as CDATA;
@@ -286,25 +286,38 @@ no SENR0001 node-kind restriction); `xhtml` is serialized as `xml` — a defensi
 approximation, as helium implements no XHTML-specific serialization rules.
 
 **Normalization + character maps (all methods incl. JSON).** `normalization-form`
-is APPLIED to the serialized output for the methods that support it —
-xml/xhtml/html/text, the unspecified default, AND `json` (Serialization 3.1
-§9.1.9) — `NFC`/`NFD`/`NFKC`/`NFKD` via `golang.org/x/text/unicode/norm`
-(`applySerializeNormalization`, the last serialization step); `none`/`""` is a
-no-op; the W3C-specific `fully-normalized` form is not provided by that package and
-is the `SESU0011` unsupported-normalization error. Only the `adaptive` method
-ignores it. `use-character-maps` is likewise applicable to the `json` output
-method (§9.1.11, matching Saxon): a mapped character is replaced by its verbatim
-replacement in JSON string content (values and object keys) INSTEAD of being
-JSON-escaped — e.g. a map `"/"→"/"` prevents escaping `/` as `\/`
-(`encodeJSONStringForSerialization` consults `opts.charMap`). A character-map
-REPLACEMENT string is NOT subjected to Unicode Normalization or re-escaping
-(Serialization 3.1 §11): when a normalization pass and a character map are BOTH in
-force, `withCharMapSentinels` substitutes each mapped key with a unique sentinel
-rune (Supplementary Private Use Area-A, unaffected by normalization) during
-serialization (XML/HTML/text/json alike), then `expandCharMapSentinels` restores
-the verbatim replacement AFTER normalization — so replacements pass through
-un-normalized while the surrounding content is normalized. `json-node-output-method`
-is validated against its OWN
+is APPLIED for the methods that support it — xml/xhtml/html/text, the unspecified
+default, AND `json` (Serialization 3.1 §9.1.9) — `NFC`/`NFD`/`NFKC`/`NFKD` via
+`golang.org/x/text/unicode/norm`; `none`/`""` is a no-op; the W3C-specific
+`fully-normalized` form is not provided by that package and is the `SESU0011`
+unsupported-normalization error (rejected up front in `fnSerialize` via
+`isSupportedSerializeNormForm`, so it fires for every applicable method even with
+no text to normalize). Only the `adaptive` method ignores it. Normalization is
+SCOPED to text-node and attribute-value character content (Serialization 3.1 §4
+character-expansion phase) — element/attribute NAMES, comment/PI markup, the
+DOCTYPE, and the XML declaration are NEVER normalized. The markup methods
+(xml/xhtml/html and the unspecified default) apply it INSIDE their writer: the
+`helium` XML writer via `Writer.Normalization(form)` (normalizing each text node
+and attribute value in `escapeText`/`escapeAttrValue`, and CDATA content, before
+escaping) and the `helium/html` writer via `Writer.Normalization(form)`
+(`dumpText`/`dumpAttributes`). The `text` and `json` methods emit pure character
+data (text) or ASCII-delimited character data (json), so
+`applySerializeNormalization` normalizes their WHOLE output — equivalent to
+node-scoped normalization for those methods. `use-character-maps` is likewise
+applicable to the `json` output method (§9.1.11, matching Saxon): a mapped
+character is replaced by its verbatim replacement in JSON string content (values
+and object keys) INSTEAD of being JSON-escaped — e.g. a map `"/"→"/"` prevents
+escaping `/` as `\/` (`encodeJSONStringForSerialization` consults `opts.charMap`).
+A character-map REPLACEMENT string is NOT subjected to Unicode Normalization or
+re-escaping (Serialization 3.1 §11): when a normalization pass and a character map
+are BOTH in force, `withCharMapSentinels` substitutes each mapped key with a unique
+sentinel rune (Supplementary Private Use Area-A, unaffected by normalization)
+during serialization (XML/HTML/text/json alike), then `expandCharMapSentinels`
+restores the verbatim replacement AFTER normalization — so replacements pass
+through un-normalized while the surrounding content is normalized (in the markup
+writers the mapped key is folded to its sentinel BEFORE the per-node normalize
+pass, so the ordering — character mapping precedes normalization — holds).
+`json-node-output-method` is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 `json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default
 (`xml`) is honored, so a non-default value (`html`/`xhtml`/`text`/extension) that

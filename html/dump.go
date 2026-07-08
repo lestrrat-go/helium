@@ -57,6 +57,8 @@ func (w Writer) WriteTo(out io.Writer, node helium.Node) error {
 		escapeControlChars:    cfg.escapeControlChars,
 		nullNamespaceHTMLOnly: cfg.nullNamespaceHTMLOnly,
 		charMap:               cfg.charMap,
+		normalize:             cfg.normalize,
+		normForm:              cfg.normForm,
 	}
 	return d.dumpNode(out, node)
 }
@@ -111,6 +113,11 @@ type htmlDumper struct {
 	// its literal (unescaped) replacement string (Serialization 3.1 character
 	// maps). Empty/nil disables the feature.
 	charMap map[rune]string
+	// normalize / normForm request Unicode normalization of text-node and
+	// attribute-value character content (Serialization 3.1 §4), scoped to text and
+	// attribute nodes. false keeps output byte-identical.
+	normalize bool
+	normForm  norm.Form
 	// err is a sticky serialization error. Once set, all checked write
 	// helpers become no-ops and terminal methods return it. This mirrors
 	// the writeSession sticky-error pattern in writer.go so that a writer
@@ -362,17 +369,67 @@ func (d *htmlDumper) dumpDTD(out io.Writer, dtd *helium.DTD) {
 	d.writeString(out, ">\n")
 }
 
+// htmlNormalizationForm maps a normalization-form parameter name to its
+// golang.org/x/text norm.Form and reports whether normalization is active.
+func htmlNormalizationForm(form string) (norm.Form, bool) {
+	switch form {
+	case "NFC":
+		return norm.NFC, true
+	case "NFD":
+		return norm.NFD, true
+	case "NFKC":
+		return norm.NFKC, true
+	case "NFKD":
+		return norm.NFKD, true
+	}
+	return norm.NFC, false
+}
+
+// normalizeContent applies the dumper's requested Unicode normalization to a text
+// or attribute node's character content, substituting character-map keys with
+// their (normalization-inert sentinel) replacement FIRST so a replacement passes
+// through un-normalized (Serialization 3.1 §4). Because the character map has been
+// applied here, the caller passes a nil map to the escape funnel. Only called when
+// d.normalize is true.
+func (d *htmlDumper) normalizeContent(s []byte) []byte {
+	if len(d.charMap) == 0 {
+		return d.normForm.Bytes(s)
+	}
+	var b bytes.Buffer
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		i += width
+		if repl, ok := d.charMap[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return d.normForm.Bytes(b.Bytes())
+}
+
 // dumpText outputs text content, escaping &, <, > unless inside a raw text element.
 func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
+	// Unicode normalization is scoped to text nodes: normalize the character
+	// content first (character maps are folded in), then the escape funnel emits it
+	// with a nil map since mapping is already applied.
+	content := n.Content()
+	cm := d.charMap
+	if d.normalize {
+		content = d.normalizeContent(content)
+		cm = nil
+	}
+
 	parent := n.Parent()
 	if parent != nil && parent.Type() == helium.ElementNode {
 		parentName := strings.ToLower(parent.Name())
 		if desc := lookupElement(parentName); desc != nil && desc.dataMode >= dataRawText {
 			// Raw text element: no escaping (character maps still apply).
-			if len(d.charMap) == 0 {
-				d.writeBytes(out, n.Content())
+			if len(cm) == 0 {
+				d.writeBytes(out, content)
 			} else {
-				d.check(writeHTMLCharMapped(out, n.Content(), d.charMap))
+				d.check(writeHTMLCharMapped(out, content, cm))
 			}
 			return d.err
 		}
@@ -382,7 +439,7 @@ func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
 	if d.err != nil {
 		return d.err
 	}
-	d.check(htmlEscapeText(out, n.Content(), d.escapeControlChars, d.charMap))
+	d.check(htmlEscapeText(out, content, d.escapeControlChars, cm))
 	return d.err
 }
 
@@ -751,9 +808,15 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 			// is applied to a URI attribute value (escape-uri-attributes=yes), the
 			// serializer skips character mapping for that value. Character maps
 			// apply to non-URI attributes, and to URI attributes only when URI
-			// escaping is disabled (escape-uri-attributes=no).
+			// escaping is disabled (escape-uri-attributes=no). Unicode normalization
+			// is likewise scoped to the attribute value's character content; a
+			// URI-escaped value is already ASCII (percent-encoded), so normalization
+			// is a no-op there and character mapping is skipped.
 			attrCharMap := d.charMap
 			if uriEscaped {
+				attrCharMap = nil
+			} else if d.normalize {
+				val = string(d.normalizeContent([]byte(val)))
 				attrCharMap = nil
 			}
 			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, attrCharMap))
