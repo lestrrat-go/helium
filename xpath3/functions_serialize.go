@@ -11,6 +11,7 @@ import (
 	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 const (
@@ -26,7 +27,15 @@ func init() {
 const (
 	errCodeSEPM0009 = "SEPM0009"
 	errCodeSEPM0010 = "SEPM0010"
+	errCodeSESU0011 = "SESU0011"
 )
+
+// serializeNormalizationSupported reports whether helium can produce the
+// requested Unicode normalization form. helium performs no normalization, so
+// only the "no normalization" forms ("" and "none") are supported.
+func serializeNormalizationSupported(form string) bool {
+	return form == "" || form == "none"
+}
 
 // effectiveSerializeVersion returns the effective output version, defaulting an
 // unspecified version to "1.0".
@@ -59,6 +68,13 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 
+	// helium performs no Unicode normalization, so a requested normalization-form
+	// other than none/"" is the SESU0011 unsupported-normalization serialization
+	// error rather than silently unnormalized output (Serialization 3.1 §5).
+	if !serializeNormalizationSupported(opts.normalizationForm) {
+		return nil, &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
+	}
+
 	var result string
 	switch opts.method {
 	case "", serializeMethodAdaptive:
@@ -67,7 +83,11 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		result, err = serializeJSONSequence(args[0], opts)
 	case serializeMethodHTML:
 		result, err = serializeHTMLSequence(args[0], opts)
+	case "text":
+		result, err = serializeTextSequence(args[0], opts)
 	default:
+		// The xml method (and xhtml, serialized as XML — a defensible
+		// approximation, since helium implements no XHTML-specific rules).
 		result, err = serializeXMLSequence(args[0], opts)
 	}
 	if err != nil {
@@ -110,6 +130,13 @@ type serializeOptions struct {
 	htmlVersion   string
 	doctypePublic string
 	doctypeSystem string
+	// mediaType is the media-type parameter ("" = default "text/html"), used in
+	// the html Content-Type meta element.
+	mediaType string
+	// normalizationForm is the requested Unicode normalization form ("" / "none"
+	// = no normalization). helium performs no Unicode normalization, so any other
+	// value is the SESU0011 unsupported-normalization serialization error.
+	normalizationForm string
 }
 
 func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptions, error) {
@@ -249,6 +276,31 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 		return opts, err
 	} else if found {
 		opts.doctypeSystem = sys
+	}
+	if mt, found, err := readSerializeStringOption(ctx, m, "media-type"); err != nil {
+		return opts, err
+	} else if found {
+		opts.mediaType = mt
+	}
+	// Validation parity with the element form for the recognized-but-unapplied
+	// (or limitation) parameters, so an invalid value is rejected consistently.
+	if _, found, err := readBool("byte-order-mark"); err != nil {
+		return opts, err
+	} else {
+		_ = found // validated (boolean lexical space) and ignored (UTF-8 emits no BOM)
+	}
+	if jn, found, err := readSerializeStringOption(ctx, m, "json-node-output-method"); err != nil {
+		return opts, err
+	} else if found && !serializeMethodValid(jn) {
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", jn)}
+	}
+	if nf, found, err := readSerializeStringOption(ctx, m, "normalization-form"); err != nil {
+		return opts, err
+	} else if found {
+		if !serializeNormalizationFormValid(nf) {
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option normalization-form has an invalid value %q", nf)}
+		}
+		opts.normalizationForm = nf
 	}
 	if v, found := m.Get(AtomicValue{TypeName: TypeString, Value: "standalone"}); found {
 		standalone, err := resolveSerializeStandaloneMap(ctx, v)
@@ -521,14 +573,17 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			if err != nil {
 				return opts, err
 			}
-			if !serializeNormalizationFormValid(strings.Trim(value, xsdWhitespaceCutset)) {
+			nf := strings.Trim(value, xsdWhitespaceCutset)
+			if !serializeNormalizationFormValid(nf) {
 				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter normalization-form has an invalid value %q", value)}
 			}
+			opts.normalizationForm = nf
 		case "media-type":
-			// A string-type parameter helium does not apply; validate structure.
-			if _, err := readSerializeParamValue(param); err != nil {
+			value, err := readSerializeParamValue(param)
+			if err != nil {
 				return opts, err
 			}
+			opts.mediaType = value
 		case "standalone":
 			value, err := readSerializeParamStandalone(param)
 			if err != nil {
@@ -1129,6 +1184,11 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return formatJSONComposite("{", "}", parts, 0, opts.indent), nil
 	case NodeItem:
+		// helium LIMITATION: the json-node-output-method parameter (xml/html/
+		// xhtml/text) is validated but NOT honored — a node embedded in JSON is
+		// always serialized with the xml method (the default value of the
+		// parameter), because helium has no nested-node JSON serialization for the
+		// other methods. Only the default value produces correct output.
 		text, err := serializeNodeItem(v, serializeOptions{method: lexicon.PrefixXML, omitXMLDeclaration: true})
 		if err != nil {
 			return "", err
@@ -1164,6 +1224,56 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		}
 		return `"` + encodeJSONStringForSerialization(s, opts.encoding) + `"`, nil
 	}
+}
+
+// serializeTextSequence implements the text output method (Serialization 3.1
+// §8): the concatenation of the string values of the items, with the
+// item-separator between adjacent items and no markup. A node contributes its
+// string value (an attribute or namespace node its value — the text method has
+// no SENR0001 node-kind restriction); an atomic its lexical form. Character maps
+// apply to the resulting text.
+func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) {
+	parts := make([]string, 0, seqLen(seq))
+	for item := range seqItems(seq) {
+		s, err := serializeTextItem(item)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, s)
+	}
+	return applyCharMapToString(strings.Join(parts, opts.itemSeparator), opts.charMap), nil
+}
+
+func serializeTextItem(item Item) (string, error) {
+	switch v := item.(type) {
+	case AtomicValue:
+		return atomicToString(v)
+	case NodeItem:
+		return ixpath.StringValue(v.Node), nil
+	case FunctionItem:
+		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
+	default:
+		// A map or array has no string value; it can only be serialized with the
+		// json or adaptive method.
+		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T using the text output method", item)}
+	}
+}
+
+// applyCharMapToString substitutes each mapped rune in s with its replacement
+// string (used by the text output method, where the whole output is text).
+func applyCharMapToString(s string, charMap map[rune]string) string {
+	if len(charMap) == 0 {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if repl, ok := charMap[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
@@ -1291,7 +1401,7 @@ func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) 
 	}
 	// include-content-type (default yes) controls the Content-Type meta injection.
 	if opts.includeContentType {
-		insertHTMLContentTypeMeta(clone, opts.encoding)
+		insertHTMLContentTypeMeta(clone, opts.encoding, opts.mediaType)
 	}
 
 	doctype := htmlDoctype(opts, clone)
@@ -1372,9 +1482,9 @@ func htmlDocumentElementIsHTML(doc *helium.Document) bool {
 
 // insertHTMLContentTypeMeta inserts a <meta http-equiv="Content-Type"> element
 // as the first child of the document's <head>, unless one already exists. The
-// encoding defaults to UTF-8. It mutates the given document, so callers pass a
-// copy.
-func insertHTMLContentTypeMeta(doc *helium.Document, encoding string) {
+// encoding defaults to UTF-8 and the media type to text/html. It mutates the
+// given document, so callers pass a copy.
+func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string) {
 	root := doc.DocumentElement()
 	if root == nil {
 		return
@@ -1397,12 +1507,16 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding string) {
 	if enc == "" {
 		enc = lexicon.EncodingUTF8U
 	}
+	mt := mediaType
+	if mt == "" {
+		mt = "text/html"
+	}
 	meta := doc.CreateElement("meta")
 	if headURI := head.URI(); headURI != "" {
 		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
 	}
 	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	_ = meta.SetLiteralAttribute("content", "text/html; charset="+enc)
+	_ = meta.SetLiteralAttribute("content", mt+"; charset="+enc)
 
 	// Detach the current children, add meta first, then re-add them, so meta
 	// becomes the head's first child.

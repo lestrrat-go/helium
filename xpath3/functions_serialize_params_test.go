@@ -635,8 +635,15 @@ func TestSerialize_ElementFormValueValidation(t *testing.T) {
 	t.Run("normalization-form bogus is XPTY0004", func(t *testing.T) {
 		requireXPTY0004(t, paramsOpen+`<output:normalization-form value="bogus"/>`+paramsClose)
 	})
-	t.Run("normalization-form NFC is accepted", func(t *testing.T) {
-		requireOK(t, paramsOpen+`<output:normalization-form value="NFC"/>`+paramsClose)
+	t.Run("normalization-form none is accepted (no-op)", func(t *testing.T) {
+		requireOK(t, paramsOpen+`<output:normalization-form value="none"/>`+paramsClose)
+	})
+	t.Run("normalization-form NFC is SESU0011 (unsupported)", func(t *testing.T) {
+		_, err := runElementFormParams(t, `<root/>`, paramsOpen+`<output:normalization-form value="NFC"/>`+paramsClose)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SESU0011", xerr.Code)
 	})
 
 	// Finding 3: NBSP is not XSD whitespace, so NBSP-only content is significant.
@@ -645,5 +652,83 @@ func TestSerialize_ElementFormValueValidation(t *testing.T) {
 	})
 	t.Run("NBSP-only content in a parameter element is XPTY0004", func(t *testing.T) {
 		requireXPTY0004(t, paramsOpen+"<output:method value=\"xml\"> </output:method>"+paramsClose)
+	})
+}
+
+// TestSerialize_TextMethodAndHonesty covers the newly-implemented text output
+// method, map-form validation parity, the media-type meta value, and the
+// spec-honest normalization-form (SESU0011) behavior.
+func TestSerialize_TextMethodAndHonesty(t *testing.T) {
+	t.Run("text method concatenates string values with no markup", func(t *testing.T) {
+		doc := mustParseXML(t, `<doc><a>Hello</a><b> World</b></doc>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"text"})`)
+		require.NoError(t, err)
+		require.Equal(t, "Hello World", res.StringValue())
+	})
+
+	t.Run("text method on atomics uses item-separator", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil, `serialize((1, 2, 3), map{"method":"text","item-separator":"|"})`)
+		require.NoError(t, err)
+		require.Equal(t, "1|2|3", res.StringValue())
+	})
+
+	t.Run("text method applies character maps", func(t *testing.T) {
+		doc := mustParseXML(t, `<e>xml</e>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"text","use-character-maps":map{"x":"j","m":"so","l":"n"}})`)
+		require.NoError(t, err)
+		require.Equal(t, "json", res.StringValue())
+	})
+
+	t.Run("map-form normalization-form NFC is SESU0011", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"normalization-form":"NFC"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SESU0011", xerr.Code)
+	})
+
+	t.Run("map-form normalization-form bogus is XPTY0004", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"normalization-form":"bogus"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+
+	t.Run("map-form byte-order-mark bad value is XPTY0004", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"byte-order-mark":"maybe"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+
+	t.Run("map-form json-node-output-method bad value is XPTY0004", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"json-node-output-method":"not a qname"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+
+	t.Run("media-type is used in the html Content-Type meta", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","media-type":"application/xhtml+xml"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "application/xhtml+xml; charset=UTF-8", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("xhtml method serializes as XML", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body><p>Hi</p></body></html>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"xhtml"})`)
+		require.NoError(t, err)
+		// XML serialization emits an explicit end tag and no HTML DOCTYPE.
+		require.Contains(t, res.StringValue(), "<p>Hi</p>", "output:\n%s", res.StringValue())
+		require.NotContains(t, res.StringValue(), "<!DOCTYPE", "output:\n%s", res.StringValue())
 	})
 }

@@ -215,23 +215,39 @@ under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
 (default yes) selects `helium/html` `Writer.EscapeURIAttributes`; and the DOCTYPE
 is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
 a PUBLIC/SYSTEM declaration, otherwise HTML5 (`html-version` ≥ 5, the default)
-yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration. The
+yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration; the
+Content-Type meta uses the `media-type` param (default `text/html`). The
 doctype/meta work on a copy of the document (never mutating the input), then
 serialize via the `helium/html` writer. The map form defaults `omit-xml-declaration`
 to true (an empty map equals omitting the argument; W3C serialize-xml-127a); the
 element form keeps the Serialization-spec default (declaration emitted). Character
 maps are not applied on the html path.
 
-**Element-form value validation (Serialization 3.1 schema types).** Every
-recognized parameter is either applied or a spec-justified no-op, and its value
-is schema-type validated: booleans/`yes-no-omit` accept `{yes,no,true,false,1,0}`
-(+ `omit`), uppercase rejected; `method`/`json-node-output-method` validate as a
-built-in method or a QName/EQName; `html-version` as `xs:decimal` (`isValidXSDecimal`);
-`normalization-form` against `{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`;
-`version` as the output version. `byte-order-mark`, `media-type`, `doctype-public`,
-`doctype-system` are validated for structure. Content whitespace checks use
-`isXSDWhitespaceOnly` (`#x20/#x9/#xA/#xD` only) so NBSP-only content is
-significant, not ignorable.
+**Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
+applied as above; `text` (`serializeTextSequence`) concatenates the string values
+of the items with the `item-separator` and no markup (character maps applied,
+no SENR0001 node-kind restriction); `xhtml` is serialized as `xml` — a defensible
+approximation, as helium implements no XHTML-specific serialization rules.
+
+**Spec-honest gaps (no silent wrong output).** `normalization-form` other than
+`none`/`""` is the `SESU0011` unsupported-normalization serialization error
+(helium performs no Unicode normalization), not silently-unnormalized output.
+`json-node-output-method` is validated but only its default (`xml`) is honored — a
+node embedded in JSON is always serialized with the xml method (helium has no
+nested-node JSON serialization for html/xhtml/text); this is a documented
+no-op limitation flagged at the call site.
+
+**Value validation (Serialization 3.1 schema types), map AND element form.** Every
+recognized parameter is applied, a spec-justified no-op, or a documented gap, and
+its value is schema-type validated consistently across both forms: booleans/
+`yes-no-omit` accept `{yes,no,true,false,1,0}` (+ `omit`), uppercase rejected;
+`method`/`json-node-output-method` validate as a built-in method or a QName/EQName;
+`html-version` as `xs:decimal` (`isValidXSDecimal`); `normalization-form` against
+`{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as the output version.
+`byte-order-mark` validated as boolean and ignored (UTF-8 emits no BOM);
+`media-type` applied to the html meta; `doctype-public`/`doctype-system` applied
+to the html doctype. Content whitespace checks use `isXSDWhitespaceOnly`
+(`#x20/#x9/#xA/#xD` only) so NBSP-only content is significant, not ignorable.
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.
