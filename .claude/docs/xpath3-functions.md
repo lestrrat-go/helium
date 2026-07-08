@@ -288,10 +288,14 @@ routes an `*helium.Element` through `elementWithInScopeNamespaces`: an element
 with no inherited in-scope namespace is returned unchanged (byte-identical — a
 document root, root element, or standalone element), otherwise a namespace-
 complete deep COPY is serialized. `inheritedInScopeNamespaces` walks the
-ancestor chain collecting each PREFIXED (non-empty prefix + non-empty URI)
-declaration not shadowed closer to the element and not already on it; the
-over-declaring deep copy re-declares the element's own/active namespaces and the
-inherited prefixes are added on top. Only prefixed declarations are force-added
+ancestor chain collecting each PREFIXED declaration not shadowed closer to the
+element and not already on it; the NEAREST ancestor declaration for a prefix
+decides it, so an XML 1.1 undeclaration (`xmlns:p=""`, empty URI) marks the prefix
+decided and removes it from scope BEFORE the empty-URI skip — a further-out
+ancestor binding for that prefix cannot resurrect it. Only a nearest declaration
+with a non-empty URI is added. The over-declaring deep copy re-declares the
+element's own/active namespaces and the inherited prefixes are added on top. Only
+prefixed declarations are force-added
 (a prefixed decl never rebinds the element's own name); the default (empty-prefix)
 namespace and undeclarations are left to the copy's active-namespace binding. This
 runs BEFORE the doctype handling so `applyDoctype` copies the namespace-complete

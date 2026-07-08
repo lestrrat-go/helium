@@ -215,6 +215,28 @@ func TestSerialize_IsolatedElementInScopeNamespaces(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, `<a xmlns:p="urn:P"><p:b/></a>`, res.StringValue())
 	})
+
+	// An ancestor that UNDECLARES a prefix (XML 1.1 xmlns:p="") removes it from
+	// the inner element's in-scope namespace set, so a further-out ancestor's
+	// binding for the same prefix must NOT be resurrected on the serialized
+	// element: the nearest declaration (the undeclaration) decides the prefix
+	// (XDM namespace-node rules; fn-in-scope-prefixes-29).
+	t.Run("xml 1.1 undeclaration is not resurrected", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.1"?><outer xmlns:p="urn"><mid xmlns:p=""><child/></mid></outer>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(/*/*/*[1], map{"version":"1.1","undeclare-prefixes":true()})`)
+		require.NoError(t, err)
+		require.Equal(t, `<child/>`, res.StringValue())
+	})
+
+	// The symmetric positive case: an outer prefix binding with NO inner
+	// undeclaration IS inherited onto the serialized element.
+	t.Run("outer binding without inner undeclaration is inherited", func(t *testing.T) {
+		doc := mustParseXML(t, `<outer xmlns:p="urn"><mid><child/></mid></outer>`)
+		res, err := evaluate(t.Context(), doc, `serialize(/*/*/*[1])`)
+		require.NoError(t, err)
+		require.Equal(t, `<child xmlns:p="urn"/>`, res.StringValue())
+	})
 }
 
 // fn:serialize with no serialization parameters uses the xml output method

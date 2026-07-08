@@ -2348,9 +2348,14 @@ func elementWithInScopeNamespaces(elem *helium.Element) (helium.Node, error) {
 
 // inheritedInScopeNamespaces returns the namespace declarations that are in
 // scope on elem by virtue of an ANCESTOR declaration (i.e. not declared on elem
-// itself), with a non-empty prefix and non-empty URI, closest-ancestor wins per
-// prefix. A prefix declared on elem itself shadows any ancestor declaration and
-// is omitted (the copy already reproduces elem's own declarations).
+// itself), with a non-empty prefix, closest-ancestor wins per prefix. A prefix
+// declared on elem itself shadows any ancestor declaration and is omitted (the
+// copy already reproduces elem's own declarations). The NEAREST ancestor
+// declaration for a prefix decides it: if that declaration is an XML 1.1
+// undeclaration (empty URI, xmlns:p="") the prefix is NOT in scope, so it is
+// recorded as decided and NOT added — and a further-out ancestor binding for the
+// same prefix cannot resurrect it (marking "seen" happens BEFORE the empty-URI
+// skip).
 func inheritedInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 	seen := map[string]struct{}{}
 	// elem's own declarations shadow ancestors and are reproduced by the copy, so
@@ -2366,13 +2371,21 @@ func inheritedInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 		}
 		for _, ns := range e.Namespaces() {
 			prefix := ns.Prefix()
-			if prefix == "" || ns.URI() == "" {
+			// The default (empty-prefix) namespace is left to the copy's active-
+			// namespace binding, never force-added here.
+			if prefix == "" {
 				continue
 			}
 			if _, dup := seen[prefix]; dup {
 				continue
 			}
+			// This is the nearest ancestor declaration for prefix: it decides
+			// whether prefix is in scope, so mark it decided BEFORE the
+			// undeclaration skip so an outer binding cannot revive it.
 			seen[prefix] = struct{}{}
+			if ns.URI() == "" {
+				continue
+			}
 			result = append(result, ns)
 		}
 	}
