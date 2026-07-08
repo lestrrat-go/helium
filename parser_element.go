@@ -1051,52 +1051,92 @@ func (pctx *parserCtx) attributeEntityWFC(ent *Entity) attrEntityWFC {
 }
 
 // scanAttrEntityWFC walks replacement text for a literal '<' or a nested general
-// reference to an external/unparsed entity, recursing through internal general
-// entities. visited guards against entity reference cycles. Predefined entities
+// reference to an external/unparsed entity, following internal general entities
+// transitively. It uses an EXPLICIT work stack rather than native recursion so a
+// long ACYCLIC chain of nested internal entities cannot grow the Go call stack
+// without bound; the visited set both guards reference cycles and bounds the
+// walk to the number of distinct declared entities. Detection is order-
+// independent: any reachable violation is reported (the walk returns on the
+// first one seen), which is all the WFC requires. Predefined entities
 // (&lt; &gt; &amp; &apos; &quot;) are the sanctioned escapes and are never a
 // violation, matching parseEntityRef's InternalPredefinedEntity exclusion.
 func (pctx *parserCtx) scanAttrEntityWFC(content string, visited map[*Entity]struct{}) attrEntityWFC {
-	for i := 0; i < len(content); i++ {
-		c := content[i]
-		if c == '<' {
-			return attrWFCLessThan
-		}
-		if c != '&' {
-			continue
-		}
-		semi := strings.IndexByte(content[i+1:], ';')
-		if semi < 0 {
-			break
-		}
-		ref := content[i+1 : i+1+semi]
-		i += 1 + semi // loop's i++ then moves past ';'
-		if len(ref) == 0 || ref[0] == '#' {
-			// Char reference: character data. Any '<' it resolves to is an
-			// allowed escape (&#60;), so it is intentionally not flagged.
-			continue
-		}
-		nested, err := pctx.getEntity(ref)
-		if err != nil || nested == nil {
-			// Undefined nested entity: the "Entity Declared" WFC is enforced by
-			// the decodeEntities validation, not here — do not double-report.
-			continue
-		}
-		switch nested.entityType {
-		case enum.ExternalGeneralUnparsedEntity:
-			return attrWFCUnparsed
-		case enum.ExternalGeneralParsedEntity:
-			return attrWFCExternal
-		case enum.InternalGeneralEntity:
-			if _, seen := visited[nested]; seen {
+	stack := []string{content}
+	for len(stack) > 0 {
+		s := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if c == '<' {
+				return attrWFCLessThan
+			}
+			if c != '&' {
 				continue
 			}
-			visited[nested] = struct{}{}
-			if v := pctx.scanAttrEntityWFC(nested.content, visited); v != attrWFCNone {
-				return v
+			semi := strings.IndexByte(s[i+1:], ';')
+			if semi < 0 {
+				break
+			}
+			ref := s[i+1 : i+1+semi]
+			i += 1 + semi // loop's i++ then moves past ';'
+			if len(ref) == 0 || ref[0] == '#' {
+				// Char reference: character data. Any '<' it resolves to is an
+				// allowed escape (&#60;), so it is intentionally not flagged.
+				continue
+			}
+			nested, err := pctx.getEntity(ref)
+			if err != nil || nested == nil {
+				// Undefined nested entity: the "Entity Declared" WFC is enforced by
+				// the decodeEntities validation, not here — do not double-report.
+				continue
+			}
+			switch nested.entityType {
+			case enum.ExternalGeneralUnparsedEntity:
+				return attrWFCUnparsed
+			case enum.ExternalGeneralParsedEntity:
+				return attrWFCExternal
+			case enum.InternalGeneralEntity:
+				if _, seen := visited[nested]; seen {
+					continue
+				}
+				visited[nested] = struct{}{}
+				stack = append(stack, nested.content)
 			}
 		}
 	}
 	return attrWFCNone
+}
+
+// validateAttributeDefaultsWFC re-checks every DTD-declared attribute default
+// value against the attribute-value WFCs (No External Entity References, No <
+// in Attribute Values) once the WHOLE DTD (internal + external subset) has been
+// parsed. A default value is parsed WHILE the DTD is still being read, so a
+// nested general entity it references may be declared AFTER it (a forward
+// reference) — the parse-time check in parseAttributeValueInternal cannot see
+// that entity yet and lets the value through. The WFC constrains the default
+// value DECLARATION itself (W3C rmt-e3e-12), independent of whether any element
+// actually uses the default, so this pass runs over the stored lexical values
+// with the entity tables complete. It matters only under SubstituteEntities(false),
+// where the stored default retains its unexpanded `&name;` references; with
+// substitution on, a violating direct reference is already rejected at parse time.
+func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
+	for _, attrs := range pctx.attsDefault {
+		for _, attr := range attrs {
+			val := attr.Value()
+			if !strings.ContainsRune(val, '&') {
+				continue
+			}
+			switch pctx.scanAttrEntityWFC(val, map[*Entity]struct{}{}) {
+			case attrWFCExternal:
+				return pctx.error(ctx, errors.New("attribute references external entity"))
+			case attrWFCUnparsed:
+				return pctx.error(ctx, errors.New("entity reference to unparsed entity"))
+			case attrWFCLessThan:
+				return pctx.error(ctx, errors.New("'<' in entity is not allowed in attribute values"))
+			}
+		}
+	}
+	return nil
 }
 
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {

@@ -1787,3 +1787,50 @@ func TestIndirectHarmlessEntityRefInAttributeValue(t *testing.T) {
 	require.NoError(t, err, "a harmless indirect entity must be accepted in an attribute value")
 	require.NotNil(t, doc)
 }
+
+// TestForwardReferencedEntityInAttributeDefault covers a DTD attribute default
+// value that transitively references an external entity declared AFTER it (a
+// forward reference). The parse-time check cannot see the entity yet, so the
+// well-formedness violation is caught by the post-DTD re-validation once the
+// entity tables are complete. An external subset makes the early undefined
+// reference non-fatal, reproducing the case that would otherwise slip through.
+func TestForwardReferencedEntityInAttributeDefault(t *testing.T) {
+	t.Parallel()
+
+	const doc = "<!DOCTYPE r SYSTEM \"d.dtd\" [\n" +
+		"<!ELEMENT r EMPTY>\n" +
+		"<!ENTITY outer \"&ext;\">\n" +
+		"<!ATTLIST r a CDATA \"&outer;\">\n" +
+		"<!ENTITY ext SYSTEM \"x\">\n" +
+		"]>\n<r/>"
+	fsys := fstest.MapFS{"d.dtd": {Data: []byte("<!-- external subset -->")}}
+
+	got, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		FS(fsys).Parse(t.Context(), []byte(doc))
+	require.Error(t, err, "a forward-referenced external entity in a default value must be rejected")
+	require.Nil(t, got)
+	require.Contains(t, err.Error(), "attribute references external entity")
+}
+
+// TestDeepEntityChainInAttributeValueBounded confirms the attribute-value WFC
+// walk traverses a long acyclic chain of nested internal entities without native
+// call-stack recursion (the walker uses an explicit work stack) and does not
+// false-reject a harmless plain-text terminus.
+func TestDeepEntityChainInAttributeValueBounded(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	b.WriteString("<!DOCTYPE r [\n<!ELEMENT r EMPTY>\n")
+	const depth = 30 // stays under the entity-expansion depth guard
+	for i := range depth {
+		fmt.Fprintf(&b, "<!ENTITY e%d \"&e%d;\">\n", i, i+1)
+	}
+	fmt.Fprintf(&b, "<!ENTITY e%d \"end\">\n<!ATTLIST r a CDATA \"&e0;\">\n]>\n<r/>", depth)
+
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		Parse(t.Context(), []byte(b.String()))
+	require.NoError(t, err, "a harmless deep entity chain must be accepted")
+	require.NotNil(t, doc)
+}
