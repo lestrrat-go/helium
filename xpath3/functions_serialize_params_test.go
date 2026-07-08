@@ -1568,4 +1568,19 @@ func TestSerialize_HTMLDoctypeNonHTMLRoot(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, res.StringValue(), "<!DOCTYPE", "output:\n%s", res.StringValue())
 	})
+
+	// Sequence normalization (Serialization 3.1 §2) wraps the whole sequence in a
+	// SINGLE document node, so a multi-element sequence gets exactly ONE DOCTYPE,
+	// immediately before the first element — never one per item.
+	t.Run("multi-element sequence + doctype-system emits a single DOCTYPE", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><a>A</a><b>B</b></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize((/root/a, /root/b), map{"method":"html","doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Equal(t, 1, strings.Count(out, "<!DOCTYPE"), "expected exactly one DOCTYPE, output:\n%s", out)
+		require.Contains(t, out, `<!DOCTYPE html SYSTEM "x.dtd">`, "output:\n%s", out)
+		// The single DOCTYPE precedes both elements.
+		require.Regexp(t, `(?s)<!DOCTYPE html SYSTEM "x\.dtd">.*<a>A</a>.*<b>B</b>`, out)
+	})
 }

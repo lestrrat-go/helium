@@ -1762,15 +1762,19 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 }
 
 // serializeHTMLSequence serializes a sequence under the html output method.
-// An html-rooted document is serialized with a DOCTYPE (the default <!DOCTYPE html>
-// or an explicit doctype-public/doctype-system) and a <meta http-equiv=
-// "Content-Type"> injected into <head>. A non-html-rooted document or a bare
-// element still gets a DOCTYPE when doctype-public/doctype-system is specified
-// (Serialization 3.1 §7.4.6); otherwise it is serialized as an HTML fragment
-// (no DOCTYPE, no meta). Character maps (use-character-maps) are applied to text
-// and attribute content.
+// Sequence normalization (Serialization 3.1 §2) wraps the WHOLE sequence in a
+// single document node, so the html method emits at most ONE DOCTYPE for the
+// entire sequence — immediately before the first element (§7.4.6). An html-rooted
+// document contributes the default <!DOCTYPE html> (or an explicit doctype) plus a
+// <meta http-equiv="Content-Type"> injected into <head>; a non-html-rooted
+// document or a bare element contributes a DOCTYPE only when doctype-public/
+// doctype-system is specified; any node with no element (or once a prior item has
+// emitted the DOCTYPE) is a plain HTML fragment. The doctypeEmitted flag threads
+// that "at most once" rule across the item loop. Character maps (use-character-
+// maps) are applied to text and attribute content.
 func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, seqLen(seq))
+	doctypeEmitted := false
 	for item := range seqItems(seq) {
 		node, ok := item.(NodeItem)
 		if !ok {
@@ -1784,95 +1788,100 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 		if err := serializeNodeKindError(node); err != nil {
 			return "", err
 		}
-		text, err := serializeHTMLNode(node.Node, opts)
+		text, emitted, err := serializeHTMLNode(node.Node, opts, !doctypeEmitted)
 		if err != nil {
 			return "", err
+		}
+		if emitted {
+			doctypeEmitted = true
 		}
 		parts = append(parts, text)
 	}
 	return strings.Join(parts, opts.itemSeparator), nil
 }
 
-func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
+// serializeHTMLNode serializes a single node under the html output method,
+// reporting whether it emitted the DOCTYPE. allowDoctype is false once a prior
+// item in the sequence already emitted one, so the DOCTYPE appears at most once
+// for the whole sequence (Serialization 3.1 §2/§7.4.6). This node emits a DOCTYPE
+// only when allowDoctype is true AND either the document element is <html> (the
+// default <!DOCTYPE html> / HTML 4.01 declaration, html-version-gated) or
+// doctype-public/doctype-system was explicitly specified (any root, or a bare
+// element — §7.4.6). The include-content-type <meta> injection applies only to an
+// html-rooted document (a fragment / non-html root has no <head>).
+func serializeHTMLNode(node helium.Node, opts serializeOptions, allowDoctype bool) (string, bool, error) {
 	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
 		EscapeURIAttributes(opts.escapeURIAttributes).CharacterMap(opts.charMap).
 		Normalization(opts.normalizationForm)
 
 	doc, isDoc := node.(*helium.Document)
 	htmlRooted := isDoc && htmlDocumentElementIsHTML(doc)
-	// An explicitly specified doctype-system or doctype-public makes the html
-	// output method emit a document type declaration (named "html", not the
-	// document element's name) immediately before the first element — per
-	// Serialization 3.1 §7.4.6, regardless of the document element's name or
-	// whether the input is a bare element. The DEFAULT DOCTYPE (<!DOCTYPE html> at
-	// html-version 5.0 with no explicit doctype) is emitted ONLY when the document
-	// element's local name is "html", so a non-html-rooted node with no explicit
-	// doctype is serialized as a plain HTML fragment.
 	explicitDoctype := opts.doctypePublic != "" || opts.doctypeSystem != ""
+	emitDoctype := allowDoctype && (htmlRooted || explicitDoctype)
 
-	if !htmlRooted && !explicitDoctype {
-		// A fragment / non-html-rooted node with no explicit doctype: no DOCTYPE and
-		// no meta injection. The input tree is not mutated; escape-uri-attributes
-		// still applies.
-		var buf strings.Builder
-		if err := hw.WriteTo(&buf, node); err != nil {
-			return "", err
-		}
-		return strings.TrimSuffix(buf.String(), "\n"), nil
+	if !htmlRooted {
+		// A non-html-rooted document, a bare element, or a fragment node. The input
+		// tree is not mutated (no meta injection — there is no <head>).
+		// escape-uri-attributes still applies.
+		return writeHTMLNodeTree(hw, node, opts, emitDoctype)
 	}
 
-	// The remaining cases emit a DOCTYPE. Only an html-rooted document receives the
-	// include-content-type <meta> injection (a fragment / non-html root has no
-	// <head>). The meta injection works on a copy so the caller's tree is never
-	// mutated.
-	if htmlRooted {
-		clone, err := helium.CopyDoc(doc)
-		if err != nil {
-			return "", err
-		}
-		if opts.includeContentType {
-			insertHTMLContentTypeMeta(clone, opts.encoding, opts.mediaType)
-		}
-		return writeHTMLWithDoctype(hw, clone, opts)
+	// An html-rooted document: inject the Content-Type meta on a COPY (never
+	// mutating the caller's tree), then serialize, emitting the DOCTYPE unless the
+	// sequence already emitted one.
+	clone, err := helium.CopyDoc(doc)
+	if err != nil {
+		return "", false, err
 	}
-	return writeHTMLWithDoctype(hw, node, opts)
+	if opts.includeContentType {
+		insertHTMLContentTypeMeta(clone, opts.encoding, opts.mediaType)
+	}
+	return writeHTMLNodeTree(hw, clone, opts, emitDoctype)
 }
 
-// writeHTMLWithDoctype serializes node under the html writer, emitting the
-// computed DOCTYPE (htmlDoctype) immediately before the first element
-// (Serialization 3.1 §7.4.6). A document node's children are written in order (its
-// DTD node skipped, the DOCTYPE inserted before the first element child); a bare
-// element is written after the DOCTYPE; any other single node (text/comment/PI,
-// which has no first element) is written unchanged with no DOCTYPE.
-func writeHTMLWithDoctype(hw htmlpkg.Writer, node helium.Node, opts serializeOptions) (string, error) {
-	doctype := htmlDoctype(opts)
+// writeHTMLNodeTree serializes node under the html writer, reporting whether it
+// emitted a DOCTYPE. When emitDoctype is true it writes the computed DOCTYPE
+// (htmlDoctype) immediately before the first element (Serialization 3.1 §7.4.6);
+// otherwise no DOCTYPE is written. A document node's children are written in order
+// (its DTD node skipped, the DOCTYPE inserted before the first element child); a
+// bare element is written after the DOCTYPE; any other single node (text/comment/
+// PI) has no first element, so no DOCTYPE is written even when emitDoctype is true
+// (and it reports false so a later item in the sequence can still emit one).
+func writeHTMLNodeTree(hw htmlpkg.Writer, node helium.Node, opts serializeOptions, emitDoctype bool) (string, bool, error) {
+	var doctype string
+	if emitDoctype {
+		doctype = htmlDoctype(opts)
+	}
 	var buf strings.Builder
+	emitted := false
 	switch n := node.(type) {
 	case *helium.Document:
-		doctypeEmitted := false
 		for child := range helium.Children(n) {
 			if child.Type() == helium.DTDNode {
 				continue
 			}
-			if child.Type() == helium.ElementNode && !doctypeEmitted {
+			if emitDoctype && !emitted && child.Type() == helium.ElementNode {
 				buf.WriteString(doctype)
-				doctypeEmitted = true
+				emitted = true
 			}
 			if err := hw.WriteTo(&buf, child); err != nil {
-				return "", err
+				return "", false, err
 			}
 		}
 	case *helium.Element:
-		buf.WriteString(doctype)
+		if emitDoctype {
+			buf.WriteString(doctype)
+			emitted = true
+		}
 		if err := hw.WriteTo(&buf, n); err != nil {
-			return "", err
+			return "", false, err
 		}
 	default:
 		if err := hw.WriteTo(&buf, node); err != nil {
-			return "", err
+			return "", false, err
 		}
 	}
-	return strings.TrimSuffix(buf.String(), "\n"), nil
+	return strings.TrimSuffix(buf.String(), "\n"), emitted, nil
 }
 
 // htmlDoctype computes the DOCTYPE declaration (with trailing newline) for the

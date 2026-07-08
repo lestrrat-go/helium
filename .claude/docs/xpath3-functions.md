@@ -225,14 +225,18 @@ non-`fn:serialize` caller — keeps the document's version, byte-identical).
 `undeclare-prefixes` is honored only when that effective version is 1.1;
 requesting it at an effective 1.0 (the default when `version` is unspecified) is
 the `SEPM0010` static error. `method="html"` (`serializeHTMLSequence` /
-`serializeHTMLNode`) emits its DOCTYPE (`writeHTMLWithDoctype`, immediately before
-the first element) and injects a `<meta http-equiv="Content-Type">` into `<head>`.
+`serializeHTMLNode` / `writeHTMLNodeTree`) emits its DOCTYPE immediately before the
+first element and injects a `<meta http-equiv="Content-Type">` into `<head>`.
 A DOCTYPE is emitted in two cases (Serialization 3.1 §7.4.6): (a) an explicit
 `doctype-system`/`doctype-public` — emitted regardless of the document element's
 name AND for a bare element input, since sequence normalization wraps the element
 in a document; or (b) the DEFAULT `<!DOCTYPE html>` (HTML5) / HTML 4.01 declaration,
 which is emitted ONLY when the document element's local name is `html`
-(case-insensitive). The `<meta>` injection likewise applies only to an
+(case-insensitive). Because sequence normalization (§2) wraps the WHOLE sequence in
+a single document node, the DOCTYPE is emitted AT MOST ONCE for the entire
+sequence — before the first element — not once per item; the `doctypeEmitted` flag
+threaded through the item loop (and `serializeHTMLNode`'s `allowDoctype` parameter)
+enforces this. The `<meta>` injection likewise applies only to an
 html-rooted document (a fragment / non-html root has no `<head>`). The html
 parameters are APPLIED:
 `include-content-type` (default yes) gates the meta injection; `escape-uri-attributes`
