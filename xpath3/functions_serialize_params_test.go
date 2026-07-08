@@ -1072,3 +1072,110 @@ func TestSerialize_CharMapURIAttributeExclusion(t *testing.T) {
 		require.Contains(t, out, `title="Z"`, "output:\n%s", out)
 	})
 }
+
+// TestSerialize_NormalizationCharMapAndEmptyDefaults covers three fixes:
+//   - a character-map replacement string is NOT subjected to Unicode
+//     Normalization (Serialization 3.1 §11) — a normalization pass must leave
+//     replacements verbatim while normalizing the surrounding content;
+//   - a map-form option value present with the empty sequence selects that
+//     parameter's DEFAULT (present-empty = use default, not an error);
+//   - the map-form json-node-output-method accepts a namespaced xs:QName without
+//     losing its namespace (an extension → unsupported when a node is serialized).
+func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
+	// Finding 2: replacement string not normalized.
+	t.Run("char-map replacement is not normalized (text method)", func(t *testing.T) {
+		// Input "X" + decomposed "é"; map X -> decomposed "é" replacement; NFC.
+		// The decomposed source é composes to U+00E9, but the X replacement stays
+		// decomposed (verbatim).
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string((88, 101, 769)), `+
+				`map{"method":"text","normalization-form":"NFC","use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		require.Equal(t, "éé", res.StringValue())
+	})
+	t.Run("char-map replacement is not normalized (xml method)", func(t *testing.T) {
+		doc := mustParseXML(t, "<e>X</e>")
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":true(),"normalization-form":"NFC",`+
+				`"use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		// The X replacement (decomposed "é") is emitted verbatim, un-normalized.
+		require.Equal(t, "<e>é</e>", res.StringValue())
+	})
+
+	// Finding 3: present-empty map option value applies the default.
+	t.Run("indent () applies the default (no indentation)", func(t *testing.T) {
+		doc := mustParseXML(t, `<a><b>x</b></a>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"xml","indent":()})`)
+		require.NoError(t, err)
+		require.Equal(t, "<a><b>x</b></a>", res.StringValue())
+	})
+	t.Run("method () applies the default xml method", func(t *testing.T) {
+		doc := mustParseXML(t, `<r>x</r>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":()})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<r>x</r>", "output:\n%s", res.StringValue())
+	})
+	t.Run("cdata-section-elements () applies the default (none)", func(t *testing.T) {
+		doc := mustParseXML(t, `<doc><b>x</b></doc>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"xml","cdata-section-elements":()})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "<b>x</b>", "output:\n%s", out)
+		require.NotContains(t, out, "CDATA", "output:\n%s", out)
+	})
+	t.Run("use-character-maps () applies the default (no mapping)", func(t *testing.T) {
+		doc := mustParseXML(t, `<e>x</e>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"xml","use-character-maps":()})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<e>x</e>", "output:\n%s", res.StringValue())
+	})
+	t.Run("html-version () applies the default (HTML5) with html method", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","include-content-type":false(),"html-version":()})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<!DOCTYPE html>", "output:\n%s", res.StringValue())
+	})
+	t.Run("byte-order-mark () applies the default (no error)", func(t *testing.T) {
+		doc := mustParseXML(t, `<r/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"xml","byte-order-mark":()})`)
+		require.NoError(t, err)
+	})
+
+	// Finding 4: map-form json-node-output-method namespaced QName.
+	t.Run("json-node-output-method namespaced QName over a node is unsupported SEPM0016", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":QName("urn:x","custom")})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+	})
+	t.Run("json-node-output-method no-namespace domain token text over a node is SEPM0016", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":QName("","text")})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+	})
+	t.Run("json-node-output-method no-namespace non-domain QName is invalid XPTY0004", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":QName("","custom")})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+	t.Run("json-node-output-method no-namespace xml (default) over a node is fine", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":QName("","xml")})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<a>x", "output:\n%s", res.StringValue())
+	})
+}

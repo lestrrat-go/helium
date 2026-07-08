@@ -277,7 +277,14 @@ is APPLIED to the serialized output for the methods that support it
 serialization step); `none`/`""` is a no-op; the W3C-specific `fully-normalized`
 form is not provided by that package and is the `SESU0011` unsupported-normalization
 error. It is NOT applicable to the `json`/`adaptive` methods (Serialization 3.1
-§9.1.9), which ignore it. `json-node-output-method` is validated against its OWN
+§9.1.9), which ignore it. A character-map REPLACEMENT string is NOT subjected to
+Unicode Normalization (Serialization 3.1 §11): when a normalization pass and a
+character map are BOTH in force, `withCharMapSentinels` substitutes each mapped key
+with a unique sentinel rune (Supplementary Private Use Area-A, unaffected by
+normalization) during serialization, then `expandCharMapSentinels` restores the
+verbatim replacement AFTER normalization — so replacements pass through
+un-normalized while the surrounding content is normalized. `json-node-output-method`
+is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 `json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default
 (`xml`) is honored, so a non-default value (`html`/`xhtml`/`text`/extension) that
@@ -297,7 +304,10 @@ its value is schema-type validated consistently across both forms: booleans/
 non-built-in NCName invalid; the map form additionally accepts an `xs:QName` value,
 where a namespaced QName is an extension → `SEPM0016`, a no-namespace QName must be
 a built-in token, else `XPTY0004`); `json-node-output-method` against its narrower
-`{xml,html,xhtml,text}`-or-extension domain; `html-version` as `xs:decimal`
+`{xml,html,xhtml,text}`-or-extension domain (map form also `xs:QName`-aware, via
+`resolveSerializeJSONNodeMethodMap` — a namespaced QName is an extension, a
+no-namespace QName must be a domain token, keeping its namespace instead of
+stringifying to the local part); `html-version` as `xs:decimal`
 (`isValidXSDecimal`); `normalization-form` against
 `{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as a supported XML
 output version (else `SESU0013`). The map-form `cdata-section-elements` /
@@ -308,6 +318,10 @@ serialize-xml-106a).
 `media-type` applied to the html meta; `doctype-public`/`doctype-system` applied
 to the html doctype. Content whitespace checks use `isXSDWhitespaceOnly`
 (`#x20/#x9/#xA/#xD` only) so NBSP-only content is significant, not ignorable.
+A map-form option entry present with the EMPTY SEQUENCE selects that parameter's
+DEFAULT (F&O 3.1 fn:serialize present-empty = use default, not an error), across
+every map option type — the bool/string/number/method/json-node-method/character-map
+readers report a present-empty value as not-found so the caller keeps its default.
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.

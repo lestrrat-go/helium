@@ -107,20 +107,32 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 
+	// Serialization 3.1 §11: a character-map replacement string is NOT subjected
+	// to Unicode Normalization. When BOTH a normalization pass and a character map
+	// are in force, substitute each mapped key with a unique SENTINEL rune during
+	// serialization, normalize (sentinels — Supplementary Private Use Area-A — are
+	// unaffected by normalization), then expand each sentinel to its verbatim
+	// replacement AFTER normalization, so replacements pass through un-normalized.
+	dispatchOpts := opts
+	var charMapSentinels map[rune]string
+	if opts.methodAppliesNormalization() && serializeNormalizationActive(opts.normalizationForm) && len(opts.charMap) > 0 {
+		dispatchOpts, charMapSentinels = withCharMapSentinels(opts)
+	}
+
 	var result string
-	switch opts.method {
+	switch dispatchOpts.method {
 	case "", serializeMethodAdaptive:
-		result, err = serializeAdaptiveSequence(args[0], opts)
+		result, err = serializeAdaptiveSequence(args[0], dispatchOpts)
 	case serializeMethodJSON:
-		result, err = serializeJSONSequence(args[0], opts)
+		result, err = serializeJSONSequence(args[0], dispatchOpts)
 	case serializeMethodHTML:
-		result, err = serializeHTMLSequence(args[0], opts)
+		result, err = serializeHTMLSequence(args[0], dispatchOpts)
 	case serializeMethodText:
-		result, err = serializeTextSequence(args[0], opts)
+		result, err = serializeTextSequence(args[0], dispatchOpts)
 	default:
 		// The xml method (and xhtml, serialized as XML — a defensible
 		// approximation, since helium implements no XHTML-specific rules).
-		result, err = serializeXMLSequence(args[0], opts)
+		result, err = serializeXMLSequence(args[0], dispatchOpts)
 	}
 	if err != nil {
 		return nil, err
@@ -129,11 +141,54 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Apply the requested Unicode normalization to the serialized output (the
 	// last step, for the methods that support normalization-form). json/adaptive
 	// ignore the parameter; "fully-normalized" is the SESU0011 unsupported form.
-	result, err = applySerializeNormalization(result, opts)
+	result, err = applySerializeNormalization(result, dispatchOpts)
 	if err != nil {
 		return nil, err
 	}
+	if charMapSentinels != nil {
+		result = expandCharMapSentinels(result, charMapSentinels)
+	}
 	return SingleString(result), nil
+}
+
+// serializeNormalizationActive reports whether the normalization-form parameter
+// requests an actual Unicode normalization (anything other than none/"").
+func serializeNormalizationActive(form string) bool {
+	return form != "" && form != "none"
+}
+
+// withCharMapSentinels returns a copy of opts whose character map substitutes each
+// mapped key with a unique SENTINEL rune (from Supplementary Private Use Area-A,
+// U+F0000+, which Unicode normalization never alters), together with the
+// sentinel→replacement table for post-normalization expansion. This keeps a
+// character-map replacement string out of the normalization pass (Serialization
+// 3.1 §11: replacement strings are not subjected to Unicode Normalization).
+func withCharMapSentinels(opts serializeOptions) (serializeOptions, map[rune]string) {
+	sentinelMap := make(map[rune]string, len(opts.charMap))
+	replacements := make(map[rune]string, len(opts.charMap))
+	next := rune(0xF0000)
+	for key, repl := range opts.charMap {
+		sentinelMap[key] = string(next)
+		replacements[next] = repl
+		next++
+	}
+	opts.charMap = sentinelMap
+	return opts, replacements
+}
+
+// expandCharMapSentinels replaces each sentinel rune in s with its verbatim
+// character-map replacement string (the final step, after normalization).
+func expandCharMapSentinels(s string, replacements map[rune]string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if repl, ok := replacements[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // applySerializeNormalization applies the normalization-form parameter to the
@@ -262,6 +317,12 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 		if !found {
 			return false, false, nil
 		}
+		// A map entry present with the empty sequence selects the parameter's
+		// DEFAULT (F&O 3.1 fn:serialize: present-empty = use default, not an
+		// error), so report it as not-found and let the caller keep its default.
+		if seqLen(v) == 0 {
+			return false, false, nil
+		}
 		if seqLen(v) != 1 {
 			return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single xs:boolean", name)}
 		}
@@ -372,12 +433,9 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	} else {
 		_ = found // validated (boolean lexical space) and ignored (UTF-8 emits no BOM)
 	}
-	if jn, found, err := readSerializeStringOption(ctx, m, "json-node-output-method"); err != nil {
+	if jn, found, err := resolveSerializeJSONNodeMethodMap(ctx, m); err != nil {
 		return opts, err
 	} else if found {
-		if !serializeJSONNodeOutputMethodValid(jn) {
-			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", jn)}
-		}
 		opts.jsonNodeOutputMethod = jn
 	}
 	if nf, found, err := readSerializeStringOption(ctx, m, "normalization-form"); err != nil {
@@ -458,6 +516,11 @@ func readSerializeNumberOption(m MapItem, name string) (string, bool, error) {
 	if !found {
 		return "", false, nil
 	}
+	// A map entry present with the empty sequence selects the parameter's DEFAULT
+	// (present-empty = use default, not an error); report it as not-found.
+	if seqLen(v) == 0 {
+		return "", false, nil
+	}
 	if seqLen(v) != 1 {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single number", name)}
 	}
@@ -490,6 +553,11 @@ func readSerializeStringOption(ctx context.Context, m MapItem, name string) (str
 	if err != nil {
 		return "", true, err
 	}
+	// A map entry present with the empty sequence selects the parameter's DEFAULT
+	// (present-empty = use default, not an error); report it as not-found.
+	if len(atoms) == 0 {
+		return "", false, nil
+	}
 	if len(atoms) != 1 {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
 	}
@@ -517,6 +585,11 @@ func resolveSerializeMethodMap(ctx context.Context, m MapItem) (string, bool, er
 	atoms, err := atomizeTypedValue(ctx, v)
 	if err != nil {
 		return "", true, err
+	}
+	// A "method" entry present with the empty sequence selects the default method
+	// (present-empty = use default, not an error); report it as not-found.
+	if len(atoms) == 0 {
+		return "", false, nil
 	}
 	if len(atoms) != 1 {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "method" must be a singleton`}
@@ -546,6 +619,56 @@ func resolveSerializeMethodMap(ctx context.Context, m MapItem) (string, bool, er
 	}
 	if !serializeMethodValid(s) {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", s)}
+	}
+	return s, true, nil
+}
+
+// resolveSerializeJSONNodeMethodMap resolves the map-form "json-node-output-method"
+// option, whose value is an xs:string OR xs:QName over the narrower domain
+// xml|html|xhtml|text (or an extension QName). Like resolveSerializeMethodMap it
+// inspects the ATOM so a namespaced QName keeps its namespace (an extension,
+// carried as an EQName — only its default xml is honored, so a non-default value
+// over a serialized node is the SEPM0016 honest-error) instead of being
+// stringified to its local part. A no-namespace QName must name a domain token,
+// else err:XPTY0004. found is false when the key is absent or present-empty
+// (present-empty selects the default).
+func resolveSerializeJSONNodeMethodMap(ctx context.Context, m MapItem) (string, bool, error) {
+	v, present := m.Get(AtomicValue{TypeName: TypeString, Value: "json-node-output-method"})
+	if !present {
+		return "", false, nil
+	}
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return "", true, err
+	}
+	if len(atoms) == 0 {
+		return "", false, nil
+	}
+	if len(atoms) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "json-node-output-method" must be a singleton`}
+	}
+	av := atoms[0]
+	if av.TypeName == TypeQName {
+		qn, ok := av.Value.(QNameValue)
+		if !ok {
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "json-node-output-method" is not a valid xs:QName`}
+		}
+		if qn.URI == "" {
+			// A no-namespace QName must name a domain token (xml/html/xhtml/text).
+			if serializeJSONNodeOutputMethodValid(qn.Local) {
+				return qn.Local, true, nil
+			}
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", qn.Local)}
+		}
+		// A namespaced QName is an extension: carry it as an EQName.
+		return "Q{" + qn.URI + "}" + qn.Local, true, nil
+	}
+	s, err := atomicToString(av)
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option json-node-output-method has an invalid value"}
+	}
+	if !serializeJSONNodeOutputMethodValid(s) {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", s)}
 	}
 	return s, true, nil
 }
@@ -1187,6 +1310,12 @@ func hasNonWhitespaceContent(elem *helium.Element) bool {
 // strings and values strings (option (function) conventions apply — a QName key
 // is err:XPTY0004; W3C serialize-xml-139/139b).
 func resolveSerializeCharacterMaps(v Sequence) (map[rune]string, error) {
+	// A use-character-maps entry present with the empty sequence selects the
+	// default (no character map); present-empty = use default, not an error. An
+	// empty (non-nil) map disables the feature just like a nil one.
+	if seqLen(v) == 0 {
+		return map[rune]string{}, nil
+	}
 	if seqLen(v) != 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
 	}
@@ -1413,10 +1542,10 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		}
 		// Character maps and Unicode normalization are BOTH inapplicable to the
 		// json output method, per the verbatim Serialization 3.1 text:
-		//   §9.1.11: "The use-character-maps serialization parameter is not
-		//            applicable to the JSON output method."
-		//   §9.1.9:  "The normalization-form serialization parameter is not
-		//            applicable to the JSON output method."
+		//   §9.1.11: "The use-character-maps parameter is not applicable to the
+		//            JSON output method."
+		//   §9.1.9:  "The normalization-form parameter is not applicable to the
+		//            JSON output method."
 		// So opts.charMap is intentionally not consulted here (only JSON string
 		// escaping applies), and applySerializeNormalization skips the json method
 		// via methodAppliesNormalization.
