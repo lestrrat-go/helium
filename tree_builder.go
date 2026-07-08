@@ -410,6 +410,16 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		return readErr
 	}
 
+	// An external subset may begin with a TextDecl
+	// ('<?xml' VersionInfo? EncodingDecl S? '?>'). Consume it (and honor any
+	// declared encoding) before the declaration loop, which would otherwise
+	// reject the '<?xml' as a processing instruction whose target may not be
+	// "xml". This is the same treatment external parameter/general entities get.
+	data, err = ctx.decodeExternalPEContent(ctxif, resolved, data)
+	if err != nil {
+		return err
+	}
+
 	doc := ctx.doc
 
 	// Create the external subset DTD

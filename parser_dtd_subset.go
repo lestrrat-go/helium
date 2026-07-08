@@ -720,7 +720,7 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	// bytes means a later reference (from either path) reuses them consistently,
 	// instead of one path getting raw bytes that embed the TextDecl into a
 	// general entity's stored value.
-	content, err = pctx.decodeExternalPEContent(ctx, content)
+	content, err = pctx.decodeExternalPEContent(ctx, uri, content)
 	if err != nil {
 		return nil, "", err
 	}
@@ -740,7 +740,7 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 // When no TextDecl is present the content is returned unchanged. Only the
 // ASCII-compatible TextDecl shape is handled (the DTD-fragment case in scope);
 // a non-ASCII-leading encoding is left to the caller's raw push.
-func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []byte) ([]byte, error) {
+func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
 	if len(content) == 0 {
 		return content, nil
 	}
@@ -750,16 +750,19 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []by
 
 	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
 	// declared encoding switches only this sub-cursor. Inherit the parent's
-	// options (encoding-ignore policy). The TextDecl grammar is enforced by
-	// parseTextDecl: VersionInfo is optional, EncodingDecl is REQUIRED, and no
-	// StandaloneDecl is permitted — a version-only or standalone-bearing
-	// declaration is rejected rather than leniently accepted.
+	// options (encoding-ignore policy). srcURI (the resolved DTD/PE location) is
+	// set as the sub-parser's base URI so a malformed TextDecl reports the source
+	// file, matching every other declaration error in that resource. The TextDecl
+	// grammar is enforced by parseTextDecl: VersionInfo is optional, EncodingDecl
+	// is REQUIRED, and no StandaloneDecl is permitted — a version-only or
+	// standalone-bearing declaration is rejected rather than leniently accepted.
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
+	sub.baseURI = srcURI
 
 	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
 		if err := sub.parseTextDecl(ctx); err != nil {
@@ -767,7 +770,10 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []by
 		}
 	}
 	if err := sub.switchEncoding(); err != nil {
-		return nil, err
+		// Wrap through sub.error so the failure (e.g. an unsupported declared
+		// encoding) carries srcURI, matching the parseTextDecl branch; otherwise
+		// it would be rewrapped at the caller's location and lose the source file.
+		return nil, sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
@@ -776,7 +782,7 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []by
 	}
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
-		return nil, err
+		return nil, sub.error(ctx, err)
 	}
 	return rest, nil
 }
