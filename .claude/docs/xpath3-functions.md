@@ -225,10 +225,16 @@ non-`fn:serialize` caller — keeps the document's version, byte-identical).
 `undeclare-prefixes` is honored only when that effective version is 1.1;
 requesting it at an effective 1.0 (the default when `version` is unspecified) is
 the `SEPM0010` static error. `method="html"` (`serializeHTMLSequence` /
-`serializeHTMLNode`) emits its DOCTYPE and injects a `<meta http-equiv=
-"Content-Type">` into `<head>` — but ONLY when the document element's local name
-is `html` (case-insensitive); any other root (or a fragment node) is serialized
-under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
+`serializeHTMLNode`) emits its DOCTYPE (`writeHTMLWithDoctype`, immediately before
+the first element) and injects a `<meta http-equiv="Content-Type">` into `<head>`.
+A DOCTYPE is emitted in two cases (Serialization 3.1 §7.4.6): (a) an explicit
+`doctype-system`/`doctype-public` — emitted regardless of the document element's
+name AND for a bare element input, since sequence normalization wraps the element
+in a document; or (b) the DEFAULT `<!DOCTYPE html>` (HTML5) / HTML 4.01 declaration,
+which is emitted ONLY when the document element's local name is `html`
+(case-insensitive). The `<meta>` injection likewise applies only to an
+html-rooted document (a fragment / non-html root has no `<head>`). The html
+parameters are APPLIED:
 `include-content-type` (default yes) gates the meta injection; `escape-uri-attributes`
 (default yes) selects `helium/html` `Writer.EscapeURIAttributes`; and the DOCTYPE
 is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
@@ -281,8 +287,11 @@ supported XML output version (`1.0`/`1.1`); any other value is `SESU0013`
 
 **Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
 applied as above; `text` (`serializeTextSequence`) concatenates the string values
-of the items with the `item-separator` and no markup (character maps applied,
-no SENR0001 node-kind restriction); `xhtml` is serialized as `xml` — a defensible
+of the items with the `item-separator` and no markup (character maps applied);
+sequence normalization (Serialization 3.1 §2) applies to `text` too, so an
+attribute node, a namespace node, or a function item input is `SENR0001` — the
+same node-kind guard (`serializeNodeKindError`) the xml/xhtml/html methods use;
+`xhtml` is serialized as `xml` — a defensible
 approximation, as helium implements no XHTML-specific serialization rules.
 
 **Normalization + character maps (all methods incl. JSON).** `normalization-form`

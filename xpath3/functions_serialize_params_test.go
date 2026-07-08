@@ -1503,3 +1503,69 @@ func TestSerialize_JSONCharacterMapsAndNormalization(t *testing.T) {
 		require.Equal(t, "\"e\u0301\u00e9\"", res.StringValue())
 	})
 }
+
+// TestSerialize_TextMethodSENR0001 verifies that sequence normalization
+// (Serialization 3.1 §2 — "It is a serialization error [err:SENR0001] if an item
+// … is an attribute node, a namespace node or a function item") applies to the
+// text output method too: such items are rejected with SENR0001 rather than
+// silently contributing their string value. This routes through the same
+// serializeNodeKindError checkpoint the xml/xhtml/html methods use.
+func TestSerialize_TextMethodSENR0001(t *testing.T) {
+	requireSENR0001 := func(t *testing.T, src, expr string) {
+		t.Helper()
+		doc := mustParseXML(t, src)
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SENR0001", xerr.Code)
+	}
+
+	t.Run("attribute node", func(t *testing.T) {
+		requireSENR0001(t, `<root id="x">text</root>`, `serialize(/root/@id, map{"method":"text"})`)
+	})
+	t.Run("namespace node", func(t *testing.T) {
+		requireSENR0001(t, `<root xmlns:p="urn:p">text</root>`, `serialize(/root/namespace::*[local-name()='p'], map{"method":"text"})`)
+	})
+	t.Run("function item", func(t *testing.T) {
+		requireSENR0001(t, `<root>text</root>`, `serialize(true#0, map{"method":"text"})`)
+	})
+}
+
+// TestSerialize_HTMLDoctypeNonHTMLRoot verifies Serialization 3.1 §7.4.6: an
+// explicitly specified doctype-system/doctype-public makes the html output method
+// emit a document type declaration (named "html", not the document element's name)
+// immediately before the first element, regardless of the document element's name
+// or whether the input is a bare element. With no explicit doctype a
+// non-html-rooted node stays a fragment — the default <!DOCTYPE html> is emitted
+// only for an <html>-rooted document.
+func TestSerialize_HTMLDoctypeNonHTMLRoot(t *testing.T) {
+	t.Run("non-html document + doctype-system emits DOCTYPE html", func(t *testing.T) {
+		doc := mustParseXML(t, `<page><body><p>Hi</p></body></page>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE html SYSTEM "about:legacy-compat">`, "output:\n%s", out)
+		// The DOCTYPE name is the fixed token "html", never the root element name.
+		require.NotContains(t, out, "<!DOCTYPE page", "output:\n%s", out)
+	})
+
+	t.Run("bare non-html element + doctype-public/system emits DOCTYPE html", func(t *testing.T) {
+		doc := mustParseXML(t, `<page><body><p>Hi</p></body></page>`)
+		root := doc.DocumentElement() // a bare element, not a document node
+		res, err := evaluate(t.Context(), root,
+			`serialize(., map{"method":"html","doctype-public":"-//X//DTD//EN","doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE html PUBLIC "-//X//DTD//EN" "x.dtd">`, "output:\n%s", out)
+		require.Contains(t, out, "<body>", "output:\n%s", out)
+	})
+
+	t.Run("non-html root without explicit doctype stays a fragment", func(t *testing.T) {
+		doc := mustParseXML(t, `<page><body><p>Hi</p></body></page>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html"})`)
+		require.NoError(t, err)
+		require.NotContains(t, res.StringValue(), "<!DOCTYPE", "output:\n%s", res.StringValue())
+	})
+}
