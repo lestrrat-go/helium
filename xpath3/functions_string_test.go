@@ -160,6 +160,16 @@ func TestAnalyzeString_NestedGroups(t *testing.T) {
 			expr: `fn:serialize(fn:analyze-string("banana", "(b)(x?)"))`,
 			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">b</fn:group><fn:group nr="2"/></fn:match><fn:non-match>anana</fn:non-match></fn:analyze-string-result>`,
 		},
+		{
+			// Group nesting must be derived from the SAME normalized pattern the
+			// engine compiles. Under "x", "( a \ ) (b) )" strips to "(a\)(b))"
+			// (the escaped ")" is literal, group 2 nested in group 1), so the match
+			// string value MUST be "a)b" — never "a)bb" (text duplicated by reading
+			// the escaped paren as a group close on the RAW pattern).
+			name: "x-flag escaped paren after stripped whitespace nests correctly",
+			expr: `fn:serialize(fn:analyze-string("a)b", "( a \ ) (b) )", "x"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">a)<fn:group nr="2">b</fn:group></fn:group></fn:match></fn:analyze-string-result>`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := evalString(t, tc.expr)
