@@ -1291,6 +1291,22 @@ func serializeNodeKindError(item NodeItem) error {
 	return nil
 }
 
+// serializeItemKindError reports err:SENR0001 for every item kind that sequence
+// normalization (Serialization 3.1 §2) rejects under the markup output methods
+// (xml/xhtml/html/text and the unspecified default): a bare attribute node, a
+// namespace node, OR a function item. It returns nil for any other item. The
+// adaptive and json methods serialize these kinds specially, so callers must not
+// apply this guard for those methods.
+func serializeItemKindError(item Item) error {
+	switch v := item.(type) {
+	case NodeItem:
+		return serializeNodeKindError(v)
+	case FunctionItem:
+		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
+	}
+	return nil
+}
+
 // resolveSerializeCharacterMapsElement validates the element form of
 // use-character-maps and builds the rune→replacement map from its
 // output:character-map children.
@@ -1465,6 +1481,13 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 	case ArrayItem:
 		return serializeAdaptiveArray(v, opts)
 	case FunctionItem:
+		// The unspecified default method is the xml family, under which sequence
+		// normalization (Serialization 3.1 §2) rejects a function item [err:SENR0001].
+		// An explicit method="adaptive" handles a function item its own way (helium
+		// emits no adaptive function representation, so FOER0000).
+		if opts.method != serializeMethodAdaptive {
+			return "", &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
+		}
 		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 	default:
 		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T", item)}
@@ -1635,20 +1658,17 @@ func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) 
 }
 
 func serializeTextItem(item Item) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute node,
+	// a namespace node, or a function item with SENR0001 before the text output
+	// method runs.
+	if err := serializeItemKindError(item); err != nil {
+		return "", err
+	}
 	switch v := item.(type) {
 	case AtomicValue:
 		return atomicToString(v)
 	case NodeItem:
-		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute or
-		// namespace node with SENR0001 before the text output method runs.
-		if err := serializeNodeKindError(v); err != nil {
-			return "", err
-		}
 		return ixpath.StringValue(v.Node), nil
-	case FunctionItem:
-		// Sequence normalization (Serialization 3.1 §2) rejects a function item with
-		// SENR0001.
-		return "", &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under the text output method"}
 	default:
 		// A map or array has no string value; it can only be serialized with the
 		// json or adaptive method.
@@ -1676,15 +1696,14 @@ func applyCharMapToString(s string, charMap map[rune]string) string {
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, seqLen(seq))
 	for item := range seqItems(seq) {
+		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
+		// node, a namespace node, or a function item under the xml/xhtml methods
+		// [err:SENR0001] before serialization.
+		if err := serializeItemKindError(item); err != nil {
+			return "", err
+		}
 		switch v := item.(type) {
-		case FunctionItem:
-			return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
 		case NodeItem:
-			// xml/xhtml/html/text output methods cannot serialize a bare
-			// attribute or namespace node [err:SENR0001].
-			if err := serializeNodeKindError(v); err != nil {
-				return "", err
-			}
 			text, err := serializeNodeItem(v, opts)
 			if err != nil {
 				return "", err
@@ -1776,6 +1795,13 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 	parts := make([]string, 0, seqLen(seq))
 	doctypeEmitted := false
 	for item := range seqItems(seq) {
+		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
+		// node, a namespace node, or a function item under the html method
+		// [err:SENR0001] — a function item must NOT fall through to adaptive
+		// serialization.
+		if err := serializeItemKindError(item); err != nil {
+			return "", err
+		}
 		node, ok := item.(NodeItem)
 		if !ok {
 			s, err := serializeAdaptiveItem(item, opts)
@@ -1784,9 +1810,6 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 			}
 			parts = append(parts, s)
 			continue
-		}
-		if err := serializeNodeKindError(node); err != nil {
-			return "", err
 		}
 		text, emitted, err := serializeHTMLNode(node.Node, opts, !doctypeEmitted)
 		if err != nil {

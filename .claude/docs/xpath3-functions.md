@@ -292,11 +292,14 @@ supported XML output version (`1.0`/`1.1`); any other value is `SESU0013`
 **Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
 applied as above; `text` (`serializeTextSequence`) concatenates the string values
 of the items with the `item-separator` and no markup (character maps applied);
-sequence normalization (Serialization 3.1 §2) applies to `text` too, so an
-attribute node, a namespace node, or a function item input is `SENR0001` — the
-same node-kind guard (`serializeNodeKindError`) the xml/xhtml/html methods use;
-`xhtml` is serialized as `xml` — a defensible
-approximation, as helium implements no XHTML-specific serialization rules.
+`xhtml` is serialized as `xml` — a defensible approximation, as helium implements
+no XHTML-specific serialization rules. Sequence normalization (Serialization 3.1
+§2) rejects an attribute node, a namespace node, OR a function item with
+`SENR0001` under EVERY markup method — `xml`/`xhtml`/`html`/`text` and the
+unspecified default — via the shared `serializeItemKindError` guard (which
+delegates node kinds to `serializeNodeKindError`); a function item does NOT fall
+through to adaptive serialization under the html method. The `adaptive` and `json`
+methods are exempt (they keep their own function-item handling, `FOER0000`).
 
 **Normalization + character maps (all methods incl. JSON).** `normalization-form`
 is APPLIED for the methods that support it — xml/xhtml/html/text, the unspecified

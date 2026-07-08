@@ -1509,7 +1509,7 @@ func TestSerialize_JSONCharacterMapsAndNormalization(t *testing.T) {
 // … is an attribute node, a namespace node or a function item") applies to the
 // text output method too: such items are rejected with SENR0001 rather than
 // silently contributing their string value. This routes through the same
-// serializeNodeKindError checkpoint the xml/xhtml/html methods use.
+// serializeItemKindError checkpoint the xml/xhtml/html methods use.
 func TestSerialize_TextMethodSENR0001(t *testing.T) {
 	requireSENR0001 := func(t *testing.T, src, expr string) {
 		t.Helper()
@@ -1530,6 +1530,46 @@ func TestSerialize_TextMethodSENR0001(t *testing.T) {
 	t.Run("function item", func(t *testing.T) {
 		requireSENR0001(t, `<root>text</root>`, `serialize(true#0, map{"method":"text"})`)
 	})
+}
+
+// TestSerialize_FunctionItemSENR0001 verifies that a function-item input is a
+// serialization error [err:SENR0001] under EVERY markup output method
+// (xml/xhtml/html and the unspecified default) — sequence normalization
+// (Serialization 3.1 §2) rejects function items for all of them, not just text.
+// The adaptive and json methods are exempt (they keep their own function-item
+// handling), so they stay FOER0000.
+func TestSerialize_FunctionItemSENR0001(t *testing.T) {
+	requireCode := func(t *testing.T, method, wantCode string) {
+		t.Helper()
+		doc := mustParseXML(t, `<root>text</root>`)
+		expr := `serialize(true#0, map{"method":"` + method + `"})`
+		_, err := evaluate(t.Context(), doc, expr)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, wantCode, xerr.Code, "method=%s", method)
+	}
+
+	for _, method := range []string{"xml", "xhtml", "html", "text"} {
+		t.Run(method+" raises SENR0001", func(t *testing.T) {
+			requireCode(t, method, "SENR0001")
+		})
+	}
+	// The unspecified default (xml family) also raises SENR0001.
+	t.Run("default method raises SENR0001", func(t *testing.T) {
+		doc := mustParseXML(t, `<root>text</root>`)
+		_, err := evaluate(t.Context(), doc, `serialize(true#0)`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SENR0001", xerr.Code)
+	})
+	// adaptive and json are exempt from the SENR0001 sequence-normalization guard.
+	for _, method := range []string{"adaptive", "json"} {
+		t.Run(method+" is exempt (FOER0000)", func(t *testing.T) {
+			requireCode(t, method, "FOER0000")
+		})
+	}
 }
 
 // TestSerialize_HTMLDoctypeNonHTMLRoot verifies Serialization 3.1 §7.4.6: an
