@@ -134,6 +134,17 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 
+	// Validate the normalization-form up front so an unsupported form
+	// ("fully-normalized" → SESU0011) is reported for every method that applies
+	// normalization, even when the serialized output has no text/attribute content
+	// to normalize (e.g. an empty element under the xml method). NFC/NFD/NFKC/NFKD
+	// are applied later — inside the writer for the markup methods (scoped to
+	// text/attribute nodes) or to the whole output for text/json (pure character
+	// data).
+	if opts.methodAppliesNormalization() && serializeNormalizationActive(opts.normalizationForm) && !isSupportedSerializeNormForm(opts.normalizationForm) {
+		return nil, &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
+	}
+
 	// Serialization 3.1 §11: a character-map replacement string is NOT subjected
 	// to Unicode Normalization. When BOTH a normalization pass and a character map
 	// are in force, substitute each mapped key with a unique SENTINEL rune during
@@ -165,17 +176,36 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	// Apply the requested Unicode normalization to the serialized output (the
-	// last step, for the methods that support normalization-form). json/adaptive
-	// ignore the parameter; "fully-normalized" is the SESU0011 unsupported form.
-	result, err = applySerializeNormalization(result, dispatchOpts)
-	if err != nil {
-		return nil, err
+	// Unicode normalization (normalization-form). The markup methods
+	// (xml/xhtml/html and the unspecified default) apply it INSIDE the writer,
+	// scoped to text-node and attribute-value character content (Serialization 3.1
+	// §4 character-expansion phase) so element/attribute names, comments, PIs, the
+	// DOCTYPE, and the XML declaration are never normalized. The text and json
+	// methods emit pure character data (no element/attribute names; the json
+	// structure is ASCII), so normalizing the whole output is equivalent to
+	// node-scoped normalization and is applied here. adaptive ignores normalization.
+	switch dispatchOpts.method {
+	case serializeMethodText, serializeMethodJSON:
+		result, err = applySerializeNormalization(result, dispatchOpts)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if charMapSentinels != nil {
 		result = expandCharMapSentinels(result, charMapSentinels)
 	}
 	return SingleString(result), nil
+}
+
+// isSupportedSerializeNormForm reports whether form names a Unicode normalization
+// form helium applies. A valid, active normalization-form (serialize parameter
+// values are validated at parse time by serializeNormalizationFormValid) is one of
+// NFC/NFD/NFKC/NFKD or "fully-normalized"; of these only "fully-normalized" is
+// unsupported — it is not provided by golang.org/x/text/unicode/norm and is the
+// SESU0011 unsupported-normalization serialization error. "none"/"" request no
+// normalization (serializeNormalizationActive is false).
+func isSupportedSerializeNormForm(form string) bool {
+	return serializeNormalizationActive(form) && form != "fully-normalized"
 }
 
 // serializeNormalizationActive reports whether the normalization-form parameter
@@ -218,12 +248,15 @@ func expandCharMapSentinels(s string, replacements map[rune]string) string {
 	return b.String()
 }
 
-// applySerializeNormalization applies the normalization-form parameter to the
-// serialized string. none/"" is a no-op; NFC/NFD/NFKC/NFKD are applied via
-// golang.org/x/text/unicode/norm; the W3C-specific "fully-normalized" form is
-// not provided by that package and is the SESU0011 unsupported-normalization
-// serialization error. The parameter is not applicable to the json/adaptive
-// methods, which ignore it (Serialization 3.1 §9.1.9).
+// applySerializeNormalization applies the normalization-form parameter to a whole
+// serialized string. It is used only by the text and json output methods, whose
+// output is pure character data (text) or ASCII-delimited character data (json),
+// so normalizing the whole string is equivalent to the node-scoped
+// character-expansion phase (Serialization 3.1 §4); the markup methods
+// (xml/xhtml/html) normalize inside their writer instead so element/attribute
+// names and other markup are never touched. none/"" is a no-op;
+// NFC/NFD/NFKC/NFKD are applied via golang.org/x/text/unicode/norm; the
+// W3C-specific "fully-normalized" form is rejected up front (SESU0011).
 func applySerializeNormalization(s string, opts serializeOptions) (string, error) {
 	form := opts.normalizationForm
 	if form == "" || form == "none" || !opts.methodAppliesNormalization() {
@@ -1703,6 +1736,18 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	if len(opts.charMap) > 0 {
 		writer = writer.CharacterMap(opts.charMap)
 	}
+	// normalization-form is applied inside the writer, scoped to text-node and
+	// attribute-value character content (Serialization 3.1 §4), so element/attribute
+	// names, comments, PIs, the DOCTYPE, and the XML declaration are never
+	// normalized. An unsupported form (fully-normalized) is rejected up front, so
+	// the writer only ever sees NFC/NFD/NFKC/NFKD (or none/"" = disabled). Gated to
+	// methods that apply normalization: serializeNodeItem uses this writer for the
+	// xml/xhtml and unspecified-default methods AND for the adaptive method (which
+	// ignores normalization) and json-embedded nodes, so the adaptive method must
+	// not normalize a serialized node's text.
+	if opts.methodAppliesNormalization() {
+		writer = writer.Normalization(opts.normalizationForm)
+	}
 	return writer
 }
 
@@ -1737,7 +1782,8 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 
 func serializeHTMLNode(node helium.Node, opts serializeOptions) (string, error) {
 	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
-		EscapeURIAttributes(opts.escapeURIAttributes).CharacterMap(opts.charMap)
+		EscapeURIAttributes(opts.escapeURIAttributes).CharacterMap(opts.charMap).
+		Normalization(opts.normalizationForm)
 
 	doc, ok := node.(*helium.Document)
 	if !ok || !htmlDocumentElementIsHTML(doc) {

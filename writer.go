@@ -11,6 +11,7 @@ import (
 	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Write serializes a node (document or element) to the given writer using
@@ -75,6 +76,17 @@ type Writer struct {
 	// declaration (the encoding serialization parameter). Empty keeps the
 	// document's own encoding, leaving default output byte-identical.
 	outputEncoding string
+	// normalize / normForm request Unicode normalization of text-node and
+	// attribute-value character content (the normalization-form serialization
+	// parameter, Serialization 3.1 §4 character-expansion phase). Normalization is
+	// scoped to text and attribute nodes ONLY — element/attribute names, comments,
+	// PIs, the DOCTYPE, and the XML declaration are never normalized. A
+	// character-map replacement is assumed to be normalization-inert (fn:serialize
+	// substitutes a sentinel rune for a mapped character), so a replacement passes
+	// through un-normalized. normalize is false by default, keeping output
+	// byte-identical when no normalization is requested.
+	normalize bool
+	normForm  norm.Form
 }
 
 // standaloneMode controls how the writer emits the standalone pseudo-attribute
@@ -373,6 +385,20 @@ func (w Writer) OutputEncoding(v string) Writer {
 	return w
 }
 
+// Normalization requests Unicode normalization of text-node and attribute-value
+// character content (the normalization-form serialization parameter). form is one
+// of "NFC", "NFD", "NFKC", "NFKD"; "", "none", or any other value disables it,
+// leaving output byte-identical. Normalization is scoped to text and attribute
+// nodes (Serialization 3.1 §4 character-expansion phase) — element/attribute
+// names, comments, PIs, the DOCTYPE, and the XML declaration are never normalized.
+// A character map (CharacterMap) is expected to carry normalization-inert
+// replacements (fn:serialize substitutes sentinel runes), so a mapped character's
+// replacement is not normalized.
+func (w Writer) Normalization(form string) Writer {
+	w.normForm, w.normalize = xmlNormalizationForm(form)
+	return w
+}
+
 // effectiveEncoding returns the encoding driving the XML-declaration
 // pseudo-attribute: the OutputEncoding override when set, otherwise the
 // document's own encoding.
@@ -644,10 +670,20 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			}
 		} else if d.cdataText {
 			// The parent element is a cdata-section-element: emit the text as
-			// one or more CDATA sections instead of escaping it.
+			// one or more CDATA sections instead of escaping it. A CDATA section
+			// serializes a text node, so its content is normalized too (character
+			// maps are not applied inside a CDATA section).
+			if d.normalize {
+				c = d.normForm.Bytes(c)
+			}
 			d.writeCDATASplit(out, c)
 		} else {
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
+			cm := d.charMap
+			if d.normalize {
+				c = d.normalizeContent(c)
+				cm = nil
+			}
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars, d.xml11, cm); err != nil {
 				return err
 			}
 		}
@@ -655,8 +691,14 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case CDATASectionNode:
 		// Mirrors xmlsave.c XML_CDATA_SECTION_NODE handling.
 		// Splits content on "]]>" sequences so the output is well-formed.
-		// Read-only serialization: use the internal slice without a copy.
-		d.writeCDATASplit(out, rawContent(n))
+		// Read-only serialization: use the internal slice without a copy. A CDATA
+		// section serializes a text node, so its content is normalized when
+		// requested (the delimiters are markup and stay verbatim).
+		cdata := rawContent(n)
+		if d.normalize {
+			cdata = d.normForm.Bytes(cdata)
+		}
+		d.writeCDATASplit(out, cdata)
 		return d.err
 	case ElementDeclNode:
 		if edecl, ok := AsNode[*ElementDecl](n); ok {
@@ -747,7 +789,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
+					if err := d.writeAttrValueContent(out, rawContent(achld)); err != nil {
 						return err
 					}
 				} else {

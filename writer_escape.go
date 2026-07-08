@@ -1,11 +1,71 @@
 package helium
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
+
+// xmlNormalizationForm maps a normalization-form parameter name to its
+// golang.org/x/text norm.Form and reports whether normalization is active. "NFC",
+// "NFD", "NFKC", and "NFKD" enable it; "", "none", and any other value disable it
+// (the caller — fn:serialize — rejects "fully-normalized" as SESU0011 before
+// reaching the writer).
+func xmlNormalizationForm(form string) (norm.Form, bool) {
+	switch form {
+	case "NFC":
+		return norm.NFC, true
+	case "NFD":
+		return norm.NFD, true
+	case "NFKC":
+		return norm.NFKC, true
+	case "NFKD":
+		return norm.NFKD, true
+	}
+	return norm.NFC, false
+}
+
+// normalizeContent applies the writer's requested Unicode normalization to a text
+// or attribute node's character content. When a character map is in force its
+// mapped characters are substituted FIRST (their replacement — a
+// normalization-inert sentinel supplied by fn:serialize — is left un-normalized),
+// matching Serialization 3.1 §4: character mapping precedes normalization and a
+// replacement is not normalized. Because the character map has already been
+// applied here, the caller passes a nil map to the escaper. It must only be
+// called when d.normalize is true.
+func (d *writeSession) normalizeContent(s []byte) []byte {
+	if len(d.charMap) == 0 {
+		return d.normForm.Bytes(s)
+	}
+	var b bytes.Buffer
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		i += width
+		if repl, ok := d.charMap[r]; ok {
+			b.WriteString(repl)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return d.normForm.Bytes(b.Bytes())
+}
+
+// writeAttrValueContent escapes an attribute value's character content, applying
+// the requested Unicode normalization (scoped to attribute nodes) and character
+// maps. Shared by the generic and XHTML serialization paths.
+func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
+	cm := d.charMap
+	if d.normalize {
+		content = d.normalizeContent(content)
+		cm = nil
+	}
+	return escapeAttrValue(out, content, d.escapeNonASCII, d.rejectInvalidChars, d.xml11, cm)
+}
 
 var (
 	qch_dquote = []byte{'"'}

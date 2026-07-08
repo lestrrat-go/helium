@@ -1082,7 +1082,13 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		res, err := evaluate(t.Context(), doc,
 			`serialize(., map{"method":"xml","normalization-form":"NFC"})`)
 		require.NoError(t, err)
-		require.Equal(t, `<e>`+composed+`</e>`, res.StringValue())
+		// Normalization is scoped to the text node and runs BEFORE the XML writer's
+		// escaping: the decomposed "e" + U+0301 composes to é (U+00E9), which the
+		// writer's default non-ASCII escaping then emits as &#xE9; — exactly as a
+		// literal composed é serializes, so normalization is consistent with the
+		// rest of the writer rather than slipping a literal through a post-escape
+		// pass.
+		require.Equal(t, `<e>&#xE9;</e>`, res.StringValue())
 	})
 	t.Run("json applies normalization-form to string content", func(t *testing.T) {
 		// normalization-form IS applicable to the json output method (§9.1.9): the
@@ -1152,6 +1158,67 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"text"})`)
 		require.NoError(t, err)
 		require.Equal(t, "hi", res.StringValue())
+	})
+}
+
+// TestSerialize_NormalizationScope covers Serialization 3.1 §4: the
+// normalization-form parameter is a step of the character-expansion phase, which
+// is scoped to TEXT and ATTRIBUTE node character content only. Element/attribute
+// NAMES, comment and PI markup, the DOCTYPE, and the XML declaration are NOT
+// normalized even when a non-none normalization-form is set.
+func TestSerialize_NormalizationScope(t *testing.T) {
+	// U+00E9 (composed é) vs "e" + U+0301 (decomposed). The XML writer's default
+	// non-ASCII escaping emits a composed é (U+00E9, < U+0100) as &#xE9;.
+	const decomposed = "e\u0301"
+	const composed = "\u00e9"
+	const composedRef = "&#xE9;"
+
+	t.Run("xml: names, comment, and PI are not normalized; text and attr value are", func(t *testing.T) {
+		src := `<caf` + decomposed + ` at` + decomposed + `="` + decomposed + `">` +
+			`<!--` + decomposed + `--><?p ` + decomposed + `?>` + decomposed + `</caf` + decomposed + `>`
+		doc := mustParseXML(t, src)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":true(),"normalization-form":"NFC"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		// Element/attribute names, comment content, and PI data stay decomposed.
+		want := `<caf` + decomposed + ` at` + decomposed + `="` + composedRef + `">` +
+			`<!--` + decomposed + `--><?p ` + decomposed + `?>` + composedRef + `</caf` + decomposed + `>`
+		require.Equal(t, want, out)
+		// A whole-string normalization would have composed the name/comment/PI too.
+		require.NotContains(t, out, "caf"+composed, "element name must not be normalized")
+		require.NotContains(t, out, "<!--"+composed, "comment must not be normalized")
+	})
+
+	t.Run("xml: attribute value is normalized", func(t *testing.T) {
+		doc := mustParseXML(t, `<e a="`+decomposed+`"/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":true(),"normalization-form":"NFC"})`)
+		require.NoError(t, err)
+		require.Equal(t, `<e a="`+composedRef+`"/>`, res.StringValue())
+	})
+
+	t.Run("html: element name stays decomposed while text is normalized", func(t *testing.T) {
+		// The html writer emits non-ASCII literally (no numeric-reference escaping),
+		// so a normalized text node reads as the literal composed é.
+		doc := mustParseXML(t, `<x`+decomposed+`>`+decomposed+`</x`+decomposed+`>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","normalization-form":"NFC"})`)
+		require.NoError(t, err)
+		require.Equal(t, `<x`+decomposed+`>`+composed+`</x`+decomposed+`>`, res.StringValue())
+	})
+
+	t.Run("xml: char-map replacement stays un-normalized while surrounding text is normalized", func(t *testing.T) {
+		// Text "X" + decomposed é; map X -> decomposed é. The mapped replacement is
+		// emitted verbatim (decomposed) while the surrounding decomposed é composes.
+		doc := mustParseXML(t, `<e>X`+decomposed+`</e>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":true(),"normalization-form":"NFC",`+
+				`"use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		// Replacement decomposed é (verbatim, U+0301 > U+00FF so not escaped) then
+		// the surrounding é composed to &#xE9;.
+		require.Equal(t, `<e>`+decomposed+composedRef+`</e>`, res.StringValue())
 	})
 }
 

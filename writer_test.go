@@ -1208,3 +1208,39 @@ func TestWriteStringWithoutDTD(t *testing.T) {
 	require.True(t, strings.Contains(s, "<root>"))
 	require.Contains(t, s, "&amp;")
 }
+
+// TestWriterNormalization exercises Writer.Normalization: Unicode normalization is
+// scoped to text-node and attribute-value character content (Serialization 3.1
+// §4). Element/attribute names, comments, and PIs are never normalized.
+func TestWriterNormalization(t *testing.T) {
+	t.Parallel()
+	const decomposed = "e\u0301" // "e" + combining acute
+	const composed = "\u00e9"    // U+00E9
+	src := "<caf" + decomposed + " at" + decomposed + "=\"" + decomposed + "\">" +
+		"<!--" + decomposed + "--><?p " + decomposed + "?>" + decomposed +
+		"</caf" + decomposed + ">"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	var buf strings.Builder
+	// EscapeNonASCII(false) so the composed é appears literally, isolating the
+	// normalization effect from the writer's numeric-reference escaping.
+	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+		Normalization("NFC").WriteTo(&buf, doc)
+	require.NoError(t, err)
+	out := buf.String()
+
+	// Text and attribute value are composed; names, comment, and PI stay decomposed.
+	require.Contains(t, out, ">"+composed+"</caf"+decomposed+">", "text normalized: %q", out)
+	require.Contains(t, out, "at"+decomposed+"=\""+composed+"\"", "attr value normalized, name not: %q", out)
+	require.Contains(t, out, "<caf"+decomposed, "element name not normalized: %q", out)
+	require.Contains(t, out, "<!--"+decomposed+"-->", "comment not normalized: %q", out)
+	require.Contains(t, out, "<?p "+decomposed+"?>", "PI not normalized: %q", out)
+	require.NotContains(t, out, "caf"+composed, "name must stay decomposed: %q", out)
+
+	// Without normalization the output is byte-identical to the source content.
+	var raw strings.Builder
+	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).WriteTo(&raw, doc)
+	require.NoError(t, err)
+	require.NotContains(t, raw.String(), composed, "no normalization by default: %q", raw.String())
+}
