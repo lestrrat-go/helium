@@ -1037,20 +1037,17 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 // content through nested &name; references and whose weaker general-content check
 // (ent.checked) must not suppress the stricter attribute-value WFCs.
 //
-// The result is memoized on ent: it is a pure function of the entity tables,
-// which do not change mid-parse. Crucially the walk resolves nested references
-// with pctx.getEntity (a plain table lookup that fires NO SAX callbacks), unlike
-// decodeEntities, so consulting it on every occurrence never duplicates
-// ResolveEntity events.
+// The walk resolves nested references with pctx.getEntity (a plain table lookup
+// that fires NO SAX callbacks), unlike decodeEntities, so consulting it on every
+// occurrence never duplicates ResolveEntity events. The result is NOT memoized:
+// the entity tables can still grow while an attribute default value is parsed
+// during the DTD (a nested entity may be declared AFTER the value that references
+// it), so a result computed against incomplete tables must never be cached — the
+// scan is side-effect-free and cheap, and re-running it always reflects the
+// current tables.
 func (pctx *parserCtx) attributeEntityWFC(ent *Entity) attrEntityWFC {
-	if ent.attrWFCSet {
-		return ent.attrWFC
-	}
 	visited := map[*Entity]struct{}{ent: {}}
-	res := pctx.scanAttrEntityWFC(ent.content, visited)
-	ent.attrWFC = res
-	ent.attrWFCSet = true
-	return res
+	return pctx.scanAttrEntityWFC(ent.content, visited)
 }
 
 // scanAttrEntityWFC walks replacement text for a literal '<' or a nested general

@@ -39,13 +39,6 @@ type Entity struct {
 	checked      int   // was the entity content checked
 	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
 	expandedSize int64 // total expanded byte count after recursive resolution
-	// attrWFC caches the transitive attribute-value well-formedness
-	// classification of this entity's replacement text (see attrEntityWFC).
-	// It is a pure function of the entity tables (stable mid-parse) and is
-	// computed without SAX side effects, so it can be consulted on every
-	// attribute-value occurrence. attrWFCSet guards the one-time computation.
-	attrWFC    attrEntityWFC
-	attrWFCSet bool
 	/* this is also used to count entities
 	 * references done from that entity
 	 * and if it contains '<' */

@@ -1736,6 +1736,21 @@ func TestIndirectEntityRefInAttributeValue(t *testing.T) {
 				"]>\n<r><e a=\"&outer;\"/></r>",
 			wantMsg: "'<' in entity is not allowed in attribute values",
 		},
+		{
+			// The nested external entity is declared AFTER the ATTLIST default
+			// value that transitively references it (forward reference). The WFC
+			// classification must NOT be memoized against the incomplete entity
+			// tables seen while the default value is parsed — a cached result
+			// would let the document be accepted once the entity is declared.
+			name: "external-indirect-attlist-default-forward",
+			src: "<!DOCTYPE r [\n" +
+				"<!ELEMENT r EMPTY>\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"<!ATTLIST r a CDATA \"&outer;\">\n" +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"]>\n<r/>",
+			wantMsg: "not defined",
+		},
 	}
 
 	for _, tc := range testcases {
