@@ -489,10 +489,15 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 	}
 
 	if pctx.instate == psAttributeValue && loadedEnt.EntityType() == enum.ExternalGeneralParsedEntity {
-		return nil, 0, fmt.Errorf("attribute references enternal entity '%s'", name)
+		return nil, 0, fmt.Errorf("attribute references external entity '%s'", name)
 	}
 
-	if pctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && loadedEnt.EntityType() == enum.InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
+	// An internal general entity whose replacement text contains a literal '<'
+	// is a WFC violation ("No < in Attribute Values") when referenced from an
+	// attribute value. Predefined entities (&lt; etc.) resolve earlier and are
+	// legal, so gate on non-predefined, mirroring the cursor path in
+	// parseEntityRef.
+	if pctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && loadedEnt.EntityType() != enum.InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
 		return nil, 0, fmt.Errorf("'<' in entity '%s' is not allowed in attribute values", name)
 	}
 
@@ -677,8 +682,6 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		return ent, nil
 	}
 
-	err = nil
-
 	if s := pctx.sax; s != nil {
 		// A non-nil error here is advisory (e.g. "entity not found"): we fall
 		// through to the undeclared-entity handling below, matching libxml2's
@@ -691,11 +694,15 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 			if !ok {
 				return nil, pctx.error(ctx, fmt.Errorf("SAX GetEntity returned unsupported entity type %T for entity '%s'", loadedEnt, name))
 			}
+			// Fall through to the well-formedness checks below rather than
+			// returning the SAX-resolved entity directly: a direct reference to
+			// an external/unparsed/parameter entity (or an internal entity whose
+			// replacement text contains '<') from an attribute value is a WFC
+			// violation regardless of which resolver produced the entity.
 			ent = typed
-			return
+		} else {
+			ent, _ = pctx.getEntity(name)
 		}
-
-		ent, _ = pctx.getEntity(name)
 	}
 
 	if ent == nil {
