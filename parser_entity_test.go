@@ -1675,3 +1675,100 @@ func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
 	_, found := doc.GetEntity("greet")
 	require.True(t, found, "entity from external DTD must be declared, proving the file: DTD URI was resolved")
 }
+
+// TestIndirectEntityRefInAttributeValue exercises the XML 1.0 attribute-value
+// well-formedness constraints ("No External Entity References", "No < in
+// Attribute Values") against an INDIRECT reference — a general entity whose OWN
+// replacement text is harmless but which transitively references an external or
+// unparsed entity, or reaches a literal '<'. Under SubstituteEntities(false) the
+// stricter attribute-value WFCs must fire on EVERY attribute occurrence,
+// independent of whether the entity was already expanded (and its weaker
+// element-content check recorded) in element content first.
+func TestIndirectEntityRefInAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	const head = "<!DOCTYPE r [\n" +
+		"<!ELEMENT r ANY>\n" +
+		"<!ELEMENT e EMPTY>\n" +
+		"<!ATTLIST e a CDATA #IMPLIED>\n"
+
+	testcases := []struct {
+		name    string
+		src     string
+		wantMsg string
+	}{
+		{
+			// The entity is expanded in element content FIRST (setting its
+			// checked bit), then referenced from an attribute. The checked bit
+			// must NOT suppress the attribute-value WFC re-validation.
+			name: "external-indirect-after-content",
+			src: head +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"]>\n<r>&outer;<e a=\"&outer;\"/></r>",
+			wantMsg: "attribute references external entity",
+		},
+		{
+			name: "external-indirect-attr-only",
+			src: head +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "attribute references external entity",
+		},
+		{
+			// An unparsed (NDATA) entity reached only through an attribute value.
+			name: "unparsed-indirect-attr-only",
+			src: head +
+				"<!NOTATION gif PUBLIC \"gif\">\n" +
+				"<!ENTITY pic SYSTEM \"nul\" NDATA gif>\n" +
+				"<!ENTITY outer \"&pic;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "entity reference to unparsed entity",
+		},
+		{
+			// A nested entity whose replacement text contains a '<' (via a char
+			// reference resolved into its stored content).
+			name: "lessthan-indirect-attr-only",
+			src: head +
+				"<!ENTITY inner \"x&#60;y\">\n" +
+				"<!ENTITY outer \"&inner;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "'<' in entity is not allowed in attribute values",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+				DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+				Parse(t.Context(), []byte(tc.src))
+			require.Error(t, err, "indirect entity reference must violate the attribute-value WFC")
+			require.Nil(t, doc, "no document on a fatal well-formedness error")
+			require.Contains(t, err.Error(), tc.wantMsg)
+		})
+	}
+}
+
+// TestIndirectHarmlessEntityRefInAttributeValue confirms the attribute-value WFC
+// walk does not over-reject: an indirect general entity whose transitive
+// replacement text is plain character data (no external/unparsed reference, no
+// '<') is accepted, including when referenced multiple times.
+func TestIndirectHarmlessEntityRefInAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	src := "<!DOCTYPE r [\n" +
+		"<!ELEMENT r ANY>\n" +
+		"<!ELEMENT e EMPTY>\n" +
+		"<!ATTLIST e a CDATA #IMPLIED>\n" +
+		"<!ENTITY inner \"value\">\n" +
+		"<!ENTITY outer \"a&inner;b\">\n" +
+		"]>\n<r>&outer;<e a=\"&outer; &outer;\"/></r>"
+
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		Parse(t.Context(), []byte(src))
+	require.NoError(t, err, "a harmless indirect entity must be accepted in an attribute value")
+	require.NotNil(t, doc)
+}

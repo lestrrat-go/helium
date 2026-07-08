@@ -939,6 +939,25 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						return
 					}
 				} else {
+					// Attribute-value WFCs on the entity's TRANSITIVE replacement
+					// text ("No External Entity References", "No < in Attribute
+					// Values"). This is consulted on EVERY occurrence, independent
+					// of ent.checked: the checked bit records only the weaker
+					// general-content (element) check, so an entity first expanded
+					// in element content must still be re-validated under the
+					// stricter attribute-value rules here. The predicate fires no
+					// SAX callbacks, so it does not duplicate ResolveEntity events.
+					switch pctx.attributeEntityWFC(ent) {
+					case attrWFCExternal:
+						err = pctx.error(ctx, errors.New("attribute references external entity"))
+						return
+					case attrWFCUnparsed:
+						err = pctx.error(ctx, errors.New("entity reference to unparsed entity"))
+						return
+					case attrWFCLessThan:
+						err = pctx.error(ctx, errors.New("'<' in entity is not allowed in attribute values"))
+						return
+					}
 					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {
 						// Validate the entity's replacement text: a general entity
 						// referenced from an attribute value must expand to
@@ -1006,6 +1025,81 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	}
 
 	return
+}
+
+// attributeEntityWFC reports whether the general entity ent, referenced from an
+// attribute value under SubstituteEntities(false), violates one of the XML 1.0
+// attribute-value well-formedness constraints via its TRANSITIVE replacement
+// text: "No External Entity References" (a nested external or unparsed general
+// entity) or "No < in Attribute Values" (a nested literal '<'). The DIRECT case
+// (ent itself external/unparsed, or its own content directly containing '<') is
+// caught earlier by parseEntityRef; this covers an entity that only reaches such
+// content through nested &name; references and whose weaker general-content check
+// (ent.checked) must not suppress the stricter attribute-value WFCs.
+//
+// The result is memoized on ent: it is a pure function of the entity tables,
+// which do not change mid-parse. Crucially the walk resolves nested references
+// with pctx.getEntity (a plain table lookup that fires NO SAX callbacks), unlike
+// decodeEntities, so consulting it on every occurrence never duplicates
+// ResolveEntity events.
+func (pctx *parserCtx) attributeEntityWFC(ent *Entity) attrEntityWFC {
+	if ent.attrWFCSet {
+		return ent.attrWFC
+	}
+	visited := map[*Entity]struct{}{ent: {}}
+	res := pctx.scanAttrEntityWFC(ent.content, visited)
+	ent.attrWFC = res
+	ent.attrWFCSet = true
+	return res
+}
+
+// scanAttrEntityWFC walks replacement text for a literal '<' or a nested general
+// reference to an external/unparsed entity, recursing through internal general
+// entities. visited guards against entity reference cycles. Predefined entities
+// (&lt; &gt; &amp; &apos; &quot;) are the sanctioned escapes and are never a
+// violation, matching parseEntityRef's InternalPredefinedEntity exclusion.
+func (pctx *parserCtx) scanAttrEntityWFC(content string, visited map[*Entity]struct{}) attrEntityWFC {
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		if c == '<' {
+			return attrWFCLessThan
+		}
+		if c != '&' {
+			continue
+		}
+		semi := strings.IndexByte(content[i+1:], ';')
+		if semi < 0 {
+			break
+		}
+		ref := content[i+1 : i+1+semi]
+		i += 1 + semi // loop's i++ then moves past ';'
+		if len(ref) == 0 || ref[0] == '#' {
+			// Char reference: character data. Any '<' it resolves to is an
+			// allowed escape (&#60;), so it is intentionally not flagged.
+			continue
+		}
+		nested, err := pctx.getEntity(ref)
+		if err != nil || nested == nil {
+			// Undefined nested entity: the "Entity Declared" WFC is enforced by
+			// the decodeEntities validation, not here — do not double-report.
+			continue
+		}
+		switch nested.entityType {
+		case enum.ExternalGeneralUnparsedEntity:
+			return attrWFCUnparsed
+		case enum.ExternalGeneralParsedEntity:
+			return attrWFCExternal
+		case enum.InternalGeneralEntity:
+			if _, seen := visited[nested]; seen {
+				continue
+			}
+			visited[nested] = struct{}{}
+			if v := pctx.scanAttrEntityWFC(nested.content, visited); v != attrWFCNone {
+				return v
+			}
+		}
+	}
+	return attrWFCNone
 }
 
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {
