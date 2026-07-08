@@ -11,18 +11,47 @@ suite:
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 22,090 |
-| Skip | 383 |
+| Pass | 22,328 |
+| Skip | 141 |
 | Fail | 0 |
-| Total | 22,473 |
+| Total | 22,469 |
 
-The skips are out-of-scope dependencies — cases requiring an XSLT transform,
-XQuery `load-xquery-module`, a schema-validated source, static typing, XPath
-2.0-only behavior, XML 1.1, or Unicode 7.0. Committed evidence sits beside this
-package — a stamped `summary-qt3.md` and JUnit `results-qt3.xml` — regenerated
-from the sibling `helium-w3c-tests` module (`go run ./cmd/w3ctest
--no-system-out -summary ../helium/xpath3/summary-qt3.md -out
-../helium/xpath3/results-qt3.xml qt3`).
+The harness really evaluates every FOTS assertion — generic `<assert>`,
+`assert-type` (`$result instance of T`), `assert-xml` (serialize + canonical XML
+compare), and `assert-permutation` (type-aware atomic value compare + node
+`fn:deep-equal`) — and a weak-un-skip guard (`TestQT3WeakNoOpGuard`) fails if a
+run-enabled case degrades to a no-op pass. The committed `false_pass_risk` count
+is **0**: no case slips through on an unchecked assertion, so a green run reflects
+real conformance rather than silent no-op passes.
+
+The 141 skips split into **136 out-of-scope** (XQuery `load-xquery-module`,
+static typing, XSD 1.0, XML 1.1, Unicode 7.0, remote HTTP access, and
+directory-as-collection URIs) and **5 not-wired** harness gaps (`fn:transform`
+fixture-base-URI/resource cases). Zero cases fail.
+
+### Known gaps
+
+The floor is four documented expected-fails, all genuine unimplemented-feature
+gaps rather than bugs:
+
+- `json-to-xml-016` — `fn:json-to-xml(..., map{'validate':true()})` needs
+  schema-import/PSVI type annotation so `j:number` is typed `xs:double`; helium
+  leaves it untyped, so `data(...) instance of xs:double` is false.
+- `analyzeString-020`, `analyzeString-021` — the built-in
+  `fn:analyze-string-result` schema annotates the constructed result (`@nr` as
+  `xs:positiveInteger`, a named complex type on the element); helium leaves it
+  untyped without a compiled schema.
+- `parse-xml-010` — the parsed document declares and references a `SYSTEM`
+  external parsed entity; helium does not fetch and expand it, so the referenced
+  content is absent from the result.
+
+The first three are PSVI/schema-awareness gaps; the last is external parsed-entity
+expansion.
+
+Committed evidence sits beside this package — a stamped `summary-qt3.md` and
+JUnit `results-qt3.xml` — regenerated from the sibling `helium-w3c-tests` module
+(`go run ./cmd/w3ctest -no-system-out -summary ../helium/xpath3/summary-qt3.md
+-out ../helium/xpath3/results-qt3.xml qt3`).
 
 <!-- INCLUDE(examples/xpath3_find_example_test.go) -->
 ```go
