@@ -216,12 +216,25 @@ under the html method with no DOCTYPE/meta. The html parameters are APPLIED:
 is chosen by `htmlDoctype` — an explicit `doctype-public`/`doctype-system` yields
 a PUBLIC/SYSTEM declaration, otherwise HTML5 (`html-version` ≥ 5, the default)
 yields `<!DOCTYPE html>` and HTML 4 yields the HTML 4.01 declaration; the
-Content-Type meta uses the `media-type` param (default `text/html`). The
-doctype/meta work on a copy of the document (never mutating the input), then
-serialize via the `helium/html` writer. The map form defaults `omit-xml-declaration`
+Content-Type meta uses the `media-type` param (default `text/html`) and UPDATES an
+existing `<meta http-equiv="Content-Type">` in place (rather than leaving a stale
+one) so a `media-type` change is honored. The doctype/meta work on a copy of the
+document (never mutating the input), then serialize via the `helium/html` writer.
+The `xml` method applies `doctype-public`/`doctype-system` too: `serializeNodeItem`
+injects an internal-subset DTD (named after the document element) on a COPY via
+`documentWithDoctype`, so the XML writer emits `<!DOCTYPE name PUBLIC/SYSTEM ...>`
+between the declaration and the root. The map form defaults `omit-xml-declaration`
 to true (an empty map equals omitting the argument; W3C serialize-xml-127a); the
 element form keeps the Serialization-spec default (declaration emitted). Character
 maps are not applied on the html path.
+
+**SEPM0009** (`fnSerialize`, gated to `methodEmitsXMLDeclaration` — the xml/xhtml/
+default methods) fires when `omit-xml-declaration=yes` AND (`standalone` is yes/no
+OR `doctype-system` is present): neither a standalone nor a document-type
+declaration is possible without an XML declaration (Serialization 3.1 §5.1). It
+uses the EFFECTIVE omit (incl. the map-form default true) and resolved standalone,
+so `serialize(., map{"doctype-system":"x"})` is SEPM0009 while the html method
+(no XML declaration) is unaffected.
 
 **Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
 applied as above; `text` (`serializeTextSequence`) concatenates the string values

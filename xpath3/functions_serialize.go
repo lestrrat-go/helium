@@ -46,19 +46,34 @@ func (o serializeOptions) effectiveSerializeVersion() string {
 	return o.xmlVersion
 }
 
+// methodEmitsXMLDeclaration reports whether the output method produces an XML
+// declaration (the xml and xhtml methods, and the unspecified default). The
+// omit-xml-declaration / standalone / SEPM0009 rules apply only to these; for
+// html/json/text/adaptive an XML declaration is never produced.
+func (o serializeOptions) methodEmitsXMLDeclaration() bool {
+	switch o.method {
+	case "", "xml", "xhtml":
+		return true
+	}
+	return false
+}
+
 func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	opts, err := parseSerializeOptions(ctx, args)
 	if err != nil {
 		return nil, err
 	}
 
-	// A standalone declaration is impossible without an XML declaration, so
-	// requesting omit-xml-declaration=yes together with a standalone value of
-	// yes/no is a static error (Serialization 3.1 §5.1.6, SEPM0009). This uses
-	// the EFFECTIVE omit-xml-declaration (including the map-form default of true)
-	// and the RESOLVED standalone value (omit vs yes/no).
-	if opts.omitXMLDeclaration && (opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo) {
-		return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with a standalone value of yes/no"}
+	// Neither a standalone declaration nor a document type declaration is
+	// possible without an XML declaration, so requesting omit-xml-declaration=yes
+	// together with a standalone value other than omit OR a doctype-system value
+	// is a static error (Serialization 3.1 §5.1, SEPM0009). This uses the
+	// EFFECTIVE omit-xml-declaration (including the map-form default of true) and
+	// the RESOLVED standalone value; it applies only to methods that emit an XML
+	// declaration (xml/xhtml/default).
+	if opts.methodEmitsXMLDeclaration() && opts.omitXMLDeclaration &&
+		(opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo || opts.doctypeSystem != "") {
+		return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with standalone=yes/no or a doctype-system value"}
 	}
 
 	// Namespace undeclarations require XML/XHTML 1.1; requesting them at an
@@ -210,6 +225,12 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	if method, found, err := readSerializeStringOption(ctx, m, "method"); err != nil {
 		return opts, err
 	} else if found {
+		// Validate with the same domain rules as the element form: a built-in
+		// method or a QName/EQName extension. A bad value must not silently fall
+		// through to xml serialization.
+		if !serializeMethodValid(method) {
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", method)}
+		}
 		opts.method = method
 	}
 	if sep, found, err := readSerializeStringOption(ctx, m, "item-separator"); err != nil {
@@ -1500,9 +1521,6 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	if head == nil {
 		return
 	}
-	if htmlHeadHasContentTypeMeta(head) {
-		return
-	}
 	enc := encoding
 	if enc == "" {
 		enc = lexicon.EncodingUTF8U
@@ -1511,12 +1529,22 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	if mt == "" {
 		mt = "text/html"
 	}
+	contentValue := mt + "; charset=" + enc
+
+	// If a Content-Type meta already exists, UPDATE its content attribute to the
+	// computed media-type/charset (so a media-type param is honored even for a
+	// source that already declares text/html) rather than leaving the stale one.
+	if existing := htmlHeadContentTypeMeta(head); existing != nil {
+		_ = existing.SetLiteralAttribute("content", contentValue)
+		return
+	}
+
 	meta := doc.CreateElement("meta")
 	if headURI := head.URI(); headURI != "" {
 		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
 	}
 	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	_ = meta.SetLiteralAttribute("content", mt+"; charset="+enc)
+	_ = meta.SetLiteralAttribute("content", contentValue)
 
 	// Detach the current children, add meta first, then re-add them, so meta
 	// becomes the head's first child.
@@ -1536,7 +1564,9 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	}
 }
 
-func htmlHeadHasContentTypeMeta(head *helium.Element) bool {
+// htmlHeadContentTypeMeta returns the existing <meta http-equiv="Content-Type">
+// child of head, or nil if none exists.
+func htmlHeadContentTypeMeta(head *helium.Element) *helium.Element {
 	for child := range helium.Children(head) {
 		e, ok := child.(*helium.Element)
 		if !ok || !strings.EqualFold(e.LocalName(), "meta") {
@@ -1544,22 +1574,56 @@ func htmlHeadHasContentTypeMeta(head *helium.Element) bool {
 		}
 		for _, attr := range e.Attributes() {
 			if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
-				return true
+				return e
 			}
 		}
 	}
-	return false
+	return nil
 }
 
 func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 	if attr, ok := item.Node.(*helium.Attribute); ok {
 		return fmt.Sprintf(`%s="%s"`, attr.Name(), attr.Value()), nil
 	}
+	node := item.Node
+	// The xml method emits a document type declaration for the doctype-public /
+	// doctype-system parameters when serializing a document node. It is injected
+	// as an internal subset on a COPY so the caller's tree is never mutated.
+	if doc, ok := node.(*helium.Document); ok && (opts.doctypePublic != "" || opts.doctypeSystem != "") {
+		withDT, err := documentWithDoctype(doc, opts)
+		if err != nil {
+			return "", err
+		}
+		node = withDT
+	}
 	var buf strings.Builder
-	if err := newSerializeXMLWriter(opts).WriteTo(&buf, item.Node); err != nil {
+	if err := newSerializeXMLWriter(opts).WriteTo(&buf, node); err != nil {
 		return "", err
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// documentWithDoctype returns a copy of doc carrying an internal-subset DTD with
+// the requested doctype-public / doctype-system identifiers (named after the
+// document element), so the XML writer emits `<!DOCTYPE name PUBLIC/SYSTEM ...>`.
+// A document that already has a DTD is returned unchanged (a second declaration
+// cannot be emitted).
+func documentWithDoctype(doc *helium.Document, opts serializeOptions) (*helium.Document, error) {
+	clone, err := helium.CopyDoc(doc)
+	if err != nil {
+		return nil, err
+	}
+	if clone.IntSubset() != nil {
+		return clone, nil
+	}
+	root := clone.DocumentElement()
+	if root == nil {
+		return clone, nil
+	}
+	if _, err := clone.CreateInternalSubset(root.Name(), opts.doctypePublic, opts.doctypeSystem); err != nil {
+		return nil, err
+	}
+	return clone, nil
 }
 
 func encodeJSONStringForSerialization(s, encoding string) string {

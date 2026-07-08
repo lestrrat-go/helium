@@ -732,3 +732,77 @@ func TestSerialize_TextMethodAndHonesty(t *testing.T) {
 		require.NotContains(t, res.StringValue(), "<!DOCTYPE", "output:\n%s", res.StringValue())
 	})
 }
+
+// TestSerialize_DoctypeMethodAndMeta covers the three correctness fixes:
+// media-type updating an existing Content-Type meta, map-form method validation,
+// the SEPM0009 doctype-system half, and XML doctype-system emission.
+func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
+	t.Run("media-type updates an existing Content-Type meta", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?>`+
+			`<html><head><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/></head><body/></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","media-type":"application/xhtml+xml"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, "application/xhtml+xml; charset=UTF-8", "output:\n%s", out)
+		require.NotContains(t, out, "text/html; charset=iso-8859-1", "output:\n%s", out)
+	})
+
+	t.Run("map-form method bad value errors, not silent XML", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"not a qname"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+
+	t.Run("map-form method extension QName is accepted", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"ex:custom","omit-xml-declaration":true()})`)
+		require.NoError(t, err)
+	})
+
+	t.Run("omit-xml-declaration=yes with doctype-system is SEPM0009", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"omit-xml-declaration":true(),"doctype-system":"x.dtd"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0009", xerr.Code)
+	})
+
+	t.Run("map default omit with doctype-system is SEPM0009", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"doctype-system":"x.dtd"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0009", xerr.Code)
+	})
+
+	t.Run("XML doctype-system is emitted", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"doctype-system":"http://example.com/x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE root SYSTEM "http://example.com/x.dtd">`, "output:\n%s", out)
+	})
+
+	t.Run("XML doctype-public+system is emitted", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"doctype-public":"-//EX//DTD//EN","doctype-system":"http://example.com/x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE root PUBLIC "-//EX//DTD//EN" "http://example.com/x.dtd">`, "output:\n%s", out)
+	})
+
+	t.Run("html method with doctype-system does not raise SEPM0009", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)
+		require.NoError(t, err)
+	})
+}
