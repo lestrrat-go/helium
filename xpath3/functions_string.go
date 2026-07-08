@@ -1012,6 +1012,15 @@ func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 	}
 
+	// The nesting of fn:group elements is a STATIC property of the pattern's
+	// capturing parentheses, not of the match positions: e.g. "(b)(x?)" and
+	// "(b(x?))" yield identical submatch indices when the inner group is empty at
+	// the boundary, yet the first nests the groups as siblings and the second
+	// nests group 2 inside group 1. Compute the parent-of relationship once from
+	// the pattern; the per-match positions only drive text distribution and which
+	// groups participated.
+	groupParents := analyzeStringGroupParents(pattern, flags)
+
 	// Stream the matches one at a time instead of materializing every match up
 	// front. An input with a huge number of matches would otherwise allocate the
 	// full match slice (an O(matches) up-front cost) and build the whole result
@@ -1051,41 +1060,8 @@ func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return buildFail(err)
 		}
-		// Check for groups
-		if len(m) > 2 {
-			groupPos := start
-			for g := 1; g < len(m)/2; g++ {
-				gs, ge := m[2*g], m[2*g+1]
-				if gs < 0 {
-					continue
-				}
-				if gs > groupPos {
-					if err := matchElem.AppendText([]byte(s[groupPos:gs])); err != nil {
-						return buildFail(err)
-					}
-				}
-				groupElem, err := createAnalyzeStringElement(doc, "group")
-				if err != nil {
-					return buildFail(err)
-				}
-				_ = groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", g))
-				if err := groupElem.AppendText([]byte(s[gs:ge])); err != nil {
-					return buildFail(err)
-				}
-				if err := matchElem.AddChild(groupElem); err != nil {
-					return buildFail(err)
-				}
-				groupPos = ge
-			}
-			if groupPos < end {
-				if err := matchElem.AppendText([]byte(s[groupPos:end])); err != nil {
-					return buildFail(err)
-				}
-			}
-		} else {
-			if err := matchElem.AppendText([]byte(s[start:end])); err != nil {
-				return buildFail(err)
-			}
+		if err := buildAnalyzeStringMatch(doc, matchElem, s, m, groupParents); err != nil {
+			return buildFail(err)
 		}
 		if err := root.AddChild(matchElem); err != nil {
 			return buildFail(err)
@@ -1113,6 +1089,155 @@ func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	return ItemSlice{NodeItem{Node: root}}, nil
+}
+
+// analyzeStringGroup is a node in the capture-group tree for a single regex
+// match. Nesting comes from the pattern's static parenthesis structure (F&O 3.1
+// §5.6.5 fn:analyze-string); the start/end spans come from the match and drive
+// text distribution.
+type analyzeStringGroup struct {
+	nr       int
+	start    int
+	end      int
+	children []*analyzeStringGroup
+}
+
+// analyzeStringGroupParents computes, from the regex pattern, the parent group
+// number of each capturing group. parents[i] is the parent of capturing group
+// i+1 (1-based group numbers); 0 means the group is a direct child of the match.
+// Group numbering follows XPath/XSD regex: the N-th capturing "(" (one NOT
+// introducing a "(?..." non-capturing/modifier group) is group N. Escapes, XSD
+// character-class subexpressions, and non-capturing groups are handled so the
+// static nesting is exact even when two patterns produce identical match spans
+// (e.g. "(b)(x?)" siblings vs "(b(x?))" nested).
+func analyzeStringGroupParents(pattern, flags string) []int {
+	extended := strings.ContainsRune(flags, 'x')
+	rs := []rune(pattern)
+	var parents []int
+	// stack holds open group numbers; a non-capturing/modifier group pushes 0 so
+	// it still balances its closing ")" without becoming a capture parent.
+	var stack []int
+	groupNum := 0
+	inClass := false
+	classStart := -1
+	for i := 0; i < len(rs); i++ {
+		c := rs[i]
+		if c == '\\' {
+			i++ // skip the escaped character
+			continue
+		}
+		if inClass {
+			if c == ']' && i != classStart {
+				inClass = false
+			}
+			continue
+		}
+		switch c {
+		case '#':
+			if extended {
+				for i+1 < len(rs) && rs[i+1] != '\n' {
+					i++
+				}
+			}
+		case '[':
+			inClass = true
+			classStart = i + 1
+			if i+1 < len(rs) && rs[i+1] == '^' {
+				classStart = i + 2
+			}
+		case '(':
+			if i+1 < len(rs) && rs[i+1] == '?' {
+				stack = append(stack, 0)
+				continue
+			}
+			groupNum++
+			parent := 0
+			for _, open := range slices.Backward(stack) {
+				if open > 0 {
+					parent = open
+					break
+				}
+			}
+			parents = append(parents, parent)
+			stack = append(stack, groupNum)
+		case ')':
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+	return parents
+}
+
+// buildAnalyzeStringMatch populates matchElem with the fn:group hierarchy and
+// interleaved text for one regex match. m is the submatch-index slice
+// (m[0],m[1] = whole match; m[2g],m[2g+1] = group g); groupParents gives the
+// static nesting. Nested capturing groups produce nested fn:group elements; the
+// matched substring text is distributed so that each fn:group holds the text of
+// its span not covered by a nested child, in document order. A capturing group
+// that did not participate in the match (start < 0) produces no fn:group element.
+func buildAnalyzeStringMatch(doc *helium.Document, matchElem *helium.Element, s string, m []int, groupParents []int) error {
+	root := &analyzeStringGroup{nr: 0, start: m[0], end: m[1]}
+	nodes := make([]*analyzeStringGroup, len(groupParents)+1)
+	nodes[0] = root
+	for g := 1; g < len(m)/2; g++ {
+		gs, ge := m[2*g], m[2*g+1]
+		if gs < 0 {
+			continue // group did not participate in the match
+		}
+		nodes[g] = &analyzeStringGroup{nr: g, start: gs, end: ge}
+	}
+	// Attach each participating group under its nearest participating ancestor.
+	// Groups are numbered in opening-paren (document) order, so appending in that
+	// order keeps sibling groups in document order.
+	for g := 1; g < len(nodes); g++ {
+		node := nodes[g]
+		if node == nil {
+			continue
+		}
+		parent := root
+		for p := groupParents[g-1]; p > 0; p = groupParents[p-1] {
+			if nodes[p] != nil {
+				parent = nodes[p]
+				break
+			}
+		}
+		parent.children = append(parent.children, node)
+	}
+	return renderAnalyzeStringGroup(doc, matchElem, root, s)
+}
+
+// renderAnalyzeStringGroup emits, into parent, the text spans of node not covered
+// by a child group interleaved with the child fn:group elements, in document order.
+func renderAnalyzeStringGroup(doc *helium.Document, parent *helium.Element, node *analyzeStringGroup, s string) error {
+	cursor := node.start
+	for _, child := range node.children {
+		if child.start > cursor {
+			if err := parent.AppendText([]byte(s[cursor:child.start])); err != nil {
+				return err
+			}
+		}
+		groupElem, err := createAnalyzeStringElement(doc, "group")
+		if err != nil {
+			return err
+		}
+		if err := groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", child.nr)); err != nil {
+			return err
+		}
+		if err := renderAnalyzeStringGroup(doc, groupElem, child, s); err != nil {
+			return err
+		}
+		if err := parent.AddChild(groupElem); err != nil {
+			return err
+		}
+		cursor = child.end
+	}
+	if cursor < node.end {
+		if err := parent.AppendText([]byte(s[cursor:node.end])); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func createAnalyzeStringElement(doc *helium.Document, localName string) (*helium.Element, error) {

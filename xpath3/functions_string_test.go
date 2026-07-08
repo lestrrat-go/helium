@@ -108,6 +108,50 @@ func TestAnalyzeString_EdgeBranches(t *testing.T) {
 	require.ErrorAs(t, err, &xpErr)
 }
 
+// Nested capturing groups must produce nested fn:group elements (F&O 3.1
+// §5.6.5): an outer group holds its own text plus the fn:group children for the
+// groups nested within it, in document order, each with the correct @nr.
+func TestAnalyzeString_NestedGroups(t *testing.T) {
+	const fnNS = ` xmlns:fn="http://www.w3.org/2005/xpath-functions"`
+	for _, tc := range []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "sibling groups nested under outer group",
+			expr: `fn:serialize(fn:analyze-string("abc", "((a)(b))c"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1"><fn:group nr="2">a</fn:group><fn:group nr="3">b</fn:group></fn:group>c</fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// QT3 analyzeString-008: nested captured groups.
+			name: "nested optional group with text before it",
+			expr: `fn:serialize(fn:analyze-string("banana", "(a(n?))"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:non-match>b</fn:non-match><fn:match><fn:group nr="1">a<fn:group nr="2">n</fn:group></fn:group></fn:match><fn:match><fn:group nr="1">a<fn:group nr="2">n</fn:group></fn:group></fn:match><fn:match><fn:group nr="1">a<fn:group nr="2"/></fn:group></fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// QT3 analyzeString-017a: empty nested captured group is still nested.
+			name: "empty nested group stays nested after text",
+			expr: `fn:serialize(fn:analyze-string("banana", "(b(x?))"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">b<fn:group nr="2"/></fn:group></fn:match><fn:non-match>anana</fn:non-match></fn:analyze-string-result>`,
+		},
+		{
+			// QT3 analyzeString-017: the sibling counterpart of 017a — identical
+			// match spans but separate parentheses, so the empty group 2 is a
+			// SIBLING of group 1, not nested. Nesting is a static property of the
+			// pattern, not of the match positions.
+			name: "empty sibling group is not nested",
+			expr: `fn:serialize(fn:analyze-string("banana", "(b)(x?)"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">b</fn:group><fn:group nr="2"/></fn:match><fn:non-match>anana</fn:non-match></fn:analyze-string-result>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evalString(t, tc.expr)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // Patterns containing backreferences force the regexp2 backtracking engine
 // (r.backtrack != nil), exercising the Split / FindAllStringSubmatchIndex /
 // ReplaceAllString / NumSubexp branches that the std regexp path skips.
