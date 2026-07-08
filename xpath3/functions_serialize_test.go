@@ -90,6 +90,46 @@ func mustCompile(t *testing.T, expr string) *xpath3.Expression {
 	return c
 }
 
+// Sequence normalization (Serialization 3.1 §2, step 3): with an absent
+// item-separator a single space separates only adjacent atomic-value strings,
+// never adjacent nodes nor a node-and-atomic pair. A specified item-separator is
+// inserted between every adjacent pair of items regardless of kind.
+func TestSerialize_ItemSeparatorNormalization(t *testing.T) {
+	doc := mustParseXML(t, `<r><a/><b/></r>`)
+
+	run := func(t *testing.T, ctx helium.Node, expr string) string {
+		t.Helper()
+		res, err := evaluate(t.Context(), ctx, expr)
+		require.NoError(t, err)
+		return res.StringValue()
+	}
+
+	t.Run("adjacent nodes get no separator (xml)", func(t *testing.T) {
+		require.Equal(t, "<a/><b/>", run(t, doc, `serialize(/r/*, map{"method":"xml"})`))
+	})
+	t.Run("adjacent nodes get no separator (default method)", func(t *testing.T) {
+		require.Equal(t, "<a/><b/>", run(t, doc, `serialize(/r/*)`))
+	})
+	t.Run("adjacent atomics keep the space", func(t *testing.T) {
+		require.Equal(t, "1 2 3", run(t, doc, `serialize((1,2,3), map{"method":"xml"})`))
+	})
+	t.Run("node adjacent to atomic gets no separator", func(t *testing.T) {
+		require.Equal(t, "<a/>1", run(t, doc, `serialize((/r/a, 1), map{"method":"xml"})`))
+	})
+	t.Run("array flattens to nodes with no separator", func(t *testing.T) {
+		require.Equal(t, "<a/><b/>", run(t, doc, `serialize([/r/a, /r/b], map{"method":"xml"})`))
+	})
+	t.Run("specified item-separator joins all items", func(t *testing.T) {
+		require.Equal(t, "<a/>,<b/>", run(t, doc, `serialize(/r/*, map{"method":"xml","item-separator":","})`))
+	})
+	t.Run("specified item-separator joins atomics", func(t *testing.T) {
+		require.Equal(t, "1|2|3|4", run(t, doc, `serialize(1 to 4, map{"method":"xml","item-separator":"|"})`))
+	})
+	t.Run("html adjacent nodes get no separator", func(t *testing.T) {
+		require.Equal(t, "<a></a><b></b>", run(t, doc, `serialize(/r/*, map{"method":"html"})`))
+	})
+}
+
 // fn:serialize with no serialization parameters uses the xml output method
 // (adaptive is opt-in), under which serializing an attribute or namespace node
 // is err:SENR0001 (W3C serialize-xml-002/011/012).
