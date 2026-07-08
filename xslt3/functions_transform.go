@@ -538,7 +538,11 @@ func TransformFunction(options ...TransformOption) xpath3.Function {
 // standalone (TransformFunction) paths run identical logic.
 func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	cfg := &transformFnConfig{
-		baseURI:               ec.stylesheet.baseURI,
+		// The static base URI of the fn:transform CALL — used to resolve a
+		// relative stylesheet-location, stylesheet-base-uri, and base-output-uri —
+		// is the effective static base URI at the call site (honoring an xml:base
+		// on the calling template/element), NOT the bare module URI.
+		baseURI:               ec.effectiveStaticBaseURI(),
 		nestedCompiler:        ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit()).AllowExternalEntities(ec.allowExternalEntities()),
 		stylesheetResolver:    ec.stylesheet.uriResolver,
 		packageResolver:       ec.stylesheet.packageResolver,

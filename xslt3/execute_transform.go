@@ -214,10 +214,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		return nil, errNilStylesheet
 	}
 	resultDoc := helium.NewDefaultDocument()
+	// The global context item and the initial match selection are SEPARATE
+	// (XSLT 3.0 §5.4): xsl:global-context-item use="absent" makes only the GLOBAL
+	// CONTEXT ITEM absent — a global "." reference raises XPDY0002, handled via
+	// ec.globalContextAbsent below. It must NOT discard the source tree, which is
+	// still the initial match selection for apply-templates (otherwise a transform
+	// with a source-node and no initial-template would wrongly raise XTDE0040).
 	effectiveSource := source
-	if ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent {
-		effectiveSource = nil
-	}
 
 	// The caller's source document is owned by the caller and must never be
 	// mutated in place: doing so destroys node identity, corrupts a tree the

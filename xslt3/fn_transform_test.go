@@ -230,6 +230,36 @@ func TestFnTransformInitialFunction(t *testing.T) {
 
 // TestFnTransformBaseOutputURI verifies that base-output-uri passed through
 // fn:transform() is visible via current-output-uri() in the inner stylesheet.
+// TestFnTransformInStylesheetBaseOutputURIUsesCallSiteBase verifies that the
+// in-stylesheet fn:transform resolves a relative base-output-uri against the
+// CALL SITE's effective static base URI (honoring an xml:base on the calling
+// template element), not the bare module URI. The module base here is empty, so
+// only the call-site xml:base can produce the expected absolute key.
+func TestFnTransformInStylesheetBaseOutputURIUsesCallSiteBase(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner"/>
+  <xsl:template match="/" xml:base="http://example.com/callsite/">
+    <xsl:variable name="r" select="transform(map{
+      'stylesheet-text': $inner,
+      'source-node': .,
+      'base-output-uri': 'out.xml'
+    })"/>
+    <result><xsl:value-of select="map:contains($r, 'http://example.com/callsite/out.xml')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inner := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"><p>hi</p></xsl:template></xsl:stylesheet>`
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner", xpath3.SingleString(inner)).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, ">true</result>")
+}
+
 func TestFnTransformBaseOutputURI(t *testing.T) {
 	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"

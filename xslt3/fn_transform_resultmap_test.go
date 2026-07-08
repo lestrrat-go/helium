@@ -366,6 +366,25 @@ func TestFnTransformGlobalContextItemUse(t *testing.T) {
 		require.Contains(t, err.Error(), "XPDY0002")
 	})
 
+	t.Run("absent-with-source-node-match-template-applies", func(t *testing.T) {
+		// use="absent" makes only the GLOBAL CONTEXT ITEM absent; the source-node
+		// is still the initial match selection, so a match template applies
+		// normally (no XTDE0040). No global "." reference here.
+		matchXSL := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:global-context-item use="absent"/><xsl:template match="a"><out>matched</out></xsl:template></xsl:stylesheet>`
+		expr := `transform(map{"stylesheet-text":$xsl,"source-node":parse-xml("<a/>")})?output/out = "matched"`
+		require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(matchXSL, "")))
+	})
+
+	t.Run("absent-with-source-node-and-match-template-global-dot-XPDY0002", func(t *testing.T) {
+		// Even with a source-node present and a match template, use="absent" keeps
+		// the global context item absent, so a global "." reference still fails.
+		matchXSL := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:global-context-item use="absent"/><xsl:variable name="v" select="."/><xsl:template match="a"><out><xsl:value-of select="$v"/></out></xsl:template></xsl:stylesheet>`
+		expr := `transform(map{"stylesheet-text":$xsl,"source-node":parse-xml("<a/>")})?output`
+		err := transformErr(t, expr, xslXMLVars(matchXSL, ""))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XPDY0002")
+	})
+
 	t.Run("required-no-source-no-gci-raises-XTDE3086", func(t *testing.T) {
 		expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main")})?output`
 		err := transformErr(t, expr, xslXMLVars(requiredXSL, ""))
