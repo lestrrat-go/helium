@@ -639,8 +639,11 @@ func TestSerialize_ElementFormValueValidation(t *testing.T) {
 	t.Run("normalization-form none is accepted (no-op)", func(t *testing.T) {
 		requireOK(t, paramsOpen+`<output:normalization-form value="none"/>`+paramsClose)
 	})
-	t.Run("normalization-form NFC is SESU0011 (unsupported)", func(t *testing.T) {
-		_, err := runElementFormParams(t, `<root/>`, paramsOpen+`<output:normalization-form value="NFC"/>`+paramsClose)
+	t.Run("normalization-form NFC is applied (supported)", func(t *testing.T) {
+		requireOK(t, paramsOpen+`<output:method value="xml"/><output:normalization-form value="NFC"/>`+paramsClose)
+	})
+	t.Run("normalization-form fully-normalized is SESU0011 (unsupported)", func(t *testing.T) {
+		_, err := runElementFormParams(t, `<root/>`, paramsOpen+`<output:method value="xml"/><output:normalization-form value="fully-normalized"/>`+paramsClose)
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
@@ -680,9 +683,9 @@ func TestSerialize_TextMethodAndHonesty(t *testing.T) {
 		require.Equal(t, "json", res.StringValue())
 	})
 
-	t.Run("map-form normalization-form NFC is SESU0011", func(t *testing.T) {
+	t.Run("map-form normalization-form fully-normalized is SESU0011", func(t *testing.T) {
 		doc := mustParseXML(t, `<root/>`)
-		_, err := evaluate(t.Context(), doc, `serialize(., map{"normalization-form":"NFC"})`)
+		_, err := evaluate(t.Context(), doc, `serialize(., map{"normalization-form":"fully-normalized"})`)
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
@@ -931,5 +934,108 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 		require.NotContains(t, out, "us-ascii", "output:\n%s", out)
 		// Exactly one Content-Type meta remains.
 		require.Equal(t, 1, strings.Count(strings.ToLower(out), "http-equiv"), "output:\n%s", out)
+	})
+}
+
+// TestSerialize_NormalizationJSONNodeAndQNameMethod locks in the round-2 fixes:
+// normalization-form NFC/NFD/NFKC/NFKD actually normalize the serialized output
+// (json/adaptive ignore it, fully-normalized is SESU0011); json-node-output-method
+// non-default over a serialized node is an honest unsupported error (not silent
+// xml); and a map-form namespaced-QName method is treated as an unsupported
+// extension (SEPM0016) rather than losing its namespace to XPTY0004.
+func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
+	// U+00E9 (composed é) vs "e" + U+0301 (decomposed).
+	const composed = "\u00e9"
+	const decomposed = "e\u0301"
+
+	t.Run("NFD decomposes the serialized text output", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize("`+composed+`", map{"method":"text","normalization-form":"NFD"})`)
+		require.NoError(t, err)
+		require.Equal(t, decomposed, res.StringValue())
+	})
+	t.Run("NFC composes the serialized text output", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize("`+decomposed+`", map{"method":"text","normalization-form":"NFC"})`)
+		require.NoError(t, err)
+		require.Equal(t, composed, res.StringValue())
+	})
+	t.Run("NFKC folds a compatibility ligature", func(t *testing.T) {
+		// U+FB01 (ﬁ ligature) → "fi" under NFKC.
+		res, err := evaluate(t.Context(), nil,
+			`serialize("ﬁ", map{"method":"text","normalization-form":"NFKC"})`)
+		require.NoError(t, err)
+		require.Equal(t, "fi", res.StringValue())
+	})
+	t.Run("NFKD folds a compatibility ligature", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize("ﬁ", map{"method":"text","normalization-form":"NFKD"})`)
+		require.NoError(t, err)
+		require.Equal(t, "fi", res.StringValue())
+	})
+	t.Run("NFC in an XML element normalizes text content", func(t *testing.T) {
+		doc := mustParseXML(t, `<e>`+decomposed+`</e>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","normalization-form":"NFC"})`)
+		require.NoError(t, err)
+		require.Equal(t, `<e>`+composed+`</e>`, res.StringValue())
+	})
+	t.Run("json ignores normalization-form (not applicable)", func(t *testing.T) {
+		// The decomposed sequence must survive unchanged: json does not normalize.
+		res, err := evaluate(t.Context(), nil,
+			`serialize("`+decomposed+`", map{"method":"json","normalization-form":"NFC"})`)
+		require.NoError(t, err)
+		require.Equal(t, `"`+decomposed+`"`, res.StringValue())
+	})
+
+	t.Run("json-node-output-method text over a node is unsupported SEPM0016", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":"text"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+	})
+	t.Run("json-node-output-method xml (default) over a node is fine", func(t *testing.T) {
+		doc := mustParseXML(t, `<a>x</a>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"json","json-node-output-method":"xml"})`)
+		require.NoError(t, err)
+		// The node is xml-serialized and embedded as a JSON string (its markup
+		// stays literal inside the string).
+		require.Contains(t, res.StringValue(), "<a>x", "output:\n%s", res.StringValue())
+	})
+	t.Run("json-node-output-method text with no node serialized is a harmless no-op", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize("hi", map{"method":"json","json-node-output-method":"text"})`)
+		require.NoError(t, err)
+		require.Equal(t, `"hi"`, res.StringValue())
+	})
+
+	t.Run("map-form namespaced-QName method is unsupported extension SEPM0016", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":QName("urn:x","custom"),"omit-xml-declaration":true()})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+	})
+	t.Run("map-form no-namespace non-builtin QName method is invalid XPTY0004", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":QName("","custom")})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "XPTY0004", xerr.Code)
+	})
+	t.Run("map-form no-namespace builtin QName method is accepted", func(t *testing.T) {
+		doc := mustParseXML(t, `<root>hi</root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":QName("","text")})`)
+		require.NoError(t, err)
+		require.Equal(t, "hi", res.StringValue())
 	})
 }

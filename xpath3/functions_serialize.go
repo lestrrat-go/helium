@@ -12,11 +12,15 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
+	serializeMethodXML      = "xml"
+	serializeMethodXHTML    = "xhtml"
 	serializeMethodHTML     = "html"
 	serializeMethodText     = "text"
+	serializeMethodJSON     = "json"
 	serializeMethodAdaptive = "adaptive"
 	serializeStandaloneOmit = "omit"
 )
@@ -33,13 +37,6 @@ const (
 	errCodeSESU0013 = "SESU0013"
 )
 
-// serializeNormalizationSupported reports whether helium can produce the
-// requested Unicode normalization form. helium performs no normalization, so
-// only the "no normalization" forms ("" and "none") are supported.
-func serializeNormalizationSupported(form string) bool {
-	return form == "" || form == "none"
-}
-
 // effectiveSerializeVersion returns the effective output version, defaulting an
 // unspecified version to "1.0".
 func (o serializeOptions) effectiveSerializeVersion() string {
@@ -55,7 +52,7 @@ func (o serializeOptions) effectiveSerializeVersion() string {
 // html/json/text/adaptive an XML declaration is never produced.
 func (o serializeOptions) methodEmitsXMLDeclaration() bool {
 	switch o.method {
-	case "", "xml", "xhtml":
+	case "", serializeMethodXML, serializeMethodXHTML:
 		return true
 	}
 	return false
@@ -110,18 +107,11 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 
-	// helium performs no Unicode normalization, so a requested normalization-form
-	// other than none/"" is the SESU0011 unsupported-normalization serialization
-	// error rather than silently unnormalized output (Serialization 3.1 §5).
-	if !serializeNormalizationSupported(opts.normalizationForm) {
-		return nil, &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
-	}
-
 	var result string
 	switch opts.method {
 	case "", serializeMethodAdaptive:
 		result, err = serializeAdaptiveSequence(args[0], opts)
-	case "json":
+	case serializeMethodJSON:
 		result, err = serializeJSONSequence(args[0], opts)
 	case serializeMethodHTML:
 		result, err = serializeHTMLSequence(args[0], opts)
@@ -135,7 +125,39 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply the requested Unicode normalization to the serialized output (the
+	// last step, for the methods that support normalization-form). json/adaptive
+	// ignore the parameter; "fully-normalized" is the SESU0011 unsupported form.
+	result, err = applySerializeNormalization(result, opts)
+	if err != nil {
+		return nil, err
+	}
 	return SingleString(result), nil
+}
+
+// applySerializeNormalization applies the normalization-form parameter to the
+// serialized string. none/"" is a no-op; NFC/NFD/NFKC/NFKD are applied via
+// golang.org/x/text/unicode/norm; the W3C-specific "fully-normalized" form is
+// not provided by that package and is the SESU0011 unsupported-normalization
+// serialization error. The parameter is not applicable to the json/adaptive
+// methods, which ignore it (Serialization 3.1 §9.1.9).
+func applySerializeNormalization(s string, opts serializeOptions) (string, error) {
+	form := opts.normalizationForm
+	if form == "" || form == "none" || !opts.methodAppliesNormalization() {
+		return s, nil
+	}
+	switch form {
+	case "NFC":
+		return norm.NFC.String(s), nil
+	case "NFD":
+		return norm.NFD.String(s), nil
+	case "NFKC":
+		return norm.NFKC.String(s), nil
+	case "NFKD":
+		return norm.NFKD.String(s), nil
+	}
+	return "", &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", form)}
 }
 
 type serializeOptions struct {
@@ -176,9 +198,28 @@ type serializeOptions struct {
 	// the html Content-Type meta element.
 	mediaType string
 	// normalizationForm is the requested Unicode normalization form ("" / "none"
-	// = no normalization). helium performs no Unicode normalization, so any other
-	// value is the SESU0011 unsupported-normalization serialization error.
+	// = no normalization). NFC/NFD/NFKC/NFKD are applied to the serialized output
+	// for the methods that support normalization; "fully-normalized" is the
+	// SESU0011 unsupported-normalization serialization error; the parameter is not
+	// applicable to (ignored by) the json/adaptive methods.
 	normalizationForm string
+	// jsonNodeOutputMethod is the requested json-node-output-method value ("" =
+	// the default xml). helium serializes a node embedded in JSON only with the
+	// xml method, so any other value that would change node serialization is an
+	// unsupported-feature error when a node is actually serialized under json.
+	jsonNodeOutputMethod string
+}
+
+// methodAppliesNormalization reports whether the output method applies the
+// normalization-form parameter. Per Serialization 3.1 it is a parameter of the
+// xml/xhtml/html/text output methods (and the unspecified default); it is NOT
+// applicable to the json (§9.1.9) or adaptive methods, which ignore it.
+func (o serializeOptions) methodAppliesNormalization() bool {
+	switch o.method {
+	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML, serializeMethodText:
+		return true
+	}
+	return false
 }
 
 func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptions, error) {
@@ -249,15 +290,9 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 		}
 	}
 
-	if method, found, err := readSerializeStringOption(ctx, m, "method"); err != nil {
+	if method, found, err := resolveSerializeMethodMap(ctx, m); err != nil {
 		return opts, err
 	} else if found {
-		// Validate with the same domain rules as the element form: a built-in
-		// method or a QName/EQName extension. A bad value must not silently fall
-		// through to xml serialization.
-		if !serializeMethodValid(method) {
-			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", method)}
-		}
 		opts.method = method
 	}
 	if sep, found, err := readSerializeStringOption(ctx, m, "item-separator"); err != nil {
@@ -339,8 +374,11 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 	}
 	if jn, found, err := readSerializeStringOption(ctx, m, "json-node-output-method"); err != nil {
 		return opts, err
-	} else if found && !serializeJSONNodeOutputMethodValid(jn) {
-		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", jn)}
+	} else if found {
+		if !serializeJSONNodeOutputMethodValid(jn) {
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option json-node-output-method has an invalid value %q", jn)}
+		}
+		opts.jsonNodeOutputMethod = jn
 	}
 	if nf, found, err := readSerializeStringOption(ctx, m, "normalization-form"); err != nil {
 		return opts, err
@@ -458,6 +496,56 @@ func readSerializeStringOption(ctx context.Context, m MapItem, name string) (str
 	s, err := atomicToString(atoms[0])
 	if err != nil {
 		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
+	}
+	return s, true, nil
+}
+
+// resolveSerializeMethodMap resolves the map-form "method" option, whose value is
+// an xs:string OR xs:QName (F&O 3.1 §18.9.1). It inspects the ATOM so a
+// namespaced QName keeps its namespace instead of being stringified to its local
+// part: a no-namespace value must be a built-in method token (else err:XPTY0004),
+// and a value with a non-null namespace (a namespaced QName, or a prefixed-QName
+// string) names an EXTENSION method — a valid value helium does not implement,
+// which the SEPM0016 dispatch check reports as unsupported (the extension name is
+// carried as an EQName so it is never mistaken for a built-in token). found is
+// false only when the "method" key is absent.
+func resolveSerializeMethodMap(ctx context.Context, m MapItem) (string, bool, error) {
+	v, present := m.Get(AtomicValue{TypeName: TypeString, Value: "method"})
+	if !present {
+		return "", false, nil
+	}
+	atoms, err := atomizeTypedValue(ctx, v)
+	if err != nil {
+		return "", true, err
+	}
+	if len(atoms) != 1 {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "method" must be a singleton`}
+	}
+	av := atoms[0]
+	if av.TypeName == TypeQName {
+		qn, ok := av.Value.(QNameValue)
+		if !ok {
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: `serialize option "method" is not a valid xs:QName`}
+		}
+		if qn.URI == "" {
+			// A no-namespace QName must name a built-in method token; any other
+			// no-namespace name is an invalid value.
+			if isBuiltinSerializeMethod(qn.Local) {
+				return qn.Local, true, nil
+			}
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", qn.Local)}
+		}
+		// A namespaced QName names an extension method: preserve its namespace as
+		// an EQName so it is never a built-in token and the SEPM0016 dispatch check
+		// reports it as unsupported.
+		return "Q{" + qn.URI + "}" + qn.Local, true, nil
+	}
+	s, err := atomicToString(av)
+	if err != nil {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option method has an invalid value"}
+	}
+	if !serializeMethodValid(s) {
+		return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option method has an invalid value %q", s)}
 	}
 	return s, true, nil
 }
@@ -621,9 +709,11 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			}
 			// json-node-output-method-type: xml|html|xhtml|text or an extension QName
 			// (NOT json/adaptive — a narrower domain than the method parameter).
-			if !serializeJSONNodeOutputMethodValid(strings.Trim(value, xsdWhitespaceCutset)) {
+			jn := strings.Trim(value, xsdWhitespaceCutset)
+			if !serializeJSONNodeOutputMethodValid(jn) {
 				return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter json-node-output-method has an invalid value %q", value)}
 			}
+			opts.jsonNodeOutputMethod = jn
 		case "normalization-form":
 			value, err := readSerializeParamValue(param)
 			if err != nil {
@@ -720,7 +810,7 @@ func serializeNormalizationFormValid(v string) bool {
 // helium implements.
 func isBuiltinSerializeMethod(v string) bool {
 	switch v {
-	case "xml", serializeMethodHTML, "xhtml", serializeMethodText, "json", serializeMethodAdaptive:
+	case serializeMethodXML, serializeMethodHTML, serializeMethodXHTML, serializeMethodText, serializeMethodJSON, serializeMethodAdaptive:
 		return true
 	}
 	return false
@@ -759,7 +849,7 @@ func serializeMethodValid(v string) bool {
 // QName — a SEPARATE, narrower domain than the method parameter.
 func serializeJSONNodeOutputMethodValid(v string) bool {
 	switch v {
-	case "xml", serializeMethodHTML, "xhtml", serializeMethodText:
+	case serializeMethodXML, serializeMethodHTML, serializeMethodXHTML, serializeMethodText:
 		return true
 	}
 	return isExtensionMethodName(v)
@@ -1280,11 +1370,14 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return formatJSONComposite("{", "}", parts, 0, opts.indent), nil
 	case NodeItem:
-		// helium LIMITATION: the json-node-output-method parameter (xml/html/
-		// xhtml/text) is validated but NOT honored — a node embedded in JSON is
-		// always serialized with the xml method (the default value of the
-		// parameter), because helium has no nested-node JSON serialization for the
-		// other methods. Only the default value produces correct output.
+		// helium serializes a node embedded in JSON only with the xml method (the
+		// json-node-output-method default). A non-default value (html/xhtml/text or
+		// an extension) would change the node's serialization, which helium does
+		// not implement — so rather than silently emitting xml, it is an explicit
+		// unsupported-feature error (SEPM0016). The empty/"xml" default is honored.
+		if m := opts.jsonNodeOutputMethod; m != "" && m != lexicon.PrefixXML {
+			return "", &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("json-node-output-method %q is not supported for a node embedded in JSON", m)}
+		}
 		text, err := serializeNodeItem(v, serializeOptions{method: lexicon.PrefixXML, omitXMLDeclaration: true})
 		if err != nil {
 			return "", err

@@ -70,11 +70,14 @@ flattens away) and cardinality applies AFTER, so `map{"opt": ([], "v")}` coerces
 to the single `"v"`, not `XPTY0004`. No raw pre-atomization `seqLen != 1` gate
 wraps these. `fn:json-to-xml`/`fn:parse-json`/`map:merge` `duplicates` route
 through `coerceArgToStringRequired`; `fn:serialize`'s string map parameters
-(`method`/`item-separator`/`encoding`, via `readSerializeStringOption`) and its
-`standalone` union value (`resolveSerializeStandaloneMap`) atomize via the
-ctx-aware `atomizeTypedValue`/typed-value stream then enforce the singleton,
-keeping each atom's type (e.g. an `xs:QName` `method`) so the `atomicToString`/
-type checks are unchanged. Because atomization is content-kind-aware, an
+(`item-separator`/`encoding`, via `readSerializeStringOption`), its `method`
+union-of-string-or-QName (`resolveSerializeMethodMap` — which inspects the ATOM so
+a namespaced `xs:QName` keeps its namespace as an extension EQName instead of being
+stringified to its local part), and its `standalone` union value
+(`resolveSerializeStandaloneMap`) atomize via the ctx-aware
+`atomizeTypedValue`/typed-value stream then enforce the singleton, keeping each
+atom's type so the `atomicToString`/type checks are unchanged. Because atomization
+is content-kind-aware, an
 element-only-typed node used as an option value has no typed value and raises
 `FOTY0012`; every extractor lets that dynamic error surface (`isNoTypedValueError`)
 instead of masking it as its own bad-option error (`XPTY0004`/`FOJS0005`).
@@ -260,16 +263,23 @@ of the items with the `item-separator` and no markup (character maps applied,
 no SENR0001 node-kind restriction); `xhtml` is serialized as `xml` — a defensible
 approximation, as helium implements no XHTML-specific serialization rules.
 
-**Spec-honest gaps (no silent wrong output).** `normalization-form` other than
-`none`/`""` is the `SESU0011` unsupported-normalization serialization error
-(helium performs no Unicode normalization), not silently-unnormalized output.
-`json-node-output-method` is validated against its OWN narrower domain
-(`xml`/`html`/`xhtml`/`text` or an extension QName — NOT `json`/`adaptive`, via
-`serializeJSONNodeOutputMethodValid`) but only its default (`xml`) is honored — a
-node embedded in JSON is always serialized with the xml method (helium has no
-nested-node JSON serialization for html/xhtml/text); this is a documented
-no-op limitation flagged at the call site. Character maps (`use-character-maps`)
-are NOT applicable to the `json` output method (Serialization 3.1 §9.1.11), so the
+**Normalization + spec-honest gaps (no silent wrong output).** `normalization-form`
+is APPLIED to the serialized output for the methods that support it
+(xml/xhtml/html/text/default) — `NFC`/`NFD`/`NFKC`/`NFKD` via
+`golang.org/x/text/unicode/norm` (`applySerializeNormalization`, the last
+serialization step); `none`/`""` is a no-op; the W3C-specific `fully-normalized`
+form is not provided by that package and is the `SESU0011` unsupported-normalization
+error. It is NOT applicable to the `json`/`adaptive` methods (Serialization 3.1
+§9.1.9), which ignore it. `json-node-output-method` is validated against its OWN
+narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
+`json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default
+(`xml`) is honored, so a non-default value (`html`/`xhtml`/`text`/extension) that
+would change a node's serialization is an explicit `SEPM0016` unsupported-feature
+error when a node is actually serialized under json (helium has no nested-node JSON
+serialization for the other methods) — never silent xml. When no node is serialized
+under json it is a harmless no-op. Character maps (`use-character-maps`) are NOT
+applicable to the `json` output method (Serialization 3.1 §9.1.11: "The
+use-character-maps parameter is not applicable to the JSON output method"), so the
 json string paths intentionally do not consult `opts.charMap`.
 
 **Value validation (Serialization 3.1 schema types), map AND element form.** Every
@@ -277,7 +287,9 @@ recognized parameter is applied, a spec-justified no-op, or a documented gap, an
 its value is schema-type validated consistently across both forms: booleans/
 `yes-no-omit` accept `{yes,no,true,false,1,0}` (+ `omit`), uppercase rejected;
 `method` as a built-in method or a prefixed-QName/EQName extension (bare
-non-built-in NCName invalid); `json-node-output-method` against its narrower
+non-built-in NCName invalid; the map form additionally accepts an `xs:QName` value,
+where a namespaced QName is an extension → `SEPM0016`, a no-namespace QName must be
+a built-in token, else `XPTY0004`); `json-node-output-method` against its narrower
 `{xml,html,xhtml,text}`-or-extension domain; `html-version` as `xs:decimal`
 (`isValidXSDecimal`); `normalization-form` against
 `{NFC,NFD,NFKC,NFKD,fully-normalized,none,""}`; `version` as a supported XML
