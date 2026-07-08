@@ -838,6 +838,53 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)
 		require.NoError(t, err)
 	})
+
+	// fn:serialize applies sequence normalization (Serialization 3.1 §2), which
+	// wraps the node sequence in a document node, so doctype-system MUST apply to
+	// an ELEMENT input too — not only a document node. The requested DOCTYPE is
+	// emitted immediately before the first element, named after that element, with
+	// an empty internal subset. The caller's tree is never mutated.
+	t.Run("element input + doctype-system emits DOCTYPE", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(/*, map{"method":"xml","omit-xml-declaration":true(),"doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE root SYSTEM "x.dtd">`, "output:\n%s", out)
+		require.Contains(t, out, `<root>`, "output:\n%s", out)
+	})
+
+	t.Run("element input + doctype-public+system emits PUBLIC form", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(/*, map{"method":"xml","omit-xml-declaration":true(),"doctype-public":"-//EX//DTD//EN","doctype-system":"http://example.com/x.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE root PUBLIC "-//EX//DTD//EN" "http://example.com/x.dtd">`, "output:\n%s", out)
+	})
+
+	t.Run("element input + doctype-system with both quote kinds is SEPM0016", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := evaluate(t.Context(), doc,
+			`serialize(/*, map{"method":"xml","omit-xml-declaration":true(),"doctype-system":concat('a"b',"'",'c')})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+	})
+
+	t.Run("element input serialize does not mutate the caller's tree", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(/*, map{"method":"xml","omit-xml-declaration":true(),"doctype-system":"x.dtd"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `<!DOCTYPE root SYSTEM "x.dtd">`)
+		// Re-serializing the same source without doctype-system must show no DOCTYPE
+		// leaked back onto the caller's document.
+		plain, err := evaluate(t.Context(), doc, `serialize(/*, map{"method":"xml","omit-xml-declaration":true()})`)
+		require.NoError(t, err)
+		require.NotContains(t, plain.StringValue(), "<!DOCTYPE", "output:\n%s", plain.StringValue())
+	})
 }
 
 // TestSerialize_MethodVersionAndCharMapAudit locks in the spec-correctness fixes

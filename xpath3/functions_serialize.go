@@ -1924,13 +1924,20 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 		return fmt.Sprintf(`%s="%s"`, attr.Name(), attr.Value()), nil
 	}
 	node := item.Node
-	// The xml method emits a document type declaration when serializing a
-	// document node ONLY if doctype-system is specified — per Serialization 3.1
-	// §5.1 the doctype-public parameter MUST be ignored unless doctype-system is
-	// also present (public is an optional additive). It is injected as an
-	// internal subset on a COPY so the caller's tree is never mutated.
-	if doc, ok := node.(*helium.Document); ok && opts.doctypeSystem != "" {
-		withDT, err := documentWithDoctype(doc, opts)
+	// The xml method emits a document type declaration when doctype-system is
+	// specified (Serialization 3.1 §5.1.7: "If the doctype-system parameter is
+	// specified, the XML output method MUST output a document type declaration
+	// immediately before the first element"). doctype-public is additive and MUST
+	// be ignored unless doctype-system is present, so both are gated on
+	// doctypeSystem alone. fn:serialize performs sequence normalization
+	// (Serialization 3.1 §2), which wraps the node sequence in a document node, so
+	// the DOCTYPE applies to an ELEMENT input too — not only a document node. The
+	// node is copied into a fresh document (the caller's tree is never mutated) and
+	// the DOCTYPE is injected as its internal subset, named after the document
+	// element. A node with no document element (bare text/comment/PI) has no name
+	// to declare, so no DOCTYPE is emitted and the node serializes unchanged.
+	if opts.doctypeSystem != "" {
+		withDT, err := applyDoctype(node, opts)
 		if err != nil {
 			return "", err
 		}
@@ -1943,30 +1950,61 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
-// documentWithDoctype returns a copy of doc carrying an internal-subset DTD with
-// the requested doctype-public / doctype-system identifiers (named after the
-// document element), so the XML writer emits `<!DOCTYPE name PUBLIC/SYSTEM ...>`.
-// Per Serialization 3.1 §5.1 (XML Output Method), when doctype-system is
-// specified the emitted document type declaration carries the requested system
-// (and optional public) identifier and an EMPTY internal subset — the source
-// document's internal DTD subset is NOT copied through. Any pre-existing
-// internal subset on the copy is therefore replaced, so the old system/public
-// identifiers and declarations do not leak into the output. The replacement is
-// done on the COPY, so the caller's tree is never mutated.
-func documentWithDoctype(doc *helium.Document, opts serializeOptions) (*helium.Document, error) {
-	clone, err := helium.CopyDoc(doc)
-	if err != nil {
-		return nil, err
+// applyDoctype returns the node that serializeNodeItem should serialize with the
+// requested doctype-system / doctype-public applied. fn:serialize performs
+// sequence normalization (Serialization 3.1 §2, step S7 "construct a new
+// sequence … that consists of a single document node and copy all the items …
+// as children of that document node"), so a DOCTYPE applies to a document node
+// AND to a bare element input: the node is deep-copied into a fresh document
+// (the caller's tree is never mutated) and an internal-subset DTD carrying the
+// requested identifiers is injected, named after the document element. Per
+// Serialization 3.1 §5.1.7 the internal subset MUST be empty, so any pre-existing
+// internal subset on a copied document is replaced (its system/public identifiers
+// and declarations do not leak through). A node with no document element (bare
+// text/comment/PI, or a document without a root element) has no name to declare,
+// so it is returned unchanged and no DOCTYPE is emitted.
+func applyDoctype(node helium.Node, opts serializeOptions) (helium.Node, error) {
+	var clone *helium.Document
+	switch n := node.(type) {
+	case *helium.Document:
+		c, err := helium.CopyDoc(n)
+		if err != nil {
+			return nil, err
+		}
+		clone = c
+	case *helium.Element:
+		c, err := wrapElementInDocument(n)
+		if err != nil {
+			return nil, err
+		}
+		clone = c
+	default:
+		return node, nil
 	}
 	root := clone.DocumentElement()
 	if root == nil {
-		return clone, nil
+		return node, nil
 	}
 	clone.RemoveInternalSubset()
 	if _, err := clone.CreateInternalSubset(root.Name(), opts.doctypePublic, opts.doctypeSystem); err != nil {
 		return nil, err
 	}
 	return clone, nil
+}
+
+// wrapElementInDocument returns a fresh document node holding a deep COPY of elem
+// as its document element (fn:serialize sequence normalization, Serialization 3.1
+// §2), so a DOCTYPE can be injected without mutating the caller's tree.
+func wrapElementInDocument(elem *helium.Element) (*helium.Document, error) {
+	dst := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	copied, err := helium.CopyNode(elem, dst)
+	if err != nil {
+		return nil, err
+	}
+	if err := dst.AddChild(copied); err != nil {
+		return nil, err
+	}
+	return dst, nil
 }
 
 // encodeJSONStringForSerialization escapes s as JSON string content for the json
