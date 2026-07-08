@@ -546,6 +546,32 @@ func TestParameterEntityDeclFirstExternalSubset(t *testing.T) {
 	}
 }
 
+// TestConditionalSectionKeywordFromParameterEntity covers an external-subset
+// conditional section whose INCLUDE keyword is supplied by a parameter entity
+// (`<![ %e; ... ]]>` with %e; -> "INCLUDE["). The blank skip after "<![" must
+// leave the "%" for expansion (not consume it unexpanded), and the spent PE
+// cursor must be popped before the body floor is captured, so the body
+// declarations (here a defaulting <!ATTLIST>) are parsed and applied.
+func TestConditionalSectionKeywordFromParameterEntity(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc></doc>`
+	dtd := "<!ENTITY % e \"INCLUDE[\">\n" +
+		"<!ELEMENT doc (#PCDATA)>\n" +
+		"<![ %e; <!ATTLIST doc a1 CDATA \"v1\"> ]]>\n"
+	fsys := fstest.MapFS{dtdSystemID: {Data: []byte(dtd)}}
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).
+		FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	str, werr := helium.WriteString(doc.DocumentElement())
+	require.NoError(t, werr)
+	require.Contains(t, str, `a1="v1"`, "the <!ATTLIST> inside the PE-supplied INCLUDE section must supply the default attribute")
+}
+
 // TestExternalPublicParameterEntityCaptured proves the PUBLIC external parameter
 // entity path records the public and system IDs in the correct fields rather than
 // swapping them.
