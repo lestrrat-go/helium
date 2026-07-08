@@ -283,8 +283,15 @@ func applySerializeNormalization(s string, opts serializeOptions) (string, error
 }
 
 type serializeOptions struct {
-	method              string
+	method string
+	// itemSeparator is the item-separator parameter value; itemSeparatorSet
+	// records whether it was explicitly specified. Per Serialization 3.1 §2
+	// (sequence normalization, step 3) an ABSENT item-separator inserts a single
+	// space ONLY between two adjacent atomic-value-derived strings (never between
+	// nodes, nor between a node and an atomic value); a PRESENT item-separator is
+	// inserted between EVERY adjacent pair of items regardless of kind.
 	itemSeparator       string
+	itemSeparatorSet    bool
 	indent              bool
 	omitXMLDeclaration  bool
 	allowDuplicateNames bool
@@ -431,6 +438,7 @@ func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapI
 		return opts, err
 	} else if found {
 		opts.itemSeparator = sep
+		opts.itemSeparatorSet = true
 	}
 	if indent, found, err := readBool("indent"); err != nil {
 		return opts, err
@@ -806,6 +814,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 				return opts, err
 			}
 			opts.itemSeparator = value
+			opts.itemSeparatorSet = true
 		case "indent":
 			value, err := readSerializeParamYesNo(param)
 			if err != nil {
@@ -1476,12 +1485,23 @@ func resolveSerializeCharacterMaps(v Sequence) (map[rune]string, error) {
 
 func serializeAdaptiveSequence(seq Sequence, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, seqLen(seq))
+	atomic := make([]bool, 0, seqLen(seq))
 	for item := range seqItems(seq) {
 		s, err := serializeAdaptiveItem(item, opts)
 		if err != nil {
 			return "", err
 		}
 		parts = append(parts, s)
+		_, isAtomic := item.(AtomicValue)
+		atomic = append(atomic, isAtomic)
+	}
+	// The unspecified default method ("") is the xml family and obeys sequence
+	// normalization (Serialization 3.1 §2): an absent item-separator separates
+	// only adjacent atomic-value strings, not adjacent nodes. The explicit
+	// adaptive method (and nested map/array serialization) is exempt and joins
+	// every item with the item-separator.
+	if opts.method == "" {
+		return joinSerializedItems(parts, atomic, opts), nil
 	}
 	return strings.Join(parts, opts.itemSeparator), nil
 }
@@ -1690,14 +1710,17 @@ func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) 
 	// their members before serialization.
 	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
+	atomic := make([]bool, 0, seqLen(seq))
 	for item := range seqItems(seq) {
 		s, err := serializeTextItem(item)
 		if err != nil {
 			return "", err
 		}
 		parts = append(parts, s)
+		_, isAtomic := item.(AtomicValue)
+		atomic = append(atomic, isAtomic)
 	}
-	return applyCharMapToString(strings.Join(parts, opts.itemSeparator), opts.charMap), nil
+	return applyCharMapToString(joinSerializedItems(parts, atomic, opts), opts.charMap), nil
 }
 
 func serializeTextItem(item Item) (string, error) {
@@ -1736,11 +1759,34 @@ func applyCharMapToString(s string, charMap map[rune]string) string {
 	return b.String()
 }
 
+// joinSerializedItems joins the serialized item strings under sequence
+// normalization (Serialization 3.1 §2, step 3). When the item-separator
+// parameter is explicitly specified, it is inserted between EVERY adjacent pair
+// of items regardless of kind. Otherwise a single space is inserted ONLY between
+// two adjacent atomic-value-derived strings — never between two nodes, nor
+// between a node and an atomic value (atomic[i] reports whether parts[i] came
+// from an atomic value). This preserves serialize((1,2,3)) → "1 2 3" while
+// producing serialize((<a/>,<b/>)) → "<a/><b/>" with no spurious separator.
+func joinSerializedItems(parts []string, atomic []bool, opts serializeOptions) string {
+	if opts.itemSeparatorSet {
+		return strings.Join(parts, opts.itemSeparator)
+	}
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 && atomic[i-1] && atomic[i] {
+			b.WriteByte(' ')
+		}
+		b.WriteString(p)
+	}
+	return b.String()
+}
+
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
 	// their members before serialization.
 	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
+	atomic := make([]bool, 0, seqLen(seq))
 	for item := range seqItems(seq) {
 		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
 		// node, a namespace node, or a function item under the xml/xhtml methods
@@ -1755,15 +1801,17 @@ func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 				return "", err
 			}
 			parts = append(parts, text)
+			atomic = append(atomic, false)
 		default:
 			s, err := serializeAdaptiveItem(item, opts)
 			if err != nil {
 				return "", err
 			}
 			parts = append(parts, s)
+			atomic = append(atomic, true)
 		}
 	}
-	return strings.Join(parts, opts.itemSeparator), nil
+	return joinSerializedItems(parts, atomic, opts), nil
 }
 
 // newSerializeXMLWriter builds a helium.Writer configured from the serialization
@@ -1842,6 +1890,7 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 	// their members before serialization.
 	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
+	atomic := make([]bool, 0, seqLen(seq))
 	doctypeEmitted := false
 	for item := range seqItems(seq) {
 		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
@@ -1858,6 +1907,7 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 				return "", err
 			}
 			parts = append(parts, s)
+			atomic = append(atomic, true)
 			continue
 		}
 		text, emitted, err := serializeHTMLNode(node.Node, opts, !doctypeEmitted)
@@ -1868,8 +1918,9 @@ func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) 
 			doctypeEmitted = true
 		}
 		parts = append(parts, text)
+		atomic = append(atomic, false)
 	}
-	return strings.Join(parts, opts.itemSeparator), nil
+	return joinSerializedItems(parts, atomic, opts), nil
 }
 
 // serializeHTMLNode serializes a single node under the html output method,

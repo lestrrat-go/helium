@@ -289,17 +289,33 @@ raises `SEPM0016` at dispatch rather than silently falling through to xml. The
 supported XML output version (`1.0`/`1.1`); any other value is `SESU0013`
 (`isSupportedXMLOutputVersion`), not a bogus version pseudo-attribute.
 
+**Item separator (sequence normalization §2, step 3).** The join between adjacent
+serialized items is `joinSerializedItems`, shared by the xml/xhtml/html/text
+sequence functions and the unspecified-default path (`serializeAdaptiveSequence`
+with `method==""`). When the `item-separator` parameter is EXPLICITLY specified
+(`opts.itemSeparatorSet`, set in both the map and element parse paths) it is
+inserted between EVERY adjacent pair of items regardless of kind. When ABSENT, a
+single space is inserted ONLY between two adjacent atomic-value-derived strings —
+never between two nodes, nor between a node and an atomic value — so
+`serialize((1,2,3))` is `1 2 3` while `serialize((<a/>,<b/>))` is `<a/><b/>` with
+no spurious separator. Each sequence function tracks a parallel `atomic []bool`
+(true iff the item is an `AtomicValue`) to drive the rule. The EXPLICIT `adaptive`
+method (and nested map/array serialization) is exempt and joins every item with
+the `item-separator` directly.
+
 **Output methods.** `xml` (default) and `adaptive`/`json` are full; `html` is
 applied as above; `text` (`serializeTextSequence`) concatenates the string values
-of the items with the `item-separator` and no markup (character maps applied);
+of the items (joined per the item-separator rule above) and no markup (character
+maps applied);
 `xhtml` is serialized as `xml` — a defensible approximation, as helium implements
 no XHTML-specific serialization rules. Sequence normalization (Serialization 3.1
 §2) governs maps/arrays/functions under EVERY markup method —
 `xml`/`xhtml`/`html`/`text` and the unspecified default — in two steps.
 (1) **Array flattening** (`flattenSerializeArrays`, reusing `ArrayItem.Flatten`):
 an array is NOT a rejected kind; it is replaced by its member items RECURSIVELY
-(nested arrays flatten too), which then serialize as if supplied directly — atomic
-members space-separated by the `item-separator`, node members as nodes. (2) The
+(nested arrays flatten too), which then serialize as if supplied directly — the
+flattened atomic/node members then obey the item-separator rule above (adjacent
+atomics space-separated when the separator is absent, nodes never separated). (2) The
 shared `serializeItemKindError` guard then rejects with `SENR0001` a bare attribute
 node, a namespace node, OR a function item — INCLUDING a map (a map is a function
 item; an array is not) — delegating node kinds to `serializeNodeKindError`. So a
