@@ -108,6 +108,113 @@ func TestAnalyzeString_EdgeBranches(t *testing.T) {
 	require.ErrorAs(t, err, &xpErr)
 }
 
+// Nested capturing groups must produce nested fn:group elements (F&O 3.1
+// §5.6.5): an outer group holds its own text plus the fn:group children for the
+// groups nested within it, in document order, each with the correct @nr.
+func TestAnalyzeString_NestedGroups(t *testing.T) {
+	const fnNS = ` xmlns:fn="http://www.w3.org/2005/xpath-functions"`
+	for _, tc := range []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "sibling groups nested under outer group",
+			expr: `fn:serialize(fn:analyze-string("abc", "((a)(b))c"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1"><fn:group nr="2">a</fn:group><fn:group nr="3">b</fn:group></fn:group>c</fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// QT3 analyzeString-008: nested captured groups.
+			name: "nested optional group with text before it",
+			expr: `fn:serialize(fn:analyze-string("banana", "(a(n?))"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:non-match>b</fn:non-match><fn:match><fn:group nr="1">a<fn:group nr="2">n</fn:group></fn:group></fn:match><fn:match><fn:group nr="1">a<fn:group nr="2">n</fn:group></fn:group></fn:match><fn:match><fn:group nr="1">a<fn:group nr="2"/></fn:group></fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// QT3 analyzeString-017a: empty nested captured group is still nested.
+			name: "empty nested group stays nested after text",
+			expr: `fn:serialize(fn:analyze-string("banana", "(b(x?))"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">b<fn:group nr="2"/></fn:group></fn:match><fn:non-match>anana</fn:non-match></fn:analyze-string-result>`,
+		},
+		{
+			// "#" is a LITERAL regex character under the "x" flag (XPath 3.1 has
+			// no "#" comments), and "(a)" is a real capturing group. This must not
+			// panic (regression: a "#"-comment misread dropped the group, so the
+			// derived group count fell short of the match's and indexed out of range).
+			name: "x-flag hash is literal not a comment",
+			expr: `fn:serialize(fn:analyze-string("#a", "#(a)", "x"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match>#<fn:group nr="1">a</fn:group></fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// The "x" flag removes unescaped whitespace, so "( a )" nested in
+			// "( (b) )" is the same as "((b))": group 2 nested in group 1.
+			name: "x-flag whitespace nested groups",
+			expr: `fn:serialize(fn:analyze-string("b", "( (b) )", "x"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1"><fn:group nr="2">b</fn:group></fn:group></fn:match></fn:analyze-string-result>`,
+		},
+		{
+			// QT3 analyzeString-017: the sibling counterpart of 017a — identical
+			// match spans but separate parentheses, so the empty group 2 is a
+			// SIBLING of group 1, not nested. Nesting is a static property of the
+			// pattern, not of the match positions.
+			name: "empty sibling group is not nested",
+			expr: `fn:serialize(fn:analyze-string("banana", "(b)(x?)"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">b</fn:group><fn:group nr="2"/></fn:match><fn:non-match>anana</fn:non-match></fn:analyze-string-result>`,
+		},
+		{
+			// Group nesting must be derived from the SAME normalized pattern the
+			// engine compiles. Under "x", "( a \ ) (b) )" strips to "(a\)(b))"
+			// (the escaped ")" is literal, group 2 nested in group 1), so the match
+			// string value MUST be "a)b" — never "a)bb" (text duplicated by reading
+			// the escaped paren as a group close on the RAW pattern).
+			name: "x-flag escaped paren after stripped whitespace nests correctly",
+			expr: `fn:serialize(fn:analyze-string("a)b", "( a \ ) (b) )", "x"))`,
+			want: `<fn:analyze-string-result` + fnNS + `><fn:match><fn:group nr="1">a)<fn:group nr="2">b</fn:group></fn:group></fn:match></fn:analyze-string-result>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evalString(t, tc.expr)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// The "x" flag removes EXACTLY the four XML whitespace characters (#x9, #xA,
+// #xD, #x20) outside character classes — never other Unicode spaces. A U+00A0
+// (NBSP) in the pattern is a LITERAL character and must be preserved, across
+// every regex function (fn:matches/replace/tokenize/analyze-string share
+// stripFreeSpacing).
+func TestRegexXFlagWhitespaceExactSet(t *testing.T) {
+	const nbsp = " "
+	boolResult := func(t *testing.T, expr string) bool {
+		t.Helper()
+		r, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err)
+		b, ok := r.IsBoolean()
+		require.True(t, ok, "expected boolean for %q", expr)
+		return b
+	}
+
+	// NBSP in pattern stays literal: it only matches an NBSP in the input.
+	require.True(t, boolResult(t,
+		`fn:matches("a`+nbsp+`b", "a`+nbsp+`b", "x")`),
+		"NBSP in pattern must match NBSP in input under x flag")
+	require.False(t, boolResult(t,
+		`fn:matches("ab", "a`+nbsp+`b", "x")`),
+		"NBSP in pattern must NOT be stripped under x flag")
+
+	// An ordinary space IS stripped under x, so "a b" matches "ab".
+	require.True(t, boolResult(t, `fn:matches("ab", "a b", "x")`))
+
+	// analyze-string shares the same stripping: an NBSP-bearing pattern produces
+	// a match (not a non-match) for the NBSP-bearing input.
+	r, err := evaluate(t.Context(), nil,
+		`fn:analyze-string("a`+nbsp+`b", "a`+nbsp+`b", "x")//fn:match => count()`)
+	require.NoError(t, err)
+	n, ok := r.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(1), n)
+}
+
 // Patterns containing backreferences force the regexp2 backtracking engine
 // (r.backtrack != nil), exercising the Split / FindAllStringSubmatchIndex /
 // ReplaceAllString / NumSubexp branches that the std regexp path skips.
