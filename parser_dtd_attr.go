@@ -403,6 +403,16 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 		}
 	}
 
+	// XML 1.0 §3.3: when more than one definition is provided for the same
+	// attribute of a given element type, the first declaration is binding and
+	// later declarations are ignored. A repeated <!ATTLIST> for an attribute
+	// already declared in this subset is therefore a validity warning, not a
+	// fatal error (libxml2 warns "already defined" and continues); keep the first
+	// declaration and ignore the duplicate.
+	if existing, ok := dtd.LookupAttribute(name, prefix, elem); ok {
+		return existing, nil
+	}
+
 	attr = newAttributeDecl()
 	attr.atype = atype
 	attr.doc = dtd.doc
