@@ -1193,3 +1193,45 @@ func TestSerialize_HTMLDoctypeNameFixedHTML(t *testing.T) {
 	require.Contains(t, out, `<!DOCTYPE html SYSTEM "about:legacy-compat">`, "output:\n%s", out)
 	require.NotContains(t, out, "DOCTYPE HtMl", "output:\n%s", out)
 }
+
+// TestSerialize_EncodingDeclarationAndDoctypeSystemQuotes covers two spec
+// requirements: the XML declaration carries an encoding declaration
+// (Serialization 3.1 §5.1.6) driven by the encoding parameter (default UTF-8),
+// and a doctype-system value containing BOTH quote characters is an invalid
+// value (§3, SEPM0016), not malformed output.
+func TestSerialize_EncodingDeclarationAndDoctypeSystemQuotes(t *testing.T) {
+	t.Run("encoding param appears in the XML declaration", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"encoding":"UTF-16"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `encoding="UTF-16"`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("map-form default encoding UTF-8 appears in the declaration", func(t *testing.T) {
+		doc := mustParseXML(t, `<r/>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., map{"method":"xml","omit-xml-declaration":false()})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `encoding="UTF-8"`, "output:\n%s", res.StringValue())
+	})
+
+	t.Run("doctype-system with both quote characters is SEPM0016", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		// The XPath string literal doubles the embedded " so the doctype-system
+		// value is a"b'c (containing both a quotation mark and an apostrophe).
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"doctype-system":"a""b'c"})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+	})
+
+	t.Run("doctype-system with only a double quote is accepted", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root><a>x</a></root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","omit-xml-declaration":false(),"doctype-system":"a'b"})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), `<!DOCTYPE root SYSTEM "a'b">`, "output:\n%s", res.StringValue())
+	})
+}

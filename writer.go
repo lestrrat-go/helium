@@ -71,6 +71,10 @@ type Writer struct {
 	// serialization rules (restricted-character references, namespace
 	// undeclarations), so the declaration and escaping stay consistent.
 	outputVersion string
+	// outputEncoding overrides the encoding pseudo-attribute of the XML
+	// declaration (the encoding serialization parameter). Empty keeps the
+	// document's own encoding, leaving default output byte-identical.
+	outputEncoding string
 }
 
 // standaloneMode controls how the writer emits the standalone pseudo-attribute
@@ -361,6 +365,27 @@ func (d Writer) effectiveVersion(doc *Document) string {
 	return "1.0"
 }
 
+// OutputEncoding overrides the encoding pseudo-attribute of the XML declaration
+// (the encoding serialization parameter). An empty string keeps the document's
+// own encoding, leaving default output byte-identical.
+func (w Writer) OutputEncoding(v string) Writer {
+	w.outputEncoding = v
+	return w
+}
+
+// effectiveEncoding returns the encoding driving the XML-declaration
+// pseudo-attribute: the OutputEncoding override when set, otherwise the
+// document's own encoding.
+func (d Writer) effectiveEncoding(doc *Document) string {
+	if d.outputEncoding != "" {
+		return d.outputEncoding
+	}
+	if doc != nil {
+		return doc.encoding
+	}
+	return ""
+}
+
 // writeCDATASplit emits c as one or more CDATA sections, splitting on any "]]>"
 // sequence so the output stays well-formed (the "]]" is kept in one section and
 // the ">" starts the next). Empty content emits an empty CDATA section. Used for
@@ -512,7 +537,7 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 	d.writeString(out, `<?xml version="`)
 	d.writeString(out, d.effectiveVersion(doc)+`"`)
 
-	if encoding := doc.encoding; encoding != "" {
+	if encoding := d.effectiveEncoding(doc); encoding != "" {
 		d.writeString(out, ` encoding="`+encoding+`"`)
 	}
 

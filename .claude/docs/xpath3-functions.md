@@ -318,7 +318,14 @@ output version (else `SESU0013`). The map-form `cdata-section-elements` /
 serialize-xml-106a).
 `byte-order-mark` validated as boolean and ignored (UTF-8 emits no BOM);
 `media-type` applied to the html meta; `doctype-public`/`doctype-system` applied
-to the html doctype. Content whitespace checks use `isXSDWhitespaceOnly`
+to the html/xml doctype — but a `doctype-system` value containing BOTH a `"` and a
+`'` cannot be an XML SystemLiteral, so it is the `SEPM0016` invalid-value error
+(Serialization 3.1 §3), not malformed output. The `encoding` param drives the XML
+declaration's encoding pseudo-attribute (§5.1.6: the declaration includes an
+encoding declaration) via `Writer.OutputEncoding` — the map form defaults it to
+`UTF-8` so the declaration always carries `encoding="…"`, while the element form
+falls back to the document's own encoding when the param is absent. Content
+whitespace checks use `isXSDWhitespaceOnly`
 (`#x20/#x9/#xA/#xD` only) so NBSP-only content is significant, not ignorable.
 A map-form option entry present with the EMPTY SEQUENCE selects that parameter's
 DEFAULT (F&O 3.1 fn:serialize present-empty = use default, not an error), across

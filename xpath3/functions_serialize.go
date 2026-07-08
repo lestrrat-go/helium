@@ -82,6 +82,14 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeSESU0013, Message: fmt.Sprintf("XML output version %q is not supported", opts.xmlVersion)}
 	}
 
+	// A doctype-system value MUST NOT contain BOTH an apostrophe (#x27) and a
+	// quotation mark (#x22) — it could not be written as an XML SystemLiteral. Per
+	// Serialization 3.1 §3 that is an invalid parameter value (SEPM0016), rather
+	// than silently emitting a malformed DOCTYPE.
+	if strings.ContainsRune(opts.doctypeSystem, '"') && strings.ContainsRune(opts.doctypeSystem, '\'') {
+		return nil, &XPathError{Code: errCodeSEPM0016, Message: "doctype-system must not contain both a quotation mark and an apostrophe"}
+	}
+
 	// SEPM0009 (Serialization 3.1): when the omit-xml-declaration parameter is
 	// yes, it is an error if (a) the standalone parameter has a value other than
 	// omit, OR (b) the version parameter has a value other than 1.0 AND the
@@ -312,6 +320,10 @@ func parseSerializeOptions(ctx context.Context, args []Sequence) (serializeOptio
 }
 
 func parseSerializeOptionsMap(ctx context.Context, opts serializeOptions, m MapItem) (serializeOptions, error) {
+	// The Serialization 3.1 default encoding is UTF-8; the map form applies it so
+	// the XML declaration carries an encoding declaration (§5.1.6) even when the
+	// encoding option is absent (an explicit value below overrides it).
+	opts.encoding = lexicon.EncodingUTF8U
 	readBool := func(name string) (bool, bool, error) {
 		v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
 		if !found {
@@ -1632,15 +1644,20 @@ func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
 }
 
 // newSerializeXMLWriter builds a helium.Writer configured from the serialization
-// options for the xml output method: version, omit-xml-declaration, indent,
-// standalone, undeclare-prefixes, cdata-section-elements, suppress-indentation,
-// and character maps.
+// options for the xml output method: version, encoding, omit-xml-declaration,
+// indent, standalone, undeclare-prefixes, cdata-section-elements,
+// suppress-indentation, and character maps.
 func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	writer := helium.NewWriter()
 	// The effective output version (version param, default "1.0") drives the XML
 	// declaration text AND the XML 1.1 escaping/undeclaration behavior, so they
 	// stay consistent regardless of the source document's own version.
 	writer = writer.OutputVersion(opts.effectiveSerializeVersion())
+	// The encoding param drives the encoding pseudo-attribute of the XML
+	// declaration (Serialization 3.1 §5.1.6: the declaration includes an encoding
+	// declaration). When the param is unset it is empty, and the writer keeps the
+	// document's own encoding, leaving default output byte-identical.
+	writer = writer.OutputEncoding(opts.encoding)
 	if opts.omitXMLDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
