@@ -58,6 +58,19 @@ func (o serializeOptions) methodEmitsXMLDeclaration() bool {
 	return false
 }
 
+// methodEmitsDoctype reports whether the output method emits a document type
+// declaration from the doctype-system / doctype-public parameters (the xml,
+// xhtml, and html methods, and the unspecified xml default). doctype-system is
+// applicable to these methods (Serialization 3.1 §5.1.7 for xml/xhtml, §7.4.6 for
+// html) and is ignored by the text/json/adaptive methods.
+func (o serializeOptions) methodEmitsDoctype() bool {
+	switch o.method {
+	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML:
+		return true
+	}
+	return false
+}
+
 func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	opts, err := parseSerializeOptions(ctx, args)
 	if err != nil {
@@ -85,8 +98,11 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// A doctype-system value MUST NOT contain BOTH an apostrophe (#x27) and a
 	// quotation mark (#x22) — it could not be written as an XML SystemLiteral. Per
 	// Serialization 3.1 §3 that is an invalid parameter value (SEPM0016), rather
-	// than silently emitting a malformed DOCTYPE.
-	if strings.ContainsRune(opts.doctypeSystem, '"') && strings.ContainsRune(opts.doctypeSystem, '\'') {
+	// than silently emitting a malformed DOCTYPE. doctype-system is applicable only
+	// to the xml, xhtml, and html output methods (§5.1.7 / §7.4.6) — text/json/
+	// adaptive ignore it — so the SystemLiteral check is gated to the methods that
+	// actually emit a DOCTYPE.
+	if opts.methodEmitsDoctype() && strings.ContainsRune(opts.doctypeSystem, '"') && strings.ContainsRune(opts.doctypeSystem, '\'') {
 		return nil, &XPathError{Code: errCodeSEPM0016, Message: "doctype-system must not contain both a quotation mark and an apostrophe"}
 	}
 
@@ -109,9 +125,12 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	// Namespace undeclarations require XML/XHTML 1.1; requesting them at an
-	// effective output version of 1.0 is a static error (Serialization 3.1
-	// SEPM0010).
-	if opts.undeclarePrefixes && opts.effectiveSerializeVersion() != "1.1" {
+	// effective output version of 1.0 is a static error (Serialization 3.1 §5.1.8
+	// SEPM0010). undeclare-prefixes is applicable ONLY to the xml and xhtml output
+	// methods (and the unspecified xml default) — for html/text/json/adaptive it is
+	// silently ignored, no error — so SEPM0010 is gated to that method family
+	// (methodEmitsXMLDeclaration covers exactly {"", xml, xhtml}).
+	if opts.methodEmitsXMLDeclaration() && opts.undeclarePrefixes && opts.effectiveSerializeVersion() != "1.1" {
 		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 

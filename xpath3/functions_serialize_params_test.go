@@ -254,7 +254,12 @@ func TestSerialize_ApplyParams(t *testing.T) {
 //     standalone="yes".
 //   - cdata-section-elements / suppress-indentation match by EXACT expanded
 //     name: QName("","b") must not match a namespaced <p:b>.
-//   - undeclare-prefixes at output version 1.0 is a SEPM0010 static error.
+//   - undeclare-prefixes at output version 1.0 is a SEPM0010 static error under
+//     the xml/xhtml methods, but is silently ignored (no error) for html/text/
+//     json/adaptive, where the parameter is not applicable.
+//   - the doctype-system SystemLiteral both-quotes SEPM0016 check fires only for
+//     the methods that emit a DOCTYPE (xml/xhtml/html), and is ignored by
+//     text/json/adaptive.
 //   - method="html" emits the HTML5 DOCTYPE + Content-Type meta ONLY when the
 //     document element is <html>; an <article><head/> root gets neither.
 func TestSerialize_ParamNegativeCases(t *testing.T) {
@@ -300,6 +305,47 @@ func TestSerialize_ParamNegativeCases(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorAs(t, err, &xerr)
 		require.Equal(t, "SEPM0010", xerr.Code)
+	})
+
+	t.Run("undeclare-prefixes ignored for non-applicable method (html)", func(t *testing.T) {
+		// undeclare-prefixes is applicable only to the xml/xhtml methods
+		// (Serialization 3.1 §5.1.8); for html it is silently ignored, so an
+		// effective 1.0 version raises NO SEPM0010 and serialization proceeds.
+		doc := mustParseXML(t, `<html xmlns:p="urn:p"><body><p>Hi</p></body></html>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","undeclare-prefixes":true()})`)
+		require.NoError(t, err)
+		require.Contains(t, res.StringValue(), "<body>", "output:\n%s", res.StringValue())
+	})
+
+	t.Run("undeclare-prefixes ignored for non-applicable method (text)", func(t *testing.T) {
+		doc := mustParseXML(t, `<root xmlns:p="urn:p">hi</root>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"text","undeclare-prefixes":true()})`)
+		require.NoError(t, err)
+		require.Equal(t, "hi", res.StringValue())
+	})
+
+	t.Run("doctype-system both-quotes SEPM0016 only for applicable methods", func(t *testing.T) {
+		doc := mustParseXML(t, `<root>hi</root>`)
+		// A doctype-system value that could not be written as a SystemLiteral (it
+		// contains both a " and a ') is SEPM0016 under the xml method, which emits a
+		// DOCTYPE from the parameter (§5.1.7).
+		_, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","doctype-system":concat('a', codepoints-to-string(34), 'b', codepoints-to-string(39), 'c')})`)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.ErrorAs(t, err, &xerr)
+		require.Equal(t, "SEPM0016", xerr.Code)
+
+		// text/adaptive ignore doctype-system, so the same value raises no error
+		// and serialization proceeds.
+		for _, method := range []string{"text", "adaptive"} {
+			expr := `serialize(., map{"method":"` + method +
+				`","doctype-system":concat('a', codepoints-to-string(34), 'b', codepoints-to-string(39), 'c')})`
+			_, err := evaluate(t.Context(), doc, expr)
+			require.NoErrorf(t, err, "method %q must ignore doctype-system", method)
+		}
 	})
 
 	t.Run("html method on non-html root emits no doctype or meta", func(t *testing.T) {
