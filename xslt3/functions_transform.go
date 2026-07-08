@@ -1491,6 +1491,12 @@ func resetSerializationParam(out *OutputDef, name string) {
 		out.DoctypeSystem = ""
 	case "item-separator":
 		out.ItemSeparator = nil
+	case "cdata-section-elements":
+		out.CDATASections = nil
+	case "suppress-indentation":
+		out.SuppressIndentation = nil
+	case "use-character-maps":
+		out.ResolvedCharMap = nil
 	}
 }
 
@@ -1562,7 +1568,84 @@ func applySerializationParam(out *OutputDef, name string, val xpath3.Sequence) {
 		if s, ok := transformSeqString(val); ok {
 			out.ItemSeparator = &s
 		}
+	case "cdata-section-elements":
+		out.CDATASections = mergeSerializationQNames(out.CDATASections, val)
+	case "suppress-indentation":
+		out.SuppressIndentation = mergeSerializationQNames(out.SuppressIndentation, val)
+	case "use-character-maps":
+		applyUseCharacterMapsParam(out, val)
 	}
+}
+
+// serializationQNameClarkName returns the Clark-notation name ({uri}local, or
+// the bare local name when there is no namespace) of a serialization-params
+// value item that is an xs:QName. Non-QName items yield "".
+func serializationQNameClarkName(item xpath3.Item) string {
+	av, err := xpath3.AtomizeItem(item)
+	if err != nil {
+		return ""
+	}
+	qv, ok := av.Value.(xpath3.QNameValue)
+	if !ok {
+		return ""
+	}
+	if qv.URI != "" {
+		return helium.ClarkName(qv.URI, qv.Local)
+	}
+	return qv.Local
+}
+
+// mergeSerializationQNames unions the Clark names of the xs:QName items in val
+// into base. The cdata-section-elements / suppress-indentation values supplied
+// via serialization-params accumulate onto the stylesheet's xsl:output set
+// rather than replacing it (F&O 3.1 §14.8.3), skipping duplicates.
+func mergeSerializationQNames(base []string, val xpath3.Sequence) []string {
+	seen := make(map[string]struct{}, len(base))
+	for _, n := range base {
+		seen[n] = struct{}{}
+	}
+	for i := range sequence.Len(val) {
+		name := serializationQNameClarkName(val.Get(i))
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		base = append(base, name)
+	}
+	return base
+}
+
+// applyUseCharacterMapsParam merges the (character → replacement) entries of a
+// use-character-maps serialization-param map into out.ResolvedCharMap. Its
+// value is a map(xs:string, xs:string) keyed by single characters; entries
+// override any inherited mapping for the same character.
+func applyUseCharacterMapsParam(out *OutputDef, val xpath3.Sequence) {
+	sm, ok := val.Get(0).(xpath3.MapItem)
+	if !ok {
+		return
+	}
+	if out.ResolvedCharMap == nil {
+		out.ResolvedCharMap = make(map[rune]string, sm.Size())
+	}
+	_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
+		ks, err := xpath3.AtomicToString(key)
+		if err != nil {
+			return nil //nolint:nilerr // skip unparseable character-map keys
+		}
+		runes := []rune(ks)
+		if len(runes) != 1 {
+			return nil // character-map keys are single characters
+		}
+		rs, ok := transformSeqString(value)
+		if !ok {
+			return nil
+		}
+		out.ResolvedCharMap[runes[0]] = rs
+		return nil
+	})
 }
 
 // transformSeqString extracts a string value from a single-item sequence,
