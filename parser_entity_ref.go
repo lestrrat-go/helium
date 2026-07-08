@@ -418,6 +418,20 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 	return ret, nil
 }
 
+// isNilEntity reports whether e is nil, including a non-nil sax.Entity interface
+// value that wraps a nil *Entity. getEntity returns a concrete (*Entity)(nil)
+// for an undefined entity; assigned to a sax.Entity interface that becomes a
+// typed nil that a plain `== nil` check misses, so any method call on it panics.
+func isNilEntity(e sax.Entity) bool {
+	if e == nil {
+		return true
+	}
+	if ce, ok := e.(*Entity); ok {
+		return ce == nil
+	}
+	return false
+}
+
 func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.Entity, int, error) {
 	if len(s) == 0 || s[0] != '&' {
 		return nil, 0, errors.New("invalid entity ref")
@@ -454,7 +468,13 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 			}
 		}
 	}
-	if loadedEnt == nil {
+	// getEntity returns a concrete (*Entity)(nil) for an undefined entity, which
+	// becomes a non-nil sax.Entity interface holding a nil pointer when assigned
+	// above. A plain `== nil` check misses that typed nil and the EntityType()
+	// call below would panic (e.g. an internal entity whose replacement text
+	// references an undefined entity, referenced from an attribute value), so
+	// detect the typed nil too and treat it as "not defined".
+	if isNilEntity(loadedEnt) {
 		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 			return nil, 0, fmt.Errorf("entity '%s' not defined", name)
 		}

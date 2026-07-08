@@ -940,7 +940,15 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					}
 				} else {
 					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {
-						_, _ = pctx.decodeEntities(ctx, ent.Content(), SubstituteRef)
+						// Validate the entity's replacement text: a general entity
+						// referenced from an attribute value must expand to
+						// well-formed content, so an undefined entity nested in it
+						// (WFC: Entity Declared) is a fatal error, not something to
+						// swallow. (W3C not-wf-sa-077.)
+						if _, derr := pctx.decodeEntities(ctx, ent.Content(), SubstituteRef); derr != nil {
+							err = pctx.error(ctx, derr)
+							return
+						}
 						ent.checked = 2
 					}
 					// Route the unresolved reference through the bounded helper:
