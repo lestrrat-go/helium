@@ -203,15 +203,28 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		return err
 	}
 
-	// skipBlanks records an over-cap whitespace run in pctx.blankRunErr but only
-	// returns a bool, so a guard tripped while skipping conditional-section HEADER
-	// whitespace (after "<![", after a "%pe;", after INCLUDE/IGNORE) must be
-	// surfaced here. Otherwise this function would proceed and return a generic
+	// Depth of the section's OWN cursor (the one holding "<![ ... ]]>"). The
+	// INCLUDE/IGNORE keyword may be supplied by a parameter entity pushed above
+	// this depth; that spent PE cursor is popped back to here before the body
+	// floor is captured, so the body is not mistaken for already-consumed.
+	sectionDepth := pctx.inputTab.Len()
+
+	// Blank-ONLY skip after "<![" — NOT skipBlanks, whose handlePEReference would
+	// CONSUME a "%pe;" that supplies the INCLUDE/IGNORE keyword (`<![ %e;` with
+	// %e; -> "INCLUDE[") without expanding it, so the keyword would be lost and
+	// the whole section dropped. Leaving the "%" for the explicit parsePEReference
+	// below pushes the replacement text so the keyword (and body) are parsed.
+	// skipBlankRun still records an over-cap whitespace run in pctx.blankRunErr,
+	// which must be surfaced here: otherwise this function returns a generic
 	// conditional-section sentinel (ErrConditionalSectionKeyword /
-	// ErrConditionalSectionNotFinished) which the top-level external-subset loop
+	// ErrConditionalSectionNotFinished) that the top-level external-subset loop
 	// TOLERATES — downgrading a resource-limit violation to "stop parsing the
 	// subset" instead of failing closed at the source.
-	pctx.skipBlanks(ctx)
+	if c := pctx.getCursor(); c != nil {
+		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
+			return err
+		}
+	}
 	if pctx.blankRunErr != nil {
 		return pctx.blankRunErr
 	}
@@ -256,6 +269,13 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		// expands inside the section pushes a nested cursor and is popped back to
 		// baseLen when exhausted, after which the "]]>" terminator (which lives in
 		// this section's own cursor) is examined again.
+		// The INCLUDE keyword and its '[' may have come from a parameter entity
+		// (`<![ %e;` with %e; -> "INCLUDE[") whose replacement-text cursor is now
+		// fully consumed. Pop that spent PE cursor back to the section's own cursor
+		// BEFORE capturing the body floor: otherwise baseLen counts the spent PE
+		// cursor, popping it later drops the stack below baseLen, and the body
+		// declarations (e.g. a defaulting <!ATTLIST>) are silently skipped.
+		pctx.popSpentExternalSubsetInputs(sectionDepth)
 		baseLen := pctx.inputTab.Len()
 		for {
 			// Pop spent nested PE/conditional cursors and skip leading blanks on

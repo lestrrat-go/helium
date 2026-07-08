@@ -823,6 +823,19 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 		return nil
 	}
 
+	// A '%' immediately followed by whitespace (or end of input) is the
+	// parameter-entity DECLARATION marker of `<!ENTITY % name ...>`, never a PE
+	// reference — a reference is `%name;` with a NameStartChar right after '%'.
+	// Leave the marker for the declaration parser in EVERY state. Without this,
+	// the FIRST declaration of an external subset being a PE declaration reaches
+	// skipBlanks (called from parseEntityDecl after `<!ENTITY`) with instate not
+	// yet psDTD — parseMarkupDecl sets psDTD only AFTER a declaration — so the
+	// psDTD-branch guard below does not apply and the marker is mis-parsed as a
+	// reference, yielding a spurious "space required" on that first declaration.
+	if c := cur.PeekAt(1); isBlankByte(c) || c == 0 {
+		return nil
+	}
+
 	switch pctx.instate {
 	case psCDATA, psComment, psStartTag, psEndTag, psEntityDecl, psContent, psAttributeValue, psPI, psSystemLiteral, psPublicLiteral, psEntityValue, psIgnore:
 		return nil
@@ -834,10 +847,6 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 		return errors.New("handlePEReference: parameter entity in epilogue")
 	case psDTD:
 		if !pctx.external || pctx.inputTab.Len() == 1 {
-			return nil
-		}
-
-		if c := cur.PeekAt(1); isBlankByte(c) || c == 0 {
 			return nil
 		}
 	}
