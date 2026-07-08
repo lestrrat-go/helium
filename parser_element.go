@@ -1045,6 +1045,14 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 // it), so a result computed against incomplete tables must never be cached — the
 // scan is side-effect-free and cheap, and re-running it always reflects the
 // current tables.
+// attributeEntityWFC resolves nested references through the DOCUMENT entity table
+// (pctx.getEntity), which holds every entity a DOM-building parse declares. It
+// deliberately does NOT consult a replacement SAX handler's GetEntity: that would
+// fire observable lookups on a logging/counting handler (perturbing the SAX event
+// stream), and the only configuration where the SAX table diverges from the
+// document table is a custom SAXHandler that REPLACES the TreeBuilder — a pure
+// SAX-event parse with no document being built, where entity/WFC semantics are the
+// consumer's responsibility, not helium's document-construction concern.
 func (pctx *parserCtx) attributeEntityWFC(ent *Entity) attrEntityWFC {
 	visited := map[*Entity]struct{}{ent: {}}
 	return pctx.scanAttrEntityWFC(ent.content, visited)
