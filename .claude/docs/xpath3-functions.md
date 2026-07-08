@@ -312,8 +312,16 @@ with a non-empty URI is added. The over-declaring deep copy re-declares the
 element's own/active namespaces and the inherited prefixes are added on top. Only
 prefixed declarations are force-added
 (a prefixed decl never rebinds the element's own name); the default (empty-prefix)
-namespace and undeclarations are left to the copy's active-namespace binding. This
-runs BEFORE the doctype handling so `applyDoctype` copies the namespace-complete
+namespace and undeclarations are left to the copy's active-namespace binding.
+`pruneRedundantNamespaceDecls` then walks the copy and drops, from every element
+BELOW the root, any declaration whose prefix is already bound to the same URI by
+an ancestor within the serialized subtree — the redundant `xmlns` the
+over-declaring copy leaves on each namespaced descendant. The root keeps every
+declaration (it is the top of the serialized tree and must be namespace-complete);
+the XML output method emits a declaration for a descendant only when its namespace
+node differs from its parent's, so a bare descendant (`<xsl:text>`) serializes
+without repeating an in-scope ancestor binding (W3C strip-space-029). This runs
+BEFORE the doctype handling so `applyDoctype` copies the namespace-complete
 element. W3C fn-union-node-args-015/016/017, fn-intersect-node-args-015/016,
 XQueryComment002.
 

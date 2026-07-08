@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -2343,7 +2344,44 @@ func elementWithInScopeNamespaces(elem *helium.Element) (helium.Node, error) {
 		}
 		declared[ns.Prefix()] = struct{}{}
 	}
+	// helium.CopyNode over-declares: every namespaced element re-declares its own
+	// active namespace, so a descendant repeats a prefix its serialized-subtree
+	// ancestor already binds. The XML output method emits a namespace declaration
+	// for an element only when its namespace node differs from its parent's (no
+	// redundant xmlns), so drop descendant declarations already in scope from an
+	// ancestor within the copy. The root keeps every declaration (it is the top of
+	// the serialized tree and must be namespace-complete).
+	pruneRedundantNamespaceDecls(copyElem, map[string]string{})
 	return copyElem, nil
+}
+
+// pruneRedundantNamespaceDecls removes, from every element BELOW root, the
+// namespace declarations whose prefix is already bound to the same URI by an
+// ancestor within root's subtree — the redundant declarations helium.CopyNode's
+// over-declaring copy leaves behind. inScope maps prefix -> URI for the bindings
+// visible from elem's ancestors (empty at root, so root's own declarations are
+// never pruned). A declaration that establishes a new prefix or rebinds one to a
+// different URI is kept and extends the scope for elem's descendants.
+func pruneRedundantNamespaceDecls(elem *helium.Element, inScope map[string]string) {
+	childScope := inScope
+	cloned := false
+	for _, ns := range elem.Namespaces() {
+		prefix := ns.Prefix()
+		if uri, ok := inScope[prefix]; ok && uri == ns.URI() {
+			elem.RemoveNamespaceByPrefix(prefix)
+			continue
+		}
+		// This declaration establishes or rebinds prefix; extend the scope for
+		// elem's descendants without mutating the ancestor-owned inScope map.
+		if !cloned {
+			childScope = maps.Clone(inScope)
+			cloned = true
+		}
+		childScope[prefix] = ns.URI()
+	}
+	for child := range helium.ChildElements(elem) {
+		pruneRedundantNamespaceDecls(child, childScope)
+	}
 }
 
 // inheritedInScopeNamespaces returns the namespace declarations that are in
