@@ -1149,7 +1149,7 @@ func analyzeStringGroupParents(pattern, flags string) []int {
 		case '(':
 			j := i + 1
 			if extended {
-				for j < len(rs) && isRegexXFlagWhitespace(rs[j]) {
+				for j < len(rs) && isXPathRegexWhitespace(rs[j]) {
 					j++
 				}
 			}
@@ -1176,10 +1176,14 @@ func analyzeStringGroupParents(pattern, flags string) []int {
 	return parents
 }
 
-// isRegexXFlagWhitespace reports whether r is whitespace removed by the XPath/XSD
-// regex "x" flag (#x9, #xA, #xD, #x20).
-func isRegexXFlagWhitespace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+// isXPathRegexWhitespace reports whether r is whitespace removed by the XPath/XSD
+// regex "x" flag (F&O 3.1 §5.6.1.1): EXACTLY the four XML whitespace characters
+// #x9, #xA, #xD, #x20. It is deliberately narrower than unicode.IsSpace — e.g.
+// U+00A0 (NBSP) and other Unicode spaces are literal regex characters and must
+// be preserved. Shared by every "x"-flag site (fn:matches/replace/tokenize via
+// stripFreeSpacing, and fn:analyze-string group counting).
+func isXPathRegexWhitespace(r rune) bool {
+	return r == 0x09 || r == 0x0A || r == 0x0D || r == 0x20
 }
 
 // buildAnalyzeStringMatch populates matchElem with the fn:group hierarchy and
@@ -1891,8 +1895,8 @@ func stripFreeSpacing(pattern string) string {
 		r := runes[i]
 		if r == '\\' && i+1 < len(runes) {
 			next := i + 1
-			if inCharClass == 0 && unicode.IsSpace(runes[next]) {
-				for next < len(runes) && unicode.IsSpace(runes[next]) {
+			if inCharClass == 0 && isXPathRegexWhitespace(runes[next]) {
+				for next < len(runes) && isXPathRegexWhitespace(runes[next]) {
 					next++
 				}
 				if next >= len(runes) {
@@ -1913,7 +1917,7 @@ func stripFreeSpacing(pattern string) string {
 				inCharClass--
 			}
 		}
-		if inCharClass == 0 && unicode.IsSpace(r) {
+		if inCharClass == 0 && isXPathRegexWhitespace(r) {
 			continue
 		}
 		b.WriteRune(r)

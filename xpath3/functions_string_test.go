@@ -168,6 +168,43 @@ func TestAnalyzeString_NestedGroups(t *testing.T) {
 	}
 }
 
+// The "x" flag removes EXACTLY the four XML whitespace characters (#x9, #xA,
+// #xD, #x20) outside character classes — never other Unicode spaces. A U+00A0
+// (NBSP) in the pattern is a LITERAL character and must be preserved, across
+// every regex function (fn:matches/replace/tokenize/analyze-string share
+// stripFreeSpacing).
+func TestRegexXFlagWhitespaceExactSet(t *testing.T) {
+	const nbsp = " "
+	boolResult := func(t *testing.T, expr string) bool {
+		t.Helper()
+		r, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err)
+		b, ok := r.IsBoolean()
+		require.True(t, ok, "expected boolean for %q", expr)
+		return b
+	}
+
+	// NBSP in pattern stays literal: it only matches an NBSP in the input.
+	require.True(t, boolResult(t,
+		`fn:matches("a`+nbsp+`b", "a`+nbsp+`b", "x")`),
+		"NBSP in pattern must match NBSP in input under x flag")
+	require.False(t, boolResult(t,
+		`fn:matches("ab", "a`+nbsp+`b", "x")`),
+		"NBSP in pattern must NOT be stripped under x flag")
+
+	// An ordinary space IS stripped under x, so "a b" matches "ab".
+	require.True(t, boolResult(t, `fn:matches("ab", "a b", "x")`))
+
+	// analyze-string shares the same stripping: an NBSP-bearing pattern produces
+	// a match (not a non-match) for the NBSP-bearing input.
+	r, err := evaluate(t.Context(), nil,
+		`fn:analyze-string("a`+nbsp+`b", "a`+nbsp+`b", "x")//fn:match => count()`)
+	require.NoError(t, err)
+	n, ok := r.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(1), n)
+}
+
 // Patterns containing backreferences force the regexp2 backtracking engine
 // (r.backtrack != nil), exercising the Split / FindAllStringSubmatchIndex /
 // ReplaceAllString / NumSubexp branches that the std regexp path skips.
