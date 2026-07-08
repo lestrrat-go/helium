@@ -1946,20 +1946,23 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 // documentWithDoctype returns a copy of doc carrying an internal-subset DTD with
 // the requested doctype-public / doctype-system identifiers (named after the
 // document element), so the XML writer emits `<!DOCTYPE name PUBLIC/SYSTEM ...>`.
-// A document that already has a DTD is returned unchanged (a second declaration
-// cannot be emitted).
+// Per Serialization 3.1 §5.1 (XML Output Method), when doctype-system is
+// specified the emitted document type declaration carries the requested system
+// (and optional public) identifier and an EMPTY internal subset — the source
+// document's internal DTD subset is NOT copied through. Any pre-existing
+// internal subset on the copy is therefore replaced, so the old system/public
+// identifiers and declarations do not leak into the output. The replacement is
+// done on the COPY, so the caller's tree is never mutated.
 func documentWithDoctype(doc *helium.Document, opts serializeOptions) (*helium.Document, error) {
 	clone, err := helium.CopyDoc(doc)
 	if err != nil {
 		return nil, err
 	}
-	if clone.IntSubset() != nil {
-		return clone, nil
-	}
 	root := clone.DocumentElement()
 	if root == nil {
 		return clone, nil
 	}
+	clone.RemoveInternalSubset()
 	if _, err := clone.CreateInternalSubset(root.Name(), opts.doctypePublic, opts.doctypeSystem); err != nil {
 		return nil, err
 	}

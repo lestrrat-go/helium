@@ -822,6 +822,17 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.Contains(t, out, `<!DOCTYPE root PUBLIC "-//EX//DTD//EN" "http://example.com/x.dtd">`, "output:\n%s", out)
 	})
 
+	t.Run("XML doctype-system replaces a pre-existing internal subset", func(t *testing.T) {
+		doc := mustParseXML(t, `<?xml version="1.0"?><!DOCTYPE root SYSTEM "old.dtd" [<!ELEMENT root EMPTY>]><root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"xml","doctype-system":"new.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.Contains(t, out, `<!DOCTYPE root SYSTEM "new.dtd">`, "output:\n%s", out)
+		require.NotContains(t, out, "old.dtd", "output:\n%s", out)
+		require.NotContains(t, out, "<!ELEMENT", "output:\n%s", out)
+	})
+
 	t.Run("html method with doctype-system does not raise SEPM0009", func(t *testing.T) {
 		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)

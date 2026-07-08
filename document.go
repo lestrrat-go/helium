@@ -251,6 +251,18 @@ func (d *Document) IntSubset() *DTD {
 	return d.intSubset
 }
 
+// RemoveInternalSubset detaches the document's internal-subset DTD (if any) from
+// the child list and clears the association, so a subsequent
+// CreateInternalSubset can install a fresh one in its place. It is a no-op when
+// no internal subset is present.
+func (d *Document) RemoveInternalSubset() {
+	if d.intSubset == nil {
+		return
+	}
+	unlinkNode(d.intSubset)
+	d.intSubset = nil
+}
+
 func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
