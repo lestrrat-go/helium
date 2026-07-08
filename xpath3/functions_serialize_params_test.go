@@ -1039,3 +1039,36 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.Equal(t, "hi", res.StringValue())
 	})
 }
+
+// TestSerialize_CharMapURIAttributeExclusion covers the Serialization 3.1 §7
+// character-expansion rule: when URI escaping is applied to a URI attribute value
+// (escape-uri-attributes=yes, the default), character mapping is SKIPPED for that
+// value; character maps apply to non-URI attributes normally, and to URI
+// attributes only when escaping is disabled.
+func TestSerialize_CharMapURIAttributeExclusion(t *testing.T) {
+	const src = `<?xml version="1.0" encoding="UTF-8"?>` +
+		`<html><head/><body><a href="ab" title="a">x</a></body></html>`
+
+	t.Run("URI attr not char-mapped when escaping on (default); non-URI attr is", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","include-content-type":false(),"use-character-maps":map{"a":"Z"}})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		// href is URI-escaped, so its "a" is NOT mapped to "Z".
+		require.Contains(t, out, `href="ab"`, "output:\n%s", out)
+		// title is not a URI attribute, so its "a" IS mapped.
+		require.Contains(t, out, `title="Z"`, "output:\n%s", out)
+	})
+
+	t.Run("URI attr IS char-mapped when escape-uri-attributes=no", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","include-content-type":false(),"escape-uri-attributes":false(),"use-character-maps":map{"a":"Z"}})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		// URI escaping disabled, so the character map applies to href too.
+		require.Contains(t, out, `href="Zb"`, "output:\n%s", out)
+		require.Contains(t, out, `title="Z"`, "output:\n%s", out)
+	})
+}

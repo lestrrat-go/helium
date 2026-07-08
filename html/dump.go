@@ -740,13 +740,23 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 		val := attr.Value()
 		elemName := strings.ToLower(e.LocalName())
 		isURI := htmlURIAttrs[attrNameLower] || (attrNameLower == "name" && elemName == "a")
-		if isURI && !d.noEscapeURIAttributes {
+		uriEscaped := isURI && !d.noEscapeURIAttributes
+		if uriEscaped {
 			val = uriEscapeStr(val)
 		}
 
 		d.writeString(out, "=\"")
 		if d.err == nil {
-			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, d.charMap))
+			// Serialization 3.1 §7 (character-expansion phase): when URI escaping
+			// is applied to a URI attribute value (escape-uri-attributes=yes), the
+			// serializer skips character mapping for that value. Character maps
+			// apply to non-URI attributes, and to URI attributes only when URI
+			// escaping is disabled (escape-uri-attributes=no).
+			attrCharMap := d.charMap
+			if uriEscaped {
+				attrCharMap = nil
+			}
+			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, attrCharMap))
 		}
 		d.writeString(out, "\"")
 	}

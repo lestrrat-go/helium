@@ -1411,9 +1411,15 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// Character maps (use-character-maps) are NOT applicable to the json
-		// output method (Serialization 3.1 §9.1.11), so opts.charMap is
-		// intentionally not consulted here — only JSON string escaping applies.
+		// Character maps and Unicode normalization are BOTH inapplicable to the
+		// json output method, per the verbatim Serialization 3.1 text:
+		//   §9.1.11: "The use-character-maps serialization parameter is not
+		//            applicable to the JSON output method."
+		//   §9.1.9:  "The normalization-form serialization parameter is not
+		//            applicable to the JSON output method."
+		// So opts.charMap is intentionally not consulted here (only JSON string
+		// escaping applies), and applySerializeNormalization skips the json method
+		// via methodAppliesNormalization.
 		return `"` + encodeJSONStringForSerialization(s, opts.encoding) + `"`, nil
 	}
 }

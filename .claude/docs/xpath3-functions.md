@@ -228,7 +228,14 @@ Content-Type meta uses the `media-type` param (default `text/html`) and
 computed one as the head's first child, so no stale declaration survives. The
 doctype/meta work on a copy of the document (never mutating the input), then
 serialize via the `helium/html` writer. Character maps ARE applied on the html
-path (text + attribute content) via the `helium/html` `Writer.CharacterMap` knob.
+path (text + attribute content) via the `helium/html` `Writer.CharacterMap` knob;
+per Serialization 3.1 §7 (character-expansion phase) a URI attribute value that is
+URI-escaped (`escape-uri-attributes=yes`, the default) SKIPS character mapping, so
+character maps apply to non-URI attributes normally and to URI attributes only
+when escaping is disabled. The `helium` XML writer's XHTML serialization path
+(`writer_xhtml.go`) likewise applies `Writer.CharacterMap` to XHTML attribute
+values (including the synthesized id-from-name / xml:lang attributes); it performs
+no URI percent-encoding, so the §7 URI exclusion is not reachable there.
 The `xml` method emits `doctype-public`/`doctype-system` ONLY when
 `doctype-system` is present — per Serialization 3.1 §5.1 `doctype-public` MUST be
 ignored unless `doctype-system` is also specified (`serializeNodeItem` injects an
