@@ -206,3 +206,95 @@ func TestJSONToXML_DeepNestingBounded(t *testing.T) {
 	require.True(t, errors.Is(err, xpath3.ErrRecursionLimit),
 		"expected ErrRecursionLimit, got %v", err)
 }
+
+// Every fn:json-to-xml result element is in the xpath-functions namespace
+// (F&O 3.1 §17.6.1), and the declaration is present on every element so that a
+// descendant selected by an XPath step still serializes with its xmlns
+// declaration (QT3 json-to-xml-011/013/014).
+func TestJSONToXML_Namespace(t *testing.T) {
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+
+	r, err := evaluate(t.Context(), nil, `namespace-uri(json-to-xml('["x"]')/*)`)
+	require.NoError(t, err)
+	require.Equal(t, fnNS, r.StringValue(), "root element must be in the fn namespace")
+
+	// A descendant string selected on its own must serialize with the xmlns
+	// declaration it inherits, not lose it.
+	r, err = evaluate(t.Context(), nil,
+		`serialize(json-to-xml('["data"]')//*:string, map{'omit-xml-declaration':true()})`)
+	require.NoError(t, err)
+	require.Contains(t, r.StringValue(), `xmlns="`+fnNS+`"`,
+		"extracted descendant must carry the fn namespace declaration")
+	require.Equal(t, fnNS, mustNSURI(t, `namespace-uri(json-to-xml('{"k":"v"}')//*:string)`),
+		"descendant string must be in the fn namespace")
+}
+
+func mustNSURI(t *testing.T, expr string) string {
+	t.Helper()
+	r, err := evaluate(t.Context(), nil, expr)
+	require.NoError(t, err, expr)
+	return r.StringValue()
+}
+
+// fn:json-to-xml preserves duplicate JSON object keys by default: the default
+// value of the duplicates option is "retain" (F&O 3.1 §17.6.1: "if validate is
+// true then reject, otherwise retain"), unlike fn:parse-json whose default is
+// use-first (QT3 json-to-xml-018).
+func TestJSONToXML_DuplicateKeysRetainedByDefault(t *testing.T) {
+	r, err := evaluate(t.Context(), nil,
+		`count(json-to-xml('{"a":3, "b":4, "a":5}')//*:number)`)
+	require.NoError(t, err)
+	require.Equal(t, "3", r.StringValue(), "all three entries, including the duplicate key, must be retained")
+
+	r, err = evaluate(t.Context(), nil,
+		`string-join(json-to-xml('{"a":3, "b":4, "a":5}')//*:number/@key, ",")`)
+	require.NoError(t, err)
+	require.Equal(t, "a,b,a", r.StringValue(), "duplicate key must appear twice in document order")
+}
+
+// The escaped / escaped-key attributes are emitted ONLY under escape=true() and
+// ONLY when the string value / key attribute actually contains a backslash escape
+// (F&O 3.1 §17.6.1). A value or key without a backslash carries no such
+// attribute (QT3 fo-test-fn-json-to-xml-004 / json-to-xml-021 / -024).
+func TestJSONToXML_EscapedAttributesConditional(t *testing.T) {
+	// escape=true(): value "x" decodes to a lone backslash (\), so escaped="true";
+	// value "y" is "%", no backslash, so no escaped attribute.
+	cases := []struct {
+		desc string
+		expr string
+		want string
+	}{
+		{
+			"value with backslash gets escaped=true",
+			`json-to-xml('{"x":"\\", "y":"%"}', map{'escape':true()})//*:string[@key='x']/@escaped`,
+			wantTrue,
+		},
+		{
+			"value without backslash gets no escaped attribute",
+			`string(json-to-xml('{"x":"\\", "y":"%"}', map{'escape':true()})//*:string[@key='y']/@escaped)`,
+			"",
+		},
+		{
+			"key with backslash gets escaped-key=true",
+			`json-to-xml('{"a\\":3}', map{'escape':true()})//*:number/@escaped-key`,
+			wantTrue,
+		},
+		{
+			"key without backslash gets no escaped-key attribute",
+			`string(json-to-xml('{"a":3}', map{'escape':true()})//*:number/@escaped-key)`,
+			"",
+		},
+		{
+			"escape=false() never emits escaped even when the key contains a backslash",
+			`string(json-to-xml('{"a\\":3}', map{'escape':false()})//*:number/@escaped-key)`,
+			"",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			r, err := evaluate(t.Context(), nil, tc.expr)
+			require.NoError(t, err, tc.expr)
+			require.Equal(t, tc.want, r.StringValue(), tc.expr)
+		})
+	}
+}

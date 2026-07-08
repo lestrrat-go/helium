@@ -160,6 +160,21 @@ JSON numbers differently, gated by `jsonOptions.retainNumberLexical`:
 ### `functions_json_xml.go`
 `json-to-xml`, `xml-to-json`
 
+`json-to-xml` builds every result element (`map`/`array`/`string`/`number`/
+`boolean`/`null`) in the fn namespace (`http://www.w3.org/2005/xpath-functions`)
+and DECLARES that default namespace on EVERY element (not only the root), so a
+descendant selected by an XPath step (e.g. `json-to-xml(...)//j:string`) still
+carries its `xmlns` declaration when `fn:serialize` renders it in isolation
+(`buildJSONToXMLTree`). The `duplicates` option defaults to `retain` (F&O 3.1
+§17.6.1: reject if `validate` is true, else retain) — unlike `fn:parse-json`,
+whose default is `use-first` — so duplicate JSON object keys are preserved as
+repeated entries (`MapItem.entries` keeps duplicates; `forEach0` emits all).
+The `escaped` / `escaped-key` attributes are emitted ONLY under `escape=true()`
+AND ONLY when the string value / key attribute actually contains a backslash
+(F&O 3.1 §17.6.1: "Any string element whose string value contains a backslash
+character must have the attribute value escaped='true'"); a value/key with no
+backslash carries no such attribute, and `escape=false()` never emits either.
+
 `json-to-xml` with the `validate:true()` option type-annotates the result tree:
 each result element records the type defined by the json-to-xml result schema
 (`schema-for-json.xsd`, target namespace = fn namespace) keyed by node into

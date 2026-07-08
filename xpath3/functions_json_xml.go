@@ -76,7 +76,7 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		annotations = make(map[helium.Node]string)
 	}
 
-	root, err := buildJSONToXMLTree(doc, item, opts, true, annotations)
+	root, err := buildJSONToXMLTree(doc, item, opts, annotations)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func jsonToXMLTypeAnnotation(name string) string {
 	}
 }
 
-func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root bool, annotations map[helium.Node]string) (*helium.Element, error) {
+func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annotations map[helium.Node]string) (*helium.Element, error) {
 	name := jsonKindNull
 	switch v := item.(type) {
 	case MapItem:
@@ -155,10 +155,13 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 			annotations[elem] = ann
 		}
 	}
-	if root {
-		if err := elem.DeclareNamespace("", NSFn); err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
-		}
+	// Declare the fn namespace on every element (not just the root) so that a
+	// descendant element extracted by an XPath step (e.g. json-to-xml(...)//j:string)
+	// still carries the xmlns="http://www.w3.org/2005/xpath-functions" declaration
+	// when serialized in isolation. Redundant declarations on descendants are
+	// namespace-equivalent to the root-only form.
+	if err := elem.DeclareNamespace("", NSFn); err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 	if err := elem.SetActiveNamespace("", NSFn); err != nil {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
@@ -176,13 +179,17 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		}
 	case MapItem:
 		if err := v.forEach0(func(key AtomicValue, value Sequence) error {
-			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(value), opts, false, annotations)
+			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(value), opts, annotations)
 			if err != nil {
 				return err
 			}
 			keyText := key.StringVal()
 			_ = child.SetLiteralAttribute("key", keyText)
-			if opts.escape {
+			// escaped-key is emitted only under escape=true AND only when the key
+			// actually contains a backslash escape (F&O 3.1 §17.6.1): "Any element
+			// that contains a key attribute whose string value contains a backslash
+			// character must have the attribute escaped-key='true'."
+			if opts.escape && strings.Contains(keyText, "\\") {
 				_ = child.SetLiteralAttribute("escaped-key", lexicon.ValueTrue)
 			}
 			if err := elem.AddChild(child); err != nil {
@@ -194,7 +201,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		}
 	case ArrayItem:
 		for _, member := range v.members0() {
-			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(member), opts, false, annotations)
+			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(member), opts, annotations)
 			if err != nil {
 				return nil, err
 			}
@@ -205,7 +212,12 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
-			if opts.escape {
+			// escaped is emitted only under escape=true AND only when the string
+			// value actually contains a backslash escape (F&O 3.1 §17.6.1): "Any
+			// string element whose string value contains a backslash character must
+			// have the attribute value escaped='true'." When escape is false the
+			// attribute is never present.
+			if opts.escape && strings.Contains(v.StringVal(), "\\") {
 				_ = elem.SetLiteralAttribute("escaped", lexicon.ValueTrue)
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
@@ -244,7 +256,11 @@ func jsonSequenceToItem(seq Sequence) Item {
 
 func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
-		duplicates:          duplicatesUseFirst,
+		// F&O 3.1 §17.6.1: the default for the duplicates option is "if validate is
+		// true then reject, otherwise retain". The validate=true adjustment to
+		// reject is applied below; retain is the standalone default (unlike
+		// fn:parse-json, whose default is use-first).
+		duplicates:          "retain",
 		retainNumberLexical: true,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
