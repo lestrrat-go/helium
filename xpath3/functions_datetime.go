@@ -250,8 +250,7 @@ func fnSecondsFromDateTime(_ context.Context, args []Sequence) (Sequence, error)
 	if !ok {
 		return validNilSequence, nil
 	}
-	sec := float64(t.Second()) + float64(t.Nanosecond())/1e9
-	return SingleDouble(sec), nil
+	return SingleDecimal(secondsToRat(t)), nil
 }
 
 func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
@@ -367,8 +366,18 @@ func fnSecondsFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	sec := float64(t.Second()) + float64(t.Nanosecond())/1e9
-	return SingleDouble(sec), nil
+	return SingleDecimal(secondsToRat(t)), nil
+}
+
+// secondsToRat returns the seconds component (0..59) plus the fractional
+// nanoseconds of t as an exact rational, for the xs:decimal-typed
+// fn:seconds-from-dateTime / fn:seconds-from-time results (F&O 3.1 §9.5.10/§9.5.14).
+func secondsToRat(t time.Time) *big.Rat {
+	r := new(big.Rat).SetInt64(int64(t.Second()))
+	if ns := t.Nanosecond(); ns != 0 {
+		r.Add(r, new(big.Rat).SetFrac(big.NewInt(int64(ns)), big.NewInt(1_000_000_000)))
+	}
+	return r
 }
 
 func fnTimezoneFromTime(_ context.Context, args []Sequence) (Sequence, error) {

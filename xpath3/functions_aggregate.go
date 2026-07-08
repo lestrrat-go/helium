@@ -404,15 +404,19 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		return SingleAtomic(a), nil
 	}
 	var family string
-	var best AtomicValue
+	var best AtomicValue     // promoted value, used for comparison
+	var bestOrig AtomicValue // original selected item, used to derive the result type
 	widest := TypeInteger
 	first := true
 	hasNaN := false
+	// F&O 3.1 §14.4.7/§14.4.8: xs:anyURI values are converted to xs:string only
+	// when the sequence also contains a value that is (a subtype of) xs:string.
+	sawNonURIString := false
 	var err error
-	for _, a := range atoms {
-		a, err = promoteForAggregate(a)
-		if err != nil {
-			return nil, err
+	for _, orig := range atoms {
+		a, aerr := promoteForAggregate(orig)
+		if aerr != nil {
+			return nil, aerr
 		}
 		newFamily := aggregateTypeFamily(a)
 		if newFamily == "" || newFamily == "duration" {
@@ -429,6 +433,9 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 				Message: fmt.Sprintf("incompatible types in %s: %s and %s", fnName, family, newFamily),
 			}
 		}
+		if family == lexicon.TypeString && isStringDerived(a.TypeName) {
+			sawNonURIString = true
+		}
 		if family == familyNumeric && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
 			widest = a.TypeName
 		}
@@ -438,6 +445,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		}
 		if first {
 			best = a
+			bestOrig = orig
 			first = false
 			continue
 		}
@@ -457,6 +465,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		}
 		if cmp {
 			best = a
+			bestOrig = orig
 		}
 	}
 	if hasNaN {
@@ -467,9 +476,25 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		return SingleAtomic(AtomicValue{TypeName: nanType, Value: NewDouble(math.NaN())}), nil
 	}
 	if family == familyNumeric {
-		best = promoteResult(best, widest)
+		// When every value is an xs:integer subtype (widest stays xs:integer),
+		// F&O 3.1 retains the type of the selected item rather than collapsing to
+		// xs:integer; otherwise apply numeric type promotion to the widest type.
+		if widest == TypeInteger {
+			return SingleAtomic(bestOrig), nil
+		}
+		return SingleAtomic(promoteResult(best, widest)), nil
 	}
-	return SingleAtomic(best), nil
+	// Only the SELECTED item is converted, and only xs:anyURI: when the returned
+	// item is xs:anyURI and a plain (non-anyURI) string value is also present, the
+	// anyURI must be promoted to xs:string, so the result is xs:string (qt3
+	// fn-min-16/fn-max-16). A selected STRING SUBTYPE is never converted — it is
+	// returned unchanged even when an xs:anyURI is present in the sequence (qt3
+	// fn-min-18/fn-max-18, "Strings are not converted"), because that item needs no
+	// promotion. All-anyURI (no plain string) also retains anyURI (fn-min-17/17).
+	if family == lexicon.TypeString && sawNonURIString && bestOrig.TypeName == TypeAnyURI {
+		return SingleAtomic(AtomicValue{TypeName: TypeString, Value: best.StringVal()}), nil
+	}
+	return SingleAtomic(bestOrig), nil
 }
 
 func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
