@@ -43,4 +43,10 @@ testdata/saxon/source/
 !THIRD_PARTY_NOTICES.md
 !AGENTS.md
 !CLAUDE.md
+
+# Local dev-time scratch (not committed)
 .review-gauntlet/
+.worktrees/
+.tmp/
+.cache/
+.envrc
