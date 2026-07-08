@@ -1572,13 +1572,17 @@ func TestSerialize_FunctionItemSENR0001(t *testing.T) {
 	}
 }
 
-// TestSerialize_MapArraySENR0001 verifies that a map or array input is a
-// serialization error [err:SENR0001] under every markup output method
-// (xml/xhtml/html/text and the unspecified default): maps and arrays ARE function
-// items in XDM, so sequence normalization (Serialization 3.1 §2) rejects them.
-// The json output method legitimately serializes maps/arrays, and the adaptive
-// method serializes them its own way — both must keep working.
-func TestSerialize_MapArraySENR0001(t *testing.T) {
+// TestSerialize_MapSENR0001AndArrayFlattening verifies sequence normalization
+// (Serialization 3.1 §2) for maps and arrays under the markup output methods
+// (xml/xhtml/html/text and the unspecified default). A MAP is a function item, so
+// it is a serialization error [err:SENR0001]; an ARRAY is NOT — it is flattened
+// (recursively) into its members, which serialize as if supplied directly. The
+// json output method serializes maps/arrays natively, and the adaptive method
+// serializes them its own way — both must keep working (no flattening, no
+// SENR0001).
+func TestSerialize_MapSENR0001AndArrayFlattening(t *testing.T) {
+	markupMethods := []string{"xml", "xhtml", "html", "text"}
+
 	requireSENR0001 := func(t *testing.T, expr string) {
 		t.Helper()
 		doc := mustParseXML(t, `<root>text</root>`)
@@ -1588,45 +1592,62 @@ func TestSerialize_MapArraySENR0001(t *testing.T) {
 		require.ErrorAs(t, err, &xerr)
 		require.Equal(t, "SENR0001", xerr.Code)
 	}
-
-	for _, input := range []struct{ name, expr string }{
-		{"map", `map{"a":1}`},
-		{"array", `[1]`},
-	} {
-		for _, method := range []string{"xml", "xhtml", "html", "text"} {
-			t.Run(input.name+" method="+method, func(t *testing.T) {
-				requireSENR0001(t, `serialize(`+input.expr+`, map{"method":"`+method+`"})`)
-			})
-		}
-		t.Run(input.name+" default method", func(t *testing.T) {
-			requireSENR0001(t, `serialize(`+input.expr+`)`)
-		})
+	requireEquals := func(t *testing.T, expr, want string) {
+		t.Helper()
+		doc := mustParseXML(t, `<r><a/><b/></r>`)
+		res, err := evaluate(t.Context(), doc, expr)
+		require.NoError(t, err)
+		require.Equal(t, want, res.StringValue())
 	}
 
-	// json and adaptive must still serialize maps and arrays (NOT SENR0001).
-	t.Run("json still serializes a map", func(t *testing.T) {
-		doc := mustParseXML(t, `<root/>`)
-		res, err := evaluate(t.Context(), doc, `serialize(map{"a":1}, map{"method":"json"})`)
-		require.NoError(t, err)
-		require.Equal(t, `{"a":1}`, res.StringValue())
+	// A map is still SENR0001 under every markup method + the unspecified default.
+	for _, method := range markupMethods {
+		t.Run("map method="+method+" is SENR0001", func(t *testing.T) {
+			requireSENR0001(t, `serialize(map{"a":1}, map{"method":"`+method+`"})`)
+		})
+	}
+	t.Run("map default method is SENR0001", func(t *testing.T) {
+		requireSENR0001(t, `serialize(map{"a":1})`)
 	})
-	t.Run("json still serializes an array", func(t *testing.T) {
-		doc := mustParseXML(t, `<root/>`)
-		res, err := evaluate(t.Context(), doc, `serialize([1,2], map{"method":"json"})`)
-		require.NoError(t, err)
-		require.Equal(t, `[1,2]`, res.StringValue())
+
+	// An array is flattened into its members (NOT SENR0001) under every markup
+	// method + the unspecified default. Atomic members serialize space-separated.
+	for _, method := range markupMethods {
+		t.Run("array of atomics method="+method+" flattens", func(t *testing.T) {
+			requireEquals(t, `serialize([1,2,3], map{"method":"`+method+`"})`, "1 2 3")
+		})
+	}
+	t.Run("array of atomics default method flattens", func(t *testing.T) {
+		requireEquals(t, `serialize([1,2,3])`, "1 2 3")
 	})
-	t.Run("adaptive still serializes a map", func(t *testing.T) {
-		doc := mustParseXML(t, `<root/>`)
-		res, err := evaluate(t.Context(), doc, `serialize(map{"a":1}, map{"method":"adaptive"})`)
-		require.NoError(t, err)
-		require.Equal(t, `map{"a":1}`, res.StringValue())
+	t.Run("nested array flattens recursively", func(t *testing.T) {
+		requireEquals(t, `serialize([1,[2,3],4], map{"method":"xml"})`, "1 2 3 4")
 	})
-	t.Run("adaptive still serializes an array", func(t *testing.T) {
-		doc := mustParseXML(t, `<root/>`)
-		res, err := evaluate(t.Context(), doc, `serialize([1], map{"method":"adaptive"})`)
+	t.Run("array of element nodes serializes the elements", func(t *testing.T) {
+		doc := mustParseXML(t, `<r><a/><b/></r>`)
+		res, err := evaluate(t.Context(), doc, `serialize([/r/a, /r/b], map{"method":"xml"})`)
 		require.NoError(t, err)
-		require.Equal(t, `[1]`, res.StringValue())
+		out := res.StringValue()
+		require.Contains(t, out, "<a/>", "output:\n%s", out)
+		require.Contains(t, out, "<b/>", "output:\n%s", out)
+	})
+	// A map member inside an array is still SENR0001 after the array is flattened.
+	t.Run("array containing a map member is SENR0001", func(t *testing.T) {
+		requireSENR0001(t, `serialize([1, map{"a":1}], map{"method":"xml"})`)
+	})
+
+	// json and adaptive keep native map/array handling (no flattening, no SENR0001).
+	t.Run("json serializes a map", func(t *testing.T) {
+		requireEquals(t, `serialize(map{"a":1}, map{"method":"json"})`, `{"a":1}`)
+	})
+	t.Run("json serializes an array", func(t *testing.T) {
+		requireEquals(t, `serialize([1,2], map{"method":"json"})`, `[1,2]`)
+	})
+	t.Run("adaptive serializes a map", func(t *testing.T) {
+		requireEquals(t, `serialize(map{"a":1}, map{"method":"adaptive"})`, `map{"a":1}`)
+	})
+	t.Run("adaptive serializes an array", func(t *testing.T) {
+		requireEquals(t, `serialize([1], map{"method":"adaptive"})`, `[1]`)
 	})
 }
 

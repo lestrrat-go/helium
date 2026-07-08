@@ -159,7 +159,14 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	var result string
 	switch dispatchOpts.method {
-	case "", serializeMethodAdaptive:
+	case "":
+		// The unspecified default is the xml family: sequence normalization
+		// (Serialization 3.1 §2) flattens array inputs into their members. It
+		// otherwise reuses the adaptive machinery, whose node-kind guard treats the
+		// default method as a markup method (SENR0001 for attribute/namespace/map/
+		// function items).
+		result, err = serializeAdaptiveSequence(flattenSerializeArrays(args[0]), dispatchOpts)
+	case serializeMethodAdaptive:
 		result, err = serializeAdaptiveSequence(args[0], dispatchOpts)
 	case serializeMethodJSON:
 		result, err = serializeJSONSequence(args[0], dispatchOpts)
@@ -1294,23 +1301,52 @@ func serializeNodeKindError(item NodeItem) error {
 // serializeItemKindError reports err:SENR0001 for every item kind that sequence
 // normalization (Serialization 3.1 §2) rejects under the markup output methods
 // (xml/xhtml/html/text and the unspecified default): a bare attribute node, a
-// namespace node, OR a function item. Maps and arrays ARE function items in XDM,
-// so they are rejected too. It returns nil for any other item. The adaptive and
-// json methods serialize these kinds specially (json serializes maps/arrays; both
-// handle function items their own way), so callers must not apply this guard for
-// those methods.
+// namespace node, OR a function item — INCLUDING a map (a map is a function item),
+// but NOT an array. Arrays are flattened into their members by
+// flattenSerializeArrays before this guard runs, so an array is never a rejected
+// kind. It returns nil for any other item. The adaptive and json methods serialize
+// these kinds specially (json serializes maps/arrays; both handle function items
+// their own way), so callers must not apply this guard for those methods.
 func serializeItemKindError(item Item) error {
 	switch v := item.(type) {
 	case NodeItem:
 		return serializeNodeKindError(v)
 	case MapItem:
 		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a map under this output method"}
-	case ArrayItem:
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize an array under this output method"}
 	case FunctionItem:
 		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
 	}
 	return nil
+}
+
+// flattenSerializeArrays implements the array-flattening step of sequence
+// normalization (Serialization 3.1 §2): an array supplied to a markup output
+// method (xml/xhtml/html/text and the unspecified default) is replaced by its
+// member items, RECURSIVELY (nested arrays flatten too), and those members are
+// serialized as if they had been supplied directly. A map is NOT flattened (it is
+// a function item, rejected by serializeItemKindError). The json and adaptive
+// methods keep their native array handling and must NOT call this. When the
+// sequence contains no array the input is returned unchanged.
+func flattenSerializeArrays(seq Sequence) Sequence {
+	hasArray := false
+	for item := range seqItems(seq) {
+		if _, ok := item.(ArrayItem); ok {
+			hasArray = true
+			break
+		}
+	}
+	if !hasArray {
+		return seq
+	}
+	out := make(ItemSlice, 0, seqLen(seq))
+	for item := range seqItems(seq) {
+		if arr, ok := item.(ArrayItem); ok {
+			out = append(out, arr.Flatten().Materialize()...)
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // resolveSerializeCharacterMapsElement validates the element form of
@@ -1650,6 +1686,9 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 // or a function item is a serialization error [err:SENR0001]. Character maps apply
 // to the resulting text.
 func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
+	// their members before serialization.
+	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
 	for item := range seqItems(seq) {
 		s, err := serializeTextItem(item)
@@ -1698,6 +1737,9 @@ func applyCharMapToString(s string, charMap map[rune]string) string {
 }
 
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
+	// their members before serialization.
+	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
 	for item := range seqItems(seq) {
 		// Sequence normalization (Serialization 3.1 §2) rejects a bare attribute
@@ -1796,6 +1838,9 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 // that "at most once" rule across the item loop. Character maps (use-character-
 // maps) are applied to text and attribute content.
 func serializeHTMLSequence(seq Sequence, opts serializeOptions) (string, error) {
+	// Sequence normalization (Serialization 3.1 §2) flattens array inputs into
+	// their members before serialization.
+	seq = flattenSerializeArrays(seq)
 	parts := make([]string, 0, seqLen(seq))
 	doctypeEmitted := false
 	for item := range seqItems(seq) {
