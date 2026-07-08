@@ -36,6 +36,12 @@ jobs:
       # HELIUM_SLOW_TESTS is treated as "enabled" whenever it is non-empty, so
       # it must be left EMPTY (never "0") when slow tests are off.
       HELIUM_SLOW_TESTS: ${{ inputs.slow && '1' || '' }}
+      # This suite runs helium-w3c-tests against the PR's helium via its
+      # `replace => ../helium`. When a helium PR bumps a shared dependency,
+      # helium-w3c-tests@main's go.mod/go.sum lag and the readonly module graph
+      # is inconsistent ("updates to go.mod needed"). -mod=mod reconciles it in
+      # the ephemeral checkout.
+      GOFLAGS: -mod=mod
     steps:
       # Check out this helium repo at the triggering ref (the code under test).
       # No repository:/ref: so it uses the ref the calling workflow ran against.
