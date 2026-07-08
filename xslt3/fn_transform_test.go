@@ -230,6 +230,65 @@ func TestFnTransformInitialFunction(t *testing.T) {
 
 // TestFnTransformBaseOutputURI verifies that base-output-uri passed through
 // fn:transform() is visible via current-output-uri() in the inner stylesheet.
+// TestFnTransformInStylesheetBaseOutputURIUsesCallSiteBase verifies that the
+// in-stylesheet fn:transform resolves a relative base-output-uri against the
+// CALL SITE's effective static base URI (honoring an xml:base on the calling
+// template element), not the bare module URI. The module base here is empty, so
+// only the call-site xml:base can produce the expected absolute key.
+func TestFnTransformInStylesheetBaseOutputURIUsesCallSiteBase(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner"/>
+  <xsl:template match="/" xml:base="http://example.com/callsite/">
+    <xsl:variable name="r" select="transform(map{
+      'stylesheet-text': $inner,
+      'source-node': .,
+      'base-output-uri': 'out.xml'
+    })"/>
+    <result><xsl:value-of select="map:contains($r, 'http://example.com/callsite/out.xml')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inner := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"><p>hi</p></xsl:template></xsl:stylesheet>`
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner", xpath3.SingleString(inner)).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, ">true</result>")
+}
+
+// TestFnTransformInStylesheetSecondaryKeyAbsoluteWithoutBaseOutputURI verifies
+// that, with base-output-uri OMITTED, an in-stylesheet fn:transform still keys
+// secondary result documents by absolute URIs resolved against the call-site
+// effective static base URI (honoring xml:base). The module base is empty, so
+// only the call-site xml:base yields the expected absolute secondary key.
+func TestFnTransformInStylesheetSecondaryKeyAbsoluteWithoutBaseOutputURI(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner"/>
+  <xsl:template match="/" xml:base="http://example.com/callsite/">
+    <xsl:variable name="r" select="transform(map{
+      'stylesheet-text': $inner,
+      'source-node': .
+    })"/>
+    <result><xsl:value-of select="map:contains($r, 'http://example.com/callsite/s.xml')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inner := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"><xsl:result-document href="s.xml"><s/></xsl:result-document></xsl:template></xsl:stylesheet>`
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner", xpath3.SingleString(inner)).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, ">true</result>")
+}
+
 func TestFnTransformBaseOutputURI(t *testing.T) {
 	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
@@ -242,7 +301,7 @@ func TestFnTransformBaseOutputURI(t *testing.T) {
       'base-output-uri': 'http://example.com/output.xml',
       'delivery-format': 'serialized'
     })"/>
-    <result><xsl:value-of select="$result('output')"/></result>
+    <result><xsl:value-of select="$result('http://example.com/output.xml')"/></result>
   </xsl:template>
 </xsl:stylesheet>`)
 
@@ -255,6 +314,8 @@ func TestFnTransformBaseOutputURI(t *testing.T) {
 	if idx := strings.Index(cleaned, "?>"); idx >= 0 {
 		cleaned = cleaned[idx+2:]
 	}
+	// The principal result is keyed by the base output URI (not "output") when
+	// base-output-uri is supplied (F&O 3.1 §14.8.3).
 	require.Contains(t, cleaned, "http://example.com/output.xml")
 }
 
@@ -491,10 +552,13 @@ func TestFnTransformInitialMatchSelectionResultDocument(t *testing.T) {
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-resultdoc.xsl"))).
 		Serialize(t.Context())
 	require.NoError(t, err)
-	// Principal output is present (XML-escaped inside the <entry> wrapper).
+	// Principal output is present (XML-escaped inside the <entry> wrapper),
+	// keyed by the base output URI.
+	require.Contains(t, out, `key="http://example.com/output.xml"`)
 	require.Contains(t, out, "&lt;principal&gt;alpha&lt;/principal&gt;")
-	// The secondary xsl:result-document appears in the result map keyed by href.
-	require.Contains(t, out, `key="secondary.xml"`)
+	// The secondary xsl:result-document appears in the result map keyed by its
+	// href resolved against the base output URI (an absolute URI).
+	require.Contains(t, out, `key="http://example.com/secondary.xml"`)
 	require.Contains(t, out, "&lt;secondary&gt;alpha&lt;/secondary&gt;")
 }
 

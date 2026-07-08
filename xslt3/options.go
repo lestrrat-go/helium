@@ -71,7 +71,8 @@ type transformConfig struct {
 	httpClient            *http.Client       // explicit HTTP client for fn:doc/fn:unparsed-text — opt-in network
 	onMultipleMatch       string             // "use-last" or "fail" — overrides default mode's on-multiple-match
 	rawResultHandler      RawResultHandler
-	baseOutputURI         string // base output URI for current-output-uri()
+	baseOutputURI         string // resolved base-output-uri; drives the PRINCIPAL result-map key and current-output-uri() (empty when the option is absent)
+	outputBaseURI         string // base for RESOLVING secondary result-document output URIs: the resolved base-output-uri when present, else the call's effective static base URI (so secondary keys stay absolute even when base-output-uri is omitted)
 	annotationHandler     AnnotationHandler
 	initialMatchSelection xpath3.Sequence // initial match selection for apply-templates entry
 	rawCapture            bool            // enable captureItems on output frame for raw delivery
@@ -82,6 +83,8 @@ type transformConfig struct {
 	traceWriter           io.Writer     // destination for fn:trace output (nil = os.Stderr)
 	resolvedOutputDef     *OutputDef    // resolved primary output def (set by executeTransform)
 	globalContextSelect   string        // XPath for global context item (evaluated after strip-space)
+	globalContextItem     xpath3.Item   // explicit global context item (fn:transform global-context-item option)
+	globalContextAbsent   bool          // fn:transform supplied no source-node and no global-context-item → the global context item is absent
 	maxResourceBytes      int64         // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
 	// allowExternalEntities opts into the legacy permissive parse of runtime
 	// documents loaded via fn:doc/document()/xsl:source-document/xsl:merge

@@ -214,10 +214,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		return nil, errNilStylesheet
 	}
 	resultDoc := helium.NewDefaultDocument()
+	// The global context item and the initial match selection are SEPARATE
+	// (XSLT 3.0 §5.4): xsl:global-context-item use="absent" makes only the GLOBAL
+	// CONTEXT ITEM absent — a global "." reference raises XPDY0002, handled via
+	// ec.globalContextAbsent below. It must NOT discard the source tree, which is
+	// still the initial match selection for apply-templates (otherwise a transform
+	// with a source-node and no initial-template would wrongly raise XTDE0040).
 	effectiveSource := source
-	if ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent {
-		effectiveSource = nil
-	}
 
 	// The caller's source document is owned by the caller and must never be
 	// mutated in place: doing so destroys node identity, corrupts a tree the
@@ -260,6 +263,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		resultDocuments:     make(map[string]*helium.Document),
 		resultDocItems:      make(map[string]xpath3.Sequence),
 		resultDocOutputDefs: make(map[string]*OutputDef),
+		resultDocHrefs:      make(map[string]string),
 		usedResultURIs:      make(map[string]struct{}),
 		defaultValidation:   ss.defaultValidation,
 		defaultCollation:    ss.defaultCollation,
@@ -306,6 +310,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// canonical key never makes the primary collide with itself.
 		ec.canonicalPrimaryURI = canonicalResultURIKey(cfg.baseOutputURI, "")
 		ec.usedResultURIs[ec.canonicalPrimaryURI] = struct{}{}
+	} else if cfg != nil && cfg.outputBaseURI != "" {
+		// No base-output-uri was supplied, so the principal output has no declared
+		// URI (no canonicalPrimaryURI reservation; the principal result-map key
+		// stays "output"). Secondary xsl:result-document output URIs still resolve
+		// against the best available base — the call's effective static base URI —
+		// so their result-map keys are absolute whenever any base exists.
+		ec.currentOutputURI = cfg.outputBaseURI
 	}
 	// Make the transform config (and thus its URIResolver) available before
 	// any runtime resource loading. initGlobalVars also assigns this; setting
@@ -494,6 +505,34 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
+	// Establish the global context item used when evaluating global
+	// variables/parameters, per F&O 3.1 §14.8 (the global-context-item option is
+	// an item()) and XSLT 3.0 §5.4.3.1 (xsl:global-context-item).
+	//   - use="absent": the global context item is absent regardless of any
+	//     supplied option, so a supplied global-context-item is NOT installed and
+	//     a global "." reference raises XPDY0002.
+	//   - an explicit global-context-item overrides the default (the source
+	//     document node). When it is a node, global initialisers see it as "."
+	//     (globalSourceNode) while the initial match selection still drives
+	//     template matching independently; a non-node item (atomic/map/array/
+	//     function) has no context node, so it is exposed through ec.contextItem
+	//     for the duration of global evaluation only.
+	//   - no source-node and no explicit item (cfg.globalContextAbsent): the
+	//     global context item is absent (XPDY0002 on "."; XTDE3086 if required).
+	restoreGlobalContextItem := false
+	switch {
+	case ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent:
+		ec.globalContextAbsent = true
+	case cfg != nil && cfg.globalContextItem != nil:
+		ec.globalContextItem = cfg.globalContextItem
+		if _, isNode := cfg.globalContextItem.(xpath3.NodeItem); !isNode {
+			ec.contextItem = cfg.globalContextItem
+			restoreGlobalContextItem = true
+		}
+	case cfg != nil && cfg.globalContextAbsent:
+		ec.globalContextAbsent = true
+	}
+
 	// Store exec context in Go context for avt evaluation
 	ctx = withExecContext(ctx, ec)
 
@@ -525,6 +564,11 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// are non-recoverable and cannot be caught by xsl:try/xsl:catch.
 	if err := ec.evaluateAllGlobals(ctx); err != nil {
 		return nil, err
+	}
+	// The non-node global-context-item was exposed as ec.contextItem only for
+	// global evaluation; clear it so it does not leak into template execution.
+	if restoreGlobalContextItem {
+		ec.contextItem = nil
 	}
 
 	// Pre-compute accumulator states for the main source document so that
@@ -724,18 +768,21 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// For secondary result documents with json/adaptive method, serialize
 	// captured items into the document so the handler receives the complete output.
-	for href, items := range ec.resultDocItems {
+	// Keys here are the RESOLVED absolute output URI (the same key used across
+	// resultDocItems/resultDocuments/resultDocOutputDefs).
+	for uri, items := range ec.resultDocItems {
 		if items == nil || sequence.Len(items) == 0 {
 			continue
 		}
-		doc := ec.resultDocuments[href]
+		doc := ec.resultDocuments[uri]
 		if doc == nil {
 			doc = helium.NewDefaultDocument()
-			ec.resultDocuments[href] = doc
+			doc.SetURL(uri)
+			ec.resultDocuments[uri] = doc
 		}
 		// Serialize items into a text node in the document.
 		var buf strings.Builder
-		outDef := ec.resultDocOutputDefs[href]
+		outDef := ec.resultDocOutputDefs[uri]
 		if outDef == nil {
 			outDef = ss.outputs[""] // fallback to default
 		}
@@ -747,11 +794,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
-	// Deliver secondary result documents to the receiver.
+	// Deliver secondary result documents to the receiver. The map is keyed by the
+	// resolved absolute output URI (which is also doc.URL()), while the public
+	// handler receives the raw href as written on xsl:result-document.
 	if cfg != nil && cfg.resultDocHandler != nil {
-		for href, doc := range ec.resultDocuments {
-			outDef := ec.resultDocOutputDefs[href]
-			if err := cfg.resultDocHandler.HandleResultDocument(href, doc, outDef); err != nil {
+		for uri, doc := range ec.resultDocuments {
+			outDef := ec.resultDocOutputDefs[uri]
+			if err := cfg.resultDocHandler.HandleResultDocument(ec.resultDocHrefs[uri], doc, outDef); err != nil {
 				return nil, err
 			}
 		}

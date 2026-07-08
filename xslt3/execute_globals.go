@@ -87,17 +87,32 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	if gci == nil {
 		return nil
 	}
-	if source == nil {
+	// The item actually used as the global context item: when the global context
+	// item is absent (use="absent", or fn:transform supplied neither a source-node
+	// nor an explicit item) there is none; otherwise an explicit fn:transform
+	// global-context-item (any item() — atomic/map/array/function or a node)
+	// overrides the source document node, which is the last-resort default. This
+	// is what must be type-checked against @as.
+	var ctxItem xpath3.Item
+	switch {
+	case ec.globalContextAbsent:
+		ctxItem = nil
+	case ec.globalContextItem != nil:
+		ctxItem = ec.globalContextItem
+	case source != nil:
+		ctxItem = xpath3.NodeItem{Node: source}
+	}
+	if ctxItem == nil {
 		if gci.Use == ctxItemRequired {
-			return dynamicError(errCodeXTDE3086, "global-context-item use=\"required\" but no source document was supplied")
+			return dynamicError(errCodeXTDE3086, "global-context-item use=\"required\" but no global context item was supplied")
 		}
 		return nil
 	}
 	if gci.As == "" {
 		return nil
 	}
-	// Validate the supplied global context item (the source document node)
-	// against the declared sequence type using the namespace-aware type
+	// Validate the supplied global context item against the declared sequence
+	// type using the namespace-aware type
 	// machinery, so that prefixed element tests like
 	// document-node(element(p:root)) compare both local name and namespace
 	// rather than local name alone. Prefixes and the default element namespace
@@ -118,7 +133,7 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	}()
 
 	st := parseSequenceType(gci.As)
-	seq := xpath3.ItemSlice{xpath3.NodeItem{Node: source}}
+	seq := xpath3.ItemSlice{ctxItem}
 	if _, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
 		return err
 	}
@@ -249,6 +264,14 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 // item is absent (XPDY0002).
 func (ec *execContext) globalSourceNode() helium.Node {
 	if ec.globalContextAbsent {
+		return nil
+	}
+	if ni, ok := ec.globalContextItem.(xpath3.NodeItem); ok {
+		return normalizeNode(ni.Node)
+	}
+	if ec.globalContextItem != nil {
+		// A non-node global context item (atomic/map/array/function) has no
+		// context node; it is exposed via ec.contextItem instead.
 		return nil
 	}
 	return normalizeNode(ec.sourceDoc)

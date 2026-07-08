@@ -276,9 +276,20 @@ type resultDocCollector struct {
 }
 
 func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Document, outDef *OutputDef) error {
-	c.results[href] = doc
+	// Key by the fully-resolved absolute output URI captured during execution
+	// (SetURL on the result document), NOT the raw href. A nested
+	// xsl:result-document resolves its href against the DYNAMIC current output
+	// URI of the enclosing result document, not the top-level base output URI, so
+	// re-resolving the raw href against the base here would key it wrongly.
+	key := href
+	if doc != nil {
+		if u := doc.URL(); u != "" {
+			key = u
+		}
+	}
+	c.results[key] = doc
 	if outDef != nil && c.outputDefs != nil {
-		c.outputDefs[href] = outDef
+		c.outputDefs[key] = outDef
 	}
 	return nil
 }
@@ -527,7 +538,11 @@ func TransformFunction(options ...TransformOption) xpath3.Function {
 // standalone (TransformFunction) paths run identical logic.
 func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	cfg := &transformFnConfig{
-		baseURI:               ec.stylesheet.baseURI,
+		// The static base URI of the fn:transform CALL — used to resolve a
+		// relative stylesheet-location, stylesheet-base-uri, and base-output-uri —
+		// is the effective static base URI at the call site (honoring an xml:base
+		// on the calling template/element), NOT the bare module URI.
+		baseURI:               ec.effectiveStaticBaseURI(),
 		nestedCompiler:        ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit()).AllowExternalEntities(ec.allowExternalEntities()),
 		stylesheetResolver:    ec.stylesheet.uriResolver,
 		packageResolver:       ec.stylesheet.packageResolver,
@@ -628,7 +643,19 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	initialMode := getStr("initial-mode")
 	initialFunction := getQNameStr("initial-function")
 	deliveryFormat := getStr("delivery-format")
+	// base-output-uri (F&O 3.1 §14.8): a relative reference is resolved ONCE
+	// against the fn:transform call's static base URI (cfg.baseURI — the base URI
+	// of the calling stylesheet element for the in-stylesheet path, or
+	// WithTransformBaseURI for the standalone path). Resolving it here means the
+	// principal result-map key, the currentOutputURI seed, and every secondary
+	// result-document URI that chains off it are all absolute. An already-absolute
+	// value is a no-op; when no static base is available a relative value is left
+	// relative (F&O leaves the outcome to the undefined static base URI — best
+	// effort, using the SAME resolver as the secondary keys for consistency).
 	baseOutputURI := getStr("base-output-uri")
+	if baseOutputURI != "" {
+		baseOutputURI = canonicalResultURIKey(baseOutputURI, cfg.baseURI)
+	}
 	// stylesheet-base-uri (F&O 3.1): the base URI used to resolve relative
 	// references (xsl:include/xsl:import) inside a stylesheet supplied via
 	// stylesheet-text or stylesheet-node. A relative value is itself resolved
@@ -638,6 +665,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	stylesheetBaseURI := getStr("stylesheet-base-uri")
 	initialMatchSel := getSeq("initial-match-selection")
 	sourceNode := getSeq("source-node")
+	globalContextItemSeq := getSeq("global-context-item")
 	stylesheetParamsSeq := getSeq("stylesheet-params")
 	staticParamsSeq := getSeq("static-params")
 	templateParamsSeq := getSeq("template-params")
@@ -804,18 +832,18 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		return nil, dynamicError(errCodeFOXT0002, "fn:transform: no stylesheet specified (stylesheet-location, stylesheet-node, stylesheet-text, or package-name required)")
 	}
 
-	// Determine the source document
+	// Determine the source document and the source node. The source tree that
+	// owns the source-node drives the default global context item; the source
+	// node itself is the initial match selection (F&O 3.1 §14.8.3). When the
+	// source-node is an element (not a document node), template matching must run
+	// against that element while global variables still see the document root as
+	// the default context item.
 	var sourceDoc *helium.Document
+	var sourceNodeItem helium.Node
 	if sourceNode != nil && sequence.Len(sourceNode) > 0 {
 		if ni, ok := sourceNode.Get(0).(xpath3.NodeItem); ok {
-			n := ni.Node
-			for n != nil {
-				if d, ok := n.(*helium.Document); ok {
-					sourceDoc = d
-					break
-				}
-				n = n.Parent()
-			}
+			sourceNodeItem = ni.Node
+			sourceDoc = owningDocument(ni.Node)
 		}
 	}
 
@@ -827,15 +855,34 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	// Invocation enabled it.
 	secondaryResults := make(map[string]*helium.Document)
 	secondaryOutputDefs := make(map[string]*OutputDef)
+	// The PRINCIPAL result-map key is "output" when base-output-uri is absent, or
+	// the resolved base-output-uri when present (fnTransformCfg.baseOutputURI). The
+	// base for RESOLVING secondary result-document output URIs is decoupled: it is
+	// the resolved base-output-uri when present, else the call's effective static
+	// base URI (cfg.baseURI), so secondary result-map keys are absolute whenever
+	// ANY base exists. Only when there is genuinely no base at all (no
+	// base-output-uri AND no static base — e.g. a standalone call with no
+	// WithTransformBaseURI) does a secondary key remain best-effort relative; the
+	// spec cannot require an absolute URI when no base is available.
+	outputBaseURI := baseOutputURI
+	if outputBaseURI == "" {
+		outputBaseURI = cfg.baseURI
+	}
 	fnTransformCfg := &transformConfig{
 		initialTemplate:  initialTemplate,
 		initialMode:      initialMode,
 		initialFunction:  initialFunction,
 		baseOutputURI:    baseOutputURI,
+		outputBaseURI:    outputBaseURI,
 		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
 	}
 	fnTransformCfg.uriResolver = cfg.innerURIResolver
 	fnTransformCfg.httpClient = cfg.httpClient
+	// An explicit global-context-item overrides the default (the source document
+	// node) for global variable/parameter evaluation inside the nested transform.
+	if globalContextItemSeq != nil && sequence.Len(globalContextItemSeq) > 0 {
+		fnTransformCfg.globalContextItem = globalContextItemSeq.Get(0)
+	}
 	// Inherit the outer Invocation's effective per-resource read cap so that
 	// fn:doc / fn:unparsed-text / fn:json-doc inside the inner transform honor
 	// the same MaxResourceBytes override. Without this the inner reads would
@@ -924,6 +971,25 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		// schema/static context all behave identically to a source-driven
 		// transform.
 		fnTransformCfg.initialMatchSelection = initialMatchSel
+	} else if sourceNodeItem != nil {
+		// A source-node that is not a document node is itself the initial match
+		// selection: template matching runs against that element/node, while the
+		// source tree (sourceDoc) supplies the default global context item and the
+		// navigable document. A document source-node keeps the source-driven
+		// path (apply-templates to the document root) unchanged.
+		if _, isDoc := sourceNodeItem.(*helium.Document); !isDoc {
+			fnTransformCfg.initialMatchSelection = sourceNode
+		}
+	}
+	// When neither a source-node / initial-match-selection nor an explicit
+	// global-context-item was supplied, the transformation has NO global context
+	// item (F&O 3.1 §14.8). A synthetic empty document is still substituted below
+	// as the navigable source tree for an initial-template/-function entry, but it
+	// must NOT masquerade as the global context item: a global "." reference then
+	// raises XPDY0002, and an xsl:global-context-item use="required" declaration
+	// raises XTDE3086.
+	if sourceDoc == nil && fnTransformCfg.globalContextItem == nil {
+		fnTransformCfg.globalContextAbsent = true
 	}
 	if sourceDoc == nil {
 		sourceDoc = helium.NewDefaultDocument()
@@ -942,77 +1008,72 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		capturedItems = fnTransformCfg.rawCapturedItems
 	}
 
-	// Build result map
-	outputKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "output"}
+	// Build result map. The principal result is keyed by the base output URI when
+	// one is supplied (F&O 3.1 §14.8.3); otherwise by the literal "output". A
+	// principal entry is emitted only when the transformation actually wrote
+	// principal output — a stylesheet that produces only secondary result
+	// documents (via xsl:result-document) has no principal entry (W3C bug 30209).
+	// secondaryResults is keyed by each result document's fully-resolved absolute
+	// output URI (captured during execution via SetURL), which already resolves a
+	// nested href against its enclosing dynamic output URI — so those keys are
+	// used verbatim, never re-resolved against the top-level base output URI.
+	principalKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "output"}
+	if baseOutputURI != "" {
+		principalKey = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: baseOutputURI}
+	}
 	result := xpath3.MapItem{}
 
 	switch deliveryFormat {
 	case "raw":
-		// Raw delivery: return the XDM items from the transformation.
-		// When captured items are available (from raw capture mode), use
-		// those directly — they may contain function items, maps, etc.
-		// that cannot be represented as DOM children. Otherwise fall
-		// back to extracting DOM children for backward compatibility.
+		// Raw delivery: return the XDM items from the transformation. Merge DOM
+		// children with any captured non-node items (function items, maps, etc.
+		// that cannot be represented as DOM children).
+		var seq xpath3.ItemSlice
+		for child := range helium.Children(resultDoc) {
+			seq = append(seq, xpath3.NodeItem{Node: child})
+		}
 		if capturedItems != nil && sequence.Len(capturedItems) > 0 {
-			// Merge DOM children and captured non-node items.
-			var seq xpath3.ItemSlice
-			for child := range helium.Children(resultDoc) {
-				seq = append(seq, xpath3.NodeItem{Node: child})
-			}
 			seq = append(seq, sequence.Materialize(capturedItems)...)
-			result = result.Put(outputKey, seq)
-		} else if resultDoc != nil {
-			var seq xpath3.ItemSlice
-			for child := range helium.Children(resultDoc) {
-				seq = append(seq, xpath3.NodeItem{Node: child})
-			}
-			result = result.Put(outputKey, seq)
+		}
+		if len(seq) > 0 {
+			result = result.Put(principalKey, seq)
 		}
 		// Secondary results are returned as document nodes in raw mode.
-		for href, doc := range secondaryResults {
-			hrefKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: href}
-			result = result.Put(hrefKey, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
+		for uri, doc := range secondaryResults {
+			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
 		}
 	case "serialized":
 		// Serialized delivery: serialize the result document to a string. The
 		// serialization-params option overrides the stylesheet's own xsl:output
 		// parameters for the principal result.
-		if resultDoc != nil {
+		if documentHasChildren(resultDoc) {
 			outDef := applySerializationParams(fnTransformCfg.resolvedOutputDef, serializationParamsSeq)
-			var buf bytes.Buffer
-			if err := SerializeResult(&buf, resultDoc, outDef); err != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", err)
+			s, serErr := serializeDeliveredResult(resultDoc, outDef)
+			if serErr != nil {
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", serErr)
 			}
-			result = result.Put(outputKey, xpath3.SingleString(buf.String()))
+			result = result.Put(principalKey, xpath3.SingleString(s))
 		}
 		// Serialize secondary results too.
-		for href, doc := range secondaryResults {
-			hrefKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: href}
-			outDef := secondaryOutputDefs[href]
-			if outDef == nil {
-				outDef = ss.outputs[href]
-			}
+		for uri, doc := range secondaryResults {
+			outDef := secondaryOutputDefs[uri]
 			if outDef == nil {
 				outDef = ss.outputs[""]
 			}
-			var buf bytes.Buffer
-			if err := SerializeResult(&buf, doc, outDef); err != nil {
-				result = result.Put(hrefKey, xpath3.SingleString(""))
-			} else {
-				// Trim trailing newline added by the XML serializer's document
-				// serialization so the string value matches spec expectations.
-				result = result.Put(hrefKey, xpath3.SingleString(strings.TrimRight(buf.String(), "\n")))
+			s, serErr := serializeDeliveredResult(doc, outDef)
+			if serErr != nil {
+				s = ""
 			}
+			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.SingleString(s))
 		}
 	default:
 		// Default: return the result document
-		if resultDoc != nil {
-			result = result.Put(outputKey, xpath3.ItemSlice{xpath3.NodeItem{Node: resultDoc}})
+		if documentHasChildren(resultDoc) {
+			result = result.Put(principalKey, xpath3.ItemSlice{xpath3.NodeItem{Node: resultDoc}})
 		}
 		// Add secondary results as document nodes.
-		for href, doc := range secondaryResults {
-			hrefKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: href}
-			result = result.Put(hrefKey, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
+		for uri, doc := range secondaryResults {
+			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.ItemSlice{xpath3.NodeItem{Node: doc}})
 		}
 	}
 
@@ -1064,6 +1125,51 @@ func applyTransformPostProcess(ctx context.Context, fi xpath3.FunctionItem, resu
 		out = out.Put(key, processed)
 	}
 	return out, nil
+}
+
+// documentHasChildren reports whether doc has any child nodes, i.e. whether the
+// transformation wrote any principal result content. An empty principal result
+// tree yields no principal entry in the fn:transform result map (W3C bug 30209).
+func documentHasChildren(doc *helium.Document) bool {
+	if doc == nil {
+		return false
+	}
+	for range helium.Children(doc) {
+		return true
+	}
+	return false
+}
+
+// serializeDeliveredResult serializes doc to a string for the fn:transform
+// "serialized" delivery format. For the element-tree methods (xml/html/xhtml)
+// the helium document serializer appends a single trailing newline that is a
+// serialization artifact, not result content, so it is trimmed. For the
+// text/json/adaptive methods the output is the value itself — a trailing newline
+// there is legitimate content and is preserved.
+func serializeDeliveredResult(doc *helium.Document, outDef *OutputDef) (string, error) {
+	var buf bytes.Buffer
+	if err := SerializeResult(&buf, doc, outDef); err != nil {
+		return "", err
+	}
+	s := buf.String()
+	if !preservesTrailingNewline(outDef) {
+		s = strings.TrimSuffix(s, "\n")
+	}
+	return s, nil
+}
+
+// preservesTrailingNewline reports whether the serialization method treats a
+// trailing newline as significant output content (text/json/adaptive) rather
+// than as the element-tree serializer's document-terminating artifact.
+func preservesTrailingNewline(outDef *OutputDef) bool {
+	if outDef == nil {
+		return false // default (xml) method
+	}
+	switch outDef.Method {
+	case methodText, methodJSON, methodAdaptive:
+		return true
+	}
+	return false
 }
 
 // owningDocument walks up from n to the helium document that contains it,
@@ -1173,6 +1279,10 @@ func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
 		return err
 	}
 
+	if err := validateTransformGlobalContextItem(m); err != nil {
+		return err
+	}
+
 	for _, name := range []string{"stylesheet-params", "static-params", "template-params", "tunnel-params"} {
 		if err := validateTransformParamMap(name, transformMapSeq(m, name)); err != nil {
 			return err
@@ -1180,6 +1290,23 @@ func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
 	}
 
 	return checkTransformCapabilities(transformMapSeq(m, "requested-properties"))
+}
+
+// validateTransformGlobalContextItem enforces that the global-context-item
+// option, when the key is present in the map, holds EXACTLY ONE item (F&O 3.1
+// §14.8: its required type is item()). A present-but-empty or multi-item value
+// is an XPTY0004 type error — it must NOT be silently treated as absent or
+// truncated to its first item. An omitted key is fine (the global context item
+// then defaults to the source-node root, or is absent).
+func validateTransformGlobalContextItem(m xpath3.MapItem) error {
+	seq, ok := m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "global-context-item"})
+	if !ok {
+		return nil
+	}
+	if seq == nil || sequence.Len(seq) != 1 {
+		return dynamicError(errCodeXPTY0004, "fn:transform: global-context-item must be exactly one item")
+	}
+	return nil
 }
 
 // validateTransformXSLTVersion checks that the xslt-version option, when
