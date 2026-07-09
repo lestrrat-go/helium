@@ -130,7 +130,7 @@ error rather than being silently passed through.
 
 - `parserctx.go` owns the parser context, input/cursor stack, SAX callback dispatch, location/error reporting, and other shared parser state.
 - `parser_document.go` owns the top-level parse pipeline (`parseDocument`, `parseContent`, recovery re-sync).
-- `parser_element.go` owns recursive element parsing, start/end tags, attributes, and character data.
+- `parser_element.go` owns recursive element parsing, start/end tags, attributes, and character data. `parseStartTag` enforces XML §3.1 P40/P44 required inter-attribute whitespace: after EVERY attribute — the default-namespace, prefixed-namespace, and regular-attribute branches alike — the next character must close the tag (`>` or `/>`) or be whitespace; a NameStartChar with no intervening `S` is a fatal `ErrSpaceRequired` (mirrors libxml2's uniform `next_attr` check; W3C not-wf `attlist10`/`attlist11`, `o-p40fail1`/`o-p44fail4`, `not-wf-sa-186`).
 - `parser_xml_decl.go` owns byte/rune XML declaration parsing; `parser_decl.go` owns the lower-level declaration token/value helpers and name/QName parsing.
 - `parser_dtd_*` files split DTD handling by declaration kind instead of keeping all markup parsing in one file.
 - `parser_entity_decl.go` handles entity declaration bodies and balanced-chunk parsing; `parser_entity_ref.go` handles references, char refs, replay, and amplification checks.
