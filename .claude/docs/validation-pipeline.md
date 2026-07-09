@@ -867,6 +867,33 @@ and each content leaf's declared name is reconstructed by
 `<p:a/>` but not `<a/>`, and `(a)` does not match `<p:a/>`; an unprefixed model is
 byte-identical to matching on the local name.
 
+`matchContentModel` runs a **greedy recursive-descent fast path**
+(`matchContent`/`matchElement`/`matchSeq`/`matchOr`) — correct and
+allocation-free for the deterministic (1-unambiguous) content models the XML
+spec requires (§3.2.1, Appendix E), where a single particle matches at each
+position — and, **only when that greedy pass fails, an exact reachability
+fallback** (`matchContentModelExact`/`contentReacher`). Greedy descent cannot
+backtrack, so a greedy `*`/`+` sub-particle consuming maximally can starve a
+later iteration of an OUTER repetition that needs those tokens (e.g.
+`(lhs,(rhs,(com|wfc|vc)*)+)` over `lhs rhs com rhs vc`). The fallback is an
+NFA-style acceptor: `contentReacher.reach(node,pos)` returns the SET of end
+positions reachable by matching `node` (honoring its occurrence) from `pos`,
+composing sequences left-to-right over position sets, unioning choice
+alternatives, and taking a frontier closure for `*`/`+`; results are memoized
+per `(node,pos)` so the work is bounded by `(nodes × positions)` — polynomial,
+no exponential blowup, and the closure's "if not already seen" guard makes an
+empty-matchable inner term terminate. The document matches iff `len(children)`
+is in the top node's reachable set. Because the fallback is exact for the
+regular language the model denotes and runs only on a greedy MISS, it converts
+over-rejections into accepts **only** for genuine language members and never
+accepts a non-member — a genuinely invalid content model is still rejected by
+both passes. The occurrence-aware flatteners `flattenSeq`/`flattenOr` (shared
+by both paths) merge a right-nested `c2` continuation only when it is a bare
+`Once` group of the same compositor; a `c2` carrying an EXPLICIT occurrence
+(`+`/`*`/`?`) is a distinct grouped sub-particle kept whole (mirroring the
+sub-group parenthesization test in `writer_dtd.go`), so a nested group's
+occurrence is never silently flattened away.
+
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /
 `xmlValidateAttributeDecl` / `xmlValidateDtdFinal`. It walks both subsets

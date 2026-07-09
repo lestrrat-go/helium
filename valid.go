@@ -693,15 +693,164 @@ func collectChildElements(elem *Element) []string {
 // matchContentModel validates a sequence of child element names against
 // an ElementContent tree. Returns true if the children match.
 //
-// This uses a greedy recursive descent approach, which is correct for
-// deterministic content models as required by the XML spec (Section 3.2.1,
-// Appendix E). At each position only one particle can match the next
-// element, so greedy consumption and first-match-wins in choices always
-// produce the correct result. Non-deterministic content models (which
-// violate the XML spec) may be matched incorrectly.
+// The fast path is a greedy recursive descent (matchContent), which is
+// correct for the overwhelmingly common deterministic content models the
+// XML spec requires (Section 3.2.1, Appendix E): at each position only one
+// particle matches the next element, so greedy consumption and
+// first-match-wins in choices produce the right answer with no allocation.
+//
+// Greedy descent cannot backtrack, though, so a greedy `*`/`+` sub-particle
+// that consumes maximally can starve a later iteration of an OUTER
+// repetition that needs some of those tokens (e.g. (lhs,(rhs,(com|wfc|vc)*)+)
+// over lhs rhs com rhs vc). When the greedy pass FAILS we fall back to
+// matchContentModelExact, an NFA-style reachable-position acceptor that is
+// exact for the regular language the model denotes. The fallback only ever
+// turns a greedy reject into an accept when the string is genuinely in the
+// language, so it fixes over-rejection without ever accepting a non-member —
+// a genuinely invalid content model is still rejected by both passes. The
+// fallback is bounded (position-set memoized, no exponential blowup) and runs
+// only on the rare greedy miss, so the common path stays fast.
 func matchContentModel(content *ElementContent, children []string) bool {
 	consumed, ok := matchContent(content, children, 0)
-	return ok && consumed == len(children)
+	if ok && consumed == len(children) {
+		return true
+	}
+	return matchContentModelExact(content, children)
+}
+
+// matchContentModelExact reports whether children is in the regular language
+// denoted by the content model, using exact NFA-style reachability over child
+// positions. It backtracks correctly across nested repetitions where the
+// greedy matcher cannot.
+func matchContentModelExact(content *ElementContent, children []string) bool {
+	if content == nil {
+		return len(children) == 0
+	}
+	m := &contentReacher{children: children, memo: make(map[reachKey]map[int]struct{})}
+	ends := m.reach(content, 0)
+	_, ok := ends[len(children)]
+	return ok
+}
+
+type reachKey struct {
+	content *ElementContent
+	pos     int
+}
+
+// contentReacher computes, per (content node, start position), the SET of end
+// positions reachable by matching that node (honoring its occurrence) starting
+// at that position. Results are memoized so the total work is bounded by
+// (nodes × positions), guaranteeing polynomial time with no exponential blowup
+// even for deeply nested repetition groups.
+type contentReacher struct {
+	children []string
+	memo     map[reachKey]map[int]struct{}
+}
+
+// reach returns the set of end positions reachable by matching content
+// (including its occurrence indicator) starting at pos.
+func (m *contentReacher) reach(content *ElementContent, pos int) map[int]struct{} {
+	if content == nil {
+		return map[int]struct{}{pos: {}}
+	}
+
+	key := reachKey{content: content, pos: pos}
+	if cached, ok := m.memo[key]; ok {
+		return cached
+	}
+
+	var result map[int]struct{}
+	switch content.coccur {
+	case ElementContentOnce:
+		result = m.reachOnce(content, pos)
+	case ElementContentOpt:
+		result = map[int]struct{}{pos: {}}
+		unionInto(result, m.reachOnce(content, pos))
+	case ElementContentMult:
+		result = m.closure(content, pos, true)
+	case ElementContentPlus:
+		result = m.closure(content, pos, false)
+	default:
+		result = map[int]struct{}{}
+	}
+
+	m.memo[key] = result
+	return result
+}
+
+// reachOnce returns the end positions of exactly ONE application of content,
+// ignoring its occurrence indicator.
+func (m *contentReacher) reachOnce(content *ElementContent, pos int) map[int]struct{} {
+	switch content.ctype {
+	case ElementContentElement:
+		if pos < len(m.children) && m.children[pos] == content.rawName() {
+			return map[int]struct{}{pos + 1: {}}
+		}
+		return map[int]struct{}{}
+	case ElementContentSeq:
+		cur := map[int]struct{}{pos: {}}
+		for _, part := range flattenSeq(content) {
+			next := map[int]struct{}{}
+			for p := range cur {
+				unionInto(next, m.reach(part, p))
+			}
+			cur = next
+			if len(cur) == 0 {
+				break
+			}
+		}
+		return cur
+	case ElementContentOr:
+		res := map[int]struct{}{}
+		for _, alt := range flattenOr(content) {
+			unionInto(res, m.reach(alt, pos))
+		}
+		return res
+	case ElementContentPCDATA:
+		// #PCDATA in element content consumes nothing.
+		return map[int]struct{}{pos: {}}
+	}
+	return map[int]struct{}{}
+}
+
+// closure computes the transitive closure of reachOnce from pos. includeStart
+// adds pos itself to the result (ElementContentMult, "zero or more"); when
+// false (ElementContentPlus, "one or more") at least one application is
+// required. The "if not already seen" frontier guard bounds the iteration by
+// the number of positions, so an inner term that can match empty cannot loop
+// forever.
+func (m *contentReacher) closure(content *ElementContent, pos int, includeStart bool) map[int]struct{} {
+	result := map[int]struct{}{}
+	var frontier []int
+	if includeStart {
+		result[pos] = struct{}{}
+		frontier = append(frontier, pos)
+	} else {
+		for q := range m.reachOnce(content, pos) {
+			if _, seen := result[q]; !seen {
+				result[q] = struct{}{}
+				frontier = append(frontier, q)
+			}
+		}
+	}
+	for len(frontier) > 0 {
+		p := frontier[len(frontier)-1]
+		frontier = frontier[:len(frontier)-1]
+		for q := range m.reachOnce(content, p) {
+			if _, seen := result[q]; !seen {
+				result[q] = struct{}{}
+				frontier = append(frontier, q)
+			}
+		}
+	}
+	return result
+}
+
+// unionInto adds every element of src into dst.
+func unionInto(dst, src map[int]struct{}) {
+	for k := range src {
+		dst[k] = struct{}{}
+	}
 }
 
 // matchContent tries to match children[pos:] against the content model,
@@ -876,33 +1025,55 @@ func matchOr(content *ElementContent, children []string, pos int) (int, bool) {
 	return 0, false
 }
 
-// flattenSeq collects all parts of a right-nested sequence into a slice.
+// flattenSeq collects the parts of a right-nested sequence into a slice.
+//
+// The tree stores a sequence's continuation in c2. A continuation node is a
+// bare Seq with the default Once occurrence, so it is merged into the same
+// part list; but a c2 that is a Seq carrying an EXPLICIT occurrence (+/*/?) is
+// a distinct grouped sub-particle — e.g. the (rhs,...)+ group in
+// (lhs,(rhs,...)+) — and must be kept whole as ONE part, not flattened away
+// (which would silently discard its occurrence and corrupt matching). Any
+// non-Seq c2 (element leaf, choice group, or occurrence-bearing seq group) is
+// likewise appended as a single part. This mirrors the sub-group test the DTD
+// writer uses (writer_dtd.go).
 func flattenSeq(content *ElementContent) []*ElementContent {
 	var parts []*ElementContent
-	for cur := content; cur != nil && cur.ctype == ElementContentSeq; cur = cur.c2 {
+	for cur := content; ; {
 		if cur.c1 != nil {
 			parts = append(parts, cur.c1)
 		}
-		// If c2 is not a seq, it's the last element
-		if cur.c2 != nil && cur.c2.ctype != ElementContentSeq {
-			parts = append(parts, cur.c2)
-			break
+		c2 := cur.c2
+		if c2 != nil && c2.ctype == ElementContentSeq && c2.coccur == ElementContentOnce {
+			cur = c2
+			continue
 		}
+		if c2 != nil {
+			parts = append(parts, c2)
+		}
+		break
 	}
 	return parts
 }
 
-// flattenOr collects all alternatives of a right-nested choice into a slice.
+// flattenOr collects the alternatives of a right-nested choice into a slice.
+// A c2 that is a bare Once choice is a continuation merged into the same
+// alternative list; a c2 that is a choice carrying an explicit occurrence, or
+// any non-choice node, is a distinct alternative kept whole (see flattenSeq).
 func flattenOr(content *ElementContent) []*ElementContent {
 	var alts []*ElementContent
-	for cur := content; cur != nil && cur.ctype == ElementContentOr; cur = cur.c2 {
+	for cur := content; ; {
 		if cur.c1 != nil {
 			alts = append(alts, cur.c1)
 		}
-		if cur.c2 != nil && cur.c2.ctype != ElementContentOr {
-			alts = append(alts, cur.c2)
-			break
+		c2 := cur.c2
+		if c2 != nil && c2.ctype == ElementContentOr && c2.coccur == ElementContentOnce {
+			cur = c2
+			continue
 		}
+		if c2 != nil {
+			alts = append(alts, c2)
+		}
+		break
 	}
 	return alts
 }
