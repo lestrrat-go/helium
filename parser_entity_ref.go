@@ -418,6 +418,70 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 	return ret, nil
 }
 
+// lookupGeneralEntity resolves a general entity by name for the attribute-value
+// WFC walk, mirroring libxml2 xmlLookupGeneralEntity: a predefined entity first,
+// then the SAX getEntity callback, then the document entity table. Resolving
+// SAX-first is what lets a pure SAX-event parse (a custom handler replacing the
+// tree builder, with no document being built) surface an indirect
+// external/unparsed reference — the document table is empty there, but the
+// handler's GetEntity still answers. When inAttr, a direct resolution to an
+// unparsed entity yields attrWFCUnparsed and to an external parsed entity yields
+// attrWFCExternal (the "No External Entity References"/"Parsed Entity" WFCs). An
+// undefined entity is reported as (nil, attrWFCNone, nil); the caller applies
+// the "Entity Declared" WFC via handleUndeclaredEntity.
+func (pctx *parserCtx) lookupGeneralEntity(ctx context.Context, name string, inAttr bool) (*Entity, attrEntityWFC, error) {
+	if ent, err := resolvePredefinedEntity(name); err == nil {
+		return ent, attrWFCNone, nil
+	}
+
+	var ent *Entity
+	if s := pctx.sax; s != nil {
+		loaded, _ := s.GetEntity(ctx, name)
+		if !isNilEntity(loaded) {
+			typed, ok := loaded.(*Entity)
+			if !ok {
+				return nil, attrWFCNone, pctx.error(ctx, fmt.Errorf("SAX GetEntity returned unsupported entity type %T for entity '%s'", loaded, name))
+			}
+			ent = typed
+		}
+	}
+	if ent == nil {
+		ent, _ = pctx.getEntity(name)
+	}
+	if ent == nil {
+		return nil, attrWFCNone, nil
+	}
+
+	switch ent.entityType {
+	case enum.ExternalGeneralUnparsedEntity:
+		return ent, attrWFCUnparsed, nil
+	case enum.ExternalGeneralParsedEntity:
+		if inAttr {
+			return ent, attrWFCExternal, nil
+		}
+	}
+	return ent, attrWFCNone, nil
+}
+
+// handleUndeclaredEntity applies the "Entity Declared" WFC for a general-entity
+// reference that resolved to no declaration, mirroring libxml2
+// xmlHandleUndeclaredEntity. It returns a fatal error when the missing
+// declaration is a well-formedness violation (standalone='yes', or no external
+// subset and no parameter-entity references, so all declarations must be
+// visible); otherwise it emits a warning, marks the parse invalid, and returns
+// nil so the caller can continue (a nested entity may still be declared later in
+// an external subset).
+func (pctx *parserCtx) handleUndeclaredEntity(ctx context.Context, name string) error {
+	if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
+		return pctx.error(ctx, fmt.Errorf("Entity '%s' not defined", name))
+	}
+	if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
+		return err
+	}
+	pctx.valid = false
+	return nil
+}
+
 // isNilEntity reports whether e is nil, including a non-nil sax.Entity interface
 // value that wraps a nil *Entity. getEntity returns a concrete (*Entity)(nil)
 // for an undefined entity; assigned to a sax.Entity interface that becomes a

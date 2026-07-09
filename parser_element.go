@@ -939,17 +939,38 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						return
 					}
 				} else {
-					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {
-						// Validate the entity's replacement text: a general entity
-						// referenced from an attribute value must expand to
-						// well-formed content, so an undefined entity nested in it
-						// (WFC: Entity Declared) is a fatal error, not something to
-						// swallow. (W3C not-wf-sa-077.)
-						if _, derr := pctx.decodeEntities(ctx, ent.Content(), SubstituteRef); derr != nil {
-							err = pctx.error(ctx, derr)
+					// Attribute-value WFCs on the entity's TRANSITIVE replacement
+					// text ("No External Entity References", "No < in Attribute
+					// Values", and the nested "Entity Declared" WFC). Mirroring
+					// libxml2's attribute-value call site (xmlParseAttValueInternal),
+					// the memoized walk runs ONLY when the entity's flags don't yet
+					// include the target set; a repeat reference (or a shared nested
+					// entity) is trusted and skipped, which is what keeps the nested
+					// getEntity lookups at libxml2's emission count. The target
+					// depends on context: in the DTD subset a nested entity may be
+					// forward-declared, so the result is only provisionally
+					// entWFCValidated and re-checked in body content.
+					entFlags := entWFCChecked | entWFCValidated
+					if pctx.inSubset != notInSubset {
+						entFlags = entWFCValidated
+					}
+					if ent.attrWFCFlags&entFlags != entFlags {
+						wfc, werr := pctx.checkEntityInAttValue(ctx, ent, entFlags)
+						if werr != nil {
+							err = pctx.error(ctx, werr)
 							return
 						}
-						ent.checked = 2
+						switch wfc {
+						case attrWFCExternal:
+							err = pctx.error(ctx, errors.New("attribute references external entity"))
+							return
+						case attrWFCUnparsed:
+							err = pctx.error(ctx, errors.New("entity reference to unparsed entity"))
+							return
+						case attrWFCLessThan:
+							err = pctx.error(ctx, errors.New("'<' in entity is not allowed in attribute values"))
+							return
+						}
 					}
 					// Route the unresolved reference through the bounded helper:
 					// a declared entity with a very long name under
@@ -1006,6 +1027,170 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	}
 
 	return
+}
+
+// checkEntityInAttValue validates the general entity pent, referenced from an
+// attribute value under SubstituteEntities(false), against the XML 1.0
+// attribute-value well-formedness constraints by walking its TRANSITIVE
+// replacement text: "No External Entity References" (a nested external or
+// unparsed general entity), "No < in Attribute Values" (a nested literal '<'),
+// and the nested "Entity Declared" WFC (an undefined nested entity). It is a
+// port of libxml2 xmlCheckEntityInAttValue integrated with helium's entity
+// resolution: nested references resolve SAX-first then via the document table
+// (lookupGeneralEntity), so the walk works both for a DOM-building parse and for
+// a pure SAX-event parse whose custom handler answers GetEntity. The DIRECT case
+// (pent itself external/unparsed, or its own content directly containing '<') is
+// caught earlier by parseEntityRef; this covers content reached only through
+// nested &name; references.
+//
+// The result is memoized on each internal entity it walks via the WFC flags, so
+// a repeated reference — or a nested entity shared across walks — skips the
+// re-walk and does NOT re-emit the getEntity callbacks the nested lookups make.
+// flags selects the memoization target (entWFCChecked|entWFCValidated in body
+// content, entWFCValidated alone inside the DTD subset).
+func (pctx *parserCtx) checkEntityInAttValue(ctx context.Context, pent *Entity, flags int) (attrEntityWFC, error) {
+	visited := map[*Entity]struct{}{pent: {}}
+	checked := []*Entity{pent}
+	wfc, err := pctx.walkAttrValueWFC(ctx, pent.content, flags, visited, &checked)
+	if err != nil || wfc != attrWFCNone {
+		return wfc, err
+	}
+	for _, e := range checked {
+		e.attrWFCFlags |= flags
+	}
+	return attrWFCNone, nil
+}
+
+// checkAttrValueStringWFC validates a raw attribute-value string (a stored
+// ATTLIST default) against the attribute-value WFCs, resolving and recursing
+// into the general entities it references exactly as checkEntityInAttValue does.
+// Unlike an entity, the string itself is not memoized; the internal entities it
+// reaches are.
+func (pctx *parserCtx) checkAttrValueStringWFC(ctx context.Context, s string, flags int) (attrEntityWFC, error) {
+	visited := map[*Entity]struct{}{}
+	var checked []*Entity
+	wfc, err := pctx.walkAttrValueWFC(ctx, s, flags, visited, &checked)
+	if err != nil || wfc != attrWFCNone {
+		return wfc, err
+	}
+	for _, e := range checked {
+		e.attrWFCFlags |= flags
+	}
+	return attrWFCNone, nil
+}
+
+// walkAttrValueWFC walks content for a literal '<' or a nested general reference
+// to an external/unparsed/undefined entity, following internal general entities
+// transitively. It uses an EXPLICIT work stack rather than native recursion so a
+// long ACYCLIC chain of nested internal entities cannot grow the Go call stack
+// without bound; the visited set both guards reference cycles and bounds the
+// walk to the number of distinct declared entities. Each internal entity whose
+// content is walked is appended to *checked so the caller can flag it once the
+// walk completes without a violation. A nested entity already carrying the
+// target flags is trusted and not re-walked, mirroring libxml2's flag-gated
+// recursion. Predefined entities (&lt; &gt; &amp; &apos; &quot;) are the
+// sanctioned escapes and are never a violation.
+func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, content string, flags int, visited map[*Entity]struct{}, checked *[]*Entity) (attrEntityWFC, error) {
+	stack := []string{content}
+	for len(stack) > 0 {
+		s := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if c == '<' {
+				return attrWFCLessThan, nil
+			}
+			if c != '&' {
+				continue
+			}
+			semi := strings.IndexByte(s[i+1:], ';')
+			if semi < 0 {
+				break
+			}
+			ref := s[i+1 : i+1+semi]
+			i += 1 + semi // loop's i++ then moves past ';'
+			if len(ref) == 0 || ref[0] == '#' {
+				// Char reference: character data. Any '<' it resolves to is an
+				// allowed escape (&#60;), so it is intentionally not flagged.
+				continue
+			}
+			nested, wfc, err := pctx.lookupGeneralEntity(ctx, ref, true)
+			if err != nil {
+				return attrWFCNone, err
+			}
+			if wfc != attrWFCNone {
+				return wfc, nil
+			}
+			if nested == nil {
+				// Undefined nested entity: the "Entity Declared" WFC. A fatal
+				// verdict stops the walk; a non-fatal one (external subset present)
+				// lets it continue, to be re-checked once declarations complete.
+				if uerr := pctx.handleUndeclaredEntity(ctx, ref); uerr != nil {
+					return attrWFCNone, uerr
+				}
+				continue
+			}
+			if nested.entityType != enum.InternalGeneralEntity {
+				// Predefined or any non-internal type that survived
+				// lookupGeneralEntity's WFC gate: nothing to recurse into.
+				continue
+			}
+			if _, seen := visited[nested]; seen {
+				continue
+			}
+			if nested.attrWFCFlags&flags == flags {
+				// Already validated in this (or a stricter) context; its content is
+				// known clean, so skip the re-walk — and the getEntity callbacks it
+				// would emit — matching libxml2's flag-gated recursion.
+				continue
+			}
+			visited[nested] = struct{}{}
+			*checked = append(*checked, nested)
+			stack = append(stack, nested.content)
+		}
+	}
+	return attrWFCNone, nil
+}
+
+// validateAttributeDefaultsWFC re-checks every DTD-declared attribute default
+// value against the attribute-value WFCs (No External Entity References, No <
+// in Attribute Values) once the WHOLE DTD (internal + external subset) has been
+// parsed. A default value is parsed WHILE the DTD is still being read, so a
+// nested general entity it references may be declared AFTER it (a forward
+// reference) — the parse-time check in parseAttributeValueInternal cannot see
+// that entity yet and lets the value through. The WFC constrains the default
+// value DECLARATION itself (W3C rmt-e3e-12), independent of whether any element
+// actually uses the default, so this pass runs over the stored lexical values
+// with the entity tables complete. It matters only under SubstituteEntities(false),
+// where the stored default retains its unexpanded `&name;` references; with
+// substitution on, a violating direct reference is already rejected at parse time.
+//
+// It runs with the body-context flags (entWFCChecked|entWFCValidated): a default
+// walked inside the DTD subset only carries entWFCValidated, so this pass — with
+// the entity tables now complete — re-walks any entity a forward reference left
+// provisionally validated and catches the once-invisible violation.
+func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
+	for _, attrs := range pctx.attsDefault {
+		for _, attr := range attrs {
+			val := attr.Value()
+			if !strings.ContainsRune(val, '&') {
+				continue
+			}
+			wfc, err := pctx.checkAttrValueStringWFC(ctx, val, entWFCChecked|entWFCValidated)
+			if err != nil {
+				return err
+			}
+			switch wfc {
+			case attrWFCExternal:
+				return pctx.error(ctx, errors.New("attribute references external entity"))
+			case attrWFCUnparsed:
+				return pctx.error(ctx, errors.New("entity reference to unparsed entity"))
+			case attrWFCLessThan:
+				return pctx.error(ctx, errors.New("'<' in entity is not allowed in attribute values"))
+			}
+		}
+	}
+	return nil
 }
 
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {

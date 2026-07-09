@@ -1675,3 +1675,162 @@ func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
 	_, found := doc.GetEntity("greet")
 	require.True(t, found, "entity from external DTD must be declared, proving the file: DTD URI was resolved")
 }
+
+// TestIndirectEntityRefInAttributeValue exercises the XML 1.0 attribute-value
+// well-formedness constraints ("No External Entity References", "No < in
+// Attribute Values") against an INDIRECT reference — a general entity whose OWN
+// replacement text is harmless but which transitively references an external or
+// unparsed entity, or reaches a literal '<'. Under SubstituteEntities(false) the
+// stricter attribute-value WFCs must fire on EVERY attribute occurrence,
+// independent of whether the entity was already expanded (and its weaker
+// element-content check recorded) in element content first.
+func TestIndirectEntityRefInAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	const head = "<!DOCTYPE r [\n" +
+		"<!ELEMENT r ANY>\n" +
+		"<!ELEMENT e EMPTY>\n" +
+		"<!ATTLIST e a CDATA #IMPLIED>\n"
+
+	testcases := []struct {
+		name    string
+		src     string
+		wantMsg string
+	}{
+		{
+			// The entity is expanded in element content FIRST (setting its
+			// checked bit), then referenced from an attribute. The checked bit
+			// must NOT suppress the attribute-value WFC re-validation.
+			name: "external-indirect-after-content",
+			src: head +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"]>\n<r>&outer;<e a=\"&outer;\"/></r>",
+			wantMsg: "attribute references external entity",
+		},
+		{
+			name: "external-indirect-attr-only",
+			src: head +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "attribute references external entity",
+		},
+		{
+			// An unparsed (NDATA) entity reached only through an attribute value.
+			name: "unparsed-indirect-attr-only",
+			src: head +
+				"<!NOTATION gif PUBLIC \"gif\">\n" +
+				"<!ENTITY pic SYSTEM \"nul\" NDATA gif>\n" +
+				"<!ENTITY outer \"&pic;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "entity reference to unparsed entity",
+		},
+		{
+			// A nested entity whose replacement text contains a '<' (via a char
+			// reference resolved into its stored content).
+			name: "lessthan-indirect-attr-only",
+			src: head +
+				"<!ENTITY inner \"x&#60;y\">\n" +
+				"<!ENTITY outer \"&inner;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "'<' in entity is not allowed in attribute values",
+		},
+		{
+			// The nested external entity is declared AFTER the ATTLIST default
+			// value that transitively references it (forward reference). The WFC
+			// classification must NOT be memoized against the incomplete entity
+			// tables seen while the default value is parsed — a cached result
+			// would let the document be accepted once the entity is declared.
+			name: "external-indirect-attlist-default-forward",
+			src: "<!DOCTYPE r [\n" +
+				"<!ELEMENT r EMPTY>\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"<!ATTLIST r a CDATA \"&outer;\">\n" +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"]>\n<r/>",
+			wantMsg: "not defined",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+				DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+				Parse(t.Context(), []byte(tc.src))
+			require.Error(t, err, "indirect entity reference must violate the attribute-value WFC")
+			require.Nil(t, doc, "no document on a fatal well-formedness error")
+			require.Contains(t, err.Error(), tc.wantMsg)
+		})
+	}
+}
+
+// TestIndirectHarmlessEntityRefInAttributeValue confirms the attribute-value WFC
+// walk does not over-reject: an indirect general entity whose transitive
+// replacement text is plain character data (no external/unparsed reference, no
+// '<') is accepted, including when referenced multiple times.
+func TestIndirectHarmlessEntityRefInAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	src := "<!DOCTYPE r [\n" +
+		"<!ELEMENT r ANY>\n" +
+		"<!ELEMENT e EMPTY>\n" +
+		"<!ATTLIST e a CDATA #IMPLIED>\n" +
+		"<!ENTITY inner \"value\">\n" +
+		"<!ENTITY outer \"a&inner;b\">\n" +
+		"]>\n<r>&outer;<e a=\"&outer; &outer;\"/></r>"
+
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		Parse(t.Context(), []byte(src))
+	require.NoError(t, err, "a harmless indirect entity must be accepted in an attribute value")
+	require.NotNil(t, doc)
+}
+
+// TestForwardReferencedEntityInAttributeDefault covers a DTD attribute default
+// value that transitively references an external entity declared AFTER it (a
+// forward reference). The parse-time check cannot see the entity yet, so the
+// well-formedness violation is caught by the post-DTD re-validation once the
+// entity tables are complete. An external subset makes the early undefined
+// reference non-fatal, reproducing the case that would otherwise slip through.
+func TestForwardReferencedEntityInAttributeDefault(t *testing.T) {
+	t.Parallel()
+
+	const doc = "<!DOCTYPE r SYSTEM \"d.dtd\" [\n" +
+		"<!ELEMENT r EMPTY>\n" +
+		"<!ENTITY outer \"&ext;\">\n" +
+		"<!ATTLIST r a CDATA \"&outer;\">\n" +
+		"<!ENTITY ext SYSTEM \"x\">\n" +
+		"]>\n<r/>"
+	fsys := fstest.MapFS{"d.dtd": {Data: []byte("<!-- external subset -->")}}
+
+	got, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		FS(fsys).Parse(t.Context(), []byte(doc))
+	require.Error(t, err, "a forward-referenced external entity in a default value must be rejected")
+	require.Nil(t, got)
+	require.Contains(t, err.Error(), "attribute references external entity")
+}
+
+// TestDeepEntityChainInAttributeValueBounded confirms the attribute-value WFC
+// walk traverses a long acyclic chain of nested internal entities without native
+// call-stack recursion (the walker uses an explicit work stack) and does not
+// false-reject a harmless plain-text terminus.
+func TestDeepEntityChainInAttributeValueBounded(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	b.WriteString("<!DOCTYPE r [\n<!ELEMENT r EMPTY>\n")
+	const depth = 30 // stays under the entity-expansion depth guard
+	for i := range depth {
+		fmt.Fprintf(&b, "<!ENTITY e%d \"&e%d;\">\n", i, i+1)
+	}
+	fmt.Fprintf(&b, "<!ENTITY e%d \"end\">\n<!ATTLIST r a CDATA \"&e0;\">\n]>\n<r/>", depth)
+
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		Parse(t.Context(), []byte(b.String()))
+	require.NoError(t, err, "a harmless deep entity chain must be accepted")
+	require.NotNil(t, doc)
+}

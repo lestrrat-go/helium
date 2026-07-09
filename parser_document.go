@@ -195,6 +195,14 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 		pctx.inSubset = notInSubset
 
+		// The whole DTD is parsed now, so the entity tables are complete. Re-check
+		// every attribute default value's WFCs to catch a nested external/unparsed
+		// (or '<') entity reached through a FORWARD-referenced entity that was not
+		// yet declared when the default was parsed (SubstituteEntities(false)).
+		if err := pctx.validateAttributeDefaultsWFC(ctx); err != nil {
+			return err
+		}
+
 		pctx.cleanSpecialAttributes()
 
 		pctx.instate = psPrologue
