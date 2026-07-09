@@ -786,6 +786,17 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.fsys = pctx.fsys
 	newctx.catalog = pctx.catalog
 	newctx.baseURI = pctx.baseURI
+	// Carry the document-scope DTD state that gates the "Entity Declared" VC so a
+	// nested entity-replacement sub-parse makes the SAME lenient/strict decision
+	// as the top-level document: an undeclared general entity is a validity error
+	// only when validating a standalone, fully-INTERNAL DTD (no external subset
+	// or external parameter entity). Without this, a nested sub-context would
+	// default hasExternalSubset/hasExternalPERef to false and over-reject an
+	// undeclared entity in a document that in fact has an external subset/PE.
+	newctx.standalone = pctx.standalone
+	newctx.hasExternalSubset = pctx.hasExternalSubset
+	newctx.hasPERefs = pctx.hasPERefs
+	newctx.hasExternalPERef = pctx.hasExternalPERef
 }
 
 func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, externalID string) (Node, error) {
