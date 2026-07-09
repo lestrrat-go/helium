@@ -29,6 +29,20 @@ func condSectParse(t *testing.T, dtd string) (*helium.Document, error) {
 		Parse(t.Context(), []byte(condSectDoc()))
 }
 
+// condSectParseValidating is condSectParse with DTD validation enabled, so the
+// validity-only "Proper Conditional Section/PE Nesting" constraint is enforced.
+func condSectParseValidating(t *testing.T, dtd string) (*helium.Document, error) {
+	t.Helper()
+	fsys := fstest.MapFS{condSectExtName: &fstest.MapFile{Data: []byte(dtd)}}
+	return helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		ValidateDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(condSectDoc()))
+}
+
 // A conditional section keyword is case-sensitive (XML §3.4 P62/P63): only the
 // exact literals INCLUDE and IGNORE are permitted. A miscased keyword such as
 // lowercase "include" is a fatal well-formedness error and must be reported even
@@ -123,4 +137,46 @@ func TestConditionalSectionPESuppliedIncludeBracketAccepted(t *testing.T) {
 	require.NoError(t, err, "a PE-supplied 'INCLUDE[' must be accepted")
 	require.NotNil(t, doc)
 	require.Equal(t, "pe inc bracket", string(doc.DocumentElement().Content()))
+}
+
+// VC "Proper Conditional Section/PE Nesting" (XML §3.4): when the "<![" opens in
+// the external subset but the INCLUDE keyword and its "[" are supplied by a
+// parameter entity, the section markup straddles an entity boundary. A
+// validating processor must report it (W3C xmlconf invalid-not-sa-022). It is a
+// validity constraint, so it is reported ONLY when validating; the
+// non-validating counterpart above accepts the same DTD.
+func TestConditionalSectionPEBoundaryRejectedWhenValidating(t *testing.T) {
+	t.Parallel()
+
+	const dtd = "<!ENTITY % e \"INCLUDE[\">\n<![ %e; <!ELEMENT doc (#PCDATA)> ]]>\n" +
+		"<!ENTITY greeting \"boundary\">\n"
+	_, err := condSectParseValidating(t, dtd)
+	require.Error(t, err, "a PE straddling the conditional-section markup must be a validity error")
+	require.Contains(t, err.Error(), "not in the same entity")
+}
+
+// When the ENTIRE conditional section — "<![", keyword, "[", body and "]]>" —
+// comes from a single parameter-entity replacement text, the markup does NOT
+// straddle an entity boundary and a validating processor must accept it.
+func TestConditionalSectionWholeInPEAcceptedWhenValidating(t *testing.T) {
+	t.Parallel()
+
+	const dtd = "<!ENTITY % sec \"<![INCLUDE[ <!ELEMENT doc (#PCDATA)> " +
+		"<!ENTITY greeting 'whole pe'> ]]>\">\n%sec;\n"
+	doc, err := condSectParseValidating(t, dtd)
+	require.NoError(t, err, "a conditional section wholly inside one PE must be accepted")
+	require.NotNil(t, doc)
+	require.Equal(t, "whole pe", string(doc.DocumentElement().Content()))
+}
+
+// A literal (non-PE) INCLUDE section is well within a single entity and must be
+// accepted even when validating.
+func TestConditionalSectionLiteralAcceptedWhenValidating(t *testing.T) {
+	t.Parallel()
+
+	const dtd = "<![INCLUDE[\n<!ELEMENT doc (#PCDATA)>\n<!ENTITY greeting \"lit\">\n]]>\n"
+	doc, err := condSectParseValidating(t, dtd)
+	require.NoError(t, err, "a literal INCLUDE section must be accepted when validating")
+	require.NotNil(t, doc)
+	require.Equal(t, "lit", string(doc.DocumentElement().Content()))
 }
