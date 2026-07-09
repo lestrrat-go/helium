@@ -468,16 +468,15 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// "%pe;" reference without expanding it), explicit parsePEReference
 	// expansion, spent-cursor cleanup, and a forward-progress guard that surfaces
 	// a malformed "<!BOGUS" while the external DTD cursor/baseURI are still
-	// active (so its location, not the main doctype's, is reported). The
-	// top-level loop is tolerant of conditional-section errors (stop, do not
-	// fail).
+	// active (so its location, not the main doctype's, is reported). A malformed
+	// or unterminated conditional section propagates as a fatal error.
 	for ctx.inputTab.Len() > baseLen {
 		top := ctx.adaptCursor(ctx.inputTab.PeekOne())
 		if top == nil || top.Done() {
 			break
 		}
 
-		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor, true)
+		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor)
 		if err != nil {
 			return err
 		}

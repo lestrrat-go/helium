@@ -1172,10 +1172,9 @@ func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
 	// terminated top-level <![INCLUDE[ ... ]]> section must surface as a parse
 	// error. Previously the top-level external-subset loop swallowed EVERY error
 	// from parseConditionalSections, silently accepting the bogus declaration.
-	// Only an unterminated "]]>" section is tolerated now (truncated/streaming
-	// external subset); a missing/malformed conditional-section keyword is a fatal
-	// WF error, and an actual declaration parse error inside the INCLUDE body
-	// propagates.
+	// Now conditional-section errors propagate: a missing/malformed keyword and
+	// an unterminated "]]>" section are both fatal, and an actual declaration
+	// parse error inside the INCLUDE body propagates.
 	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
@@ -1204,9 +1203,9 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 
 	// Guard against a regression manifesting as a hang: run the parse on a
 	// goroutine with a deadline so a re-introduced infinite loop fails the test
-	// instead of hanging the whole suite. The external subset is tolerant of
-	// conditional-section errors (it stops scanning without failing the parse),
-	// so the requirement here is PROMPT completion, not a surfaced error.
+	// instead of hanging the whole suite. The requirement here is PROMPT
+	// completion (whether or not the parse surfaces a conditional-section error),
+	// not a hang.
 	ctx := t.Context()
 	done := make(chan struct{})
 	go func() {

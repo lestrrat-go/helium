@@ -217,11 +217,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 	// the whole section dropped. Leaving the "%" for the explicit parsePEReference
 	// below pushes the replacement text so the keyword (and body) are parsed.
 	// skipBlankRun still records an over-cap whitespace run in pctx.blankRunErr,
-	// which must be surfaced here: otherwise this function returns a generic
-	// conditional-section sentinel (ErrConditionalSectionKeyword /
-	// ErrConditionalSectionNotFinished) that the top-level external-subset loop
-	// TOLERATES — downgrading a resource-limit violation to "stop parsing the
-	// subset" instead of failing closed at the source.
+	// which must be surfaced here so the specific resource-limit error is reported
+	// at its source rather than a generic conditional-section sentinel
+	// (ErrConditionalSectionKeyword / ErrConditionalSectionNotFinished).
 	if c := pctx.getCursor(); c != nil {
 		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
 			return err
@@ -320,7 +318,7 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 				}
 			}
 
-			stop, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen, false)
+			stop, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen)
 			if err != nil {
 				return err
 			}
@@ -437,20 +435,16 @@ func (pctx *parserCtx) popSpentExternalSubsetInputs(baseLen int) {
 // INCLUDE body. The step pops spent nested PE/conditional cursors (those
 // strictly above the floor) back down to it. It returns stop=true once that
 // content cursor is exhausted (the stack dropped below the floor, or the floor
-// cursor is gone/Done) — or, when tolerateCondError is set, when a nested
-// conditional section reports an error — signalling the caller to stop or
-// resume its scan.
+// cursor is gone/Done), signalling the caller to stop or resume its scan.
 //
-// tolerateCondError mirrors the long-standing top-level external-subset
-// behavior for a TRUNCATED section: an unterminated "]]>"
-// (ErrConditionalSectionNotFinished) stops the loop WITHOUT failing the whole
-// parse, which a streaming / imperfectly-terminated external subset relies on. A
-// malformed or miscased INCLUDE/IGNORE keyword (ErrConditionalSectionKeyword) is
-// a FATAL well-formedness error (XML §3.4 P62/P63: the keyword is case-sensitive
-// and mandatory) and is NOT tolerated — it propagates even at the top level.
-// Actual declaration parse errors from inside an INCLUDE body also always
-// propagate. The INCLUDE-body caller passes false so every nested
-// conditional-section error propagates.
+// Every conditional-section error is fatal. The external subset is read fully
+// into a buffer before parsing, so an unterminated "]]>"
+// (ErrConditionalSectionNotFinished) at buffer EOF is a genuine truncation, not
+// a streaming boundary, and a malformed/miscased INCLUDE/IGNORE keyword
+// (ErrConditionalSectionKeyword) is a well-formedness error (XML §3.4 P62/P63:
+// the keyword is case-sensitive and mandatory). Both propagate — libxml2 reports
+// the same "Content error in the external subset" (W3C not-wf-not-sa-004,
+// ibm-not-wf-P62-ibm62n07).
 //
 // Unlike skipBlanks, the blank skip here advances over whitespace ONLY and
 // leaves any "%" for the explicit parsePEReference below. In the external
@@ -458,7 +452,7 @@ func (pctx *parserCtx) popSpentExternalSubsetInputs(baseLen int) {
 // while only validating it (it does not expand the replacement text). That
 // swallows the reference before parsePEReference can push the PE content onto
 // the input stack, so the PE's declarations are never parsed.
-func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen int, tolerateCondError bool) (bool, error) {
+func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen int) (bool, error) {
 	// Snapshot the cursor position BEFORE consuming blanks so the progress guard
 	// below counts everything this step does — whitespace, a markup declaration,
 	// AND a parameter-entity reference — as forward progress. The guard must
@@ -519,26 +513,14 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	cur = pctx.getCursor()
 	if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
 		// Nested conditional section. parseConditionalSections is responsible for
-		// its own blank/PE handling within the section.
+		// its own blank/PE handling within the section. Every conditional-section
+		// error propagates as fatal — an unterminated "]]>"
+		// (ErrConditionalSectionNotFinished) at the end of the fully-buffered
+		// external subset is a genuine truncation, not a streaming boundary
+		// (XML §3.4; libxml2 "Content error in the external subset"), and a
+		// malformed/miscased keyword (ErrConditionalSectionKeyword) is a
+		// well-formedness error (P62/P63).
 		if err := pctx.parseConditionalSections(ctx); err != nil {
-			// Only the unterminated-section sentinel is tolerated at the top
-			// level: it mirrors the long-standing best-effort handling of an
-			// imperfectly-terminated / truncated external subset. A malformed or
-			// miscased INCLUDE/IGNORE keyword (ErrConditionalSectionKeyword) is a
-			// FATAL well-formedness error (XML §3.4 P62/P63: the keyword is
-			// case-sensitive and mandatory) and must propagate even under the
-			// tolerance — as must an actual declaration parse error from within an
-			// INCLUDE body (e.g. a malformed "<!BOGUS" or a bad entity-value PE).
-			if tolerateCondError && errors.Is(err, ErrConditionalSectionNotFinished) {
-				// A resource-limit violation (over-cap whitespace) recorded while
-				// the conditional section was being parsed must NEVER be masked by
-				// the conditional-section tolerance: propagate it as a real fatal
-				// error instead of stopping the loop silently.
-				if pctx.blankRunErr != nil {
-					return false, pctx.blankRunErr
-				}
-				return true, nil
-			}
 			return false, err
 		}
 	} else {
