@@ -837,6 +837,23 @@ reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
 `ErrorHandler` via `validCtx.addf`; a failed validation returns
 `ErrDTDValidationFailed`.
 
+**QName keying (element + attribute).** DTD validation matches names by their
+qualified form exactly as written — DTD validity is prefix-literal, not
+namespace-aware. The DOCTYPE name is the root element's QName, so the root-name
+check compares `root.Name()` (not the local part). ATTLIST declarations are stored
+under the declared element QName (`AttributeDecl.elem`), so every element-keyed
+lookup passes the instance element's QName: `AttributesForElement(elem.Name())` in
+`validateElementAttributes`, `checkStandaloneExternalDefaults`, and
+`GetElementByID`; `parseStartTag` threads the element QName into `parseAttribute`
+for the special-attribute (`attsSpecial`/`attsSpecialExternal`) and attribute-
+default (`attsDefault`) lookups. Attributes are matched by (prefix, local): the
+`attsSpecial` maps key on the raw attribute QName, and the `AttributeDecl`-based
+paths compare `adecl.prefix`+`adecl.name` against the instance attribute's prefix
+and local. So a declaration for `p:r`/`p:id` applies to `<p:r p:id=…>` and never to
+`<r>` or an unprefixed/differently-prefixed attribute (and vice-versa). Element
+declarations (`ElementDecl`) are stored split into (local, prefix), and
+`lookupElementDecl` looks them up by `elem.LocalName()`+`elem.Prefix()`.
+
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /
 `xmlValidateAttributeDecl` / `xmlValidateDtdFinal`. It walks both subsets
@@ -909,12 +926,13 @@ declaration takes precedence (§3.3). Three sub-cases:
   (`parserCtx.attsSpecialExternal`, the analogue of libxml2's
   `XML_SPECIAL_EXTERNAL`, populated in `addSpecialAttribute` when
   `effectivelyExternal()`). Both the normalization lookup and the external-origin
-  lookup key on the attribute's full QName (prefix + local, exactly as written,
-  matching how the declaration is keyed), so `p:id` matches only an
-  `<!ATTLIST r p:id …>` declaration and never the unprefixed `id` (and vice-versa)
-  — the normalization and the standalone report only fire on the matching
-  declaration. A hit under `standalone="yes"` + `ValidateDTD(true)` is appended to
-  `doc.standaloneNormAttrs`, which the validation pass reports.
+  lookup key on the element's full QName + the attribute's full QName (prefix +
+  local, exactly as written, matching how the declaration is keyed — see the
+  QName-keying note below), so `<r p:id>` matches only an `<!ATTLIST r p:id …>`
+  declaration and never the unprefixed `id` (and vice-versa) — the normalization
+  and the standalone report only fire on the matching declaration. A hit under
+  `standalone="yes"` + `ValidateDTD(true)` is appended to `doc.standaloneNormAttrs`,
+  which the validation pass reports.
 - **Element-content whitespace** (`checkStandaloneWhitespace`, existing): an
   element declared element-content in the external subset that contains
   whitespace-only text nodes.

@@ -252,8 +252,10 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 		if dtdName == "" && doc.extSubset != nil {
 			dtdName = doc.extSubset.name
 		}
-		if dtdName != "" && root.LocalName() != dtdName {
-			vctx.addf(ctx, "root element name %q does not match DTD name %q", root.LocalName(), dtdName)
+		// The DOCTYPE name is the root element's qualified name (e.g. `p:r`), so
+		// compare against the element's QName, not just its local part.
+		if dtdName != "" && root.Name() != dtdName {
+			vctx.addf(ctx, "root element name %q does not match DTD name %q", root.Name(), dtdName)
 		}
 	}
 
@@ -324,26 +326,33 @@ func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx 
 // - ID values are unique across the document
 // - IDREF/IDREFS values are recorded for cross-reference checking
 func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, _ *ElementDecl, vctx *validCtx) {
-	ename := elem.LocalName()
+	// ATTLIST declarations are keyed by the element's declared QName; match by the
+	// instance element's QName so a declaration for `p:r` is not applied to `<r>`.
+	ename := elem.Name()
 	attrs := elem.Attributes()
 
-	// Build a set of attributes present on the element
+	// Build a set of present attributes, keyed by full QName (prefix + local), so a
+	// declaration for `p:id` matches only a `p:id` instance attribute, not `q:id`.
 	present := make(map[string]string, len(attrs))
 	for _, a := range attrs {
-		present[a.LocalName()] = a.Value()
+		present[a.Prefix()+":"+a.LocalName()] = a.Value()
 	}
 
-	// Check all declared attributes from both subsets, dedup by name
+	// Check all declared attributes from both subsets, dedup by QName
 	seen := make(map[string]bool)
 	for _, dtd := range docDTDs(doc) {
 		for _, adecl := range dtd.AttributesForElement(ename) {
+			akey := adecl.prefix + ":" + adecl.name
 			aname := adecl.name
-			if seen[aname] {
+			if adecl.prefix != "" {
+				aname = adecl.prefix + ":" + adecl.name
+			}
+			if seen[akey] {
 				continue
 			}
-			seen[aname] = true
+			seen[akey] = true
 
-			val, found := present[aname]
+			val, found := present[akey]
 
 			switch adecl.def {
 			case enum.AttrDefaultRequired:
@@ -469,8 +478,9 @@ func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *E
 	// supplied ATTLIST is registered in the internal subset's table yet is still
 	// external markup. An internal-subset declaration takes precedence (§3.3), and
 	// dtdSubsets orders internal first, so the first-seen declaration per attribute
-	// wins.
-	ename := elem.LocalName()
+	// wins. ATTLIST declarations are keyed by the element's declared QName, so match
+	// by the instance element's QName (a declaration for `p:r` does not apply to `<r>`).
+	ename := elem.Name()
 	seen := make(map[string]struct{})
 	for _, dtd := range dtdSubsets(doc) {
 		for _, adecl := range dtd.AttributesForElement(ename) {

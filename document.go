@@ -1014,12 +1014,12 @@ func (d *Document) GetElementByID(id string) *Element {
 			if dtd == nil {
 				continue
 			}
-			for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
+			for _, adecl := range dtd.AttributesForElement(elem.Name()) {
 				if adecl.AType() != enum.AttrID {
 					continue
 				}
 				for _, a := range elem.Attributes() {
-					if a.LocalName() == adecl.LocalName() && a.Value() == id {
+					if a.LocalName() == adecl.LocalName() && a.Prefix() == adecl.prefix && a.Value() == id {
 						found = elem
 						return errors.New("found")
 					}

@@ -417,6 +417,15 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		return pctx.error(ctx, err)
 	}
 
+	// The element's full QName (prefix + local) exactly as written. ATTLIST
+	// declarations (special-attribute types and attribute defaults) are keyed by
+	// the declared element QName, so lookups must use the qualified name — an
+	// unprefixed `<!ATTLIST id …>` does not apply to `<p:r>` and vice-versa.
+	elemQName := local
+	if prefix != "" {
+		elemQName = prefix + ":" + local
+	}
+
 	// Push xml:space stack entry for this element (inherit parent's value by default)
 	pctx.spaceTab = append(pctx.spaceTab, -1)
 
@@ -445,7 +454,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
 			break
 		}
-		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, local)
+		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, elemQName)
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -562,14 +571,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// are done post-parse via validateDocument() when parseDTDValid is set.
 	// ID/IDREF uniqueness checks are done post-parse via validateDocument().
 	if len(pctx.attsDefault) > 0 {
-		var elemName string
-		if prefix != "" {
-			elemName = prefix + ":" + local
-		} else {
-			elemName = local
-		}
-
-		defaults, ok := pctx.lookupAttributeDefault(elemName)
+		defaults, ok := pctx.lookupAttributeDefault(elemQName)
 		if ok {
 			// First pass: apply default xmlns="..." (must come before prefixed).
 			// Skip a DTD default whose prefix (the empty string for the default

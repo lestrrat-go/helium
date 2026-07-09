@@ -243,4 +243,53 @@ func TestStandaloneExternalDecl(t *testing.T) {
 			require.NoError(t, err)
 		})
 	})
+
+	// ATTLIST declarations are keyed by the declared element QName, so a declaration
+	// for a PREFIXED element applies to that prefixed element and nothing else.
+	t.Run("prefixed element", func(t *testing.T) {
+		t.Parallel()
+
+		extDTD := `<!ATTLIST p:r p:id NMTOKEN #IMPLIED>`
+
+		// Prefixed element + prefixed attribute matching the prefixed external
+		// declaration: the value is normalized and reported under standalone="yes".
+		t.Run("prefixed element and attr rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE p:r SYSTEM "ext.dtd" [ <!ELEMENT p:r EMPTY> ]>
+<p:r xmlns:p="urn:p" p:id="  spacedvalue  "/>`, extDTD)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "normalization of attribute p:id"))
+		})
+
+		// Same match under standalone="no": normalized to a valid NMTOKEN → accepted
+		// (no over-rejection of the previously un-normalized value).
+		t.Run("prefixed element and attr accepted when not standalone", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseStandalone(t, `<?xml version="1.0" standalone="no"?>
+<!DOCTYPE p:r SYSTEM "ext.dtd" [ <!ELEMENT p:r EMPTY> ]>
+<p:r xmlns:p="urn:p" p:id="  spacedvalue  "/>`, extDTD)
+			require.NoError(t, err)
+		})
+
+		// A declaration for the PREFIXED element `p:r` does not apply to an
+		// unprefixed element `<r>`, so no normalization and no report.
+		t.Run("prefixed decl vs unprefixed element accepted", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
+<r id="  spacedvalue  "/>`, extDTD)
+			require.NoError(t, err)
+		})
+
+		// External default declared for a prefixed element applies to that element.
+		t.Run("prefixed element external default rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE p:r SYSTEM "ext.dtd" [ <!ELEMENT p:r EMPTY> ]>
+<p:r xmlns:p="urn:p"/>`, `<!ATTLIST p:r color CDATA #FIXED "yellow">`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "defaulted from external subset"))
+		})
+	})
 }
