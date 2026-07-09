@@ -3,6 +3,8 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
@@ -104,16 +106,19 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 
 	if cur.Consume(patUTF8) {
 		encoding = encUTF8
+		ctx.autoEncoding = encUTF8
 		return
 	}
 
 	if cur.Consume(patUTF16BE2B) {
 		encoding = encUTF16BE
+		ctx.autoEncoding = encUTF16BE
 		return
 	}
 
 	if cur.Consume(patUTF16LE2B) {
 		encoding = encUTF16LE
+		ctx.autoEncoding = encUTF16LE
 		return
 	}
 
@@ -237,6 +242,38 @@ func (ctx *parserCtx) switchEncoding() error {
 	ctx.pushInput(strcursor.NewUTF8Cursor(b))
 
 	return nil
+}
+
+// bomAllowedEncodings maps a BOM-asserted Unicode encoding to the set of
+// declared-encoding names (case-insensitive) that do NOT contradict it. The
+// alias lists mirror libxml2's xmlSetDeclaredEncoding.
+var bomAllowedEncodings = map[string]map[string]struct{}{
+	encUTF8:    {"utf-8": {}, "utf8": {}},
+	encUTF16LE: {"utf-16": {}, "utf-16le": {}, "utf16": {}},
+	encUTF16BE: {"utf-16": {}, "utf-16be": {}, "utf16": {}},
+}
+
+// checkBOMEncodingConflict reports a fatal error when the document declared an
+// encoding that contradicts the Unicode encoding asserted by a leading
+// byte-order mark (XML §4.3.3: presenting an entity in an encoding other than
+// the one named in its declaration is a fatal error). Only a real consumed BOM
+// sets ctx.autoEncoding, so a plain ASCII/UTF-8 `<?xml` start declaring a
+// single-byte encoding (e.g. iso-8859-1) is unaffected. libxml2 downgrades this
+// to a warning; helium follows the spec and the W3C xml suite (hst-lhs-007/008)
+// in treating it as fatal. Declared aliases that match the BOM are accepted.
+func (ctx *parserCtx) checkBOMEncodingConflict() error {
+	if ctx.autoEncoding == "" || ctx.encoding == "" {
+		return nil
+	}
+	allowed, ok := bomAllowedEncodings[ctx.autoEncoding]
+	if !ok {
+		return nil
+	}
+	if _, ok := allowed[strings.ToLower(ctx.encoding)]; ok {
+		return nil
+	}
+	return fmt.Errorf("%w: declared %q, byte-order mark implies %q",
+		ErrEncodingBOMMismatch, ctx.encoding, ctx.autoEncoding)
 }
 
 var xmlDeclHint = []byte{'<', '?', 'x', 'm', 'l'}

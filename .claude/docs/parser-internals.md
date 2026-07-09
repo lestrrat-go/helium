@@ -110,6 +110,21 @@ Special cases:
 
 `switchEncoding()`: pop ByteCursor, create encoder, push RuneCursor.
 
+**BOM vs declared encoding**: a real (consumed) byte-order mark at the document
+start asserts the entity's encoding, recorded on `pctx.autoEncoding` (UTF-8 from
+`EF BB BF`, UTF-16LE from `FF FE`, UTF-16BE from `FE FF`) in `detectEncoding`.
+After the XML declaration is parsed and the encoding switched, `parseDocument`
+calls `checkBOMEncodingConflict` (`parser_encoding.go`): a declared encoding that
+is not in the BOM's allowed-alias set (`bomAllowedEncodings`, mirroring libxml2's
+`xmlSetDeclaredEncoding` lists — UTF-8→{UTF-8,UTF8}, UTF-16BE→{UTF-16,UTF-16BE,
+UTF16}, UTF-16LE→{UTF-16,UTF-16LE,UTF16}, case-insensitive) is a fatal
+`ErrEncodingBOMMismatch` (XML §4.3.3; W3C not-wf `hst-lhs-007`/`hst-lhs-008`).
+This is a byte-for-byte stricter stance than libxml2, which downgrades the
+mismatch to a warning and continues. Only a consumed BOM sets `autoEncoding`, so
+the byte-pattern (non-BOM) UTF-16/UCS-4 detection and a plain ASCII/UTF-8 `<?xml`
+start that declares a single-byte encoding (e.g. `iso-8859-1`) are unaffected —
+no over-rejection of a legitimately single-byte-encoded document.
+
 **Strict decode of fixed-width Unicode encodings**: `internal/encoding` wraps the
 UTF-16/UTF-32/UCS-2/UCS-4 decoders (`withStrictDecode`, `strict.go`) so that
 malformed input the base decoder would silently replace with U+FFFD (e.g. an

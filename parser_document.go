@@ -132,6 +132,12 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 	}
 
+	// A leading byte-order mark asserts the entity's encoding; a contradicting
+	// encoding declaration is a fatal error (XML §4.3.3).
+	if err := pctx.checkBOMEncodingConflict(); err != nil {
+		return pctx.error(ctx, err)
+	}
+
 	if pctx.treeBuilder != nil {
 		pctx.fastStartDocument()
 	} else if s := pctx.sax; s != nil {

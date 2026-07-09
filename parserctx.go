@@ -80,8 +80,13 @@ type parserCtx struct {
 	// <?xml version="1.0"?> vs <?xml version="1.0" encoding="utf-8"?>
 	encoding         string
 	detectedEncoding string
-	in               io.Reader
-	rawInput         []byte // original bytes, used for EBCDIC encoding detection
+	// autoEncoding records the Unicode encoding asserted by a real byte-order
+	// mark at the document start (UTF-8, UTF-16LE, or UTF-16BE), "" when no BOM
+	// was consumed. A declared encoding that contradicts it is a fatal error
+	// (XML §4.3.3); see checkBOMEncodingConflict.
+	autoEncoding string
+	in           io.Reader
+	rawInput     []byte // original bytes, used for EBCDIC encoding detection
 	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
 	// that mode rawInput holds only a bounded sniff prefix (enough for
 	// ExtractEBCDICEncoding), and the live cursor over the prefix+remainder
