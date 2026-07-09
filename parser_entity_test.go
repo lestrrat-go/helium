@@ -419,19 +419,24 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 
 	t.Run("internal subset", func(t *testing.T) {
 		t.Parallel()
-		// helium recognizes PE references in the internal subset (more permissive
-		// than the XML WFC), which lets us drive PE expansion through a path that
-		// propagates the validation error rather than swallowing it.
-		good := `<!DOCTYPE r [<!ENTITY % p "&#38;amp;"><!ENTITY e "%p; ok">]><r/>`
-		_, errGood := helium.NewParser().Parse(t.Context(), []byte(good))
-		require.NoError(t, errGood,
-			"a well-formed reference produced via a PE must be accepted")
+		// A PE reference inside an entity value in the internal subset violates
+		// the PEs in Internal Subset WFC (XML §2.8) and is rejected outright,
+		// before any general-reference well-formedness of the (would-be)
+		// replacement text is considered. This holds whether the PE would expand
+		// to a well-formed or a malformed general reference. The malformed
+		// general-reference-via-PE path itself is exercised in the external
+		// subset subtest, where PE references in entity values are permitted.
+		wouldBeGood := `<!DOCTYPE r [<!ENTITY % p "&#38;amp;"><!ENTITY e "%p; ok">]><r/>`
+		_, errGood := helium.NewParser().Parse(t.Context(), []byte(wouldBeGood))
+		require.Error(t, errGood,
+			"a PE reference in an internal-subset entity value is not well formed")
+		require.Contains(t, errGood.Error(), "PEReferences forbidden in internal subset")
 
-		bad := `<!DOCTYPE r [<!ENTITY % amp "&#38;"><!ENTITY e "%amp;broken">]><r/>`
-		_, errBad := helium.NewParser().Parse(t.Context(), []byte(bad))
+		wouldBeBad := `<!DOCTYPE r [<!ENTITY % amp "&#38;"><!ENTITY e "%amp;broken">]><r/>`
+		_, errBad := helium.NewParser().Parse(t.Context(), []byte(wouldBeBad))
 		require.Error(t, errBad,
-			"a malformed reference produced via a PE must be rejected")
-		require.Contains(t, errBad.Error(), "malformed entity reference in entity value")
+			"a PE reference in an internal-subset entity value is not well formed")
+		require.Contains(t, errBad.Error(), "PEReferences forbidden in internal subset")
 	})
 
 	t.Run("external subset", func(t *testing.T) {
@@ -1514,12 +1519,32 @@ func TestEntityDepthLimit(t *testing.T) {
 }
 
 // TestParameterEntities exercises parameter-entity declaration and reference in
-// the internal subset.
+// the internal subset. A PE reference between declarations (supplying a whole
+// markup declaration) is well formed; a PE reference WITHIN a declaration — here
+// inside another entity's value — violates the "PEs in Internal Subset" WFC
+// (XML §2.8) and is fatal, matching libxml2.
 func TestParameterEntities(t *testing.T) {
 	t.Parallel()
 
-	// A parameter entity expanded inside another entity's value.
-	const src = `<?xml version="1.0"?>
+	// A parameter entity referenced BETWEEN declarations, supplying a complete
+	// markup declaration. This is where PE references may occur in the internal
+	// subset, so it must parse.
+	const good = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY % decls "<!ELEMENT doc (#PCDATA)>">
+%decls;
+<!ENTITY greeting "Hello World">
+]>
+<doc>&greeting;</doc>`
+
+	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(good))
+	require.NoError(t, err, "a PE reference between declarations is well formed")
+	require.NotNil(t, doc.DocumentElement())
+
+	// A parameter entity referenced WITHIN a markup declaration (inside an
+	// entity value) in the internal subset violates the PEs in Internal Subset
+	// WFC and is a fatal error.
+	const bad = `<?xml version="1.0"?>
 <!DOCTYPE doc [
 <!ENTITY % name "World">
 <!ENTITY greeting "Hello %name;">
@@ -1527,9 +1552,9 @@ func TestParameterEntities(t *testing.T) {
 ]>
 <doc>&greeting;</doc>`
 
-	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
-	require.NoError(t, err)
-	require.NotNil(t, doc.DocumentElement())
+	_, err = helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(bad))
+	require.Error(t, err, "a PE reference within a declaration in the internal subset is not well formed")
+	require.Contains(t, err.Error(), "PEReferences forbidden in internal subset")
 }
 
 // TestEntitySubstitution exercises entity expansion in content and attributes.

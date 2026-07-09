@@ -155,6 +155,7 @@ var (
 	ErrOpenParenRequired             = errors.New("'(' is required")
 	ErrPCDATARequired                = errors.New("'#PCDATA' required")
 	ErrPercentRequired               = errors.New("'%' is required")
+	ErrPEReferenceInInternalSubset   = errors.New("PEReferences forbidden in internal subset")
 	ErrPrematureEOF                  = errors.New("end of document reached")
 	ErrUndeclaredEntity              = errors.New("undeclared entity")
 	ErrSemicolonRequired             = errors.New("';' is required")

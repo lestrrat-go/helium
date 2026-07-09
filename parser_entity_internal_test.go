@@ -112,6 +112,12 @@ func TestValidateEntityValueRefsRestoresOnResolvedPE(t *testing.T) {
 	pctx.sax = tb
 	pctx.treeBuilder = tb
 
+	// A PE reference in an entity value is only expanded when the parser is
+	// effectively external (external subset or external parameter entity); in the
+	// internal subset it is a fatal WFC error. Put the context in the external
+	// subset so the resolved-PE EXPANSION path — the subject of this test — runs.
+	pctx.inSubset = inExternalSubset
+
 	ctx := withParserCtx(t.Context(), pctx)
 
 	pctx.valid = true

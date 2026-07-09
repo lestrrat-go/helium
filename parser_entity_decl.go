@@ -393,6 +393,19 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 				return nil, err
 			}
 			if ent != nil {
+				// WFC: PEs in Internal Subset (XML §2.8). A parameter-entity
+				// reference occurring WITHIN a markup declaration — here, inside
+				// an EntityValue literal — is a fatal well-formedness error in
+				// the internal subset; it is permitted only in the external
+				// subset or within an external parameter entity
+				// (effectivelyExternal, libxml2's PARSER_EXTERNAL gate in
+				// xmlExpandPEsInEntityValue). The check fires only for a RESOLVED
+				// PE ref (ent != nil), matching libxml2's early return on an
+				// undeclared/malformed reference (W3C not-wf-sa-160/162,
+				// ibm-not-wf-P29-ibm29n04, ibm-not-wf-P69-ibm69n06/07).
+				if !pctx.effectivelyExternal() {
+					return nil, ErrPEReferenceInInternalSubset
+				}
 				// Expand the PE replacement text. decodeEntitiesInternal
 				// recursively substitutes nested parameter entities and resolves
 				// character references to their literal characters, so a "&#38;"
