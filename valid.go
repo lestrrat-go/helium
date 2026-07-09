@@ -213,13 +213,21 @@ func (vc *validCtx) addf(ctx context.Context, format string, args ...any) {
 	vc.handler.Handle(ctx, fmt.Errorf(format, args...))
 }
 
-// docDTDs returns the DTDs to search in order, respecting standalone.
+// docDTDs returns the DTDs to search for declarations, internal subset first.
+// Both subsets are always searched, independent of standalone: a validating
+// processor reads the external subset and uses its element/attribute
+// declarations to validate document structure regardless of the standalone
+// declaration (libxml2 xmlGetDtdElementDesc/xmlGetDtdAttrDesc search both). The
+// Standalone Document Declaration VC (§2.9) — that a standalone="yes" document
+// must not DEPEND on external declarations for attribute defaults or value
+// normalization — is enforced separately by checkStandaloneExternalDefaults and
+// checkStandaloneExternalNormalization, not by hiding the external declarations.
 func docDTDs(doc *Document) []*DTD {
 	var dtds []*DTD
 	if doc.intSubset != nil {
 		dtds = append(dtds, doc.intSubset)
 	}
-	if doc.standalone != StandaloneExplicitYes && doc.extSubset != nil {
+	if doc.extSubset != nil {
 		dtds = append(dtds, doc.extSubset)
 	}
 	return dtds
@@ -313,15 +321,19 @@ func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx 
 	// itself carries an <!ELEMENT> declaration (an ATTLIST may exist without one).
 	checkStandaloneExternalDefaults(ctx, doc, elem, vctx)
 
+	// VC: Standalone Document Declaration — if standalone="yes" and the element
+	// has element-only content declared in the external subset, whitespace-only
+	// text nodes directly within it are a validity error (the external subset
+	// makes that whitespace ignorable). This consults the external subset
+	// directly, so it runs independent of the declaration lookup below — the
+	// element is normally FOUND (both subsets are searched regardless of
+	// standalone), and the violation must still be reported.
+	if doc.standalone == StandaloneExplicitYes && doc.extSubset != nil {
+		checkStandaloneWhitespace(ctx, doc.extSubset, elem, name, vctx)
+	}
+
 	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
 	if edecl == nil {
-		// VC: Standalone Document Declaration — if standalone="yes" and the
-		// element is declared in the external subset with element-only content,
-		// whitespace-only text nodes are a validity error (the external subset
-		// would have caused them to be treated as ignorable whitespace).
-		if doc.standalone == StandaloneExplicitYes && doc.extSubset != nil {
-			checkStandaloneWhitespace(ctx, doc.extSubset, elem, name, vctx)
-		}
 		vctx.addf(ctx, "element %s: no declaration found", name)
 		return
 	}
@@ -467,9 +479,15 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 		return
 	}
 	for child := range Children(elem) {
-		if child.Type() == TextNode && xmlchar.IsAllSpace(child.Content()) {
-			vctx.addf(ctx, "standalone: element %s declared in the external subset contains white spaces nodes", name)
-			return
+		// Whitespace-only character data — whether written as ordinary text or a
+		// CDATA section — is ignorable only because the external element-content
+		// declaration says so, so either form violates the standalone constraint.
+		switch child.Type() {
+		case TextNode, CDATASectionNode:
+			if xmlchar.IsAllSpace(child.Content()) {
+				vctx.addf(ctx, "standalone: element %s declared in the external subset contains white spaces nodes", name)
+				return
+			}
 		}
 	}
 }
