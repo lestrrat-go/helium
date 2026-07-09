@@ -149,6 +149,7 @@ var (
 	ErrNameRequired                  = errors.New("name is required")
 	ErrNmtokenRequired               = errors.New("nmtoken is required")
 	ErrNotationNameRequired          = errors.New("notation name expected in NOTATION declaration")
+	ErrNotationExternalIDRequired    = errors.New("ExternalID or PublicID required in NOTATION declaration")
 	ErrNotationNotFinished           = errors.New("notation must finish with a ')'")
 	ErrNotationNotStarted            = errors.New("notation must start with a '('")
 	ErrOpenParenRequired             = errors.New("'(' is required")

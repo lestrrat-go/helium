@@ -716,9 +716,15 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
-	systemID, publicID, err := pctx.parseExternalID(ctx, false)
+	systemID, publicID, found, err := pctx.parseExternalID(ctx, false)
 	if err != nil {
 		return pctx.error(ctx, err)
+	}
+	// NotationDecl [82]: '<!NOTATION' S Name S (ExternalID | PublicID) S? '>' —
+	// the ExternalID/PublicID is mandatory, so a notation with neither is a fatal
+	// well-formedness error (W3C ibm-not-wf-P82-ibm82n03).
+	if !found {
+		return pctx.error(ctx, ErrNotationExternalIDRequired)
 	}
 
 	if _, err := pctx.skipBlanksPE(ctx); err != nil {
@@ -819,10 +825,17 @@ func (pctx *parserCtx) preserveLimitOrAbort(ctx context.Context, err, fallback e
 // PUBLIC with only the PubidLiteral. Pass strict=true for every ExternalID
 // production (DOCTYPE external subset, entity declarations) and strict=false
 // only for NotationDecl.
-func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string, string, error) {
+//
+// The returned bool reports whether a SYSTEM or PUBLIC production was actually
+// present. It distinguishes an empty-but-present literal (e.g. `SYSTEM ""`,
+// which yields an empty systemID with found=true) from a wholly absent
+// ExternalID (found=false), mirroring libxml2's NULL-vs-non-NULL URI/literal
+// pointers. Callers that require the production (NotationDecl P82, EntityDecl
+// P73/P74) gate on found, not on the string being non-empty.
+func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string, string, bool, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		return "", "", pctx.error(ctx, errNoCursor)
+		return "", "", false, pctx.error(ctx, errNoCursor)
 	}
 
 	// The mandatory "S" separators here — and, in the external subset, a
@@ -833,71 +846,71 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 	// inside a SystemLiteral/PubidLiteral is a literal character).
 	if cur.HasPrefixString("SYSTEM") {
 		if err := cur.Advance(6); err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
 		adv, serr := pctx.skipBlanksPE(ctx)
 		if serr != nil {
-			return "", "", pctx.error(ctx, serr)
+			return "", "", false, pctx.error(ctx, serr)
 		}
 		if !adv {
-			return "", "", pctx.error(ctx, ErrSpaceRequired)
+			return "", "", false, pctx.error(ctx, ErrSpaceRequired)
 		}
 		uri, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.externalIDLiteralError(ctx, err, "system URI required")
+			return "", "", false, pctx.externalIDLiteralError(ctx, err, "system URI required")
 		}
-		return uri, "", nil
+		return uri, "", true, nil
 	} else if cur.HasPrefixString("PUBLIC") {
 		if err := cur.Advance(6); err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
 		adv, serr := pctx.skipBlanksPE(ctx)
 		if serr != nil {
-			return "", "", pctx.error(ctx, serr)
+			return "", "", false, pctx.error(ctx, serr)
 		}
 		if !adv {
-			return "", "", pctx.error(ctx, ErrSpaceRequired)
+			return "", "", false, pctx.error(ctx, ErrSpaceRequired)
 		}
 		publicID, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parsePubidLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.externalIDLiteralError(ctx, err, "public ID required")
+			return "", "", false, pctx.externalIDLiteralError(ctx, err, "public ID required")
 		}
 		if strict {
 			// ExternalID [75]: "S SystemLiteral" is mandatory after the
 			// PubidLiteral, so a space (then the SystemLiteral below) is required.
 			adv, serr := pctx.skipBlanksPE(ctx)
 			if serr != nil {
-				return "", "", pctx.error(ctx, serr)
+				return "", "", false, pctx.error(ctx, serr)
 			}
 			if !adv {
-				return "", "", pctx.error(ctx, ErrSpaceRequired)
+				return "", "", false, pctx.error(ctx, ErrSpaceRequired)
 			}
 		} else {
 			// NotationDecl PublicID [83]: the SystemLiteral is optional, so return
 			// the PubidLiteral alone when no quoted SystemLiteral follows.
 			adv, serr := pctx.skipBlanksPE(ctx)
 			if serr != nil {
-				return "", "", pctx.error(ctx, serr)
+				return "", "", false, pctx.error(ctx, serr)
 			}
 			if !adv {
-				return "", publicID, nil
+				return "", publicID, true, nil
 			}
 			cur = pctx.dtdRefetch(cur)
 			if c := cur.Peek(); c != '\'' && c != '"' {
-				return "", publicID, nil
+				return "", publicID, true, nil
 			}
 		}
 		uri, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.externalIDLiteralError(ctx, err, "system URI required")
+			return "", "", false, pctx.externalIDLiteralError(ctx, err, "system URI required")
 		}
-		return uri, publicID, nil
+		return uri, publicID, true, nil
 	}
-	return "", "", nil
+	return "", "", false, nil
 }
