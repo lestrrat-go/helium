@@ -119,13 +119,18 @@ func isValidName(s string) bool {
 
 // isValidNmtoken checks whether s matches the XML Nmtoken production:
 // Nmtoken ::= (NameChar)+
+//
+// DTD validation is NOT namespace-aware, so an Nmtoken uses the full XML 1.0
+// NameChar production, which INCLUDES the colon (e.g. `x:image` is a valid
+// NMTOKEN). Unlike the ID/IDREF/ENTITY Name checks, this must not use the
+// namespace-aware NCNameChar production.
 func isValidNmtoken(s string) bool {
 	if s == "" {
 		return false
 	}
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
-		if (r == utf8.RuneError && size == 1) || !isValidNameChar(r) {
+		if (r == utf8.RuneError && size == 1) || !isValidNmtokenChar(r) {
 			return false
 		}
 		i += size
@@ -138,6 +143,10 @@ func isValidNameStartChar(r rune) bool { return xmlchar.IsNCNameStartChar(r) }
 
 // isValidNameChar checks the XML 1.0 NameChar production (without colon).
 func isValidNameChar(r rune) bool { return xmlchar.IsNCNameChar(r) }
+
+// isValidNmtokenChar checks the XML 1.0 NameChar production INCLUDING the colon.
+// NameChar ::= NCNameChar | ":"
+func isValidNmtokenChar(r rune) bool { return xmlchar.IsNCNameChar(r) || r == ':' }
 
 // validateAttributeValueInternal validates that defvalue is legal for the
 // declared attribute type. Mirrors xmlValidateAttributeDecl() in libxml2.
