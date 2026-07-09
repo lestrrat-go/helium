@@ -259,6 +259,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
 		}
+		if err := pctx.checkCondSectionEntityBoundary(ctx, sectionDepth); err != nil {
+			return err
+		}
 		if err := cur.Advance(1); err != nil {
 			return err
 		}
@@ -342,6 +345,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
 		}
+		if err := pctx.checkCondSectionEntityBoundary(ctx, sectionDepth); err != nil {
+			return err
+		}
 		if err := cur.Advance(1); err != nil {
 			return err
 		}
@@ -376,6 +382,27 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 	}
 
 	return ErrConditionalSectionKeyword
+}
+
+// checkCondSectionEntityBoundary enforces the "Proper Conditional Section/PE
+// Nesting" validity constraint (XML §3.4): the "<![", the INCLUDE/IGNORE
+// keyword, and the "[" that open a conditional section must all originate in
+// the same parameter-entity replacement text. sectionDepth is the input-stack
+// depth of the cursor holding "<!["; when the keyword and "[" were supplied by a
+// parameter entity pushed above it, the section markup straddles an entity
+// boundary and the input stack is deeper than sectionDepth. It is a VALIDITY
+// constraint, so it is reported only when validating (matching libxml2, which
+// raises XML_ERR_ENTITY_BOUNDARY here as xmlValidityError, not a fatal
+// well-formedness error).
+func (pctx *parserCtx) checkCondSectionEntityBoundary(ctx context.Context, sectionDepth int) error {
+	if !pctx.options.IsSet(parseDTDValid) {
+		return nil
+	}
+	if pctx.inputTab.Len() <= sectionDepth {
+		return nil
+	}
+	return pctx.error(ctx,
+		fmt.Errorf("%w: all markup of the conditional section is not in the same entity", ErrEntityBoundary))
 }
 
 // popSpentExternalSubsetInputs pops any exhausted (Done) parameter-entity or
