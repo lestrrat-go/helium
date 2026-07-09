@@ -388,11 +388,22 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 	}
 }
 
+// specialAttrKey identifies a special (tokenized-type) attribute declaration by
+// the element's declared QName and the attribute's declared QName, both exactly as
+// written. A struct key avoids the ambiguity of a `elem + ":" + attr` string
+// concatenation, which would collide distinct QName pairs — e.g. `(p:r, id)` and
+// `(p, r:id)` both concatenate to `p:r:id` (libxml2 avoids this with a two-arg
+// hash lookup, xmlHashQLookup2).
+type specialAttrKey struct {
+	elem string
+	attr string
+}
+
 func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.AttributeType) {
 	if typ == enum.AttrID && ctx.loadsubset.IsSet(SkipIDs) {
 		return
 	}
-	key := elemName + ":" + attrName
+	key := specialAttrKey{elem: elemName, attr: attrName}
 	// XML 1.0 §3.3: the first declaration of an attribute is binding. The parse
 	// loop invokes this for every <!ATTLIST> declaration, including an ignored
 	// duplicate; keeping the first-seen type ensures a later duplicate's type
@@ -401,14 +412,33 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 		return
 	}
 	ctx.attsSpecial[key] = typ
+	// Record whether this binding originates in external markup (external subset or
+	// an external parameter entity), for the VC: Standalone Document Declaration
+	// normalization check (libxml2 XML_SPECIAL_EXTERNAL).
+	if ctx.effectivelyExternal() {
+		ctx.attsSpecialExternal[key] = struct{}{}
+	}
+}
+
+// specialAttributeExternal reports whether the tokenized-type binding for
+// (elemName, attrName) was declared in external markup. attrName is the attribute
+// name EXACTLY as written (raw QName, prefix included), matching both how
+// addSpecialAttribute keyed the declaration and how parseAttribute keys the
+// normalization lookup — so `p:id` matches only an `<!ATTLIST r p:id …>`
+// declaration, never the unprefixed `id`.
+func (ctx *parserCtx) specialAttributeExternal(elemName, attrName string) bool {
+	if len(ctx.attsSpecialExternal) == 0 {
+		return false
+	}
+	_, ok := ctx.attsSpecialExternal[specialAttrKey{elem: elemName, attr: attrName}]
+	return ok
 }
 
 func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.AttributeType, bool) {
 	if len(ctx.attsSpecial) == 0 {
 		return 0, false
 	}
-	key := elemName + ":" + attrName
-	v, ok := ctx.attsSpecial[key]
+	v, ok := ctx.attsSpecial[specialAttrKey{elem: elemName, attr: attrName}]
 	return v, ok
 }
 
@@ -466,6 +496,11 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	attr.def = def
 	attr.tree = tree
 	attr.defvalue = defvalue
+	// Record whether this declaration comes from external markup (external subset
+	// or an external parameter entity), for the VC: Standalone Document Declaration
+	// default-attribute check. An external-PE-declared ATTLIST is registered in the
+	// internal subset's table, so origin cannot be inferred from the subset alone.
+	attr.external = ctx.effectivelyExternal()
 
 	if err = dtd.RegisterAttribute(attr); err != nil {
 		attr = nil

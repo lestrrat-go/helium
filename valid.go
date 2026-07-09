@@ -173,6 +173,15 @@ func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalu
 	return nil
 }
 
+// standaloneNormAttr identifies a specified attribute (by owning element name and
+// attribute name, as written in the source) whose value was altered by tokenized
+// attribute-value normalization driven by an external-subset declaration. It backs
+// the VC: Standalone Document Declaration normalization check.
+type standaloneNormAttr struct {
+	elem string
+	attr string
+}
+
 // ErrDTDValidationFailed is returned by DTD validation when the document
 // does not conform to the DTD. Individual validation errors are delivered
 // to the configured [ErrorHandler].
@@ -203,13 +212,14 @@ func docDTDs(doc *Document) []*DTD {
 	return dtds
 }
 
-// lookupElementDecl searches both intSubset and extSubset for an element declaration.
+// lookupElementDecl searches both intSubset and extSubset for an element
+// declaration. DTD validation compares raw qualified names, not namespaces, so a
+// prefixed element requires an <!ELEMENT> declaration for the SAME QName — there is
+// no fallback from `p:r` to an unprefixed `r` declaration (for an unprefixed
+// element, prefix is "" and this is the only lookup).
 func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) {
 	for _, dtd := range docDTDs(doc) {
 		if edecl, ok := dtd.LookupElement(name, prefix); ok {
-			return edecl, dtd
-		}
-		if edecl, ok := dtd.LookupElement(name, ""); ok {
 			return edecl, dtd
 		}
 	}
@@ -243,14 +253,20 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 		if dtdName == "" && doc.extSubset != nil {
 			dtdName = doc.extSubset.name
 		}
-		if dtdName != "" && root.LocalName() != dtdName {
-			vctx.addf(ctx, "root element name %q does not match DTD name %q", root.LocalName(), dtdName)
+		// The DOCTYPE name is the root element's qualified name (e.g. `p:r`), so
+		// compare against the element's QName, not just its local part.
+		if dtdName != "" && root.Name() != dtdName {
+			vctx.addf(ctx, "root element name %q does not match DTD name %q", root.Name(), dtdName)
 		}
 	}
 
 	// Validate the DTD declarations themselves (declaration-consistency VCs)
 	// before walking the instance tree.
 	validateDTDDeclarations(ctx, doc, vctx)
+
+	// VC: Standalone Document Declaration (XML §2.9) — attribute values normalized
+	// by an external-subset tokenized-type declaration (recorded during parsing).
+	checkStandaloneExternalNormalization(ctx, doc, vctx)
 
 	// Walk the document tree and validate each element. A cycle in the tree
 	// (ErrWalkCycle) leaves the walk partial, so the document cannot be
@@ -276,6 +292,13 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 // validateOneElement checks a single element against DTD declarations.
 func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
 	name := elem.LocalName()
+
+	// VC: Standalone Document Declaration (XML §2.9) — an attribute that takes a
+	// default value from an ATTLIST declaration in the external subset changes the
+	// document, so it is invalid in a standalone="yes" document. Checked before the
+	// element-declaration lookup so it fires independently of whether the element
+	// itself carries an <!ELEMENT> declaration (an ATTLIST may exist without one).
+	checkStandaloneExternalDefaults(ctx, doc, elem, vctx)
 
 	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
 	if edecl == nil {
@@ -304,26 +327,33 @@ func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx 
 // - ID values are unique across the document
 // - IDREF/IDREFS values are recorded for cross-reference checking
 func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, _ *ElementDecl, vctx *validCtx) {
-	ename := elem.LocalName()
+	// ATTLIST declarations are keyed by the element's declared QName; match by the
+	// instance element's QName so a declaration for `p:r` is not applied to `<r>`.
+	ename := elem.Name()
 	attrs := elem.Attributes()
 
-	// Build a set of attributes present on the element
+	// Build a set of present attributes, keyed by full QName (prefix + local), so a
+	// declaration for `p:id` matches only a `p:id` instance attribute, not `q:id`.
 	present := make(map[string]string, len(attrs))
 	for _, a := range attrs {
-		present[a.LocalName()] = a.Value()
+		present[a.Prefix()+":"+a.LocalName()] = a.Value()
 	}
 
-	// Check all declared attributes from both subsets, dedup by name
+	// Check all declared attributes from both subsets, dedup by QName
 	seen := make(map[string]bool)
 	for _, dtd := range docDTDs(doc) {
 		for _, adecl := range dtd.AttributesForElement(ename) {
+			akey := adecl.prefix + ":" + adecl.name
 			aname := adecl.name
-			if seen[aname] {
+			if adecl.prefix != "" {
+				aname = adecl.prefix + ":" + adecl.name
+			}
+			if seen[akey] {
 				continue
 			}
-			seen[aname] = true
+			seen[akey] = true
 
-			val, found := present[aname]
+			val, found := present[akey]
 
 			switch adecl.def {
 			case enum.AttrDefaultRequired:
@@ -417,10 +447,9 @@ func validateDocumentFinal(ctx context.Context, vctx *validCtx) {
 // standalone="yes" document must not contain such whitespace when the
 // element declaration comes from the external subset.
 func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Element, name string, vctx *validCtx) {
+	// DTD validation is prefix-literal, so match the element's exact QName with no
+	// fallback from a prefixed element to an unprefixed declaration.
 	extDecl, ok := extSubset.LookupElement(name, elem.Prefix())
-	if !ok {
-		extDecl, ok = extSubset.LookupElement(name, "")
-	}
 	if !ok || extDecl.decltype != enum.ElementElementType {
 		return
 	}
@@ -429,6 +458,82 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 			vctx.addf(ctx, "standalone: element %s declared in the external subset contains white spaces nodes", name)
 			return
 		}
+	}
+}
+
+// checkStandaloneExternalDefaults implements part of the VC: Standalone Document
+// Declaration (XML §2.9): in a standalone="yes" document it is a validity error
+// for an attribute to take a default value supplied by an ATTLIST declaration in
+// the external subset, because omitting the external subset would change whether
+// the attribute is present. Mirrors libxml2's XML_DTD_STANDALONE_DEFAULTED report.
+func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
+	if doc.standalone != StandaloneExplicitYes {
+		return
+	}
+	// Drive the check from the ATTLIST declarations, not materialized default
+	// Attribute nodes: ValidateDTD(true) does not imply DefaultDTDAttributes(true),
+	// so an external default may never be materialized on the instance, yet the
+	// declaration still makes the document depend on external markup. Origin is
+	// recorded per-declaration (AttributeDecl.external), because an external-PE-
+	// supplied ATTLIST is registered in the internal subset's table yet is still
+	// external markup. An internal-subset declaration takes precedence (§3.3), and
+	// dtdSubsets orders internal first, so the first-seen declaration per attribute
+	// wins. ATTLIST declarations are keyed by the element's declared QName, so match
+	// by the instance element's QName (a declaration for `p:r` does not apply to `<r>`).
+	ename := elem.Name()
+	seen := make(map[string]struct{})
+	for _, dtd := range dtdSubsets(doc) {
+		for _, adecl := range dtd.AttributesForElement(ename) {
+			key := adecl.name + ":" + adecl.prefix
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			if !attrHasDefaultValue(adecl.def) || !adecl.external {
+				continue
+			}
+			// The external default is a validity error unless the instance supplies
+			// the attribute explicitly (a value present in the source, not the
+			// DTD-supplied default).
+			if attrExplicitlySpecified(elem, adecl.name, adecl.prefix) {
+				continue
+			}
+			name := adecl.name
+			if adecl.prefix != "" {
+				name = adecl.prefix + ":" + adecl.name
+			}
+			vctx.addf(ctx, "standalone: attribute %s on %s defaulted from external subset", name, ename)
+		}
+	}
+}
+
+// attrExplicitlySpecified reports whether the element carries the named attribute
+// as a value present in the source instance — a materialized node that is not a
+// DTD-supplied default.
+func attrExplicitlySpecified(elem *Element, name, prefix string) bool {
+	for _, a := range elem.Attributes() {
+		if a.LocalName() == name && a.Prefix() == prefix {
+			return !a.IsDefault()
+		}
+	}
+	return false
+}
+
+// checkStandaloneExternalNormalization implements part of the VC: Standalone
+// Document Declaration (XML §2.9): in a standalone="yes" document it is a validity
+// error for the normalized value of a specified attribute to differ from its
+// literal value when the attribute's (tokenized) type comes from a declaration in
+// the external subset — omitting the external subset would leave the attribute
+// CDATA and preserve its whitespace. The parser records each such attribute during
+// attribute-value normalization (it alone still holds the pre-normalization
+// value); this flushes those records as validity errors. Mirrors libxml2's
+// XML_DTD_NOT_STANDALONE normalization report.
+func checkStandaloneExternalNormalization(ctx context.Context, doc *Document, vctx *validCtx) {
+	if doc.standalone != StandaloneExplicitYes {
+		return
+	}
+	for _, v := range doc.standaloneNormAttrs {
+		vctx.addf(ctx, "standalone: normalization of attribute %s on %s by external subset declaration", v.attr, v.elem)
 	}
 }
 
@@ -506,6 +611,12 @@ func collectMixedNamesRecurse(content *ElementContent, names map[string]struct{}
 
 // collectChildElements returns a slice of element names from the children
 // of an element, ignoring text nodes, comments, PIs, etc.
+//
+// PRE-EXISTING GAP: content-model matching (here and in validateMixedContent)
+// compares element LOCAL names, not raw QNames, so a model `(p:a)` accepts a
+// `<a/>` child and vice-versa. This is a systematic local-name-based content-model
+// limitation, independent of the QName-keyed declaration lookups; a proper
+// raw-QName content-model fix is a separate follow-up.
 func collectChildElements(elem *Element) []string {
 	var children []string
 	for child := range Children(elem) {

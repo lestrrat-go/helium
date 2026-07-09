@@ -11,6 +11,7 @@ type AttributeDecl struct {
 	tree     Enumeration           // ... or the enumeration tree, if any
 	prefix   string                // the namespace prefix, if any
 	elem     string                // name of the element holding the attribute
+	external bool                  // declared in external markup (external subset or external PE)
 }
 
 func newAttributeDecl() *AttributeDecl {

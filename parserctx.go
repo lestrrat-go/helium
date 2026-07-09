@@ -116,23 +116,32 @@ type parserCtx struct {
 	// exhausted, but it must never pop BELOW this floor (which would drop into the
 	// main document input and consume post-DOCTYPE content). 0 outside an external
 	// subset, so skipBlanksPE performs no PE expansion there.
-	dtdInputFloor  int
-	extSubSystem   string
-	extSubURI      string
-	version        string
-	attsSpecial    map[string]enum.AttributeType
-	attsDefault    map[string][]*Attribute
-	valid          bool
-	hasPERefs      bool
-	pedantic       bool
-	wellFormed     bool
-	depth          int
-	loadsubset     LoadSubsetOption
-	charBufferSize int
-	baseURI        string          // document base URI for resolving external references
-	catalog        CatalogResolver // XML catalog for entity resolution
-	fsys           fs.FS           // filesystem for loading external DTDs and entities
-	elem           *Element        // current context element
+	dtdInputFloor int
+	extSubSystem  string
+	extSubURI     string
+	version       string
+	attsSpecial   map[specialAttrKey]enum.AttributeType
+	// attsSpecialExternal records which entries of attsSpecial were declared in the
+	// external subset (mirrors libxml2's XML_SPECIAL_EXTERNAL flag). Used for the
+	// VC: Standalone Document Declaration attribute-normalization check.
+	attsSpecialExternal map[specialAttrKey]struct{}
+	// attrNormChanged is a transient flag set while parsing one attribute value: it
+	// reports whether tokenized-type normalization (leading/trailing trim or
+	// internal-space collapse) altered the value. Read by parseAttribute for the
+	// VC: Standalone Document Declaration normalization check.
+	attrNormChanged bool
+	attsDefault     map[string][]*Attribute
+	valid           bool
+	hasPERefs       bool
+	pedantic        bool
+	wellFormed      bool
+	depth           int
+	loadsubset      LoadSubsetOption
+	charBufferSize  int
+	baseURI         string          // document base URI for resolving external references
+	catalog         CatalogResolver // XML catalog for entity resolution
+	fsys            fs.FS           // filesystem for loading external DTDs and entities
+	elem            *Element        // current context element
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
@@ -382,6 +391,17 @@ func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
 	return ctx.activeExternalPECount[ent] > 0
 }
 
+// effectivelyExternal reports whether a markup declaration parsed at this point
+// counts as EXTERNAL for the VC: Standalone Document Declaration (XML §2.9). A
+// declaration is external when it comes from the external subset OR from an
+// external parameter entity referenced anywhere (mirrors libxml2's PARSER_EXTERNAL
+// = inSubset==2 OR the current input is an XML_EXTERNAL_PARAMETER_ENTITY). An
+// external-PE-supplied declaration referenced from the internal subset is external
+// markup even though it is registered in the internal subset's declaration table.
+func (ctx *parserCtx) effectivelyExternal() bool {
+	return ctx.inSubset == inExternalSubset || len(ctx.externalPEScopes) > 0
+}
+
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	cur, ok := ctx.inputTab.PeekOne().(*strcursor.ByteCursor)
 	if !ok {
@@ -586,7 +606,8 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.keepBlanks = true
 	ctx.instate = psStart
 	ctx.standalone = StandaloneImplicitNo
-	ctx.attsSpecial = map[string]enum.AttributeType{}
+	ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
+	ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
 	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]
