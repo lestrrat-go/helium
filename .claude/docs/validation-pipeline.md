@@ -868,11 +868,15 @@ a prefixed instance attribute (`p:id`, `xml:space`, `xml:lang`) is undeclared
 unless an `<!ATTLIST>` declares that exact QName (W3C ibm-invalid-P41-ibm41i01,
 inv-required01/02). One exemption: the synthetic `xml:base` attribute helium
 injects onto the top-level elements of an external parsed entity to record its
-base URI (`parser_entity_decl.go`) is NOT flagged — `isSyntheticEntityBase`
-recognizes it (the owning element's `entityBaseURI` is non-empty and the `xml:base`
-value equals it), because it is not present in the source and libxml2 tracks the
-entity base without materializing an attribute (W3C valid ext-sa-005/013,
-sun/valid/ext01).
+base URI (`parser_entity_decl.go`) is NOT flagged — it carries an
+`Attribute.syntheticBase` marker set ONLY at the injection site (and re-applied by
+`carrySyntheticBase` in `tree_builder.go` when a cached entity subtree is replayed
+under `replaceEntities`), and the loop skips a marked attribute. The check is
+marker-based, not value-based: an AUTHORED `xml:base` — even one whose value
+coincidentally equals the entity base URI — is never marked and is validated
+normally, matching `xmllint --valid --noent`. libxml2 tracks the entity base
+without materializing an attribute, so it never flags the synthetic one (W3C valid
+ext-sa-005/013, sun/valid/ext01).
 
 **Namespace-declaration attributes** (`xmlns` / `xmlns:*`) live in the element's
 `nsDefs`, not its attribute chain, and are handled by

@@ -489,7 +489,11 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 	// (xmlns / xmlns:*) are stored in nsDefs, not the attribute chain, so they are
 	// checked separately by validateElementNamespaceDecls.
 	for _, a := range attrs {
-		if isSyntheticEntityBase(elem, a) {
+		// The xml:base the parser injects onto external-entity elements is not in
+		// the source; libxml2 tracks the entity base without a materialized
+		// attribute, so it is exempt from this VC. An AUTHORED xml:base is not
+		// marked and is validated normally.
+		if a.syntheticBase {
 			continue
 		}
 		if !seen[a.Prefix()+":"+a.LocalName()] {
@@ -498,24 +502,6 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 	}
 
 	validateElementNamespaceDecls(ctx, doc, elem, ename, vctx)
-}
-
-// isSyntheticEntityBase reports whether a is the xml:base attribute helium
-// injects onto the top-level elements of an external parsed entity to record the
-// entity's base URI (parser_entity_decl.go). Such an attribute is not present in
-// the source and is not subject to the "must be declared" VC — libxml2 tracks the
-// entity base without a materialized attribute, so it never flags one. The
-// injection sets the value to the element's entityBaseURI, so an attribute is
-// synthetic exactly when the owning element originates from an external entity
-// (entityBaseURI != "") and its xml:base value equals that URI.
-func isSyntheticEntityBase(elem *Element, a *Attribute) bool {
-	if elem.entityBaseURI == "" {
-		return false
-	}
-	if a.LocalName() != "base" || a.Prefix() != "xml" {
-		return false
-	}
-	return a.Value() == elem.entityBaseURI
 }
 
 // validateElementNamespaceDecls enforces the Fixed Attribute Default VC on the

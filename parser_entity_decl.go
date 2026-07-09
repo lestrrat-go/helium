@@ -921,7 +921,14 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 					if !pctx.options.IsSet(parseNoBaseFix) {
 						if elem, ok := e.(*Element); ok {
 							if _, exists := elem.GetAttributeNS("base", lexicon.NamespaceXML); !exists {
-								_, _ = elem.SetAttributeNS("base", uri, newNamespace("xml", lexicon.NamespaceXML))
+								if _, err := elem.SetAttributeNS("base", uri, newNamespace("xml", lexicon.NamespaceXML)); err == nil {
+									// Mark this xml:base as parser-synthesized so DTD
+									// validation does not treat it as an undeclared
+									// attribute (an authored xml:base is never marked).
+									if injected := elem.GetAttributeNodeNS("base", lexicon.NamespaceXML); injected != nil {
+										injected.syntheticBase = true
+									}
+								}
 							}
 						}
 					}

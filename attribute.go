@@ -9,7 +9,13 @@ type Attribute struct {
 	docnode
 	atype       enum.AttributeType
 	defaultAttr bool
-	ns          *Namespace
+	// syntheticBase is set only on the xml:base attribute the parser injects onto
+	// the top-level elements of an external parsed entity (parser_entity_decl.go)
+	// to record the entity's base URI. It is not present in the source, so DTD
+	// validation exempts it from the "attribute must be declared" VC. An AUTHORED
+	// xml:base is never marked and is validated normally.
+	syntheticBase bool
+	ns            *Namespace
 }
 
 func newAttribute(name string, ns *Namespace) *Attribute {

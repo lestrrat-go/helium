@@ -67,7 +67,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 |------|--------|------|----------|---------|----------|----------------|
 | Document | `Document` | docnode | ✓ | — | ✗ | version, encoding, standalone, url, properties, intSubset, extSubset, ids map |
 | Element | `Element` | node | ✓ | via children | ✓ | properties (Attribute linked list), ns, nsDefs |
-| Attribute | `Attribute` | docnode | ✓ (text/entityref for value) | via children | ✓ (linked list) | ns, atype, defaultAttr |
+| Attribute | `Attribute` | docnode | ✓ (text/entityref for value) | via children | ✓ (linked list) | ns, atype, defaultAttr, syntheticBase (parser-injected external-entity xml:base) |
 | Text | `Text` | node | ✗ (merges) | ✓ content | ✓ | Adjacent text nodes auto-merge |
 | CDATASection | `CDATASection` | node | ✗ | ✓ content | ✓ | — |
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |

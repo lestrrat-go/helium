@@ -146,6 +146,7 @@ func TestExternalEntitySyntheticBaseNotFlagged(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	_, err := helium.NewParser().
 		BaseURI("doc.xml").
+		BlockXXE(false).
 		LoadExternalDTD(true).
 		DefaultDTDAttributes(true).
 		SubstituteEntities(true).
@@ -154,4 +155,43 @@ func TestExternalEntitySyntheticBaseNotFlagged(t *testing.T) {
 		ErrorHandler(collector).
 		Parse(t.Context(), []byte(src))
 	require.NoError(t, err, "external-entity elements carry a synthetic xml:base that must not be flagged as undeclared; errors=%v", collector.Errors())
+}
+
+// TestExternalEntityAuthoredBaseFlagged is the adversarial counterpart: only the
+// parser-injected xml:base is exempt. An AUTHORED xml:base on an external-entity
+// element — even one whose value coincidentally equals the entity's base URI, so
+// the parser suppresses its own injection — is a real attribute and must be
+// rejected when undeclared (VC: Attribute Value Type), matching
+// `xmllint --valid --noent`. The exemption is marker-based, not value-based.
+func TestExternalEntityAuthoredBaseFlagged(t *testing.T) {
+	t.Parallel()
+
+	// The entity's base URI resolves to "e.ent" (relative to BaseURI "doc.xml"),
+	// and the authored xml:base value is exactly that, so a value-equality
+	// exemption would wrongly accept it.
+	fsys := fstest.MapFS{
+		"e.ent": {Data: []byte(`<e xml:base="e.ent"/>`)},
+	}
+	src := `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (e*)>
+  <!ELEMENT e EMPTY>
+  <!ENTITY e SYSTEM "e.ent">
+]>
+<doc>&e;</doc>`
+
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, err := helium.NewParser().
+		BaseURI("doc.xml").
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		DefaultDTDAttributes(true).
+		SubstituteEntities(true).
+		ValidateDTD(true).
+		FS(fsys).
+		ErrorHandler(collector).
+		Parse(t.Context(), []byte(src))
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "no declaration for attribute xml:base"),
+		"authored undeclared xml:base must be flagged; errors=%v", collector.Errors())
 }
