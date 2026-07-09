@@ -138,6 +138,28 @@ func TestStandaloneExternalDecl(t *testing.T) {
 			require.NoError(t, err)
 		})
 
+		// An external UNPREFIXED tokenized declaration does not apply to a PREFIXED
+		// instance attribute of the same local name, so the standalone check must
+		// not fire (main accepts this document — no new false positive).
+		t.Run("prefixed instance vs unprefixed external decl accepted", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
+<r xmlns:p="urn:p" p:id="  spacedvalue  "/>`, `<!ATTLIST r id NMTOKEN #IMPLIED>`)
+			require.NoError(t, err)
+		})
+
+		// The genuine case (unprefixed instance matching the unprefixed external
+		// declaration) still fires.
+		t.Run("unprefixed instance matching external decl rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
+<r id="  spacedvalue  "/>`, `<!ATTLIST r id NMTOKEN #IMPLIED>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "normalization of attribute id"))
+		})
+
 		// The same tokenized type declared in the INTERNAL subset normalizes the
 		// value too, but that requires no external markup, so it is not a violation.
 		t.Run("internal normalization accepted", func(t *testing.T) {

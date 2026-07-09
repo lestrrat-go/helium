@@ -1272,14 +1272,23 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		// document, an attribute whose value is altered by tokenized-type
 		// normalization declared in the external subset is a validity error.
 		// Record it for the post-parse DTD validation pass, which alone would no
-		// longer have the pre-normalization value.
+		// longer have the pre-normalization value. The external-origin lookup keys
+		// on the attribute's EXACT source QName (prefix included), so an external
+		// unprefixed `<!ATTLIST r id ...>` declaration never matches a prefixed
+		// instance attribute `p:id` (whose over-broad local-name normalization is a
+		// separate pre-existing gap) — this avoids a false-positive validity error
+		// on a valid document.
+		attrQName := l
+		if p != "" {
+			attrQName = p + ":" + l
+		}
 		if pctx.attrNormChanged &&
 			pctx.standalone == StandaloneExplicitYes &&
 			pctx.options.IsSet(parseDTDValid) &&
-			pctx.specialAttributeExternal(elemName, l) &&
+			pctx.specialAttributeExternal(elemName, attrQName) &&
 			pctx.doc != nil {
 			pctx.doc.standaloneNormAttrs = append(pctx.doc.standaloneNormAttrs,
-				standaloneNormAttr{elem: elemName, attr: l})
+				standaloneNormAttr{elem: elemName, attr: attrQName})
 		}
 	}
 
