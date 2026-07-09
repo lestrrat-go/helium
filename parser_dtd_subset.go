@@ -884,6 +884,13 @@ func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcU
 	// encoding was already fixed by the BOM/leading-'<' shape, so the declared
 	// encoding is informational; a standalone pseudo-attribute or a missing
 	// encoding is still rejected by parseTextDeclFromCursor.
+	//
+	// NOTE (deferred follow-up): XML §4.3.3 applies per external parsed entity,
+	// so a BOM here that contradicts this TextDecl's declared encoding is also a
+	// fatal error. checkBOMEncodingConflict currently runs only at the document
+	// entity (parser_document.go); extending it to external-entity scope (using
+	// the entity's own BOM + TextDecl encoding) is a separate change with no W3C
+	// xml corpus case exercising it. Not covered here.
 	if looksLikeXMLDeclString(cur) {
 		if err := sub.parseTextDeclFromCursor(ctx); err != nil {
 			return nil, err
