@@ -41,6 +41,12 @@ var (
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
+	// ErrEntityNotWellBalanced is returned when an internal general entity's
+	// replacement text is not well balanced with respect to element nesting —
+	// e.g. it opens with an end-tag or closes an element opened outside the
+	// entity (WFC: Parsed entities must be well-formed; XML §4.3.2). Referencing
+	// such an entity in element content is a fatal well-formedness error.
+	ErrEntityNotWellBalanced = errors.New("entity content is not well balanced")
 	// ErrWalkCycle is returned by Walk when the traversal encounters a
 	// child-pointer cycle — a node reachable from itself through child links.
 	// A well-formed, parent-consistent tree never triggers it; it guards
