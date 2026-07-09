@@ -1044,6 +1044,15 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	if err := newctx.cursorDecodeErr(); err != nil {
 		return nil, newctx.error(innerCtx, err)
 	}
+	// The replacement text must be well balanced with respect to element nesting
+	// (WFC: parsed entities must be well-formed; XML §4.3.2). parseContent stops
+	// at a "</" that would close an element opened OUTSIDE this chunk (the
+	// pseudo-root), leaving that end-tag — and anything after it — unconsumed. A
+	// non-exhausted cursor here therefore means the entity opens with, or crosses,
+	// an element boundary (e.g. "</foo><foo>"), which is a fatal error.
+	if lc := newctx.getCursor(); lc != nil && !lc.Done() {
+		return nil, newctx.error(innerCtx, ErrEntityNotWellBalanced)
+	}
 
 	if child := newctx.doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
