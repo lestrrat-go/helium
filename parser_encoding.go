@@ -249,8 +249,8 @@ func (ctx *parserCtx) switchEncoding() error {
 // alias lists mirror libxml2's xmlSetDeclaredEncoding.
 var bomAllowedEncodings = map[string]map[string]struct{}{
 	encUTF8:    {"utf-8": {}, "utf8": {}},
-	encUTF16LE: {"utf-16": {}, "utf-16le": {}, "utf16": {}},
-	encUTF16BE: {"utf-16": {}, "utf-16be": {}, "utf16": {}},
+	encUTF16LE: {"utf-16": {}, "utf-16le": {}, "utf16": {}, "utf16le": {}},
+	encUTF16BE: {"utf-16": {}, "utf-16be": {}, "utf16": {}, "utf16be": {}},
 }
 
 // checkBOMEncodingConflict reports a fatal error when the document declared an

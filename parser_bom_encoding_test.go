@@ -104,6 +104,16 @@ func TestBOMEncodingConflict(t *testing.T) {
 			require.NoError(t, err)
 		})
 
+		// The hyphen-less endian alias (UTF16BE) is a name internal/encoding.Load
+		// and xmllint both accept, so a BOM declaring it must NOT be a conflict.
+		t.Run("utf-16be BOM with hyphenless utf16be declaration", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16BE...),
+				utf16be(`<?xml version='1.0' encoding='UTF16BE'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
 		// The key over-rejection guard: a BOM-less, ASCII-compatible document
 		// that declares a single-byte encoding must NOT be treated as a
 		// conflict — no BOM was consumed, so autoEncoding is empty.
