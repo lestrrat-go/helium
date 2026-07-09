@@ -49,6 +49,16 @@ func TestDeclMissingMandatoryPart(t *testing.T) {
 				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n SYSTEM "">]><root/>`))
 			require.NoError(t, err)
 		})
+
+		t.Run("colon in name rejected", func(t *testing.T) {
+			t.Parallel()
+			// A NotationDecl Name is a non-namespaced Name; a colon is forbidden
+			// under namespace processing (W3C not-wf rmt-ns10-044).
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION a:b SYSTEM "n.dtd">]><root/>`))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "colons are forbidden from notation names")
+		})
 	})
 
 	// EntityDecl [73] EntityDef / [74] PEDef: EntityValue | ExternalID(...).

@@ -707,6 +707,12 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
+	// A NotationDecl Name is a non-namespaced Name; under namespace processing a
+	// colon is forbidden, exactly as for entity names (Namespaces in XML §6, W3C
+	// not-wf rmt-ns10-044; libxml2 reports the same "colons are forbidden" error).
+	if strings.IndexByte(name, ':') > -1 {
+		return pctx.error(ctx, errors.New("colons are forbidden from notation names"))
+	}
 
 	adv, err = pctx.skipBlanksPE(ctx)
 	if err != nil {
