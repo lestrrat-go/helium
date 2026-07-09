@@ -698,6 +698,45 @@ func TestParameterEntitySuppliesEntityValue(t *testing.T) {
 	require.Equal(t, "<doc>hello</doc>", str, "the PE-supplied internal entity value must expand, not become an empty external entity")
 }
 
+// TestInternalSubsetPEInMarkupRejected asserts the INTERNAL subset stays
+// byte-identical to origin: a parameter entity must NOT supply part of (or be
+// adjacent to) a markup declaration there (WFC: PEs in Internal Subset). PE
+// expansion inside markup is EXTERNAL-subset-only; a '%' where an "S", token, or
+// '>' is required is rejected exactly as before, never silently accepted.
+func TestInternalSubsetPEInMarkupRejected(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		name    string
+		doctype string
+	}{
+		{
+			// A '%' where an "S" or '>' is required in an <!ENTITY> declaration.
+			name:    "stray-percent-in-entity-decl",
+			doctype: `<!DOCTYPE doc [<!ELEMENT doc EMPTY><!ENTITY e SYSTEM "x"%p;>]><doc/>`,
+		},
+		{
+			// A PE supplying the <!ATTLIST> body in the internal subset.
+			name:    "pe-supplies-attlist-body",
+			doctype: `<!DOCTYPE doc [<!ELEMENT doc EMPTY><!ENTITY % att "a1 CDATA 'v1'"><!ATTLIST doc %att;>]><doc/>`,
+		},
+		{
+			// A PE supplying an <!ELEMENT> content model in the internal subset.
+			name:    "pe-supplies-content-model",
+			doctype: `<!DOCTYPE doc [<!ENTITY % m "#PCDATA"><!ELEMENT doc (%m;)>]><doc/>`,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).
+				Parse(t.Context(), []byte(tc.doctype))
+			require.Error(t, err, "a parameter entity inside a markup declaration in the internal subset must be rejected")
+		})
+	}
+}
+
 // TestParameterEntityMarkupBoundaryViolation covers the XML validity constraints
 // that a markup declaration (and a parenthesized content-model group) must start
 // and stop in the SAME entity: a closing '>' or ')' supplied by a DIFFERENT
@@ -730,6 +769,16 @@ func TestParameterEntityMarkupBoundaryViolation(t *testing.T) {
 			dtd: "<!ELEMENT a EMPTY>\n<!ELEMENT b (#PCDATA)>\n" +
 				"<!ENTITY % choice1 \"(a|b\">\n<!ENTITY % choice2 \"|c)\">\n" +
 				"<!ELEMENT c ANY>\n<!ELEMENT child1 %choice1;%choice2; >\n",
+		},
+		{
+			// The <!ENTITY> closing '>' comes from a PE (%close; -> ">").
+			name: "entity-close-in-pe",
+			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % close \">\">\n<!ENTITY greet 'hi'%close;\n",
+		},
+		{
+			// The <!NOTATION> closing '>' comes from a PE (%close; -> ">").
+			name: "notation-close-in-pe",
+			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % close \">\">\n<!NOTATION gif SYSTEM 'gif'%close;\n",
 		},
 	}
 

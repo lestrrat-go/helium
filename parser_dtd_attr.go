@@ -646,6 +646,10 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 	if !cur.ConsumeString("<!NOTATION") {
 		return pctx.error(ctx, errors.New("<!NOTATION not started"))
 	}
+	// The whole <!NOTATION ... > must start and stop in the same input: a closing
+	// '>' supplied by a different parameter entity than the one that opened the
+	// declaration is a boundary violation, matching <!ELEMENT>/<!ATTLIST>/<!ENTITY>.
+	startInput := pctx.currentInputID()
 
 	adv, err := pctx.skipBlanksPE(ctx)
 	if err != nil {
@@ -680,6 +684,10 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 	cur = pctx.dtdRefetch(cur)
 	if cur.Peek() != '>' {
 		return pctx.error(ctx, errors.New("'>' required to close <!NOTATION"))
+	}
+	if pctx.currentInputID() != startInput {
+		return pctx.error(ctx,
+			fmt.Errorf("%w: notation declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 	}
 	if err := cur.Advance(1); err != nil {
 		return err
