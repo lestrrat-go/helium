@@ -493,17 +493,38 @@ func (pctx *parserCtx) lookupGeneralEntity(ctx context.Context, name string, inA
 	return ent, attrWFCNone, nil
 }
 
-// handleUndeclaredEntity applies the "Entity Declared" WFC for a general-entity
-// reference that resolved to no declaration, mirroring libxml2
+// undeclaredEntityValidityError promotes an undeclared general-entity reference —
+// one that resolved to no declaration and is NOT the fatal WFC case — to the
+// "Entity Declared" VALIDITY error when validating a FULLY-INTERNAL DTD: no
+// external subset and no external parameter entity (`parseDTDValid` set,
+// `!hasExternalSubset && !hasExternalPERef`). An external subset or external PE
+// may resolve incompletely (e.g. an empty/unreachable external PE), so helium
+// stays lenient there rather than risk rejecting a valid document. It returns nil
+// when the reference should stay a non-fatal warning. The VC "Entity Declared"
+// applies to ALL general entity references alike — in element content AND in
+// attribute values (W3C rmt-e3e-13; matches libxml2's xmlValidityError).
+func (pctx *parserCtx) undeclaredEntityValidityError(ctx context.Context, name string) error {
+	if !pctx.options.IsSet(parseDTDValid) || pctx.hasExternalSubset || pctx.hasExternalPERef {
+		return nil
+	}
+	return pctx.error(ctx, fmt.Errorf("%w '%s'", ErrUndeclaredEntity, name))
+}
+
+// handleUndeclaredEntity applies the "Entity Declared" constraint for a
+// general-entity reference that resolved to no declaration, mirroring libxml2
 // xmlHandleUndeclaredEntity. It returns a fatal error when the missing
 // declaration is a well-formedness violation (standalone='yes', or no external
 // subset and no parameter-entity references, so all declarations must be
-// visible); otherwise it emits a warning, marks the parse invalid, and returns
-// nil so the caller can continue (a nested entity may still be declared later in
-// an external subset).
+// visible), or — when validating a fully-internal DTD — the "Entity Declared"
+// validity error (undeclaredEntityValidityError). Otherwise it emits a warning,
+// marks the parse invalid, and returns nil so the caller can continue (a nested
+// entity may still be declared later in an external subset).
 func (pctx *parserCtx) handleUndeclaredEntity(ctx context.Context, name string) error {
 	if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 		return pctx.error(ctx, fmt.Errorf("Entity '%s' not defined", name))
+	}
+	if err := pctx.undeclaredEntityValidityError(ctx, name); err != nil {
+		return err
 	}
 	if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
 		return err
@@ -576,6 +597,12 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 	if isNilEntity(loadedEnt) {
 		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 			return nil, 0, fmt.Errorf("entity '%s' not defined", name)
+		}
+		// Same "Entity Declared" VC promotion as the content path: a fully-internal
+		// DTD referencing an undeclared entity from an attribute value is a validity
+		// error when validating (W3C rmt-e3e-13 applies to attribute values too).
+		if err := pctx.undeclaredEntityValidityError(ctx, name); err != nil {
+			return nil, 0, err
 		}
 		if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
 			return nil, 0, err
@@ -818,14 +845,10 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		}
 		// A parameter-entity reference or external subset downgrades an undeclared
 		// general entity from a fatal WFC to the "Entity Declared" VALIDITY
-		// constraint. When validating, the declarations are fully known and the
-		// entity is definitively undeclared — a reportable validity error (W3C
-		// rmt-e3e-13; matches libxml2's xmlValidityError). This is limited to a
-		// fully-internal DTD: an external subset or external parameter entity may
-		// resolve incompletely (e.g. an empty or unreachable external PE), so
-		// there helium stays lenient rather than risk rejecting a valid document.
-		if pctx.options.IsSet(parseDTDValid) && !pctx.hasExternalSubset && !pctx.hasExternalPERef {
-			return nil, pctx.error(ctx, fmt.Errorf("%w '%s'", ErrUndeclaredEntity, name))
+		// constraint; when validating a fully-internal DTD it is still reported
+		// (undeclaredEntityValidityError).
+		if err := pctx.undeclaredEntityValidityError(ctx, name); err != nil {
+			return nil, err
 		}
 		if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
 			return nil, err
