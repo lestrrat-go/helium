@@ -173,6 +173,15 @@ func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalu
 	return nil
 }
 
+// standaloneNormAttr identifies a specified attribute (by owning element name and
+// attribute name, as written in the source) whose value was altered by tokenized
+// attribute-value normalization driven by an external-subset declaration. It backs
+// the VC: Standalone Document Declaration normalization check.
+type standaloneNormAttr struct {
+	elem string
+	attr string
+}
+
 // ErrDTDValidationFailed is returned by DTD validation when the document
 // does not conform to the DTD. Individual validation errors are delivered
 // to the configured [ErrorHandler].
@@ -252,6 +261,10 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 	// before walking the instance tree.
 	validateDTDDeclarations(ctx, doc, vctx)
 
+	// VC: Standalone Document Declaration (XML §2.9) — attribute values normalized
+	// by an external-subset tokenized-type declaration (recorded during parsing).
+	checkStandaloneExternalNormalization(ctx, doc, vctx)
+
 	// Walk the document tree and validate each element. A cycle in the tree
 	// (ErrWalkCycle) leaves the walk partial, so the document cannot be
 	// considered valid.
@@ -276,6 +289,13 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 // validateOneElement checks a single element against DTD declarations.
 func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
 	name := elem.LocalName()
+
+	// VC: Standalone Document Declaration (XML §2.9) — an attribute that takes a
+	// default value from an ATTLIST declaration in the external subset changes the
+	// document, so it is invalid in a standalone="yes" document. Checked before the
+	// element-declaration lookup so it fires independently of whether the element
+	// itself carries an <!ELEMENT> declaration (an ATTLIST may exist without one).
+	checkStandaloneExternalDefaults(ctx, doc, elem, vctx)
 
 	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
 	if edecl == nil {
@@ -429,6 +449,64 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 			vctx.addf(ctx, "standalone: element %s declared in the external subset contains white spaces nodes", name)
 			return
 		}
+	}
+}
+
+// checkStandaloneExternalDefaults implements part of the VC: Standalone Document
+// Declaration (XML §2.9): in a standalone="yes" document it is a validity error
+// for an attribute to take a default value supplied by an ATTLIST declaration in
+// the external subset, because omitting the external subset would change whether
+// the attribute is present. Mirrors libxml2's XML_DTD_STANDALONE_DEFAULTED report.
+func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
+	if doc.standalone != StandaloneExplicitYes || doc.extSubset == nil {
+		return
+	}
+	ename := elem.LocalName()
+	for _, a := range elem.Attributes() {
+		if !a.IsDefault() {
+			continue
+		}
+		if attrDeclExternalOnly(doc, a.LocalName(), a.Prefix(), ename) {
+			vctx.addf(ctx, "standalone: attribute %s on %s defaulted from external subset", a.Name(), ename)
+		}
+	}
+}
+
+// attrDeclExternalOnly reports whether the effective declaration of attribute
+// (name, prefix) on element elem comes from the external subset. An
+// internal-subset declaration takes precedence (XML §3.3), so the origin is
+// external only when the external subset declares the attribute and the internal
+// subset does not.
+func attrDeclExternalOnly(doc *Document, name, prefix, elem string) bool {
+	if doc.extSubset == nil {
+		return false
+	}
+	if _, ok := doc.extSubset.LookupAttribute(name, prefix, elem); !ok {
+		return false
+	}
+	if doc.intSubset != nil {
+		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
+			return false
+		}
+	}
+	return true
+}
+
+// checkStandaloneExternalNormalization implements part of the VC: Standalone
+// Document Declaration (XML §2.9): in a standalone="yes" document it is a validity
+// error for the normalized value of a specified attribute to differ from its
+// literal value when the attribute's (tokenized) type comes from a declaration in
+// the external subset — omitting the external subset would leave the attribute
+// CDATA and preserve its whitespace. The parser records each such attribute during
+// attribute-value normalization (it alone still holds the pre-normalization
+// value); this flushes those records as validity errors. Mirrors libxml2's
+// XML_DTD_NOT_STANDALONE normalization report.
+func checkStandaloneExternalNormalization(ctx context.Context, doc *Document, vctx *validCtx) {
+	if doc.standalone != StandaloneExplicitYes {
+		return
+	}
+	for _, v := range doc.standaloneNormAttrs {
+		vctx.addf(ctx, "standalone: normalization of attribute %s on %s by external subset declaration", v.attr, v.elem)
 	}
 }
 

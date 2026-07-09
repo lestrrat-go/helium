@@ -401,6 +401,21 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 		return
 	}
 	ctx.attsSpecial[key] = typ
+	// Record whether this binding originates in the external subset, for the VC:
+	// Standalone Document Declaration normalization check (libxml2 XML_SPECIAL_EXTERNAL).
+	if ctx.inSubset == inExternalSubset {
+		ctx.attsSpecialExternal[key] = struct{}{}
+	}
+}
+
+// specialAttributeExternal reports whether the effective tokenized-type binding
+// for (elemName, attrName) was declared in the external subset.
+func (ctx *parserCtx) specialAttributeExternal(elemName, attrName string) bool {
+	if len(ctx.attsSpecialExternal) == 0 {
+		return false
+	}
+	_, ok := ctx.attsSpecialExternal[elemName+":"+attrName]
+	return ok
 }
 
 func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.AttributeType, bool) {

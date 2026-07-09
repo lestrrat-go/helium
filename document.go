@@ -52,6 +52,13 @@ type Document struct {
 	ids       map[string]*Element
 	idsSkip   bool
 
+	// standaloneNormAttrs records specified attributes whose value was changed by
+	// tokenized-type normalization driven by an external-subset ATTLIST
+	// declaration. Populated by the parser (which alone holds the pre-normalization
+	// value) and consulted by DTD validation for the VC: Standalone Document
+	// Declaration in a standalone="yes" document. See valid.go.
+	standaloneNormAttrs []standaloneNormAttr
+
 	// Slab allocators for high-frequency node types.
 	// These reduce per-node heap allocation overhead by allocating
 	// nodes in chunks and handing them out one at a time.

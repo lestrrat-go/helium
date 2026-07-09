@@ -876,6 +876,35 @@ not merely a declared notation. All DTD-declaration data comes from the DOM mode
 (`AttributeDecl.{atype,def,defvalue,tree,elem}`, `ElementDecl.{decltype,content}`,
 `Entity` content for NDATA, `DTD.LookupNotation`).
 
+The **Standalone Document Declaration** VC (§2.9) fires only when the document
+declares `standalone="yes"` (`StandaloneExplicitYes`); it flags reliance on
+external markup declarations, mirroring libxml2's `XML_DTD_STANDALONE_*` /
+`XML_DTD_NOT_STANDALONE` reports. Decl origin is structural — an
+`AttributeDecl`/`ElementDecl` lives in `doc.intSubset` or `doc.extSubset`, an
+internal-subset declaration takes precedence (§3.3). Three sub-cases:
+- **External default attribute** (`checkStandaloneExternalDefaults`, run per
+  element from `validateOneElement`): an attribute materialized from an ATTLIST
+  default (`Attribute.IsDefault()`) whose effective declaration is external-only
+  (`attrDeclExternalOnly`: present in `extSubset`, absent from `intSubset`) is a
+  validity error, since omitting the external subset would change the attribute's
+  presence.
+- **External attribute normalization** (`checkStandaloneExternalNormalization`,
+  flushed once from `validateDocument`): a *specified* attribute whose value was
+  altered by tokenized-type normalization driven by an external declaration. The
+  post-parse walk no longer holds the pre-normalization value, so the parser
+  records the change during `parseAttribute`: it tracks per-attribute whether the
+  normalize path dropped whitespace (`parserCtx.attrNormChanged`, set on
+  leading/trailing trim or internal-space collapse in `parseAttributeValueInternal`)
+  and whether the (first-binding) tokenized-type declaration came from the external
+  subset (`parserCtx.attsSpecialExternal`, the analogue of libxml2's
+  `XML_SPECIAL_EXTERNAL`, populated in `addSpecialAttribute` when
+  `inSubset == inExternalSubset`). A hit under `standalone="yes"` +
+  `ValidateDTD(true)` is appended to `doc.standaloneNormAttrs`, which the
+  validation pass reports.
+- **Element-content whitespace** (`checkStandaloneWhitespace`, existing): an
+  element declared element-content in the external subset that contains
+  whitespace-only text nodes.
+
 ## Comparison
 
 | Aspect | XSD | RELAX NG | Schematron |

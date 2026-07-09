@@ -994,8 +994,16 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					if err = pctx.writeAttrByte(ctx, b, 0x20); err != nil {
 						return
 					}
+				} else {
+					// normalize && inSpace: an internal whitespace run is collapsed
+					// (this space is dropped), a tokenized-normalization change.
+					pctx.attrNormChanged = true
 				}
 				inSpace = true
+			} else {
+				// normalize && b.Len() == 0: a leading whitespace char is dropped,
+				// a tokenized-normalization change.
+				pctx.attrNormChanged = true
 			}
 			if err := cur.Advance(1); err != nil {
 				return "", 0, err
@@ -1017,6 +1025,8 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	value = b.String()
 	if inSpace && normalize {
 		if value[len(value)-1] == 0x20 {
+			// A trailing whitespace run is trimmed, a tokenized-normalization change.
+			pctx.attrNormChanged = true
 			for len(value) > 0 {
 				if value[len(value)-1] != 0x20 {
 					break
@@ -1240,6 +1250,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		pctx.replaceEntities = true
 	}
 
+	pctx.attrNormChanged = false
 	v, entities, err := pctx.parseAttributeValue(ctx, normalize)
 
 	pctx.replaceEntities = savedReplaceEntities
@@ -1251,7 +1262,24 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	if normalize {
 		if entities > 0 {
-			v = pctx.attrNormalizeSpace(v)
+			nv := pctx.attrNormalizeSpace(v)
+			if nv != v {
+				pctx.attrNormChanged = true
+			}
+			v = nv
+		}
+		// VC: Standalone Document Declaration (XML §2.9) — in a standalone="yes"
+		// document, an attribute whose value is altered by tokenized-type
+		// normalization declared in the external subset is a validity error.
+		// Record it for the post-parse DTD validation pass, which alone would no
+		// longer have the pre-normalization value.
+		if pctx.attrNormChanged &&
+			pctx.standalone == StandaloneExplicitYes &&
+			pctx.options.IsSet(parseDTDValid) &&
+			pctx.specialAttributeExternal(elemName, l) &&
+			pctx.doc != nil {
+			pctx.doc.standaloneNormAttrs = append(pctx.doc.standaloneNormAttrs,
+				standaloneNormAttr{elem: elemName, attr: l})
 		}
 	}
 
