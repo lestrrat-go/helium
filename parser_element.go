@@ -1047,12 +1047,18 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 // current tables.
 // attributeEntityWFC resolves nested references through the DOCUMENT entity table
 // (pctx.getEntity), which holds every entity a DOM-building parse declares. It
-// deliberately does NOT consult a replacement SAX handler's GetEntity: that would
-// fire observable lookups on a logging/counting handler (perturbing the SAX event
-// stream), and the only configuration where the SAX table diverges from the
-// document table is a custom SAXHandler that REPLACES the TreeBuilder — a pure
-// SAX-event parse with no document being built, where entity/WFC semantics are the
-// consumer's responsibility, not helium's document-construction concern.
+// deliberately does NOT consult a replacement SAX handler's GetEntity. Current
+// libxml2 (xmlCheckEntityInAttValue -> xmlLookupGeneralEntity) does query the SAX
+// getEntity callback for nested refs, but helium's SAX-event goldens are generated
+// from a PINNED older libxml2's result/*.sax2 files (see testdata/libxml2), and
+// that pinned version emits no such lookup — so querying SAX here would make the
+// generated golden (e.g. att11) diverge from its libxml2 source, and the goldens
+// are generated, not hand-editable. The only configuration where the SAX table
+// diverges from the document table is a custom SAXHandler that REPLACES the
+// TreeBuilder — a pure SAX-event parse with no document being built, where
+// entity/WFC semantics are the consumer's responsibility, not helium's
+// document-construction concern; there the document-table walk is a no-op, and
+// direct external/unparsed references are still rejected by parseEntityRef.
 func (pctx *parserCtx) attributeEntityWFC(ent *Entity) attrEntityWFC {
 	visited := map[*Entity]struct{}{ent: {}}
 	return pctx.scanAttrEntityWFC(ent.content, visited)
