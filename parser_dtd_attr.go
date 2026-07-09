@@ -655,19 +655,28 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 		if cur == nil {
 			return pctx.error(ctx, errNoCursor)
 		}
-		if cur.Peek() == '>' {
-			// The whole <!ATTLIST ... > must start and stop in the same input: a
-			// closing '>' supplied by a parameter entity that began mid-declaration
-			// (e.g. `<!ATTLIST foo %e;` with %e; -> "... #IMPLIED>") is a boundary
-			// violation, the same fatal condition <!ELEMENT> enforces.
-			if pctx.currentInputID() != startInput {
-				return pctx.error(ctx,
-					fmt.Errorf("%w: attribute list declaration doesn't start and stop in the same entity", ErrEntityBoundary))
-			}
-			if err := cur.Advance(1); err != nil {
-				return err
-			}
-			break
+	}
+
+	// AttlistDecl ::= '<!ATTLIST' S Name AttDef* S? '>' — AttDef* is
+	// zero-or-more, so an empty `<!ATTLIST name>` (the loop above never ran)
+	// is well-formed and closes here. When instate is psEOF the declaration
+	// was truncated before its '>'; leave it unconsumed so the subset loop
+	// reports the unfinished doctype.
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return pctx.error(ctx, errNoCursor)
+	}
+	if cur.Peek() == '>' {
+		// The whole <!ATTLIST ... > must start and stop in the same input: a
+		// closing '>' supplied by a parameter entity that began mid-declaration
+		// (e.g. `<!ATTLIST foo %e;` with %e; -> "... #IMPLIED>") is a boundary
+		// violation, the same fatal condition <!ELEMENT> enforces.
+		if pctx.currentInputID() != startInput {
+			return pctx.error(ctx,
+				fmt.Errorf("%w: attribute list declaration doesn't start and stop in the same entity", ErrEntityBoundary))
+		}
+		if err := cur.Advance(1); err != nil {
+			return err
 		}
 	}
 	return nil
