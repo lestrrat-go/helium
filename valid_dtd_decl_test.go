@@ -61,9 +61,10 @@ func TestDTDDeclValidation(t *testing.T) {
 
 		t.Run("declared notation outside the attr enum rejected", func(t *testing.T) {
 			t.Parallel()
+			// ANY (not EMPTY) content isolates this to the enumerated-value VC.
 			errs, err := parseValidatingDTD(t, `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!ATTLIST root type NOTATION (fruit|vegetable) #REQUIRED>
   <!NOTATION fruit SYSTEM "f">
   <!NOTATION vegetable SYSTEM "v">
@@ -72,6 +73,20 @@ func TestDTDDeclValidation(t *testing.T) {
 <root type="candy"/>`)
 			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 			require.True(t, containsError(errs, "not among the enumerated notations"))
+		})
+
+		t.Run("notation attribute on EMPTY element rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root type NOTATION (fruit|vegetable) #IMPLIED>
+  <!NOTATION fruit SYSTEM "f">
+  <!NOTATION vegetable SYSTEM "v">
+]>
+<root/>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "not allowed on an EMPTY element"))
 		})
 
 		t.Run("enumerated notation accepted", func(t *testing.T) {
@@ -133,6 +148,45 @@ func TestDTDDeclValidation(t *testing.T) {
 <root v="one"/>`)
 			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 			require.True(t, containsError(errs, "not among the enumerated set"))
+		})
+
+		t.Run("empty IDREF default rejected", func(t *testing.T) {
+			t.Parallel()
+			// A literal empty default must still satisfy the declared type; an empty
+			// string is not a valid Name for an IDREF.
+			errs, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root ANY>
+  <!ELEMENT unused EMPTY>
+  <!ATTLIST unused ref IDREF "">
+]>
+<root/>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "is not valid"))
+		})
+
+		t.Run("empty NMTOKEN default rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root ANY>
+  <!ELEMENT unused EMPTY>
+  <!ATTLIST unused tok NMTOKEN "">
+]>
+<root/>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "is not valid"))
+		})
+
+		t.Run("valid NMTOKEN default accepted", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root ANY>
+  <!ATTLIST root tok NMTOKEN "abc">
+]>
+<root/>`)
+			require.NoError(t, err)
 		})
 
 		t.Run("legal default accepted", func(t *testing.T) {
@@ -219,9 +273,10 @@ func TestDTDDeclValidation(t *testing.T) {
 
 		t.Run("undeclared notation in attr enum rejected", func(t *testing.T) {
 			t.Parallel()
+			// ANY (not EMPTY) content isolates this to the Notation Declared VC.
 			errs, err := parseValidatingDTD(t, `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!ATTLIST root type NOTATION (fruit|vegetable) #REQUIRED>
   <!NOTATION fruit SYSTEM "f">
 ]>

@@ -65,6 +65,7 @@ func validateDTDDeclarations(ctx context.Context, doc *Document, vctx *validCtx)
 		for _, adecl := range dtd.attributes {
 			validateAttributeDeclLegal(ctx, adecl, vctx)
 			validateNotationEnumDeclared(ctx, doc, adecl, vctx)
+			validateNotationNotOnEmptyElement(ctx, doc, adecl, vctx)
 		}
 		for name, ent := range dtd.entities {
 			validateUnparsedEntityNotation(ctx, doc, name, ent, vctx)
@@ -112,10 +113,12 @@ func collectMixedLeaves(content *ElementContent, out *[]*ElementContent) {
 	collectMixedLeaves(content.c2, out)
 }
 
-// validateAttributeDeclLegal implements two declaration-time attribute VCs:
+// validateAttributeDeclLegal implements the declaration-time attribute VCs:
 //
 //   - ID Attribute Default (§3.3.1): an ID attribute's declared default must be
 //     #IMPLIED or #REQUIRED.
+//   - Attribute Default Value Syntactically Correct (§3.3.2): a declared default
+//     must satisfy the attribute's declared (tokenized) type.
 //   - Attribute Default Legal (§3.3.2): an enumerated or NOTATION attribute's
 //     default value must be one of the declared tokens.
 func validateAttributeDeclLegal(ctx context.Context, adecl *AttributeDecl, vctx *validCtx) {
@@ -125,13 +128,26 @@ func validateAttributeDeclLegal(ctx context.Context, adecl *AttributeDecl, vctx 
 		vctx.addf(ctx, "element %s: ID attribute %s must be declared #IMPLIED or #REQUIRED", adecl.elem, adecl.name)
 	}
 
-	// The default-value check runs whenever a default VALUE is declared — a bare
+	// The default-value checks run whenever a default VALUE is declared — a bare
 	// default or a #FIXED value — not merely when the value is non-empty: a
-	// literal empty default `""` is still a default and must be in the set.
-	// #IMPLIED/#REQUIRED carry no default value, so presence is decided by the
-	// DefaultDecl kind, NOT by defvalue != "" (helium collapses "no default" and
-	// an empty default to the same empty string).
-	if !attrHasDefaultValue(adecl.def) || len(adecl.tree) == 0 {
+	// literal empty default `""` is still a default (e.g. an empty IDREF/NMTOKEN
+	// default is syntactically invalid). #IMPLIED/#REQUIRED carry no default
+	// value, so presence is decided by the DefaultDecl kind, NOT by defvalue != ""
+	// (helium collapses "no default" and an empty default to the same empty
+	// string, and its parse-time syntactic check skips an empty default).
+	if !attrHasDefaultValue(adecl.def) {
+		return
+	}
+
+	// The default must satisfy the declared type for EVERY tokenized type
+	// (ID/IDREF/IDREFS/ENTITY/ENTITIES/NMTOKEN/NMTOKENS); CDATA accepts anything.
+	if err := validateAttributeValueInternal(nil, adecl.atype, adecl.defvalue); err != nil {
+		vctx.addf(ctx, "element %s: default value %q for attribute %s is not valid: %s", adecl.elem, adecl.defvalue, adecl.name, err)
+	}
+
+	// Attribute Default Legal: an enumerated/NOTATION default must be one of the
+	// declared tokens.
+	if len(adecl.tree) == 0 {
 		return
 	}
 	switch adecl.atype {
@@ -160,6 +176,31 @@ func validateNotationEnumDeclared(ctx context.Context, doc *Document, adecl *Att
 		if !notationDeclared(doc, nname) {
 			vctx.addf(ctx, "element %s: attribute %s enumerates undeclared notation %q", adecl.elem, adecl.name, nname)
 		}
+	}
+}
+
+// elementDeclForAttr looks up the declaration of the element that owns adecl,
+// searching both subsets. It returns nil when the element is undeclared or only
+// forward-referenced (UndefinedElementType).
+func elementDeclForAttr(doc *Document, elemName string) *ElementDecl {
+	for _, dtd := range dtdSubsets(doc) {
+		if e, ok := dtd.GetElementDesc(elemName); ok && e.decltype != enum.UndefinedElementType {
+			return e
+		}
+	}
+	return nil
+}
+
+// validateNotationNotOnEmptyElement implements the No Notation on Empty Element
+// VC (§3.3.1): an attribute of type NOTATION must not be declared on an element
+// whose content type is EMPTY.
+func validateNotationNotOnEmptyElement(ctx context.Context, doc *Document, adecl *AttributeDecl, vctx *validCtx) {
+	if adecl.atype != enum.AttrNotation {
+		return
+	}
+	edecl := elementDeclForAttr(doc, adecl.elem)
+	if edecl != nil && edecl.decltype == enum.EmptyElementType {
+		vctx.addf(ctx, "element %s: NOTATION attribute %s is not allowed on an EMPTY element", adecl.elem, adecl.name)
 	}
 }
 

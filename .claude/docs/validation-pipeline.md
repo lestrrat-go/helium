@@ -846,9 +846,18 @@ pass — the analogue of libxml2's `xmlValidateElementDecl` /
   not name the same element type (name+prefix) twice (`validateNoDuplicateTypes`
   over each `MixedElementType` `ElementDecl`, leaves gathered by
   `collectMixedLeaves`).
+- **Attribute Default Value Syntactically Correct** (§3.3.2): a declared default
+  must satisfy the attribute's tokenized type. The check keys off the DefaultDecl
+  kind (`attrHasDefaultValue`: a bare default or `#FIXED`), NOT `defvalue != ""` —
+  helium collapses "no default" and an empty default to the same empty string and
+  its parse-time syntactic check skips an empty default, so a literal empty
+  `IDREF`/`NMTOKEN` default is re-validated here via `validateAttributeValueInternal`.
 - **Attribute Default Legal** (§3.3.2): an enumerated/NOTATION attribute's
-  default value must be one of the declared tokens (`validateAttributeDeclLegal`,
-  gated on `defvalue != "" && len(tree) > 0`).
+  default value must be one of the declared tokens (`validateAttributeDeclLegal`).
+- **No Notation on Empty Element** (§3.3.1): an attribute of type NOTATION may
+  not be declared on an element whose content type is EMPTY
+  (`validateNotationNotOnEmptyElement`, resolving the owning element via
+  `elementDeclForAttr` across both subsets).
 - **ID Attribute Default** (§3.3.1): an `ID` attribute's default must be
   `#IMPLIED` or `#REQUIRED` — never a literal default or `#FIXED`
   (`validateAttributeDeclLegal`).
