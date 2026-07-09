@@ -622,14 +622,10 @@ func collectMixedNamesRecurse(content *ElementContent, names map[string]struct{}
 	collectMixedNamesRecurse(content.c2, names)
 }
 
-// collectChildElements returns a slice of element names from the children
-// of an element, ignoring text nodes, comments, PIs, etc.
-//
-// PRE-EXISTING GAP: content-model matching (here and in validateMixedContent)
-// compares element LOCAL names, not raw QNames, so a model `(p:a)` accepts a
-// `<a/>` child and vice-versa. This is a systematic local-name-based content-model
-// limitation, independent of the QName-keyed declaration lookups; a proper
-// raw-QName content-model fix is a separate follow-up.
+// collectChildElements returns the raw qualified names (prefix:local, as
+// written) of an element's child elements, ignoring text nodes, comments, PIs,
+// etc. DTD content-model matching is prefix-literal, not namespace-aware, so the
+// name is taken verbatim from the child tag.
 func collectChildElements(elem *Element) []string {
 	var children []string
 	for child := range Children(elem) {
