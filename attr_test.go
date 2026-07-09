@@ -372,6 +372,94 @@ func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
 	})
 }
 
+// TestNamespaceWellFormednessConstraints covers the Namespaces in XML
+// well-formedness constraints on prefix binding and the reserved namespace
+// names (W3C xml suite rmt-ns10-026, rmt-ns-e1.0-13a, rmt-ns-e1.0-13b), plus
+// the well-formed namespaced documents that must keep parsing.
+func TestNamespaceWellFormednessConstraints(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unbound attribute prefix is rejected", func(t *testing.T) {
+		t.Parallel()
+		// rmt-ns10-026: prefix `a` on an attribute is never declared.
+		xml := `<?xml version="1.0"?>` + "\n" + `<foo a:attr="1"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "namespace 'a' not found")
+	})
+
+	t.Run("reserved xml URI as default namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		// rmt-ns-e1.0-13a: the reserved XML namespace name may not be the
+		// default namespace.
+		xml := `<foo xmlns="http://www.w3.org/XML/1998/namespace"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("reserved xmlns URI as default namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		// rmt-ns-e1.0-13b: the reserved XMLNS namespace name may not be the
+		// default namespace.
+		xml := `<foo xmlns="http://www.w3.org/2000/xmlns/"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("DTD-defaulted reserved xml URI as default namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+		xml := `<!DOCTYPE foo [<!ATTLIST foo xmlns CDATA "http://www.w3.org/XML/1998/namespace">]><foo/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err)
+	})
+
+	t.Run("declared attribute prefix is accepted", func(t *testing.T) {
+		t.Parallel()
+		xml := `<r xmlns:p="urn:x"><p:a p:b="1"/></r>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("reserved xml prefix on an attribute needs no declaration", func(t *testing.T) {
+		t.Parallel()
+		// The xml prefix is always bound; xml:lang/xml:space parse with no
+		// namespace declaration.
+		xml := `<r xml:lang="en" xml:space="preserve"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("ordinary default namespace is accepted", func(t *testing.T) {
+		t.Parallel()
+		xml := `<r xmlns="urn:d"><c/></r>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("prefixed attribute with declared prefix is accepted", func(t *testing.T) {
+		t.Parallel()
+		xml := `<r xmlns:p="urn:x" p:id="5"/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+	})
+}
+
 func TestGetAttribute(t *testing.T) {
 	t.Parallel()
 
