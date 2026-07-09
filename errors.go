@@ -41,6 +41,13 @@ var (
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
+	// ErrEntityVersionMismatch is returned when an external parsed entity (or
+	// the external DTD subset) declares, in its TextDecl, an XML version later
+	// than the referencing document's (XML §4.3.4). Helium targets XML 1.0, so a
+	// TextDecl declaring anything other than "1.0" (e.g. "1.1") in a 1.0 document
+	// is a fatal error (libxml2 XML_ERR_VERSION_MISMATCH).
+	ErrEntityVersionMismatch = errors.New("version mismatch between document and entity")
+
 	// ErrEntityNotWellBalanced is returned when an internal general entity's
 	// replacement text is not well balanced with respect to element nesting —
 	// e.g. it opens with an end-tag or closes an element opened outside the
