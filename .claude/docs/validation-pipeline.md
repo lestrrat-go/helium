@@ -902,7 +902,15 @@ pass — the analogue of libxml2's `xmlValidateElementDecl` /
 The instance-tree `AttrNotation` branch additionally enforces the **Notation
 Attributes** VC (§3.3.1): the instance value must be one of the notation names
 listed in *this* attribute's declaration (`slices.Contains(adecl.tree, val)`),
-not merely a declared notation. All DTD-declaration data comes from the DOM model
+not merely a declared notation. The instance-tree `AttrEntity`/`AttrEntities`
+branches enforce the **Entity Name** VC (§3.3.1): each referenced name must be a
+declared UNPARSED general entity (`Entity.EntityType() ==
+ExternalGeneralUnparsedEntity`). The lookup goes through `lookupDTDEntity`, which
+searches BOTH subsets via `docDTDs` **independent of standalone** — an unparsed
+entity in the external subset must be found even for a `standalone="yes"`
+document (unlike `Document.GetEntity`, which suppresses the external subset for
+`StandaloneExplicitYes`); an undeclared name or a PARSED (non-`NDATA`) entity is
+a validity error. All DTD-declaration data comes from the DOM model
 (`AttributeDecl.{atype,def,defvalue,tree,elem}`, `ElementDecl.{decltype,content}`,
 `Entity` content for NDATA, `DTD.LookupNotation`).
 
