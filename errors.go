@@ -157,6 +157,7 @@ var (
 	ErrPercentRequired               = errors.New("'%' is required")
 	ErrPEReferenceInInternalSubset   = errors.New("PEReferences forbidden in internal subset")
 	ErrPrematureEOF                  = errors.New("end of document reached")
+	ErrNotStandalone                 = errors.New("document marked standalone but requires external subset")
 	ErrUndeclaredEntity              = errors.New("undeclared entity")
 	ErrSemicolonRequired             = errors.New("';' is required")
 	ErrConditionalSectionNotFinished = errors.New("conditional section ']]>' expected")

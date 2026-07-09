@@ -703,7 +703,10 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 			if s := pctx.sax; s != nil {
 				current, _ = s.GetEntity(ctx, name)
 				if current == nil {
-					e, _ := pctx.getEntity(name)
+					// DTD-declaration bookkeeping (SetOrig); getEntity does not
+					// flag the standalone WFC here (inSubset != 0), so any error
+					// is a plain lookup miss and the entity (if any) is used.
+					e, _ := pctx.getEntity(ctx, name)
 					current = e
 				}
 			}
