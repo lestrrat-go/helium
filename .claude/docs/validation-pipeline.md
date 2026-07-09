@@ -889,11 +889,15 @@ from which subset holds the decl; it is recorded at parse time
 (`AttributeDecl.external`, `parserCtx.attsSpecialExternal`). An internal-subset
 declaration takes precedence (§3.3). Three sub-cases:
 - **External default attribute** (`checkStandaloneExternalDefaults`, run per
-  element from `validateOneElement`): an attribute materialized from an ATTLIST
-  default (`Attribute.IsDefault()`) whose effective declaration is external
-  (`attrDeclEffectivelyExternal`: the looked-up `AttributeDecl.external`, internal
-  table consulted first) is a validity error, since omitting the external markup
-  would change the attribute's presence.
+  element from `validateOneElement`): driven by the ATTLIST *declarations*, not
+  materialized default nodes — `ValidateDTD(true)` does not imply
+  `DefaultDTDAttributes(true)`, so an external default may never be materialized yet
+  still makes the document depend on external markup. It walks the element's
+  effective `AttributeDecl`s (both subsets via `dtdSubsets`, internal first for §3.3
+  precedence, deduped per name+prefix) and reports any with a default value
+  (`attrHasDefaultValue`) and external origin (`AttributeDecl.external`) UNLESS the
+  instance supplies the attribute explicitly (`attrExplicitlySpecified`: a
+  materialized node that is not itself the DTD default).
 - **External attribute normalization** (`checkStandaloneExternalNormalization`,
   flushed once from `validateDocument`): a *specified* attribute whose value was
   altered by tokenized-type normalization driven by an external declaration. The

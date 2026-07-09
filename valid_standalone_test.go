@@ -10,8 +10,16 @@ import (
 
 // parseStandalone parses src as a validating processor with an external subset
 // supplied via extDTD (loaded for the SYSTEM id "ext.dtd"), returning the
-// collected validity errors and the parse/validation error.
+// collected validity errors and the parse/validation error. Default attributes
+// are materialized.
 func parseStandalone(t *testing.T, src, extDTD string) ([]error, error) {
+	t.Helper()
+	return parseStandaloneOpt(t, src, extDTD, true)
+}
+
+// parseStandaloneOpt is parseStandalone with control over whether DTD default
+// attributes are materialized (DefaultDTDAttributes).
+func parseStandaloneOpt(t *testing.T, src, extDTD string, defaultAttrs bool) ([]error, error) {
 	t.Helper()
 	const extDTDName = "ext.dtd"
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
@@ -20,7 +28,7 @@ func parseStandalone(t *testing.T, src, extDTD string) ([]error, error) {
 		BaseURI("doc.xml").
 		BlockXXE(false).
 		LoadExternalDTD(true).
-		DefaultDTDAttributes(true).
+		DefaultDTDAttributes(defaultAttrs).
 		SubstituteEntities(true).
 		ValidateDTD(true).
 		ErrorHandler(collector).
@@ -72,6 +80,18 @@ func TestStandaloneExternalDecl(t *testing.T) {
 ]>
 <animal/>`, `<!ELEMENT ignored EMPTY>`)
 			require.NoError(t, err)
+		})
+
+		// The check is driven by the ATTLIST declaration, not a materialized default
+		// node: ValidateDTD(true) does not imply DefaultDTDAttributes(true), so an
+		// external default that is never materialized must still be reported.
+		t.Run("standalone yes rejected without default materialization", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandaloneOpt(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE animal SYSTEM "ext.dtd" [ <!ELEMENT animal EMPTY> ]>
+<animal/>`, extDTD, false)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "defaulted from external subset"))
 		})
 
 		// A specified (non-defaulted) attribute is fine even when the same external

@@ -411,6 +411,14 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 
 // specialAttributeExternal reports whether the effective tokenized-type binding
 // for (elemName, attrName) was declared in the external subset.
+//
+// NOTE (pre-existing): special attributes are stored by the RAW declared name
+// (e.g. "p:class") in addSpecialAttribute but looked up by LOCAL name in
+// parseAttribute (lookupSpecialAttribute), so a PREFIXED tokenized attribute is
+// never normalized (and thus never standalone-reported). This external-origin map
+// keys identically to attsSpecial, so it inherits that behavior rather than
+// introducing a new inconsistency — the prefixed-attribute keying mismatch is a
+// separate, pre-existing normalization gap (no W3C corpus case), out of scope here.
 func (ctx *parserCtx) specialAttributeExternal(elemName, attrName string) bool {
 	if len(ctx.attsSpecialExternal) == 0 {
 		return false

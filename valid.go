@@ -458,39 +458,52 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 // the external subset, because omitting the external subset would change whether
 // the attribute is present. Mirrors libxml2's XML_DTD_STANDALONE_DEFAULTED report.
 func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
-	// No extSubset guard: external markup may also arrive via an external parameter
-	// entity referenced from the internal subset, in which case doc.extSubset is nil
-	// but AttributeDecl.external is still set.
 	if doc.standalone != StandaloneExplicitYes {
 		return
 	}
+	// Drive the check from the ATTLIST declarations, not materialized default
+	// Attribute nodes: ValidateDTD(true) does not imply DefaultDTDAttributes(true),
+	// so an external default may never be materialized on the instance, yet the
+	// declaration still makes the document depend on external markup. Origin is
+	// recorded per-declaration (AttributeDecl.external), because an external-PE-
+	// supplied ATTLIST is registered in the internal subset's table yet is still
+	// external markup. An internal-subset declaration takes precedence (§3.3), and
+	// dtdSubsets orders internal first, so the first-seen declaration per attribute
+	// wins.
 	ename := elem.LocalName()
-	for _, a := range elem.Attributes() {
-		if !a.IsDefault() {
-			continue
-		}
-		if attrDeclEffectivelyExternal(doc, a.LocalName(), a.Prefix(), ename) {
-			vctx.addf(ctx, "standalone: attribute %s on %s defaulted from external subset", a.Name(), ename)
+	seen := make(map[string]struct{})
+	for _, dtd := range dtdSubsets(doc) {
+		for _, adecl := range dtd.AttributesForElement(ename) {
+			key := adecl.name + ":" + adecl.prefix
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			if !attrHasDefaultValue(adecl.def) || !adecl.external {
+				continue
+			}
+			// The external default is a validity error unless the instance supplies
+			// the attribute explicitly (a value present in the source, not the
+			// DTD-supplied default).
+			if attrExplicitlySpecified(elem, adecl.name, adecl.prefix) {
+				continue
+			}
+			name := adecl.name
+			if adecl.prefix != "" {
+				name = adecl.prefix + ":" + adecl.name
+			}
+			vctx.addf(ctx, "standalone: attribute %s on %s defaulted from external subset", name, ename)
 		}
 	}
 }
 
-// attrDeclEffectivelyExternal reports whether the effective declaration of
-// attribute (name, prefix) on element elem comes from external markup (the
-// external subset or an external parameter entity). The origin is recorded on the
-// declaration at parse time (AttributeDecl.external), because an external-PE-
-// supplied ATTLIST is registered in the internal subset's table yet is still
-// external markup. An internal-subset declaration takes precedence (XML §3.3), so
-// the internal table is consulted first.
-func attrDeclEffectivelyExternal(doc *Document, name, prefix, elem string) bool {
-	if doc.intSubset != nil {
-		if d, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
-			return d.external
-		}
-	}
-	if doc.extSubset != nil {
-		if d, ok := doc.extSubset.LookupAttribute(name, prefix, elem); ok {
-			return d.external
+// attrExplicitlySpecified reports whether the element carries the named attribute
+// as a value present in the source instance — a materialized node that is not a
+// DTD-supplied default.
+func attrExplicitlySpecified(elem *Element, name, prefix string) bool {
+	for _, a := range elem.Attributes() {
+		if a.LocalName() == name && a.Prefix() == prefix {
+			return !a.IsDefault()
 		}
 	}
 	return false
