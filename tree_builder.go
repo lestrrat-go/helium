@@ -153,6 +153,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 				// value. Use literal mode to avoid re-parsing & as
 				// new entity reference starts.
 				_ = e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+				carrySyntheticBase(e, attr, ns)
 			} else {
 				if _, err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
 					return err
@@ -528,6 +529,27 @@ func (t *TreeBuilder) GetParameterEntity(ctxif context.Context, name string) (sa
 	}
 
 	return nil, ErrEntityNotFound
+}
+
+// carrySyntheticBase re-marks a replayed xml:base attribute as parser-synthesized.
+// When an external-entity subtree is replayed under replaceEntities, the tree
+// builder rebuilds each attribute fresh, so the syntheticBase marker on the cached
+// source attribute (set by parseExternalEntityPrivate) must be copied onto the
+// newly built one — otherwise DTD validation would flag the synthetic xml:base as
+// an undeclared attribute. An authored xml:base is never marked, so it is not
+// carried and remains subject to the "attribute must be declared" VC.
+func carrySyntheticBase(e *Element, src sax.Attribute, ns *Namespace) {
+	srcAttr, ok := src.(*Attribute)
+	if !ok || !srcAttr.syntheticBase {
+		return
+	}
+	var uri string
+	if ns != nil {
+		uri = ns.URI()
+	}
+	if a := e.GetAttributeNodeNS(srcAttr.LocalName(), uri); a != nil {
+		a.syntheticBase = true
+	}
 }
 
 func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName string, typ enum.AttributeType, deftype enum.AttributeDefault, value string, enumif sax.Enumeration) error {

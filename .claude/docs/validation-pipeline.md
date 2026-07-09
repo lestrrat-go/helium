@@ -829,9 +829,10 @@ test { typ (Assert|Report), expr, compiled *xpath.Expression, message []messageP
 DTD validity (XML 1.0 §3–§4) is validated in `valid.go` post-parse by
 `validateDocument`, reached only under `ValidateDTD(true)`. It runs two kinds of
 check: the **instance-tree** walk (root-name match, per-element declaration
-lookup, `#REQUIRED`/`#FIXED`, attribute lexical type, enumeration/notation value
-membership, ID uniqueness, IDREF cross-reference, ENTITY/ENTITIES declared+
-unparsed, content-model matching) and a **declaration-consistency** pass over the
+lookup, every present attribute declared, `#REQUIRED`/`#FIXED`, attribute lexical
+type, enumeration/notation value membership, ID uniqueness, IDREF cross-reference,
+ENTITY/ENTITIES declared+unparsed, content-model matching) and a
+**declaration-consistency** pass over the
 DTD declarations themselves. A document with neither internal nor external subset
 reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
 `ErrorHandler` via `validCtx.addf`; a failed validation returns
@@ -857,6 +858,39 @@ unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
 (`ElementDecl`) are stored split into (local, prefix); `lookupElementDecl` looks
 them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
 element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
+
+**Attribute Value Type — every present attribute must be declared** (§3.1). After
+`validateElementAttributes` checks the declared attributes, it walks the element's
+own attribute chain (`Element.Attributes()`) and reports `no declaration for
+attribute <qname>` for any attribute whose (prefix, local) key has no matching
+`<!ATTLIST>` — libxml2 `xmlValidateOneAttribute`. Prefix-literal keying applies, so
+a prefixed instance attribute (`p:id`, `xml:space`, `xml:lang`) is undeclared
+unless an `<!ATTLIST>` declares that exact QName (W3C ibm-invalid-P41-ibm41i01,
+inv-required01/02). One exemption: the synthetic `xml:base` attribute helium
+injects onto the top-level elements of an external parsed entity to record its
+base URI (`parser_entity_decl.go`) is NOT flagged — it carries an
+`Attribute.syntheticBase` marker set ONLY at the injection site (and re-applied by
+`carrySyntheticBase` in `tree_builder.go` when a cached entity subtree is replayed
+under `replaceEntities`), and the loop skips a marked attribute. The check is
+marker-based, not value-based: an AUTHORED `xml:base` — even one whose value
+coincidentally equals the entity base URI — is never marked and is validated
+normally, matching `xmllint --valid --noent`. libxml2 tracks the entity base
+without materializing an attribute, so it never flags the synthetic one (W3C valid
+ext-sa-005/013, sun/valid/ext01).
+
+**Namespace-declaration attributes** (`xmlns` / `xmlns:*`) live in the element's
+`nsDefs`, not its attribute chain, and are handled by
+`validateElementNamespaceDecls` against an `<!ATTLIST>` keyed as `xmlns` (default
+declaration) or, for `xmlns:p`, local name `p` with declared prefix `xmlns`. Only
+the **Fixed Attribute Default** VC is enforced: a `#FIXED` namespace declaration
+whose value differs from the declared value is rejected (W3C attr08). The
+"must be declared" VC is deliberately NOT enforced for a namespace declaration —
+helium is namespace-aware, so a DTD-validated namespaced document need not declare
+its `xmlns` attributes in the DTD; flagging an undeclared `xmlns:*` would
+over-reject the ordinary case of validating a namespaced document against a
+namespace-agnostic DTD. (W3C hst-bh-005/hst-bh-006, which assert a namespace-UNAWARE
+processor rejects an undeclared `xmlns:*`, are therefore out of scope; helium's
+parser also drops a redundant `xmlns:xml` re-declaration before validation.)
 
 **Content-model matching is raw-QName-based too** (`valid.go`
 `collectChildElements`/`matchContentModel`/`matchElement` for element-only
