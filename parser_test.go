@@ -2138,10 +2138,15 @@ func TestCurrentInputID(t *testing.T) {
 func TestConditionalSection(t *testing.T) {
 	t.Parallel()
 
-	t.Run("include", func(t *testing.T) {
+	t.Run("internal subset PE is not well formed", func(t *testing.T) {
 		t.Parallel()
 
-		// INCLUDE section via PE expansion: element declarations should be applied.
+		// A conditional section supplied through a parameter entity requires the
+		// PE reference to sit inside an entity value in the internal subset, which
+		// violates the PEs in Internal Subset WFC (XML §2.8) and is fatal —
+		// matching libxml2. Conditional sections through a PE are only valid in
+		// the external subset (see the "external DTD" subtest and
+		// TestParseExternalDTDPEInIncludeSectionExpands).
 		const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ENTITY % inc "INCLUDE">
@@ -2153,68 +2158,14 @@ func TestConditionalSection(t *testing.T) {
 </doc>`
 
 		p := helium.NewParser().ValidateDTD(true)
-		doc, err := p.Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "INCLUDE conditional section should parse successfully")
-		require.NotNil(t, doc)
-
-		root := doc.DocumentElement()
-		require.NotNil(t, root)
-		require.Equal(t, "doc", root.Name())
-	})
-
-	t.Run("ignore", func(t *testing.T) {
-		t.Parallel()
-
-		// Conditional sections in internal subset must come via PE expansion.
-		const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % ign "IGNORE">
-  <!ENTITY % sect "<![%ign;[<!ELEMENT doc (nonexistent)>]]>">
-  %sect;
-  <!ELEMENT doc (#PCDATA)>
-]>
-<doc>hello</doc>`
-
-		p := helium.NewParser()
 		_, err := p.Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "IGNORE section content should be skipped")
+		require.Error(t, err, "a PE reference in an internal-subset entity value is not well formed")
+		require.Contains(t, err.Error(), "PEReferences forbidden in internal subset")
 	})
 
-	t.Run("internal subset PE", func(t *testing.T) {
-		t.Parallel()
-
-		// Internal subset with PE that expands to conditional section content.
-		const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % inc "INCLUDE">
-  <!ENTITY % content "<![%inc;[<!ELEMENT doc (#PCDATA)>]]>">
-  %content;
-]>
-<doc>hello</doc>`
-
-		p := helium.NewParser()
-		_, err := p.Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "PE-expanded conditional section in internal subset should work")
-	})
-
-	t.Run("errors", func(t *testing.T) {
-		t.Parallel()
-
-		t.Run("invalid keyword", func(t *testing.T) {
-			t.Parallel()
-
-			const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % kw "BOGUS">
-  <!ENTITY % sect "<![%kw;[<!ELEMENT doc (#PCDATA)>]]>">
-  %sect;
-]>
-<doc/>`
-			p := helium.NewParser()
-			_, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err, "invalid keyword should fail")
-		})
-	})
+	// Invalid conditional-section keywords are covered where they are legal — the
+	// external subset — in parser_condsect_test.go (miscased/non-keyword tokens
+	// all raising "INCLUDE or IGNORE keyword expected").
 
 	t.Run("external DTD", func(t *testing.T) {
 		t.Parallel()
