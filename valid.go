@@ -149,6 +149,25 @@ func isValidNameChar(r rune) bool { return xmlchar.IsNCNameChar(r) }
 // NameChar ::= NCNameChar | ":"
 func isValidNmtokenChar(r rune) bool { return xmlchar.IsNCNameChar(r) || r == ':' }
 
+// splitNormalizedTokens splits an already-attribute-normalized list value
+// (NMTOKENS / IDREFS / ENTITIES) into its tokens. The list separator in the
+// normalized value is exactly one space (#x20): attribute-value normalization
+// (XML §3.3.3) folds every literal whitespace character to #x20, so #x20 is the
+// only separator; any other whitespace character present came from a character
+// reference (e.g. &#9;) and is a token character, not a separator, so it must
+// NOT split the value. Splitting on Go's unicode whitespace (strings.Fields)
+// would wrongly treat such a character-reference tab/newline as a separator and
+// under-report an invalid NMTOKEN (W3C rmt-e2e-20).
+func splitNormalizedTokens(s string) []string {
+	var toks []string
+	for tok := range strings.SplitSeq(s, " ") {
+		if tok != "" {
+			toks = append(toks, tok)
+		}
+	}
+	return toks
+}
+
 // validateAttributeValueInternal validates that defvalue is legal for the
 // declared attribute type. Mirrors xmlValidateAttributeDecl() in libxml2.
 func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalue string) error {
@@ -162,27 +181,35 @@ func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalu
 			return fmt.Errorf("value %q is not a valid Name", defvalue)
 		}
 	case enum.AttrIDRefs, enum.AttrEntities:
-		// Must match Names production: Name (S Name)*
-		for tok := range strings.FieldsSeq(defvalue) {
+		// Must match Names production: Name (S Name)*. The value is already
+		// attribute-normalized, so the only token separator is a single space
+		// (#x20): literal whitespace was folded to #x20, but a whitespace
+		// character introduced by a character reference (e.g. &#9;) survives
+		// verbatim and is part of a token, not a separator (XML §3.3.3).
+		toks := splitNormalizedTokens(defvalue)
+		if len(toks) == 0 {
+			return errors.New("value must not be empty")
+		}
+		for _, tok := range toks {
 			if !isValidName(tok) {
 				return fmt.Errorf("value %q is not a valid Name", tok)
 			}
-		}
-		if len(strings.Fields(defvalue)) == 0 {
-			return errors.New("value must not be empty")
 		}
 	case enum.AttrNmtoken:
 		if !isValidNmtoken(defvalue) {
 			return fmt.Errorf("value %q is not a valid NMTOKEN", defvalue)
 		}
 	case enum.AttrNmtokens:
-		for tok := range strings.FieldsSeq(defvalue) {
+		// Split on #x20 only — see AttrIDRefs above for why character-reference
+		// whitespace must NOT be treated as a token separator.
+		toks := splitNormalizedTokens(defvalue)
+		if len(toks) == 0 {
+			return errors.New("value must not be empty")
+		}
+		for _, tok := range toks {
 			if !isValidNmtoken(tok) {
 				return fmt.Errorf("value %q is not a valid NMTOKEN", tok)
 			}
-		}
-		if len(strings.Fields(defvalue)) == 0 {
-			return errors.New("value must not be empty")
 		}
 	case enum.AttrEnumeration, enum.AttrNotation:
 		// These are validated against the enumeration tree at a higher
@@ -744,6 +771,14 @@ func collectChildElements(elem *Element) []string {
 				// Use a sentinel to cause content model mismatch
 				children = append(children, "#text")
 			}
+		case CDATASectionNode:
+			// A CDATA section is character data, never ignorable white space —
+			// even when it is empty or whitespace-only, a CDATA section does not
+			// match the S nonterminal (XML §2.4/§3.2.1). So any CDATA section in
+			// element-only content is a validity error (VC: Element Valid). The
+			// sentinel forces a content-model mismatch. (A whitespace-only Text
+			// node above may be ignorable; a CDATA section never is.)
+			children = append(children, "#text")
 		}
 	}
 	return children
