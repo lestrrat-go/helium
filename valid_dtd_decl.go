@@ -125,7 +125,13 @@ func validateAttributeDeclLegal(ctx context.Context, adecl *AttributeDecl, vctx 
 		vctx.addf(ctx, "element %s: ID attribute %s must be declared #IMPLIED or #REQUIRED", adecl.elem, adecl.name)
 	}
 
-	if adecl.defvalue == "" || len(adecl.tree) == 0 {
+	// The default-value check runs whenever a default VALUE is declared — a bare
+	// default or a #FIXED value — not merely when the value is non-empty: a
+	// literal empty default `""` is still a default and must be in the set.
+	// #IMPLIED/#REQUIRED carry no default value, so presence is decided by the
+	// DefaultDecl kind, NOT by defvalue != "" (helium collapses "no default" and
+	// an empty default to the same empty string).
+	if !attrHasDefaultValue(adecl.def) || len(adecl.tree) == 0 {
 		return
 	}
 	switch adecl.atype {
@@ -134,6 +140,13 @@ func validateAttributeDeclLegal(ctx context.Context, adecl *AttributeDecl, vctx 
 			vctx.addf(ctx, "element %s: default value %q for attribute %s is not among the enumerated set", adecl.elem, adecl.defvalue, adecl.name)
 		}
 	}
+}
+
+// attrHasDefaultValue reports whether a DefaultDecl carries an actual default
+// value (a bare default or #FIXED value) as opposed to #IMPLIED/#REQUIRED which
+// carry none.
+func attrHasDefaultValue(def enum.AttributeDefault) bool {
+	return def == enum.AttrDefaultNone || def == enum.AttrDefaultFixed
 }
 
 // validateNotationEnumDeclared implements the Notation Declared VC (§4.7) for a

@@ -76,9 +76,12 @@ func TestDTDDeclValidation(t *testing.T) {
 
 		t.Run("enumerated notation accepted", func(t *testing.T) {
 			t.Parallel()
+			// The element uses ANY content, not EMPTY: a NOTATION attribute on an
+			// EMPTY element is itself invalid (No Notation on Empty Element VC), so
+			// it would not be a genuine no-over-rejection witness.
 			_, err := parseValidatingDTD(t, `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!ATTLIST root type NOTATION (fruit|vegetable) #REQUIRED>
   <!NOTATION fruit SYSTEM "f">
   <!NOTATION vegetable SYSTEM "v">
@@ -114,6 +117,20 @@ func TestDTDDeclValidation(t *testing.T) {
   <!NOTATION not2 SYSTEM "n2">
 ]>
 <foo a="not"/>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "not among the enumerated set"))
+		})
+
+		t.Run("empty-string enumeration default rejected", func(t *testing.T) {
+			t.Parallel()
+			// A literal empty default is still a default value and must be one of
+			// the enumerated tokens; the empty string never is.
+			errs, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root v (one|two) "">
+]>
+<root v="one"/>`)
 			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 			require.True(t, containsError(errs, "not among the enumerated set"))
 		})
