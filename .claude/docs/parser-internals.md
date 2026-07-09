@@ -123,7 +123,11 @@ This is a byte-for-byte stricter stance than libxml2, which downgrades the
 mismatch to a warning and continues. Only a consumed BOM sets `autoEncoding`, so
 the byte-pattern (non-BOM) UTF-16/UCS-4 detection and a plain ASCII/UTF-8 `<?xml`
 start that declares a single-byte encoding (e.g. `iso-8859-1`) are unaffected —
-no over-rejection of a legitimately single-byte-encoded document.
+no over-rejection of a legitimately single-byte-encoded document. The check reads
+the declared EncName from `pctx.declaredEncoding` (recorded unconditionally in
+`parseXMLDecl`/`parseXMLDeclFromCursor`), not `pctx.encoding`, so it still fires
+under `IgnoreEncoding(true)`: that option suppresses the decoder switch (and
+erases `pctx.encoding`) but does not suppress this fatal well-formedness check.
 
 **Strict decode of fixed-width Unicode encodings**: `internal/encoding` wraps the
 UTF-16/UTF-32/UCS-2/UCS-4 decoders (`withStrictDecode`, `strict.go`) so that

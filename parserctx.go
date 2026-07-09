@@ -85,8 +85,13 @@ type parserCtx struct {
 	// was consumed. A declared encoding that contradicts it is a fatal error
 	// (XML §4.3.3); see checkBOMEncodingConflict.
 	autoEncoding string
-	in           io.Reader
-	rawInput     []byte // original bytes, used for EBCDIC encoding detection
+	// declaredEncoding is the EncName parsed from the document entity's XML
+	// declaration, recorded UNCONDITIONALLY (even when IgnoreEncoding suppresses
+	// the decoder switch, which erases ctx.encoding) so the BOM conflict check
+	// still sees what the document declared.
+	declaredEncoding string
+	in               io.Reader
+	rawInput         []byte // original bytes, used for EBCDIC encoding detection
 	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
 	// that mode rawInput holds only a bounded sniff prefix (enough for
 	// ExtractEBCDICEncoding), and the live cursor over the prefix+remainder

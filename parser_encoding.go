@@ -261,19 +261,24 @@ var bomAllowedEncodings = map[string]map[string]struct{}{
 // single-byte encoding (e.g. iso-8859-1) is unaffected. libxml2 downgrades this
 // to a warning; helium follows the spec and the W3C xml suite (hst-lhs-007/008)
 // in treating it as fatal. Declared aliases that match the BOM are accepted.
+//
+// The check consults ctx.declaredEncoding (the parsed EncName) rather than
+// ctx.encoding, so it still fires under IgnoreEncoding(true): that option
+// suppresses the decoder switch (erasing ctx.encoding) but must not suppress
+// this fatal well-formedness check.
 func (ctx *parserCtx) checkBOMEncodingConflict() error {
-	if ctx.autoEncoding == "" || ctx.encoding == "" {
+	if ctx.autoEncoding == "" || ctx.declaredEncoding == "" {
 		return nil
 	}
 	allowed, ok := bomAllowedEncodings[ctx.autoEncoding]
 	if !ok {
 		return nil
 	}
-	if _, ok := allowed[strings.ToLower(ctx.encoding)]; ok {
+	if _, ok := allowed[strings.ToLower(ctx.declaredEncoding)]; ok {
 		return nil
 	}
 	return fmt.Errorf("%w: declared %q, byte-order mark implies %q",
-		ErrEncodingBOMMismatch, ctx.encoding, ctx.autoEncoding)
+		ErrEncodingBOMMismatch, ctx.declaredEncoding, ctx.autoEncoding)
 }
 
 var xmlDeclHint = []byte{'<', '?', 'x', 'm', 'l'}
