@@ -824,6 +824,58 @@ rule { context string, contextExpr *xpath.Expression, tests []*test, lets []*let
 test { typ (Assert|Report), expr, compiled *xpath.Expression, message []messagePart }
 ```
 
+## DTD Validation
+
+DTD validity (XML 1.0 §3–§4) is validated in `valid.go` post-parse by
+`validateDocument`, reached only under `ValidateDTD(true)`. It runs two kinds of
+check: the **instance-tree** walk (root-name match, per-element declaration
+lookup, `#REQUIRED`/`#FIXED`, attribute lexical type, enumeration/notation value
+membership, ID uniqueness, IDREF cross-reference, ENTITY/ENTITIES declared+
+unparsed, content-model matching) and a **declaration-consistency** pass over the
+DTD declarations themselves. A document with neither internal nor external subset
+reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
+`ErrorHandler` via `validCtx.addf`; a failed validation returns
+`ErrDTDValidationFailed`.
+
+`validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
+pass — the analogue of libxml2's `xmlValidateElementDecl` /
+`xmlValidateAttributeDecl` / `xmlValidateDtdFinal`. It walks both subsets
+(`dtdSubsets`, standalone-independent unlike `docDTDs`) and reports:
+
+- **No Duplicate Types** (§3.2.2): a Mixed content model `(#PCDATA|a|b|…)*` may
+  not name the same element type (name+prefix) twice (`validateNoDuplicateTypes`
+  over each `MixedElementType` `ElementDecl`, leaves gathered by
+  `collectMixedLeaves`).
+- **Attribute Default Value Syntactically Correct** (§3.3.2): a declared default
+  must satisfy the attribute's tokenized type. The check keys off the DefaultDecl
+  kind (`attrHasDefaultValue`: a bare default or `#FIXED`), NOT `defvalue != ""` —
+  helium collapses "no default" and an empty default to the same empty string and
+  its parse-time syntactic check skips an empty default, so a literal empty
+  `IDREF`/`NMTOKEN` default is re-validated here via `validateAttributeValueInternal`.
+- **Attribute Default Legal** (§3.3.2): an enumerated/NOTATION attribute's
+  default value must be one of the declared tokens (`validateAttributeDeclLegal`).
+- **No Notation on Empty Element** (§3.3.1): an attribute of type NOTATION may
+  not be declared on an element whose content type is EMPTY
+  (`validateNotationNotOnEmptyElement`, resolving the owning element via
+  `elementDeclForAttr` across both subsets).
+- **ID Attribute Default** (§3.3.1): an `ID` attribute's default must be
+  `#IMPLIED` or `#REQUIRED` — never a literal default or `#FIXED`
+  (`validateAttributeDeclLegal`).
+- **One ID per Element Type** (§3.3.1): an element type may declare at most one
+  `ID` attribute; internal- and external-subset ID declarations for the same
+  element are counted together (`validateOneIDPerElement`).
+- **Notation Declared** (§4.7): a notation named in a NOTATION attribute's
+  enumeration (`validateNotationEnumDeclared`) or in an unparsed entity's `NDATA`
+  clause (`validateUnparsedEntityNotation`; the notation name is the entity
+  content) must be declared in either subset (`notationDeclared`).
+
+The instance-tree `AttrNotation` branch additionally enforces the **Notation
+Attributes** VC (§3.3.1): the instance value must be one of the notation names
+listed in *this* attribute's declaration (`slices.Contains(adecl.tree, val)`),
+not merely a declared notation. All DTD-declaration data comes from the DOM model
+(`AttributeDecl.{atype,def,defvalue,tree,elem}`, `ElementDecl.{decltype,content}`,
+`Entity` content for NDATA, `DTD.LookupNotation`).
+
 ## Comparison
 
 | Aspect | XSD | RELAX NG | Schematron |

@@ -251,9 +251,11 @@ func TestNotationAttributeValidation(t *testing.T) {
 	t.Run("valid notation", func(t *testing.T) {
 		t.Parallel()
 
+		// A NOTATION attribute is not allowed on an EMPTY element (No Notation on
+		// Empty Element VC), so the element uses ANY content.
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!NOTATION gif SYSTEM "image/gif">
   <!NOTATION png SYSTEM "image/png">
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
@@ -269,7 +271,7 @@ func TestNotationAttributeValidation(t *testing.T) {
 
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!NOTATION gif SYSTEM "image/gif">
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
@@ -627,9 +629,11 @@ func TestValidateAttributeTypes(t *testing.T) {
 func TestValidateNotationAttribute(t *testing.T) {
 	t.Parallel()
 
+	// A NOTATION attribute is not allowed on an EMPTY element (No Notation on
+	// Empty Element VC), so the element uses ANY content.
 	const dtd = `<!DOCTYPE doc [
 <!NOTATION gif SYSTEM "viewer">
-<!ELEMENT doc EMPTY>
+<!ELEMENT doc ANY>
 <!ATTLIST doc kind NOTATION (gif) #IMPLIED>
 ]>`
 

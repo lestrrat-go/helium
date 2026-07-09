@@ -248,6 +248,10 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 		}
 	}
 
+	// Validate the DTD declarations themselves (declaration-consistency VCs)
+	// before walking the instance tree.
+	validateDTDDeclarations(ctx, doc, vctx)
+
 	// Walk the document tree and validate each element. A cycle in the tree
 	// (ErrWalkCycle) leaves the walk partial, so the document cannot be
 	// considered valid.
@@ -385,6 +389,11 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 					}
 					if notFound {
 						vctx.addf(ctx, "element %s: attribute %s references undeclared notation %q", ename, aname, val)
+					}
+					// VC: Notation Attributes — the value must be one of the
+					// notation names listed in this attribute's declaration.
+					if len(adecl.tree) > 0 && !slices.Contains(adecl.tree, val) {
+						vctx.addf(ctx, "element %s: attribute %s value %q is not among the enumerated notations", ename, aname, val)
 					}
 				}
 			}
