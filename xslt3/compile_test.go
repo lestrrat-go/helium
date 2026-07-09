@@ -350,7 +350,10 @@ func TestCompileFileLoadsDTDDefinedExternalEntityInIncludedStylesheet(t *testing
 </xsl:stylesheet>`), 0o644))
 
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "child.dtd"), []byte(`<!ENTITY inject SYSTEM "inject.xsl">`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "inject.xsl"), []byte(`<?xml version="1.0"?>
+	// inject.xsl is loaded as an external parsed general entity; its optional
+	// leading TextDecl must carry the mandatory EncodingDecl (a version-only
+	// declaration is a not-wf external entity per XML 4.3.1).
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "inject.xsl"), []byte(`<?xml version="1.0" encoding="UTF-8"?>
 <xsl:variable xmlns:xsl="http://www.w3.org/1999/XSL/Transform" name="var" select="'from-dtd-entity'"/>`), 0o644))
 
 	mainPath := filepath.Join(tmpDir, "main.xsl")

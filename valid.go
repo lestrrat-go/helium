@@ -242,6 +242,21 @@ func docDTDs(doc *Document) []*DTD {
 	return dtds
 }
 
+// lookupDTDEntity searches both intSubset and extSubset for a general entity
+// declaration, regardless of the document's standalone status. DTD validity
+// (VC: Entity Name) requires the referenced entity to be declared in either
+// subset — an unparsed entity in the external subset must be found even for a
+// standalone="yes" document — so this deliberately does NOT gate on standalone
+// the way Document.GetEntity does.
+func lookupDTDEntity(doc *Document, name string) (*Entity, bool) {
+	for _, dtd := range docDTDs(doc) {
+		if ent, ok := dtd.LookupEntity(name); ok {
+			return ent, true
+		}
+	}
+	return nil, false
+}
+
 // lookupElementDecl searches both intSubset and extSubset for an element
 // declaration. DTD validation compares raw qualified names, not namespaces, so a
 // prefixed element requires an <!ELEMENT> declaration for the SAME QName — there is
@@ -428,7 +443,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 						vctx.idrefs[ref] = true
 					}
 				case enum.AttrEntity:
-					ent, ok := doc.GetEntity(val)
+					ent, ok := lookupDTDEntity(doc, val)
 					if !ok {
 						vctx.addf(ctx, "element %s: attribute %s references undeclared entity %q", ename, aname, val)
 					} else if ent.EntityType() != enum.ExternalGeneralUnparsedEntity {
@@ -436,7 +451,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 					}
 				case enum.AttrEntities:
 					for entName := range strings.FieldsSeq(val) {
-						ent, ok := doc.GetEntity(entName)
+						ent, ok := lookupDTDEntity(doc, entName)
 						if !ok {
 							vctx.addf(ctx, "element %s: attribute %s references undeclared entity %q", ename, aname, entName)
 						} else if ent.EntityType() != enum.ExternalGeneralUnparsedEntity {

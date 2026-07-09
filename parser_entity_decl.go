@@ -807,6 +807,21 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 		return nil, pctx.error(ctx, fmt.Errorf("external entity (URI=%s) exceeds maximum size of %d bytes", uri, externalEntityMaxBytes))
 	}
 
+	// An external parsed general entity's replacement text MAY begin with a
+	// TextDecl ('<?xml' VersionInfo? EncodingDecl S? '?>') — VersionInfo OPTIONAL,
+	// EncodingDecl REQUIRED, NO StandaloneDecl (XML §4.3.1). Consume it and decode
+	// the body per its declared encoding at the same shared chokepoint the external
+	// DTD subset and external parameter entities use, so the nested parse is handed
+	// post-TextDecl UTF-8 content. Without this the nested parseXMLDecl would reject
+	// a version-less TextDecl for a missing version, and a leading '<?xml' left in
+	// the decoded stream would be rejected by parseContent as a PI whose target may
+	// not be "xml". A malformed TextDecl (e.g. a standalone pseudo-attribute, or a
+	// version-only declaration) is rejected here by parseTextDecl.
+	content, err = pctx.decodeExternalPEContent(ctx, uri, content)
+	if err != nil {
+		return nil, err
+	}
+
 	// Charge the external content to the amplification counters. Without this an
 	// external entity that is just under externalEntityMaxBytes could be
 	// referenced repeatedly to bypass the entity-expansion limits entirely (the
@@ -871,13 +886,10 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
-	bcur := newctx.getByteCursor()
-	if bcur != nil && looksLikeXMLDecl(bcur) {
-		if err := newctx.parseXMLDecl(innerCtx); err != nil {
-			return nil, err
-		}
-	}
-
+	// A leading TextDecl (and any declared encoding) has already been consumed and
+	// the body decoded to UTF-8 by decodeExternalPEContent above, so the byte
+	// stream here never begins with a '<?xml' declaration; detectEncoding /
+	// switchEncoding still handle a BOM-only external entity carrying no TextDecl.
 	if err := newctx.switchEncoding(); err != nil {
 		return nil, err
 	}
