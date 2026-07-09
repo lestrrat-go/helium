@@ -109,22 +109,30 @@ type parserCtx struct {
 	inSubset          int
 	intSubName        string
 	external          bool // true if parsing external DTDs
-	extSubSystem      string
-	extSubURI         string
-	version           string
-	attsSpecial       map[string]enum.AttributeType
-	attsDefault       map[string][]*Attribute
-	valid             bool
-	hasPERefs         bool
-	pedantic          bool
-	wellFormed        bool
-	depth             int
-	loadsubset        LoadSubsetOption
-	charBufferSize    int
-	baseURI           string          // document base URI for resolving external references
-	catalog           CatalogResolver // XML catalog for entity resolution
-	fsys              fs.FS           // filesystem for loading external DTDs and entities
-	elem              *Element        // current context element
+	// dtdInputFloor is the input-stack depth of the external subset's own base
+	// cursor (the pushed DTD buffer). skipBlanksPE expands parameter-entity
+	// references inside/adjacent to markup declarations by pushing their padded
+	// replacement text and crosses back over the boundary when a PE input is
+	// exhausted, but it must never pop BELOW this floor (which would drop into the
+	// main document input and consume post-DOCTYPE content). 0 outside an external
+	// subset, so skipBlanksPE performs no PE expansion there.
+	dtdInputFloor  int
+	extSubSystem   string
+	extSubURI      string
+	version        string
+	attsSpecial    map[string]enum.AttributeType
+	attsDefault    map[string][]*Attribute
+	valid          bool
+	hasPERefs      bool
+	pedantic       bool
+	wellFormed     bool
+	depth          int
+	loadsubset     LoadSubsetOption
+	charBufferSize int
+	baseURI        string          // document base URI for resolving external references
+	catalog        CatalogResolver // XML catalog for entity resolution
+	fsys           fs.FS           // filesystem for loading external DTDs and entities
+	elem           *Element        // current context element
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
@@ -384,6 +392,23 @@ func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 
 func (ctx *parserCtx) adaptCursor(v any) strcursor.Cursor {
 	cur, _ := v.(strcursor.Cursor)
+	return cur
+}
+
+// dtdRefetch returns the top cursor for continued DTD-declaration parsing after
+// a skipBlanksPE that may have crossed a parameter-entity boundary. In the
+// EXTERNAL subset it re-fetches via getCursor so a boundary crossed by
+// skipBlanksPE (a spent PE input popped, or a fresh padded PE input pushed) is
+// reflected — a markup declaration may legitimately be assembled across PE
+// boundaries there (§4.4.8). In the INTERNAL subset — where a parameter entity
+// must NOT supply part of a markup declaration (WFC: PEs in Internal Subset) — it
+// returns the caller's existing cursor unchanged, so an exhausted PE input is not
+// silently auto-popped across the declaration boundary; the stalled parse then
+// surfaces the boundary violation as an error, exactly as before.
+func (ctx *parserCtx) dtdRefetch(cur strcursor.Cursor) strcursor.Cursor {
+	if ctx.external {
+		return ctx.getCursor()
+	}
 	return cur
 }
 

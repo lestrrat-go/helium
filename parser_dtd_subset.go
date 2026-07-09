@@ -101,7 +101,7 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 		if err := pctx.parseMarkupDecl(ctx); err != nil {
 			return pctx.error(ctx, err)
 		}
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return pctx.error(ctx, err)
 		}
 
@@ -175,7 +175,7 @@ func (pctx *parserCtx) parseMarkupDecl(ctx context.Context) error {
 	}
 
 	if !pctx.external && pctx.inputTab.Len() == 1 {
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return pctx.error(ctx, err)
 		}
 	}
@@ -231,7 +231,7 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 
 	cur = pctx.getCursor()
 	if cur != nil && cur.Peek() == '%' {
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return err
 		}
 		pctx.skipBlanks(ctx)
@@ -517,7 +517,7 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 		// not handle top-level "%pe;" references in the external subset, so this
 		// pushes the PE replacement text onto the input stack and lets its
 		// declarations be parsed by subsequent steps.
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return false, err
 		}
 	}
@@ -537,7 +537,14 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	return false, nil
 }
 
-func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
+// parsePEReference expands the parameter-entity reference at the cursor by
+// pushing its replacement text onto the input stack. When pad is true the pushed
+// replacement is enlarged by one leading and one trailing space per XML §4.4.8
+// ("Included as PE") — required when a PE is included INSIDE or ADJACENT to a
+// markup declaration in the external subset so the boundary separates tokens.
+// The between-declaration callers pass pad=false: a PE that stands on its own
+// between declarations is already whitespace-separated, so padding is redundant.
+func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -632,7 +639,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				// resolves against the PE's location, not the containing DTD. The
 				// override (and the active-recursion mark) is cleared when this
 				// pushed cursor is popped.
-				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(content)), peURI, ent)
+				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, ent)
 			}
 			pctx.hasPERefs = true
 			return nil
@@ -666,11 +673,26 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 
-			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader([]byte(decodedContent))))
+			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent([]byte(decodedContent), pad))))
 		}
 	}
 	pctx.hasPERefs = true
 	return nil
+}
+
+// padPEContent returns the parameter-entity replacement text enlarged by one
+// leading and one trailing space (#x20) per XML §4.4.8 when pad is true,
+// otherwise the content unchanged. A fresh slice is always returned when padding
+// so the caller's buffer is never aliased.
+func padPEContent(content []byte, pad bool) []byte {
+	if !pad {
+		return content
+	}
+	out := make([]byte, 0, len(content)+2)
+	out = append(out, ' ')
+	out = append(out, content...)
+	out = append(out, ' ')
+	return out
 }
 
 // loadExternalParameterEntityContent returns the replacement text of an external

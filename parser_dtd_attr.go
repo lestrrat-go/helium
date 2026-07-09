@@ -490,36 +490,58 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 	}
 	startInput := pctx.currentInputID()
 
-	if !isBlankByte(cur.Peek()) {
+	// The "S" after <!ATTLIST, between tokens, and around a supplied token may be
+	// provided by a parameter entity's §4.4.8 padding or a crossed PE-input
+	// boundary in the external subset, so require it through skipBlanksPE (which
+	// also expands a "%pe;" that supplies the element name / attribute
+	// definitions) rather than a raw isBlankByte check. Re-fetch the cursor after
+	// each skip and after each sub-parse: an expanded PE pushes a new input and an
+	// exhausted PE input is popped, so a cursor captured earlier is stale.
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
-	pctx.skipBlanks(ctx)
 
 	elemName, err := pctx.parseName(ctx)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return pctx.error(ctx, err)
+	}
 
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return pctx.error(ctx, errNoCursor)
+	}
 	for cur.Peek() != '>' && pctx.instate != psEOF {
 		attrName, err := pctx.parseName(ctx)
 		if err != nil {
 			return pctx.error(ctx, ErrAttributeNameRequired)
 		}
-		if !isBlankByte(cur.Peek()) {
+		adv, err := pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if !adv {
 			return pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 
 		typ, tree, err := pctx.parseAttributeType(ctx)
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
 
-		if !isBlankByte(cur.Peek()) {
+		adv, err = pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if !adv {
 			return pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 
 		def, defvalue, err := pctx.parseDefaultDecl(ctx)
 		if err != nil {
@@ -530,11 +552,18 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 			defvalue = pctx.attrNormalizeSpace(defvalue)
 		}
 
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return pctx.error(ctx, errNoCursor)
+		}
 		if c := cur.Peek(); c != '>' {
-			if !isBlankByte(c) {
+			adv, err := pctx.skipBlanksPE(ctx)
+			if err != nil {
+				return pctx.error(ctx, err)
+			}
+			if !adv {
 				return pctx.error(ctx, ErrSpaceRequired)
 			}
-			pctx.skipBlanks(ctx)
 		}
 		if s := pctx.sax; s != nil {
 			switch err := s.AttributeDecl(ctx, elemName, attrName, typ, def, defvalue, tree); err {
@@ -550,10 +579,18 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 
 		pctx.addSpecialAttribute(elemName, attrName, typ)
 
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return pctx.error(ctx, errNoCursor)
+		}
 		if cur.Peek() == '>' {
+			// The whole <!ATTLIST ... > must start and stop in the same input: a
+			// closing '>' supplied by a parameter entity that began mid-declaration
+			// (e.g. `<!ATTLIST foo %e;` with %e; -> "... #IMPLIED>") is a boundary
+			// violation, the same fatal condition <!ELEMENT> enforces.
 			if pctx.currentInputID() != startInput {
-				_ = pctx.warning(ctx, "attribute list declaration doesn't start and stop in the same entity\n")
-				pctx.valid = false
+				return pctx.error(ctx,
+					fmt.Errorf("%w: attribute list declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 			}
 			if err := cur.Advance(1); err != nil {
 				return err

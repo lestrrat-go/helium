@@ -18,21 +18,35 @@ func (pctx *parserCtx) parseElementDecl(ctx context.Context) (enum.ElementType, 
 	}
 	startInput := pctx.currentInputID()
 
-	if !isBlankByte(cur.Peek()) {
+	// Require the mandatory "S" through skipBlanksPE so a parameter entity may
+	// supply (or be adjacent to) the element name / content spec in the external
+	// subset; its §4.4.8 padding or a crossed PE boundary satisfies the "S". The
+	// captured cursor goes stale across a PE expand/pop, so re-fetch it.
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return enum.UndefinedElementType, pctx.error(ctx, err)
+	}
+	if !adv {
 		return enum.UndefinedElementType, pctx.error(ctx, ErrSpaceRequired)
 	}
-	pctx.skipBlanks(ctx)
 
 	name, err := pctx.parseName(ctx)
 	if err != nil {
 		return enum.UndefinedElementType, pctx.error(ctx, err)
 	}
 
-	if !isBlankByte(cur.Peek()) {
+	adv, err = pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return enum.UndefinedElementType, pctx.error(ctx, err)
+	}
+	if !adv {
 		return enum.UndefinedElementType, pctx.error(ctx, ErrSpaceRequired)
 	}
-	pctx.skipBlanks(ctx)
 
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return enum.UndefinedElementType, pctx.error(ctx, errNoCursor)
+	}
 	var etype enum.ElementType
 	var content *ElementContent
 	if cur.ConsumeString("EMPTY") {
@@ -46,8 +60,14 @@ func (pctx *parserCtx) parseElementDecl(ctx context.Context) (enum.ElementType, 
 		}
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return enum.UndefinedElementType, pctx.error(ctx, err)
+	}
 
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return enum.UndefinedElementType, pctx.error(ctx, errNoCursor)
+	}
 	if cur.Peek() != '>' {
 		return enum.UndefinedElementType, pctx.error(ctx, ErrGtRequired)
 	}
@@ -79,6 +99,12 @@ func (pctx *parserCtx) parseElementContentDecl(ctx context.Context) (*ElementCon
 	if cur.Peek() != '(' {
 		return nil, enum.UndefinedElementType, pctx.error(ctx, ErrOpenParenRequired)
 	}
+	// The input holding this opening '(' is the boundary reference for the
+	// group's PE-nesting validity check (XML VC "Proper Group/PE Nesting"): the
+	// matching ')' must be read from this same input. Capture it BEFORE advancing
+	// so a parameter entity supplying the group's content (e.g. "(%m;)") does not
+	// shift the reference to the PE input.
+	openInput := pctx.currentInputID()
 	if err := cur.Advance(1); err != nil {
 		return nil, enum.UndefinedElementType, err
 	}
@@ -87,30 +113,38 @@ func (pctx *parserCtx) parseElementContentDecl(ctx context.Context) (*ElementCon
 		return nil, enum.UndefinedElementType, pctx.error(ctx, ErrEOF)
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, enum.UndefinedElementType, pctx.error(ctx, err)
+	}
 
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return nil, enum.UndefinedElementType, pctx.error(ctx, errNoCursor)
+	}
 	var ec *ElementContent
 	var err error
 	var etype enum.ElementType
 	if cur.HasPrefixString("#PCDATA") {
-		ec, err = pctx.parseElementMixedContentDecl(ctx)
+		ec, err = pctx.parseElementMixedContentDecl(ctx, openInput)
 		if err != nil {
 			return nil, enum.UndefinedElementType, pctx.error(ctx, err)
 		}
 		etype = enum.MixedElementType
 	} else {
-		ec, err = pctx.parseElementChildrenContentDeclPriv(ctx, 0)
+		ec, err = pctx.parseElementChildrenContentDeclPriv(ctx, openInput, 0)
 		if err != nil {
 			return nil, enum.UndefinedElementType, pctx.error(ctx, err)
 		}
 		etype = enum.ElementElementType
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, enum.UndefinedElementType, pctx.error(ctx, err)
+	}
 	return ec, etype, nil
 }
 
-func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*ElementContent, error) {
+func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context, openInput any) (*ElementContent, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
 		return nil, pctx.error(ctx, errNoCursor)
@@ -118,14 +152,24 @@ func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*Eleme
 	if !cur.ConsumeString("#PCDATA") {
 		return nil, pctx.error(ctx, ErrPCDATARequired)
 	}
-	startInput := pctx.currentInputID()
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
 
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return nil, pctx.error(ctx, errNoCursor)
+	}
 	if cur.Peek() == ')' {
-		if pctx.valid && pctx.currentInputID() != startInput {
-			_ = pctx.warning(ctx, "element content declaration doesn't start and stop in the same entity\n")
-			pctx.valid = false
+		// XML VC "Proper Group/PE Nesting": the group's matching ')' must be read
+		// from the SAME input as its '('. A ')' supplied by a different
+		// parameter-entity replacement text (the '(' in one PE / entity, the ')' in
+		// another, or split between a PE and the containing DTD) is a boundary
+		// violation, the same fatal condition the <!ELEMENT> wrapper enforces.
+		if pctx.currentInputID() != openInput {
+			return nil, pctx.error(ctx,
+				fmt.Errorf("%w: element content declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 		}
 		if err := cur.Advance(1); err != nil {
 			return nil, pctx.error(ctx, err)
@@ -186,12 +230,20 @@ func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*Eleme
 			n.parent = curelem
 			curelem = n
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
 		elem, err = pctx.parseName(ctx)
 		if err != nil {
 			return nil, pctx.error(ctx, err)
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return nil, pctx.error(ctx, errNoCursor)
+		}
 	}
 	if cur.Peek() == ')' && cur.PeekAt(1) == '*' {
 		if err := cur.Advance(2); err != nil {
@@ -208,39 +260,47 @@ func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*Eleme
 		if retelem != nil {
 			retelem.coccur = ElementContentMult
 		}
-		if pctx.valid && pctx.currentInputID() != startInput {
-			_ = pctx.warning(ctx, "element content declaration doesn't start and stop in the same entity\n")
-			pctx.valid = false
+		if pctx.currentInputID() != openInput {
+			return nil, pctx.error(ctx,
+				fmt.Errorf("%w: element content declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 		}
 	}
 	return retelem, nil
 }
 
-func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, depth int) (*ElementContent, error) {
+func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, openInput any, depth int) (*ElementContent, error) {
 	if pctx.maxCMDepth > 0 && depth > pctx.maxCMDepth {
 		return nil, fmt.Errorf("xmlParseElementChildrenContentDecl : depth %d too deep", depth)
 	}
-	startInput := pctx.currentInputID()
 
 	var curelem *ElementContent
 	var retelem *ElementContent
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
 	cur := pctx.getCursor()
 	if cur == nil {
 		return nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() == '(' {
+		// A nested group: the input holding THIS '(' is the boundary reference for
+		// the nested group's own ')'.
+		nestedInput := pctx.currentInputID()
 		if err := cur.Advance(1); err != nil {
 			return nil, err
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
 		var err error
-		retelem, err = pctx.parseElementChildrenContentDeclPriv(ctx, depth+1)
+		retelem, err = pctx.parseElementChildrenContentDeclPriv(ctx, nestedInput, depth+1)
 		if err != nil {
 			return nil, pctx.error(ctx, err)
 		}
 		curelem = retelem
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
 	} else {
 		elem, err := pctx.parseName(ctx)
 		if err != nil {
@@ -253,6 +313,10 @@ func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, 
 		}
 		curelem = retelem
 
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return nil, pctx.error(ctx, errNoCursor)
+		}
 		switch cur.Peek() {
 		case '?':
 			curelem.coccur = ElementContentOpt
@@ -272,7 +336,13 @@ func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, 
 		}
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return nil, pctx.error(ctx, errNoCursor)
+	}
 
 	var sep rune
 	var last *ElementContent
@@ -312,7 +382,11 @@ func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, 
 	}
 
 LOOP:
-	for !cur.Done() {
+	for {
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil || cur.Done() {
+			break
+		}
 		c := cur.Peek()
 		switch c {
 		case ')':
@@ -329,19 +403,30 @@ LOOP:
 			return nil, pctx.error(ctx, ErrElementContentNotFinished)
 		}
 
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return nil, pctx.error(ctx, errNoCursor)
+		}
 
 		if cur.Peek() == '(' {
+			nestedInput := pctx.currentInputID()
 			if err := cur.Advance(1); err != nil {
 				return nil, err
 			}
-			pctx.skipBlanks(ctx)
+			if _, err := pctx.skipBlanksPE(ctx); err != nil {
+				return nil, pctx.error(ctx, err)
+			}
 			var err error
-			last, err = pctx.parseElementChildrenContentDeclPriv(ctx, depth+1)
+			last, err = pctx.parseElementChildrenContentDeclPriv(ctx, nestedInput, depth+1)
 			if err != nil {
 				return nil, pctx.error(ctx, err)
 			}
-			pctx.skipBlanks(ctx)
+			if _, err := pctx.skipBlanksPE(ctx); err != nil {
+				return nil, pctx.error(ctx, err)
+			}
 		} else {
 			elem, err := pctx.parseName(ctx)
 			if err != nil {
@@ -353,6 +438,10 @@ LOOP:
 				return nil, pctx.error(ctx, err)
 			}
 
+			cur = pctx.dtdRefetch(cur)
+			if cur == nil {
+				return nil, pctx.error(ctx, errNoCursor)
+			}
 			switch cur.Peek() {
 			case '?':
 				last.coccur = ElementContentOpt
@@ -371,18 +460,24 @@ LOOP:
 				}
 			}
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
 	}
 	if last != nil {
 		curelem.c2 = last
 		last.parent = curelem
 	}
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return nil, pctx.error(ctx, errNoCursor)
+	}
+	if pctx.currentInputID() != openInput {
+		return nil, pctx.error(ctx,
+			fmt.Errorf("%w: element content declaration doesn't start and stop in the same entity", ErrEntityBoundary))
+	}
 	if err := cur.Advance(1); err != nil {
 		return nil, pctx.error(ctx, err)
-	}
-	if pctx.valid && pctx.currentInputID() != startInput {
-		_ = pctx.warning(ctx, "element content declaration doesn't start and stop in the same entity\n")
-		pctx.valid = false
 	}
 
 	c := cur.Peek()

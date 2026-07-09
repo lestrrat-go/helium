@@ -572,6 +572,119 @@ func TestConditionalSectionKeywordFromParameterEntity(t *testing.T) {
 	require.Contains(t, str, `a1="v1"`, "the <!ATTLIST> inside the PE-supplied INCLUDE section must supply the default attribute")
 }
 
+// TestParameterEntityInMarkupDecl covers XML §4.4.8 "Included as PE": in the
+// EXTERNAL subset a parameter-entity reference is recognized and included
+// ANYWHERE a markup declaration occurs — INSIDE or ADJACENT to the declaration,
+// not only between declarations — and its replacement text is padded with one
+// leading and one trailing space. Each DTD here is a valid external subset that
+// must parse AND apply the resulting declaration (W3C xmlconf valid/not-sa
+// 019/020/021 and the japanese/spec.dtd content-model & common-attribute
+// patterns).
+func TestParameterEntityInMarkupDecl(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc></doc>`
+
+	testcases := []struct {
+		name string
+		dtd  string
+	}{
+		{
+			// PE adjacent to an attribute type: `CDATA%e;` with %e; -> "'v1'". The
+			// §4.4.8 leading space separates the type from the default value.
+			name: "pe-adjacent-to-attribute-type",
+			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % e \"'v1'\">\n<!ATTLIST doc a1 CDATA%e;>\n",
+		},
+		{
+			// PE supplies the element name immediately after <!ATTLIST (no space):
+			// `<!ATTLIST%e;a1` with %e; -> "doc".
+			name: "pe-supplies-element-name",
+			dtd:  "<!ENTITY % e \"doc\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST%e;a1 CDATA \"v1\">\n",
+		},
+		{
+			// PE supplies most of the ATTLIST body: %e; -> "doc a1 CDATA".
+			name: "pe-supplies-attlist-body-head",
+			dtd:  "<!ENTITY % e \"doc a1 CDATA\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST %e; \"v1\">\n",
+		},
+		{
+			// PE supplies the whole attribute definition list.
+			name: "pe-supplies-full-attlist-body",
+			dtd:  "<!ENTITY % att \"a1 CDATA 'v1'\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc %att;>\n",
+		},
+		{
+			// PE inside an element content model, recursively nested through an
+			// empty PE (the japanese/spec.dtd `%class;` idiom).
+			name: "pe-in-content-model",
+			dtd: "<!ENTITY % local \"\">\n<!ENTITY % kids \"a %local;\">\n" +
+				"<!ELEMENT a (#PCDATA)>\n<!ELEMENT head (#PCDATA)>\n" +
+				"<!ELEMENT doc (head?, (%kids;)*)>\n<!ATTLIST doc a1 CDATA 'v1'>\n",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{dtdSystemID: {Data: []byte(tc.dtd)}}
+			doc, err := helium.NewParser().BlockXXE(false).
+				LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).
+				ValidateDTD(true).FS(fsys).Parse(t.Context(), []byte(input))
+			require.NoError(t, err, "a valid external subset with a PE in/adjacent to a markup declaration must parse")
+			require.NotNil(t, doc)
+
+			str, werr := helium.WriteString(doc.DocumentElement())
+			require.NoError(t, werr)
+			require.Contains(t, str, `a1="v1"`, "the declaration assembled across the PE boundary must supply the default attribute")
+		})
+	}
+}
+
+// TestParameterEntityMarkupBoundaryViolation covers the XML validity constraints
+// that a markup declaration (and a parenthesized content-model group) must start
+// and stop in the SAME entity: a closing '>' or ')' supplied by a DIFFERENT
+// parameter-entity replacement text than the one that opened the declaration/group
+// is a boundary violation and must be rejected (W3C xmlconf invalid cases E14,
+// invalid/002, ibm P49/P50/P51 invalid). Rejecting these must NOT regress the
+// valid PE-in-markup documents above.
+func TestParameterEntityMarkupBoundaryViolation(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc></doc>`
+
+	testcases := []struct {
+		name string
+		dtd  string
+	}{
+		{
+			// The ATTLIST closing '>' comes from inside the PE (W3C errata E14).
+			name: "attlist-close-in-pe",
+			dtd:  "<!ELEMENT doc ANY>\n<!ENTITY % e \"a1 CDATA #IMPLIED>\">\n<!ATTLIST doc %e;\n",
+		},
+		{
+			// Content-model '(' in a PE, ')' in the containing DTD (W3C invalid/002).
+			name: "content-model-open-in-pe-close-in-dtd",
+			dtd:  "<!ENTITY % e \"(#PCDATA\">\n<!ELEMENT doc %e;)>\n",
+		},
+		{
+			// Content-model '(' in one PE, ')' in another (W3C ibm P49 invalid).
+			name: "content-model-group-split-across-pes",
+			dtd: "<!ELEMENT a EMPTY>\n<!ELEMENT b (#PCDATA)>\n" +
+				"<!ENTITY % choice1 \"(a|b\">\n<!ENTITY % choice2 \"|c)\">\n" +
+				"<!ELEMENT c ANY>\n<!ELEMENT child1 %choice1;%choice2; >\n",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{dtdSystemID: {Data: []byte(tc.dtd)}}
+			_, err := helium.NewParser().BlockXXE(false).
+				LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).
+				ValidateDTD(true).FS(fsys).Parse(t.Context(), []byte(input))
+			require.Error(t, err, "a markup declaration / group that crosses a PE boundary must be rejected")
+		})
+	}
+}
+
 // TestExternalPublicParameterEntityCaptured proves the PUBLIC external parameter
 // entity path records the public and system IDs in the correct fields rather than
 // swapping them.
