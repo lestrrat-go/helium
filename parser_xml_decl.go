@@ -42,7 +42,17 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 	}
 
 	v, err = pctx.parseEncodingDecl(ctx)
-	if err == nil && !pctx.options.IsSet(parseIgnoreEnc) {
+	if err != nil {
+		// An "encoding" keyword that is present but malformed (missing '=',
+		// missing opening quote, or an invalid EncName) is a fatal error per
+		// EncodingDecl [80]/EncName [81]; only a wholly-absent keyword
+		// (AttrNotFoundError) is benign and falls through to the optional
+		// StandaloneDecl (W3C ibm-not-wf-P80-ibm80n03).
+		var nf AttrNotFoundError
+		if !errors.As(err, &nf) {
+			return pctx.error(ctx, err)
+		}
+	} else if !pctx.options.IsSet(parseIgnoreEnc) {
 		pctx.encoding = v
 	}
 
@@ -288,7 +298,15 @@ func (pctx *parserCtx) parseXMLDeclFromCursor(ctx context.Context) error {
 	}
 
 	ev, err := pctx.parseEncodingDeclFromCursor(ctx)
-	if err == nil && !pctx.options.IsSet(parseIgnoreEnc) {
+	if err != nil {
+		// A present-but-malformed "encoding" keyword is fatal (EncodingDecl
+		// [80]/EncName [81]); only a wholly-absent keyword (AttrNotFoundError)
+		// falls through to the optional StandaloneDecl.
+		var nf AttrNotFoundError
+		if !errors.As(err, &nf) {
+			return pctx.error(ctx, err)
+		}
+	} else if !pctx.options.IsSet(parseIgnoreEnc) {
 		pctx.encoding = ev
 	}
 

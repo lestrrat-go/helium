@@ -540,17 +540,24 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 		} else {
-			// parseExternalID returns (systemURI, publicID). Mirror the external
-			// general-entity path below: guard on the system URI (a SYSTEM
+			// parseExternalID returns (systemURI, publicID, found). Mirror the
+			// external general-entity path below: guard on the system URI (a SYSTEM
 			// declaration carries no public ID, so guarding on the public ID would
 			// drop every SYSTEM parameter entity), and pass publicID/systemID to
 			// EntityDecl in that order.
-			literal, uri, err = pctx.parseExternalID(ctx, true)
+			var found bool
+			literal, uri, found, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
 				// Preserve a resource-limit (ErrNodeContentTooLarge) or
 				// parse-abort error verbatim; only an empty/missing literal
 				// falls back to the generic ErrValueRequired.
 				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
+			}
+			// PEDef [74]: EntityValue | ExternalID — with neither an EntityValue
+			// (handled above) nor an ExternalID present, the declaration is a fatal
+			// well-formedness error.
+			if !found {
+				return pctx.error(ctx, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -585,12 +592,19 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				}
 			}
 		} else {
-			literal, uri, err = pctx.parseExternalID(ctx, true)
+			var found bool
+			literal, uri, found, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
 				// Preserve a resource-limit (ErrNodeContentTooLarge) or
 				// parse-abort error verbatim; only an empty/missing literal
 				// falls back to the generic ErrValueRequired.
 				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
+			}
+			// EntityDef [73]: EntityValue | (ExternalID NDataDecl?) — with neither
+			// an EntityValue (handled above) nor an ExternalID present, the
+			// declaration is a fatal well-formedness error (W3C o-p73fail4).
+			if !found {
+				return pctx.error(ctx, ErrValueRequired)
 			}
 
 			if literal != "" {

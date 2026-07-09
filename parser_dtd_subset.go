@@ -31,7 +31,9 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 	pctx.intSubName = name
 
 	pctx.skipBlanks(ctx)
-	u, eid, err := pctx.parseExternalID(ctx, true)
+	// A DOCTYPE's ExternalID is optional (an internal-subset-only doctype has
+	// none), so the presence bool is not required here.
+	u, eid, _, err := pctx.parseExternalID(ctx, true)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
