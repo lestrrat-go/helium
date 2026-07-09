@@ -26,7 +26,11 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	// A reference (character or general-entity) is content per XML production
 	// [43]. Record it on the containing element so element-content validity can
 	// reject a reference inside an element declared EMPTY (errata 2e E15a) even
-	// when the reference expands to nothing.
+	// when the reference expands to nothing. parseReference runs only from the
+	// element-content loop (parseDocument), so pctx.elem is the element the
+	// reference is content of; references in attribute values take a separate
+	// path (decodeEntities) and never reach here, so an attribute char/entity
+	// reference never marks its element.
 	if pctx.elem != nil {
 		pctx.elem.contentHasReference = true
 	}
