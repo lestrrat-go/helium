@@ -131,4 +131,53 @@ func TestStandaloneExternalDecl(t *testing.T) {
 			require.NoError(t, err)
 		})
 	})
+
+	// A declaration pulled in by an EXTERNAL PARAMETER ENTITY referenced from the
+	// INTERNAL subset is external markup for the VC (libxml2 PARSER_EXTERNAL), even
+	// though it is registered in the internal-subset declaration table.
+	t.Run("external parameter entity", func(t *testing.T) {
+		t.Parallel()
+
+		// External-PE-supplied ATTLIST default.
+		t.Run("default rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE animal [
+  <!ENTITY % ext SYSTEM "ext.dtd">
+  %ext;
+  <!ELEMENT animal EMPTY>
+]>
+<animal/>`, `<!ATTLIST animal color CDATA #FIXED "yellow">`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "defaulted from external subset"))
+		})
+
+		// External-PE-supplied tokenized type driving attribute normalization.
+		t.Run("normalization rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE animal [
+  <!ENTITY % ext SYSTEM "ext.dtd">
+  %ext;
+  <!ELEMENT animal EMPTY>
+]>
+<animal class="  spacedvalue  "/>`, `<!ATTLIST animal class NMTOKEN #IMPLIED>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "normalization of attribute class"))
+		})
+
+		// A purely-internal parameter entity supplies no external markup, so its
+		// defaulted attribute and normalization are not standalone violations.
+		t.Run("internal PE accepted", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE animal [
+  <!ENTITY % int "<!ATTLIST animal color CDATA #FIXED 'yellow'><!ATTLIST animal class NMTOKEN #IMPLIED>">
+  %int;
+  <!ELEMENT animal EMPTY>
+]>
+<animal class="  spacedvalue  "/>`, `<!ELEMENT ignored EMPTY>`)
+			require.NoError(t, err)
+		})
+	})
 }

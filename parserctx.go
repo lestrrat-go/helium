@@ -391,6 +391,17 @@ func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
 	return ctx.activeExternalPECount[ent] > 0
 }
 
+// effectivelyExternal reports whether a markup declaration parsed at this point
+// counts as EXTERNAL for the VC: Standalone Document Declaration (XML §2.9). A
+// declaration is external when it comes from the external subset OR from an
+// external parameter entity referenced anywhere (mirrors libxml2's PARSER_EXTERNAL
+// = inSubset==2 OR the current input is an XML_EXTERNAL_PARAMETER_ENTITY). An
+// external-PE-supplied declaration referenced from the internal subset is external
+// markup even though it is registered in the internal subset's declaration table.
+func (ctx *parserCtx) effectivelyExternal() bool {
+	return ctx.inSubset == inExternalSubset || len(ctx.externalPEScopes) > 0
+}
+
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	cur, ok := ctx.inputTab.PeekOne().(*strcursor.ByteCursor)
 	if !ok {

@@ -401,9 +401,10 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 		return
 	}
 	ctx.attsSpecial[key] = typ
-	// Record whether this binding originates in the external subset, for the VC:
-	// Standalone Document Declaration normalization check (libxml2 XML_SPECIAL_EXTERNAL).
-	if ctx.inSubset == inExternalSubset {
+	// Record whether this binding originates in external markup (external subset or
+	// an external parameter entity), for the VC: Standalone Document Declaration
+	// normalization check (libxml2 XML_SPECIAL_EXTERNAL).
+	if ctx.effectivelyExternal() {
 		ctx.attsSpecialExternal[key] = struct{}{}
 	}
 }
@@ -481,6 +482,11 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	attr.def = def
 	attr.tree = tree
 	attr.defvalue = defvalue
+	// Record whether this declaration comes from external markup (external subset
+	// or an external parameter entity), for the VC: Standalone Document Declaration
+	// default-attribute check. An external-PE-declared ATTLIST is registered in the
+	// internal subset's table, so origin cannot be inferred from the subset alone.
+	attr.external = ctx.effectivelyExternal()
 
 	if err = dtd.RegisterAttribute(attr); err != nil {
 		attr = nil

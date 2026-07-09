@@ -458,7 +458,10 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 // the external subset, because omitting the external subset would change whether
 // the attribute is present. Mirrors libxml2's XML_DTD_STANDALONE_DEFAULTED report.
 func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
-	if doc.standalone != StandaloneExplicitYes || doc.extSubset == nil {
+	// No extSubset guard: external markup may also arrive via an external parameter
+	// entity referenced from the internal subset, in which case doc.extSubset is nil
+	// but AttributeDecl.external is still set.
+	if doc.standalone != StandaloneExplicitYes {
 		return
 	}
 	ename := elem.LocalName()
@@ -466,30 +469,31 @@ func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *E
 		if !a.IsDefault() {
 			continue
 		}
-		if attrDeclExternalOnly(doc, a.LocalName(), a.Prefix(), ename) {
+		if attrDeclEffectivelyExternal(doc, a.LocalName(), a.Prefix(), ename) {
 			vctx.addf(ctx, "standalone: attribute %s on %s defaulted from external subset", a.Name(), ename)
 		}
 	}
 }
 
-// attrDeclExternalOnly reports whether the effective declaration of attribute
-// (name, prefix) on element elem comes from the external subset. An
-// internal-subset declaration takes precedence (XML §3.3), so the origin is
-// external only when the external subset declares the attribute and the internal
-// subset does not.
-func attrDeclExternalOnly(doc *Document, name, prefix, elem string) bool {
-	if doc.extSubset == nil {
-		return false
-	}
-	if _, ok := doc.extSubset.LookupAttribute(name, prefix, elem); !ok {
-		return false
-	}
+// attrDeclEffectivelyExternal reports whether the effective declaration of
+// attribute (name, prefix) on element elem comes from external markup (the
+// external subset or an external parameter entity). The origin is recorded on the
+// declaration at parse time (AttributeDecl.external), because an external-PE-
+// supplied ATTLIST is registered in the internal subset's table yet is still
+// external markup. An internal-subset declaration takes precedence (XML §3.3), so
+// the internal table is consulted first.
+func attrDeclEffectivelyExternal(doc *Document, name, prefix, elem string) bool {
 	if doc.intSubset != nil {
-		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
-			return false
+		if d, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
+			return d.external
 		}
 	}
-	return true
+	if doc.extSubset != nil {
+		if d, ok := doc.extSubset.LookupAttribute(name, prefix, elem); ok {
+			return d.external
+		}
+	}
+	return false
 }
 
 // checkStandaloneExternalNormalization implements part of the VC: Standalone
