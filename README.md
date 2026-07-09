@@ -242,12 +242,13 @@ Some edge cases and parity gaps are still being iterated on; contributions and i
 ## W3C conformance suites
 
 Each row links to the package's README (for scope and details) and its
-committed, point-in-time evidence. The package summaries carry the generated
-date, pinned upstream suite revision, pass/skip/fail counts, and skip breakdowns
-where applicable.
+committed, point-in-time evidence. The summaries carry the generated date,
+pinned upstream suite revision, pass/skip/xfail/fail counts, and skip and
+expected-failure (documented known gap) breakdowns where applicable.
 
 | Suite | Package | Evidence |
 |-------|---------|----------|
+| XML 1.0 (parser + validity) | core parser | [summary](summary-xml.md) |
 | XPath 3.1 (QT3) | [`xpath3`](xpath3/README.md) | [summary](xpath3/summary-qt3.md) |
 | XSLT 3.0 | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md), [conformance declaration](xslt3/CONFORMANCE.md) |
 | XSD 1.0 (default) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
