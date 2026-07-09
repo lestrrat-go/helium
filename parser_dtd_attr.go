@@ -126,7 +126,14 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 	if err := cur.Advance(1); err != nil {
 		return nil, pctx.error(ctx, err)
 	}
-	pctx.skipBlanks(ctx)
+	// Blanks (and, in the external subset, parameter-entity references supplying
+	// the name list) between the '(' and each name/'|' are consumed through
+	// skipBlanksPE; re-fetch the cursor after each skip since an expand/pop may
+	// have changed the top input.
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
 
 	names := map[string]struct{}{}
 
@@ -142,7 +149,10 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 		names[name] = struct{}{}
 
 		enumv = append(enumv, name)
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 
 		if cur.Peek() != '|' {
 			break
@@ -150,7 +160,10 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 		if err := cur.Advance(1); err != nil {
 			return nil, pctx.error(ctx, err)
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 	}
 
 	if cur.Peek() != ')' {
@@ -173,7 +186,13 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 	if err := cur.Advance(1); err != nil {
 		return nil, pctx.error(ctx, err)
 	}
-	pctx.skipBlanks(ctx)
+	// In the external subset a parameter entity may supply the enumeration name
+	// list (e.g. `(%vals;)`); skipBlanksPE expands it and crosses the boundary,
+	// so re-fetch the cursor after each skip.
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
 
 	names := map[string]struct{}{}
 
@@ -189,7 +208,10 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 		names[name] = struct{}{}
 
 		enumv = append(enumv, name)
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 
 		if cur.Peek() != '|' {
 			break
@@ -197,7 +219,10 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 		if err := cur.Advance(1); err != nil {
 			return nil, pctx.error(ctx, err)
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 	}
 
 	if cur.Peek() != ')' {
@@ -215,10 +240,13 @@ func (pctx *parserCtx) parseEnumeratedType(ctx context.Context) (enum.AttributeT
 		return enum.AttrInvalid, nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.ConsumeString("NOTATION") {
-		if !isBlankByte(cur.Peek()) {
+		adv, err := pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return enum.AttrInvalid, nil, pctx.error(ctx, err)
+		}
+		if !adv {
 			return enum.AttrInvalid, nil, pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 		tree, err := pctx.parseNotationType(ctx)
 		if err != nil {
 			return enum.AttrInvalid, nil, pctx.error(ctx, err)
@@ -285,12 +313,21 @@ func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.Attri
 
 	if cur.ConsumeString("#FIXED") {
 		deftype = enum.AttrDefaultFixed
-		if !isBlankByte(cur.Peek()) {
+		// The mandatory "S" after #FIXED — and, in the external subset, a
+		// parameter entity supplying the #FIXED value (e.g. `#FIXED %v;`) — is
+		// consumed through skipBlanksPE so a PE-supplied value's opening quote is
+		// reached rather than left unexpanded.
+		adv, serr := pctx.skipBlanksPE(ctx)
+		if serr != nil {
+			deftype = enum.AttrDefaultInvalid
+			err = pctx.error(ctx, serr)
+			return
+		}
+		if !adv {
 			deftype = enum.AttrDefaultInvalid
 			err = pctx.error(ctx, ErrSpaceRequired)
 			return
 		}
-		pctx.skipBlanks(ctx)
 	}
 
 	defvalue, err = pctx.parseQuotedText(func(qch byte) (string, error) {
@@ -610,7 +647,11 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 		return pctx.error(ctx, errors.New("<!NOTATION not started"))
 	}
 
-	if !pctx.skipBlanks(ctx) {
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
@@ -619,7 +660,11 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 		return pctx.error(ctx, err)
 	}
 
-	if !pctx.skipBlanks(ctx) {
+	adv, err = pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
@@ -628,8 +673,11 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 		return pctx.error(ctx, err)
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return pctx.error(ctx, err)
+	}
 
+	cur = pctx.dtdRefetch(cur)
 	if cur.Peek() != '>' {
 		return pctx.error(ctx, errors.New("'>' required to close <!NOTATION"))
 	}
@@ -725,14 +773,23 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 		return "", "", pctx.error(ctx, errNoCursor)
 	}
 
+	// The mandatory "S" separators here — and, in the external subset, a
+	// parameter entity supplying a SYSTEM/PUBLIC literal (e.g.
+	// `<!NOTATION n SYSTEM %sid;>`) — are consumed through skipBlanksPE, which
+	// expands the PE and positions the cursor at the literal's opening quote. The
+	// quoted literal scanners themselves do NOT recognize PE references (a '%'
+	// inside a SystemLiteral/PubidLiteral is a literal character).
 	if cur.HasPrefixString("SYSTEM") {
 		if err := cur.Advance(6); err != nil {
 			return "", "", err
 		}
-		if !isBlankByte(cur.Peek()) {
+		adv, serr := pctx.skipBlanksPE(ctx)
+		if serr != nil {
+			return "", "", pctx.error(ctx, serr)
+		}
+		if !adv {
 			return "", "", pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 		uri, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
@@ -744,10 +801,13 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 		if err := cur.Advance(6); err != nil {
 			return "", "", err
 		}
-		if !isBlankByte(cur.Peek()) {
+		adv, serr := pctx.skipBlanksPE(ctx)
+		if serr != nil {
+			return "", "", pctx.error(ctx, serr)
+		}
+		if !adv {
 			return "", "", pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 		publicID, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parsePubidLiteral(ctx, qch)
 		})
@@ -757,17 +817,24 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string
 		if strict {
 			// ExternalID [75]: "S SystemLiteral" is mandatory after the
 			// PubidLiteral, so a space (then the SystemLiteral below) is required.
-			if !isBlankByte(cur.Peek()) {
+			adv, serr := pctx.skipBlanksPE(ctx)
+			if serr != nil {
+				return "", "", pctx.error(ctx, serr)
+			}
+			if !adv {
 				return "", "", pctx.error(ctx, ErrSpaceRequired)
 			}
-			pctx.skipBlanks(ctx)
 		} else {
 			// NotationDecl PublicID [83]: the SystemLiteral is optional, so return
 			// the PubidLiteral alone when no quoted SystemLiteral follows.
-			if !isBlankByte(cur.Peek()) {
+			adv, serr := pctx.skipBlanksPE(ctx)
+			if serr != nil {
+				return "", "", pctx.error(ctx, serr)
+			}
+			if !adv {
 				return "", publicID, nil
 			}
-			pctx.skipBlanks(ctx)
+			cur = pctx.dtdRefetch(cur)
 			if c := cur.Peek(); c != '\'' && c != '"' {
 				return "", publicID, nil
 			}

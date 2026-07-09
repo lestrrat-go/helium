@@ -569,8 +569,12 @@ func TestConditionalSectionKeywordFromParameterEntity(t *testing.T) {
 
 	str, werr := helium.WriteString(doc.DocumentElement())
 	require.NoError(t, werr)
-	require.Contains(t, str, `a1="v1"`, "the <!ATTLIST> inside the PE-supplied INCLUDE section must supply the default attribute")
+	require.Contains(t, str, wantAttrA1V1, "the <!ATTLIST> inside the PE-supplied INCLUDE section must supply the default attribute")
 }
+
+// wantAttrA1V1 is the serialized default attribute the PE-in-markup fixtures
+// assemble; shared to keep the repeated literal in one place.
+const wantAttrA1V1 = `a1="v1"`
 
 // TestParameterEntityInMarkupDecl covers XML §4.4.8 "Included as PE": in the
 // EXTERNAL subset a parameter-entity reference is recognized and included
@@ -588,28 +592,33 @@ func TestParameterEntityInMarkupDecl(t *testing.T) {
 	testcases := []struct {
 		name string
 		dtd  string
+		want string // substring the serialized <doc> must contain
 	}{
 		{
 			// PE adjacent to an attribute type: `CDATA%e;` with %e; -> "'v1'". The
 			// §4.4.8 leading space separates the type from the default value.
 			name: "pe-adjacent-to-attribute-type",
 			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % e \"'v1'\">\n<!ATTLIST doc a1 CDATA%e;>\n",
+			want: wantAttrA1V1,
 		},
 		{
 			// PE supplies the element name immediately after <!ATTLIST (no space):
 			// `<!ATTLIST%e;a1` with %e; -> "doc".
 			name: "pe-supplies-element-name",
 			dtd:  "<!ENTITY % e \"doc\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST%e;a1 CDATA \"v1\">\n",
+			want: wantAttrA1V1,
 		},
 		{
 			// PE supplies most of the ATTLIST body: %e; -> "doc a1 CDATA".
 			name: "pe-supplies-attlist-body-head",
 			dtd:  "<!ENTITY % e \"doc a1 CDATA\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST %e; \"v1\">\n",
+			want: wantAttrA1V1,
 		},
 		{
 			// PE supplies the whole attribute definition list.
 			name: "pe-supplies-full-attlist-body",
 			dtd:  "<!ENTITY % att \"a1 CDATA 'v1'\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc %att;>\n",
+			want: wantAttrA1V1,
 		},
 		{
 			// PE inside an element content model, recursively nested through an
@@ -618,6 +627,34 @@ func TestParameterEntityInMarkupDecl(t *testing.T) {
 			dtd: "<!ENTITY % local \"\">\n<!ENTITY % kids \"a %local;\">\n" +
 				"<!ELEMENT a (#PCDATA)>\n<!ELEMENT head (#PCDATA)>\n" +
 				"<!ELEMENT doc (head?, (%kids;)*)>\n<!ATTLIST doc a1 CDATA 'v1'>\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies an ATTLIST enumeration name list: `(%vals;)`.
+			name: "pe-in-attribute-enumeration",
+			dtd:  "<!ENTITY % vals \"red|green|blue\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc a1 (%vals;) \"red\">\n",
+			want: `a1="red"`,
+		},
+		{
+			// PE supplies a #FIXED default value.
+			name: "pe-in-fixed-default",
+			dtd:  "<!ENTITY % v \"'red'\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc a1 CDATA #FIXED %v;>\n",
+			want: `a1="red"`,
+		},
+		{
+			// PE supplies a NOTATION type name list, plus the notation declarations.
+			name: "pe-in-notation-type-list",
+			dtd: "<!ENTITY % ns \"gif|jpg\">\n<!ELEMENT doc (#PCDATA)>\n" +
+				"<!NOTATION gif SYSTEM \"gif\">\n<!NOTATION jpg SYSTEM \"jpg\">\n" +
+				"<!ATTLIST doc t NOTATION (%ns;) #IMPLIED a1 CDATA 'v1'>\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies a NOTATION declaration's SYSTEM literal: `SYSTEM %sid;`.
+			name: "pe-in-notation-decl-system-id",
+			dtd: "<!ENTITY % sid \"'g.dtd'\">\n<!ELEMENT doc (#PCDATA)>\n" +
+				"<!NOTATION gif SYSTEM %sid;>\n<!ATTLIST doc a1 CDATA 'v1'>\n",
+			want: wantAttrA1V1,
 		},
 	}
 
@@ -633,9 +670,32 @@ func TestParameterEntityInMarkupDecl(t *testing.T) {
 
 			str, werr := helium.WriteString(doc.DocumentElement())
 			require.NoError(t, werr)
-			require.Contains(t, str, `a1="v1"`, "the declaration assembled across the PE boundary must supply the default attribute")
+			require.Contains(t, str, tc.want, "the declaration assembled across the PE boundary must be applied")
 		})
 	}
+}
+
+// TestParameterEntitySuppliesEntityValue covers a parameter entity supplying an
+// internal general entity's value in the external subset:
+// `<!ENTITY greet %pub;>` with %pub; -> "'hello'" declares greet as an INTERNAL
+// entity whose value is `hello` (not an empty external entity), so a later
+// `&greet;` reference expands to `hello`.
+func TestParameterEntitySuppliesEntityValue(t *testing.T) {
+	t.Parallel()
+
+	dtd := "<!ENTITY % pub \"'hello'\">\n<!ELEMENT doc (#PCDATA)>\n<!ENTITY greet %pub;>\n"
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc>&greet;</doc>`
+	fsys := fstest.MapFS{dtdSystemID: {Data: []byte(dtd)}}
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).SubstituteEntities(true).
+		FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	str, werr := helium.WriteString(doc.DocumentElement())
+	require.NoError(t, werr)
+	require.Equal(t, "<doc>hello</doc>", str, "the PE-supplied internal entity value must expand, not become an empty external entity")
 }
 
 // TestParameterEntityMarkupBoundaryViolation covers the XML validity constraints
