@@ -61,6 +61,69 @@ func TestExternalGeneralEntityTextDeclWithVersion(t *testing.T) {
 	require.Equal(t, "hi", string(parsed.DocumentElement().FirstChild().Content()))
 }
 
+// parseExtEntityVersioned parses a document with the given XML-declaration
+// version (empty for no declaration) that references an external general entity
+// whose replacement text begins with entBytes.
+func parseExtEntityVersioned(t *testing.T, docVersion string, entBytes []byte) (*helium.Document, error) {
+	t.Helper()
+	decl := ""
+	if docVersion != "" {
+		decl = `<?xml version="` + docVersion + `"?>` + "\n"
+	}
+	src := decl +
+		`<!DOCTYPE root [<!ENTITY e SYSTEM "` + extEntityName + `">]>` + "\n" +
+		`<root>&e;</root>`
+	fsys := fstest.MapFS{extEntityName: &fstest.MapFile{Data: entBytes}}
+	return helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(src))
+}
+
+// The XML §4.3.4 version-compatibility matrix: an external parsed entity's
+// TextDecl version must not be LATER than the referencing document's. A 1.0
+// document may not reference a 1.1 entity (fatal, W3C rmt-e2e-38); every other
+// combination is accepted. The version comparison is against the ACTUAL document
+// version, so a 1.1 document referencing a 1.1 (or 1.0) entity must be accepted —
+// the TextDecl is decoded on a doc-less sub-context that is seeded with the
+// parent document's version.
+func TestExternalGeneralEntityTextDeclVersionMatrix(t *testing.T) {
+	t.Parallel()
+
+	const ent11 = `<?xml version="1.1" encoding="UTF-8"?><child>hi</child>`
+	const ent10 = `<?xml version="1.0" encoding="UTF-8"?><child>hi</child>`
+	const entNoVer = `<?xml encoding="UTF-8"?><child>hi</child>`
+
+	for _, tc := range []struct {
+		name       string
+		docVersion string
+		ent        string
+		wantErr    bool
+	}{
+		{"1.0 doc + 1.1 entity is fatal", "1.0", ent11, true},
+		{"no-decl doc (treated 1.0) + 1.1 entity is fatal", "", ent11, true},
+		{"1.0 doc + 1.0 entity is ok", "1.0", ent10, false},
+		{"1.0 doc + versionless entity is ok", "1.0", entNoVer, false},
+		{"1.1 doc + 1.1 entity is ok", "1.1", ent11, false},
+		{"1.1 doc + 1.0 entity is ok", "1.1", ent10, false},
+		{"1.1 doc + versionless entity is ok", "1.1", entNoVer, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := parseExtEntityVersioned(t, tc.docVersion, []byte(tc.ent))
+			if tc.wantErr {
+				require.Error(t, err, "expected a version mismatch")
+				require.Contains(t, err.Error(), "version mismatch")
+				return
+			}
+			require.NoError(t, err, "version combination must be accepted")
+			require.NotNil(t, doc)
+		})
+	}
+}
+
 // A TextDecl carrying a StandaloneDecl is forbidden by the grammar (a TextDecl
 // permits no 'standalone' pseudo-attribute) and must be rejected.
 func TestExternalGeneralEntityTextDeclStandaloneRejected(t *testing.T) {
