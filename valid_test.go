@@ -636,3 +636,42 @@ func TestValidateNotationAttribute(t *testing.T) {
 	require.Empty(t, parseValidating(t, dtd+`<doc kind="gif"/>`))
 	require.NotEmpty(t, parseValidating(t, dtd+`<doc kind="png"/>`))
 }
+
+// TestValidateNoDTD verifies that requesting DTD validation on a document with
+// neither an internal nor an external subset is a validity error (libxml2
+// XML_DTD_NO_DTD "no DTD found!"), while the same document parsed without
+// ValidateDTD succeeds and a document carrying a DTD still validates.
+func TestValidateNoDTD(t *testing.T) {
+	t.Parallel()
+
+	const noDTD = `<?xml version="1.0"?>
+<root><child/></root>`
+
+	t.Run("ValidateDTD(true) with no DTD is invalid", func(t *testing.T) {
+		h := &collectingErrorHandler{}
+		_, err := helium.NewParser().
+			ValidateDTD(true).
+			ErrorHandler(h).
+			Parse(t.Context(), []byte(noDTD))
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(h.errs, "no DTD found"),
+			"expected a 'no DTD found' validity error, got %v", h.errs)
+	})
+
+	t.Run("ValidateDTD(false) with no DTD succeeds", func(t *testing.T) {
+		_, err := helium.NewParser().
+			ValidateDTD(false).
+			Parse(t.Context(), []byte(noDTD))
+		require.NoError(t, err)
+	})
+
+	t.Run("ValidateDTD(true) with a DTD still validates", func(t *testing.T) {
+		const withDTD = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+]>
+<root><child/></root>`
+		require.Empty(t, parseValidating(t, withDTD))
+	})
+}
