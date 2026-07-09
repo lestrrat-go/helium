@@ -192,7 +192,7 @@ func TestBOMEncodingConflict(t *testing.T) {
 			t.Parallel()
 			_, err := helium.NewParser().
 				LenientXMLDecl(true).IgnoreEncoding(true).Parse(t.Context(),
-					[]byte(`<?xml version='1.0' encoding='iso-8859-1'?><x/>`))
+				[]byte(`<?xml version='1.0' encoding='iso-8859-1'?><x/>`))
 			require.NoError(t, err)
 		})
 
