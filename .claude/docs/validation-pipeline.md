@@ -848,7 +848,10 @@ pass — the analogue of libxml2's `xmlValidateElementDecl` /
   `collectMixedLeaves`).
 - **Attribute Default Legal** (§3.3.2): an enumerated/NOTATION attribute's
   default value must be one of the declared tokens (`validateAttributeDeclLegal`,
-  gated on `defvalue != "" && len(tree) > 0`).
+  gated on `attrHasDefaultValue(adecl.def) && len(tree) > 0` — `AttrDefaultNone`
+  and `AttrDefaultFixed` carry a value, INCLUDING a literal empty `""`, so an
+  empty default not among the tokens is still rejected; `#IMPLIED`/`#REQUIRED`
+  carry no value).
 - **ID Attribute Default** (§3.3.1): an `ID` attribute's default must be
   `#IMPLIED` or `#REQUIRED` — never a literal default or `#FIXED`
   (`validateAttributeDeclLegal`).
