@@ -837,6 +837,18 @@ reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
 `ErrorHandler` via `validCtx.addf`; a failed validation returns
 `ErrDTDValidationFailed`.
 
+**Content-model matching is raw-QName-based** (`valid.go`
+`collectChildElements`/`matchContentModel`/`matchElement` for element-only
+models, `validateMixedContent`/`collectMixedNames` for mixed models). DTD
+validation is NOT namespace-aware: the declared name's prefix is an opaque part
+of the name, compared literally against the element tag as written (mirroring
+libxml2's `node->name`, the full qualified name). Both sides use the raw qname —
+child elements contribute `Element.Name()` (`prefix:local`), and each content
+leaf's declared name is reconstructed by `ElementContent.rawName()` from its
+stored `prefix`+`name`. So `(p:a)` matches `<p:a/>` but not `<a/>`, and `(a)`
+does not match `<p:a/>`; an unprefixed model is byte-identical to matching on the
+local name.
+
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /
 `xmlValidateAttributeDecl` / `xmlValidateDtdFinal`. It walks both subsets
