@@ -816,6 +816,17 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 			return nil, pctx.error(ctx, ErrUndeclaredEntity)
 		}
+		// A parameter-entity reference or external subset downgrades an undeclared
+		// general entity from a fatal WFC to the "Entity Declared" VALIDITY
+		// constraint. When validating, the declarations are fully known and the
+		// entity is definitively undeclared — a reportable validity error (W3C
+		// rmt-e3e-13; matches libxml2's xmlValidityError). This is limited to a
+		// fully-internal DTD: an external subset or external parameter entity may
+		// resolve incompletely (e.g. an empty or unreachable external PE), so
+		// there helium stays lenient rather than risk rejecting a valid document.
+		if pctx.options.IsSet(parseDTDValid) && !pctx.hasExternalSubset && !pctx.hasExternalPERef {
+			return nil, pctx.error(ctx, fmt.Errorf("%w '%s'", ErrUndeclaredEntity, name))
+		}
 		if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
 			return nil, err
 		}

@@ -648,6 +648,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, ent)
 			}
 			pctx.hasPERefs = true
+			pctx.hasExternalPERef = true
 			return nil
 		} else {
 			// Capture the PE's replacement text once: Entity.Content()
