@@ -1120,9 +1120,10 @@ func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
 	// terminated top-level <![INCLUDE[ ... ]]> section must surface as a parse
 	// error. Previously the top-level external-subset loop swallowed EVERY error
 	// from parseConditionalSections, silently accepting the bogus declaration.
-	// Only the conditional-section WRAPPER sentinels (unterminated "]]>" or a
-	// missing/malformed keyword) are tolerated now; an actual declaration parse
-	// error inside the INCLUDE body propagates.
+	// Only an unterminated "]]>" section is tolerated now (truncated/streaming
+	// external subset); a missing/malformed conditional-section keyword is a fatal
+	// WF error, and an actual declaration parse error inside the INCLUDE body
+	// propagates.
 	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 

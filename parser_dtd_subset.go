@@ -413,13 +413,15 @@ func (pctx *parserCtx) popSpentExternalSubsetInputs(baseLen int) {
 // resume its scan.
 //
 // tolerateCondError mirrors the long-standing top-level external-subset
-// behavior: a conditional-section WRAPPER error (an unterminated "]]>" or a
-// missing/malformed INCLUDE/IGNORE keyword — ErrConditionalSectionNotFinished
-// or ErrConditionalSectionKeyword) stops the loop WITHOUT failing the whole
-// parse, which valid documents whose conditional-section handling is otherwise
-// imperfect rely on. Actual declaration parse errors from inside an INCLUDE
-// body still propagate even when tolerateCondError is set. The INCLUDE-body
-// caller passes false so every nested conditional-section error propagates.
+// behavior for a TRUNCATED section: an unterminated "]]>"
+// (ErrConditionalSectionNotFinished) stops the loop WITHOUT failing the whole
+// parse, which a streaming / imperfectly-terminated external subset relies on. A
+// malformed or miscased INCLUDE/IGNORE keyword (ErrConditionalSectionKeyword) is
+// a FATAL well-formedness error (XML §3.4 P62/P63: the keyword is case-sensitive
+// and mandatory) and is NOT tolerated — it propagates even at the top level.
+// Actual declaration parse errors from inside an INCLUDE body also always
+// propagate. The INCLUDE-body caller passes false so every nested
+// conditional-section error propagates.
 //
 // Unlike skipBlanks, the blank skip here advances over whitespace ONLY and
 // leaves any "%" for the explicit parsePEReference below. In the external
@@ -490,13 +492,15 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 		// Nested conditional section. parseConditionalSections is responsible for
 		// its own blank/PE handling within the section.
 		if err := pctx.parseConditionalSections(ctx); err != nil {
-			// Only the conditional-section WRAPPER sentinels (an unterminated
-			// "]]>" or a missing/malformed INCLUDE/IGNORE keyword) are tolerated
-			// at the top level: those mirror the long-standing best-effort
-			// handling of an imperfectly-terminated section. An actual
-			// declaration parse error from within an INCLUDE body (e.g. a
-			// malformed "<!BOGUS" or a bad entity-value PE) must propagate.
-			if tolerateCondError && (errors.Is(err, ErrConditionalSectionNotFinished) || errors.Is(err, ErrConditionalSectionKeyword)) {
+			// Only the unterminated-section sentinel is tolerated at the top
+			// level: it mirrors the long-standing best-effort handling of an
+			// imperfectly-terminated / truncated external subset. A malformed or
+			// miscased INCLUDE/IGNORE keyword (ErrConditionalSectionKeyword) is a
+			// FATAL well-formedness error (XML §3.4 P62/P63: the keyword is
+			// case-sensitive and mandatory) and must propagate even under the
+			// tolerance — as must an actual declaration parse error from within an
+			// INCLUDE body (e.g. a malformed "<!BOGUS" or a bad entity-value PE).
+			if tolerateCondError && errors.Is(err, ErrConditionalSectionNotFinished) {
 				// A resource-limit violation (over-cap whitespace) recorded while
 				// the conditional section was being parsed must NEVER be masked by
 				// the conditional-section tolerance: propagate it as a real fatal
