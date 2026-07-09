@@ -152,6 +152,7 @@ Run specific test subsets via env vars:
 - Bound fuzz input sizes early. Return on oversize inputs.
 - Prefer in-memory stubs over filesystem/network access.
 - Parse/compile/validate/transform fuzz targets MUST tolerate invalid intermediate inputs by returning early instead of asserting.
+- The `xslt3` targets run each input's parse+compile (and transform) under a watchdog goroutine (`fuzz_test.go` `finishesWithinBudget`): an input that stalls past `slowInputThreshold()` fails via `t.Errorf`, so the fuzzing engine persists the exact bytes as a crasher instead of the input silently pinning the worker until the run's fuzztime deadline surfaces only an unactionable `context deadline exceeded`. The threshold defaults to 30s (far above any legitimate compile, so no false trips under CI scheduler jitter) and is overridable via `HELIUM_FUZZ_SLOW_INPUT` (a Go duration).
 
 ## Fuzz CI
 
