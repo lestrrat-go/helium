@@ -85,10 +85,13 @@ type parserCtx struct {
 	// was consumed. A declared encoding that contradicts it is a fatal error
 	// (XML §4.3.3); see checkBOMEncodingConflict.
 	autoEncoding string
-	// declaredEncoding is the EncName parsed from the document entity's XML
-	// declaration, recorded UNCONDITIONALLY (even when IgnoreEncoding suppresses
-	// the decoder switch, which erases ctx.encoding) so the BOM conflict check
-	// still sees what the document declared.
+	// declaredEncoding is the EncName parsed from an XML/Text declaration,
+	// recorded UNCONDITIONALLY at the leaf EncName parsers (parseEncodingName /
+	// parseEncodingDeclFromCursor) — independent of IgnoreEncoding (which
+	// suppresses the decoder switch and erases ctx.encoding) and LenientXMLDecl
+	// (which relaxes the declaration parse). checkBOMEncodingConflict reads it
+	// immediately after the document entity's declaration is parsed, so the BOM
+	// well-formedness check fires regardless of those knobs.
 	declaredEncoding string
 	in               io.Reader
 	rawInput         []byte // original bytes, used for EBCDIC encoding detection

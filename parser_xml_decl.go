@@ -52,11 +52,8 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 		if !errors.As(err, &nf) {
 			return pctx.error(ctx, err)
 		}
-	} else {
-		pctx.declaredEncoding = v
-		if !pctx.options.IsSet(parseIgnoreEnc) {
-			pctx.encoding = v
-		}
+	} else if !pctx.options.IsSet(parseIgnoreEnc) {
+		pctx.encoding = v
 	}
 
 	pctx.skipBlankBytes(ctx, cur)
@@ -309,11 +306,8 @@ func (pctx *parserCtx) parseXMLDeclFromCursor(ctx context.Context) error {
 		if !errors.As(err, &nf) {
 			return pctx.error(ctx, err)
 		}
-	} else {
-		pctx.declaredEncoding = ev
-		if !pctx.options.IsSet(parseIgnoreEnc) {
-			pctx.encoding = ev
-		}
+	} else if !pctx.options.IsSet(parseIgnoreEnc) {
+		pctx.encoding = ev
 	}
 
 	pctx.skipBlanks(ctx)

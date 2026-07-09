@@ -144,4 +144,52 @@ func TestBOMEncodingConflict(t *testing.T) {
 			require.NoError(t, err)
 		})
 	})
+
+	// LenientXMLDecl(true) relaxes declaration parsing but must NOT suppress the
+	// BOM/encoding-mismatch check. The declared EncName is recorded at the leaf
+	// EncName parser, so it is authoritative on the lenient path too. The check
+	// must also hold when LenientXMLDecl and IgnoreEncoding are combined.
+	t.Run("lenient-decl", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("utf-8 BOM with iso-8859-1 declaration still fatal", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF8...),
+				[]byte(`<?xml version='1.0' encoding='iso-8859-1'?><x/>`)...)
+			_, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(), src)
+			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
+		})
+
+		t.Run("utf-16be BOM with utf-8 declaration still fatal", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16BE...),
+				utf16be(`<?xml version='1.0' encoding='utf-8'?><x/>`)...)
+			_, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(), src)
+			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
+		})
+
+		t.Run("lenient plus ignore-encoding still fatal", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF8...),
+				[]byte(`<?xml version='1.0' encoding='iso-8859-1'?><x/>`)...)
+			_, err := helium.NewParser().
+				LenientXMLDecl(true).IgnoreEncoding(true).Parse(t.Context(), src)
+			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
+		})
+
+		t.Run("utf-8 BOM with matching declaration parses", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF8...),
+				[]byte(`<?xml version='1.0' encoding='UTF-8'?><x/>`)...)
+			_, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		t.Run("no BOM with iso-8859-1 declaration parses", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(),
+				[]byte(`<?xml version='1.0' encoding='iso-8859-1'?><x/>`))
+			require.NoError(t, err)
+		})
+	})
 }

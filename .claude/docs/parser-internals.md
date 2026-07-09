@@ -124,10 +124,15 @@ mismatch to a warning and continues. Only a consumed BOM sets `autoEncoding`, so
 the byte-pattern (non-BOM) UTF-16/UCS-4 detection and a plain ASCII/UTF-8 `<?xml`
 start that declares a single-byte encoding (e.g. `iso-8859-1`) are unaffected —
 no over-rejection of a legitimately single-byte-encoded document. The check reads
-the declared EncName from `pctx.declaredEncoding` (recorded unconditionally in
-`parseXMLDecl`/`parseXMLDeclFromCursor`), not `pctx.encoding`, so it still fires
-under `IgnoreEncoding(true)`: that option suppresses the decoder switch (and
-erases `pctx.encoding`) but does not suppress this fatal well-formedness check.
+the declared EncName from `pctx.declaredEncoding`, not `pctx.encoding`.
+`declaredEncoding` is recorded UNCONDITIONALLY at the two leaf EncName parsers
+(`parseEncodingName` byte / `parseEncodingDeclFromCursor`), the convergence point
+for every XML/Text-declaration path (strict, UTF-16 cursor, and the
+`LenientXMLDecl` recovery variants). So the check still fires under
+`IgnoreEncoding(true)` (which suppresses the decoder switch and erases
+`pctx.encoding`) and under `LenientXMLDecl(true)` (which relaxes the declaration
+parse) — those knobs affect decl-parse leniency and decoder switching, not this
+fatal well-formedness constraint.
 
 **Strict decode of fixed-width Unicode encodings**: `internal/encoding` wraps the
 UTF-16/UTF-32/UCS-2/UCS-4 decoders (`withStrictDecode`, `strict.go`) so that
