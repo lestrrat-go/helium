@@ -565,15 +565,19 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				if err != nil {
 					return pctx.error(ctx, err)
 				}
-
 				if u.Fragment != "" {
 					return pctx.error(ctx, errors.New("err uri fragment"))
-				} else if s := pctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, uri, literal, ""); err {
-					case nil, sax.ErrHandlerUnspecified:
-					default:
-						return pctx.error(ctx, err)
-					}
+				}
+			}
+			// Register the external parameter entity whenever an ExternalID was
+			// present (found), including a valid empty SystemLiteral (`SYSTEM ""`);
+			// gating on literal != "" would drop such a PE and leave
+			// GetParameterEntity false.
+			if s := pctx.sax; s != nil {
+				switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, uri, literal, ""); err {
+				case nil, sax.ErrHandlerUnspecified:
+				default:
+					return pctx.error(ctx, err)
 				}
 			}
 		}

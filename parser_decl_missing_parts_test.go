@@ -92,6 +92,17 @@ func TestDeclMissingMandatoryPart(t *testing.T) {
 				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge SYSTEM "">]><root/>`))
 			require.NoError(t, err)
 		})
+
+		t.Run("parameter SYSTEM empty literal registers", func(t *testing.T) {
+			t.Parallel()
+			// A present-but-empty SystemLiteral is a valid ExternalID, so the PE
+			// must be registered even though its literal is empty.
+			doc, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % pe SYSTEM "">]><root/>`))
+			require.NoError(t, err)
+			_, ok := doc.GetParameterEntity("pe")
+			require.True(t, ok, "external PE with empty SystemLiteral must register")
+		})
 	})
 
 	// EncodingDecl [80]: S 'encoding' Eq ('"' EncName '"' | "'" EncName "'").
@@ -127,6 +138,31 @@ func TestDeclMissingMandatoryPart(t *testing.T) {
 			// through to the optional StandaloneDecl, not become fatal.
 			_, err := helium.NewParser().Parse(t.Context(),
 				[]byte(`<?xml version="1.0" standalone="yes"?><root/>`))
+			require.NoError(t, err)
+		})
+
+		// The UTF-16 XMLDecl is parsed on the rune cursor
+		// (parseEncodingDeclFromCursor), which must enforce EncName [81] just like
+		// the byte path.
+		t.Run("UTF-16 empty EncName rejected", func(t *testing.T) {
+			t.Parallel()
+			doc := utf16Bytes(`<?xml version="1.0" encoding=""?><root/>`, true)
+			_, err := helium.NewParser().Parse(t.Context(), doc)
+			require.Error(t, err)
+		})
+
+		t.Run("UTF-16 invalid EncName rejected", func(t *testing.T) {
+			t.Parallel()
+			// "1bad" violates EncName [81] (must start with a letter).
+			doc := utf16Bytes(`<?xml version="1.0" encoding="1bad"?><root/>`, true)
+			_, err := helium.NewParser().Parse(t.Context(), doc)
+			require.Error(t, err)
+		})
+
+		t.Run("UTF-16 valid EncName parses", func(t *testing.T) {
+			t.Parallel()
+			doc := utf16Bytes(`<?xml version="1.0" encoding="UTF-16"?><root/>`, true)
+			_, err := helium.NewParser().Parse(t.Context(), doc)
 			require.NoError(t, err)
 		})
 	})
