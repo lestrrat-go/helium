@@ -411,17 +411,10 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 
 // specialAttributeExternal reports whether the tokenized-type binding for
 // (elemName, attrName) was declared in external markup. attrName is the attribute
-// name EXACTLY as written (raw QName, prefix included), matching how
-// addSpecialAttribute keyed the declaration — so the standalone caller passes the
-// source attribute's full QName and an external unprefixed `<!ATTLIST r id ...>`
-// never matches a prefixed instance `p:id`.
-//
-// NOTE (pre-existing, separate gap): the NORMALIZATION flag itself
-// (lookupSpecialAttribute in parseAttribute) is looked up by LOCAL name, so a
-// prefixed instance attribute is normalized against an unprefixed declaration and
-// a prefixed declaration is never applied. Fixing that whitespace-normalization
-// behavior is out of scope here (no W3C corpus case); this standalone check keys
-// on the exact QName precisely so it does not turn that gap into a validity error.
+// name EXACTLY as written (raw QName, prefix included), matching both how
+// addSpecialAttribute keyed the declaration and how parseAttribute keys the
+// normalization lookup — so `p:id` matches only an `<!ATTLIST r p:id …>`
+// declaration, never the unprefixed `id`.
 func (ctx *parserCtx) specialAttributeExternal(elemName, attrName string) bool {
 	if len(ctx.attsSpecialExternal) == 0 {
 		return false

@@ -1210,8 +1210,18 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		return
 	}
 
+	// Special-attribute (tokenized-type) declarations are keyed by the attribute's
+	// full QName exactly as written, so an instance attribute is matched by its own
+	// QName (prefix + local): `p:id` matches an `<!ATTLIST r p:id …>` declaration and
+	// NOT an unprefixed `<!ATTLIST r id …>` (and vice-versa). Matches libxml2, which
+	// keys special-attribute state on the fully-qualified name.
+	attrQName := l
+	if p != "" {
+		attrQName = p + ":" + l
+	}
+
 	normalize := false
-	attType, ok := pctx.lookupSpecialAttribute(elemName, l)
+	attType, ok := pctx.lookupSpecialAttribute(elemName, attrQName)
 	if ok && attType != enum.AttrInvalid {
 		normalize = true
 	}
@@ -1273,15 +1283,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		// normalization declared in the external subset is a validity error.
 		// Record it for the post-parse DTD validation pass, which alone would no
 		// longer have the pre-normalization value. The external-origin lookup keys
-		// on the attribute's EXACT source QName (prefix included), so an external
-		// unprefixed `<!ATTLIST r id ...>` declaration never matches a prefixed
-		// instance attribute `p:id` (whose over-broad local-name normalization is a
-		// separate pre-existing gap) — this avoids a false-positive validity error
-		// on a valid document.
-		attrQName := l
-		if p != "" {
-			attrQName = p + ":" + l
-		}
+		// on the same full QName as the normalization lookup above.
 		if pctx.attrNormChanged &&
 			pctx.standalone == StandaloneExplicitYes &&
 			pctx.options.IsSet(parseDTDValid) &&

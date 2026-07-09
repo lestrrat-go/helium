@@ -908,11 +908,11 @@ declaration takes precedence (§3.3). Three sub-cases:
   and whether the (first-binding) tokenized-type declaration is external
   (`parserCtx.attsSpecialExternal`, the analogue of libxml2's
   `XML_SPECIAL_EXTERNAL`, populated in `addSpecialAttribute` when
-  `effectivelyExternal()`). The external-origin lookup keys on the attribute's
-  EXACT source QName (prefix included, matching how the declaration was keyed), so
-  an external unprefixed `<!ATTLIST r id …>` never matches a prefixed instance
-  `p:id` (whose over-broad local-name whitespace normalization is a separate,
-  pre-existing gap) — the standalone report never fires on a non-matching
+  `effectivelyExternal()`). Both the normalization lookup and the external-origin
+  lookup key on the attribute's full QName (prefix + local, exactly as written,
+  matching how the declaration is keyed), so `p:id` matches only an
+  `<!ATTLIST r p:id …>` declaration and never the unprefixed `id` (and vice-versa)
+  — the normalization and the standalone report only fire on the matching
   declaration. A hit under `standalone="yes"` + `ValidateDTD(true)` is appended to
   `doc.standaloneNormAttrs`, which the validation pass reports.
 - **Element-content whitespace** (`checkStandaloneWhitespace`, existing): an

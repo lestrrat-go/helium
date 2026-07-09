@@ -160,6 +160,27 @@ func TestStandaloneExternalDecl(t *testing.T) {
 			require.True(t, containsError(errs, "normalization of attribute id"))
 		})
 
+		// A PREFIXED external declaration matched by a PREFIXED instance attribute of
+		// the same QName normalizes and is reported under standalone="yes".
+		t.Run("prefixed instance matching prefixed external decl rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
+<r xmlns:p="urn:p" p:id="  spacedvalue  "/>`, `<!ATTLIST r p:id NMTOKEN #IMPLIED>`)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "normalization of attribute p:id"))
+		})
+
+		// The same prefixed match under standalone="no": the value is normalized (so
+		// it is a valid NMTOKEN) and the document is accepted — no over-rejection.
+		t.Run("prefixed instance matching prefixed external decl accepted when not standalone", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseStandalone(t, `<?xml version="1.0" standalone="no"?>
+<!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
+<r xmlns:p="urn:p" p:id="  spacedvalue  "/>`, `<!ATTLIST r p:id NMTOKEN #IMPLIED>`)
+			require.NoError(t, err)
+		})
+
 		// The same tokenized type declared in the INTERNAL subset normalizes the
 		// value too, but that requires no external markup, so it is not a violation.
 		t.Run("internal normalization accepted", func(t *testing.T) {
