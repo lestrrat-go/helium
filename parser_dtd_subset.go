@@ -217,11 +217,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 	// the whole section dropped. Leaving the "%" for the explicit parsePEReference
 	// below pushes the replacement text so the keyword (and body) are parsed.
 	// skipBlankRun still records an over-cap whitespace run in pctx.blankRunErr,
-	// which must be surfaced here: otherwise this function returns a generic
-	// conditional-section sentinel (ErrConditionalSectionKeyword /
-	// ErrConditionalSectionNotFinished) that the top-level external-subset loop
-	// TOLERATES — downgrading a resource-limit violation to "stop parsing the
-	// subset" instead of failing closed at the source.
+	// which must be surfaced here so the specific resource-limit error is reported
+	// at its source rather than a generic conditional-section sentinel
+	// (ErrConditionalSectionKeyword / ErrConditionalSectionNotFinished).
 	if c := pctx.getCursor(); c != nil {
 		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
 			return err

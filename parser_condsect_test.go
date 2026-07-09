@@ -32,7 +32,7 @@ func condSectParse(t *testing.T, dtd string) (*helium.Document, error) {
 // A conditional section keyword is case-sensitive (XML §3.4 P62/P63): only the
 // exact literals INCLUDE and IGNORE are permitted. A miscased keyword such as
 // lowercase "include" is a fatal well-formedness error and must be reported even
-// from the top level of the external subset, where truncation is tolerated.
+// from the top level of the external subset.
 func TestConditionalSectionLowercaseIncludeRejected(t *testing.T) {
 	t.Parallel()
 
