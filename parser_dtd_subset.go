@@ -32,13 +32,15 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 
 	pctx.skipBlanks(ctx)
 	// A DOCTYPE's ExternalID is optional (an internal-subset-only doctype has
-	// none), so the presence bool is not required here.
-	u, eid, _, err := pctx.parseExternalID(ctx, true)
+	// none). Its PRESENCE — not a non-empty literal — marks an external subset:
+	// a present-but-empty `SYSTEM ""` is still an external ID (found), so the DTD
+	// is not fully internal.
+	u, eid, found, err := pctx.parseExternalID(ctx, true)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
 
-	if u != "" || eid != "" {
+	if found {
 		pctx.hasExternalSubset = true
 	}
 	pctx.extSubURI = u
@@ -657,6 +659,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, ent)
 			}
 			pctx.hasPERefs = true
+			pctx.hasExternalPERef = true
 			return nil
 		} else {
 			// Capture the PE's replacement text once: Entity.Content()

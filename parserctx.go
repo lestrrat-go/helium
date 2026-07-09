@@ -146,15 +146,22 @@ type parserCtx struct {
 	attsDefault     map[string][]*Attribute
 	valid           bool
 	hasPERefs       bool
-	pedantic        bool
-	wellFormed      bool
-	depth           int
-	loadsubset      LoadSubsetOption
-	charBufferSize  int
-	baseURI         string          // document base URI for resolving external references
-	catalog         CatalogResolver // XML catalog for entity resolution
-	fsys            fs.FS           // filesystem for loading external DTDs and entities
-	elem            *Element        // current context element
+	// hasExternalPERef records that at least one EXTERNAL parameter entity was
+	// referenced (its content loaded from an external resource). Unlike a purely
+	// internal DTD, an external PE may fail to load or resolve incompletely, so
+	// helium cannot be certain an undeclared general entity is truly undeclared
+	// rather than declared in unread external markup — the undeclared-entity
+	// validity error (VC: Entity Declared) is therefore suppressed in that case.
+	hasExternalPERef bool
+	pedantic         bool
+	wellFormed       bool
+	depth            int
+	loadsubset       LoadSubsetOption
+	charBufferSize   int
+	baseURI          string          // document base URI for resolving external references
+	catalog          CatalogResolver // XML catalog for entity resolution
+	fsys             fs.FS           // filesystem for loading external DTDs and entities
+	elem             *Element        // current context element
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
