@@ -397,6 +397,23 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 	return nil
 }
 
+// validateDefaultNamespaceDecl enforces the Namespaces in XML constraints that
+// apply to a default namespace declaration (xmlns="uri"), whether literal on a
+// start tag or supplied as a DTD attribute default. Per Namespaces in XML 1.0
+// (errata NE13) §3, the reserved XML and XMLNS namespace names may not be
+// declared as the default namespace. It returns a non-nil namespace error when
+// either reserved URI is used. An empty value (xmlns="") is a legal default
+// namespace undeclaration and is accepted.
+func (pctx *parserCtx) validateDefaultNamespaceDecl(ctx context.Context, uri string) error {
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, errors.New("xml namespace URI cannot be the default namespace"))
+	}
+	if uri == lexicon.NamespaceXMLNS {
+		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name is forbidden"))
+	}
+	return nil
+}
+
 func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	cur := pctx.getCursor()
 	if cur == nil {
@@ -476,6 +493,12 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
 			}
 			nsDeclared = append(nsDeclared, "")
+
+			// Namespaces in XML §3 (errata NE13): the reserved XML/XMLNS
+			// namespace names may not be declared as the default namespace.
+			if err := pctx.validateDefaultNamespaceDecl(ctx, attvalue); err != nil {
+				return err
+			}
 
 			// parseNsClean: skip redundant ancestor redeclarations.
 			if pctx.options.IsSet(parseNsClean) && pctx.nsTab.Lookup("") == attvalue {
@@ -598,6 +621,11 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 					if slices.Contains(nsDeclared, "") {
 						continue
 					}
+					// A DTD-defaulted default namespace is subject to the
+					// same reserved-URI constraints as a literal one.
+					if err := pctx.validateDefaultNamespaceDecl(ctx, attr.Value()); err != nil {
+						return err
+					}
 					pctx.pushNS("", attr.Value())
 					nbNs++
 				}
@@ -677,6 +705,15 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			continue
 		}
 		iuri := pctx.lookupNamespace(attrs[i].prefix)
+		// Namespaces in XML §3: a prefix used on an attribute must be bound to
+		// an in-scope namespace declaration. The reserved xml prefix is always
+		// bound (handled by lookupNamespace); an unbound prefix is a fatal
+		// namespace well-formedness error. (The default namespace does not
+		// apply to attribute names, so an unprefixed attribute — skipped above —
+		// is never affected.)
+		if iuri == "" {
+			return pctx.namespaceError(ctx, errors.New("namespace '"+attrs[i].prefix+"' not found"))
+		}
 		for j := i + 1; j < len(attrs); j++ {
 			if attrs[j].prefix == "" || attrs[j].prefix == lexicon.PrefixXML {
 				continue
