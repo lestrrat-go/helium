@@ -477,7 +477,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 			break
 		}
 
-		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor, true)
+		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor)
 		if err != nil {
 			return err
 		}

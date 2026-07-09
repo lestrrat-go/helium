@@ -73,6 +73,29 @@ func TestConditionalSectionMissingBracketRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "INCLUDE or IGNORE keyword")
 }
 
+// An INCLUDE conditional section left unterminated (no closing "]]>") at the end
+// of the fully-buffered external subset is a genuine truncation, not a streaming
+// boundary, and is a fatal error (XML §3.4; W3C not-wf-not-sa-004,
+// ibm-not-wf-P62-ibm62n07; libxml2 "Content error in the external subset").
+func TestConditionalSectionUnterminatedIncludeRejected(t *testing.T) {
+	t.Parallel()
+
+	const dtd = "<![ INCLUDE [\n<!ELEMENT doc (#PCDATA)>\n<!ENTITY greeting \"x\">\n"
+	_, err := condSectParse(t, dtd)
+	require.Error(t, err, "an unterminated INCLUDE section must be a fatal error")
+	require.Contains(t, err.Error(), "conditional section")
+}
+
+// An unterminated IGNORE section is equally fatal.
+func TestConditionalSectionUnterminatedIgnoreRejected(t *testing.T) {
+	t.Parallel()
+
+	const dtd = "<![ IGNORE [\n<!ELEMENT doc (#PCDATA)>\n"
+	_, err := condSectParse(t, dtd)
+	require.Error(t, err, "an unterminated IGNORE section must be a fatal error")
+	require.Contains(t, err.Error(), "conditional section")
+}
+
 // A correctly-cased INCLUDE section parses cleanly and its declarations take
 // effect (the general entity declared inside it resolves in the document).
 func TestConditionalSectionIncludeAccepted(t *testing.T) {
