@@ -847,12 +847,22 @@ lookup passes the instance element's QName: `AttributesForElement(elem.Name())` 
 `GetElementByID`; `parseStartTag` threads the element QName into `parseAttribute`
 for the special-attribute (`attsSpecial`/`attsSpecialExternal`) and attribute-
 default (`attsDefault`) lookups. Attributes are matched by (prefix, local): the
-`attsSpecial` maps key on the raw attribute QName, and the `AttributeDecl`-based
-paths compare `adecl.prefix`+`adecl.name` against the instance attribute's prefix
-and local. So a declaration for `p:r`/`p:id` applies to `<p:r p:id=…>` and never to
-`<r>` or an unprefixed/differently-prefixed attribute (and vice-versa). Element
-declarations (`ElementDecl`) are stored split into (local, prefix), and
-`lookupElementDecl` looks them up by `elem.LocalName()`+`elem.Prefix()`.
+`attsSpecial`/`attsSpecialExternal` maps key on a `specialAttrKey{elem, attr}`
+STRUCT (element QName + attribute QName) — never a `elem + ":" + attr` string
+concatenation, which would collide distinct pairs like `(p:r, id)` and `(p, r:id)`
+(libxml2 uses a two-arg hash lookup) — and the `AttributeDecl`-based paths compare
+`adecl.prefix`+`adecl.name` against the instance attribute's prefix and local. So a
+declaration for `p:r`/`p:id` applies to `<p:r p:id=…>` and never to `<r>` or an
+unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
+(`ElementDecl`) are stored split into (local, prefix); `lookupElementDecl` looks
+them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
+element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
+
+KNOWN GAP: **content-model matching** (`collectChildElements`/`matchElement`,
+`validateMixedContent`) compares child element LOCAL names, not raw QNames, so a
+model `(p:a)` accepts a `<a/>` child and vice-versa. This is a systematic
+local-name limitation independent of the QName-keyed declaration lookups above; a
+raw-QName content-model fix is a separate follow-up.
 
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /

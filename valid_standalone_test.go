@@ -291,5 +291,45 @@ func TestStandaloneExternalDecl(t *testing.T) {
 			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 			require.True(t, containsError(errs, "defaulted from external subset"))
 		})
+
+		// The special-attribute key is a (element-QName, attribute-QName) struct, not
+		// a `elem:attr` concatenation, so distinct QName pairs that would concatenate
+		// identically do not cross-contaminate: a declaration for element `p:r`,
+		// attribute `id` (concat "p:r:id") must NOT apply to element `p`, attribute
+		// `r:id` (also concat "p:r:id"). If it did, `r:id` would be treated as an
+		// external NMTOKEN, normalized, and wrongly reported — so acceptance proves
+		// the keys are disambiguated.
+		t.Run("ambiguous element/attr key does not cross-contaminate", func(t *testing.T) {
+			t.Parallel()
+			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE p SYSTEM "ext.dtd" [ <!ELEMENT p EMPTY> ]>
+<p xmlns:r="urn:r" r:id="  spacedvalue  "/>`, `<!ATTLIST p:r id NMTOKEN #IMPLIED>`)
+			require.NoError(t, err)
+		})
+	})
+}
+
+// TestDTDElementDeclQNameMatch verifies that element-declaration lookup during DTD
+// validation is prefix-literal: a prefixed element requires an <!ELEMENT>
+// declaration for the same QName, with no fallback to an unprefixed declaration.
+func TestDTDElementDeclQNameMatch(t *testing.T) {
+	t.Parallel()
+
+	// A prefixed element with only an unprefixed declaration is undeclared.
+	t.Run("prefixed element unprefixed decl rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE p:r [ <!ELEMENT r EMPTY> ]>
+<p:r xmlns:p="urn:p"/>`)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	})
+
+	// A matching prefixed declaration validates.
+	t.Run("prefixed element matching decl accepted", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseValidatingDTD(t, `<?xml version="1.0"?>
+<!DOCTYPE p:r [ <!ELEMENT p:r EMPTY> ]>
+<p:r xmlns:p="urn:p"/>`)
+		require.NoError(t, err)
 	})
 }

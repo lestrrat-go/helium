@@ -388,11 +388,22 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 	}
 }
 
+// specialAttrKey identifies a special (tokenized-type) attribute declaration by
+// the element's declared QName and the attribute's declared QName, both exactly as
+// written. A struct key avoids the ambiguity of a `elem + ":" + attr` string
+// concatenation, which would collide distinct QName pairs — e.g. `(p:r, id)` and
+// `(p, r:id)` both concatenate to `p:r:id` (libxml2 avoids this with a two-arg
+// hash lookup, xmlHashQLookup2).
+type specialAttrKey struct {
+	elem string
+	attr string
+}
+
 func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.AttributeType) {
 	if typ == enum.AttrID && ctx.loadsubset.IsSet(SkipIDs) {
 		return
 	}
-	key := elemName + ":" + attrName
+	key := specialAttrKey{elem: elemName, attr: attrName}
 	// XML 1.0 §3.3: the first declaration of an attribute is binding. The parse
 	// loop invokes this for every <!ATTLIST> declaration, including an ignored
 	// duplicate; keeping the first-seen type ensures a later duplicate's type
@@ -419,7 +430,7 @@ func (ctx *parserCtx) specialAttributeExternal(elemName, attrName string) bool {
 	if len(ctx.attsSpecialExternal) == 0 {
 		return false
 	}
-	_, ok := ctx.attsSpecialExternal[elemName+":"+attrName]
+	_, ok := ctx.attsSpecialExternal[specialAttrKey{elem: elemName, attr: attrName}]
 	return ok
 }
 
@@ -427,8 +438,7 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.At
 	if len(ctx.attsSpecial) == 0 {
 		return 0, false
 	}
-	key := elemName + ":" + attrName
-	v, ok := ctx.attsSpecial[key]
+	v, ok := ctx.attsSpecial[specialAttrKey{elem: elemName, attr: attrName}]
 	return v, ok
 }
 

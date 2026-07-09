@@ -120,11 +120,11 @@ type parserCtx struct {
 	extSubSystem  string
 	extSubURI     string
 	version       string
-	attsSpecial   map[string]enum.AttributeType
+	attsSpecial   map[specialAttrKey]enum.AttributeType
 	// attsSpecialExternal records which entries of attsSpecial were declared in the
 	// external subset (mirrors libxml2's XML_SPECIAL_EXTERNAL flag). Used for the
 	// VC: Standalone Document Declaration attribute-normalization check.
-	attsSpecialExternal map[string]struct{}
+	attsSpecialExternal map[specialAttrKey]struct{}
 	// attrNormChanged is a transient flag set while parsing one attribute value: it
 	// reports whether tokenized-type normalization (leading/trailing trim or
 	// internal-space collapse) altered the value. Read by parseAttribute for the
@@ -606,8 +606,8 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.keepBlanks = true
 	ctx.instate = psStart
 	ctx.standalone = StandaloneImplicitNo
-	ctx.attsSpecial = map[string]enum.AttributeType{}
-	ctx.attsSpecialExternal = map[string]struct{}{}
+	ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
+	ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
 	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]

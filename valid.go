@@ -212,13 +212,14 @@ func docDTDs(doc *Document) []*DTD {
 	return dtds
 }
 
-// lookupElementDecl searches both intSubset and extSubset for an element declaration.
+// lookupElementDecl searches both intSubset and extSubset for an element
+// declaration. DTD validation compares raw qualified names, not namespaces, so a
+// prefixed element requires an <!ELEMENT> declaration for the SAME QName — there is
+// no fallback from `p:r` to an unprefixed `r` declaration (for an unprefixed
+// element, prefix is "" and this is the only lookup).
 func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) {
 	for _, dtd := range docDTDs(doc) {
 		if edecl, ok := dtd.LookupElement(name, prefix); ok {
-			return edecl, dtd
-		}
-		if edecl, ok := dtd.LookupElement(name, ""); ok {
 			return edecl, dtd
 		}
 	}
@@ -446,10 +447,9 @@ func validateDocumentFinal(ctx context.Context, vctx *validCtx) {
 // standalone="yes" document must not contain such whitespace when the
 // element declaration comes from the external subset.
 func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Element, name string, vctx *validCtx) {
+	// DTD validation is prefix-literal, so match the element's exact QName with no
+	// fallback from a prefixed element to an unprefixed declaration.
 	extDecl, ok := extSubset.LookupElement(name, elem.Prefix())
-	if !ok {
-		extDecl, ok = extSubset.LookupElement(name, "")
-	}
 	if !ok || extDecl.decltype != enum.ElementElementType {
 		return
 	}
@@ -611,6 +611,12 @@ func collectMixedNamesRecurse(content *ElementContent, names map[string]struct{}
 
 // collectChildElements returns a slice of element names from the children
 // of an element, ignoring text nodes, comments, PIs, etc.
+//
+// PRE-EXISTING GAP: content-model matching (here and in validateMixedContent)
+// compares element LOCAL names, not raw QNames, so a model `(p:a)` accepts a
+// `<a/>` child and vice-versa. This is a systematic local-name-based content-model
+// limitation, independent of the QName-keyed declaration lookups; a proper
+// raw-QName content-model fix is a separate follow-up.
 func collectChildElements(elem *Element) []string {
 	var children []string
 	for child := range Children(elem) {
