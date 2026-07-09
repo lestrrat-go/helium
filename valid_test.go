@@ -625,6 +625,39 @@ func TestValidateAttributeTypes(t *testing.T) {
 		dtd+`<doc><item id="a" ref="missing"/></doc>`))
 }
 
+// TestValidateNmtokenColon verifies that DTD (non-namespace-aware) NMTOKEN /
+// NMTOKENS validation accepts the colon, which is part of the XML 1.0 NameChar
+// production, so a value like `x:image` is a valid NMTOKEN and must not be
+// rejected. A token with a genuinely illegal char still fails.
+func TestValidateNmtokenColon(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<!DOCTYPE doc [
+<!ELEMENT doc EMPTY>
+<!ATTLIST doc
+  tok  NMTOKEN  #IMPLIED
+  toks NMTOKENS #IMPLIED>
+]>`
+
+	// An NMTOKEN value containing a colon is valid (DTD is not namespace-aware).
+	require.Empty(t, parseValidating(t, dtd+`<doc tok="x:image"/>`),
+		"a colon is a valid NMTOKEN NameChar")
+
+	// An unprefixed NMTOKEN is unchanged.
+	require.Empty(t, parseValidating(t, dtd+`<doc tok="x1"/>`),
+		"an unprefixed NMTOKEN still validates")
+
+	// Each space-separated NMTOKENS token may carry a colon.
+	require.Empty(t, parseValidating(t, dtd+`<doc toks="x:image y:photo z1"/>`),
+		"colons are valid in each NMTOKENS token")
+
+	// A token with a genuinely illegal char (@) is still rejected.
+	require.NotEmpty(t, parseValidating(t, dtd+`<doc tok="a@b"/>`),
+		"an illegal NameChar is not a valid NMTOKEN")
+	require.NotEmpty(t, parseValidating(t, dtd+`<doc toks="ok x@y"/>`),
+		"an illegal NameChar in one NMTOKENS token is rejected")
+}
+
 // TestValidateNotationAttribute exercises NOTATION-typed attribute validation.
 func TestValidateNotationAttribute(t *testing.T) {
 	t.Parallel()
