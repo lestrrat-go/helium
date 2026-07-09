@@ -821,6 +821,10 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
 	sub.baseURI = srcURI
+	// Seed the parent document's XML version so the TextDecl's version-compatibility
+	// check (checkEntityVersion) compares against the real document version rather
+	// than this doc-less sub-context's default.
+	sub.version = pctx.documentVersion()
 
 	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
 		if err := sub.parseTextDecl(ctx); err != nil {
@@ -862,6 +866,10 @@ func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcU
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
 	sub.baseURI = srcURI
+	// Seed the parent document's XML version so the TextDecl's version-compatibility
+	// check (checkEntityVersion) compares against the real document version rather
+	// than this doc-less sub-context's default.
+	sub.version = pctx.documentVersion()
 
 	// Detect the fixed-width encoding (consuming a 2-byte BOM; peeking a BOM-less
 	// 4-byte pattern) and switch the sub-cursor to a UTF-8-decoding rune cursor

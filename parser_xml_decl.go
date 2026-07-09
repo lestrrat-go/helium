@@ -79,21 +79,36 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 	return pctx.error(ctx, errors.New("XML declaration not closed"))
 }
 
+// documentVersion returns the XML version of the document being parsed — the
+// value from the document's XML declaration, or the parser context's recorded
+// version when the Document node is not attached (e.g. the throwaway sub-context
+// that decodes an external entity's TextDecl, which is seeded with the parent
+// document's version). An empty result means no declaration was seen; the caller
+// treats that as "1.0".
+func (pctx *parserCtx) documentVersion() string {
+	if pctx.doc != nil && pctx.doc.Version() != "" {
+		return pctx.doc.Version()
+	}
+	return pctx.version
+}
+
 // checkEntityVersion enforces the XML §4.3.4 version-compatibility constraint:
 // an external parsed entity (or the external DTD subset) whose TextDecl declares
-// an XML version later than the referencing document's is a fatal error
-// (libxml2 XML_ERR_VERSION_MISMATCH — e.g. a 1.0 document may not reference a
-// 1.1 external entity). Helium targets XML 1.0, so the reference version is
-// "1.0" (an absent document XML declaration is treated as 1.0); a TextDecl
-// declaring any version other than "1.0" is rejected. An absent/empty entity
-// version is compatible and never rejected.
+// an XML version LATER than the referencing document's is a fatal error (libxml2
+// XML_ERR_VERSION_MISMATCH). The matrix: a 1.0 document may not reference a 1.1
+// entity (fatal); a 1.0 document with a 1.0 or version-less entity is fine; a 1.1
+// document may reference a 1.1 OR a 1.0 entity. An absent/empty entity version is
+// compatible and never rejected. The comparison is against the actual document
+// version (documentVersion) — the sub-context that parses the TextDecl carries no
+// Document node, so it is seeded with the parent document's version by
+// decodeExternalPEContent / decodeFixedWidthExternalContent.
 func (pctx *parserCtx) checkEntityVersion(entityVersion string) error {
 	if entityVersion == "" || entityVersion == "1.0" {
 		return nil
 	}
-	docVersion := "1.0"
-	if pctx.doc != nil && pctx.doc.Version() != "" {
-		docVersion = pctx.doc.Version()
+	docVersion := pctx.documentVersion()
+	if docVersion == "" {
+		docVersion = "1.0"
 	}
 	if docVersion != "1.0" {
 		return nil
