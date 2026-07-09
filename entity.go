@@ -21,6 +21,20 @@ const (
 	attrWFCLessThan                      // replacement text contains a literal '<'
 )
 
+// Attribute-value WFC memoization flags, mirroring libxml2's
+// XML_ENT_CHECKED / XML_ENT_VALIDATED (xmlCheckEntityInAttValue). They record
+// that an entity's transitive replacement text has been walked for the
+// attribute-value WFCs so a repeated reference — or a shared nested entity —
+// skips the re-walk (and the getEntity callbacks it would emit). entWFCChecked
+// is set only when the walk ran in a reliable (non-DTD-subset) context;
+// entWFCValidated is set even inside the DTD subset, where a nested entity may
+// still be forward-declared, so a later body reference re-checks with the
+// entWFCChecked target.
+const (
+	entWFCValidated = 1 << iota // checked, possibly against an incomplete DTD subset
+	entWFCChecked               // fully checked in a reliable (body) context
+)
+
 // Entity represents an XML entity declaration (libxml2: xmlEntity).
 type Entity struct {
 	node
@@ -37,6 +51,7 @@ type Entity struct {
 	resolvedURI string
 	// owner      bool       // does the entity own children
 	checked      int   // was the entity content checked
+	attrWFCFlags int   // attribute-value WFC memoization (entWFCValidated/entWFCChecked)
 	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
 	expandedSize int64 // total expanded byte count after recursive resolution
 	/* this is also used to count entities
