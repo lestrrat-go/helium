@@ -8,6 +8,14 @@ import (
 // Element represents an XML element node (libxml2: xmlNode with type XML_ELEMENT_NODE).
 type Element struct {
 	node
+	// contentHasReference records that a reference (a character reference or a
+	// general-entity reference) appeared directly in this element's content. A
+	// reference is content per XML production [43], so an element declared EMPTY
+	// that contains one is invalid (VC: Element Valid, errata 2e E15a) even when
+	// the reference expands to nothing and leaves the element childless. It is set
+	// by the parser and read ONLY by element-content validity; it is invisible to
+	// serialization, C14N, XPath, and copy.
+	contentHasReference bool
 }
 
 func newElement(name string) *Element {

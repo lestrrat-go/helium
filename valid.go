@@ -685,8 +685,10 @@ func validateElementContent(ctx context.Context, _ *DTD, elem *Element, edecl *E
 
 	switch edecl.decltype {
 	case enum.EmptyElementType:
-		// EMPTY elements must have no children
-		if elem.FirstChild() != nil {
+		// EMPTY elements must have no content. A reference is content per XML
+		// production [43], so a reference that expands to nothing (errata 2e E15a)
+		// makes the element invalid even though it leaves no child node.
+		if elem.FirstChild() != nil || elem.contentHasReference {
 			vctx.addf(ctx, "element %s: declared EMPTY but has content", ename)
 		}
 	case enum.AnyElementType:
@@ -767,7 +769,16 @@ func collectChildElements(elem *Element) []string {
 			// whitespace) but non-whitespace text is an error. We skip
 			// whitespace-only text and treat non-whitespace as a mismatch
 			// that will be caught by the content model check.
-			if !xmlchar.IsAllSpace(child.Content()) {
+			//
+			// Whitespace produced by a character reference (&#32;) — directly or via
+			// re-parse of a general entity whose replacement text is a character
+			// reference — does NOT match the S nonterminal (XML §3.2.1, errata 2e
+			// E15), so it is NOT ignorable even though it is all whitespace: it is
+			// character data and forces a content-model mismatch, exactly like a
+			// non-whitespace text node.
+			if t, ok := AsNode[*Text](child); ok && t.fromCharRef {
+				children = append(children, "#text")
+			} else if !xmlchar.IsAllSpace(child.Content()) {
 				// Use a sentinel to cause content model mismatch
 				children = append(children, "#text")
 			}

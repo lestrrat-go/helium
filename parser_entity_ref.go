@@ -23,6 +23,18 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		return pctx.error(ctx, ErrAmpersandRequired)
 	}
 
+	// A reference (character or general-entity) is content per XML production
+	// [43]. Record it on the containing element so element-content validity can
+	// reject a reference inside an element declared EMPTY (errata 2e E15a) even
+	// when the reference expands to nothing. parseReference runs only from the
+	// element-content loop (parseDocument), so pctx.elem is the element the
+	// reference is content of; references in attribute values take a separate
+	// path (decodeEntities) and never reach here, so an attribute char/entity
+	// reference never marks its element.
+	if pctx.elem != nil {
+		pctx.elem.contentHasReference = true
+	}
+
 	if cur.PeekAt(1) == '#' {
 		v, err := pctx.parseCharRef()
 		if err != nil {
@@ -32,7 +44,13 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		l := utf8.EncodeRune(buf[:], v)
 		b := buf[:l]
 		if s := pctx.sax; s != nil {
-			if err := pctx.deliverCharacters(ctx, s.Characters, b); err != nil {
+			// Character-reference whitespace does not match the S nonterminal, so
+			// it is not ignorable in element-only content (XML §3.2.1 / errata 2e
+			// E15). Mark the delivery so the resulting Text node records its origin.
+			pctx.charDataFromCharRef = true
+			err := pctx.deliverCharacters(ctx, s.Characters, b)
+			pctx.charDataFromCharRef = false
+			if err != nil {
 				return err
 			}
 		}
@@ -219,6 +237,16 @@ func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
 			return err
 		}
 	case *Text:
+		// Propagate the cached entity Text's char-reference origin so a general
+		// entity whose replacement text is a character reference (E15h) yields a
+		// non-ignorable whitespace Text node in the content, matching a direct
+		// character reference (E15g).
+		if v.fromCharRef {
+			pctx.charDataFromCharRef = true
+			err := pctx.deliverCharacters(ctx, pctx.sax.Characters, v.Content())
+			pctx.charDataFromCharRef = false
+			return err
+		}
 		return pctx.deliverCharacters(ctx, pctx.sax.Characters, v.Content())
 	case *CDATASection:
 		switch err := pctx.sax.CDataBlock(ctx, v.Content()); err {

@@ -112,6 +112,14 @@ type parserCtx struct {
 	nbread         int
 	instate        parserState
 	keepBlanks     bool
+	// charDataFromCharRef marks that the character data currently being delivered
+	// to the SAX Characters sink originated from a character reference (&#N;/&#xN;)
+	// rather than literal source text. TreeBuilder.Characters stamps the resulting
+	// Text node's fromCharRef flag from it, so element-content validity can tell
+	// char-reference whitespace (not ignorable) from literal whitespace. Set only
+	// for the duration of a char-ref delivery (and a cached-entity Text replay of
+	// one); false otherwise.
+	charDataFromCharRef bool
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
