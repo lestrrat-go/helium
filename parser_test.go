@@ -261,6 +261,10 @@ func TestParseRejectsMissingSpaceBetweenAttributes(t *testing.T) {
 		// A missing space before a namespace-declaration attribute is also
 		// caught (the namespace branch already enforced this; keep it covered).
 		`<doc att="val"xmlns:p="urn:x"/>`,
+		// Namespace-declaration attribute FIRST, then a regular attribute with no
+		// separating space: the new regular-attribute check must fire after the
+		// namespace attribute is consumed (proves the two checks compose).
+		`<doc xmlns:p="urn:x"att="val"/>`,
 	}
 	for _, input := range reject {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
@@ -277,10 +281,14 @@ func TestParseRejectsMissingSpaceBetweenAttributes(t *testing.T) {
 		`<doc att="val" att2="val2"></doc>`,
 		"<doc att=\"val\"\natt2=\"val2\"/>",
 		"<doc att=\"val\"\t att2=\"val2\"/>",
+		"<doc att=\"val\"\ratt2=\"val2\"/>",
 		`<doc att="val"/>`,
 		`<doc att="val"></doc>`,
 		`<doc/>`,
 		`<doc att="val" ></doc>`,
+		// A space between a namespace-declaration attribute and a following
+		// regular attribute must still parse (well-formed composition).
+		`<doc xmlns:p="urn:x" att="val"/>`,
 	}
 	for _, input := range accept {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
