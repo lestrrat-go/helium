@@ -244,6 +244,58 @@ func TestParseRejectsDuplicateAttribute(t *testing.T) {
 	}
 }
 
+func TestParseRejectsMissingSpaceBetweenAttributes(t *testing.T) {
+	// XML §3.1 P40/P44: attributes in a start/empty-element tag must be
+	// separated by whitespace ('(S Attribute)*'). Two attributes written back
+	// to back with no intervening S are a fatal well-formedness error. This
+	// covers W3C xml-suite cases sun/attlist10, sun/attlist11, oasis/p40fail1,
+	// oasis/p44fail4 and xmltest/not-wf/sa/186.
+	reject := []string{
+		// STag (P40) and EmptyElemTag (P44), no DTD.
+		`<doc att="val"att2="val2"></doc>`,
+		`<doc att="val"att2="val2"/>`,
+		// With an internal DTD declaring the attributes (sun attlist10/11, sa186).
+		"<!DOCTYPE root [\n<!ELEMENT root ANY>\n<!ATTLIST root att1 CDATA #IMPLIED>\n<!ATTLIST root att2 CDATA #IMPLIED>\n]>\n<root att1=\"value1\"att2=\"value2\"></root>",
+		"<!DOCTYPE root [\n<!ELEMENT root ANY>\n<!ATTLIST root att1 CDATA #IMPLIED>\n<!ATTLIST root att2 CDATA #IMPLIED>\n]>\n<root att1=\"value1\"att2=\"value2\"/>",
+		"<!DOCTYPE a [\n<!ELEMENT a EMPTY>\n<!ATTLIST a b CDATA #IMPLIED d CDATA #IMPLIED>\n]>\n<a b=\"c\"d=\"e\"/>",
+		// A missing space before a namespace-declaration attribute is also
+		// caught (the namespace branch already enforced this; keep it covered).
+		`<doc att="val"xmlns:p="urn:x"/>`,
+		// Namespace-declaration attribute FIRST, then a regular attribute with no
+		// separating space: the new regular-attribute check must fire after the
+		// namespace attribute is consumed (proves the two checks compose).
+		`<doc xmlns:p="urn:x"att="val"/>`,
+	}
+	for _, input := range reject {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err, "Parse should reject missing space between attributes in %q", input)
+		require.ErrorIs(t, err, helium.ErrSpaceRequired, "should be a space-required error for %q", input)
+	}
+
+	// The well-formed counterparts — attributes separated by a space, a
+	// newline, or any XML whitespace — must still parse cleanly (no
+	// over-rejection). A single attribute and the two tag-close forms are
+	// included to exercise the '>' / '/>' branches of the new check.
+	accept := []string{
+		`<doc att="val" att2="val2"/>`,
+		`<doc att="val" att2="val2"></doc>`,
+		"<doc att=\"val\"\natt2=\"val2\"/>",
+		"<doc att=\"val\"\t att2=\"val2\"/>",
+		"<doc att=\"val\"\ratt2=\"val2\"/>",
+		`<doc att="val"/>`,
+		`<doc att="val"></doc>`,
+		`<doc/>`,
+		`<doc att="val" ></doc>`,
+		// A space between a namespace-declaration attribute and a following
+		// regular attribute must still parse (well-formed composition).
+		`<doc xmlns:p="urn:x" att="val"/>`,
+	}
+	for _, input := range accept {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "Parse should accept space-separated attributes in %q", input)
+	}
+}
+
 func TestParseXML11PrefixUndeclaration(t *testing.T) {
 	// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an empty
 	// value (xmlns:pfx="") undeclares the prefix. This is well-formed only in an

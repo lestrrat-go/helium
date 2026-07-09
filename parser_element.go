@@ -564,6 +564,20 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		}
 
 		attrs = append(attrs, attr)
+
+		// XML §3.1 P40/P44: attributes in a start/empty-element tag must be
+		// separated by whitespace (STag/EmptyElemTag: '(S Attribute)*'). After
+		// a regular attribute the next character must close the tag ('>' or
+		// '/>') or be whitespace; a NameStartChar beginning the next attribute
+		// with no intervening S is a fatal well-formedness error. The two
+		// namespace-declaration branches above enforce the same rule; this
+		// mirrors libxml2's uniform post-attribute check at next_attr.
+		if cur.Peek() == '>' || (cur.Peek() == '/' && cur.PeekAt(1) == '>') {
+			continue
+		}
+		if !isBlankByte(cur.Peek()) {
+			return pctx.error(ctx, ErrSpaceRequired)
+		}
 	}
 
 	// Attributes defaulting: apply DTD-declared default attribute values.
