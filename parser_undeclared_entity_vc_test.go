@@ -74,6 +74,27 @@ func TestUndeclaredEntityLenientWithExternalPE(t *testing.T) {
 	require.NotNil(t, doc)
 }
 
+// A present-but-empty external ID (`SYSTEM ""`) still marks an external subset,
+// so the fully-internal precondition of the undeclared-entity VC is not met and
+// the undeclared entity stays a non-fatal warning even when validating.
+func TestUndeclaredEntityLenientWithEmptyExternalID(t *testing.T) {
+	t.Parallel()
+
+	const src = `<!DOCTYPE foo SYSTEM "" [
+<!ELEMENT foo ANY>
+]>
+<foo>&ent2;</foo>`
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		ValidateDTD(true).
+		FS(fstest.MapFS{}).
+		Parse(t.Context(), []byte(src))
+	require.NoError(t, err, "a present-but-empty external ID keeps the undeclared entity a non-fatal warning")
+	require.NotNil(t, doc)
+}
+
 // The "Entity Declared" VC applies to attribute values too, not only element
 // content. An undeclared general entity nested inside an entity referenced from
 // an attribute value is a validity error under a fully-internal DTD when
