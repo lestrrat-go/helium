@@ -225,8 +225,13 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 		idrefs:  make(map[string]bool),
 	}
 
+	// VC: Element Declared (XML §3.2) / libxml2 XML_DTD_NO_DTD "no DTD found!".
+	// A validating processor must report a validity error for a document that
+	// has neither an internal nor an external subset — nothing declares its
+	// elements. This path is reached only under ValidateDTD(true).
 	if doc.intSubset == nil && doc.extSubset == nil {
-		return nil
+		vctx.addf(ctx, "no DTD found")
+		return ErrDTDValidationFailed
 	}
 
 	// Check that the root element name matches the DTD name
