@@ -333,3 +333,63 @@ func TestDTDElementDeclQNameMatch(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestStandaloneExternalElementContent verifies that DTD validation uses element
+// declarations from the external subset even for a standalone="yes" document
+// (docDTDs searches both subsets regardless of standalone), while the §2.9
+// element-content-whitespace Standalone VC still rejects whitespace — text or
+// CDATA — directly within an externally-declared element-content element.
+func TestStandaloneExternalElementContent(t *testing.T) {
+	t.Parallel()
+
+	// root has element-only content declared ONLY in the external subset.
+	extDTD := `<!ELEMENT root (child)*>
+<!ELEMENT child EMPTY>`
+
+	// standalone="yes" with the element declared externally and NO ignorable
+	// whitespace: the external declaration is used for validation (before this
+	// fix it was hidden, yielding a spurious "no declaration found").
+	t.Run("external element decl found under standalone yes", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE root SYSTEM "ext.dtd">
+<root><child/></root>`, extDTD)
+		require.NoError(t, err)
+	})
+
+	// Whitespace text directly within the externally-declared element-content
+	// element violates the standalone constraint.
+	t.Run("whitespace text rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE root SYSTEM "ext.dtd">
+<root>
+  <child/>
+</root>`, extDTD)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(errs, "white spaces nodes"))
+	})
+
+	// The same whitespace written as a CDATA section is equally a violation.
+	t.Run("whitespace CDATA rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE root SYSTEM "ext.dtd">
+<root><![CDATA[
+  ]]><child/></root>`, extDTD)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(errs, "white spaces nodes"))
+	})
+
+	// Near-miss: standalone="no" with the same whitespace is accepted (the
+	// document openly depends on the external subset).
+	t.Run("whitespace under standalone no accepted", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseStandalone(t, `<?xml version="1.0" standalone="no"?>
+<!DOCTYPE root SYSTEM "ext.dtd">
+<root>
+  <child/>
+</root>`, extDTD)
+		require.NoError(t, err)
+	})
+}

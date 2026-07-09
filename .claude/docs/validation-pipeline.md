@@ -870,7 +870,7 @@ byte-identical to matching on the local name.
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /
 `xmlValidateAttributeDecl` / `xmlValidateDtdFinal`. It walks both subsets
-(`dtdSubsets`, standalone-independent unlike `docDTDs`) and reports:
+(`dtdSubsets`) and reports:
 
 - **No Duplicate Types** (§3.2.2): a Mixed content model `(#PCDATA|a|b|…)*` may
   not name the same element type (name+prefix) twice (`validateNoDuplicateTypes`
@@ -946,9 +946,21 @@ declaration takes precedence (§3.3). Three sub-cases:
   and the standalone report only fire on the matching declaration. A hit under
   `standalone="yes"` + `ValidateDTD(true)` is appended to `doc.standaloneNormAttrs`,
   which the validation pass reports.
-- **Element-content whitespace** (`checkStandaloneWhitespace`, existing): an
-  element declared element-content in the external subset that contains
-  whitespace-only text nodes.
+- **Element-content whitespace** (`checkStandaloneWhitespace`): an element
+  declared element-content in the external subset that contains whitespace-only
+  character data — a plain text node OR a CDATA section — directly within it. It
+  consults the external subset directly and runs on the normal `validateOneElement`
+  path (the element declaration is normally FOUND, since `docDTDs` searches both
+  subsets regardless of standalone), so the violation is reported even though the
+  element is declared.
+
+`docDTDs` (element/attribute-declaration lookup for `lookupElementDecl` /
+`validateElementAttributes`) searches the internal subset then the external
+subset, **independent of standalone** — a validating processor uses external
+declarations to validate structure regardless of the standalone declaration
+(libxml2 `xmlGetDtdElementDesc`/`xmlGetDtdAttrDesc`). The standalone constraints
+above (external defaults / normalization / element-content whitespace) are what
+enforce §2.9; the external declarations are never hidden from the validator.
 
 ## Comparison
 
