@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
@@ -104,16 +105,19 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 
 	if cur.Consume(patUTF8) {
 		encoding = encUTF8
+		ctx.autoEncoding = encUTF8
 		return
 	}
 
 	if cur.Consume(patUTF16BE2B) {
 		encoding = encUTF16BE
+		ctx.autoEncoding = encUTF16BE
 		return
 	}
 
 	if cur.Consume(patUTF16LE2B) {
 		encoding = encUTF16LE
+		ctx.autoEncoding = encUTF16LE
 		return
 	}
 
@@ -237,6 +241,57 @@ func (ctx *parserCtx) switchEncoding() error {
 	ctx.pushInput(strcursor.NewUTF8Cursor(b))
 
 	return nil
+}
+
+// checkBOMEncodingConflict reports a fatal error when the document declared an
+// encoding that contradicts the Unicode encoding asserted by a leading
+// byte-order mark (XML §4.3.3: presenting an entity in an encoding other than
+// the one named in its declaration is a fatal error). Only a real consumed BOM
+// sets ctx.autoEncoding, so a plain ASCII/UTF-8 `<?xml` start declaring a
+// single-byte encoding (e.g. iso-8859-1) is unaffected. libxml2 downgrades this
+// to a warning; helium follows the spec and the W3C xml suite (hst-lhs-007/008)
+// in treating it as fatal.
+//
+// The declared name is canonicalized through the same internal/encoding
+// resolver the parser already uses (encoding.UnicodeBOMFamily, which consults
+// Load), so every alias Load accepts is handled without a parallel table:
+//   - an unresolvable declared name is not this check's concern (switchEncoding
+//     rejects it as an unsupported encoding), so it is not newly rejected;
+//   - a declared name resolving to the SAME Unicode family as the BOM is
+//     compatible — and a generic "utf-16" declaration (no endianness) matches
+//     EITHER UTF-16 BOM, since the BOM fixes the byte order;
+//   - anything else — a different Unicode family, the opposite-endian UTF-16,
+//     or a non-Unicode encoding such as iso-8859-1 — is a fatal conflict.
+//
+// It consults ctx.declaredEncoding (the parsed EncName) rather than
+// ctx.encoding, so it still fires under IgnoreEncoding(true): that option
+// suppresses the decoder switch (erasing ctx.encoding) but must not suppress
+// this fatal well-formedness check.
+func (ctx *parserCtx) checkBOMEncodingConflict() error {
+	if ctx.autoEncoding == "" || ctx.declaredEncoding == "" {
+		return nil
+	}
+	if encoding.Load(ctx.declaredEncoding) == nil {
+		return nil
+	}
+	bomFamily := encoding.UnicodeBOMFamily(ctx.autoEncoding)
+	declFamily := encoding.UnicodeBOMFamily(ctx.declaredEncoding)
+	if bomFamiliesCompatible(bomFamily, declFamily) {
+		return nil
+	}
+	return fmt.Errorf("%w: declared %q, byte-order mark implies %q",
+		ErrEncodingBOMMismatch, ctx.declaredEncoding, ctx.autoEncoding)
+}
+
+// bomFamiliesCompatible reports whether a declared Unicode family is compatible
+// with the family a byte-order mark asserts. A generic "utf-16" declaration
+// carries no endianness, so the BOM disambiguates it and matches either UTF-16
+// BOM; every other case must match exactly.
+func bomFamiliesCompatible(bom, decl string) bool {
+	if decl == bom {
+		return true
+	}
+	return decl == "utf-16" && (bom == "utf-16be" || bom == "utf-16le")
 }
 
 var xmlDeclHint = []byte{'<', '?', 'x', 'm', 'l'}

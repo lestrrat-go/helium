@@ -110,7 +110,10 @@ func (pctx *parserCtx) parseEncodingDeclFromCursor(ctx context.Context) (string,
 			return "", err
 		}
 	}
-	return buf.String(), nil
+	name := buf.String()
+	// Record the declared EncName unconditionally (see parserCtx.declaredEncoding).
+	pctx.declaredEncoding = name
+	return name, nil
 }
 
 // isEncNameStart reports whether b is a valid first character of an EncName [81]
@@ -342,7 +345,12 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, e
 		return "", err
 	}
 
-	return buf.String(), nil
+	name := buf.String()
+	// Record the declared EncName unconditionally (see parserCtx.declaredEncoding):
+	// the BOM/encoding conflict check must see it even when IgnoreEncoding or
+	// LenientXMLDecl suppress decoder switching / relax the decl parse.
+	pctx.declaredEncoding = name
+	return name, nil
 }
 
 var standaloneBytes = []byte{'s', 't', 'a', 'n', 'd', 'a', 'l', 'o', 'n', 'e'}

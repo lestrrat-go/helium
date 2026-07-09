@@ -128,6 +128,7 @@ var (
 	ErrElementContentNotFinished     = errors.New("element content not finished")
 	ErrEmptyDocument                 = errors.New("start tag expected, '<' not found")
 	ErrEntityNotFound                = errors.New("entity not found")
+	ErrEncodingBOMMismatch           = errors.New("declared encoding conflicts with the byte-order mark")
 	ErrEqualSignRequired             = errors.New("'=' was required here")
 	ErrGtRequired                    = errors.New("'>' was required here")
 	ErrHyphenInComment               = errors.New("'--' not allowed in comment")

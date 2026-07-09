@@ -80,6 +80,19 @@ type parserCtx struct {
 	// <?xml version="1.0"?> vs <?xml version="1.0" encoding="utf-8"?>
 	encoding         string
 	detectedEncoding string
+	// autoEncoding records the Unicode encoding asserted by a real byte-order
+	// mark at the document start (UTF-8, UTF-16LE, or UTF-16BE), "" when no BOM
+	// was consumed. A declared encoding that contradicts it is a fatal error
+	// (XML §4.3.3); see checkBOMEncodingConflict.
+	autoEncoding string
+	// declaredEncoding is the EncName parsed from an XML/Text declaration,
+	// recorded UNCONDITIONALLY at the leaf EncName parsers (parseEncodingName /
+	// parseEncodingDeclFromCursor) — independent of IgnoreEncoding (which
+	// suppresses the decoder switch and erases ctx.encoding) and LenientXMLDecl
+	// (which relaxes the declaration parse). checkBOMEncodingConflict reads it
+	// immediately after the document entity's declaration is parsed, so the BOM
+	// well-formedness check fires regardless of those knobs.
+	declaredEncoding string
 	in               io.Reader
 	rawInput         []byte // original bytes, used for EBCDIC encoding detection
 	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
