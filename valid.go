@@ -44,6 +44,19 @@ func newElementContent(name string, ctype ElementContentType) (*ElementContent, 
 	return &ret, nil
 }
 
+// rawName returns the element leaf's raw qualified name as declared in the
+// DTD (prefix:local when a prefix is present, else the local name). DTD
+// content-model validation is NOT namespace-aware: the prefix is an opaque
+// part of the name and must be matched literally against the element tag as
+// written, mirroring libxml2 (which compares node->name, the full qualified
+// name).
+func (c *ElementContent) rawName() string {
+	if c.prefix != "" {
+		return c.prefix + ":" + c.name
+	}
+	return c.name
+}
+
 func (elem *ElementContent) copyElementContent() *ElementContent {
 	if elem == nil {
 		return nil
@@ -580,7 +593,7 @@ func validateMixedContent(ctx context.Context, elem *Element, content *ElementCo
 			// Always allowed in mixed content
 		case ElementNode:
 			if ce, ok := AsNode[*Element](child); ok {
-				cname := ce.LocalName()
+				cname := ce.Name()
 				if _, ok := allowed[cname]; !ok {
 					vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
 				}
@@ -602,28 +615,24 @@ func collectMixedNamesRecurse(content *ElementContent, names map[string]struct{}
 		return
 	}
 	if content.ctype == ElementContentElement {
-		names[content.name] = struct{}{}
+		names[content.rawName()] = struct{}{}
 		return
 	}
 	collectMixedNamesRecurse(content.c1, names)
 	collectMixedNamesRecurse(content.c2, names)
 }
 
-// collectChildElements returns a slice of element names from the children
-// of an element, ignoring text nodes, comments, PIs, etc.
-//
-// PRE-EXISTING GAP: content-model matching (here and in validateMixedContent)
-// compares element LOCAL names, not raw QNames, so a model `(p:a)` accepts a
-// `<a/>` child and vice-versa. This is a systematic local-name-based content-model
-// limitation, independent of the QName-keyed declaration lookups; a proper
-// raw-QName content-model fix is a separate follow-up.
+// collectChildElements returns the raw qualified names (prefix:local, as
+// written) of an element's child elements, ignoring text nodes, comments, PIs,
+// etc. DTD content-model matching is prefix-literal, not namespace-aware, so the
+// name is taken verbatim from the child tag.
 func collectChildElements(elem *Element) []string {
 	var children []string
 	for child := range Children(elem) {
 		switch child.Type() {
 		case ElementNode:
 			if ce, ok := AsNode[*Element](child); ok {
-				children = append(children, ce.LocalName())
+				children = append(children, ce.Name())
 			}
 		case TextNode:
 			// In element-only content, whitespace text is allowed (ignorable
@@ -676,31 +685,32 @@ func matchContent(content *ElementContent, children []string, pos int) (int, boo
 
 // matchElement matches a single named element against children[pos].
 func matchElement(content *ElementContent, children []string, pos int) (int, bool) {
+	name := content.rawName()
 	switch content.coccur {
 	case ElementContentOnce:
-		if pos < len(children) && children[pos] == content.name {
+		if pos < len(children) && children[pos] == name {
 			return 1, true
 		}
 		return 0, false
 	case ElementContentOpt:
-		if pos < len(children) && children[pos] == content.name {
+		if pos < len(children) && children[pos] == name {
 			return 1, true
 		}
 		return 0, true // optional: 0 matches is ok
 	case ElementContentMult:
 		// Zero or more
 		count := 0
-		for pos+count < len(children) && children[pos+count] == content.name {
+		for pos+count < len(children) && children[pos+count] == name {
 			count++
 		}
 		return count, true
 	case ElementContentPlus:
 		// One or more
-		if pos >= len(children) || children[pos] != content.name {
+		if pos >= len(children) || children[pos] != name {
 			return 0, false
 		}
 		count := 1
-		for pos+count < len(children) && children[pos+count] == content.name {
+		for pos+count < len(children) && children[pos+count] == name {
 			count++
 		}
 		return count, true

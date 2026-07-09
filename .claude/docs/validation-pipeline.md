@@ -858,11 +858,14 @@ unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
 them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
 element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
 
-KNOWN GAP: **content-model matching** (`collectChildElements`/`matchElement`,
-`validateMixedContent`) compares child element LOCAL names, not raw QNames, so a
-model `(p:a)` accepts a `<a/>` child and vice-versa. This is a systematic
-local-name limitation independent of the QName-keyed declaration lookups above; a
-raw-QName content-model fix is a separate follow-up.
+**Content-model matching is raw-QName-based too** (`valid.go`
+`collectChildElements`/`matchContentModel`/`matchElement` for element-only
+models, `validateMixedContent`/`collectMixedNames` for mixed models). Both sides
+use the raw qname — child elements contribute `Element.Name()` (`prefix:local`),
+and each content leaf's declared name is reconstructed by
+`ElementContent.rawName()` from its stored `prefix`+`name`. So `(p:a)` matches
+`<p:a/>` but not `<a/>`, and `(a)` does not match `<p:a/>`; an unprefixed model is
+byte-identical to matching on the local name.
 
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /
