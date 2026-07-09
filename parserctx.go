@@ -154,14 +154,14 @@ type parserCtx struct {
 	// validity error (VC: Entity Declared) is therefore suppressed in that case.
 	hasExternalPERef bool
 	pedantic         bool
-	wellFormed      bool
-	depth           int
-	loadsubset      LoadSubsetOption
-	charBufferSize  int
-	baseURI         string          // document base URI for resolving external references
-	catalog         CatalogResolver // XML catalog for entity resolution
-	fsys            fs.FS           // filesystem for loading external DTDs and entities
-	elem            *Element        // current context element
+	wellFormed       bool
+	depth            int
+	loadsubset       LoadSubsetOption
+	charBufferSize   int
+	baseURI          string          // document base URI for resolving external references
+	catalog          CatalogResolver // XML catalog for entity resolution
+	fsys             fs.FS           // filesystem for loading external DTDs and entities
+	elem             *Element        // current context element
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
