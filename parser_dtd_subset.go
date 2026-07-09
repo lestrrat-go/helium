@@ -783,13 +783,23 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 // reject the "<?xml" as a processing instruction (a PI target may not be "xml"),
 // so the TextDecl must be stripped here and any declared encoding honored — the
 // same treatment parseExternalEntityPrivate gives an external general entity.
-// When no TextDecl is present the content is returned unchanged. Only the
-// ASCII-compatible TextDecl shape is handled (the DTD-fragment case in scope);
-// a non-ASCII-leading encoding is left to the caller's raw push.
+// When no TextDecl is present the ASCII-compatible content is returned unchanged.
+// UTF-16 / UCS-4 content (BOM- or encoded-'<'-led) is decoded to UTF-8 by
+// decodeFixedWidthExternalContent, which also consumes a TextDecl that is itself
+// in that fixed-width encoding.
 func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
 	if len(content) == 0 {
 		return content, nil
 	}
+
+	// UTF-16 / UCS-4 external content is not ASCII-compatible: the body, a
+	// leading byte-order mark, and any leading TextDecl are all encoded, so the
+	// byte-level "<?xml" scan below cannot see the TextDecl. Detect a fixed-width
+	// encoding from the BOM/leading '<' and decode on a rune cursor instead.
+	if fixedWidthUnicodeEncoding(content) != "" {
+		return pctx.decodeFixedWidthExternalContent(ctx, srcURI, content)
+	}
+
 	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(content))) {
 		return content, nil
 	}
@@ -826,6 +836,62 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 	if cur == nil {
 		return nil, nil
 	}
+	rest, err := io.ReadAll(cur.Unused())
+	if err != nil {
+		return nil, sub.error(ctx, err)
+	}
+	return rest, nil
+}
+
+// decodeFixedWidthExternalContent decodes an external resource's replacement text
+// that is in a fixed-width Unicode encoding (UTF-16 / UCS-4), returning the body
+// as UTF-8. The encoding is externally known — fixed by the byte-order mark or
+// the encoded shape of the leading '<' — so an OPTIONAL leading TextDecl need not
+// (re)declare it and a resource with no TextDecl at all (e.g. a UTF-16 external
+// DTD subset that opens on a comment) is still decoded. When a TextDecl IS present
+// it is consumed on the decoded rune cursor after switchEncoding, enforcing the
+// same grammar as the ASCII path (VersionInfo OPTIONAL, EncodingDecl REQUIRED, NO
+// StandaloneDecl). srcURI scopes any error to the source resource.
+func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
+	sub := &parserCtx{}
+	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
+		return nil, err
+	}
+	defer func() { _ = sub.release() }()
+	sub.options = pctx.options
+	sub.baseURI = srcURI
+
+	// Detect the fixed-width encoding (consuming a 2-byte BOM; peeking a BOM-less
+	// 4-byte pattern) and switch the sub-cursor to a UTF-8-decoding rune cursor
+	// before reading the TextDecl or the body.
+	enc, err := sub.detectEncoding()
+	if err != nil {
+		return nil, sub.error(ctx, err)
+	}
+	sub.detectedEncoding = enc
+	if err := sub.switchEncoding(); err != nil {
+		return nil, sub.error(ctx, err)
+	}
+
+	cur := sub.getCursor()
+	if cur == nil {
+		return nil, nil
+	}
+
+	// Consume an optional leading TextDecl on the decoded rune cursor. The
+	// encoding was already fixed by the BOM/leading-'<' shape, so the declared
+	// encoding is informational; a standalone pseudo-attribute or a missing
+	// encoding is still rejected by parseTextDeclFromCursor.
+	if looksLikeXMLDeclString(cur) {
+		if err := sub.parseTextDeclFromCursor(ctx); err != nil {
+			return nil, err
+		}
+		cur = sub.getCursor()
+		if cur == nil {
+			return nil, nil
+		}
+	}
+
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
 		return nil, sub.error(ctx, err)

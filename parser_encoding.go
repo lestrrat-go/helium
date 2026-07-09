@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"bytes"
 	"errors"
 	"unicode/utf8"
 
@@ -119,6 +120,37 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	encoding = encNone
 	err = errors.New("failed to detect encoding")
 	return
+}
+
+// fixedWidthUnicodeEncoding reports the fixed-width Unicode encoding (UTF-16 /
+// UCS-4) that an external resource's replacement text begins with — detected
+// from a byte-order mark or the encoded shape of a leading '<'/'<?' — or "" for
+// ASCII-compatible content. These encodings are not ASCII-compatible, so their
+// bytes (body AND any leading TextDecl) must be decoded to UTF-8 before either
+// can be read; a byte-level "<?xml" scan cannot see a TextDecl that is itself
+// UTF-16-encoded. The pattern order mirrors detectEncoding. EBCDIC and the
+// ASCII-compatible UTF-8 forms are deliberately excluded — those stay on the
+// byte-level TextDecl path.
+func fixedWidthUnicodeEncoding(content []byte) string {
+	switch {
+	case bytes.HasPrefix(content, patUCS4BE):
+		return encUCS4BE
+	case bytes.HasPrefix(content, patUCS4LE):
+		return encUCS4LE
+	case bytes.HasPrefix(content, patUCS42143):
+		return encUCS42143
+	case bytes.HasPrefix(content, patUCS43412):
+		return encUCS43412
+	case bytes.HasPrefix(content, patUTF16LE4B):
+		return encUTF16LE
+	case bytes.HasPrefix(content, patUTF16BE4B):
+		return encUTF16BE
+	case bytes.HasPrefix(content, patUTF16BE2B):
+		return encUTF16BE
+	case bytes.HasPrefix(content, patUTF16LE2B):
+		return encUTF16LE
+	}
+	return ""
 }
 
 func isBlankCh(c rune) bool {

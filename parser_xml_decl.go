@@ -137,6 +137,78 @@ func (pctx *parserCtx) parseTextDecl(ctx context.Context) error {
 	return pctx.error(ctx, errors.New("malformed TextDecl: expected '?>' after encoding declaration"))
 }
 
+// parseTextDeclFromCursor parses an external-entity TextDecl from a rune cursor.
+// It is the fixed-width-Unicode counterpart of parseTextDecl, used when the
+// external content is in UTF-16 / UCS-4 whose bytes switchEncoding already
+// decoded (so the TextDecl, being itself encoded, could not be read at byte
+// level). It enforces the same grammar:
+//
+//	TextDecl ::= '<?xml' VersionInfo? EncodingDecl S? '?>'
+//
+// VersionInfo is OPTIONAL, EncodingDecl is REQUIRED, and NO StandaloneDecl is
+// permitted — a version-only, standalone-bearing, or otherwise out-of-grammar
+// declaration is rejected. The declared encoding is informational here (the
+// BOM/leading-'<' shape already fixed the actual encoding), so it does not drive
+// a re-switch; it is recorded only to mirror the byte-level path.
+func (pctx *parserCtx) parseTextDeclFromCursor(ctx context.Context) error {
+	cur := pctx.getCursor()
+	if cur == nil {
+		return errors.New("rune cursor required for parseTextDeclFromCursor")
+	}
+
+	if !cur.ConsumeString("<?xml") {
+		return pctx.error(ctx, ErrInvalidXMLDecl)
+	}
+
+	if !pctx.skipBlanks(ctx) {
+		return pctx.error(ctx, errors.New("blank needed after '<?xml'"))
+	}
+
+	// VersionInfo is OPTIONAL. Detect it by the literal "version" token; when
+	// present it must be well formed and followed by a blank separating it from
+	// the required EncodingDecl.
+	if cur.HasPrefixString("version") {
+		v, err := pctx.parseVersionInfoFromCursor(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		pctx.version = v
+
+		if !isBlankByte(cur.Peek()) {
+			return pctx.error(ctx, ErrSpaceRequired)
+		}
+		pctx.skipBlanks(ctx)
+	}
+
+	// EncodingDecl is REQUIRED. A version-only declaration falls through here and
+	// is rejected.
+	ev, err := pctx.parseEncodingDeclFromCursor(ctx)
+	if err != nil {
+		return pctx.error(ctx, errors.New("TextDecl requires an encoding declaration"))
+	}
+	if !pctx.options.IsSet(parseIgnoreEnc) {
+		pctx.encoding = ev
+	}
+
+	// Optional trailing space, then the required "?>". A 'standalone'
+	// pseudo-attribute (or any other leftover content) leaves a non-'?' byte here
+	// and is rejected.
+	pctx.skipBlanks(ctx)
+	if cur.Peek() == '?' {
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
+		if cur.Peek() == '>' {
+			if err := cur.Advance(1); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+
+	return pctx.error(ctx, errors.New("malformed TextDecl: expected '?>' after encoding declaration"))
+}
+
 // parseXMLDeclLenient parses the XML declaration pseudo-attributes in any order.
 // Called when parseopts.LenientXMLDecl is set.
 func (pctx *parserCtx) parseXMLDeclLenient(ctx context.Context) error {
