@@ -139,14 +139,18 @@ func TestStandaloneExternalDecl(t *testing.T) {
 		})
 
 		// An external UNPREFIXED tokenized declaration does not apply to a PREFIXED
-		// instance attribute of the same local name, so the standalone check must
-		// not fire (main accepts this document — no new false positive).
-		t.Run("prefixed instance vs unprefixed external decl accepted", func(t *testing.T) {
+		// instance attribute of the same local name, so the standalone
+		// normalization check must NOT fire. The prefixed p:id is itself undeclared
+		// (VC: Attribute Value Type — the id declaration is prefix-literal), so the
+		// document is rejected for that reason, not for external normalization.
+		t.Run("prefixed instance vs unprefixed external decl not normalized", func(t *testing.T) {
 			t.Parallel()
-			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
 <!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
 <r xmlns:p="urn:p" p:id="  spacedvalue  "/>`, `<!ATTLIST r id NMTOKEN #IMPLIED>`)
-			require.NoError(t, err)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "no declaration for attribute p:id"))
+			require.False(t, containsError(errs, "normalization"))
 		})
 
 		// The genuine case (unprefixed instance matching the unprefixed external
@@ -273,13 +277,18 @@ func TestStandaloneExternalDecl(t *testing.T) {
 		})
 
 		// A declaration for the PREFIXED element `p:r` does not apply to an
-		// unprefixed element `<r>`, so no normalization and no report.
-		t.Run("prefixed decl vs unprefixed element accepted", func(t *testing.T) {
+		// unprefixed element `<r>`, so the external declaration never normalizes
+		// `<r>`'s id. Because that declaration does not apply, id is undeclared on
+		// `<r>` (VC: Attribute Value Type) — the document is rejected for the
+		// undeclared attribute, not for external normalization.
+		t.Run("prefixed decl vs unprefixed element not applied", func(t *testing.T) {
 			t.Parallel()
-			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
 <!DOCTYPE r SYSTEM "ext.dtd" [ <!ELEMENT r EMPTY> ]>
 <r id="  spacedvalue  "/>`, extDTD)
-			require.NoError(t, err)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "no declaration for attribute id"))
+			require.False(t, containsError(errs, "normalization"))
 		})
 
 		// External default declared for a prefixed element applies to that element.
@@ -297,14 +306,18 @@ func TestStandaloneExternalDecl(t *testing.T) {
 		// identically do not cross-contaminate: a declaration for element `p:r`,
 		// attribute `id` (concat "p:r:id") must NOT apply to element `p`, attribute
 		// `r:id` (also concat "p:r:id"). If it did, `r:id` would be treated as an
-		// external NMTOKEN, normalized, and wrongly reported — so acceptance proves
-		// the keys are disambiguated.
+		// external NMTOKEN, normalized, and wrongly reported. Because it does not
+		// apply, `r:id` is undeclared on `<p>` (VC: Attribute Value Type): the absence
+		// of a normalization report — with an undeclared-attribute rejection instead —
+		// proves the keys are disambiguated.
 		t.Run("ambiguous element/attr key does not cross-contaminate", func(t *testing.T) {
 			t.Parallel()
-			_, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
+			errs, err := parseStandalone(t, `<?xml version="1.0" standalone="yes"?>
 <!DOCTYPE p SYSTEM "ext.dtd" [ <!ELEMENT p EMPTY> ]>
 <p xmlns:r="urn:r" r:id="  spacedvalue  "/>`, `<!ATTLIST p:r id NMTOKEN #IMPLIED>`)
-			require.NoError(t, err)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(errs, "no declaration for attribute r:id"))
+			require.False(t, containsError(errs, "normalization"))
 		})
 	})
 }

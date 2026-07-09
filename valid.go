@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -476,6 +477,78 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 					}
 				}
 			}
+		}
+	}
+
+	// VC: Attribute Value Type (XML §3.1) — every attribute present on the
+	// instance must have been declared. libxml2 xmlValidateOneAttribute reports
+	// XML_DTD_UNKNOWN_ATTRIBUTE ("No declaration for attribute %s of element %s")
+	// for an ordinary attribute with no matching <!ATTLIST>. After the loop above,
+	// `seen` holds every declared attribute key ("prefix:local"), the same key
+	// form used for present attributes. Namespace-declaration attributes
+	// (xmlns / xmlns:*) are stored in nsDefs, not the attribute chain, so they are
+	// checked separately by validateElementNamespaceDecls.
+	for _, a := range attrs {
+		if isSyntheticEntityBase(elem, a) {
+			continue
+		}
+		if !seen[a.Prefix()+":"+a.LocalName()] {
+			vctx.addf(ctx, "element %s: no declaration for attribute %s", ename, a.Name())
+		}
+	}
+
+	validateElementNamespaceDecls(ctx, doc, elem, ename, vctx)
+}
+
+// isSyntheticEntityBase reports whether a is the xml:base attribute helium
+// injects onto the top-level elements of an external parsed entity to record the
+// entity's base URI (parser_entity_decl.go). Such an attribute is not present in
+// the source and is not subject to the "must be declared" VC — libxml2 tracks the
+// entity base without a materialized attribute, so it never flags one. The
+// injection sets the value to the element's entityBaseURI, so an attribute is
+// synthetic exactly when the owning element originates from an external entity
+// (entityBaseURI != "") and its xml:base value equals that URI.
+func isSyntheticEntityBase(elem *Element, a *Attribute) bool {
+	if elem.entityBaseURI == "" {
+		return false
+	}
+	if a.LocalName() != "base" || a.Prefix() != "xml" {
+		return false
+	}
+	return a.Value() == elem.entityBaseURI
+}
+
+// validateElementNamespaceDecls enforces the Fixed Attribute Default VC on the
+// namespace-declaration attributes (xmlns and xmlns:*) declared directly on an
+// element. An <!ATTLIST> declaration for a namespace declaration is keyed as
+// `xmlns` (default declaration) or, for a prefixed declaration `xmlns:p`, as
+// local name `p` with declared prefix `xmlns` (matching how the ATTLIST parser
+// splits the qualified name). A #FIXED declaration whose value differs from the
+// declared value is VC: Fixed Attribute Default (W3C attr08).
+//
+// helium deliberately does NOT enforce the "must be declared" VC (Attribute
+// Value Type) for a namespace declaration that lacks an <!ATTLIST>: a
+// namespace-declaration attribute is exempt, so a DTD-validated namespaced
+// document need not declare its xmlns attributes. Flagging an undeclared xmlns
+// here would over-reject the ordinary case of validating a namespaced document
+// against a namespace-agnostic DTD. (This is why W3C hst-bh-005/hst-bh-006 —
+// which assert a namespace-UNAWARE processor rejects an undeclared xmlns:* — are
+// out of scope for helium's namespace-aware validator.)
+func validateElementNamespaceDecls(ctx context.Context, doc *Document, elem *Element, ename string, vctx *validCtx) {
+	for _, ns := range elem.Namespaces() {
+		declName, declPrefix, label := lexicon.PrefixXMLNS, "", lexicon.PrefixXMLNS
+		if p := ns.Prefix(); p != "" {
+			declName, declPrefix, label = p, lexicon.PrefixXMLNS, lexicon.PrefixXMLNS+":"+p
+		}
+
+		adecl := lookupAttributeDecl(doc, declName, declPrefix, ename)
+		if adecl == nil {
+			continue
+		}
+		// VC: Fixed Attribute Default — a #FIXED namespace declaration must
+		// match the declared value.
+		if adecl.def == enum.AttrDefaultFixed && ns.URI() != adecl.defvalue {
+			vctx.addf(ctx, "element %s: attribute %s has value %q but must be %q", ename, label, ns.URI(), adecl.defvalue)
 		}
 	}
 }
