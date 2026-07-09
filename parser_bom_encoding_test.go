@@ -177,6 +177,25 @@ func TestBOMEncodingConflict(t *testing.T) {
 			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
 		})
 
+		// The combined knobs must not over-reject: a matching BOM+declaration
+		// pair and a BOM-less document still parse under LenientXMLDecl+IgnoreEncoding.
+		t.Run("lenient plus ignore-encoding matching declaration parses", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF8...),
+				[]byte(`<?xml version='1.0' encoding='UTF-8'?><x/>`)...)
+			_, err := helium.NewParser().
+				LenientXMLDecl(true).IgnoreEncoding(true).Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		t.Run("lenient plus ignore-encoding no BOM parses", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().
+				LenientXMLDecl(true).IgnoreEncoding(true).Parse(t.Context(),
+					[]byte(`<?xml version='1.0' encoding='iso-8859-1'?><x/>`))
+			require.NoError(t, err)
+		})
+
 		t.Run("utf-8 BOM with matching declaration parses", func(t *testing.T) {
 			t.Parallel()
 			src := append(append([]byte{}, bomUTF8...),
