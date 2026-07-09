@@ -67,6 +67,24 @@ func TestBOMEncodingConflict(t *testing.T) {
 			_, err := helium.NewParser().Parse(t.Context(), src)
 			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
 		})
+
+		// An explicit OPPOSITE-endian UTF-16 declaration is a definite mismatch
+		// (only a generic "utf-16" is compatible with either BOM).
+		t.Run("utf-16be BOM with explicit utf-16le declaration", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16BE...),
+				utf16be(`<?xml version='1.0' encoding='UTF-16LE'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
+		})
+
+		t.Run("utf-16le BOM with explicit utf-16be declaration", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16LE...),
+				utf16le(`<?xml version='1.0' encoding='UTF-16BE'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.ErrorIs(t, err, helium.ErrEncodingBOMMismatch)
+		})
 	})
 
 	t.Run("accepted", func(t *testing.T) {
@@ -110,6 +128,52 @@ func TestBOMEncodingConflict(t *testing.T) {
 			t.Parallel()
 			src := append(append([]byte{}, bomUTF16BE...),
 				utf16be(`<?xml version='1.0' encoding='UTF16BE'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		// Every alias internal/encoding.Load resolves to the BOM's Unicode
+		// family must parse — the check canonicalizes through Load, so it is not
+		// limited to a hand-listed set. These are aliases earlier review rounds
+		// found missing from the retired parallel table.
+		t.Run("utf-8 BOM with unicode-1-1-utf-8 alias", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF8...),
+				[]byte(`<?xml version='1.0' encoding='unicode-1-1-utf-8'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		t.Run("utf-16be BOM with unicodeFFFE alias", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16BE...),
+				utf16be(`<?xml version='1.0' encoding='unicodeFFFE'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		t.Run("utf-16le BOM with unicodeFEFF alias", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16LE...),
+				utf16le(`<?xml version='1.0' encoding='unicodeFEFF'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		// A generic "utf-16" / "unicode" / "csUnicode" declaration carries no
+		// endianness, so it matches EITHER UTF-16 BOM.
+		t.Run("utf-16le BOM with generic unicode alias", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16LE...),
+				utf16le(`<?xml version='1.0' encoding='unicode'?><x/>`)...)
+			_, err := helium.NewParser().Parse(t.Context(), src)
+			require.NoError(t, err)
+		})
+
+		t.Run("utf-16be BOM with csUnicode alias", func(t *testing.T) {
+			t.Parallel()
+			src := append(append([]byte{}, bomUTF16BE...),
+				utf16be(`<?xml version='1.0' encoding='csUnicode'?><x/>`)...)
 			_, err := helium.NewParser().Parse(t.Context(), src)
 			require.NoError(t, err)
 		})
