@@ -385,8 +385,21 @@ func parseStringName(s []byte, maxNameLength int) (string, int, error) {
 	return out.String(), i, nil
 }
 
-func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
-	if ctx.inSubset == 0 {
+// getEntity resolves a general entity by name against the document entity
+// table, mirroring libxml2 xmlSAX2GetEntity. In a standalone="yes" document a
+// reference (in the document body) to a general entity that is declared ONLY in
+// the external subset is a fatal well-formedness error — WFC: Entity Declared
+// (XML §4.1) as constrained by the Standalone Document Declaration (§2.9): under
+// standalone="yes" all consumed declarations must be visible in the internal
+// subset. Document.GetEntity hides external declarations while standalone is
+// set, so such an entity is found only on the standalone-disabled retry; that
+// retry succeeding is exactly the violation (libxml2's XML_ERR_NOT_STANDALONE).
+// A returned non-nil entity with a non-nil error is that violation (the entity
+// is still returned, matching libxml2, so the caller can surface a precise
+// error); a nil entity with a nil error is a genuinely undeclared reference the
+// caller must route through the Entity Declared WFC (handleUndeclaredEntity).
+func (pctx *parserCtx) getEntity(ctx context.Context, name string) (*Entity, error) {
+	if pctx.inSubset == 0 {
 		if ret, err := resolvePredefinedEntity(name); err == nil {
 			return ret, nil
 		}
@@ -394,24 +407,33 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 
 	var ret *Entity
 	var ok bool
-	if ctx.doc == nil {
+	if pctx.doc == nil {
 		return nil, ErrEntityNotFound
-	} else if ctx.doc.standalone != 1 {
-		ret, _ = ctx.doc.GetEntity(name)
+	} else if pctx.doc.standalone != StandaloneExplicitYes {
+		ret, _ = pctx.doc.GetEntity(name)
 	} else {
-		if ctx.inSubset == 2 {
-			ctx.doc.standalone = 0
-			ret, _ = ctx.doc.GetEntity(name)
-			ctx.doc.standalone = 1
+		if pctx.inSubset == 2 {
+			pctx.doc.standalone = 0
+			ret, _ = pctx.doc.GetEntity(name)
+			pctx.doc.standalone = 1
 		} else {
-			ret, ok = ctx.doc.GetEntity(name)
+			ret, ok = pctx.doc.GetEntity(name)
 			if !ok {
-				ctx.doc.standalone = 0
-				ret, ok = ctx.doc.GetEntity(name)
+				pctx.doc.standalone = 0
+				ret, ok = pctx.doc.GetEntity(name)
+				pctx.doc.standalone = 1
 				if !ok {
-					return nil, errors.New("Entity(" + name + ") document marked standalone but requires eternal subset")
+					// Genuinely undeclared: let the caller apply the
+					// Entity Declared WFC via its nil-entity handling.
+					return nil, nil //nolint:nilnil
 				}
-				ctx.doc.standalone = 1
+				// Declared only in the external subset while standalone="yes".
+				// A reference in the document body (inSubset == 0) is a fatal
+				// WFC violation; references inside the DTD (attribute-list
+				// bookkeeping) are not flagged here.
+				if pctx.inSubset == 0 {
+					return ret, pctx.error(ctx, ErrNotStandalone)
+				}
 			}
 		}
 	}
@@ -446,7 +468,15 @@ func (pctx *parserCtx) lookupGeneralEntity(ctx context.Context, name string, inA
 		}
 	}
 	if ent == nil {
-		ent, _ = pctx.getEntity(name)
+		var gerr error
+		ent, gerr = pctx.getEntity(ctx, name)
+		// A non-nil entity with a non-nil error is the standalone WFC violation
+		// (declared only in the external subset under standalone="yes"); surface
+		// it. A nil entity is undeclared — handled below via the caller's
+		// Entity Declared WFC, so its (non-fatal) error is discarded here.
+		if gerr != nil && ent != nil {
+			return nil, attrWFCNone, gerr
+		}
 	}
 	if ent == nil {
 		return nil, attrWFCNone, nil
@@ -525,10 +555,15 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 		loadedEnt, err = h.GetEntity(ctx, name)
 		if err != nil {
 			if pctx.wellFormed {
-				loadedEnt, err = pctx.getEntity(name)
+				var ent *Entity
+				ent, err = pctx.getEntity(ctx, name)
+				// getEntity reports the standalone WFC violation as a non-nil
+				// entity plus a non-nil error; an undeclared entity is (nil,nil)
+				// and is handled by the isNilEntity branch below.
 				if err != nil {
 					return nil, 0, err
 				}
+				loadedEnt = ent
 			}
 		}
 	}
@@ -765,7 +800,15 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 			// violation regardless of which resolver produced the entity.
 			ent = typed
 		} else {
-			ent, _ = pctx.getEntity(name)
+			var gerr error
+			ent, gerr = pctx.getEntity(ctx, name)
+			// A resolved entity plus a non-nil error is the standalone WFC
+			// violation (external-only declaration under standalone="yes");
+			// propagate it. A nil entity falls through to the undeclared-entity
+			// handling below.
+			if gerr != nil && ent != nil {
+				return nil, gerr
+			}
 		}
 	}
 
