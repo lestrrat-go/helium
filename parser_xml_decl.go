@@ -79,6 +79,28 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 	return pctx.error(ctx, errors.New("XML declaration not closed"))
 }
 
+// checkEntityVersion enforces the XML §4.3.4 version-compatibility constraint:
+// an external parsed entity (or the external DTD subset) whose TextDecl declares
+// an XML version later than the referencing document's is a fatal error
+// (libxml2 XML_ERR_VERSION_MISMATCH — e.g. a 1.0 document may not reference a
+// 1.1 external entity). Helium targets XML 1.0, so the reference version is
+// "1.0" (an absent document XML declaration is treated as 1.0); a TextDecl
+// declaring any version other than "1.0" is rejected. An absent/empty entity
+// version is compatible and never rejected.
+func (pctx *parserCtx) checkEntityVersion(entityVersion string) error {
+	if entityVersion == "" || entityVersion == "1.0" {
+		return nil
+	}
+	docVersion := "1.0"
+	if pctx.doc != nil && pctx.doc.Version() != "" {
+		docVersion = pctx.doc.Version()
+	}
+	if docVersion != "1.0" {
+		return nil
+	}
+	return ErrEntityVersionMismatch
+}
+
 // parseTextDecl parses an external-entity TextDecl from the byte cursor,
 // enforcing the XML grammar:
 //
@@ -113,6 +135,9 @@ func (pctx *parserCtx) parseTextDecl(ctx context.Context) error {
 	if cur.HasPrefix(versionBytes) {
 		v, err := pctx.parseVersionInfo(ctx)
 		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if err := pctx.checkEntityVersion(v); err != nil {
 			return pctx.error(ctx, err)
 		}
 		pctx.version = v
@@ -180,6 +205,9 @@ func (pctx *parserCtx) parseTextDeclFromCursor(ctx context.Context) error {
 	if cur.HasPrefixString("version") {
 		v, err := pctx.parseVersionInfoFromCursor(ctx)
 		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if err := pctx.checkEntityVersion(v); err != nil {
 			return pctx.error(ctx, err)
 		}
 		pctx.version = v

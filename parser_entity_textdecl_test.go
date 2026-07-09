@@ -61,6 +61,17 @@ func TestExternalGeneralEntityTextDeclWithVersion(t *testing.T) {
 	require.Equal(t, "hi", string(parsed.DocumentElement().FirstChild().Content()))
 }
 
+// A 1.0 document may not reference an external parsed entity whose TextDecl
+// declares a later XML version (XML §4.3.4; W3C xmlconf rmt-e2e-38). Helium
+// targets XML 1.0, so a "1.1" TextDecl version is a fatal version mismatch.
+func TestExternalGeneralEntityTextDeclVersion11Rejected(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseExtEntity(t, []byte(`<?xml version="1.1" encoding="UTF-8"?><child>hi</child>`))
+	require.Error(t, err, "a 1.1 external entity referenced from a 1.0 document must be rejected")
+	require.Contains(t, err.Error(), "version mismatch")
+}
+
 // A TextDecl carrying a StandaloneDecl is forbidden by the grammar (a TextDecl
 // permits no 'standalone' pseudo-attribute) and must be rejected.
 func TestExternalGeneralEntityTextDeclStandaloneRejected(t *testing.T) {
