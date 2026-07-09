@@ -837,17 +837,35 @@ reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
 `ErrorHandler` via `validCtx.addf`; a failed validation returns
 `ErrDTDValidationFailed`.
 
-**Content-model matching is raw-QName-based** (`valid.go`
+**QName keying (element + attribute).** DTD validation matches names by their
+qualified form exactly as written — DTD validity is prefix-literal, not
+namespace-aware. The DOCTYPE name is the root element's QName, so the root-name
+check compares `root.Name()` (not the local part). ATTLIST declarations are stored
+under the declared element QName (`AttributeDecl.elem`), so every element-keyed
+lookup passes the instance element's QName: `AttributesForElement(elem.Name())` in
+`validateElementAttributes`, `checkStandaloneExternalDefaults`, and
+`GetElementByID`; `parseStartTag` threads the element QName into `parseAttribute`
+for the special-attribute (`attsSpecial`/`attsSpecialExternal`) and attribute-
+default (`attsDefault`) lookups. Attributes are matched by (prefix, local): the
+`attsSpecial`/`attsSpecialExternal` maps key on a `specialAttrKey{elem, attr}`
+STRUCT (element QName + attribute QName) — never a `elem + ":" + attr` string
+concatenation, which would collide distinct pairs like `(p:r, id)` and `(p, r:id)`
+(libxml2 uses a two-arg hash lookup) — and the `AttributeDecl`-based paths compare
+`adecl.prefix`+`adecl.name` against the instance attribute's prefix and local. So a
+declaration for `p:r`/`p:id` applies to `<p:r p:id=…>` and never to `<r>` or an
+unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
+(`ElementDecl`) are stored split into (local, prefix); `lookupElementDecl` looks
+them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
+element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
+
+**Content-model matching is raw-QName-based too** (`valid.go`
 `collectChildElements`/`matchContentModel`/`matchElement` for element-only
-models, `validateMixedContent`/`collectMixedNames` for mixed models). DTD
-validation is NOT namespace-aware: the declared name's prefix is an opaque part
-of the name, compared literally against the element tag as written (mirroring
-libxml2's `node->name`, the full qualified name). Both sides use the raw qname —
-child elements contribute `Element.Name()` (`prefix:local`), and each content
-leaf's declared name is reconstructed by `ElementContent.rawName()` from its
-stored `prefix`+`name`. So `(p:a)` matches `<p:a/>` but not `<a/>`, and `(a)`
-does not match `<p:a/>`; an unprefixed model is byte-identical to matching on the
-local name.
+models, `validateMixedContent`/`collectMixedNames` for mixed models). Both sides
+use the raw qname — child elements contribute `Element.Name()` (`prefix:local`),
+and each content leaf's declared name is reconstructed by
+`ElementContent.rawName()` from its stored `prefix`+`name`. So `(p:a)` matches
+`<p:a/>` but not `<a/>`, and `(a)` does not match `<p:a/>`; an unprefixed model is
+byte-identical to matching on the local name.
 
 `validateDTDDeclarations` (`valid_dtd_decl.go`) is the declaration-consistency
 pass — the analogue of libxml2's `xmlValidateElementDecl` /
@@ -887,6 +905,50 @@ listed in *this* attribute's declaration (`slices.Contains(adecl.tree, val)`),
 not merely a declared notation. All DTD-declaration data comes from the DOM model
 (`AttributeDecl.{atype,def,defvalue,tree,elem}`, `ElementDecl.{decltype,content}`,
 `Entity` content for NDATA, `DTD.LookupNotation`).
+
+The **Standalone Document Declaration** VC (§2.9) fires only when the document
+declares `standalone="yes"` (`StandaloneExplicitYes`); it flags reliance on
+external markup declarations, mirroring libxml2's `XML_DTD_STANDALONE_*` /
+`XML_DTD_NOT_STANDALONE` reports. A declaration counts as **external** when it
+comes from the external subset OR from an external parameter entity referenced
+anywhere (including from the internal subset) — `parserCtx.effectivelyExternal()`
+= `inSubset == inExternalSubset || len(externalPEScopes) > 0`, the analogue of
+libxml2's `PARSER_EXTERNAL`. Because an external-PE-supplied declaration is
+registered in the *internal* subset's declaration table, origin cannot be inferred
+from which subset holds the decl; it is recorded at parse time
+(`AttributeDecl.external`, `parserCtx.attsSpecialExternal`). An internal-subset
+declaration takes precedence (§3.3). Three sub-cases:
+- **External default attribute** (`checkStandaloneExternalDefaults`, run per
+  element from `validateOneElement`): driven by the ATTLIST *declarations*, not
+  materialized default nodes — `ValidateDTD(true)` does not imply
+  `DefaultDTDAttributes(true)`, so an external default may never be materialized yet
+  still makes the document depend on external markup. It walks the element's
+  effective `AttributeDecl`s (both subsets via `dtdSubsets`, internal first for §3.3
+  precedence, deduped per name+prefix) and reports any with a default value
+  (`attrHasDefaultValue`) and external origin (`AttributeDecl.external`) UNLESS the
+  instance supplies the attribute explicitly (`attrExplicitlySpecified`: a
+  materialized node that is not itself the DTD default).
+- **External attribute normalization** (`checkStandaloneExternalNormalization`,
+  flushed once from `validateDocument`): a *specified* attribute whose value was
+  altered by tokenized-type normalization driven by an external declaration. The
+  post-parse walk no longer holds the pre-normalization value, so the parser
+  records the change during `parseAttribute`: it tracks per-attribute whether the
+  normalize path dropped whitespace (`parserCtx.attrNormChanged`, set on
+  leading/trailing trim or internal-space collapse in `parseAttributeValueInternal`)
+  and whether the (first-binding) tokenized-type declaration is external
+  (`parserCtx.attsSpecialExternal`, the analogue of libxml2's
+  `XML_SPECIAL_EXTERNAL`, populated in `addSpecialAttribute` when
+  `effectivelyExternal()`). Both the normalization lookup and the external-origin
+  lookup key on the element's full QName + the attribute's full QName (prefix +
+  local, exactly as written, matching how the declaration is keyed — see the
+  QName-keying note below), so `<r p:id>` matches only an `<!ATTLIST r p:id …>`
+  declaration and never the unprefixed `id` (and vice-versa) — the normalization
+  and the standalone report only fire on the matching declaration. A hit under
+  `standalone="yes"` + `ValidateDTD(true)` is appended to `doc.standaloneNormAttrs`,
+  which the validation pass reports.
+- **Element-content whitespace** (`checkStandaloneWhitespace`, existing): an
+  element declared element-content in the external subset that contains
+  whitespace-only text nodes.
 
 ## Comparison
 

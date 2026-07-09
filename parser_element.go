@@ -417,6 +417,15 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		return pctx.error(ctx, err)
 	}
 
+	// The element's full QName (prefix + local) exactly as written. ATTLIST
+	// declarations (special-attribute types and attribute defaults) are keyed by
+	// the declared element QName, so lookups must use the qualified name — an
+	// unprefixed `<!ATTLIST id …>` does not apply to `<p:r>` and vice-versa.
+	elemQName := local
+	if prefix != "" {
+		elemQName = prefix + ":" + local
+	}
+
 	// Push xml:space stack entry for this element (inherit parent's value by default)
 	pctx.spaceTab = append(pctx.spaceTab, -1)
 
@@ -445,7 +454,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
 			break
 		}
-		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, local)
+		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, elemQName)
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -562,14 +571,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// are done post-parse via validateDocument() when parseDTDValid is set.
 	// ID/IDREF uniqueness checks are done post-parse via validateDocument().
 	if len(pctx.attsDefault) > 0 {
-		var elemName string
-		if prefix != "" {
-			elemName = prefix + ":" + local
-		} else {
-			elemName = local
-		}
-
-		defaults, ok := pctx.lookupAttributeDefault(elemName)
+		defaults, ok := pctx.lookupAttributeDefault(elemQName)
 		if ok {
 			// First pass: apply default xmlns="..." (must come before prefixed).
 			// Skip a DTD default whose prefix (the empty string for the default
@@ -994,8 +996,16 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					if err = pctx.writeAttrByte(ctx, b, 0x20); err != nil {
 						return
 					}
+				} else {
+					// normalize && inSpace: an internal whitespace run is collapsed
+					// (this space is dropped), a tokenized-normalization change.
+					pctx.attrNormChanged = true
 				}
 				inSpace = true
+			} else {
+				// normalize && b.Len() == 0: a leading whitespace char is dropped,
+				// a tokenized-normalization change.
+				pctx.attrNormChanged = true
 			}
 			if err := cur.Advance(1); err != nil {
 				return "", 0, err
@@ -1017,6 +1027,8 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	value = b.String()
 	if inSpace && normalize {
 		if value[len(value)-1] == 0x20 {
+			// A trailing whitespace run is trimmed, a tokenized-normalization change.
+			pctx.attrNormChanged = true
 			for len(value) > 0 {
 				if value[len(value)-1] != 0x20 {
 					break
@@ -1200,8 +1212,18 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		return
 	}
 
+	// Special-attribute (tokenized-type) declarations are keyed by the attribute's
+	// full QName exactly as written, so an instance attribute is matched by its own
+	// QName (prefix + local): `p:id` matches an `<!ATTLIST r p:id …>` declaration and
+	// NOT an unprefixed `<!ATTLIST r id …>` (and vice-versa). Matches libxml2, which
+	// keys special-attribute state on the fully-qualified name.
+	attrQName := l
+	if p != "" {
+		attrQName = p + ":" + l
+	}
+
 	normalize := false
-	attType, ok := pctx.lookupSpecialAttribute(elemName, l)
+	attType, ok := pctx.lookupSpecialAttribute(elemName, attrQName)
 	if ok && attType != enum.AttrInvalid {
 		normalize = true
 	}
@@ -1240,6 +1262,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		pctx.replaceEntities = true
 	}
 
+	pctx.attrNormChanged = false
 	v, entities, err := pctx.parseAttributeValue(ctx, normalize)
 
 	pctx.replaceEntities = savedReplaceEntities
@@ -1251,7 +1274,25 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	if normalize {
 		if entities > 0 {
-			v = pctx.attrNormalizeSpace(v)
+			nv := pctx.attrNormalizeSpace(v)
+			if nv != v {
+				pctx.attrNormChanged = true
+			}
+			v = nv
+		}
+		// VC: Standalone Document Declaration (XML §2.9) — in a standalone="yes"
+		// document, an attribute whose value is altered by tokenized-type
+		// normalization declared in the external subset is a validity error.
+		// Record it for the post-parse DTD validation pass, which alone would no
+		// longer have the pre-normalization value. The external-origin lookup keys
+		// on the same full QName as the normalization lookup above.
+		if pctx.attrNormChanged &&
+			pctx.standalone == StandaloneExplicitYes &&
+			pctx.options.IsSet(parseDTDValid) &&
+			pctx.specialAttributeExternal(elemName, attrQName) &&
+			pctx.doc != nil {
+			pctx.doc.standaloneNormAttrs = append(pctx.doc.standaloneNormAttrs,
+				standaloneNormAttr{elem: elemName, attr: attrQName})
 		}
 	}
 
