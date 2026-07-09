@@ -5,16 +5,16 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-09
 - Upstream suite: https://www.w3.org/XML/Test/xmlts20130923.zip @ `sha256:f9510b3532926e1b4c2e54855b021e4b8a66ec98a5337dcf4ff07e8a41968deb`
-- helium: `31bafd89`
-- helium-w3c-tests (harness): `20574c0`
-- Go: `go1.26.1`
+- helium: `b722684b0126160cebe3344d45b1af044204521c`
+- helium-w3c-tests (harness): `b0a79c5b459dd74d0daef6142513f3cab2b5243b`
+- Go: `go version go1.26.1 linux/amd64`
 - Run mode: default
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 1989 |
+| Pass | 1993 |
 | Skip | 584 |
-| XFail (documented gap) | 12 |
+| XFail (documented gap) | 8 |
 | Fail | 0 |
 | **Total** | **2585** |
 
@@ -31,6 +31,6 @@ Documented known gaps: the harness expects these to fail and treats an unexpecte
 
 | Reason | Count |
 |--------|------:|
-| helium rejects a valid document (helium gap) | 6 |
-| helium does not report this validity error: DTD validation incomplete (helium gap) | 5 |
-| helium does not report this well-formedness error: DTD/entity/namespace WF checking incomplete (helium gap) | 1 |
+| intentional divergence: colon in a Name that is a valid XML 1.0 Name but an invalid QName; helium is namespace-aware and correctly rejects it, matching the paired Namespaces 1.0 not-wf test. Not a helium gap | 6 |
+| intentional divergence: helium is namespace-aware and exempts xmlns:* declarations from the Attribute Value Type (must-be-declared) VC so a namespaced document validates against a namespace-agnostic DTD; enforcing it over-rejects that case, out of scope for a namespace-aware validator | 1 |
+| intentional divergence: helium is namespace-aware and exempts xmlns:* declarations from the Attribute Value Type (must-be-declared) VC; libxml2 also accepts undeclared xmlns:xml, so a namespace-unaware validator's rejection is out of scope | 1 |
