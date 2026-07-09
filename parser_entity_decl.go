@@ -468,17 +468,37 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 	if !cur.ConsumeString("<!ENTITY") {
 		return pctx.error(ctx, errors.New("<!ENTITY not started"))
 	}
+	// The whole <!ENTITY ... > must start and stop in the same input: a closing
+	// '>' supplied by a different parameter entity than the one that opened the
+	// declaration (e.g. `<!ENTITY greet 'hi'%close;` with %close; -> ">") is a
+	// boundary violation, the same fatal condition <!ELEMENT>/<!ATTLIST> enforce.
+	startInput := pctx.currentInputID()
 
-	if !pctx.skipBlanks(ctx) {
+	// The mandatory "S" separators — and, in the external subset, a parameter
+	// entity supplying part of the declaration (the entity value or an external
+	// ID) — are consumed through skipBlanksPE, which leaves a "% " parameter-entity
+	// DECLARATION marker for the isParameter check below (it only expands a genuine
+	// "%name;" reference). Re-fetch the cursor after each skip since an expand/pop
+	// changes the top input.
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
+	cur = pctx.dtdRefetch(cur)
 	isParameter := false
 	if cur.Peek() == '%' {
 		if err := cur.Advance(1); err != nil {
 			return err
 		}
-		if !pctx.skipBlanks(ctx) {
+		adv, err := pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if !adv {
 			return pctx.error(ctx, ErrSpaceRequired)
 		}
 		isParameter = true
@@ -492,9 +512,14 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		return pctx.error(ctx, errors.New("colons are forbidden from entity names"))
 	}
 
-	if !pctx.skipBlanks(ctx) {
+	adv, err = pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
+	cur = pctx.dtdRefetch(cur)
 
 	pctx.instate = psEntityDecl
 	var literal string
@@ -578,13 +603,24 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				}
 			}
 
-			if c := cur.Peek(); c != '>' && !isBlankByte(c) {
+			cur = pctx.dtdRefetch(cur)
+			// A '%' here can supply the following token (NDATA / '>') ONLY in the
+			// external subset; in the internal subset a '%' where an "S" or '>' is
+			// required stays an early ErrSpaceRequired (byte-identical to origin).
+			if c := cur.Peek(); c != '>' && !isBlankByte(c) && (!pctx.external || c != '%') {
 				return pctx.error(ctx, ErrSpaceRequired)
 			}
 
-			pctx.skipBlanks(ctx)
+			if _, err := pctx.skipBlanksPE(ctx); err != nil {
+				return pctx.error(ctx, err)
+			}
+			cur = pctx.dtdRefetch(cur)
 			if cur.ConsumeString("NDATA") {
-				if !pctx.skipBlanks(ctx) {
+				adv, err := pctx.skipBlanksPE(ctx)
+				if err != nil {
+					return pctx.error(ctx, err)
+				}
+				if !adv {
 					return pctx.error(ctx, ErrSpaceRequired)
 				}
 
@@ -611,9 +647,16 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		}
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
 	if cur.Peek() != '>' {
 		return pctx.error(ctx, errors.New("entity not terminated"))
+	}
+	if pctx.currentInputID() != startInput {
+		return pctx.error(ctx,
+			fmt.Errorf("%w: entity declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 	}
 	if err := cur.Advance(1); err != nil {
 		return err

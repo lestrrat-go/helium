@@ -434,6 +434,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// Push content onto the input stack and loop until exhausted.
 	savedExternal := ctx.external
 	savedBaseURI := ctx.baseURI
+	savedDTDInputFloor := ctx.dtdInputFloor
 	ctx.external = true
 	ctx.baseURI = resolved
 
@@ -442,6 +443,11 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// The DTD cursor we just pushed is the enclosing content cursor for the
 	// shared declaration step: it lives one level above baseLen.
 	dtdFloor := ctx.inputTab.Len()
+	// skipBlanksPE expands parameter-entity references inside/adjacent to markup
+	// declarations by pushing their padded replacement text ABOVE this cursor and
+	// crossing back when the PE input is spent; it must never pop below this base
+	// (into the main document input), so record its depth as the floor.
+	ctx.dtdInputFloor = dtdFloor
 
 	// Restore parser state on every exit path, including the error returns
 	// below, and ensure our pushed input is always removed from the stack.
@@ -451,6 +457,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		}
 		ctx.external = savedExternal
 		ctx.baseURI = savedBaseURI
+		ctx.dtdInputFloor = savedDTDInputFloor
 	}()
 
 	// Parse the external subset declaration-by-declaration through the SHARED

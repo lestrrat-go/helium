@@ -131,6 +131,94 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 	return false
 }
 
+// skipBlanksPE is the DTD-declaration whitespace skip that ALSO expands
+// parameter-entity references inside or adjacent to markup declarations in the
+// EXTERNAL subset, mirroring libxml2's xmlSkipBlankCharsPE. It reports whether it
+// consumed any separator — a literal whitespace run, an expanded PE, or a crossed
+// PE-input boundary — so a caller can enforce a required "S" (an included PE's
+// §4.4.8 leading/trailing space, or the boundary itself, satisfies it) just as a
+// real space would.
+//
+// Outside the external subset (pctx.external == false) it delegates to skipBlanks
+// so the INTERNAL subset stays byte-identical: a "%" there is left for the
+// existing handlePEReference/decl handling, which correctly rejects a PE
+// reference within a markup declaration (WFC: PEs in Internal Subset).
+//
+// In the external subset it loops: skip a bounded blank run on the current top
+// cursor; if that cursor is exhausted and it is a pushed PE input (above
+// dtdInputFloor), pop it to resume in the enclosing DTD/PE input (a crossed
+// boundary counts as a separator); at a "%" that starts a genuine PE reference
+// (a NameStartChar, not a blank/EOF that marks a "<!ENTITY % name" declaration),
+// expand it with parsePEReference(pad=true) and continue so the pushed
+// replacement's leading pad space is consumed next. It never pops below
+// dtdInputFloor (the external subset's own base cursor), so it cannot drop into
+// the main document input and consume post-DOCTYPE content.
+func (pctx *parserCtx) skipBlanksPE(ctx context.Context) (bool, error) {
+	if !pctx.external {
+		return pctx.skipBlanks(ctx), nil
+	}
+	if pctx.blankRunErr != nil {
+		return false, pctx.blankRunErr
+	}
+
+	advanced := false
+	for {
+		if pctx.stopped {
+			return advanced, errParserStopped
+		}
+		if err := ctx.Err(); err != nil {
+			return advanced, err
+		}
+
+		// Inspect the actual top cursor WITHOUT getCursor()'s auto-pop, so the
+		// floor check below governs whether an exhausted input is popped.
+		cur := pctx.adaptCursor(pctx.inputTab.PeekOne())
+		if cur == nil {
+			break
+		}
+
+		a, err := pctx.skipBlankRun(ctx, cur)
+		if err != nil {
+			pctx.blankRunErr = err
+			return advanced, err
+		}
+		if a {
+			advanced = true
+		}
+
+		if cur.Done() {
+			// The current input is spent. If it is a PE input pushed above the
+			// external subset's base cursor, pop it and resume in the enclosing
+			// input; crossing that boundary is a token separator (§4.4.8 trailing
+			// space). Never pop the base cursor itself — that would drop into the
+			// main document input.
+			if pctx.inputTab.Len() > pctx.dtdInputFloor {
+				pctx.popInput()
+				advanced = true
+				continue
+			}
+			break
+		}
+
+		if cur.Peek() != '%' {
+			break
+		}
+		// A "%" immediately followed by whitespace or end-of-input is the
+		// parameter-entity DECLARATION marker of "<!ENTITY % name ...>", not a
+		// reference; leave it for the declaration parser.
+		if c := cur.PeekAt(1); isBlankByte(c) || c == 0 {
+			break
+		}
+
+		if err := pctx.parsePEReference(ctx, true); err != nil {
+			return advanced, err
+		}
+		advanced = true
+	}
+
+	return advanced, nil
+}
+
 func (pctx *parserCtx) skipBlankBytes(ctx context.Context, cur *strcursor.ByteCursor) bool {
 	if pctx.blankRunErr != nil {
 		return false
