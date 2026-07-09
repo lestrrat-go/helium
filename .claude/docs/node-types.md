@@ -66,9 +66,9 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | Type | Struct | Base | Children | Content | Siblings | Special Fields |
 |------|--------|------|----------|---------|----------|----------------|
 | Document | `Document` | docnode | ✓ | — | ✗ | version, encoding, standalone, url, properties, intSubset, extSubset, ids map |
-| Element | `Element` | node | ✓ | via children | ✓ | properties (Attribute linked list), ns, nsDefs |
+| Element | `Element` | node | ✓ | via children | ✓ | properties (Attribute linked list), ns, nsDefs, contentHasReference (parser flag: a reference appeared in content; validity-only, invisible to serialization/C14N/XPath/copy) |
 | Attribute | `Attribute` | docnode | ✓ (text/entityref for value) | via children | ✓ (linked list) | ns, atype, defaultAttr, syntheticBase (parser-injected external-entity xml:base) |
-| Text | `Text` | node | ✗ (merges) | ✓ content | ✓ | Adjacent text nodes auto-merge |
+| Text | `Text` | node | ✗ (merges) | ✓ content | ✓ | Adjacent text nodes auto-merge. fromCharRef (parser flag: some content came from a character reference; OR-merged on text merge; validity-only, invisible to serialization/C14N/XPath/copy) |
 | CDATASection | `CDATASection` | node | ✗ | ✓ content | ✓ | — |
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |
 | PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |

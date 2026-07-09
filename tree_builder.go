@@ -236,7 +236,19 @@ func (t *TreeBuilder) Characters(ctxif context.Context, data []byte) error {
 		return errors.New("text content placed in wrong location")
 	}
 
-	return n.AppendText(data)
+	if err := n.AppendText(data); err != nil {
+		return err
+	}
+	// A character-reference delivery marks the Text node it lands in (whether
+	// freshly created or merged into the last Text child) so element-content
+	// validity can treat its whitespace as non-ignorable. Sticky: once set, a
+	// later literal append into the same node does not clear it.
+	if ctx.charDataFromCharRef {
+		if last, ok := AsNode[*Text](n.LastChild()); ok {
+			last.fromCharRef = true
+		}
+	}
+	return nil
 }
 
 // CDataBlock mirrors xmlSAX2Text(ctxt, value, len, XML_CDATA_SECTION_NODE)

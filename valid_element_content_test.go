@@ -125,3 +125,127 @@ func TestNmtokensCharRefWhitespace(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestElementContentCharRefWhitespace asserts that whitespace introduced by a
+// character reference (directly or via a general entity whose replacement text
+// is a character reference) does NOT match the S nonterminal and is therefore a
+// validity error in element-only content, while literal whitespace — including
+// an internal entity whose replacement text is itself literal whitespace — stays
+// ignorable (XML §3.2.1 as clarified by errata 2e E15). W3C xmlconf rmt-e2e-15*.
+func TestElementContentCharRefWhitespace(t *testing.T) {
+	t.Parallel()
+
+	// E15g: a direct character reference producing whitespace between element
+	// children in element-only content is not ignorable.
+	t.Run("direct char-ref whitespace is invalid (E15g)", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo (foo*)>
+]>
+<foo><foo/>&#32;<foo/></foo>`)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	})
+
+	// E15h: a general entity whose replacement text is a character reference
+	// (&#38;#32; declares the entity value "&#32;") re-parses to a space at
+	// inclusion time — that whitespace came from a character reference.
+	t.Run("entity-of-char-ref whitespace is invalid (E15h)", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo (foo*)>
+<!ENTITY space "&#38;#32;">
+]>
+<foo><foo/>&space;<foo/></foo>`)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	})
+
+	// E15e: an internal entity whose replacement text is a literal space is
+	// ignorable whitespace — valid.
+	t.Run("entity-of-literal-space whitespace is valid (E15e)", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo (foo*)>
+<!ENTITY space " ">
+]>
+<foo><foo/>&space;<foo/></foo>`)
+		require.NoError(t, err)
+	})
+
+	// E15f: a character reference in an entity's LITERAL value expands at
+	// declaration time, so the replacement text is a literal space — the
+	// whitespace does not originate from a character reference at inclusion time
+	// and stays ignorable — valid.
+	t.Run("entity literal &#32; expands at decl time and is valid (E15f)", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo (foo*)>
+<!ENTITY space "&#32;">
+]>
+<foo><foo/>&space;<foo/></foo>`)
+		require.NoError(t, err)
+	})
+
+	// E15a: a reference is content per XML production [43]; an element declared
+	// EMPTY that contains one is invalid even when the reference expands to
+	// nothing and leaves the element with no child node.
+	t.Run("empty entity reference in an EMPTY element is invalid (E15a)", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo EMPTY>
+<!ENTITY empty "">
+]>
+<foo>&empty;</foo>`)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	})
+
+	// Literal whitespace mixed with a character reference in element-only content
+	// is still invalid — the merged text node carries the char-reference origin.
+	t.Run("literal-plus-char-ref whitespace is invalid", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo (foo*)>
+]>
+<foo><foo/> &#32; <foo/></foo>`)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	})
+
+	// A character reference producing whitespace in MIXED content is character
+	// data, which mixed content permits — still valid.
+	t.Run("char-ref whitespace in mixed content is valid", func(t *testing.T) {
+		t.Parallel()
+		err := parseECValidate(t, `<!DOCTYPE foo [
+<!ELEMENT foo (#PCDATA|a)*>
+<!ELEMENT a EMPTY>
+]>
+<foo><a/>&#32;<a/></foo>`)
+		require.NoError(t, err)
+	})
+}
+
+// TestCharRefProvenanceSerializationUnchanged guards the blast radius: the
+// char-reference-origin marker on a Text node is invisible to serialization —
+// a document whose text came from a character reference serializes byte-for-byte
+// identically to the same document written with literal text.
+func TestCharRefProvenanceSerializationUnchanged(t *testing.T) {
+	t.Parallel()
+
+	parse := func(src string) *helium.Document {
+		t.Helper()
+		doc, err := helium.NewParser().
+			SubstituteEntities(true).
+			ValidateDTD(true).
+			DefaultDTDAttributes(true).
+			Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		return doc
+	}
+
+	literal := parse(`<!DOCTYPE foo [<!ELEMENT foo (#PCDATA)>]><foo>a b</foo>`)
+	charRef := parse(`<!DOCTYPE foo [<!ELEMENT foo (#PCDATA)>]><foo>a&#32;b</foo>`)
+
+	litStr, err := helium.WriteString(literal)
+	require.NoError(t, err)
+	refStr, err := helium.WriteString(charRef)
+	require.NoError(t, err)
+	require.Equal(t, litStr, refStr)
+}
