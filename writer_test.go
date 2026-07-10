@@ -1244,3 +1244,73 @@ func TestWriterNormalization(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, raw.String(), composed, "no normalization by default: %q", raw.String())
 }
+
+// TestWriteReconcilesSubtreeNamespaces verifies that serializing a subtree
+// re-declares any namespace prefix its elements or attributes use but that was
+// bound only on an ancestor outside the subtree, so the output reparses. This
+// is the situation an XSLT result tree creates when it grafts in nodes from a
+// source document (W3C xslt30 si-lre-029/904/905, si-element-029).
+func TestWriteReconcilesSubtreeNamespaces(t *testing.T) {
+	t.Parallel()
+
+	// firstElem returns the first element child of n, or n itself.
+	firstElem := func(n helium.Node) helium.Node {
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode {
+				return c
+			}
+		}
+		return n
+	}
+
+	serializeSubtree := func(t *testing.T, src string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var buf bytes.Buffer
+		err = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, firstElem(doc.DocumentElement()))
+		require.NoError(t, err)
+		return buf.String()
+	}
+
+	t.Run("prefixed attribute bound on outer ancestor", func(t *testing.T) {
+		t.Parallel()
+		// gml is declared on the root; the serialized <b:elem> subtree uses it
+		// only on the gml:id attribute. Both b (element prefix) and gml (attr
+		// prefix) must be declared in the fragment.
+		out := serializeSubtree(t, `<root xmlns:gml="urn:g" xmlns:b="urn:b"><b:elem gml:id="x1"/></root>`)
+		require.Contains(t, out, `xmlns:gml="urn:g"`)
+		require.Contains(t, out, `xmlns:b="urn:b"`)
+		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
+		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
+	})
+
+	t.Run("prefix used only on element name", func(t *testing.T) {
+		t.Parallel()
+		out := serializeSubtree(t, `<root xmlns:p="urn:p"><p:child>text</p:child></root>`)
+		require.Contains(t, out, `xmlns:p="urn:p"`)
+		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
+		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
+	})
+
+	t.Run("locally declared prefix not duplicated", func(t *testing.T) {
+		t.Parallel()
+		// gml is declared on <b:elem> itself; reconciliation must not emit a
+		// second xmlns:gml.
+		out := serializeSubtree(t, `<root xmlns:b="urn:b"><b:elem xmlns:gml="urn:g" gml:id="x1"/></root>`)
+		require.Equal(t, 1, strings.Count(out, `xmlns:gml=`), "no duplicate declaration: %q", out)
+		require.Contains(t, out, `xmlns:b="urn:b"`)
+		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
+		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
+	})
+
+	t.Run("xml prefix never reconciled", func(t *testing.T) {
+		t.Parallel()
+		// xml:lang uses the implicitly-bound xml prefix; the serializer must not
+		// synthesize xmlns:xml.
+		out := serializeSubtree(t, `<root xmlns:b="urn:b"><b:elem xml:lang="en"/></root>`)
+		require.NotContains(t, out, `xmlns:xml=`, "xml prefix is implicitly bound: %q", out)
+		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
+		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
+	})
+}
