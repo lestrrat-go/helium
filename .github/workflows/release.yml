@@ -11,8 +11,8 @@ name: Release
 # maintainer approval and is restricted to the `main` branch — so the tag/publish
 # step pauses for a human even though anyone with write access can dispatch.
 #
-# See .claude/docs/releasing.md for the full runbook (how to dispatch, how to
-# bump the pinned harness_ref, and recovery if goreleaser fails after tagging).
+# See RELEASING.md for the full runbook (how to dispatch, how to bump the pinned
+# harness_ref, and recovery if goreleaser fails after tagging).
 on:
   workflow_dispatch:
     inputs:
@@ -25,7 +25,7 @@ on:
         # reproducible and cannot be red-blocked by unrelated harness@main churn.
         # Bump this to the harness SHA from the latest green nightly conformance
         # run when certifying a release against newer upstream tests.
-        # See .claude/docs/releasing.md.
+        # See RELEASING.md.
         description: helium-w3c-tests (harness) commit/tag to gate against
         type: string
         default: b0a79c5b459dd74d0daef6142513f3cab2b5243b
