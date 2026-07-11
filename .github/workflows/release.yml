@@ -1,17 +1,42 @@
 name: Release
 
+# Dispatch-driven release. Instead of triggering on a pushed tag (which would
+# leave a public tag behind if the conformance gate then failed), a release is
+# started manually with a version input. The slow XSLT 3.0 conformance suite
+# runs FIRST; only when it is green does the release job create the tag and run
+# goreleaser. A red gate stops the run before any tag exists, so a failing
+# conformance test has zero side effects.
+#
+# The release job is bound to the `release` GitHub Environment, which requires
+# maintainer approval and is restricted to the `main` branch — so the tag/publish
+# step pauses for a human even though anyone with write access can dispatch.
+#
+# See .claude/docs/releasing.md for the full runbook (how to dispatch, how to
+# bump the pinned harness_ref, and recovery if goreleaser fails after tagging).
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version tag to create (e.g. v0.5.2)
+        type: string
+        required: true
+      harness_ref:
+        # Pinned to a known-good helium-w3c-tests commit so the release gate is
+        # reproducible and cannot be red-blocked by unrelated harness@main churn.
+        # Bump this to the harness SHA from the latest green nightly conformance
+        # run when certifying a release against newer upstream tests.
+        # See .claude/docs/releasing.md.
+        description: helium-w3c-tests (harness) commit/tag to gate against
+        type: string
+        default: b0a79c5b459dd74d0daef6142513f3cab2b5243b
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Release-gating conformance run: the full slow XSLT 3.0 suite must pass with
-  # zero failures before anything is published. goreleaser needs: this job, so a
-  # red slow run blocks the release even though the tag is already pushed.
+  # zero failures before anything is tagged or published. The release job needs:
+  # this, so a red slow run blocks the release BEFORE a tag is ever created.
   conformance-gate:
     permissions:
       contents: read
@@ -19,10 +44,18 @@ jobs:
     with:
       suite: xslt30
       slow: true
+      harness_ref: ${{ inputs.harness_ref }}
 
-  goreleaser:
+  release:
     needs: conformance-gate
     runs-on: ubuntu-latest
+    # Maintainer-approval gate: a dispatch may be started by anyone with write
+    # access, but the `release` environment requires a reviewer and is pinned to
+    # the main branch, so tag + publish only proceeds after human approval.
+    environment: release
+    permissions:
+      # Needed to push the tag and to let goreleaser publish the GitHub release.
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -34,6 +67,27 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      # goreleaser derives the release version from a git tag, so the tag is
+      # created here (after the gate is green) and pushed with GITHUB_TOKEN. The
+      # push is a plain git operation — it deliberately does NOT trigger any
+      # other workflow; goreleaser runs inline via the next step.
+      - name: Create and push release tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$'; then
+            echo "version input '$VERSION' is not a vX.Y.Z tag" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "tag $VERSION already exists" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "refs/tags/$VERSION"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
