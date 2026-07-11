@@ -82,6 +82,7 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | XSD 1.1 document-wide ID/IDREF/ENTITY walks | `.claude/docs/xsd11-doc-walks.md` |
 | XSD 1.1 representation/structural/composition checks, xs:override, vc:, notation | `.claude/docs/xsd11-representation.md` |
 | helium CLI commands, flags, pipeline, exit codes | `.claude/docs/helium-command.md` |
+| Cutting a release, editing release/conformance workflows, bumping the harness pin | `RELEASING.md` |
 | XPath 3.1 design overview, constraints, sub-doc index | `.claude/docs/xpath3-design.md` |
 | XPath 3.1 architecture, file layout, internal/xpath | `.claude/docs/xpath3-architecture.md` |
 | XPath 3.1 public API, Context, Result, errors | `.claude/docs/xpath3-api.md` |
