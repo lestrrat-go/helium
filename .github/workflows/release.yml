@@ -76,12 +76,14 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          # Accept only a SemVer-style vX.Y.Z with an optional pre-release
-          # (dot-separated alphanumeric/hyphen identifiers) — no path characters
-          # like '/' and no trailing '.foo'. A second git check-ref-format guard
-          # rejects anything else Git would consider a malformed ref.
-          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
-            echo "version input '$VERSION' is not a vX.Y.Z[-prerelease] tag" >&2
+          # Accept only a canonical SemVer vX.Y.Z with an optional pre-release:
+          # numeric identifiers carry no leading zeros (so v01.02.03 and a numeric
+          # pre-release like v1.2.3-01 are rejected), pre-release identifiers are
+          # dot-separated alphanumerics/hyphens, and no path characters like '/'.
+          # A second git check-ref-format guard rejects anything else Git would
+          # consider a malformed ref.
+          if ! printf '%s' "$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?$'; then
+            echo "version input '$VERSION' is not a canonical vX.Y.Z[-prerelease] tag" >&2
             exit 1
           fi
           if ! git check-ref-format "refs/tags/$VERSION"; then
