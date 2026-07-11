@@ -76,18 +76,35 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$'; then
-            echo "version input '$VERSION' is not a vX.Y.Z tag" >&2
+          # Accept only a SemVer-style vX.Y.Z with an optional pre-release
+          # (dot-separated alphanumeric/hyphen identifiers) — no path characters
+          # like '/' and no trailing '.foo'. A second git check-ref-format guard
+          # rejects anything else Git would consider a malformed ref.
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+            echo "version input '$VERSION' is not a vX.Y.Z[-prerelease] tag" >&2
             exit 1
           fi
-          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            echo "tag $VERSION already exists" >&2
+          if ! git check-ref-format "refs/tags/$VERSION"; then
+            echo "version input '$VERSION' is not a valid git tag ref" >&2
             exit 1
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$VERSION" -m "$VERSION"
-          git push origin "refs/tags/$VERSION"
+          # Idempotent for a goreleaser-failure re-run: if the tag already exists
+          # pointing at THIS commit, a prior run created it before goreleaser died
+          # — reuse it and fall through to publish. Only fail when it exists on a
+          # different commit (a genuine collision). See RELEASING.md recovery.
+          target=$(git rev-parse HEAD)
+          if existing=$(git rev-parse -q --verify "refs/tags/$VERSION^{commit}"); then
+            if [ "$existing" != "$target" ]; then
+              echo "tag $VERSION already exists at $existing, not HEAD ($target)" >&2
+              exit 1
+            fi
+            echo "tag $VERSION already exists at HEAD — reusing it (goreleaser re-run)"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$VERSION" -m "$VERSION"
+            git push origin "refs/tags/$VERSION"
+          fi
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3

@@ -20,7 +20,7 @@ on:
         type: boolean
         default: false
       harness_ref:
-        description: helium-w3c-tests (harness) git ref to check out (commit/tag/branch). Defaults to main so callers that do not pin (e.g. release.yml) keep tracking the harness tip.
+        description: helium-w3c-tests (harness) git ref to check out (commit/tag/branch). Defaults to main so a caller that does not pin (the nightly/manual conformance.yml) tracks the harness tip; the release gate passes a pinned harness_ref.
         type: string
         default: main
 
@@ -46,7 +46,7 @@ jobs:
       # Check out this helium repo at the triggering ref (the code under test).
       # No repository:/ref: so it uses the ref the calling workflow ran against.
       - name: Check out helium (code under test)
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           path: helium
 
@@ -56,14 +56,14 @@ jobs:
       # defaults to main; a caller may pin an exact commit/tag for a
       # reproducible audit run.
       - name: Check out helium-w3c-tests (sibling harness)
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: lestrrat-go/helium-w3c-tests
           ref: ${{ inputs.harness_ref }}
           path: helium-w3c-tests
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: helium/go.mod
           cache-dependency-path: helium-w3c-tests/go.sum
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload conformance results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.suite }}-conformance-results
           path: |

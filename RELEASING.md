@@ -18,9 +18,10 @@ so a failed conformance run never leaves a public tag or partial release behind.
 5. After approval it creates and pushes the `version` tag, then runs goreleaser
    to publish the GitHub release + binaries.
 
-`version` must be a `vX.Y.Z` tag and must not already exist; the job fails fast
-otherwise. A hand-pushed tag no longer triggers anything — dispatch is the only
-path that releases.
+`version` must be a `vX.Y.Z` (optionally `-prerelease`) tag; the job fails fast
+on a malformed version or one that already exists on a *different* commit. A
+hand-pushed tag no longer triggers the **Release** workflow — dispatch is the
+only path that releases (a raw `push` still runs ordinary CI).
 
 ## Conformance gate
 
@@ -83,8 +84,9 @@ The gate guarantees no side effects from a *conformance* failure. There is one
 narrow window it does not cover: if the tag is pushed but goreleaser then fails
 (e.g. a transient GitHub API error), a tag exists with no published release.
 
-To recover, either re-run the failed `release` job (the tag already exists, so
-goreleaser re-runs against it), or delete the tag and re-dispatch:
+To recover, either re-run the failed `release` job — the tag step is idempotent,
+so when the tag already exists at that commit it is reused and goreleaser re-runs
+against it — or delete the tag and re-dispatch:
 
 ```
 git push origin :refs/tags/v0.5.2   # delete remote tag
