@@ -39,6 +39,36 @@ enumerate (its parser or schema compiler chokes before running them) therefore
 count as not-passing — an honest reflection that the release cannot produce a
 passing result for them.
 
+## Cases that kill the release (`crashers/`)
+
+A case that hangs or exhausts memory takes the whole test binary down with it, so
+the suite yields *no* result and the release's score for it would be a blank. A
+blank hides both what the release passes and the fact that it died. Instead:
+
+- `isolate.sh <tag> <suite>` finds the offending case, records it in
+  `crashers/<tag>-<suite>.txt`, skips it, and re-runs until the suite completes.
+- `run.sh` skips the recorded cases so every other case gets a verdict.
+- `aggregate.py` **counts them as failures** of that release. They are skipped to
+  let the suite finish, never to forgive them.
+
+Two rules keep this honest:
+
+1. **`-parallel 1`.** With parallel subtests an out-of-memory lands on whichever
+   goroutine allocates next — usually an innocent bystander (a case blamed for an
+   OOM here passed in 2s when run alone) — and peak memory is the *sum* of the
+   concurrent cases rather than any one case's. Serialized, the case running when
+   the binary dies is the case that killed it.
+2. **Every culprit is re-checked against the reference tag.** If it dies there too,
+   it is our harness/fixture at fault, not the old release; it is recorded as
+   `harness` and *excluded* from the release's failure count. Charging it to the
+   release would invent a failure — the mirror image of fabricating a pass.
+
+Do not "fix" a blank cell by writing it down as a zero: a suite our own machine
+failed to run (an OOM caused by the runner's memory cap or parallelism, not by the
+release) is a measurement failure, and recording it as the release's zero is as
+dishonest as fabricating a pass. Re-measure it; only a case that genuinely kills
+the release is its failure.
+
 ## Regenerate
 
 ```sh
@@ -51,6 +81,18 @@ tools/conformance-timeline/run.sh
 # re-render only (after editing template.html or data.json)
 python3 tools/conformance-timeline/aggregate.py
 ```
+
+If a tag/suite dies instead of producing a summary, find what kills it and record it,
+then measure normally:
+
+```sh
+tools/conformance-timeline/isolate.sh v0.1.0 xslt30   # writes crashers/v0.1.0-xslt30.txt
+tools/conformance-timeline/run.sh --suites xslt30 v0.1.0
+```
+
+`run.sh` measures with `-parallel 1` and `GOMAXPROCS=2`. That is not incidental: the
+suites were originally left unmeasured because an unguarded parallel run was OOM-killed
+by the machine, which is a property of the *runner*, not of the release.
 
 `run.sh` caches per tag/suite; pass `--force` to re-run, `--suites "xsd10 xsd11"`
 to restrict suites, or tag names to restrict releases.

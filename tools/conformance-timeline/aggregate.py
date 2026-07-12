@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
+CRASHERS = os.path.join(HERE, "crashers")
 SUITES = ["xsd10", "xsd11", "xslt30", "qt3"]
 SUITE_LABEL = {"xsd10": "XSD 1.0", "xsd11": "XSD 1.1", "xslt30": "XSLT 3.0", "qt3": "XPath/XQuery (QT3)"}
 REFERENCE_TAG = "v4"  # placeholder; resolved to the newest tag below
@@ -28,6 +29,31 @@ REFERENCE_TAG = "v4"  # placeholder; resolved to the newest tag below
 
 def tag_sort_key(tag):
     return [int(x) for x in re.findall(r"\d+", tag)]
+
+
+def load_crashers(tag, suite):
+    """Cases the release cannot survive: it hangs on them or exhausts memory.
+
+    They are skipped when the suite is run (otherwise they take the whole binary down
+    and the suite yields nothing at all), so they never appear in the JUnit -- but they
+    are the release's failures and are counted as such here. See isolate.sh.
+
+    Lines: <case-id> TAB <kind> TAB <note>, kind = "fail" (the release's fault) or
+    "harness" (also dies on the reference tag, so it is our bug, not the release's --
+    charging it to the release would invent a failure).
+    """
+    path = os.path.join(CRASHERS, f"{tag}-{suite}.txt")
+    failed, harness = [], []
+    if not os.path.exists(path):
+        return failed, harness
+    for line in open(path):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        case, kind = parts[0], (parts[1] if len(parts) > 1 else "fail")
+        (harness if kind == "harness" else failed).append(case)
+    return failed, harness
 
 
 def parse_junit(path):
@@ -85,9 +111,11 @@ def main():
         for suite in SUITES:
             cases = parse_junit(os.path.join(RESULTS, f"{tag}-{suite}-junit.xml"))
             denom = len(universe[suite]) or 0
+            crash_fail, crash_harness = load_crashers(tag, suite)
             if cases is None:
                 rows.append(dict(tag=tag, date=dates.get(tag, ""), suite=suite,
                                  measured=False, partial=False, passed=0, failed=0, skipped=0,
+                                 crashed=0, harness_excluded=0,
                                  enumerated=0, denom=denom, not_enumerated=denom,
                                  pass_pct=0.0))
                 continue
@@ -95,17 +123,25 @@ def main():
             passed = sum(1 for c, o in cases.items() if o == "pass" and (not uni or c in uni))
             failed = sum(1 for c, o in cases.items() if o == "fail" and (not uni or c in uni))
             skipped = sum(1 for c, o in cases.items() if o == "skip" and (not uni or c in uni))
+            # Cases that killed the binary were skipped to let the suite finish, so they
+            # are absent from the JUnit. They are failures of this release: count them.
+            # (Guard against double-counting if one somehow did emit a verdict.)
+            crashed = sum(1 for c in crash_fail
+                          if (not uni or c in uni) and c not in cases)
+            harness_excluded = sum(1 for c in crash_harness if (not uni or c in uni))
+            failed += crashed
             enumerated = passed + failed + skipped
             not_enum = max(0, denom - enumerated)
             pct = round(100.0 * passed / denom, 2) if denom else 0.0
-            # "partial" = the release did not run the whole suite: it crashes,
-            # hangs, or its compiler chokes so the harness enumerates far fewer
-            # cases than today's suite. Those cases count as not-passing, but the
-            # point is flagged so the chart can distinguish it from a clean low score.
+            # "partial" = the release did not run the whole suite: its compiler chokes so
+            # the harness enumerates far fewer cases than today's suite. Those cases count
+            # as not-passing, but the point is flagged so the chart can distinguish it from
+            # a clean low score.
             partial = denom > 0 and enumerated < 0.95 * denom
             rows.append(dict(tag=tag, date=dates.get(tag, ""), suite=suite,
                              measured=True, partial=partial,
                              passed=passed, failed=failed, skipped=skipped,
+                             crashed=crashed, harness_excluded=harness_excluded,
                              enumerated=enumerated, denom=denom, not_enumerated=not_enum,
                              pass_pct=pct))
 

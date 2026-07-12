@@ -249,8 +249,9 @@ const DATA = /*__DATA__*/null;
       const color = css(CVAR[s.key]);
       if (r && r.measured) {
         const flag = r.partial ? ` <span class="sub2">◦ partial: ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}</span>` : "";
+        const crash = r.crashed ? ` <span class="sub2">✗ ${r.crashed} hang/OOM, counted as failures</span>` : "";
         rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
-          `<span class="v">${r.pass_pct.toFixed(1)}% <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}</span></div>`;
+          `<span class="v">${r.pass_pct.toFixed(1)}% <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}${crash}</span></div>`;
       } else {
         rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
           `<span class="v sub2">not measured</span></div>`;
@@ -282,11 +283,14 @@ const DATA = /*__DATA__*/null;
     SUITES.forEach(s => {
       const r = byTagSuite[tag + "|" + s.key];
       if (r && r.measured) {
-        const mark = r.partial ? ' <span class="unmeas" title="partial run — release crashed/hung before finishing the suite">◦</span>' : "";
+        const mark = r.partial ? ' <span class="unmeas" title="partial run — this release&#39;s compiler chokes before the harness can enumerate the whole suite">◦</span>' : "";
+        const crashMark = r.crashed
+          ? ` <span class="unmeas" title="${r.crashed} case(s) hang or exhaust memory on this release; skipped so the suite can finish, and counted as failures">✗${r.crashed}</span>`
+          : "";
         const sub = r.partial ? `ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}` : `${r.passed.toLocaleString()}/${r.denom.toLocaleString()}`;
-        tbody += `<td><span class="pct">${r.pass_pct.toFixed(1)}%</span>${mark}<br><span class="raw">${sub}</span></td>`;
+        tbody += `<td><span class="pct">${r.pass_pct.toFixed(1)}%</span>${mark}${crashMark}<br><span class="raw">${sub}</span></td>`;
       } else {
-        tbody += `<td class="unmeas" title="not measurable — release hangs/OOMs on this suite">—</td>`;
+        tbody += `<td class="unmeas" title="not measured — no result recorded for this release/suite">—</td>`;
       }
     });
     tbody += "</tr>";

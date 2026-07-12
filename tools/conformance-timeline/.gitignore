@@ -2,3 +2,5 @@ results/*.xml
 results/*.log
 results/*.work
 results/*.work.sum
+results/*-iso.json
+results/*-iso.json.err

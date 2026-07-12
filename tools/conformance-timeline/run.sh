@@ -88,14 +88,37 @@ for tag in $TAGS; do
   printf 'go %s\nuse %s\nreplace github.com/lestrrat-go/helium => %s\n' "$GO_MINOR" "$hbase" "$hwt" > "$work"
 
   for suite in $SUITES; do
+    case "$suite" in
+      qt3)    ROOTNAME=TestQT3W3C ;;
+      xsd10)  ROOTNAME=TestXSD10W3C ;;
+      xsd11)  ROOTNAME=TestXSD11W3C ;;
+      xslt30) ROOTNAME=TestXSLT30W3C ;;
+      xml)    ROOTNAME=TestXMLW3C ;;
+      *) echo "unknown suite $suite" >&2; continue ;;
+    esac
     summ="$RESULTS/$tag-$suite-summary.md"
     if [ "$FORCE" -eq 0 ] && [ -s "$summ" ] && grep -q '^| \*\*Total\*\*' "$summ" \
        && ! grep -q '^| \*\*Total\*\* |[^0-9]*1 |' "$summ"; then
       echo "[$tag/$suite] cached"; continue
     fi
     echo "[$tag/$suite] running..."
-    GOMAXPROCS="${GOMAXPROCS:-3}" GOWORK="$work" go -C "$hbase" run ./cmd/w3ctest \
+    # Cases this release cannot survive (hang / OOM) would take the whole test binary
+    # down and leave the suite unmeasured. isolate.sh identified them; skip them here so
+    # every other case gets a verdict. They are NOT forgiven -- aggregate.py counts them
+    # as failures of this release (see crashers/ and aggregate.py:load_crashers).
+    skipargs=()
+    crashfile="$OUTDIR/crashers/$tag-$suite.txt"
+    if [ -s "$crashfile" ]; then
+      ids=$(grep -v '^#' "$crashfile" | cut -f1 | grep -v '^$' \
+            | sed 's/[].[^$()*+?{}|\\]/\\&/g' | paste -sd'|')
+      [ -n "$ids" ] && skipargs=(-skip "$ROOTNAME/^($ids)\$")
+      echo "[$tag/$suite] skipping $(grep -cv '^#' "$crashfile") crasher(s), counted as failures"
+    fi
+    # -parallel 1: peak memory is one case's, not the sum of concurrent ones, and a
+    # crash is attributable to the case that caused it.
+    GOMAXPROCS="${GOMAXPROCS:-2}" GOWORK="$work" go -C "$hbase" run ./cmd/w3ctest \
       -out "$RESULTS/$tag-$suite-junit.xml" -summary "$summ" "$suite" \
+      -parallel 1 "${skipargs[@]}" \
       >"$RESULTS/$tag-$suite.log" 2>&1 || true
     if [ -s "$summ" ]; then echo "[$tag/$suite] done"; else
       echo "[$tag/$suite] ERROR — see $RESULTS/$tag-$suite.log" >&2; fi
