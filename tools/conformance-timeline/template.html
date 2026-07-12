@@ -263,8 +263,9 @@ const DATA = /*__DATA__*/null;
       if (r && r.measured) {
         const flag = r.partial ? ` <span class="sub2">◦ partial: ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}</span>` : "";
         const crash = r.crashed ? ` <span class="sub2">✗ ${r.crashed} hang/OOM, counted as failures</span>` : "";
+        const xf = r.xfail ? ` <span class="sub2">⚠ ${r.xfail} xfail (intentional divergence), counted as not-passing</span>` : "";
         rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
-          `<span class="v">${fmtPct(r)} <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}${crash}</span></div>`;
+          `<span class="v">${fmtPct(r)} <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}${crash}${xf}</span></div>`;
       } else {
         rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
           `<span class="v sub2">not measured</span></div>`;
@@ -300,8 +301,11 @@ const DATA = /*__DATA__*/null;
         const crashMark = r.crashed
           ? ` <span class="unmeas" title="${r.crashed} case(s) hang or exhaust memory on this release; skipped so the suite can finish, and counted as failures">✗${r.crashed}</span>`
           : "";
+        const xfMark = r.xfail
+          ? ` <span class="unmeas" title="${r.xfail} documented intentional divergence(s): helium is namespace-aware and the case expects a namespace-unaware result. Not counted as passes.">⚠${r.xfail}</span>`
+          : "";
         const sub = r.partial ? `ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}` : `${r.passed.toLocaleString()}/${r.denom.toLocaleString()}`;
-        tbody += `<td><span class="pct">${fmtPct(r)}</span>${mark}${crashMark}<br><span class="raw">${sub}</span></td>`;
+        tbody += `<td><span class="pct">${fmtPct(r)}</span>${mark}${crashMark}${xfMark}<br><span class="raw">${sub}</span></td>`;
       } else {
         tbody += `<td class="unmeas" title="not measured — no result recorded for this release/suite">—</td>`;
       }

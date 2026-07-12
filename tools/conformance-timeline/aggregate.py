@@ -57,6 +57,12 @@ def load_crashers(tag, suite):
     return failed, harness
 
 
+def _is_xfail(tc):
+    """True if the harness marked this case an expected failure (system-out `xfail (...)`)."""
+    out = tc.find("system-out")
+    return out is not None and "xfail (" in (out.text or "")
+
+
 def parse_junit(path):
     """Return dict caseName -> 'pass'|'fail'|'skip', or None if file is a setup-fail stub/missing."""
     if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -74,6 +80,12 @@ def parse_junit(path):
             outcome = "fail"
         elif tc.find("skipped") is not None:
             outcome = "skip"
+        elif _is_xfail(tc):
+            # An expected failure is a PASSING Go test (the harness asserts the divergence),
+            # so it lands in the JUnit pass bucket with only a marker in system-out. It is
+            # not a passing conformance result: helium does not produce what the case wants.
+            # Counting it as a pass would claim 8 XML cases we do not actually pass.
+            outcome = "xfail"
         else:
             outcome = "pass"
         cases[cid] = outcome
@@ -132,7 +144,7 @@ def main():
             if cases is None:
                 rows.append(dict(tag=tag, date=dates.get(tag, ""), suite=suite,
                                  measured=False, partial=False, passed=0, failed=0, skipped=0,
-                                 unrun=0, crashed=0, harness_excluded=0,
+                                 unrun=0, xfail=0, crashed=0, harness_excluded=0,
                                  enumerated=0, denom=denom, not_enumerated=denom,
                                  pass_pct=0.0))
                 continue
@@ -147,6 +159,12 @@ def main():
             unrun = sum(1 for c, o in cases.items() if o == "skip" and (not uni or c in uni))
             failed += unrun
             skipped = 0
+            # Expected failures: helium deliberately diverges (it is namespace-aware and the
+            # case expects a namespace-unaware result). Documented as "not a helium gap", but
+            # it is still not a passing conformance result, so it counts against the score
+            # and stays visible instead of being rounded into a perfect 100%.
+            xfail = sum(1 for c, o in cases.items() if o == "xfail" and (not uni or c in uni))
+            failed += xfail
             # Cases that killed the binary were skipped to let the suite finish, so they
             # are absent from the JUnit. They are failures of this release: count them.
             # (Guard against double-counting if one somehow did emit a verdict.)
@@ -164,7 +182,7 @@ def main():
             partial = denom > 0 and enumerated < 0.95 * denom
             rows.append(dict(tag=tag, date=dates.get(tag, ""), suite=suite,
                              measured=True, partial=partial,
-                             passed=passed, failed=failed, skipped=skipped, unrun=unrun,
+                             passed=passed, failed=failed, skipped=skipped, unrun=unrun, xfail=xfail,
                              crashed=crashed, harness_excluded=harness_excluded,
                              enumerated=enumerated, denom=denom, not_enumerated=not_enum,
                              pass_pct=pct))

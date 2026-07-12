@@ -56,6 +56,21 @@ or schema compiler chokes before running them), cases it **skips that the refere
 runs** (that is the release's own gap, not an exemption), and cases that hang or
 exhaust its memory.
 
+## Expected failures (`xfail`)
+
+An expected failure is a *passing Go test* (the harness asserts the divergence), so it
+lands in the JUnit **pass bucket** with the marker only in `system-out`. It is not a
+passing conformance result — helium does not produce what the case asks for — so it is
+counted as **not-passing** and shown as `⚠` rather than rounded into a perfect score.
+
+Reference (v0.5.1) xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0.
+
+Note the committed summaries are inconsistent about these: `summary-xml.md` breaks
+XFail out as its own row (Pass 1993 + XFail 8), while `xsd/summary-xsd10.md`,
+`xsd/summary-xsd11.md` and `xpath3/summary-qt3.md` fold theirs into **Pass** (so their
+"Pass 14399 / Fail 0" silently includes 16 expected failures). This tool counts them
+uniformly, which is why XSD 1.0 reads 99.9% here and 100% there.
+
 ## Performance-gated cases (`HELIUM_SLOW_TESTS`)
 
 The harness skips 481 slow XSLT cases (streaming, heavy source docs) unless
