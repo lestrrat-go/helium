@@ -5,27 +5,32 @@
     {
       "key": "xml",
       "label": "XML 1.0/1.1",
-      "denom": 2585
+      "denom": 2001,
+      "inapplicable": 584
     },
     {
       "key": "xsd10",
       "label": "XSD 1.0",
-      "denom": 14399
+      "denom": 14399,
+      "inapplicable": 0
     },
     {
       "key": "xsd11",
       "label": "XSD 1.1",
-      "denom": 1049
+      "denom": 1049,
+      "inapplicable": 0
     },
     {
       "key": "xslt30",
       "label": "XSLT 3.0",
-      "denom": 13127
+      "denom": 12827,
+      "inapplicable": 300
     },
     {
       "key": "qt3",
       "label": "XPath/XQuery (QT3)",
-      "denom": 22469
+      "denom": 22328,
+      "inapplicable": 141
     }
   ],
   "tags": [
@@ -57,13 +62,14 @@
       "partial": false,
       "passed": 1633,
       "failed": 368,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 8,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 63.17
+      "pass_pct": 81.61
     },
     {
       "tag": "v0.0.1",
@@ -74,6 +80,7 @@
       "passed": 4078,
       "failed": 575,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 4653,
@@ -90,6 +97,7 @@
       "passed": 403,
       "failed": 646,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 1049,
@@ -104,14 +112,15 @@
       "measured": true,
       "partial": false,
       "passed": 12177,
-      "failed": 169,
-      "skipped": 781,
+      "failed": 650,
+      "skipped": 0,
+      "unrun": 481,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 92.76
+      "pass_pct": 94.93
     },
     {
       "tag": "v0.0.1",
@@ -120,14 +129,15 @@
       "measured": true,
       "partial": false,
       "passed": 22093,
-      "failed": 218,
-      "skipped": 158,
+      "failed": 235,
+      "skipped": 0,
+      "unrun": 17,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 98.33
+      "pass_pct": 98.95
     },
     {
       "tag": "v0.0.2",
@@ -137,13 +147,14 @@
       "partial": false,
       "passed": 1678,
       "failed": 323,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 20,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 64.91
+      "pass_pct": 83.86
     },
     {
       "tag": "v0.0.2",
@@ -154,6 +165,7 @@
       "passed": 4081,
       "failed": 572,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 4653,
@@ -170,6 +182,7 @@
       "passed": 404,
       "failed": 645,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 1049,
@@ -184,14 +197,15 @@
       "measured": true,
       "partial": false,
       "passed": 12177,
-      "failed": 169,
-      "skipped": 781,
+      "failed": 650,
+      "skipped": 0,
+      "unrun": 481,
       "crashed": 1,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 92.76
+      "pass_pct": 94.93
     },
     {
       "tag": "v0.0.2",
@@ -200,14 +214,15 @@
       "measured": true,
       "partial": false,
       "passed": 22093,
-      "failed": 218,
-      "skipped": 158,
+      "failed": 235,
+      "skipped": 0,
+      "unrun": 17,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 98.33
+      "pass_pct": 98.95
     },
     {
       "tag": "v0.1.0",
@@ -217,13 +232,14 @@
       "partial": false,
       "passed": 1714,
       "failed": 287,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 20,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 66.31
+      "pass_pct": 85.66
     },
     {
       "tag": "v0.1.0",
@@ -234,6 +250,7 @@
       "passed": 4089,
       "failed": 564,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 4653,
@@ -250,6 +267,7 @@
       "passed": 402,
       "failed": 647,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 1049,
@@ -264,14 +282,15 @@
       "measured": true,
       "partial": false,
       "passed": 12176,
-      "failed": 170,
-      "skipped": 781,
+      "failed": 651,
+      "skipped": 0,
+      "unrun": 481,
       "crashed": 1,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 92.76
+      "pass_pct": 94.92
     },
     {
       "tag": "v0.1.0",
@@ -280,14 +299,15 @@
       "measured": true,
       "partial": false,
       "passed": 22094,
-      "failed": 217,
-      "skipped": 158,
+      "failed": 234,
+      "skipped": 0,
+      "unrun": 17,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 98.33
+      "pass_pct": 98.95
     },
     {
       "tag": "v0.2.0",
@@ -297,13 +317,14 @@
       "partial": false,
       "passed": 1741,
       "failed": 260,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 12,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 67.35
+      "pass_pct": 87.01
     },
     {
       "tag": "v0.2.0",
@@ -314,6 +335,7 @@
       "passed": 3934,
       "failed": 53,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 3987,
@@ -330,6 +352,7 @@
       "passed": 199,
       "failed": 204,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 403,
@@ -344,14 +367,15 @@
       "measured": true,
       "partial": false,
       "passed": 12180,
-      "failed": 166,
-      "skipped": 781,
+      "failed": 647,
+      "skipped": 0,
+      "unrun": 481,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 92.79
+      "pass_pct": 94.96
     },
     {
       "tag": "v0.2.0",
@@ -360,14 +384,15 @@
       "measured": true,
       "partial": false,
       "passed": 22096,
-      "failed": 215,
-      "skipped": 158,
+      "failed": 232,
+      "skipped": 0,
+      "unrun": 17,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 98.34
+      "pass_pct": 98.96
     },
     {
       "tag": "v0.3.0",
@@ -377,13 +402,14 @@
       "partial": false,
       "passed": 1763,
       "failed": 238,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 68.2
+      "pass_pct": 88.11
     },
     {
       "tag": "v0.3.0",
@@ -394,6 +420,7 @@
       "passed": 3936,
       "failed": 51,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 3987,
@@ -410,6 +437,7 @@
       "passed": 244,
       "failed": 159,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 403,
@@ -424,14 +452,15 @@
       "measured": true,
       "partial": false,
       "passed": 12179,
-      "failed": 167,
-      "skipped": 781,
+      "failed": 648,
+      "skipped": 0,
+      "unrun": 481,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 92.78
+      "pass_pct": 94.95
     },
     {
       "tag": "v0.3.0",
@@ -440,14 +469,15 @@
       "measured": true,
       "partial": false,
       "passed": 22095,
-      "failed": 215,
-      "skipped": 159,
+      "failed": 233,
+      "skipped": 0,
+      "unrun": 18,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 98.34
+      "pass_pct": 98.96
     },
     {
       "tag": "v0.4.0",
@@ -457,13 +487,14 @@
       "partial": false,
       "passed": 1786,
       "failed": 215,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 69.09
+      "pass_pct": 89.26
     },
     {
       "tag": "v0.4.0",
@@ -474,6 +505,7 @@
       "passed": 14399,
       "failed": 0,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 14399,
@@ -490,6 +522,7 @@
       "passed": 1049,
       "failed": 0,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 1049,
@@ -503,15 +536,16 @@
       "suite": "xslt30",
       "measured": true,
       "partial": false,
-      "passed": 12346,
+      "passed": 12827,
       "failed": 0,
-      "skipped": 781,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 94.05
+      "pass_pct": 100.0
     },
     {
       "tag": "v0.4.0",
@@ -521,13 +555,14 @@
       "partial": false,
       "passed": 22328,
       "failed": 0,
-      "skipped": 141,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 99.37
+      "pass_pct": 100.0
     },
     {
       "tag": "v0.5.0",
@@ -537,13 +572,14 @@
       "partial": false,
       "passed": 2001,
       "failed": 0,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 77.41
+      "pass_pct": 100.0
     },
     {
       "tag": "v0.5.0",
@@ -554,6 +590,7 @@
       "passed": 14399,
       "failed": 0,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 14399,
@@ -570,6 +607,7 @@
       "passed": 1049,
       "failed": 0,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 1049,
@@ -583,15 +621,16 @@
       "suite": "xslt30",
       "measured": true,
       "partial": false,
-      "passed": 12344,
-      "failed": 2,
-      "skipped": 781,
+      "passed": 12823,
+      "failed": 4,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 94.04
+      "pass_pct": 99.97
     },
     {
       "tag": "v0.5.0",
@@ -601,13 +640,14 @@
       "partial": false,
       "passed": 22328,
       "failed": 0,
-      "skipped": 141,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 99.37
+      "pass_pct": 100.0
     },
     {
       "tag": "v0.5.1",
@@ -617,13 +657,14 @@
       "partial": false,
       "passed": 2001,
       "failed": 0,
-      "skipped": 584,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 2585,
-      "denom": 2585,
+      "enumerated": 2001,
+      "denom": 2001,
       "not_enumerated": 0,
-      "pass_pct": 77.41
+      "pass_pct": 100.0
     },
     {
       "tag": "v0.5.1",
@@ -634,6 +675,7 @@
       "passed": 14399,
       "failed": 0,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 14399,
@@ -650,6 +692,7 @@
       "passed": 1049,
       "failed": 0,
       "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
       "enumerated": 1049,
@@ -663,15 +706,16 @@
       "suite": "xslt30",
       "measured": true,
       "partial": false,
-      "passed": 12346,
+      "passed": 12827,
       "failed": 0,
-      "skipped": 781,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 13127,
-      "denom": 13127,
+      "enumerated": 12827,
+      "denom": 12827,
       "not_enumerated": 0,
-      "pass_pct": 94.05
+      "pass_pct": 100.0
     },
     {
       "tag": "v0.5.1",
@@ -681,13 +725,14 @@
       "partial": false,
       "passed": 22328,
       "failed": 0,
-      "skipped": 141,
+      "skipped": 0,
+      "unrun": 0,
       "crashed": 0,
       "harness_excluded": 0,
-      "enumerated": 22469,
-      "denom": 22469,
+      "enumerated": 22328,
+      "denom": 22328,
       "not_enumerated": 0,
-      "pass_pct": 99.37
+      "pass_pct": 100.0
     }
   ]
 }

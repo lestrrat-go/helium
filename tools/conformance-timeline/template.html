@@ -108,10 +108,14 @@
       glue targets today's API, a small per-tag <b>adapter branch</b> of the harness bridges API
       differences — it never changes the library under test and never fabricates a passing result; where a
       release lacks a feature, the harness degrades honestly and those cases fail.
-      The denominator for a suite is the case set the newest release (<span id="reftag"></span>) enumerates
-      with the unmodified harness — i.e. <b>today's full suite</b>. A release's score is its passing cases
-      over that fixed denominator, so cases an old release cannot even enumerate (its parser or schema
-      compiler chokes before running them) count as not-passing.
+      The denominator for a suite is the set of cases the newest release (<span id="reftag"></span>) actually
+      <b>runs</b> with the unmodified harness: today's suite minus the cases the harness skips as
+      <b>inapplicable</b> — XML 1.0 editions 1–4 where helium implements the 5th, XML 1.1 / Namespaces 1.1
+      where helium targets 1.0, and the equivalent dependency gates in the other suites. Those cases are not
+      failures and never could be, so charging them to a release would understate every release. A release's
+      score is its passing cases over that fixed denominator, so cases it cannot enumerate (its parser or
+      schema compiler chokes before running them), cases it skips that the reference runs, and cases that
+      hang or exhaust its memory all count as not-passing.
     </p>
   </details>
 </div>
@@ -128,6 +132,12 @@ const DATA = /*__DATA__*/null;
 
   const css = v => getComputedStyle(document.getElementById("viz")).getPropertyValue(v).trim();
 
+  // Never round a near-miss up to "100%": 12,823/12,827 is not a perfect score, and showing
+  // it as 100.0% would hide a real regression. Only an exact sweep prints 100%.
+  const fmtPct = r => (r.passed === r.denom)
+    ? "100%"
+    : (r.pass_pct >= 99.9 ? r.pass_pct.toFixed(2) : r.pass_pct.toFixed(1)) + "%";
+
   document.getElementById("prov").textContent =
     `Generated ${DATA.generated} · reference ${DATA.reference_tag} · ${tags.length} releases · ${SUITES.length} suites`;
   document.getElementById("reftag").textContent = DATA.reference_tag;
@@ -143,8 +153,11 @@ const DATA = /*__DATA__*/null;
   SUITES.forEach(s => {
     const el = document.createElement("span");
     el.className = "item"; el.dataset.suite = s.key;
+    const inap = s.inapplicable
+      ? ` (${s.inapplicable.toLocaleString()} inapplicable excluded)` : "";
     el.innerHTML = `<span class="swatch" style="background:var(${CVAR[s.key]})"></span>${s.label} ` +
-      `<span style="color:var(--muted)">· /${s.denom.toLocaleString()}</span>`;
+      `<span style="color:var(--muted)" title="cases the harness skips as inapplicable to helium (wrong XML edition / version) are excluded from the denominator${inap ? "" : ""}">` +
+      `· /${s.denom.toLocaleString()}${inap}</span>`;
     el.addEventListener("click", () => {
       if (hidden.has(s.key)) hidden.delete(s.key); else hidden.add(s.key);
       el.classList.toggle("off", hidden.has(s.key));
@@ -251,7 +264,7 @@ const DATA = /*__DATA__*/null;
         const flag = r.partial ? ` <span class="sub2">◦ partial: ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}</span>` : "";
         const crash = r.crashed ? ` <span class="sub2">✗ ${r.crashed} hang/OOM, counted as failures</span>` : "";
         rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
-          `<span class="v">${r.pass_pct.toFixed(1)}% <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}${crash}</span></div>`;
+          `<span class="v">${fmtPct(r)} <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}${crash}</span></div>`;
       } else {
         rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
           `<span class="v sub2">not measured</span></div>`;
@@ -288,7 +301,7 @@ const DATA = /*__DATA__*/null;
           ? ` <span class="unmeas" title="${r.crashed} case(s) hang or exhaust memory on this release; skipped so the suite can finish, and counted as failures">✗${r.crashed}</span>`
           : "";
         const sub = r.partial ? `ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}` : `${r.passed.toLocaleString()}/${r.denom.toLocaleString()}`;
-        tbody += `<td><span class="pct">${r.pass_pct.toFixed(1)}%</span>${mark}${crashMark}<br><span class="raw">${sub}</span></td>`;
+        tbody += `<td><span class="pct">${fmtPct(r)}</span>${mark}${crashMark}<br><span class="raw">${sub}</span></td>`;
       } else {
         tbody += `<td class="unmeas" title="not measured — no result recorded for this release/suite">—</td>`;
       }

@@ -120,9 +120,22 @@ for tag in $TAGS; do
       [ -n "$ids" ] && skipargs=(-skip "$ids")
       echo "[$tag/$suite] skipping $(grep -cv '^#' "$crashfile") crasher(s), counted as failures"
     fi
+    # Performance-gated cases (HELIUM_SLOW_TESTS): the harness skips ~481 slow streaming /
+    # heavy-source XSLT cases unless the env var is set. They are NOT inapplicable, so they
+    # must not silently vanish from the denominator. helium started actually running them in
+    # v0.4.0 (PR #1015, 2026-07-03), which is exactly the release that first ships
+    # xslt3/results-xslt30-slow.xml -- so detect the cutoff from the release's own content
+    # rather than hardcoding a tag. Releases from the cutoff on are measured WITH the slow
+    # cases; earlier releases never ran them, and aggregate.py counts them as failures there.
+    slowenv=()
+    if git -C "$MAIN_ROOT" cat-file -e "$tag:xslt3/results-xslt30-slow.xml" 2>/dev/null; then
+      slowenv=(HELIUM_SLOW_TESTS=1)
+      echo "[$tag/$suite] slow tests enabled (release ships a slow-run record)"
+    fi
     # -parallel 1: peak memory is one case's, not the sum of concurrent ones, and a
     # crash is attributable to the case that caused it.
-    GOMAXPROCS="${GOMAXPROCS:-2}" GOWORK="$work" go -C "$hbase" run ./cmd/w3ctest \
+    env "${slowenv[@]}" GOMAXPROCS="${GOMAXPROCS:-2}" GOWORK="$work" \
+      go -C "$hbase" run ./cmd/w3ctest \
       -out "$RESULTS/$tag-$suite-junit.xml" -summary "$summ" "$suite" \
       -parallel 1 "${skipargs[@]}" \
       >"$RESULTS/$tag-$suite.log" 2>&1 || true

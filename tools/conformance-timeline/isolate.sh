@@ -58,6 +58,19 @@ esac
 REFTAG=$(git -C "$MAIN_ROOT" tag --sort=creatordate | grep -E '^v[0-9]' | tail -1)
 GO_MINOR="$(go version | awk '{print $3}' | sed 's/^go//')"
 
+# slow_env_for <tag> -> "HELIUM_SLOW_TESTS=1" once the release actually ran the
+# performance-gated cases. helium started running them in v0.4.0 (PR #1015), the first
+# release to ship xslt3/results-xslt30-slow.xml -- detect that rather than hardcode a tag.
+# Isolation must run in the SAME mode as measurement, or it would miss the slow cases'
+# crashes entirely.
+slow_env_for() {
+  if git -C "$MAIN_ROOT" cat-file -e "$1:xslt3/results-xslt30-slow.xml" 2>/dev/null; then
+    echo "HELIUM_SLOW_TESTS=1"
+  fi
+}
+SLOWENV=$(slow_env_for "$TAG")
+[ -n "$SLOWENV" ] && echo "slow tests enabled for $TAG ($SLOWENV)"
+
 # skip_pat <case-id> -> a fully anchored "^Prefix/case/id$" regex for one -skip alternative.
 # Regex metacharacters are escaped, but '/' is left intact: go test uses it as the segment
 # separator, which is exactly how a nested case id must be matched.
@@ -97,8 +110,12 @@ run_suite() {
   local hb=$1 wf=$2 json=$3 skip=$4
   local skipargs=()
   [ -n "$skip" ] && skipargs=(-skip "$skip")
+  # GOMEMLIMIT makes the collector work harder as the heap approaches the cap instead of
+  # letting it sail into a fatal OOM. Without it, a long sequential run accumulates garbage
+  # and dies on whatever case happens to be executing -- an innocent bystander (observed:
+  # a case blamed for an OOM passed alone in 1.7s).
   ( ulimit -v "$MEM_KB"
-    GOWORK="$wf" GOMAXPROCS=2 \
+    env ${SLOWENV:+$SLOWENV} GOWORK="$wf" GOMAXPROCS=2 GOMEMLIMIT="$(( MEM_KB / 2 ))KiB" \
       go -C "$hb" test -json -run "$ROOT" -parallel 1 -timeout 170m "${skipargs[@]}" "$PKG"
   ) > "$json" 2>"$json.err" &
   local gopid=$!
@@ -173,7 +190,7 @@ verdict_on() {
   unset IFS
   t0=$(date +%s)
   ( ulimit -v "$MEM_KB"
-    GOWORK="$wf" GOMAXPROCS=2 timeout "$budget" \
+    env $(slow_env_for "$tag") GOWORK="$wf" GOMAXPROCS=2 GOMEMLIMIT="$(( MEM_KB / 2 ))KiB" timeout "$budget" \
       go -C "$hb" test -run "$pat" -parallel 1 "$PKG" >/dev/null 2>&1 )
   rc=$?
   ELAPSED=$(( $(date +%s) - t0 ))
@@ -185,6 +202,7 @@ verdict_on() {
 }
 
 HBASE=$(hbase_for "$TAG"); WF=$(workfile_for "$TAG" "$HBASE")
+retries=0
 OUT="$CRASHERS/$TAG-$SUITE.txt"
 skips=()
 
@@ -238,24 +256,36 @@ for round in $(seq 1 "$MAXROUNDS"); do
   mode=$(printf '%s' "$res" | cut -f3)
   echo "    suspect: $case_id ($mode)"
 
-  # A stalled output stream cannot tell "hung forever" from "merely slow" -- and some
-  # legitimate cases take minutes (an xsd introspection case passes in ~5min). Charging a
-  # slow case as a failure would fabricate one. So CONFIRM on this tag first: re-run the
-  # case alone with a generous budget. If it produces any verdict, it is slow, not a
-  # crasher -- raise the watchdog above its runtime and re-run the round, recording
-  # nothing.
-  if [ "$mode" = "hang" ]; then
-    own=$(verdict_on "$TAG" "$case_id" "$SLOW_BUDGET")
-    if [ "$own" != "died" ]; then
+  # Neither signal identifies a culprit reliably on its own:
+  #   - a stalled stream cannot tell "hung forever" from "merely slow" (an xsd introspection
+  #     case legitimately passes in ~350s), and
+  #   - an OOM kills whatever case is executing when the heap finally tips over, which after
+  #     a long sequential run is usually an innocent bystander, not the memory hog (observed:
+  #     a case blamed for an OOM passed alone in 1.7s).
+  # Either way, charging it would fabricate a failure. So CONFIRM on this tag: re-run the
+  # case alone. If it produces any verdict, it is not a crasher -- give the run more room
+  # and try again, recording nothing.
+  own=$(verdict_on "$TAG" "$case_id" "$SLOW_BUDGET")
+  if [ "$own" != "died" ]; then
+    if [ "$mode" = "hang" ]; then
       new_stall=$(( ELAPSED * 3 + 60 ))
       [ "$new_stall" -le "$STALL_SECS" ] && new_stall=$(( STALL_SECS * 2 ))
       echo "    NOT a crasher: completed alone in ${ELAPSED}s ('$own') -- merely slow." \
            "Raising watchdog ${STALL_SECS}s -> ${new_stall}s and re-running."
       STALL_SECS=$new_stall
-      continue
+    else
+      retries=$(( retries + 1 ))
+      if [ "$retries" -gt 3 ]; then
+        echo "=== the suite keeps exhausting memory but no single case is responsible:" \
+             "the run accumulates memory across cases. Raise MEM_KB and re-run." >&2
+        exit 6
+      fi
+      echo "    NOT a crasher: passed alone in ${ELAPSED}s ('$own') -- the OOM is cumulative," \
+           "not this case. Re-running (attempt $retries)."
     fi
-    echo "    confirmed hang: no verdict alone within ${SLOW_BUDGET}s"
+    continue
   fi
+  echo "    confirmed $mode: no verdict alone (budget ${SLOW_BUDGET}s, mem $(( MEM_KB / 1048576 ))GiB)"
 
   # Guard rail: does it also die on the reference? Then it is OUR bug, not the release's.
   # The reference tag is its own oracle, so there is nothing to compare it against: a case

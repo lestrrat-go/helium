@@ -32,12 +32,47 @@ pre-reference tag a small **adapter** bridges API differences — stored as
   1.1, `fn:transform`, schema-awareness, …) the harness degrades honestly and
   those cases fail.
 
-The **denominator** for a suite is the case set the newest (reference) release
-enumerates with the unmodified harness — i.e. today's full suite. A release's
-score is `passing cases / denominator`. Cases an old release cannot even
-enumerate (its parser or schema compiler chokes before running them) therefore
-count as not-passing — an honest reflection that the release cannot produce a
-passing result for them.
+The **denominator** for a suite is the set of cases the newest (reference) release
+actually **runs** with the unmodified harness: today's suite **minus the cases the
+harness skips as inapplicable**. A release's score is `passing cases / denominator`.
+
+Inapplicable cases are excluded because they are not failures and never could be —
+they test something helium deliberately does not implement:
+
+| Suite | Excluded | Why |
+|-------|---------:|-----|
+| XML | 310 | test applies to XML 1.0 editions 1–4; helium implements the 5th |
+| XML | 274 | XML 1.1 / Namespaces 1.1; helium targets XML 1.0 |
+| XSLT 3.0 | 781 | harness dependency gates (optional features out of scope) |
+| QT3 | 141 | harness dependency gates |
+| XSD 1.0 / 1.1 | 0 | — |
+
+Counting them against a release is as dishonest as counting them as passes: it
+silently records "not applicable" as "failed". With them in the denominator the
+reference release scores 77.4% on XML; excluded, it scores its true **100%**.
+
+What *does* count as not-passing: cases an old release cannot enumerate (its parser
+or schema compiler chokes before running them), cases it **skips that the reference
+runs** (that is the release's own gap, not an exemption), and cases that hang or
+exhaust its memory.
+
+## Performance-gated cases (`HELIUM_SLOW_TESTS`)
+
+The harness skips 481 slow XSLT cases (streaming, heavy source docs) unless
+`HELIUM_SLOW_TESTS=1`. These are **not** inapplicable — they are simply not run — so
+they must not vanish from the denominator.
+
+helium started actually running them in **v0.4.0** (PR #1015, 2026-07-03), the first
+release to ship `xslt3/results-xslt30-slow.xml`. Both scripts detect that cutoff from
+the release's own content rather than hardcoding a tag:
+
+- **v0.4.0 and later** are measured *with* `HELIUM_SLOW_TESTS=1`, so the 481 cases get
+  real verdicts (all pass: 12,827 / 0 fail / 300 skip, matching `xslt3/CONFORMANCE.md`).
+- **Earlier releases** never ran them, so the 481 land inside the applicable set as
+  cases with no passing result and are **counted as failures** (`unrun` in `data.json`).
+
+The 300 the reference still skips in slow mode are the genuinely inapplicable ones
+(2.0-vs-3.0 divergences, "feature required absent") plus cases too slow to run at all.
 
 ## Cases that kill the release (`crashers/`)
 

@@ -95,16 +95,27 @@ def main():
         sys.exit("no result junit files found in " + RESULTS)
     reference_tag = tags[-1]
 
-    # Build the per-suite universe (denominator) from the reference tag's run. A case that
-    # kills even the reference is skipped there too, so it is missing from its JUnit --
-    # add it back, or the suite would silently shrink for EVERY release and the case would
-    # vanish from the scoring instead of counting against the releases that fail it.
-    universe = {}
+    # Build the per-suite universe (denominator) from the reference tag's run: the cases a
+    # conformant processor is actually expected to handle.
+    #
+    # Cases the harness SKIPS on the reference are excluded. They are not failures and never
+    # could be: they are inapplicable by design -- XML 1.0 editions 1-4 when helium
+    # implements the 5th, XML 1.1 / Namespaces 1.1 when helium targets 1.0, and the
+    # equivalent dependency gates in the other suites. Counting them against a release is
+    # just as dishonest as counting them as passes: it silently marks "not applicable" as
+    # "failed" and understates every release (it drags v0.5.1's XML from 100% to 77%).
+    #
+    # A case that kills even the reference is skipped there too, so it is missing from its
+    # JUnit -- add it back, or the suite would shrink for EVERY release and the case would
+    # vanish from the scoring instead of counting against the releases it kills.
+    universe, inapplicable = {}, {}
     for suite in SUITES:
         ref = parse_junit(os.path.join(RESULTS, f"{reference_tag}-{suite}-junit.xml"))
-        cases = set(ref.keys()) if ref else set()
+        ref = ref or {}
+        applicable = {c for c, o in ref.items() if o != "skip"}
         ref_fail, ref_harness = load_crashers(reference_tag, suite)
-        universe[suite] = cases | set(ref_fail) | set(ref_harness)
+        universe[suite] = applicable | set(ref_fail) | set(ref_harness)
+        inapplicable[suite] = sum(1 for o in ref.values() if o == "skip")
 
     # Load tag dates from git (best-effort; falls back to empty).
     dates = {}
@@ -121,14 +132,21 @@ def main():
             if cases is None:
                 rows.append(dict(tag=tag, date=dates.get(tag, ""), suite=suite,
                                  measured=False, partial=False, passed=0, failed=0, skipped=0,
-                                 crashed=0, harness_excluded=0,
+                                 unrun=0, crashed=0, harness_excluded=0,
                                  enumerated=0, denom=denom, not_enumerated=denom,
                                  pass_pct=0.0))
                 continue
             uni = universe[suite]
             passed = sum(1 for c, o in cases.items() if o == "pass" and (not uni or c in uni))
             failed = sum(1 for c, o in cases.items() if o == "fail" and (not uni or c in uni))
-            skipped = sum(1 for c, o in cases.items() if o == "skip" and (not uni or c in uni))
+            # A skip INSIDE the applicable set is a case the reference RUNS but this release
+            # did not -- most of them the performance-gated XSLT cases, which helium only
+            # started running in v0.4.0. It is not applicable-and-excused and it is not a
+            # pass: the release has no passing result for a case in scope, so it is counted
+            # as a FAILURE (tracked separately as `unrun` so the reason stays visible).
+            unrun = sum(1 for c, o in cases.items() if o == "skip" and (not uni or c in uni))
+            failed += unrun
+            skipped = 0
             # Cases that killed the binary were skipped to let the suite finish, so they
             # are absent from the JUnit. They are failures of this release: count them.
             # (Guard against double-counting if one somehow did emit a verdict.)
@@ -146,7 +164,7 @@ def main():
             partial = denom > 0 and enumerated < 0.95 * denom
             rows.append(dict(tag=tag, date=dates.get(tag, ""), suite=suite,
                              measured=True, partial=partial,
-                             passed=passed, failed=failed, skipped=skipped,
+                             passed=passed, failed=failed, skipped=skipped, unrun=unrun,
                              crashed=crashed, harness_excluded=harness_excluded,
                              enumerated=enumerated, denom=denom, not_enumerated=not_enum,
                              pass_pct=pct))
@@ -154,7 +172,8 @@ def main():
     data = dict(
         generated=os.popen(f"git -C {HERE} log -1 --format=%cs 2>/dev/null").read().strip(),
         reference_tag=reference_tag,
-        suites=[dict(key=s, label=SUITE_LABEL[s], denom=len(universe[s])) for s in SUITES],
+        suites=[dict(key=s, label=SUITE_LABEL[s], denom=len(universe[s]),
+                     inapplicable=inapplicable[s]) for s in SUITES],
         tags=tags,
         dates=dates,
         rows=rows,
