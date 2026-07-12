@@ -32,8 +32,9 @@ TAG="${1:?usage: isolate.sh <tag> <suite> [max-rounds]}"
 SUITE="${2:?usage: isolate.sh <tag> <suite> [max-rounds]}"
 MAXROUNDS="${3:-15}"
 
-STALL_SECS=${STALL_SECS:-180}   # no new verdict for this long => hung case
-MEM_KB=${MEM_KB:-12582912}      # 12 GiB address-space cap; a runaway dies loudly
+STALL_SECS=${STALL_SECS:-180}    # no new verdict for this long => SUSPECT a hung case
+SLOW_BUDGET=${SLOW_BUDGET:-900}  # a suspect gets this long alone to prove it is merely slow
+MEM_KB=${MEM_KB:-12582912}       # 12 GiB address-space cap; a runaway dies loudly
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELIUM_ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
@@ -43,10 +44,12 @@ CRASHERS="$HERE/crashers"
 WORK="$HERE/results"
 mkdir -p "$CRASHERS" "$WORK"
 
+# Package paths must match cmd/w3ctest's suite map: the xsd10 and xsd11 suites are two
+# root tests in the SAME ./xsd package, and qt3 lives in ./xpath3.
 case "$SUITE" in
-  qt3)    PKG=./qt3;    ROOT='^TestQT3W3C$';    PREFIX=TestQT3W3C ;;
-  xsd10)  PKG=./xsd10;  ROOT='^TestXSD10W3C$';  PREFIX=TestXSD10W3C ;;
-  xsd11)  PKG=./xsd11;  ROOT='^TestXSD11W3C$';  PREFIX=TestXSD11W3C ;;
+  qt3)    PKG=./xpath3; ROOT='^TestQT3W3C$';    PREFIX=TestQT3W3C ;;
+  xsd10)  PKG=./xsd;    ROOT='^TestXSD10W3C$';  PREFIX=TestXSD10W3C ;;
+  xsd11)  PKG=./xsd;    ROOT='^TestXSD11W3C$';  PREFIX=TestXSD11W3C ;;
   xslt30) PKG=./xslt3;  ROOT='^TestXSLT30W3C$'; PREFIX=TestXSLT30W3C ;;
   xml)    PKG=./xml;    ROOT='^TestXMLW3C$';    PREFIX=TestXMLW3C ;;
   *) echo "unknown suite $SUITE" >&2; exit 2 ;;
@@ -54,6 +57,13 @@ esac
 
 REFTAG=$(git -C "$MAIN_ROOT" tag --sort=creatordate | grep -E '^v[0-9]' | tail -1)
 GO_MINOR="$(go version | awk '{print $3}' | sed 's/^go//')"
+
+# skip_pat <case-id> -> a fully anchored "^Prefix/case/id$" regex for one -skip alternative.
+# Regex metacharacters are escaped, but '/' is left intact: go test uses it as the segment
+# separator, which is exactly how a nested case id must be matched.
+skip_pat() {
+  printf '^%s/%s$' "$PREFIX" "$(printf '%s' "$1" | sed 's/[].[^$()*+?{}|\\]/\\&/g')"
+}
 
 # hbase_for <tag> -> harness worktree to run that tag against (adapter-patched if needed)
 hbase_for() {
@@ -128,6 +138,11 @@ for e in evs:
     if a=='run': order.append(t)
     elif a in ('pass','fail','skip'): done.add(t)
     elif a=='output' and any(f in e.get('Output','') for f in FATAL): fatal.append(t)
+if not order:
+    # No case ever started: the suite did not run at all (build failure, wrong package,
+    # missing fixtures). That is NOT "clean" -- reporting it as such would silently
+    # certify an unrun suite as crash-free.
+    print("empty"); sys.exit(0)
 unfinished=[t for t in order if t not in done]
 if not unfinished:
     print("done"); sys.exit(0)
@@ -146,15 +161,22 @@ else:
 PY
 }
 
-# verdict_on <tag> <case> -> pass|fail|died   (single case, alone)
+# verdict_on <tag> <case> [budget-secs] -> pass|fail|died   (single case, alone)
+# ELAPSED is set to the wall time taken.
 verdict_on() {
-  local tag=$1 case=$2 hb wf rc
+  local tag=$1 case=$2 budget=${3:-120} hb wf rc t0 pat
   hb=$(hbase_for "$tag"); wf=$(workfile_for "$tag" "$hb")
+  # a case id may itself contain '/' (nested subtests); anchor each segment separately
+  pat="^$PREFIX\$"
+  local IFS=/
+  for seg in $case; do pat="$pat/^$(printf '%s' "$seg" | sed 's/[].[^$()*+?{}|\\]/\\&/g')\$"; done
+  unset IFS
+  t0=$(date +%s)
   ( ulimit -v "$MEM_KB"
-    GOWORK="$wf" GOMAXPROCS=2 timeout 120 \
-      go -C "$hb" test -run "^$PREFIX\$/^$(printf '%s' "$case" | sed 's/[].[^$()*+?{}|\\]/\\&/g')\$" \
-        -parallel 1 "$PKG" >/dev/null 2>&1 )
+    GOWORK="$wf" GOMAXPROCS=2 timeout "$budget" \
+      go -C "$hb" test -run "$pat" -parallel 1 "$PKG" >/dev/null 2>&1 )
   rc=$?
+  ELAPSED=$(( $(date +%s) - t0 ))
   case $rc in
     0) echo pass ;;
     1) echo fail ;;      # ran, asserted a wrong result -- still a measurable verdict
@@ -174,7 +196,7 @@ if [ -s "$OUT" ]; then
   while IFS=$'\t' read -r case_id _rest; do
     [ -z "$case_id" ] && continue
     case "$case_id" in \#*) continue ;; esac
-    skips+=("$(printf '%s' "$case_id" | sed 's/[].[^$()*+?{}|\\]/\\&/g')")
+    skips+=("$(skip_pat "$case_id")")
   done < "$OUT"
   echo "resuming with ${#skips[@]} case(s) already recorded in $(basename "$OUT")"
 else
@@ -183,9 +205,14 @@ fi
 
 echo "tag=$TAG suite=$SUITE reference=$REFTAG harness=$HBASE"
 for round in $(seq 1 "$MAXROUNDS"); do
+  # go test splits a -run/-skip pattern on '/' and matches one part per name segment, so a
+  # case id that itself contains '/' (xsd/qt3 ids do: "common/foo.testSet/bar") CANNOT go
+  # inside a "$PREFIX/^(a|b)$" group -- the slashes would be split as pattern separators and
+  # the case would never actually be skipped. Use a top-level alternation of full anchored
+  # paths instead; go splits each alternative on its own.
   pat=""
   if [ ${#skips[@]} -gt 0 ]; then
-    pat="$PREFIX/^($(IFS='|'; echo "${skips[*]}"))\$"
+    pat="$(IFS='|'; echo "${skips[*]}")"
   fi
   echo "=== round $round (${#skips[@]} case(s) skipped)"
   json="$WORK/$TAG-$SUITE-iso.json"
@@ -198,6 +225,10 @@ for round in $(seq 1 "$MAXROUNDS"); do
     [ -s "$OUT" ] && { echo "--- recorded crashers:"; cat "$OUT"; } || echo "--- no crashers; suite runs clean"
     exit 0
   fi
+  if [ "$res" = "empty" ]; then
+    echo "=== suite ran ZERO cases -- it never built/started; see $json.err" >&2
+    tail -5 "$json.err" >&2; exit 5
+  fi
   if [ "$res" = "unknown" ]; then
     echo "=== died but could not attribute to a case; see $json.err" >&2
     tail -3 "$json.err" >&2; exit 3
@@ -205,9 +236,38 @@ for round in $(seq 1 "$MAXROUNDS"); do
 
   case_id=$(printf '%s' "$res" | cut -f2)
   mode=$(printf '%s' "$res" | cut -f3)
-  echo "    culprit: $case_id ($mode)"
+  echo "    suspect: $case_id ($mode)"
+
+  # A stalled output stream cannot tell "hung forever" from "merely slow" -- and some
+  # legitimate cases take minutes (an xsd introspection case passes in ~5min). Charging a
+  # slow case as a failure would fabricate one. So CONFIRM on this tag first: re-run the
+  # case alone with a generous budget. If it produces any verdict, it is slow, not a
+  # crasher -- raise the watchdog above its runtime and re-run the round, recording
+  # nothing.
+  if [ "$mode" = "hang" ]; then
+    own=$(verdict_on "$TAG" "$case_id" "$SLOW_BUDGET")
+    if [ "$own" != "died" ]; then
+      new_stall=$(( ELAPSED * 3 + 60 ))
+      [ "$new_stall" -le "$STALL_SECS" ] && new_stall=$(( STALL_SECS * 2 ))
+      echo "    NOT a crasher: completed alone in ${ELAPSED}s ('$own') -- merely slow." \
+           "Raising watchdog ${STALL_SECS}s -> ${new_stall}s and re-running."
+      STALL_SECS=$new_stall
+      continue
+    fi
+    echo "    confirmed hang: no verdict alone within ${SLOW_BUDGET}s"
+  fi
 
   # Guard rail: does it also die on the reference? Then it is OUR bug, not the release's.
+  # The reference tag is its own oracle, so there is nothing to compare it against: a case
+  # that kills the reference is charged to the reference (it IS the release under test).
+  # Calling it "harness" there would quietly excuse the newest release's own crashes.
+  if [ "$TAG" = "$REFTAG" ]; then
+    echo "    confirmed: $mode on $TAG (reference tag -- no independent oracle; charged to the release)"
+    printf '%s\tfail\t%s on %s (reference tag; not cross-checkable)\n' "$case_id" "$mode" "$TAG" >> "$OUT.tmp"
+    cp "$OUT.tmp" "$OUT"
+    skips+=("$(skip_pat "$case_id")")
+    continue
+  fi
   ref=$(verdict_on "$REFTAG" "$case_id")
   if [ "$ref" = "died" ]; then
     echo "    !! also dies on reference $REFTAG -- harness/fixture fault, NOT charged to $TAG"
@@ -217,7 +277,7 @@ for round in $(seq 1 "$MAXROUNDS"); do
     printf '%s\tfail\t%s on %s; reference %s=%s\n' "$case_id" "$mode" "$TAG" "$REFTAG" "$ref" >> "$OUT.tmp"
   fi
   cp "$OUT.tmp" "$OUT"   # checkpoint: a killed/timed-out run must not lose what it found
-  skips+=("$(printf '%s' "$case_id" | sed 's/[].[^$()*+?{}|\\]/\\&/g')")
+  skips+=("$(skip_pat "$case_id")")
 done
 
 echo "=== hit max rounds ($MAXROUNDS) without completing" >&2

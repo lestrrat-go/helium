@@ -109,9 +109,15 @@ for tag in $TAGS; do
     skipargs=()
     crashfile="$OUTDIR/crashers/$tag-$suite.txt"
     if [ -s "$crashfile" ]; then
+      # go test splits a -skip pattern on '/' and matches one part per name segment, so a
+      # case id that contains '/' (xsd and qt3 ids do) must NOT sit inside a
+      # "Root/^(a|b)$" group -- its slashes would be read as separators and the case would
+      # never actually be skipped. Emit a top-level alternation of full anchored paths;
+      # go splits each alternative on its own.
       ids=$(grep -v '^#' "$crashfile" | cut -f1 | grep -v '^$' \
-            | sed 's/[].[^$()*+?{}|\\]/\\&/g' | paste -sd'|')
-      [ -n "$ids" ] && skipargs=(-skip "$ROOTNAME/^($ids)\$")
+            | sed 's/[].[^$()*+?{}|\\]/\\&/g' \
+            | sed "s|^|^$ROOTNAME/|; s|\$|\$|" | paste -sd'|')
+      [ -n "$ids" ] && skipargs=(-skip "$ids")
       echo "[$tag/$suite] skipping $(grep -cv '^#' "$crashfile") crasher(s), counted as failures"
     fi
     # -parallel 1: peak memory is one case's, not the sum of concurrent ones, and a

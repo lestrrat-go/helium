@@ -95,11 +95,16 @@ def main():
         sys.exit("no result junit files found in " + RESULTS)
     reference_tag = tags[-1]
 
-    # Build the per-suite universe (denominator) from the reference tag's run.
+    # Build the per-suite universe (denominator) from the reference tag's run. A case that
+    # kills even the reference is skipped there too, so it is missing from its JUnit --
+    # add it back, or the suite would silently shrink for EVERY release and the case would
+    # vanish from the scoring instead of counting against the releases that fail it.
     universe = {}
     for suite in SUITES:
         ref = parse_junit(os.path.join(RESULTS, f"{reference_tag}-{suite}-junit.xml"))
-        universe[suite] = set(ref.keys()) if ref else set()
+        cases = set(ref.keys()) if ref else set()
+        ref_fail, ref_harness = load_crashers(reference_tag, suite)
+        universe[suite] = cases | set(ref_fail) | set(ref_harness)
 
     # Load tag dates from git (best-effort; falls back to empty).
     dates = {}
