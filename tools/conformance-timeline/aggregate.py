@@ -19,6 +19,8 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+import render_md
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 CRASHERS = os.path.join(HERE, "crashers")
@@ -200,6 +202,15 @@ def main():
     with open(out, "w") as f:
         json.dump(data, f, indent=2)
     print("wrote", out)
+
+    # Render the committed CONFORMANCE.md + its SVG chart from the same data, so the doc
+    # can never drift from the measurements.
+    render_md.render_svg(data, os.path.join(HERE, "conformance-timeline.svg"))
+    render_md.render_md(
+        data,
+        os.path.join(os.path.abspath(os.path.join(HERE, "..", "..")), "CONFORMANCE.md"),
+        "tools/conformance-timeline/conformance-timeline.svg",
+    )
 
     # Render the self-contained HTML by inlining data.json into the template.
     tpl = os.path.join(HERE, "template.html")
