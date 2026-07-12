@@ -22,8 +22,9 @@ import xml.etree.ElementTree as ET
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results")
 CRASHERS = os.path.join(HERE, "crashers")
-SUITES = ["xsd10", "xsd11", "xslt30", "qt3"]
-SUITE_LABEL = {"xsd10": "XSD 1.0", "xsd11": "XSD 1.1", "xslt30": "XSLT 3.0", "qt3": "XPath/XQuery (QT3)"}
+SUITES = ["xml", "xsd10", "xsd11", "xslt30", "qt3"]
+SUITE_LABEL = {"xml": "XML 1.0/1.1", "xsd10": "XSD 1.0", "xsd11": "XSD 1.1",
+               "xslt30": "XSLT 3.0", "qt3": "XPath/XQuery (QT3)"}
 REFERENCE_TAG = "v4"  # placeholder; resolved to the newest tag below
 
 

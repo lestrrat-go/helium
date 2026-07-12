@@ -1,7 +1,12 @@
 {
-  "generated": "2026-07-09",
+  "generated": "2026-07-12",
   "reference_tag": "v0.4.0",
   "suites": [
+    {
+      "key": "xml",
+      "label": "XML 1.0/1.1",
+      "denom": 2585
+    },
     {
       "key": "xsd10",
       "label": "XSD 1.0",
@@ -40,6 +45,22 @@
     "v0.4.0": "2026-07-08"
   },
   "rows": [
+    {
+      "tag": "v0.0.1",
+      "date": "2026-03-29",
+      "suite": "xml",
+      "measured": true,
+      "partial": false,
+      "passed": 1633,
+      "failed": 368,
+      "skipped": 584,
+      "crashed": 8,
+      "harness_excluded": 0,
+      "enumerated": 2585,
+      "denom": 2585,
+      "not_enumerated": 0,
+      "pass_pct": 63.17
+    },
     {
       "tag": "v0.0.1",
       "date": "2026-03-29",
@@ -103,6 +124,22 @@
       "denom": 22469,
       "not_enumerated": 0,
       "pass_pct": 98.33
+    },
+    {
+      "tag": "v0.0.2",
+      "date": "2026-06-15",
+      "suite": "xml",
+      "measured": true,
+      "partial": false,
+      "passed": 1678,
+      "failed": 323,
+      "skipped": 584,
+      "crashed": 20,
+      "harness_excluded": 0,
+      "enumerated": 2585,
+      "denom": 2585,
+      "not_enumerated": 0,
+      "pass_pct": 64.91
     },
     {
       "tag": "v0.0.2",
@@ -171,6 +208,22 @@
     {
       "tag": "v0.1.0",
       "date": "2026-06-17",
+      "suite": "xml",
+      "measured": true,
+      "partial": false,
+      "passed": 1714,
+      "failed": 287,
+      "skipped": 584,
+      "crashed": 20,
+      "harness_excluded": 0,
+      "enumerated": 2585,
+      "denom": 2585,
+      "not_enumerated": 0,
+      "pass_pct": 66.31
+    },
+    {
+      "tag": "v0.1.0",
+      "date": "2026-06-17",
       "suite": "xsd10",
       "measured": true,
       "partial": true,
@@ -231,6 +284,22 @@
       "denom": 22469,
       "not_enumerated": 0,
       "pass_pct": 98.33
+    },
+    {
+      "tag": "v0.2.0",
+      "date": "2026-06-19",
+      "suite": "xml",
+      "measured": true,
+      "partial": false,
+      "passed": 1741,
+      "failed": 260,
+      "skipped": 584,
+      "crashed": 12,
+      "harness_excluded": 0,
+      "enumerated": 2585,
+      "denom": 2585,
+      "not_enumerated": 0,
+      "pass_pct": 67.35
     },
     {
       "tag": "v0.2.0",
@@ -299,6 +368,22 @@
     {
       "tag": "v0.3.0",
       "date": "2026-06-22",
+      "suite": "xml",
+      "measured": true,
+      "partial": false,
+      "passed": 1763,
+      "failed": 238,
+      "skipped": 584,
+      "crashed": 0,
+      "harness_excluded": 0,
+      "enumerated": 2585,
+      "denom": 2585,
+      "not_enumerated": 0,
+      "pass_pct": 68.2
+    },
+    {
+      "tag": "v0.3.0",
+      "date": "2026-06-22",
       "suite": "xsd10",
       "measured": true,
       "partial": true,
@@ -359,6 +444,22 @@
       "denom": 22469,
       "not_enumerated": 0,
       "pass_pct": 98.34
+    },
+    {
+      "tag": "v0.4.0",
+      "date": "2026-07-08",
+      "suite": "xml",
+      "measured": true,
+      "partial": false,
+      "passed": 1786,
+      "failed": 215,
+      "skipped": 584,
+      "crashed": 0,
+      "harness_excluded": 0,
+      "enumerated": 2585,
+      "denom": 2585,
+      "not_enumerated": 0,
+      "pass_pct": 69.09
     },
     {
       "tag": "v0.4.0",

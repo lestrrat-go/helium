@@ -164,8 +164,22 @@ verdict_on() {
 
 HBASE=$(hbase_for "$TAG"); WF=$(workfile_for "$TAG" "$HBASE")
 OUT="$CRASHERS/$TAG-$SUITE.txt"
-: > "$OUT.tmp"
 skips=()
+
+# Resume: a release with many fragile cases needs one round per culprit, so a run can hit
+# the round cap before the suite completes. Re-running then picks up where it left off
+# instead of rediscovering the same cases from scratch.
+if [ -s "$OUT" ]; then
+  cp "$OUT" "$OUT.tmp"
+  while IFS=$'\t' read -r case_id _rest; do
+    [ -z "$case_id" ] && continue
+    case "$case_id" in \#*) continue ;; esac
+    skips+=("$(printf '%s' "$case_id" | sed 's/[].[^$()*+?{}|\\]/\\&/g')")
+  done < "$OUT"
+  echo "resuming with ${#skips[@]} case(s) already recorded in $(basename "$OUT")"
+else
+  : > "$OUT.tmp"
+fi
 
 echo "tag=$TAG suite=$SUITE reference=$REFTAG harness=$HBASE"
 for round in $(seq 1 "$MAXROUNDS"); do
@@ -202,6 +216,7 @@ for round in $(seq 1 "$MAXROUNDS"); do
     echo "    confirmed: $mode on $TAG, but '$ref' on reference $REFTAG -> genuine failure"
     printf '%s\tfail\t%s on %s; reference %s=%s\n' "$case_id" "$mode" "$TAG" "$REFTAG" "$ref" >> "$OUT.tmp"
   fi
+  cp "$OUT.tmp" "$OUT"   # checkpoint: a killed/timed-out run must not lose what it found
   skips+=("$(printf '%s' "$case_id" | sed 's/[].[^$()*+?{}|\\]/\\&/g')")
 done
 

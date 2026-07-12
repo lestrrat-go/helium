@@ -4,7 +4,7 @@
     --surface-1:#fcfcfb; --page:#f9f9f7;
     --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
     --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
-    --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300;
+    --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300; --s-xml:#b5359c;
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
@@ -12,20 +12,20 @@
       --surface-1:#1a1a19; --page:#0d0d0d;
       --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
       --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
-      --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300;
+      --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300; --s-xml:#cc51b4;
     }
   }
   :root[data-theme="dark"] .viz-root {
     --surface-1:#1a1a19; --page:#0d0d0d;
     --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
-    --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300;
+    --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300; --s-xml:#cc51b4;
   }
   :root[data-theme="light"] .viz-root {
     --surface-1:#fcfcfb; --page:#f9f9f7;
     --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
     --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
-    --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300;
+    --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300; --s-xml:#b5359c;
   }
   .viz-root {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -120,7 +120,7 @@
 const DATA = /*__DATA__*/null;
 (function () {
   const SUITES = DATA.suites;                 // [{key,label,denom}]
-  const CVAR = { xslt30:"--s-xslt30", qt3:"--s-qt3", xsd11:"--s-xsd11", xsd10:"--s-xsd10" };
+  const CVAR = { xml:"--s-xml", xslt30:"--s-xslt30", qt3:"--s-qt3", xsd11:"--s-xsd11", xsd10:"--s-xsd10" };
   const tags = DATA.tags;
   const byTagSuite = {};
   DATA.rows.forEach(r => { byTagSuite[r.tag + "|" + r.suite] = r; });
@@ -129,7 +129,7 @@ const DATA = /*__DATA__*/null;
   const css = v => getComputedStyle(document.getElementById("viz")).getPropertyValue(v).trim();
 
   document.getElementById("prov").textContent =
-    `Generated ${DATA.generated} · reference ${DATA.reference_tag} · ${tags.length} releases · 4 suites`;
+    `Generated ${DATA.generated} · reference ${DATA.reference_tag} · ${tags.length} releases · ${SUITES.length} suites`;
   document.getElementById("reftag").textContent = DATA.reference_tag;
   document.getElementById("metricnote").innerHTML =
     "<b>Reading the chart:</b> 100% means passing every case in today's suite. Filled dots are complete runs; " +

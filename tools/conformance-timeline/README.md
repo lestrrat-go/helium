@@ -4,7 +4,7 @@ Retroactively measures W3C conformance for every helium tagged release and
 renders a timeline graph of how much of *today's* conformance suites each
 release passes.
 
-Suites: **XSD 1.0**, **XSD 1.1**, **XSLT 3.0**, **XPath/XQuery (QT3)**.
+Suites: **XML 1.0/1.1**, **XSD 1.0**, **XSD 1.1**, **XSLT 3.0**, **XPath/XQuery (QT3)**.
 
 ## Output
 
@@ -73,7 +73,7 @@ the release is its failure.
 
 ```sh
 # one-time: fetch upstream fixtures into the sibling harness
-(cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11)
+(cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11 xml)
 
 # run all tags × all suites, then aggregate + render
 tools/conformance-timeline/run.sh

@@ -23,12 +23,12 @@
 # Prereqs
 # -------
 #   * sibling ../helium-w3c-tests checkout, clean, with fixtures fetched:
-#       (cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11)
+#       (cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11 xml)
 #   * python3 (for aggregate.py)
 #
 # Usage: tools/conformance-timeline/run.sh [--force] [--suites "a b"] [tag ...]
 #   --force          re-run even if a cached summary exists
-#   --suites "..."   subset of: xsd10 xsd11 xslt30 qt3  (default: all)
+#   --suites "..."   subset of: xml xsd10 xsd11 xslt30 qt3  (default: all)
 #   tag ...          restrict to specific tags (default: all v* tags)
 
 set -euo pipefail
@@ -42,7 +42,7 @@ ADAPTERS="$OUTDIR/harness-adapters"
 WTROOT="$MAIN_ROOT/.worktrees"
 HWTROOT="$HARNESS/.worktrees"
 
-FORCE=0; SUITES="xsd10 xsd11 xslt30 qt3"; ONLY_TAGS=""
+FORCE=0; SUITES="xml xsd10 xsd11 xslt30 qt3"; ONLY_TAGS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --force) FORCE=1 ;;

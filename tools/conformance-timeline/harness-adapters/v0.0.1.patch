@@ -1,3 +1,16 @@
+diff --git a/xml/xml_harness_test.go b/xml/xml_harness_test.go
+index a68846e..b5b78fe 100644
+--- a/xml/xml_harness_test.go
++++ b/xml/xml_harness_test.go
+@@ -220,7 +220,7 @@ func runXMLCase(t *testing.T, o *caseOutcome, testdataRoot string, c xmlCase) {
+ 		DefaultDTDAttributes(true).
+ 		SubstituteEntities(true).
+ 		ValidateDTD(validate).
+-		FS(newConfinedFS(testdataRoot)).
++		// v0.0.1 has no Parser.FS: it loads external DTDs via BaseURI, using its own file access.
+ 		Parse(t.Context(), src)
+ 
+ 	switch c.Type {
 diff --git a/xpath3/qt3_helpers_test.go b/xpath3/qt3_helpers_test.go
 index d979cee..2b4b845 100644
 --- a/xpath3/qt3_helpers_test.go
@@ -278,34 +291,6 @@ index d979cee..2b4b845 100644
  	result, err := eval.Evaluate(context.Background(), compiled, nil)
  	if err != nil {
  		return false
-diff --git a/xpath3/zz_tagadapt_test.go b/xpath3/zz_tagadapt_test.go
-new file mode 100644
-index 0000000..a2766b0
---- /dev/null
-+++ b/xpath3/zz_tagadapt_test.go
-@@ -0,0 +1,22 @@
-+package xpath3_test
-+
-+// This file adapts the harness to the helium v0.3.0 tagged release API.
-+// v0.3.0 did not export helium.PermissiveFS; permissiveFS replicates its
-+// behavior (an fs.FS that forwards any path verbatim to os.Open), matching
-+// internal/iofs.PermissiveRoot which helium.PermissiveFS returns in later
-+// releases. This is real old behavior, not a degrade-stub.
-+
-+import (
-+	"io/fs"
-+	"os"
-+)
-+
-+type permissiveRootFS struct{}
-+
-+func (permissiveRootFS) Open(name string) (fs.File, error) {
-+	return os.Open(name) //nolint:gosec // intentional passthrough, mirrors iofs.PermissiveRoot
-+}
-+
-+func permissiveFS() fs.FS {
-+	return permissiveRootFS{}
-+}
 diff --git a/xsd/xsd10_harness_test.go b/xsd/xsd10_harness_test.go
 index 0d23d4e..1ac7b1a 100644
 --- a/xsd/xsd10_harness_test.go
@@ -540,31 +525,3 @@ index d3352f3..730e191 100644
  	if err != nil {
  		return nil, err
  	}
-diff --git a/xslt3/zz_tagadapt_test.go b/xslt3/zz_tagadapt_test.go
-new file mode 100644
-index 0000000..529a8c8
---- /dev/null
-+++ b/xslt3/zz_tagadapt_test.go
-@@ -0,0 +1,22 @@
-+package xslt3_test
-+
-+// This file adapts the harness to the helium v0.3.0 tagged release API.
-+// v0.3.0 did not export helium.PermissiveFS; permissiveFS replicates its
-+// behavior (an fs.FS that forwards any path verbatim to os.Open), matching
-+// internal/iofs.PermissiveRoot which helium.PermissiveFS returns in later
-+// releases. This is real old behavior, not a degrade-stub.
-+
-+import (
-+	"io/fs"
-+	"os"
-+)
-+
-+type permissiveRootFS struct{}
-+
-+func (permissiveRootFS) Open(name string) (fs.File, error) {
-+	return os.Open(name) //nolint:gosec // intentional passthrough, mirrors iofs.PermissiveRoot
-+}
-+
-+func permissiveFS() fs.FS {
-+	return permissiveRootFS{}
-+}
