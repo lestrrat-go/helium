@@ -31,12 +31,16 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 	pctx.intSubName = name
 
 	pctx.skipBlanks(ctx)
-	u, eid, err := pctx.parseExternalID(ctx, true)
+	// A DOCTYPE's ExternalID is optional (an internal-subset-only doctype has
+	// none). Its PRESENCE — not a non-empty literal — marks an external subset:
+	// a present-but-empty `SYSTEM ""` is still an external ID (found), so the DTD
+	// is not fully internal.
+	u, eid, found, err := pctx.parseExternalID(ctx, true)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
 
-	if u != "" || eid != "" {
+	if found {
 		pctx.hasExternalSubset = true
 	}
 	pctx.extSubURI = u
@@ -101,7 +105,7 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 		if err := pctx.parseMarkupDecl(ctx); err != nil {
 			return pctx.error(ctx, err)
 		}
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return pctx.error(ctx, err)
 		}
 
@@ -175,7 +179,7 @@ func (pctx *parserCtx) parseMarkupDecl(ctx context.Context) error {
 	}
 
 	if !pctx.external && pctx.inputTab.Len() == 1 {
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return pctx.error(ctx, err)
 		}
 	}
@@ -203,22 +207,33 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		return err
 	}
 
-	// skipBlanks records an over-cap whitespace run in pctx.blankRunErr but only
-	// returns a bool, so a guard tripped while skipping conditional-section HEADER
-	// whitespace (after "<![", after a "%pe;", after INCLUDE/IGNORE) must be
-	// surfaced here. Otherwise this function would proceed and return a generic
-	// conditional-section sentinel (ErrConditionalSectionKeyword /
-	// ErrConditionalSectionNotFinished) which the top-level external-subset loop
-	// TOLERATES — downgrading a resource-limit violation to "stop parsing the
-	// subset" instead of failing closed at the source.
-	pctx.skipBlanks(ctx)
+	// Depth of the section's OWN cursor (the one holding "<![ ... ]]>"). The
+	// INCLUDE/IGNORE keyword may be supplied by a parameter entity pushed above
+	// this depth; that spent PE cursor is popped back to here before the body
+	// floor is captured, so the body is not mistaken for already-consumed.
+	sectionDepth := pctx.inputTab.Len()
+
+	// Blank-ONLY skip after "<![" — NOT skipBlanks, whose handlePEReference would
+	// CONSUME a "%pe;" that supplies the INCLUDE/IGNORE keyword (`<![ %e;` with
+	// %e; -> "INCLUDE[") without expanding it, so the keyword would be lost and
+	// the whole section dropped. Leaving the "%" for the explicit parsePEReference
+	// below pushes the replacement text so the keyword (and body) are parsed.
+	// skipBlankRun still records an over-cap whitespace run in pctx.blankRunErr,
+	// which must be surfaced here so the specific resource-limit error is reported
+	// at its source rather than a generic conditional-section sentinel
+	// (ErrConditionalSectionKeyword / ErrConditionalSectionNotFinished).
+	if c := pctx.getCursor(); c != nil {
+		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
+			return err
+		}
+	}
 	if pctx.blankRunErr != nil {
 		return pctx.blankRunErr
 	}
 
 	cur = pctx.getCursor()
 	if cur != nil && cur.Peek() == '%' {
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return err
 		}
 		pctx.skipBlanks(ctx)
@@ -244,6 +259,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
 		}
+		if err := pctx.checkCondSectionEntityBoundary(ctx, sectionDepth); err != nil {
+			return err
+		}
 		if err := cur.Advance(1); err != nil {
 			return err
 		}
@@ -256,6 +274,13 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		// expands inside the section pushes a nested cursor and is popped back to
 		// baseLen when exhausted, after which the "]]>" terminator (which lives in
 		// this section's own cursor) is examined again.
+		// The INCLUDE keyword and its '[' may have come from a parameter entity
+		// (`<![ %e;` with %e; -> "INCLUDE[") whose replacement-text cursor is now
+		// fully consumed. Pop that spent PE cursor back to the section's own cursor
+		// BEFORE capturing the body floor: otherwise baseLen counts the spent PE
+		// cursor, popping it later drops the stack below baseLen, and the body
+		// declarations (e.g. a defaulting <!ATTLIST>) are silently skipped.
+		pctx.popSpentExternalSubsetInputs(sectionDepth)
 		baseLen := pctx.inputTab.Len()
 		for {
 			// Pop spent nested PE/conditional cursors and skip leading blanks on
@@ -295,7 +320,7 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 				}
 			}
 
-			stop, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen, false)
+			stop, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen)
 			if err != nil {
 				return err
 			}
@@ -319,6 +344,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		cur = pctx.getCursor()
 		if cur == nil || cur.Peek() != '[' {
 			return ErrConditionalSectionKeyword
+		}
+		if err := pctx.checkCondSectionEntityBoundary(ctx, sectionDepth); err != nil {
+			return err
 		}
 		if err := cur.Advance(1); err != nil {
 			return err
@@ -356,6 +384,27 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 	return ErrConditionalSectionKeyword
 }
 
+// checkCondSectionEntityBoundary enforces the "Proper Conditional Section/PE
+// Nesting" validity constraint (XML §3.4): the "<![", the INCLUDE/IGNORE
+// keyword, and the "[" that open a conditional section must all originate in
+// the same parameter-entity replacement text. sectionDepth is the input-stack
+// depth of the cursor holding "<!["; when the keyword and "[" were supplied by a
+// parameter entity pushed above it, the section markup straddles an entity
+// boundary and the input stack is deeper than sectionDepth. It is a VALIDITY
+// constraint, so it is reported only when validating (matching libxml2, which
+// raises XML_ERR_ENTITY_BOUNDARY here as xmlValidityError, not a fatal
+// well-formedness error).
+func (pctx *parserCtx) checkCondSectionEntityBoundary(ctx context.Context, sectionDepth int) error {
+	if !pctx.options.IsSet(parseDTDValid) {
+		return nil
+	}
+	if pctx.inputTab.Len() <= sectionDepth {
+		return nil
+	}
+	return pctx.error(ctx,
+		fmt.Errorf("%w: all markup of the conditional section is not in the same entity", ErrEntityBoundary))
+}
+
 // popSpentExternalSubsetInputs pops any exhausted (Done) parameter-entity or
 // conditional-section cursors that sit above baseLen on the input stack, so the
 // next declaration resumes in the parent DTD where the expanded content left
@@ -388,18 +437,16 @@ func (pctx *parserCtx) popSpentExternalSubsetInputs(baseLen int) {
 // INCLUDE body. The step pops spent nested PE/conditional cursors (those
 // strictly above the floor) back down to it. It returns stop=true once that
 // content cursor is exhausted (the stack dropped below the floor, or the floor
-// cursor is gone/Done) — or, when tolerateCondError is set, when a nested
-// conditional section reports an error — signalling the caller to stop or
-// resume its scan.
+// cursor is gone/Done), signalling the caller to stop or resume its scan.
 //
-// tolerateCondError mirrors the long-standing top-level external-subset
-// behavior: a conditional-section WRAPPER error (an unterminated "]]>" or a
-// missing/malformed INCLUDE/IGNORE keyword — ErrConditionalSectionNotFinished
-// or ErrConditionalSectionKeyword) stops the loop WITHOUT failing the whole
-// parse, which valid documents whose conditional-section handling is otherwise
-// imperfect rely on. Actual declaration parse errors from inside an INCLUDE
-// body still propagate even when tolerateCondError is set. The INCLUDE-body
-// caller passes false so every nested conditional-section error propagates.
+// Every conditional-section error is fatal. The external subset is read fully
+// into a buffer before parsing, so an unterminated "]]>"
+// (ErrConditionalSectionNotFinished) at buffer EOF is a genuine truncation, not
+// a streaming boundary, and a malformed/miscased INCLUDE/IGNORE keyword
+// (ErrConditionalSectionKeyword) is a well-formedness error (XML §3.4 P62/P63:
+// the keyword is case-sensitive and mandatory). Both propagate — libxml2 reports
+// the same "Content error in the external subset" (W3C not-wf-not-sa-004,
+// ibm-not-wf-P62-ibm62n07).
 //
 // Unlike skipBlanks, the blank skip here advances over whitespace ONLY and
 // leaves any "%" for the explicit parsePEReference below. In the external
@@ -407,7 +454,7 @@ func (pctx *parserCtx) popSpentExternalSubsetInputs(baseLen int) {
 // while only validating it (it does not expand the replacement text). That
 // swallows the reference before parsePEReference can push the PE content onto
 // the input stack, so the PE's declarations are never parsed.
-func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen int, tolerateCondError bool) (bool, error) {
+func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen int) (bool, error) {
 	// Snapshot the cursor position BEFORE consuming blanks so the progress guard
 	// below counts everything this step does — whitespace, a markup declaration,
 	// AND a parameter-entity reference — as forward progress. The guard must
@@ -468,24 +515,14 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	cur = pctx.getCursor()
 	if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
 		// Nested conditional section. parseConditionalSections is responsible for
-		// its own blank/PE handling within the section.
+		// its own blank/PE handling within the section. Every conditional-section
+		// error propagates as fatal — an unterminated "]]>"
+		// (ErrConditionalSectionNotFinished) at the end of the fully-buffered
+		// external subset is a genuine truncation, not a streaming boundary
+		// (XML §3.4; libxml2 "Content error in the external subset"), and a
+		// malformed/miscased keyword (ErrConditionalSectionKeyword) is a
+		// well-formedness error (P62/P63).
 		if err := pctx.parseConditionalSections(ctx); err != nil {
-			// Only the conditional-section WRAPPER sentinels (an unterminated
-			// "]]>" or a missing/malformed INCLUDE/IGNORE keyword) are tolerated
-			// at the top level: those mirror the long-standing best-effort
-			// handling of an imperfectly-terminated section. An actual
-			// declaration parse error from within an INCLUDE body (e.g. a
-			// malformed "<!BOGUS" or a bad entity-value PE) must propagate.
-			if tolerateCondError && (errors.Is(err, ErrConditionalSectionNotFinished) || errors.Is(err, ErrConditionalSectionKeyword)) {
-				// A resource-limit violation (over-cap whitespace) recorded while
-				// the conditional section was being parsed must NEVER be masked by
-				// the conditional-section tolerance: propagate it as a real fatal
-				// error instead of stopping the loop silently.
-				if pctx.blankRunErr != nil {
-					return false, pctx.blankRunErr
-				}
-				return true, nil
-			}
 			return false, err
 		}
 	} else {
@@ -497,7 +534,7 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 		// not handle top-level "%pe;" references in the external subset, so this
 		// pushes the PE replacement text onto the input stack and lets its
 		// declarations be parsed by subsequent steps.
-		if err := pctx.parsePEReference(ctx); err != nil {
+		if err := pctx.parsePEReference(ctx, false); err != nil {
 			return false, err
 		}
 	}
@@ -517,7 +554,14 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	return false, nil
 }
 
-func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
+// parsePEReference expands the parameter-entity reference at the cursor by
+// pushing its replacement text onto the input stack. When pad is true the pushed
+// replacement is enlarged by one leading and one trailing space per XML §4.4.8
+// ("Included as PE") — required when a PE is included INSIDE or ADJACENT to a
+// markup declaration in the external subset so the boundary separates tokens.
+// The between-declaration callers pass pad=false: a PE that stands on its own
+// between declarations is already whitespace-separated, so padding is redundant.
+func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -612,9 +656,10 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				// resolves against the PE's location, not the containing DTD. The
 				// override (and the active-recursion mark) is cleared when this
 				// pushed cursor is popped.
-				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(content)), peURI, ent)
+				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, ent)
 			}
 			pctx.hasPERefs = true
+			pctx.hasExternalPERef = true
 			return nil
 		} else {
 			// Capture the PE's replacement text once: Entity.Content()
@@ -646,11 +691,26 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 
-			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader([]byte(decodedContent))))
+			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent([]byte(decodedContent), pad))))
 		}
 	}
 	pctx.hasPERefs = true
 	return nil
+}
+
+// padPEContent returns the parameter-entity replacement text enlarged by one
+// leading and one trailing space (#x20) per XML §4.4.8 when pad is true,
+// otherwise the content unchanged. A fresh slice is always returned when padding
+// so the caller's buffer is never aliased.
+func padPEContent(content []byte, pad bool) []byte {
+	if !pad {
+		return content
+	}
+	out := make([]byte, 0, len(content)+2)
+	out = append(out, ' ')
+	out = append(out, content...)
+	out = append(out, ' ')
+	return out
 }
 
 // loadExternalParameterEntityContent returns the replacement text of an external
@@ -720,7 +780,7 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	// bytes means a later reference (from either path) reuses them consistently,
 	// instead of one path getting raw bytes that embed the TextDecl into a
 	// general entity's stored value.
-	content, err = pctx.decodeExternalPEContent(ctx, content)
+	content, err = pctx.decodeExternalPEContent(ctx, uri, content)
 	if err != nil {
 		return nil, "", err
 	}
@@ -737,29 +797,46 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 // reject the "<?xml" as a processing instruction (a PI target may not be "xml"),
 // so the TextDecl must be stripped here and any declared encoding honored — the
 // same treatment parseExternalEntityPrivate gives an external general entity.
-// When no TextDecl is present the content is returned unchanged. Only the
-// ASCII-compatible TextDecl shape is handled (the DTD-fragment case in scope);
-// a non-ASCII-leading encoding is left to the caller's raw push.
-func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []byte) ([]byte, error) {
+// When no TextDecl is present the ASCII-compatible content is returned unchanged.
+// UTF-16 / UCS-4 content (BOM- or encoded-'<'-led) is decoded to UTF-8 by
+// decodeFixedWidthExternalContent, which also consumes a TextDecl that is itself
+// in that fixed-width encoding.
+func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
 	if len(content) == 0 {
 		return content, nil
 	}
+
+	// UTF-16 / UCS-4 external content is not ASCII-compatible: the body, a
+	// leading byte-order mark, and any leading TextDecl are all encoded, so the
+	// byte-level "<?xml" scan below cannot see the TextDecl. Detect a fixed-width
+	// encoding from the BOM/leading '<' and decode on a rune cursor instead.
+	if fixedWidthUnicodeEncoding(content) != "" {
+		return pctx.decodeFixedWidthExternalContent(ctx, srcURI, content)
+	}
+
 	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(content))) {
 		return content, nil
 	}
 
 	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
 	// declared encoding switches only this sub-cursor. Inherit the parent's
-	// options (encoding-ignore policy). The TextDecl grammar is enforced by
-	// parseTextDecl: VersionInfo is optional, EncodingDecl is REQUIRED, and no
-	// StandaloneDecl is permitted — a version-only or standalone-bearing
-	// declaration is rejected rather than leniently accepted.
+	// options (encoding-ignore policy). srcURI (the resolved DTD/PE location) is
+	// set as the sub-parser's base URI so a malformed TextDecl reports the source
+	// file, matching every other declaration error in that resource. The TextDecl
+	// grammar is enforced by parseTextDecl: VersionInfo is optional, EncodingDecl
+	// is REQUIRED, and no StandaloneDecl is permitted — a version-only or
+	// standalone-bearing declaration is rejected rather than leniently accepted.
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
+	sub.baseURI = srcURI
+	// Seed the parent document's XML version so the TextDecl's version-compatibility
+	// check (checkEntityVersion) compares against the real document version rather
+	// than this doc-less sub-context's default.
+	sub.version = pctx.documentVersion()
 
 	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
 		if err := sub.parseTextDecl(ctx); err != nil {
@@ -767,7 +844,10 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []by
 		}
 	}
 	if err := sub.switchEncoding(); err != nil {
-		return nil, err
+		// Wrap through sub.error so the failure (e.g. an unsupported declared
+		// encoding) carries srcURI, matching the parseTextDecl branch; otherwise
+		// it would be rewrapped at the caller's location and lose the source file.
+		return nil, sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
@@ -776,7 +856,74 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, content []by
 	}
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
+		return nil, sub.error(ctx, err)
+	}
+	return rest, nil
+}
+
+// decodeFixedWidthExternalContent decodes an external resource's replacement text
+// that is in a fixed-width Unicode encoding (UTF-16 / UCS-4), returning the body
+// as UTF-8. The encoding is externally known — fixed by the byte-order mark or
+// the encoded shape of the leading '<' — so an OPTIONAL leading TextDecl need not
+// (re)declare it and a resource with no TextDecl at all (e.g. a UTF-16 external
+// DTD subset that opens on a comment) is still decoded. When a TextDecl IS present
+// it is consumed on the decoded rune cursor after switchEncoding, enforcing the
+// same grammar as the ASCII path (VersionInfo OPTIONAL, EncodingDecl REQUIRED, NO
+// StandaloneDecl). srcURI scopes any error to the source resource.
+func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
+	sub := &parserCtx{}
+	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, err
+	}
+	defer func() { _ = sub.release() }()
+	sub.options = pctx.options
+	sub.baseURI = srcURI
+	// Seed the parent document's XML version so the TextDecl's version-compatibility
+	// check (checkEntityVersion) compares against the real document version rather
+	// than this doc-less sub-context's default.
+	sub.version = pctx.documentVersion()
+
+	// Detect the fixed-width encoding (consuming a 2-byte BOM; peeking a BOM-less
+	// 4-byte pattern) and switch the sub-cursor to a UTF-8-decoding rune cursor
+	// before reading the TextDecl or the body.
+	enc, err := sub.detectEncoding()
+	if err != nil {
+		return nil, sub.error(ctx, err)
+	}
+	sub.detectedEncoding = enc
+	if err := sub.switchEncoding(); err != nil {
+		return nil, sub.error(ctx, err)
+	}
+
+	cur := sub.getCursor()
+	if cur == nil {
+		return nil, nil
+	}
+
+	// Consume an optional leading TextDecl on the decoded rune cursor. The
+	// encoding was already fixed by the BOM/leading-'<' shape, so the declared
+	// encoding is informational; a standalone pseudo-attribute or a missing
+	// encoding is still rejected by parseTextDeclFromCursor.
+	//
+	// NOTE (deferred follow-up): XML §4.3.3 applies per external parsed entity,
+	// so a BOM here that contradicts this TextDecl's declared encoding is also a
+	// fatal error. checkBOMEncodingConflict currently runs only at the document
+	// entity (parser_document.go); extending it to external-entity scope (using
+	// the entity's own BOM + TextDecl encoding) is a separate change with no W3C
+	// xml corpus case exercising it. Not covered here.
+	if looksLikeXMLDeclString(cur) {
+		if err := sub.parseTextDeclFromCursor(ctx); err != nil {
+			return nil, err
+		}
+		cur = sub.getCursor()
+		if cur == nil {
+			return nil, nil
+		}
+	}
+
+	rest, err := io.ReadAll(cur.Unused())
+	if err != nil {
+		return nil, sub.error(ctx, err)
 	}
 	return rest, nil
 }

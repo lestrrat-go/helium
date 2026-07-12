@@ -397,6 +397,23 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 	return nil
 }
 
+// validateDefaultNamespaceDecl enforces the Namespaces in XML constraints that
+// apply to a default namespace declaration (xmlns="uri"), whether literal on a
+// start tag or supplied as a DTD attribute default. Per Namespaces in XML 1.0
+// (errata NE13) §3, the reserved XML and XMLNS namespace names may not be
+// declared as the default namespace. It returns a non-nil namespace error when
+// either reserved URI is used. An empty value (xmlns="") is a legal default
+// namespace undeclaration and is accepted.
+func (pctx *parserCtx) validateDefaultNamespaceDecl(ctx context.Context, uri string) error {
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, errors.New("xml namespace URI cannot be the default namespace"))
+	}
+	if uri == lexicon.NamespaceXMLNS {
+		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name is forbidden"))
+	}
+	return nil
+}
+
 func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	cur := pctx.getCursor()
 	if cur == nil {
@@ -415,6 +432,15 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	}
 	if err != nil {
 		return pctx.error(ctx, err)
+	}
+
+	// The element's full QName (prefix + local) exactly as written. ATTLIST
+	// declarations (special-attribute types and attribute defaults) are keyed by
+	// the declared element QName, so lookups must use the qualified name — an
+	// unprefixed `<!ATTLIST id …>` does not apply to `<p:r>` and vice-versa.
+	elemQName := local
+	if prefix != "" {
+		elemQName = prefix + ":" + local
 	}
 
 	// Push xml:space stack entry for this element (inherit parent's value by default)
@@ -445,7 +471,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
 			break
 		}
-		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, local)
+		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, elemQName)
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -467,6 +493,12 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
 			}
 			nsDeclared = append(nsDeclared, "")
+
+			// Namespaces in XML §3 (errata NE13): the reserved XML/XMLNS
+			// namespace names may not be declared as the default namespace.
+			if err := pctx.validateDefaultNamespaceDecl(ctx, attvalue); err != nil {
+				return err
+			}
 
 			// parseNsClean: skip redundant ancestor redeclarations.
 			if pctx.options.IsSet(parseNsClean) && pctx.nsTab.Lookup("") == attvalue {
@@ -555,6 +587,20 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		}
 
 		attrs = append(attrs, attr)
+
+		// XML §3.1 P40/P44: attributes in a start/empty-element tag must be
+		// separated by whitespace (STag/EmptyElemTag: '(S Attribute)*'). After
+		// a regular attribute the next character must close the tag ('>' or
+		// '/>') or be whitespace; a NameStartChar beginning the next attribute
+		// with no intervening S is a fatal well-formedness error. The two
+		// namespace-declaration branches above enforce the same rule; this
+		// mirrors libxml2's uniform post-attribute check at next_attr.
+		if cur.Peek() == '>' || (cur.Peek() == '/' && cur.PeekAt(1) == '>') {
+			continue
+		}
+		if !isBlankByte(cur.Peek()) {
+			return pctx.error(ctx, ErrSpaceRequired)
+		}
 	}
 
 	// Attributes defaulting: apply DTD-declared default attribute values.
@@ -562,14 +608,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// are done post-parse via validateDocument() when parseDTDValid is set.
 	// ID/IDREF uniqueness checks are done post-parse via validateDocument().
 	if len(pctx.attsDefault) > 0 {
-		var elemName string
-		if prefix != "" {
-			elemName = prefix + ":" + local
-		} else {
-			elemName = local
-		}
-
-		defaults, ok := pctx.lookupAttributeDefault(elemName)
+		defaults, ok := pctx.lookupAttributeDefault(elemQName)
 		if ok {
 			// First pass: apply default xmlns="..." (must come before prefixed).
 			// Skip a DTD default whose prefix (the empty string for the default
@@ -581,6 +620,11 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				if attr.LocalName() == lexicon.PrefixXMLNS && attr.Prefix() == "" {
 					if slices.Contains(nsDeclared, "") {
 						continue
+					}
+					// A DTD-defaulted default namespace is subject to the
+					// same reserved-URI constraints as a literal one.
+					if err := pctx.validateDefaultNamespaceDecl(ctx, attr.Value()); err != nil {
+						return err
 					}
 					pctx.pushNS("", attr.Value())
 					nbNs++
@@ -661,6 +705,15 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			continue
 		}
 		iuri := pctx.lookupNamespace(attrs[i].prefix)
+		// Namespaces in XML §3: a prefix used on an attribute must be bound to
+		// an in-scope namespace declaration. The reserved xml prefix is always
+		// bound (handled by lookupNamespace); an unbound prefix is a fatal
+		// namespace well-formedness error. (The default namespace does not
+		// apply to attribute names, so an unprefixed attribute — skipped above —
+		// is never affected.)
+		if iuri == "" {
+			return pctx.namespaceError(ctx, errors.New("namespace '"+attrs[i].prefix+"' not found"))
+		}
 		for j := i + 1; j < len(attrs); j++ {
 			if attrs[j].prefix == "" || attrs[j].prefix == lexicon.PrefixXML {
 				continue
@@ -939,9 +992,38 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						return
 					}
 				} else {
-					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {
-						_, _ = pctx.decodeEntities(ctx, ent.Content(), SubstituteRef)
-						ent.checked = 2
+					// Attribute-value WFCs on the entity's TRANSITIVE replacement
+					// text ("No External Entity References", "No < in Attribute
+					// Values", and the nested "Entity Declared" WFC). Mirroring
+					// libxml2's attribute-value call site (xmlParseAttValueInternal),
+					// the memoized walk runs ONLY when the entity's flags don't yet
+					// include the target set; a repeat reference (or a shared nested
+					// entity) is trusted and skipped, which is what keeps the nested
+					// getEntity lookups at libxml2's emission count. The target
+					// depends on context: in the DTD subset a nested entity may be
+					// forward-declared, so the result is only provisionally
+					// entWFCValidated and re-checked in body content.
+					entFlags := entWFCChecked | entWFCValidated
+					if pctx.inSubset != notInSubset {
+						entFlags = entWFCValidated
+					}
+					if ent.attrWFCFlags&entFlags != entFlags {
+						wfc, werr := pctx.checkEntityInAttValue(ctx, ent, entFlags)
+						if werr != nil {
+							err = pctx.error(ctx, werr)
+							return
+						}
+						switch wfc {
+						case attrWFCExternal:
+							err = pctx.error(ctx, errors.New("attribute references external entity"))
+							return
+						case attrWFCUnparsed:
+							err = pctx.error(ctx, errors.New("entity reference to unparsed entity"))
+							return
+						case attrWFCLessThan:
+							err = pctx.error(ctx, errors.New("'<' in entity is not allowed in attribute values"))
+							return
+						}
 					}
 					// Route the unresolved reference through the bounded helper:
 					// a declared entity with a very long name under
@@ -965,8 +1047,16 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					if err = pctx.writeAttrByte(ctx, b, 0x20); err != nil {
 						return
 					}
+				} else {
+					// normalize && inSpace: an internal whitespace run is collapsed
+					// (this space is dropped), a tokenized-normalization change.
+					pctx.attrNormChanged = true
 				}
 				inSpace = true
+			} else {
+				// normalize && b.Len() == 0: a leading whitespace char is dropped,
+				// a tokenized-normalization change.
+				pctx.attrNormChanged = true
 			}
 			if err := cur.Advance(1); err != nil {
 				return "", 0, err
@@ -988,6 +1078,8 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	value = b.String()
 	if inSpace && normalize {
 		if value[len(value)-1] == 0x20 {
+			// A trailing whitespace run is trimmed, a tokenized-normalization change.
+			pctx.attrNormChanged = true
 			for len(value) > 0 {
 				if value[len(value)-1] != 0x20 {
 					break
@@ -1000,6 +1092,170 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	return
 }
 
+// checkEntityInAttValue validates the general entity pent, referenced from an
+// attribute value under SubstituteEntities(false), against the XML 1.0
+// attribute-value well-formedness constraints by walking its TRANSITIVE
+// replacement text: "No External Entity References" (a nested external or
+// unparsed general entity), "No < in Attribute Values" (a nested literal '<'),
+// and the nested "Entity Declared" WFC (an undefined nested entity). It is a
+// port of libxml2 xmlCheckEntityInAttValue integrated with helium's entity
+// resolution: nested references resolve SAX-first then via the document table
+// (lookupGeneralEntity), so the walk works both for a DOM-building parse and for
+// a pure SAX-event parse whose custom handler answers GetEntity. The DIRECT case
+// (pent itself external/unparsed, or its own content directly containing '<') is
+// caught earlier by parseEntityRef; this covers content reached only through
+// nested &name; references.
+//
+// The result is memoized on each internal entity it walks via the WFC flags, so
+// a repeated reference — or a nested entity shared across walks — skips the
+// re-walk and does NOT re-emit the getEntity callbacks the nested lookups make.
+// flags selects the memoization target (entWFCChecked|entWFCValidated in body
+// content, entWFCValidated alone inside the DTD subset).
+func (pctx *parserCtx) checkEntityInAttValue(ctx context.Context, pent *Entity, flags int) (attrEntityWFC, error) {
+	visited := map[*Entity]struct{}{pent: {}}
+	checked := []*Entity{pent}
+	wfc, err := pctx.walkAttrValueWFC(ctx, pent.content, flags, visited, &checked)
+	if err != nil || wfc != attrWFCNone {
+		return wfc, err
+	}
+	for _, e := range checked {
+		e.attrWFCFlags |= flags
+	}
+	return attrWFCNone, nil
+}
+
+// checkAttrValueStringWFC validates a raw attribute-value string (a stored
+// ATTLIST default) against the attribute-value WFCs, resolving and recursing
+// into the general entities it references exactly as checkEntityInAttValue does.
+// Unlike an entity, the string itself is not memoized; the internal entities it
+// reaches are.
+func (pctx *parserCtx) checkAttrValueStringWFC(ctx context.Context, s string, flags int) (attrEntityWFC, error) {
+	visited := map[*Entity]struct{}{}
+	var checked []*Entity
+	wfc, err := pctx.walkAttrValueWFC(ctx, s, flags, visited, &checked)
+	if err != nil || wfc != attrWFCNone {
+		return wfc, err
+	}
+	for _, e := range checked {
+		e.attrWFCFlags |= flags
+	}
+	return attrWFCNone, nil
+}
+
+// walkAttrValueWFC walks content for a literal '<' or a nested general reference
+// to an external/unparsed/undefined entity, following internal general entities
+// transitively. It uses an EXPLICIT work stack rather than native recursion so a
+// long ACYCLIC chain of nested internal entities cannot grow the Go call stack
+// without bound; the visited set both guards reference cycles and bounds the
+// walk to the number of distinct declared entities. Each internal entity whose
+// content is walked is appended to *checked so the caller can flag it once the
+// walk completes without a violation. A nested entity already carrying the
+// target flags is trusted and not re-walked, mirroring libxml2's flag-gated
+// recursion. Predefined entities (&lt; &gt; &amp; &apos; &quot;) are the
+// sanctioned escapes and are never a violation.
+func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, content string, flags int, visited map[*Entity]struct{}, checked *[]*Entity) (attrEntityWFC, error) {
+	stack := []string{content}
+	for len(stack) > 0 {
+		s := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if c == '<' {
+				return attrWFCLessThan, nil
+			}
+			if c != '&' {
+				continue
+			}
+			semi := strings.IndexByte(s[i+1:], ';')
+			if semi < 0 {
+				break
+			}
+			ref := s[i+1 : i+1+semi]
+			i += 1 + semi // loop's i++ then moves past ';'
+			if len(ref) == 0 || ref[0] == '#' {
+				// Char reference: character data. Any '<' it resolves to is an
+				// allowed escape (&#60;), so it is intentionally not flagged.
+				continue
+			}
+			nested, wfc, err := pctx.lookupGeneralEntity(ctx, ref, true)
+			if err != nil {
+				return attrWFCNone, err
+			}
+			if wfc != attrWFCNone {
+				return wfc, nil
+			}
+			if nested == nil {
+				// Undefined nested entity: the "Entity Declared" WFC. A fatal
+				// verdict stops the walk; a non-fatal one (external subset present)
+				// lets it continue, to be re-checked once declarations complete.
+				if uerr := pctx.handleUndeclaredEntity(ctx, ref); uerr != nil {
+					return attrWFCNone, uerr
+				}
+				continue
+			}
+			if nested.entityType != enum.InternalGeneralEntity {
+				// Predefined or any non-internal type that survived
+				// lookupGeneralEntity's WFC gate: nothing to recurse into.
+				continue
+			}
+			if _, seen := visited[nested]; seen {
+				continue
+			}
+			if nested.attrWFCFlags&flags == flags {
+				// Already validated in this (or a stricter) context; its content is
+				// known clean, so skip the re-walk — and the getEntity callbacks it
+				// would emit — matching libxml2's flag-gated recursion.
+				continue
+			}
+			visited[nested] = struct{}{}
+			*checked = append(*checked, nested)
+			stack = append(stack, nested.content)
+		}
+	}
+	return attrWFCNone, nil
+}
+
+// validateAttributeDefaultsWFC re-checks every DTD-declared attribute default
+// value against the attribute-value WFCs (No External Entity References, No <
+// in Attribute Values) once the WHOLE DTD (internal + external subset) has been
+// parsed. A default value is parsed WHILE the DTD is still being read, so a
+// nested general entity it references may be declared AFTER it (a forward
+// reference) — the parse-time check in parseAttributeValueInternal cannot see
+// that entity yet and lets the value through. The WFC constrains the default
+// value DECLARATION itself (W3C rmt-e3e-12), independent of whether any element
+// actually uses the default, so this pass runs over the stored lexical values
+// with the entity tables complete. It matters only under SubstituteEntities(false),
+// where the stored default retains its unexpanded `&name;` references; with
+// substitution on, a violating direct reference is already rejected at parse time.
+//
+// It runs with the body-context flags (entWFCChecked|entWFCValidated): a default
+// walked inside the DTD subset only carries entWFCValidated, so this pass — with
+// the entity tables now complete — re-walks any entity a forward reference left
+// provisionally validated and catches the once-invisible violation.
+func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
+	for _, attrs := range pctx.attsDefault {
+		for _, attr := range attrs {
+			val := attr.Value()
+			if !strings.ContainsRune(val, '&') {
+				continue
+			}
+			wfc, err := pctx.checkAttrValueStringWFC(ctx, val, entWFCChecked|entWFCValidated)
+			if err != nil {
+				return err
+			}
+			switch wfc {
+			case attrWFCExternal:
+				return pctx.error(ctx, errors.New("attribute references external entity"))
+			case attrWFCUnparsed:
+				return pctx.error(ctx, errors.New("entity reference to unparsed entity"))
+			case attrWFCLessThan:
+				return pctx.error(ctx, errors.New("'<' in entity is not allowed in attribute values"))
+			}
+		}
+	}
+	return nil
+}
+
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {
 	l, p, err := pctx.parseQName(ctx)
 	if err != nil {
@@ -1007,8 +1263,18 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		return
 	}
 
+	// Special-attribute (tokenized-type) declarations are keyed by the attribute's
+	// full QName exactly as written, so an instance attribute is matched by its own
+	// QName (prefix + local): `p:id` matches an `<!ATTLIST r p:id …>` declaration and
+	// NOT an unprefixed `<!ATTLIST r id …>` (and vice-versa). Matches libxml2, which
+	// keys special-attribute state on the fully-qualified name.
+	attrQName := l
+	if p != "" {
+		attrQName = p + ":" + l
+	}
+
 	normalize := false
-	attType, ok := pctx.lookupSpecialAttribute(elemName, l)
+	attType, ok := pctx.lookupSpecialAttribute(elemName, attrQName)
 	if ok && attType != enum.AttrInvalid {
 		normalize = true
 	}
@@ -1047,6 +1313,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		pctx.replaceEntities = true
 	}
 
+	pctx.attrNormChanged = false
 	v, entities, err := pctx.parseAttributeValue(ctx, normalize)
 
 	pctx.replaceEntities = savedReplaceEntities
@@ -1058,7 +1325,25 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	if normalize {
 		if entities > 0 {
-			v = pctx.attrNormalizeSpace(v)
+			nv := pctx.attrNormalizeSpace(v)
+			if nv != v {
+				pctx.attrNormChanged = true
+			}
+			v = nv
+		}
+		// VC: Standalone Document Declaration (XML §2.9) — in a standalone="yes"
+		// document, an attribute whose value is altered by tokenized-type
+		// normalization declared in the external subset is a validity error.
+		// Record it for the post-parse DTD validation pass, which alone would no
+		// longer have the pre-normalization value. The external-origin lookup keys
+		// on the same full QName as the normalization lookup above.
+		if pctx.attrNormChanged &&
+			pctx.standalone == StandaloneExplicitYes &&
+			pctx.options.IsSet(parseDTDValid) &&
+			pctx.specialAttributeExternal(elemName, attrQName) &&
+			pctx.doc != nil {
+			pctx.doc.standaloneNormAttrs = append(pctx.doc.standaloneNormAttrs,
+				standaloneNormAttr{elem: elemName, attr: attrQName})
 		}
 	}
 

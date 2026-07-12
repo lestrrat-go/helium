@@ -59,11 +59,12 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// Decide whether to rebuild the copy's ID table from the source's. The source
 	// ID table (populated during parse) is authoritative for id()/GetElementByID on
 	// the source; the copy must reproduce it so both the no-strip and strip-space
-	// paths resolve ids identically. Translating the table is FAITHFUL where the
-	// lazy GetElementByID fallback is not: the fallback looks up DTD ATTLIST decls
-	// by LocalName only and would miss the qualified ATTLIST for a prefixed element
-	// (e.g. <!ATTLIST a:item eid ID>), so a strip-space copy that relied on it would
-	// resolve fewer ids than the source. Skip the rebuild when the source skips ids
+	// paths resolve ids identically. Translating the table reproduces the source's
+	// interned ID-table identity (and resolves at O(1)) rather than re-deriving ids
+	// through the lazy O(n) GetElementByID fallback walk, which — though it now looks
+	// up DTD ATTLIST decls by their raw qualified name (prefix+local), correctly
+	// handling a prefixed element's ATTLIST (e.g. <!ATTLIST a:item eid ID>) — would
+	// still yield a table with different element identities. Skip the rebuild when the source skips ids
 	// (no resolution either way) or has no interned table (API-built source — its
 	// own id() already relies on the lazy fallback, which the copy reproduces via
 	// the carried-over DTD subsets).

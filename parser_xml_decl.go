@@ -42,7 +42,17 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 	}
 
 	v, err = pctx.parseEncodingDecl(ctx)
-	if err == nil && !pctx.options.IsSet(parseIgnoreEnc) {
+	if err != nil {
+		// An "encoding" keyword that is present but malformed (missing '=',
+		// missing opening quote, or an invalid EncName) is a fatal error per
+		// EncodingDecl [80]/EncName [81]; only a wholly-absent keyword
+		// (AttrNotFoundError) is benign and falls through to the optional
+		// StandaloneDecl (W3C ibm-not-wf-P80-ibm80n03).
+		var nf AttrNotFoundError
+		if !errors.As(err, &nf) {
+			return pctx.error(ctx, err)
+		}
+	} else if !pctx.options.IsSet(parseIgnoreEnc) {
 		pctx.encoding = v
 	}
 
@@ -67,6 +77,43 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 		return nil
 	}
 	return pctx.error(ctx, errors.New("XML declaration not closed"))
+}
+
+// documentVersion returns the XML version of the document being parsed — the
+// value from the document's XML declaration, or the parser context's recorded
+// version when the Document node is not attached (e.g. the throwaway sub-context
+// that decodes an external entity's TextDecl, which is seeded with the parent
+// document's version). An empty result means no declaration was seen; the caller
+// treats that as "1.0".
+func (pctx *parserCtx) documentVersion() string {
+	if pctx.doc != nil && pctx.doc.Version() != "" {
+		return pctx.doc.Version()
+	}
+	return pctx.version
+}
+
+// checkEntityVersion enforces the XML §4.3.4 version-compatibility constraint:
+// an external parsed entity (or the external DTD subset) whose TextDecl declares
+// an XML version LATER than the referencing document's is a fatal error (libxml2
+// XML_ERR_VERSION_MISMATCH). The matrix: a 1.0 document may not reference a 1.1
+// entity (fatal); a 1.0 document with a 1.0 or version-less entity is fine; a 1.1
+// document may reference a 1.1 OR a 1.0 entity. An absent/empty entity version is
+// compatible and never rejected. The comparison is against the actual document
+// version (documentVersion) — the sub-context that parses the TextDecl carries no
+// Document node, so it is seeded with the parent document's version by
+// decodeExternalPEContent / decodeFixedWidthExternalContent.
+func (pctx *parserCtx) checkEntityVersion(entityVersion string) error {
+	if entityVersion == "" || entityVersion == "1.0" {
+		return nil
+	}
+	docVersion := pctx.documentVersion()
+	if docVersion == "" {
+		docVersion = "1.0"
+	}
+	if docVersion != "1.0" {
+		return nil
+	}
+	return ErrEntityVersionMismatch
 }
 
 // parseTextDecl parses an external-entity TextDecl from the byte cursor,
@@ -105,6 +152,9 @@ func (pctx *parserCtx) parseTextDecl(ctx context.Context) error {
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
+		if err := pctx.checkEntityVersion(v); err != nil {
+			return pctx.error(ctx, err)
+		}
 		pctx.version = v
 
 		if !isBlankByte(cur.Peek()) {
@@ -132,6 +182,81 @@ func (pctx *parserCtx) parseTextDecl(ctx context.Context) error {
 			return err
 		}
 		return nil
+	}
+
+	return pctx.error(ctx, errors.New("malformed TextDecl: expected '?>' after encoding declaration"))
+}
+
+// parseTextDeclFromCursor parses an external-entity TextDecl from a rune cursor.
+// It is the fixed-width-Unicode counterpart of parseTextDecl, used when the
+// external content is in UTF-16 / UCS-4 whose bytes switchEncoding already
+// decoded (so the TextDecl, being itself encoded, could not be read at byte
+// level). It enforces the same grammar:
+//
+//	TextDecl ::= '<?xml' VersionInfo? EncodingDecl S? '?>'
+//
+// VersionInfo is OPTIONAL, EncodingDecl is REQUIRED, and NO StandaloneDecl is
+// permitted — a version-only, standalone-bearing, or otherwise out-of-grammar
+// declaration is rejected. The declared encoding is informational here (the
+// BOM/leading-'<' shape already fixed the actual encoding), so it does not drive
+// a re-switch; it is recorded only to mirror the byte-level path.
+func (pctx *parserCtx) parseTextDeclFromCursor(ctx context.Context) error {
+	cur := pctx.getCursor()
+	if cur == nil {
+		return errors.New("rune cursor required for parseTextDeclFromCursor")
+	}
+
+	if !cur.ConsumeString("<?xml") {
+		return pctx.error(ctx, ErrInvalidXMLDecl)
+	}
+
+	if !pctx.skipBlanks(ctx) {
+		return pctx.error(ctx, errors.New("blank needed after '<?xml'"))
+	}
+
+	// VersionInfo is OPTIONAL. Detect it by the literal "version" token; when
+	// present it must be well formed and followed by a blank separating it from
+	// the required EncodingDecl.
+	if cur.HasPrefixString("version") {
+		v, err := pctx.parseVersionInfoFromCursor(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if err := pctx.checkEntityVersion(v); err != nil {
+			return pctx.error(ctx, err)
+		}
+		pctx.version = v
+
+		if !isBlankByte(cur.Peek()) {
+			return pctx.error(ctx, ErrSpaceRequired)
+		}
+		pctx.skipBlanks(ctx)
+	}
+
+	// EncodingDecl is REQUIRED. A version-only declaration falls through here and
+	// is rejected.
+	ev, err := pctx.parseEncodingDeclFromCursor(ctx)
+	if err != nil {
+		return pctx.error(ctx, errors.New("TextDecl requires an encoding declaration"))
+	}
+	if !pctx.options.IsSet(parseIgnoreEnc) {
+		pctx.encoding = ev
+	}
+
+	// Optional trailing space, then the required "?>". A 'standalone'
+	// pseudo-attribute (or any other leftover content) leaves a non-'?' byte here
+	// and is rejected.
+	pctx.skipBlanks(ctx)
+	if cur.Peek() == '?' {
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
+		if cur.Peek() == '>' {
+			if err := cur.Advance(1); err != nil {
+				return err
+			}
+			return nil
+		}
 	}
 
 	return pctx.error(ctx, errors.New("malformed TextDecl: expected '?>' after encoding declaration"))
@@ -216,7 +341,15 @@ func (pctx *parserCtx) parseXMLDeclFromCursor(ctx context.Context) error {
 	}
 
 	ev, err := pctx.parseEncodingDeclFromCursor(ctx)
-	if err == nil && !pctx.options.IsSet(parseIgnoreEnc) {
+	if err != nil {
+		// A present-but-malformed "encoding" keyword is fatal (EncodingDecl
+		// [80]/EncName [81]); only a wholly-absent keyword (AttrNotFoundError)
+		// falls through to the optional StandaloneDecl.
+		var nf AttrNotFoundError
+		if !errors.As(err, &nf) {
+			return pctx.error(ctx, err)
+		}
+	} else if !pctx.options.IsSet(parseIgnoreEnc) {
 		pctx.encoding = ev
 	}
 

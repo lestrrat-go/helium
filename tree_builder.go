@@ -153,6 +153,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 				// value. Use literal mode to avoid re-parsing & as
 				// new entity reference starts.
 				_ = e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+				carrySyntheticBase(e, attr, ns)
 			} else {
 				if _, err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
 					return err
@@ -235,7 +236,19 @@ func (t *TreeBuilder) Characters(ctxif context.Context, data []byte) error {
 		return errors.New("text content placed in wrong location")
 	}
 
-	return n.AppendText(data)
+	if err := n.AppendText(data); err != nil {
+		return err
+	}
+	// A character-reference delivery marks the Text node it lands in (whether
+	// freshly created or merged into the last Text child) so element-content
+	// validity can treat its whitespace as non-ignorable. Sticky: once set, a
+	// later literal append into the same node does not clear it.
+	if ctx.charDataFromCharRef {
+		if last, ok := AsNode[*Text](n.LastChild()); ok {
+			last.fromCharRef = true
+		}
+	}
+	return nil
 }
 
 // CDataBlock mirrors xmlSAX2Text(ctxt, value, len, XML_CDATA_SECTION_NODE)
@@ -410,6 +423,16 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		return readErr
 	}
 
+	// An external subset may begin with a TextDecl
+	// ('<?xml' VersionInfo? EncodingDecl S? '?>'). Consume it (and honor any
+	// declared encoding) before the declaration loop, which would otherwise
+	// reject the '<?xml' as a processing instruction whose target may not be
+	// "xml". This is the same treatment external parameter/general entities get.
+	data, err = ctx.decodeExternalPEContent(ctxif, resolved, data)
+	if err != nil {
+		return err
+	}
+
 	doc := ctx.doc
 
 	// Create the external subset DTD
@@ -424,6 +447,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// Push content onto the input stack and loop until exhausted.
 	savedExternal := ctx.external
 	savedBaseURI := ctx.baseURI
+	savedDTDInputFloor := ctx.dtdInputFloor
 	ctx.external = true
 	ctx.baseURI = resolved
 
@@ -432,6 +456,11 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// The DTD cursor we just pushed is the enclosing content cursor for the
 	// shared declaration step: it lives one level above baseLen.
 	dtdFloor := ctx.inputTab.Len()
+	// skipBlanksPE expands parameter-entity references inside/adjacent to markup
+	// declarations by pushing their padded replacement text ABOVE this cursor and
+	// crossing back when the PE input is spent; it must never pop below this base
+	// (into the main document input), so record its depth as the floor.
+	ctx.dtdInputFloor = dtdFloor
 
 	// Restore parser state on every exit path, including the error returns
 	// below, and ensure our pushed input is always removed from the stack.
@@ -441,6 +470,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		}
 		ctx.external = savedExternal
 		ctx.baseURI = savedBaseURI
+		ctx.dtdInputFloor = savedDTDInputFloor
 	}()
 
 	// Parse the external subset declaration-by-declaration through the SHARED
@@ -450,16 +480,15 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// "%pe;" reference without expanding it), explicit parsePEReference
 	// expansion, spent-cursor cleanup, and a forward-progress guard that surfaces
 	// a malformed "<!BOGUS" while the external DTD cursor/baseURI are still
-	// active (so its location, not the main doctype's, is reported). The
-	// top-level loop is tolerant of conditional-section errors (stop, do not
-	// fail).
+	// active (so its location, not the main doctype's, is reported). A malformed
+	// or unterminated conditional section propagates as a fatal error.
 	for ctx.inputTab.Len() > baseLen {
 		top := ctx.adaptCursor(ctx.inputTab.PeekOne())
 		if top == nil || top.Done() {
 			break
 		}
 
-		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor, true)
+		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor)
 		if err != nil {
 			return err
 		}
@@ -511,6 +540,27 @@ func (t *TreeBuilder) GetParameterEntity(ctxif context.Context, name string) (sa
 	}
 
 	return nil, ErrEntityNotFound
+}
+
+// carrySyntheticBase re-marks a replayed xml:base attribute as parser-synthesized.
+// When an external-entity subtree is replayed under replaceEntities, the tree
+// builder rebuilds each attribute fresh, so the syntheticBase marker on the cached
+// source attribute (set by parseExternalEntityPrivate) must be copied onto the
+// newly built one — otherwise DTD validation would flag the synthetic xml:base as
+// an undeclared attribute. An authored xml:base is never marked, so it is not
+// carried and remains subject to the "attribute must be declared" VC.
+func carrySyntheticBase(e *Element, src sax.Attribute, ns *Namespace) {
+	srcAttr, ok := src.(*Attribute)
+	if !ok || !srcAttr.syntheticBase {
+		return
+	}
+	var uri string
+	if ns != nil {
+		uri = ns.URI()
+	}
+	if a := e.GetAttributeNodeNS(srcAttr.LocalName(), uri); a != nil {
+		a.syntheticBase = true
+	}
 }
 
 func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName string, typ enum.AttributeType, deftype enum.AttributeDefault, value string, enumif sax.Enumeration) error {

@@ -23,6 +23,18 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		return pctx.error(ctx, ErrAmpersandRequired)
 	}
 
+	// A reference (character or general-entity) is content per XML production
+	// [43]. Record it on the containing element so element-content validity can
+	// reject a reference inside an element declared EMPTY (errata 2e E15a) even
+	// when the reference expands to nothing. parseReference runs only from the
+	// element-content loop (parseDocument), so pctx.elem is the element the
+	// reference is content of; references in attribute values take a separate
+	// path (decodeEntities) and never reach here, so an attribute char/entity
+	// reference never marks its element.
+	if pctx.elem != nil {
+		pctx.elem.contentHasReference = true
+	}
+
 	if cur.PeekAt(1) == '#' {
 		v, err := pctx.parseCharRef()
 		if err != nil {
@@ -32,7 +44,13 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		l := utf8.EncodeRune(buf[:], v)
 		b := buf[:l]
 		if s := pctx.sax; s != nil {
-			if err := pctx.deliverCharacters(ctx, s.Characters, b); err != nil {
+			// Character-reference whitespace does not match the S nonterminal, so
+			// it is not ignorable in element-only content (XML §3.2.1 / errata 2e
+			// E15). Mark the delivery so the resulting Text node records its origin.
+			pctx.charDataFromCharRef = true
+			err := pctx.deliverCharacters(ctx, s.Characters, b)
+			pctx.charDataFromCharRef = false
+			if err != nil {
 				return err
 			}
 		}
@@ -219,6 +237,16 @@ func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
 			return err
 		}
 	case *Text:
+		// Propagate the cached entity Text's char-reference origin so a general
+		// entity whose replacement text is a character reference (E15h) yields a
+		// non-ignorable whitespace Text node in the content, matching a direct
+		// character reference (E15g).
+		if v.fromCharRef {
+			pctx.charDataFromCharRef = true
+			err := pctx.deliverCharacters(ctx, pctx.sax.Characters, v.Content())
+			pctx.charDataFromCharRef = false
+			return err
+		}
 		return pctx.deliverCharacters(ctx, pctx.sax.Characters, v.Content())
 	case *CDATASection:
 		switch err := pctx.sax.CDataBlock(ctx, v.Content()); err {
@@ -385,8 +413,21 @@ func parseStringName(s []byte, maxNameLength int) (string, int, error) {
 	return out.String(), i, nil
 }
 
-func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
-	if ctx.inSubset == 0 {
+// getEntity resolves a general entity by name against the document entity
+// table, mirroring libxml2 xmlSAX2GetEntity. In a standalone="yes" document a
+// reference (in the document body) to a general entity that is declared ONLY in
+// the external subset is a fatal well-formedness error — WFC: Entity Declared
+// (XML §4.1) as constrained by the Standalone Document Declaration (§2.9): under
+// standalone="yes" all consumed declarations must be visible in the internal
+// subset. Document.GetEntity hides external declarations while standalone is
+// set, so such an entity is found only on the standalone-disabled retry; that
+// retry succeeding is exactly the violation (libxml2's XML_ERR_NOT_STANDALONE).
+// A returned non-nil entity with a non-nil error is that violation (the entity
+// is still returned, matching libxml2, so the caller can surface a precise
+// error); a nil entity with a nil error is a genuinely undeclared reference the
+// caller must route through the Entity Declared WFC (handleUndeclaredEntity).
+func (pctx *parserCtx) getEntity(ctx context.Context, name string) (*Entity, error) {
+	if pctx.inSubset == 0 {
 		if ret, err := resolvePredefinedEntity(name); err == nil {
 			return ret, nil
 		}
@@ -394,28 +435,144 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 
 	var ret *Entity
 	var ok bool
-	if ctx.doc == nil {
+	if pctx.doc == nil {
 		return nil, ErrEntityNotFound
-	} else if ctx.doc.standalone != 1 {
-		ret, _ = ctx.doc.GetEntity(name)
+	} else if pctx.doc.standalone != StandaloneExplicitYes {
+		ret, _ = pctx.doc.GetEntity(name)
 	} else {
-		if ctx.inSubset == 2 {
-			ctx.doc.standalone = 0
-			ret, _ = ctx.doc.GetEntity(name)
-			ctx.doc.standalone = 1
+		if pctx.inSubset == 2 {
+			pctx.doc.standalone = 0
+			ret, _ = pctx.doc.GetEntity(name)
+			pctx.doc.standalone = 1
 		} else {
-			ret, ok = ctx.doc.GetEntity(name)
+			ret, ok = pctx.doc.GetEntity(name)
 			if !ok {
-				ctx.doc.standalone = 0
-				ret, ok = ctx.doc.GetEntity(name)
+				pctx.doc.standalone = 0
+				ret, ok = pctx.doc.GetEntity(name)
+				pctx.doc.standalone = 1
 				if !ok {
-					return nil, errors.New("Entity(" + name + ") document marked standalone but requires eternal subset")
+					// Genuinely undeclared: let the caller apply the
+					// Entity Declared WFC via its nil-entity handling.
+					return nil, nil //nolint:nilnil
 				}
-				ctx.doc.standalone = 1
+				// Declared only in the external subset while standalone="yes".
+				// A reference in the document body (inSubset == 0) is a fatal
+				// WFC violation; references inside the DTD (attribute-list
+				// bookkeeping) are not flagged here.
+				if pctx.inSubset == 0 {
+					return ret, pctx.error(ctx, ErrNotStandalone)
+				}
 			}
 		}
 	}
 	return ret, nil
+}
+
+// lookupGeneralEntity resolves a general entity by name for the attribute-value
+// WFC walk, mirroring libxml2 xmlLookupGeneralEntity: a predefined entity first,
+// then the SAX getEntity callback, then the document entity table. Resolving
+// SAX-first is what lets a pure SAX-event parse (a custom handler replacing the
+// tree builder, with no document being built) surface an indirect
+// external/unparsed reference — the document table is empty there, but the
+// handler's GetEntity still answers. When inAttr, a direct resolution to an
+// unparsed entity yields attrWFCUnparsed and to an external parsed entity yields
+// attrWFCExternal (the "No External Entity References"/"Parsed Entity" WFCs). An
+// undefined entity is reported as (nil, attrWFCNone, nil); the caller applies
+// the "Entity Declared" WFC via handleUndeclaredEntity.
+func (pctx *parserCtx) lookupGeneralEntity(ctx context.Context, name string, inAttr bool) (*Entity, attrEntityWFC, error) {
+	if ent, err := resolvePredefinedEntity(name); err == nil {
+		return ent, attrWFCNone, nil
+	}
+
+	var ent *Entity
+	if s := pctx.sax; s != nil {
+		loaded, _ := s.GetEntity(ctx, name)
+		if !isNilEntity(loaded) {
+			typed, ok := loaded.(*Entity)
+			if !ok {
+				return nil, attrWFCNone, pctx.error(ctx, fmt.Errorf("SAX GetEntity returned unsupported entity type %T for entity '%s'", loaded, name))
+			}
+			ent = typed
+		}
+	}
+	if ent == nil {
+		var gerr error
+		ent, gerr = pctx.getEntity(ctx, name)
+		// A non-nil entity with a non-nil error is the standalone WFC violation
+		// (declared only in the external subset under standalone="yes"); surface
+		// it. A nil entity is undeclared — handled below via the caller's
+		// Entity Declared WFC, so its (non-fatal) error is discarded here.
+		if gerr != nil && ent != nil {
+			return nil, attrWFCNone, gerr
+		}
+	}
+	if ent == nil {
+		return nil, attrWFCNone, nil
+	}
+
+	switch ent.entityType {
+	case enum.ExternalGeneralUnparsedEntity:
+		return ent, attrWFCUnparsed, nil
+	case enum.ExternalGeneralParsedEntity:
+		if inAttr {
+			return ent, attrWFCExternal, nil
+		}
+	}
+	return ent, attrWFCNone, nil
+}
+
+// undeclaredEntityValidityError promotes an undeclared general-entity reference —
+// one that resolved to no declaration and is NOT the fatal WFC case — to the
+// "Entity Declared" VALIDITY error when validating a FULLY-INTERNAL DTD: no
+// external subset and no external parameter entity (`parseDTDValid` set,
+// `!hasExternalSubset && !hasExternalPERef`). An external subset or external PE
+// may resolve incompletely (e.g. an empty/unreachable external PE), so helium
+// stays lenient there rather than risk rejecting a valid document. It returns nil
+// when the reference should stay a non-fatal warning. The VC "Entity Declared"
+// applies to ALL general entity references alike — in element content AND in
+// attribute values (W3C rmt-e3e-13; matches libxml2's xmlValidityError).
+func (pctx *parserCtx) undeclaredEntityValidityError(ctx context.Context, name string) error {
+	if !pctx.options.IsSet(parseDTDValid) || pctx.hasExternalSubset || pctx.hasExternalPERef {
+		return nil
+	}
+	return pctx.error(ctx, fmt.Errorf("%w '%s'", ErrUndeclaredEntity, name))
+}
+
+// handleUndeclaredEntity applies the "Entity Declared" constraint for a
+// general-entity reference that resolved to no declaration, mirroring libxml2
+// xmlHandleUndeclaredEntity. It returns a fatal error when the missing
+// declaration is a well-formedness violation (standalone='yes', or no external
+// subset and no parameter-entity references, so all declarations must be
+// visible), or — when validating a fully-internal DTD — the "Entity Declared"
+// validity error (undeclaredEntityValidityError). Otherwise it emits a warning,
+// marks the parse invalid, and returns nil so the caller can continue (a nested
+// entity may still be declared later in an external subset).
+func (pctx *parserCtx) handleUndeclaredEntity(ctx context.Context, name string) error {
+	if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
+		return pctx.error(ctx, fmt.Errorf("Entity '%s' not defined", name))
+	}
+	if err := pctx.undeclaredEntityValidityError(ctx, name); err != nil {
+		return err
+	}
+	if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
+		return err
+	}
+	pctx.valid = false
+	return nil
+}
+
+// isNilEntity reports whether e is nil, including a non-nil sax.Entity interface
+// value that wraps a nil *Entity. getEntity returns a concrete (*Entity)(nil)
+// for an undefined entity; assigned to a sax.Entity interface that becomes a
+// typed nil that a plain `== nil` check misses, so any method call on it panics.
+func isNilEntity(e sax.Entity) bool {
+	if e == nil {
+		return true
+	}
+	if ce, ok := e.(*Entity); ok {
+		return ce == nil
+	}
+	return false
 }
 
 func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.Entity, int, error) {
@@ -447,16 +604,33 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 		loadedEnt, err = h.GetEntity(ctx, name)
 		if err != nil {
 			if pctx.wellFormed {
-				loadedEnt, err = pctx.getEntity(name)
+				var ent *Entity
+				ent, err = pctx.getEntity(ctx, name)
+				// getEntity reports the standalone WFC violation as a non-nil
+				// entity plus a non-nil error; an undeclared entity is (nil,nil)
+				// and is handled by the isNilEntity branch below.
 				if err != nil {
 					return nil, 0, err
 				}
+				loadedEnt = ent
 			}
 		}
 	}
-	if loadedEnt == nil {
+	// getEntity returns a concrete (*Entity)(nil) for an undefined entity, which
+	// becomes a non-nil sax.Entity interface holding a nil pointer when assigned
+	// above. A plain `== nil` check misses that typed nil and the EntityType()
+	// call below would panic (e.g. an internal entity whose replacement text
+	// references an undefined entity, referenced from an attribute value), so
+	// detect the typed nil too and treat it as "not defined".
+	if isNilEntity(loadedEnt) {
 		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 			return nil, 0, fmt.Errorf("entity '%s' not defined", name)
+		}
+		// Same "Entity Declared" VC promotion as the content path: a fully-internal
+		// DTD referencing an undeclared entity from an attribute value is a validity
+		// error when validating (W3C rmt-e3e-13 applies to attribute values too).
+		if err := pctx.undeclaredEntityValidityError(ctx, name); err != nil {
+			return nil, 0, err
 		}
 		if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
 			return nil, 0, err
@@ -469,10 +643,15 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 	}
 
 	if pctx.instate == psAttributeValue && loadedEnt.EntityType() == enum.ExternalGeneralParsedEntity {
-		return nil, 0, fmt.Errorf("attribute references enternal entity '%s'", name)
+		return nil, 0, fmt.Errorf("attribute references external entity '%s'", name)
 	}
 
-	if pctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && loadedEnt.EntityType() == enum.InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
+	// An internal general entity whose replacement text contains a literal '<'
+	// is a WFC violation ("No < in Attribute Values") when referenced from an
+	// attribute value. Predefined entities (&lt; etc.) resolve earlier and are
+	// legal, so gate on non-predefined, mirroring the cursor path in
+	// parseEntityRef.
+	if pctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && loadedEnt.EntityType() != enum.InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
 		return nil, 0, fmt.Errorf("'<' in entity '%s' is not allowed in attribute values", name)
 	}
 
@@ -657,8 +836,6 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		return ent, nil
 	}
 
-	err = nil
-
 	if s := pctx.sax; s != nil {
 		// A non-nil error here is advisory (e.g. "entity not found"): we fall
 		// through to the undeclared-entity handling below, matching libxml2's
@@ -671,16 +848,35 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 			if !ok {
 				return nil, pctx.error(ctx, fmt.Errorf("SAX GetEntity returned unsupported entity type %T for entity '%s'", loadedEnt, name))
 			}
+			// Fall through to the well-formedness checks below rather than
+			// returning the SAX-resolved entity directly: a direct reference to
+			// an external/unparsed/parameter entity (or an internal entity whose
+			// replacement text contains '<') from an attribute value is a WFC
+			// violation regardless of which resolver produced the entity.
 			ent = typed
-			return
+		} else {
+			var gerr error
+			ent, gerr = pctx.getEntity(ctx, name)
+			// A resolved entity plus a non-nil error is the standalone WFC
+			// violation (external-only declaration under standalone="yes");
+			// propagate it. A nil entity falls through to the undeclared-entity
+			// handling below.
+			if gerr != nil && ent != nil {
+				return nil, gerr
+			}
 		}
-
-		ent, _ = pctx.getEntity(name)
 	}
 
 	if ent == nil {
 		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 			return nil, pctx.error(ctx, ErrUndeclaredEntity)
+		}
+		// A parameter-entity reference or external subset downgrades an undeclared
+		// general entity from a fatal WFC to the "Entity Declared" VALIDITY
+		// constraint; when validating a fully-internal DTD it is still reported
+		// (undeclaredEntityValidityError).
+		if err := pctx.undeclaredEntityValidityError(ctx, name); err != nil {
+			return nil, err
 		}
 		if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {
 			return nil, err
@@ -796,6 +992,19 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 		return nil
 	}
 
+	// A '%' immediately followed by whitespace (or end of input) is the
+	// parameter-entity DECLARATION marker of `<!ENTITY % name ...>`, never a PE
+	// reference — a reference is `%name;` with a NameStartChar right after '%'.
+	// Leave the marker for the declaration parser in EVERY state. Without this,
+	// the FIRST declaration of an external subset being a PE declaration reaches
+	// skipBlanks (called from parseEntityDecl after `<!ENTITY`) with instate not
+	// yet psDTD — parseMarkupDecl sets psDTD only AFTER a declaration — so the
+	// psDTD-branch guard below does not apply and the marker is mis-parsed as a
+	// reference, yielding a spurious "space required" on that first declaration.
+	if c := cur.PeekAt(1); isBlankByte(c) || c == 0 {
+		return nil
+	}
+
 	switch pctx.instate {
 	case psCDATA, psComment, psStartTag, psEndTag, psEntityDecl, psContent, psAttributeValue, psPI, psSystemLiteral, psPublicLiteral, psEntityValue, psIgnore:
 		return nil
@@ -807,10 +1016,6 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 		return errors.New("handlePEReference: parameter entity in epilogue")
 	case psDTD:
 		if !pctx.external || pctx.inputTab.Len() == 1 {
-			return nil
-		}
-
-		if c := cur.PeekAt(1); isBlankByte(c) || c == 0 {
 			return nil
 		}
 	}

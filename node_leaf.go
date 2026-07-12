@@ -219,6 +219,17 @@ func (n *EntityRef) SetTreeDoc(doc *Document) {
 // Text represents an XML text node (libxml2: xmlNode with type XML_TEXT_NODE).
 type Text struct {
 	node
+	// fromCharRef records that some of this node's character data originated
+	// from a character reference (&#N;/&#xN;) — directly, or via re-parse of a
+	// general entity whose replacement text is a character reference. It is used
+	// ONLY by element-content validity (VC: Element Valid, XML §3.2.1 as clarified
+	// by errata 2e E15): whitespace produced by a character reference does NOT
+	// match the S nonterminal, so it is not ignorable in element-only content,
+	// unlike literal source whitespace or whitespace from an internal entity whose
+	// replacement text is itself literal whitespace. It is invisible to
+	// serialization, C14N, XPath string-value, and node copy — none read it — so
+	// it changes no output, only the validation verdict.
+	fromCharRef bool
 }
 
 const textNodeName = "(text)"
@@ -247,6 +258,7 @@ func (n *Text) AddChild(cur Node) error {
 		if err := addChildPreflight(n, cur); err != nil {
 			return err
 		}
+		n.fromCharRef = n.fromCharRef || t.fromCharRef
 		return n.AppendText(t.content)
 	}
 	return ErrInvalidOperation
@@ -275,6 +287,9 @@ func (n *Text) AddSibling(cur Node) error {
 		return err
 	}
 	if cur.Type() == TextNode {
+		if t, ok := cur.(*Text); ok {
+			n.fromCharRef = n.fromCharRef || t.fromCharRef
+		}
 		return n.AppendText(cur.Content())
 	}
 	return addSibling(n, cur)

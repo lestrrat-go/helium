@@ -251,9 +251,11 @@ func TestNotationAttributeValidation(t *testing.T) {
 	t.Run("valid notation", func(t *testing.T) {
 		t.Parallel()
 
+		// A NOTATION attribute is not allowed on an EMPTY element (No Notation on
+		// Empty Element VC), so the element uses ANY content.
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!NOTATION gif SYSTEM "image/gif">
   <!NOTATION png SYSTEM "image/png">
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
@@ -269,7 +271,7 @@ func TestNotationAttributeValidation(t *testing.T) {
 
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
-  <!ELEMENT root EMPTY>
+  <!ELEMENT root ANY>
   <!NOTATION gif SYSTEM "image/gif">
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
@@ -623,16 +625,90 @@ func TestValidateAttributeTypes(t *testing.T) {
 		dtd+`<doc><item id="a" ref="missing"/></doc>`))
 }
 
+// TestValidateNmtokenColon verifies that DTD (non-namespace-aware) NMTOKEN /
+// NMTOKENS validation accepts the colon, which is part of the XML 1.0 NameChar
+// production, so a value like `x:image` is a valid NMTOKEN and must not be
+// rejected. A token with a genuinely illegal char still fails.
+func TestValidateNmtokenColon(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<!DOCTYPE doc [
+<!ELEMENT doc EMPTY>
+<!ATTLIST doc
+  tok  NMTOKEN  #IMPLIED
+  toks NMTOKENS #IMPLIED>
+]>`
+
+	// An NMTOKEN value containing a colon is valid (DTD is not namespace-aware).
+	require.Empty(t, parseValidating(t, dtd+`<doc tok="x:image"/>`),
+		"a colon is a valid NMTOKEN NameChar")
+
+	// An unprefixed NMTOKEN is unchanged.
+	require.Empty(t, parseValidating(t, dtd+`<doc tok="x1"/>`),
+		"an unprefixed NMTOKEN still validates")
+
+	// Each space-separated NMTOKENS token may carry a colon.
+	require.Empty(t, parseValidating(t, dtd+`<doc toks="x:image y:photo z1"/>`),
+		"colons are valid in each NMTOKENS token")
+
+	// A token with a genuinely illegal char (@) is still rejected.
+	require.NotEmpty(t, parseValidating(t, dtd+`<doc tok="a@b"/>`),
+		"an illegal NameChar is not a valid NMTOKEN")
+	require.NotEmpty(t, parseValidating(t, dtd+`<doc toks="ok x@y"/>`),
+		"an illegal NameChar in one NMTOKENS token is rejected")
+}
+
 // TestValidateNotationAttribute exercises NOTATION-typed attribute validation.
 func TestValidateNotationAttribute(t *testing.T) {
 	t.Parallel()
 
+	// A NOTATION attribute is not allowed on an EMPTY element (No Notation on
+	// Empty Element VC), so the element uses ANY content.
 	const dtd = `<!DOCTYPE doc [
 <!NOTATION gif SYSTEM "viewer">
-<!ELEMENT doc EMPTY>
+<!ELEMENT doc ANY>
 <!ATTLIST doc kind NOTATION (gif) #IMPLIED>
 ]>`
 
 	require.Empty(t, parseValidating(t, dtd+`<doc kind="gif"/>`))
 	require.NotEmpty(t, parseValidating(t, dtd+`<doc kind="png"/>`))
+}
+
+// TestValidateNoDTD verifies that requesting DTD validation on a document with
+// neither an internal nor an external subset is a validity error (libxml2
+// XML_DTD_NO_DTD "no DTD found!"), while the same document parsed without
+// ValidateDTD succeeds and a document carrying a DTD still validates.
+func TestValidateNoDTD(t *testing.T) {
+	t.Parallel()
+
+	const noDTD = `<?xml version="1.0"?>
+<root><child/></root>`
+
+	t.Run("ValidateDTD(true) with no DTD is invalid", func(t *testing.T) {
+		h := &collectingErrorHandler{}
+		_, err := helium.NewParser().
+			ValidateDTD(true).
+			ErrorHandler(h).
+			Parse(t.Context(), []byte(noDTD))
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(h.errs, "no DTD found"),
+			"expected a 'no DTD found' validity error, got %v", h.errs)
+	})
+
+	t.Run("ValidateDTD(false) with no DTD succeeds", func(t *testing.T) {
+		_, err := helium.NewParser().
+			ValidateDTD(false).
+			Parse(t.Context(), []byte(noDTD))
+		require.NoError(t, err)
+	})
+
+	t.Run("ValidateDTD(true) with a DTD still validates", func(t *testing.T) {
+		const withDTD = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+]>
+<root><child/></root>`
+		require.Empty(t, parseValidating(t, withDTD))
+	})
 }

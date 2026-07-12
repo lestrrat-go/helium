@@ -36,6 +36,15 @@ jobs:
   ledger:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The drift-check runs helium-w3c-tests' tests against the PR's helium via
+    # its `replace => ../helium`. When a helium PR bumps a shared dependency
+    # (e.g. a Dependabot golang.org/x/* bump), helium-w3c-tests@main's go.mod /
+    # go.sum still pin the old version, so the combined module graph is
+    # inconsistent and the default readonly mode fails with "updates to go.mod
+    # needed; go mod tidy". -mod=mod lets the build reconcile the graph in the
+    # ephemeral checkout instead of failing the PR.
+    env:
+      GOFLAGS: -mod=mod
     steps:
       # helium at the triggering ref (the code under test), as a sibling of the
       # harness so helium-w3c-tests' `replace => ../helium` resolves.

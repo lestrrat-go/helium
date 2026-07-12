@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strings"
 
 	henc "github.com/lestrrat-go/helium/internal/encoding"
@@ -122,6 +123,21 @@ type writeSession struct {
 	// suppress-indentation element, so indentation is disabled for it even when
 	// format is enabled.
 	suppressDepth int
+	// nsScope maps a namespace prefix to the URI currently in force in the
+	// serialized OUTPUT — the union of the xmlns declarations emitted on the
+	// ancestor path. reconcileNamespaces consults it so a prefixed element or
+	// attribute whose namespace was declared on an ancestor outside the
+	// serialized subtree still gets a declaration. It is nil until the first
+	// namespaced element, so a plain-XML dump allocates nothing.
+	nsScope map[string]string
+}
+
+// nsSaved records a prefix's prior binding in nsScope so it can be restored
+// after an element's subtree is serialized.
+type nsSaved struct {
+	prefix string
+	href   string
+	had    bool
 }
 
 // writeString writes str to out, recording the first error encountered into
@@ -733,7 +749,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	// if it got here it's some sort of an element
 	var name string
 	var nslist []*Namespace
-	if nser, ok := n.(Namespacer); ok {
+	nser, isNser := n.(Namespacer)
+	if isNser {
 		if prefix := nser.Prefix(); prefix != "" {
 			name = prefix + ":" + nser.LocalName()
 		} else {
@@ -761,6 +778,22 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if len(nslist) > 0 {
 		if err := d.dumpNsList(out, nslist); err != nil {
 			return err
+		}
+	}
+
+	// Keep the serialized fragment self-contained: declare any namespace this
+	// element or its attributes use whose prefix was bound on an ancestor that
+	// lies OUTSIDE the output (e.g. nodes an XSLT result tree grafts in from a
+	// source document). Without this the emitted prefix is unbound and the
+	// result cannot be reparsed. Reconciliation is purely additive — when the
+	// prefix is already declared in scope with the same URI it emits nothing —
+	// so a normal full-document dump is byte-identical to before.
+	if isNser {
+		if saved := d.reconcileNamespaces(out, n, nser, nslist); saved != nil {
+			defer d.nsScopeRestore(saved)
+		}
+		if d.err != nil {
+			return d.err
 		}
 	}
 
@@ -875,6 +908,109 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	d.writeString(out, ">")
 
 	return d.err
+}
+
+// reconcileNamespaces runs after an element's own xmlns declarations (nslist)
+// are emitted. It records those declarations in the output namespace scope,
+// then for the element's active namespace and every namespaced attribute emits
+// an xmlns declaration for any prefix missing from scope (or bound there to a
+// different URI). This keeps a serialized fragment parseable when it uses a
+// prefix bound only on an ancestor that is not itself part of the output — the
+// case an XSLT result tree creates by grafting in source-document nodes. It
+// returns every binding it added to the scope so the caller can restore the
+// scope after the element's children are serialized, or nil when the element
+// neither declares nor uses a namespace (the plain-XML path stays alloc-free).
+func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespacer, nslist []*Namespace) []nsSaved {
+	var saved []nsSaved
+
+	// The element's own declarations are already emitted; record them so a
+	// prefix redeclared locally is not synthesized again below.
+	for _, ns := range nslist {
+		if ns.prefix == lexicon.PrefixXML || ns.prefix == lexicon.PrefixXMLNS {
+			continue
+		}
+		saved = d.nsScopePush(ns.prefix, ns.href, saved)
+	}
+
+	// The element's active namespace.
+	if ns := nser.Namespace(); ns != nil {
+		saved = d.reconcileOne(out, ns.prefix, ns.href, saved)
+	}
+
+	// Namespaced attributes. The per-list seen guard bounds a corrupt attribute
+	// chain, mirroring the emission loop in writeNode.
+	if e, ok := n.(*Element); ok {
+		seen := make(map[*docnode]struct{})
+		for attr := e.properties; attr != nil; attr = attr.NextAttribute() {
+			key := attr.baseDocNode()
+			if _, dup := seen[key]; dup {
+				break
+			}
+			seen[key] = struct{}{}
+			if ans := attr.ns; ans != nil {
+				saved = d.reconcileOne(out, ans.prefix, ans.href, saved)
+			}
+		}
+	}
+	return saved
+}
+
+// reconcileOne emits an "xmlns:prefix" declaration for a namespace used by the
+// current element or one of its attributes when that prefix is not already in
+// the output scope with the same URI, and records the new binding. The default
+// namespace (empty prefix) and the reserved xml/xmlns prefixes are never
+// synthesized: attributes cannot use the default namespace, and xml is
+// implicitly bound. Appends the recorded binding to saved and returns it.
+func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, saved []nsSaved) []nsSaved {
+	if prefix == "" || prefix == lexicon.PrefixXML || prefix == lexicon.PrefixXMLNS || href == "" {
+		return saved
+	}
+	if d.nsScope != nil {
+		if cur, ok := d.nsScope[prefix]; ok && cur == href {
+			return saved
+		}
+	}
+	// The prefix is emitted verbatim; reject one that is not a valid NCName so a
+	// crafted prefix cannot inject raw markup into the start tag.
+	if !d.checkNamespacePrefix(prefix) {
+		return saved
+	}
+	d.writeString(out, " xmlns:")
+	d.writeString(out, prefix)
+	d.writeString(out, `="`)
+	if d.err == nil {
+		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil); err != nil {
+			d.err = err
+		}
+	}
+	d.writeString(out, `"`)
+	return d.nsScopePush(prefix, href, saved)
+}
+
+// nsScopePush binds prefix to href in the output namespace scope, appending the
+// prior binding to saved so nsScopeRestore can revert it.
+func (d *writeSession) nsScopePush(prefix, href string, saved []nsSaved) []nsSaved {
+	if d.nsScope == nil {
+		d.nsScope = make(map[string]string)
+	}
+	old, had := d.nsScope[prefix]
+	saved = append(saved, nsSaved{prefix: prefix, href: old, had: had})
+	d.nsScope[prefix] = href
+	return saved
+}
+
+// nsScopeRestore reverts the bindings recorded in saved. It must run in reverse:
+// a single element can push the same prefix twice (a local redeclaration plus an
+// attribute masking it with a different URI), and only last-in-first-out restore
+// yields the prior binding.
+func (d *writeSession) nsScopeRestore(saved []nsSaved) {
+	for _, s := range slices.Backward(saved) {
+		if s.had {
+			d.nsScope[s.prefix] = s.href
+			continue
+		}
+		delete(d.nsScope, s.prefix)
+	}
 }
 
 // nodeExpandedName returns the expanded {uri}local name of a node (Clark

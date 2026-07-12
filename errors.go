@@ -41,6 +41,19 @@ var (
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
+	// ErrEntityVersionMismatch is returned when an external parsed entity (or
+	// the external DTD subset) declares, in its TextDecl, an XML version later
+	// than the referencing document's (XML §4.3.4). Helium targets XML 1.0, so a
+	// TextDecl declaring anything other than "1.0" (e.g. "1.1") in a 1.0 document
+	// is a fatal error (libxml2 XML_ERR_VERSION_MISMATCH).
+	ErrEntityVersionMismatch = errors.New("version mismatch between document and entity")
+
+	// ErrEntityNotWellBalanced is returned when an internal general entity's
+	// replacement text is not well balanced with respect to element nesting —
+	// e.g. it opens with an end-tag or closes an element opened outside the
+	// entity (WFC: Parsed entities must be well-formed; XML §4.3.2). Referencing
+	// such an entity in element content is a fatal well-formedness error.
+	ErrEntityNotWellBalanced = errors.New("entity content is not well balanced")
 	// ErrWalkCycle is returned by Walk when the traversal encounters a
 	// child-pointer cycle — a node reachable from itself through child links.
 	// A well-formed, parent-consistent tree never triggers it; it guards
@@ -128,6 +141,7 @@ var (
 	ErrElementContentNotFinished     = errors.New("element content not finished")
 	ErrEmptyDocument                 = errors.New("start tag expected, '<' not found")
 	ErrEntityNotFound                = errors.New("entity not found")
+	ErrEncodingBOMMismatch           = errors.New("declared encoding conflicts with the byte-order mark")
 	ErrEqualSignRequired             = errors.New("'=' was required here")
 	ErrGtRequired                    = errors.New("'>' was required here")
 	ErrHyphenInComment               = errors.New("'--' not allowed in comment")
@@ -149,12 +163,15 @@ var (
 	ErrNameRequired                  = errors.New("name is required")
 	ErrNmtokenRequired               = errors.New("nmtoken is required")
 	ErrNotationNameRequired          = errors.New("notation name expected in NOTATION declaration")
+	ErrNotationExternalIDRequired    = errors.New("ExternalID or PublicID required in NOTATION declaration")
 	ErrNotationNotFinished           = errors.New("notation must finish with a ')'")
 	ErrNotationNotStarted            = errors.New("notation must start with a '('")
 	ErrOpenParenRequired             = errors.New("'(' is required")
 	ErrPCDATARequired                = errors.New("'#PCDATA' required")
 	ErrPercentRequired               = errors.New("'%' is required")
+	ErrPEReferenceInInternalSubset   = errors.New("PEReferences forbidden in internal subset")
 	ErrPrematureEOF                  = errors.New("end of document reached")
+	ErrNotStandalone                 = errors.New("document marked standalone but requires external subset")
 	ErrUndeclaredEntity              = errors.New("undeclared entity")
 	ErrSemicolonRequired             = errors.New("';' is required")
 	ErrConditionalSectionNotFinished = errors.New("conditional section ']]>' expected")

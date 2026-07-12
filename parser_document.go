@@ -132,6 +132,12 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 	}
 
+	// A leading byte-order mark asserts the entity's encoding; a contradicting
+	// encoding declaration is a fatal error (XML §4.3.3).
+	if err := pctx.checkBOMEncodingConflict(); err != nil {
+		return pctx.error(ctx, err)
+	}
+
 	if pctx.treeBuilder != nil {
 		pctx.fastStartDocument()
 	} else if s := pctx.sax; s != nil {
@@ -194,6 +200,14 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 			return pctx.error(ctx, errors.New("unexpected EOF"))
 		}
 		pctx.inSubset = notInSubset
+
+		// The whole DTD is parsed now, so the entity tables are complete. Re-check
+		// every attribute default value's WFCs to catch a nested external/unparsed
+		// (or '<') entity reached through a FORWARD-referenced entity that was not
+		// yet declared when the default was parsed (SubstituteEntities(false)).
+		if err := pctx.validateAttributeDefaultsWFC(ctx); err != nil {
+			return err
+		}
 
 		pctx.cleanSpecialAttributes()
 

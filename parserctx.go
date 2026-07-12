@@ -80,6 +80,19 @@ type parserCtx struct {
 	// <?xml version="1.0"?> vs <?xml version="1.0" encoding="utf-8"?>
 	encoding         string
 	detectedEncoding string
+	// autoEncoding records the Unicode encoding asserted by a real byte-order
+	// mark at the document start (UTF-8, UTF-16LE, or UTF-16BE), "" when no BOM
+	// was consumed. A declared encoding that contradicts it is a fatal error
+	// (XML §4.3.3); see checkBOMEncodingConflict.
+	autoEncoding string
+	// declaredEncoding is the EncName parsed from an XML/Text declaration,
+	// recorded UNCONDITIONALLY at the leaf EncName parsers (parseEncodingName /
+	// parseEncodingDeclFromCursor) — independent of IgnoreEncoding (which
+	// suppresses the decoder switch and erases ctx.encoding) and LenientXMLDecl
+	// (which relaxes the declaration parse). checkBOMEncodingConflict reads it
+	// immediately after the document entity's declaration is parsed, so the BOM
+	// well-formedness check fires regardless of those knobs.
+	declaredEncoding string
 	in               io.Reader
 	rawInput         []byte // original bytes, used for EBCDIC encoding detection
 	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
@@ -99,6 +112,14 @@ type parserCtx struct {
 	nbread         int
 	instate        parserState
 	keepBlanks     bool
+	// charDataFromCharRef marks that the character data currently being delivered
+	// to the SAX Characters sink originated from a character reference (&#N;/&#xN;)
+	// rather than literal source text. TreeBuilder.Characters stamps the resulting
+	// Text node's fromCharRef flag from it, so element-content validity can tell
+	// char-reference whitespace (not ignorable) from literal whitespace. Set only
+	// for the duration of a char-ref delivery (and a cached-entity Text replay of
+	// one); false otherwise.
+	charDataFromCharRef bool
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
@@ -109,22 +130,46 @@ type parserCtx struct {
 	inSubset          int
 	intSubName        string
 	external          bool // true if parsing external DTDs
-	extSubSystem      string
-	extSubURI         string
-	version           string
-	attsSpecial       map[string]enum.AttributeType
-	attsDefault       map[string][]*Attribute
-	valid             bool
-	hasPERefs         bool
-	pedantic          bool
-	wellFormed        bool
-	depth             int
-	loadsubset        LoadSubsetOption
-	charBufferSize    int
-	baseURI           string          // document base URI for resolving external references
-	catalog           CatalogResolver // XML catalog for entity resolution
-	fsys              fs.FS           // filesystem for loading external DTDs and entities
-	elem              *Element        // current context element
+	// dtdInputFloor is the input-stack depth of the external subset's own base
+	// cursor (the pushed DTD buffer). skipBlanksPE expands parameter-entity
+	// references inside/adjacent to markup declarations by pushing their padded
+	// replacement text and crosses back over the boundary when a PE input is
+	// exhausted, but it must never pop BELOW this floor (which would drop into the
+	// main document input and consume post-DOCTYPE content). 0 outside an external
+	// subset, so skipBlanksPE performs no PE expansion there.
+	dtdInputFloor int
+	extSubSystem  string
+	extSubURI     string
+	version       string
+	attsSpecial   map[specialAttrKey]enum.AttributeType
+	// attsSpecialExternal records which entries of attsSpecial were declared in the
+	// external subset (mirrors libxml2's XML_SPECIAL_EXTERNAL flag). Used for the
+	// VC: Standalone Document Declaration attribute-normalization check.
+	attsSpecialExternal map[specialAttrKey]struct{}
+	// attrNormChanged is a transient flag set while parsing one attribute value: it
+	// reports whether tokenized-type normalization (leading/trailing trim or
+	// internal-space collapse) altered the value. Read by parseAttribute for the
+	// VC: Standalone Document Declaration normalization check.
+	attrNormChanged bool
+	attsDefault     map[string][]*Attribute
+	valid           bool
+	hasPERefs       bool
+	// hasExternalPERef records that at least one EXTERNAL parameter entity was
+	// referenced (its content loaded from an external resource). Unlike a purely
+	// internal DTD, an external PE may fail to load or resolve incompletely, so
+	// helium cannot be certain an undeclared general entity is truly undeclared
+	// rather than declared in unread external markup — the undeclared-entity
+	// validity error (VC: Entity Declared) is therefore suppressed in that case.
+	hasExternalPERef bool
+	pedantic         bool
+	wellFormed       bool
+	depth            int
+	loadsubset       LoadSubsetOption
+	charBufferSize   int
+	baseURI          string          // document base URI for resolving external references
+	catalog          CatalogResolver // XML catalog for entity resolution
+	fsys             fs.FS           // filesystem for loading external DTDs and entities
+	elem             *Element        // current context element
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
@@ -374,6 +419,17 @@ func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
 	return ctx.activeExternalPECount[ent] > 0
 }
 
+// effectivelyExternal reports whether a markup declaration parsed at this point
+// counts as EXTERNAL for the VC: Standalone Document Declaration (XML §2.9). A
+// declaration is external when it comes from the external subset OR from an
+// external parameter entity referenced anywhere (mirrors libxml2's PARSER_EXTERNAL
+// = inSubset==2 OR the current input is an XML_EXTERNAL_PARAMETER_ENTITY). An
+// external-PE-supplied declaration referenced from the internal subset is external
+// markup even though it is registered in the internal subset's declaration table.
+func (ctx *parserCtx) effectivelyExternal() bool {
+	return ctx.inSubset == inExternalSubset || len(ctx.externalPEScopes) > 0
+}
+
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	cur, ok := ctx.inputTab.PeekOne().(*strcursor.ByteCursor)
 	if !ok {
@@ -384,6 +440,23 @@ func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 
 func (ctx *parserCtx) adaptCursor(v any) strcursor.Cursor {
 	cur, _ := v.(strcursor.Cursor)
+	return cur
+}
+
+// dtdRefetch returns the top cursor for continued DTD-declaration parsing after
+// a skipBlanksPE that may have crossed a parameter-entity boundary. In the
+// EXTERNAL subset it re-fetches via getCursor so a boundary crossed by
+// skipBlanksPE (a spent PE input popped, or a fresh padded PE input pushed) is
+// reflected — a markup declaration may legitimately be assembled across PE
+// boundaries there (§4.4.8). In the INTERNAL subset — where a parameter entity
+// must NOT supply part of a markup declaration (WFC: PEs in Internal Subset) — it
+// returns the caller's existing cursor unchanged, so an exhausted PE input is not
+// silently auto-popped across the declaration boundary; the stalled parse then
+// surfaces the boundary violation as an error, exactly as before.
+func (ctx *parserCtx) dtdRefetch(cur strcursor.Cursor) strcursor.Cursor {
+	if ctx.external {
+		return ctx.getCursor()
+	}
 	return cur
 }
 
@@ -561,7 +634,8 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.keepBlanks = true
 	ctx.instate = psStart
 	ctx.standalone = StandaloneImplicitNo
-	ctx.attsSpecial = map[string]enum.AttributeType{}
+	ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
+	ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
 	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]

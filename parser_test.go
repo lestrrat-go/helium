@@ -244,6 +244,58 @@ func TestParseRejectsDuplicateAttribute(t *testing.T) {
 	}
 }
 
+func TestParseRejectsMissingSpaceBetweenAttributes(t *testing.T) {
+	// XML §3.1 P40/P44: attributes in a start/empty-element tag must be
+	// separated by whitespace ('(S Attribute)*'). Two attributes written back
+	// to back with no intervening S are a fatal well-formedness error. This
+	// covers W3C xml-suite cases sun/attlist10, sun/attlist11, oasis/p40fail1,
+	// oasis/p44fail4 and xmltest/not-wf/sa/186.
+	reject := []string{
+		// STag (P40) and EmptyElemTag (P44), no DTD.
+		`<doc att="val"att2="val2"></doc>`,
+		`<doc att="val"att2="val2"/>`,
+		// With an internal DTD declaring the attributes (sun attlist10/11, sa186).
+		"<!DOCTYPE root [\n<!ELEMENT root ANY>\n<!ATTLIST root att1 CDATA #IMPLIED>\n<!ATTLIST root att2 CDATA #IMPLIED>\n]>\n<root att1=\"value1\"att2=\"value2\"></root>",
+		"<!DOCTYPE root [\n<!ELEMENT root ANY>\n<!ATTLIST root att1 CDATA #IMPLIED>\n<!ATTLIST root att2 CDATA #IMPLIED>\n]>\n<root att1=\"value1\"att2=\"value2\"/>",
+		"<!DOCTYPE a [\n<!ELEMENT a EMPTY>\n<!ATTLIST a b CDATA #IMPLIED d CDATA #IMPLIED>\n]>\n<a b=\"c\"d=\"e\"/>",
+		// A missing space before a namespace-declaration attribute is also
+		// caught (the namespace branch already enforced this; keep it covered).
+		`<doc att="val"xmlns:p="urn:x"/>`,
+		// Namespace-declaration attribute FIRST, then a regular attribute with no
+		// separating space: the new regular-attribute check must fire after the
+		// namespace attribute is consumed (proves the two checks compose).
+		`<doc xmlns:p="urn:x"att="val"/>`,
+	}
+	for _, input := range reject {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err, "Parse should reject missing space between attributes in %q", input)
+		require.ErrorIs(t, err, helium.ErrSpaceRequired, "should be a space-required error for %q", input)
+	}
+
+	// The well-formed counterparts — attributes separated by a space, a
+	// newline, or any XML whitespace — must still parse cleanly (no
+	// over-rejection). A single attribute and the two tag-close forms are
+	// included to exercise the '>' / '/>' branches of the new check.
+	accept := []string{
+		`<doc att="val" att2="val2"/>`,
+		`<doc att="val" att2="val2"></doc>`,
+		"<doc att=\"val\"\natt2=\"val2\"/>",
+		"<doc att=\"val\"\t att2=\"val2\"/>",
+		"<doc att=\"val\"\ratt2=\"val2\"/>",
+		`<doc att="val"/>`,
+		`<doc att="val"></doc>`,
+		`<doc/>`,
+		`<doc att="val" ></doc>`,
+		// A space between a namespace-declaration attribute and a following
+		// regular attribute must still parse (well-formed composition).
+		`<doc xmlns:p="urn:x" att="val"/>`,
+	}
+	for _, input := range accept {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "Parse should accept space-separated attributes in %q", input)
+	}
+}
+
 func TestParseXML11PrefixUndeclaration(t *testing.T) {
 	// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an empty
 	// value (xmlns:pfx="") undeclares the prefix. This is well-formed only in an
@@ -1120,9 +1172,9 @@ func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
 	// terminated top-level <![INCLUDE[ ... ]]> section must surface as a parse
 	// error. Previously the top-level external-subset loop swallowed EVERY error
 	// from parseConditionalSections, silently accepting the bogus declaration.
-	// Only the conditional-section WRAPPER sentinels (unterminated "]]>" or a
-	// missing/malformed keyword) are tolerated now; an actual declaration parse
-	// error inside the INCLUDE body propagates.
+	// Now conditional-section errors propagate: a missing/malformed keyword and
+	// an unterminated "]]>" section are both fatal, and an actual declaration
+	// parse error inside the INCLUDE body propagates.
 	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
@@ -1151,9 +1203,9 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 
 	// Guard against a regression manifesting as a hang: run the parse on a
 	// goroutine with a deadline so a re-introduced infinite loop fails the test
-	// instead of hanging the whole suite. The external subset is tolerant of
-	// conditional-section errors (it stops scanning without failing the parse),
-	// so the requirement here is PROMPT completion, not a surfaced error.
+	// instead of hanging the whole suite. The requirement here is PROMPT
+	// completion (whether or not the parse surfaces a conditional-section error),
+	// not a hang.
 	ctx := t.Context()
 	done := make(chan struct{})
 	go func() {
@@ -2085,10 +2137,15 @@ func TestCurrentInputID(t *testing.T) {
 func TestConditionalSection(t *testing.T) {
 	t.Parallel()
 
-	t.Run("include", func(t *testing.T) {
+	t.Run("internal subset PE is not well formed", func(t *testing.T) {
 		t.Parallel()
 
-		// INCLUDE section via PE expansion: element declarations should be applied.
+		// A conditional section supplied through a parameter entity requires the
+		// PE reference to sit inside an entity value in the internal subset, which
+		// violates the PEs in Internal Subset WFC (XML §2.8) and is fatal —
+		// matching libxml2. Conditional sections through a PE are only valid in
+		// the external subset (see the "external DTD" subtest and
+		// TestParseExternalDTDPEInIncludeSectionExpands).
 		const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ENTITY % inc "INCLUDE">
@@ -2100,68 +2157,14 @@ func TestConditionalSection(t *testing.T) {
 </doc>`
 
 		p := helium.NewParser().ValidateDTD(true)
-		doc, err := p.Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "INCLUDE conditional section should parse successfully")
-		require.NotNil(t, doc)
-
-		root := doc.DocumentElement()
-		require.NotNil(t, root)
-		require.Equal(t, "doc", root.Name())
-	})
-
-	t.Run("ignore", func(t *testing.T) {
-		t.Parallel()
-
-		// Conditional sections in internal subset must come via PE expansion.
-		const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % ign "IGNORE">
-  <!ENTITY % sect "<![%ign;[<!ELEMENT doc (nonexistent)>]]>">
-  %sect;
-  <!ELEMENT doc (#PCDATA)>
-]>
-<doc>hello</doc>`
-
-		p := helium.NewParser()
 		_, err := p.Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "IGNORE section content should be skipped")
+		require.Error(t, err, "a PE reference in an internal-subset entity value is not well formed")
+		require.Contains(t, err.Error(), "PEReferences forbidden in internal subset")
 	})
 
-	t.Run("internal subset PE", func(t *testing.T) {
-		t.Parallel()
-
-		// Internal subset with PE that expands to conditional section content.
-		const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % inc "INCLUDE">
-  <!ENTITY % content "<![%inc;[<!ELEMENT doc (#PCDATA)>]]>">
-  %content;
-]>
-<doc>hello</doc>`
-
-		p := helium.NewParser()
-		_, err := p.Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "PE-expanded conditional section in internal subset should work")
-	})
-
-	t.Run("errors", func(t *testing.T) {
-		t.Parallel()
-
-		t.Run("invalid keyword", func(t *testing.T) {
-			t.Parallel()
-
-			const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % kw "BOGUS">
-  <!ENTITY % sect "<![%kw;[<!ELEMENT doc (#PCDATA)>]]>">
-  %sect;
-]>
-<doc/>`
-			p := helium.NewParser()
-			_, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err, "invalid keyword should fail")
-		})
-	})
+	// Invalid conditional-section keywords are covered where they are legal — the
+	// external subset — in parser_condsect_test.go (miscased/non-keyword tokens
+	// all raising "INCLUDE or IGNORE keyword expected").
 
 	t.Run("external DTD", func(t *testing.T) {
 		t.Parallel()

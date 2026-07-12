@@ -77,7 +77,20 @@ func (pctx *parserCtx) parseEncodingDeclFromCursor(ctx context.Context) (string,
 		return "", err
 	}
 
+	// EncName [81]: [A-Za-z] ([A-Za-z0-9._] | '-')*. The first character must be
+	// a letter (so an empty EncName is rejected), and every subsequent character
+	// must be a letter, digit, '.', '_', or '-'. A present-but-malformed EncName
+	// is a fatal error, mirroring the byte-path parseEncodingName.
+	first := cur.Peek()
+	if !isEncNameStart(first) {
+		return "", pctx.error(ctx, ErrInvalidEncodingName)
+	}
+
 	var buf strings.Builder
+	_ = buf.WriteByte(first)
+	if err := cur.Advance(1); err != nil {
+		return "", err
+	}
 	for {
 		c := cur.Peek()
 		if c == q {
@@ -89,12 +102,30 @@ func (pctx *parserCtx) parseEncodingDeclFromCursor(ctx context.Context) (string,
 		if c == 0 {
 			return "", pctx.error(ctx, errors.New("unterminated encoding value"))
 		}
+		if !isEncNameChar(c) {
+			return "", pctx.error(ctx, ErrInvalidEncodingName)
+		}
 		_ = buf.WriteByte(c)
 		if err := cur.Advance(1); err != nil {
 			return "", err
 		}
 	}
-	return buf.String(), nil
+	name := buf.String()
+	// Record the declared EncName unconditionally (see parserCtx.declaredEncoding).
+	pctx.declaredEncoding = name
+	return name, nil
+}
+
+// isEncNameStart reports whether b is a valid first character of an EncName [81]
+// (an ASCII letter).
+func isEncNameStart(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// isEncNameChar reports whether b is a valid non-initial character of an EncName
+// [81] (letter, digit, '.', '_', or '-').
+func isEncNameChar(b byte) bool {
+	return isEncNameStart(b) || (b >= '0' && b <= '9') || b == '.' || b == '_' || b == '-'
 }
 
 func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (DocumentStandaloneType, error) {
@@ -296,14 +327,14 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, e
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
-	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') { //nolint:staticcheck
+	if !isEncNameStart(c) {
 		return "", pctx.error(ctx, ErrInvalidEncodingName)
 	}
 	_ = buf.WriteByte(c)
 
 	i := 1
 	for c = cur.PeekAt(i); c != 0; c = cur.PeekAt(i) {
-		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '.' && c != '_' && c != '-' { //nolint:staticcheck
+		if !isEncNameChar(c) {
 			break
 		}
 		_ = buf.WriteByte(c)
@@ -314,7 +345,12 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, e
 		return "", err
 	}
 
-	return buf.String(), nil
+	name := buf.String()
+	// Record the declared EncName unconditionally (see parserCtx.declaredEncoding):
+	// the BOM/encoding conflict check must see it even when IgnoreEncoding or
+	// LenientXMLDecl suppress decoder switching / relax the decl parse.
+	pctx.declaredEncoding = name
+	return name, nil
 }
 
 var standaloneBytes = []byte{'s', 't', 'a', 'n', 'd', 'a', 'l', 'o', 'n', 'e'}

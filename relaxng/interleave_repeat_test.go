@@ -68,13 +68,20 @@ func TestInterleaveRepeatableMemberGroup(t *testing.T) {
 }
 
 // TestInterleaveRepeatableMemberGroupNotExponential guards against algorithmic
-// blowup: a long document of interleaved group(a,b) pairs and c elements must
-// validate in linear-ish time, not exponentially. The matcher is greedy and
-// round-bounded by content length, so this stays well under a second.
+// blowup in the interleave matcher: a long document of interleaved group(a,b)
+// pairs and c elements must validate with polynomial growth, never exponential.
+//
+// The guard is the SCALING RATIO between two input sizes, not an absolute
+// wall-clock bound. Doubling the input multiplies a correct (quadratic-ish)
+// matcher's time by a small constant (~5x here); an exponential regression would
+// multiply it by ~2^N. Because the ratio is measured on a single machine it is
+// independent of how fast that machine is, so this cannot flake on a slow or
+// loaded CI runner the way an absolute threshold does. (A genuinely exponential
+// regression would also fail to finish within `go test -timeout`, so it is
+// caught regardless of this assertion.)
 func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
 	t.Parallel()
 
-	const N = 2000
 	schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start>` +
 		`<element name="root"><interleave>` +
 		`<zeroOrMore><group>` +
@@ -83,21 +90,51 @@ func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
 		`<zeroOrMore><element name="c"><empty/></element></zeroOrMore>` +
 		`</interleave></element></start></grammar>`
 
-	var docStr strings.Builder
-	docStr.WriteString(`<root>`)
-	for range N {
-		docStr.WriteString(`<a/><c/><b/>`)
-	}
-	docStr.WriteString(`</root>`)
-
 	grammar := compileGrammar(t, schema)
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
-	require.NoError(t, err)
 
-	start := time.Now()
-	verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
-	elapsed := time.Since(start)
+	// validateN builds a <root> of n interleaved a/c/b triples, validates it
+	// (which must succeed), and returns how long validation took.
+	validateN := func(n int) time.Duration {
+		var docStr strings.Builder
+		docStr.WriteString(`<root>`)
+		for range n {
+			docStr.WriteString(`<a/><c/><b/>`)
+		}
+		docStr.WriteString(`</root>`)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
+		require.NoError(t, err)
 
-	require.NoError(t, verr, "interleave of %d group(a,b) pairs with c must validate", N)
-	require.Less(t, elapsed, 5*time.Second, "validation must not be exponential (took %s)", elapsed)
+		start := time.Now()
+		verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+		elapsed := time.Since(start)
+		require.NoError(t, verr, "interleave of %d group(a,b) pairs with c must validate", n)
+		return elapsed
+	}
+
+	// fastest validates size n a few times and keeps the shortest run, so a
+	// one-off GC pause or scheduler hiccup cannot inflate the measurement.
+	fastest := func(n, trials int) time.Duration {
+		best := validateN(n)
+		for range trials - 1 {
+			if d := validateN(n); d < best {
+				best = d
+			}
+		}
+		return best
+	}
+
+	const (
+		baseN   = 1000
+		trials  = 3
+		maxGrow = 20.0 // observed ~5x for a 2x input; exponential would be astronomically higher
+	)
+
+	validateN(baseN) // warm up the allocator/caches before the first timed run
+	base := fastest(baseN, trials)
+	grown := fastest(2*baseN, trials)
+	growth := float64(grown) / float64(base)
+	require.Less(t, growth, maxGrow,
+		"validation time grew %.1fx for a 2x larger input (base %s at N=%d, grown %s at N=%d); "+
+			"expected polynomial growth, suspect exponential blowup",
+		growth, base, baseN, grown, 2*baseN)
 }

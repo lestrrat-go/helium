@@ -126,7 +126,14 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 	if err := cur.Advance(1); err != nil {
 		return nil, pctx.error(ctx, err)
 	}
-	pctx.skipBlanks(ctx)
+	// Blanks (and, in the external subset, parameter-entity references supplying
+	// the name list) between the '(' and each name/'|' are consumed through
+	// skipBlanksPE; re-fetch the cursor after each skip since an expand/pop may
+	// have changed the top input.
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
 
 	names := map[string]struct{}{}
 
@@ -142,7 +149,10 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 		names[name] = struct{}{}
 
 		enumv = append(enumv, name)
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 
 		if cur.Peek() != '|' {
 			break
@@ -150,7 +160,10 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 		if err := cur.Advance(1); err != nil {
 			return nil, pctx.error(ctx, err)
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 	}
 
 	if cur.Peek() != ')' {
@@ -173,7 +186,13 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 	if err := cur.Advance(1); err != nil {
 		return nil, pctx.error(ctx, err)
 	}
-	pctx.skipBlanks(ctx)
+	// In the external subset a parameter entity may supply the enumeration name
+	// list (e.g. `(%vals;)`); skipBlanksPE expands it and crosses the boundary,
+	// so re-fetch the cursor after each skip.
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
 
 	names := map[string]struct{}{}
 
@@ -189,7 +208,10 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 		names[name] = struct{}{}
 
 		enumv = append(enumv, name)
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 
 		if cur.Peek() != '|' {
 			break
@@ -197,7 +219,10 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 		if err := cur.Advance(1); err != nil {
 			return nil, pctx.error(ctx, err)
 		}
-		pctx.skipBlanks(ctx)
+		if _, err := pctx.skipBlanksPE(ctx); err != nil {
+			return nil, pctx.error(ctx, err)
+		}
+		cur = pctx.dtdRefetch(cur)
 	}
 
 	if cur.Peek() != ')' {
@@ -215,10 +240,13 @@ func (pctx *parserCtx) parseEnumeratedType(ctx context.Context) (enum.AttributeT
 		return enum.AttrInvalid, nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.ConsumeString("NOTATION") {
-		if !isBlankByte(cur.Peek()) {
+		adv, err := pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return enum.AttrInvalid, nil, pctx.error(ctx, err)
+		}
+		if !adv {
 			return enum.AttrInvalid, nil, pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 		tree, err := pctx.parseNotationType(ctx)
 		if err != nil {
 			return enum.AttrInvalid, nil, pctx.error(ctx, err)
@@ -285,12 +313,21 @@ func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.Attri
 
 	if cur.ConsumeString("#FIXED") {
 		deftype = enum.AttrDefaultFixed
-		if !isBlankByte(cur.Peek()) {
+		// The mandatory "S" after #FIXED — and, in the external subset, a
+		// parameter entity supplying the #FIXED value (e.g. `#FIXED %v;`) — is
+		// consumed through skipBlanksPE so a PE-supplied value's opening quote is
+		// reached rather than left unexpanded.
+		adv, serr := pctx.skipBlanksPE(ctx)
+		if serr != nil {
+			deftype = enum.AttrDefaultInvalid
+			err = pctx.error(ctx, serr)
+			return
+		}
+		if !adv {
 			deftype = enum.AttrDefaultInvalid
 			err = pctx.error(ctx, ErrSpaceRequired)
 			return
 		}
-		pctx.skipBlanks(ctx)
 	}
 
 	defvalue, err = pctx.parseQuotedText(func(qch byte) (string, error) {
@@ -351,20 +388,57 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 	}
 }
 
+// specialAttrKey identifies a special (tokenized-type) attribute declaration by
+// the element's declared QName and the attribute's declared QName, both exactly as
+// written. A struct key avoids the ambiguity of a `elem + ":" + attr` string
+// concatenation, which would collide distinct QName pairs — e.g. `(p:r, id)` and
+// `(p, r:id)` both concatenate to `p:r:id` (libxml2 avoids this with a two-arg
+// hash lookup, xmlHashQLookup2).
+type specialAttrKey struct {
+	elem string
+	attr string
+}
+
 func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.AttributeType) {
 	if typ == enum.AttrID && ctx.loadsubset.IsSet(SkipIDs) {
 		return
 	}
-	key := elemName + ":" + attrName
+	key := specialAttrKey{elem: elemName, attr: attrName}
+	// XML 1.0 §3.3: the first declaration of an attribute is binding. The parse
+	// loop invokes this for every <!ATTLIST> declaration, including an ignored
+	// duplicate; keeping the first-seen type ensures a later duplicate's type
+	// cannot change how the attribute's explicit values are normalized.
+	if _, ok := ctx.attsSpecial[key]; ok {
+		return
+	}
 	ctx.attsSpecial[key] = typ
+	// Record whether this binding originates in external markup (external subset or
+	// an external parameter entity), for the VC: Standalone Document Declaration
+	// normalization check (libxml2 XML_SPECIAL_EXTERNAL).
+	if ctx.effectivelyExternal() {
+		ctx.attsSpecialExternal[key] = struct{}{}
+	}
+}
+
+// specialAttributeExternal reports whether the tokenized-type binding for
+// (elemName, attrName) was declared in external markup. attrName is the attribute
+// name EXACTLY as written (raw QName, prefix included), matching both how
+// addSpecialAttribute keyed the declaration and how parseAttribute keys the
+// normalization lookup — so `p:id` matches only an `<!ATTLIST r p:id …>`
+// declaration, never the unprefixed `id`.
+func (ctx *parserCtx) specialAttributeExternal(elemName, attrName string) bool {
+	if len(ctx.attsSpecialExternal) == 0 {
+		return false
+	}
+	_, ok := ctx.attsSpecialExternal[specialAttrKey{elem: elemName, attr: attrName}]
+	return ok
 }
 
 func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.AttributeType, bool) {
 	if len(ctx.attsSpecial) == 0 {
 		return 0, false
 	}
-	key := elemName + ":" + attrName
-	v, ok := ctx.attsSpecial[key]
+	v, ok := ctx.attsSpecial[specialAttrKey{elem: elemName, attr: attrName}]
 	return v, ok
 }
 
@@ -389,16 +463,26 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 		return
 	}
 
+	// Duplicate detection runs BEFORE validating this declaration's default
+	// value: XML 1.0 §3.3 says a later declaration for the same attribute is
+	// ignored ENTIRELY, so its (possibly invalid) default must not be validated
+	// or abort the parse. The internal subset takes precedence over the external
+	// one; a repeat within the same subset keeps the first declaration. This is a
+	// validity warning, not a fatal error (libxml2 warns "already defined" and
+	// continues).
+	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) > 0 {
+		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
+			return
+		}
+	}
+	if existing, ok := dtd.LookupAttribute(name, prefix, elem); ok {
+		return existing, nil
+	}
+
 	if defvalue != "" {
 		if err = validateAttributeValueInternal(dtd.doc, atype, defvalue); err != nil {
 			err = fmt.Errorf("attribute %s of %s: invalid default value: %s", elem, name, err)
 			ctx.valid = false
-			return
-		}
-	}
-
-	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) > 0 {
-		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
 			return
 		}
 	}
@@ -412,6 +496,11 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	attr.def = def
 	attr.tree = tree
 	attr.defvalue = defvalue
+	// Record whether this declaration comes from external markup (external subset
+	// or an external parameter entity), for the VC: Standalone Document Declaration
+	// default-attribute check. An external-PE-declared ATTLIST is registered in the
+	// internal subset's table, so origin cannot be inferred from the subset alone.
+	attr.external = ctx.effectivelyExternal()
 
 	if err = dtd.RegisterAttribute(attr); err != nil {
 		attr = nil
@@ -473,36 +562,58 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 	}
 	startInput := pctx.currentInputID()
 
-	if !isBlankByte(cur.Peek()) {
+	// The "S" after <!ATTLIST, between tokens, and around a supplied token may be
+	// provided by a parameter entity's §4.4.8 padding or a crossed PE-input
+	// boundary in the external subset, so require it through skipBlanksPE (which
+	// also expands a "%pe;" that supplies the element name / attribute
+	// definitions) rather than a raw isBlankByte check. Re-fetch the cursor after
+	// each skip and after each sub-parse: an expanded PE pushes a new input and an
+	// exhausted PE input is popped, so a cursor captured earlier is stale.
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
-	pctx.skipBlanks(ctx)
 
 	elemName, err := pctx.parseName(ctx)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return pctx.error(ctx, err)
+	}
 
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return pctx.error(ctx, errNoCursor)
+	}
 	for cur.Peek() != '>' && pctx.instate != psEOF {
 		attrName, err := pctx.parseName(ctx)
 		if err != nil {
 			return pctx.error(ctx, ErrAttributeNameRequired)
 		}
-		if !isBlankByte(cur.Peek()) {
+		adv, err := pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if !adv {
 			return pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 
 		typ, tree, err := pctx.parseAttributeType(ctx)
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
 
-		if !isBlankByte(cur.Peek()) {
+		adv, err = pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if !adv {
 			return pctx.error(ctx, ErrSpaceRequired)
 		}
-		pctx.skipBlanks(ctx)
 
 		def, defvalue, err := pctx.parseDefaultDecl(ctx)
 		if err != nil {
@@ -513,11 +624,18 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 			defvalue = pctx.attrNormalizeSpace(defvalue)
 		}
 
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return pctx.error(ctx, errNoCursor)
+		}
 		if c := cur.Peek(); c != '>' {
-			if !isBlankByte(c) {
+			adv, err := pctx.skipBlanksPE(ctx)
+			if err != nil {
+				return pctx.error(ctx, err)
+			}
+			if !adv {
 				return pctx.error(ctx, ErrSpaceRequired)
 			}
-			pctx.skipBlanks(ctx)
 		}
 		if s := pctx.sax; s != nil {
 			switch err := s.AttributeDecl(ctx, elemName, attrName, typ, def, defvalue, tree); err {
@@ -533,15 +651,32 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 
 		pctx.addSpecialAttribute(elemName, attrName, typ)
 
-		if cur.Peek() == '>' {
-			if pctx.currentInputID() != startInput {
-				_ = pctx.warning(ctx, "attribute list declaration doesn't start and stop in the same entity\n")
-				pctx.valid = false
-			}
-			if err := cur.Advance(1); err != nil {
-				return err
-			}
-			break
+		cur = pctx.dtdRefetch(cur)
+		if cur == nil {
+			return pctx.error(ctx, errNoCursor)
+		}
+	}
+
+	// AttlistDecl ::= '<!ATTLIST' S Name AttDef* S? '>' — AttDef* is
+	// zero-or-more, so an empty `<!ATTLIST name>` (the loop above never ran)
+	// is well-formed and closes here. When instate is psEOF the declaration
+	// was truncated before its '>'; leave it unconsumed so the subset loop
+	// reports the unfinished doctype.
+	cur = pctx.dtdRefetch(cur)
+	if cur == nil {
+		return pctx.error(ctx, errNoCursor)
+	}
+	if cur.Peek() == '>' {
+		// The whole <!ATTLIST ... > must start and stop in the same input: a
+		// closing '>' supplied by a parameter entity that began mid-declaration
+		// (e.g. `<!ATTLIST foo %e;` with %e; -> "... #IMPLIED>") is a boundary
+		// violation, the same fatal condition <!ELEMENT> enforces.
+		if pctx.currentInputID() != startInput {
+			return pctx.error(ctx,
+				fmt.Errorf("%w: attribute list declaration doesn't start and stop in the same entity", ErrEntityBoundary))
+		}
+		if err := cur.Advance(1); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -555,8 +690,16 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 	if !cur.ConsumeString("<!NOTATION") {
 		return pctx.error(ctx, errors.New("<!NOTATION not started"))
 	}
+	// The whole <!NOTATION ... > must start and stop in the same input: a closing
+	// '>' supplied by a different parameter entity than the one that opened the
+	// declaration is a boundary violation, matching <!ELEMENT>/<!ATTLIST>/<!ENTITY>.
+	startInput := pctx.currentInputID()
 
-	if !pctx.skipBlanks(ctx) {
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
@@ -564,20 +707,43 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
-
-	if !pctx.skipBlanks(ctx) {
-		return pctx.error(ctx, ErrSpaceRequired)
+	// A NotationDecl Name is a non-namespaced Name; under namespace processing a
+	// colon is forbidden, exactly as for entity names (Namespaces in XML §6, W3C
+	// not-wf rmt-ns10-044; libxml2 reports the same "colons are forbidden" error).
+	if strings.IndexByte(name, ':') > -1 {
+		return pctx.error(ctx, errors.New("colons are forbidden from notation names"))
 	}
 
-	systemID, publicID, err := pctx.parseExternalID(ctx, false)
+	adv, err = pctx.skipBlanksPE(ctx)
 	if err != nil {
 		return pctx.error(ctx, err)
 	}
+	if !adv {
+		return pctx.error(ctx, ErrSpaceRequired)
+	}
 
-	pctx.skipBlanks(ctx)
+	systemID, publicID, found, err := pctx.parseExternalID(ctx, false)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	// NotationDecl [82]: '<!NOTATION' S Name S (ExternalID | PublicID) S? '>' —
+	// the ExternalID/PublicID is mandatory, so a notation with neither is a fatal
+	// well-formedness error (W3C ibm-not-wf-P82-ibm82n03).
+	if !found {
+		return pctx.error(ctx, ErrNotationExternalIDRequired)
+	}
 
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return pctx.error(ctx, err)
+	}
+
+	cur = pctx.dtdRefetch(cur)
 	if cur.Peek() != '>' {
 		return pctx.error(ctx, errors.New("'>' required to close <!NOTATION"))
+	}
+	if pctx.currentInputID() != startInput {
+		return pctx.error(ctx,
+			fmt.Errorf("%w: notation declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 	}
 	if err := cur.Advance(1); err != nil {
 		return err
@@ -665,66 +831,92 @@ func (pctx *parserCtx) preserveLimitOrAbort(ctx context.Context, err, fallback e
 // PUBLIC with only the PubidLiteral. Pass strict=true for every ExternalID
 // production (DOCTYPE external subset, entity declarations) and strict=false
 // only for NotationDecl.
-func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string, string, error) {
+//
+// The returned bool reports whether a SYSTEM or PUBLIC production was actually
+// present. It distinguishes an empty-but-present literal (e.g. `SYSTEM ""`,
+// which yields an empty systemID with found=true) from a wholly absent
+// ExternalID (found=false), mirroring libxml2's NULL-vs-non-NULL URI/literal
+// pointers. Callers that require the production (NotationDecl P82, EntityDecl
+// P73/P74) gate on found, not on the string being non-empty.
+func (pctx *parserCtx) parseExternalID(ctx context.Context, strict bool) (string, string, bool, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		return "", "", pctx.error(ctx, errNoCursor)
+		return "", "", false, pctx.error(ctx, errNoCursor)
 	}
 
+	// The mandatory "S" separators here — and, in the external subset, a
+	// parameter entity supplying a SYSTEM/PUBLIC literal (e.g.
+	// `<!NOTATION n SYSTEM %sid;>`) — are consumed through skipBlanksPE, which
+	// expands the PE and positions the cursor at the literal's opening quote. The
+	// quoted literal scanners themselves do NOT recognize PE references (a '%'
+	// inside a SystemLiteral/PubidLiteral is a literal character).
 	if cur.HasPrefixString("SYSTEM") {
 		if err := cur.Advance(6); err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
-		if !isBlankByte(cur.Peek()) {
-			return "", "", pctx.error(ctx, ErrSpaceRequired)
+		adv, serr := pctx.skipBlanksPE(ctx)
+		if serr != nil {
+			return "", "", false, pctx.error(ctx, serr)
 		}
-		pctx.skipBlanks(ctx)
+		if !adv {
+			return "", "", false, pctx.error(ctx, ErrSpaceRequired)
+		}
 		uri, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.externalIDLiteralError(ctx, err, "system URI required")
+			return "", "", false, pctx.externalIDLiteralError(ctx, err, "system URI required")
 		}
-		return uri, "", nil
+		return uri, "", true, nil
 	} else if cur.HasPrefixString("PUBLIC") {
 		if err := cur.Advance(6); err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
-		if !isBlankByte(cur.Peek()) {
-			return "", "", pctx.error(ctx, ErrSpaceRequired)
+		adv, serr := pctx.skipBlanksPE(ctx)
+		if serr != nil {
+			return "", "", false, pctx.error(ctx, serr)
 		}
-		pctx.skipBlanks(ctx)
+		if !adv {
+			return "", "", false, pctx.error(ctx, ErrSpaceRequired)
+		}
 		publicID, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parsePubidLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.externalIDLiteralError(ctx, err, "public ID required")
+			return "", "", false, pctx.externalIDLiteralError(ctx, err, "public ID required")
 		}
 		if strict {
 			// ExternalID [75]: "S SystemLiteral" is mandatory after the
 			// PubidLiteral, so a space (then the SystemLiteral below) is required.
-			if !isBlankByte(cur.Peek()) {
-				return "", "", pctx.error(ctx, ErrSpaceRequired)
+			adv, serr := pctx.skipBlanksPE(ctx)
+			if serr != nil {
+				return "", "", false, pctx.error(ctx, serr)
 			}
-			pctx.skipBlanks(ctx)
+			if !adv {
+				return "", "", false, pctx.error(ctx, ErrSpaceRequired)
+			}
 		} else {
 			// NotationDecl PublicID [83]: the SystemLiteral is optional, so return
 			// the PubidLiteral alone when no quoted SystemLiteral follows.
-			if !isBlankByte(cur.Peek()) {
-				return "", publicID, nil
+			adv, serr := pctx.skipBlanksPE(ctx)
+			if serr != nil {
+				return "", "", false, pctx.error(ctx, serr)
 			}
-			pctx.skipBlanks(ctx)
+			if !adv {
+				return "", publicID, true, nil
+			}
+			cur = pctx.dtdRefetch(cur)
 			if c := cur.Peek(); c != '\'' && c != '"' {
-				return "", publicID, nil
+				return "", publicID, true, nil
 			}
 		}
 		uri, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 			return pctx.parseSystemLiteral(ctx, qch)
 		})
 		if err != nil {
-			return "", "", pctx.externalIDLiteralError(ctx, err, "system URI required")
+			return "", "", false, pctx.externalIDLiteralError(ctx, err, "system URI required")
 		}
-		return uri, publicID, nil
+		return uri, publicID, true, nil
 	}
-	return "", "", nil
+	return "", "", false, nil
 }

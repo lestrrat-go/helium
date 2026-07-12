@@ -147,8 +147,12 @@ func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *Eleme
 		return nil, errors.New("invalid ElementContent")
 	}
 
+	// Split a QName into prefix + local on the FIRST colon, mirroring libxml2's
+	// xmlSplitQName3: a leading colon (i == 0) is NOT a prefix separator — the
+	// whole string (colon included) is the local name — so ":x" does not collide
+	// with the unprefixed "x" (XML 1.0 5th-edition Name; eduni ibm04v01).
 	var prefix string
-	if i := strings.IndexByte(name, ':'); i > -1 {
+	if i := strings.IndexByte(name, ':'); i > 0 {
 		prefix = name[:i]
 		name = name[i+1:]
 	}
@@ -287,7 +291,7 @@ func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
 	// split into local name and prefix (see AddElementDecl). Split the same
 	// way here so a QName lookup composes the identical key.
 	var prefix string
-	if i := strings.IndexByte(name, ':'); i > -1 {
+	if i := strings.IndexByte(name, ':'); i > 0 {
 		prefix = name[:i]
 		name = name[i+1:]
 	}

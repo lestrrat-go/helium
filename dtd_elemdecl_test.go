@@ -32,6 +32,25 @@ func TestGetElementDescKey(t *testing.T) {
 		require.True(t, ok, "GetElementDesc must find the prefixed decl by QName")
 		require.Equal(t, enum.EmptyElementType, decl.decltype)
 	})
+	t.Run("leading colon distinct from unprefixed", func(t *testing.T) {
+		// A leading colon is NOT a prefix separator (libxml2 xmlSplitQName3): ":r"
+		// is a distinct element name from the unprefixed "r" and must not be
+		// reported as a redefinition of it (XML 1.0 5th-edition Name; eduni
+		// ibm04v01).
+		dtd := newDTD()
+		_, err := dtd.AddElementDecl("r", enum.EmptyElementType, nil)
+		require.NoError(t, err)
+		_, err = dtd.AddElementDecl(":r", enum.AnyElementType, nil)
+		require.NoError(t, err, "leading-colon name must not collide with the unprefixed name")
+
+		decl, ok := dtd.GetElementDesc(":r")
+		require.True(t, ok, "GetElementDesc must find the leading-colon decl")
+		require.Equal(t, enum.AnyElementType, decl.decltype)
+
+		decl, ok = dtd.GetElementDesc("r")
+		require.True(t, ok, "GetElementDesc must still find the unprefixed decl")
+		require.Equal(t, enum.EmptyElementType, decl.decltype)
+	})
 }
 
 // TestIsMixedElementWhitespace exercises the mixed-content whitespace path that

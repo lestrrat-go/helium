@@ -393,6 +393,19 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 				return nil, err
 			}
 			if ent != nil {
+				// WFC: PEs in Internal Subset (XML §2.8). A parameter-entity
+				// reference occurring WITHIN a markup declaration — here, inside
+				// an EntityValue literal — is a fatal well-formedness error in
+				// the internal subset; it is permitted only in the external
+				// subset or within an external parameter entity
+				// (effectivelyExternal, libxml2's PARSER_EXTERNAL gate in
+				// xmlExpandPEsInEntityValue). The check fires only for a RESOLVED
+				// PE ref (ent != nil), matching libxml2's early return on an
+				// undeclared/malformed reference (W3C not-wf-sa-160/162,
+				// ibm-not-wf-P29-ibm29n04, ibm-not-wf-P69-ibm69n06/07).
+				if !pctx.effectivelyExternal() {
+					return nil, ErrPEReferenceInInternalSubset
+				}
 				// Expand the PE replacement text. decodeEntitiesInternal
 				// recursively substitutes nested parameter entities and resolves
 				// character references to their literal characters, so a "&#38;"
@@ -468,17 +481,37 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 	if !cur.ConsumeString("<!ENTITY") {
 		return pctx.error(ctx, errors.New("<!ENTITY not started"))
 	}
+	// The whole <!ENTITY ... > must start and stop in the same input: a closing
+	// '>' supplied by a different parameter entity than the one that opened the
+	// declaration (e.g. `<!ENTITY greet 'hi'%close;` with %close; -> ">") is a
+	// boundary violation, the same fatal condition <!ELEMENT>/<!ATTLIST> enforce.
+	startInput := pctx.currentInputID()
 
-	if !pctx.skipBlanks(ctx) {
+	// The mandatory "S" separators — and, in the external subset, a parameter
+	// entity supplying part of the declaration (the entity value or an external
+	// ID) — are consumed through skipBlanksPE, which leaves a "% " parameter-entity
+	// DECLARATION marker for the isParameter check below (it only expands a genuine
+	// "%name;" reference). Re-fetch the cursor after each skip since an expand/pop
+	// changes the top input.
+	adv, err := pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
 
+	cur = pctx.dtdRefetch(cur)
 	isParameter := false
 	if cur.Peek() == '%' {
 		if err := cur.Advance(1); err != nil {
 			return err
 		}
-		if !pctx.skipBlanks(ctx) {
+		adv, err := pctx.skipBlanksPE(ctx)
+		if err != nil {
+			return pctx.error(ctx, err)
+		}
+		if !adv {
 			return pctx.error(ctx, ErrSpaceRequired)
 		}
 		isParameter = true
@@ -492,9 +525,14 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		return pctx.error(ctx, errors.New("colons are forbidden from entity names"))
 	}
 
-	if !pctx.skipBlanks(ctx) {
+	adv, err = pctx.skipBlanksPE(ctx)
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if !adv {
 		return pctx.error(ctx, ErrSpaceRequired)
 	}
+	cur = pctx.dtdRefetch(cur)
 
 	pctx.instate = psEntityDecl
 	var literal string
@@ -515,17 +553,24 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 		} else {
-			// parseExternalID returns (systemURI, publicID). Mirror the external
-			// general-entity path below: guard on the system URI (a SYSTEM
+			// parseExternalID returns (systemURI, publicID, found). Mirror the
+			// external general-entity path below: guard on the system URI (a SYSTEM
 			// declaration carries no public ID, so guarding on the public ID would
 			// drop every SYSTEM parameter entity), and pass publicID/systemID to
 			// EntityDecl in that order.
-			literal, uri, err = pctx.parseExternalID(ctx, true)
+			var found bool
+			literal, uri, found, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
 				// Preserve a resource-limit (ErrNodeContentTooLarge) or
 				// parse-abort error verbatim; only an empty/missing literal
 				// falls back to the generic ErrValueRequired.
 				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
+			}
+			// PEDef [74]: EntityValue | ExternalID — with neither an EntityValue
+			// (handled above) nor an ExternalID present, the declaration is a fatal
+			// well-formedness error.
+			if !found {
+				return pctx.error(ctx, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -533,15 +578,19 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				if err != nil {
 					return pctx.error(ctx, err)
 				}
-
 				if u.Fragment != "" {
 					return pctx.error(ctx, errors.New("err uri fragment"))
-				} else if s := pctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, uri, literal, ""); err {
-					case nil, sax.ErrHandlerUnspecified:
-					default:
-						return pctx.error(ctx, err)
-					}
+				}
+			}
+			// Register the external parameter entity whenever an ExternalID was
+			// present (found), including a valid empty SystemLiteral (`SYSTEM ""`);
+			// gating on literal != "" would drop such a PE and leave
+			// GetParameterEntity false.
+			if s := pctx.sax; s != nil {
+				switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, uri, literal, ""); err {
+				case nil, sax.ErrHandlerUnspecified:
+				default:
+					return pctx.error(ctx, err)
 				}
 			}
 		}
@@ -560,12 +609,19 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				}
 			}
 		} else {
-			literal, uri, err = pctx.parseExternalID(ctx, true)
+			var found bool
+			literal, uri, found, err = pctx.parseExternalID(ctx, true)
 			if err != nil {
 				// Preserve a resource-limit (ErrNodeContentTooLarge) or
 				// parse-abort error verbatim; only an empty/missing literal
 				// falls back to the generic ErrValueRequired.
 				return pctx.preserveLimitOrAbort(ctx, err, ErrValueRequired)
+			}
+			// EntityDef [73]: EntityValue | (ExternalID NDataDecl?) — with neither
+			// an EntityValue (handled above) nor an ExternalID present, the
+			// declaration is a fatal well-formedness error (W3C o-p73fail4).
+			if !found {
+				return pctx.error(ctx, ErrValueRequired)
 			}
 
 			if literal != "" {
@@ -578,13 +634,24 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				}
 			}
 
-			if c := cur.Peek(); c != '>' && !isBlankByte(c) {
+			cur = pctx.dtdRefetch(cur)
+			// A '%' here can supply the following token (NDATA / '>') ONLY in the
+			// external subset; in the internal subset a '%' where an "S" or '>' is
+			// required stays an early ErrSpaceRequired (byte-identical to origin).
+			if c := cur.Peek(); c != '>' && !isBlankByte(c) && (!pctx.external || c != '%') {
 				return pctx.error(ctx, ErrSpaceRequired)
 			}
 
-			pctx.skipBlanks(ctx)
+			if _, err := pctx.skipBlanksPE(ctx); err != nil {
+				return pctx.error(ctx, err)
+			}
+			cur = pctx.dtdRefetch(cur)
 			if cur.ConsumeString("NDATA") {
-				if !pctx.skipBlanks(ctx) {
+				adv, err := pctx.skipBlanksPE(ctx)
+				if err != nil {
+					return pctx.error(ctx, err)
+				}
+				if !adv {
 					return pctx.error(ctx, ErrSpaceRequired)
 				}
 
@@ -611,9 +678,16 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		}
 	}
 
-	pctx.skipBlanks(ctx)
+	if _, err := pctx.skipBlanksPE(ctx); err != nil {
+		return pctx.error(ctx, err)
+	}
+	cur = pctx.dtdRefetch(cur)
 	if cur.Peek() != '>' {
 		return pctx.error(ctx, errors.New("entity not terminated"))
+	}
+	if pctx.currentInputID() != startInput {
+		return pctx.error(ctx,
+			fmt.Errorf("%w: entity declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 	}
 	if err := cur.Advance(1); err != nil {
 		return err
@@ -629,7 +703,10 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 			if s := pctx.sax; s != nil {
 				current, _ = s.GetEntity(ctx, name)
 				if current == nil {
-					e, _ := pctx.getEntity(name)
+					// DTD-declaration bookkeeping (SetOrig); getEntity does not
+					// flag the standalone WFC here (inSubset != 0), so any error
+					// is a plain lookup miss and the entity (if any) is used.
+					e, _ := pctx.getEntity(ctx, name)
 					current = e
 				}
 			}
@@ -709,6 +786,17 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.fsys = pctx.fsys
 	newctx.catalog = pctx.catalog
 	newctx.baseURI = pctx.baseURI
+	// Carry the document-scope DTD state that gates the "Entity Declared" VC so a
+	// nested entity-replacement sub-parse makes the SAME lenient/strict decision
+	// as the top-level document: an undeclared general entity is a validity error
+	// only when validating a standalone, fully-INTERNAL DTD (no external subset
+	// or external parameter entity). Without this, a nested sub-context would
+	// default hasExternalSubset/hasExternalPERef to false and over-reject an
+	// undeclared entity in a document that in fact has an external subset/PE.
+	newctx.standalone = pctx.standalone
+	newctx.hasExternalSubset = pctx.hasExternalSubset
+	newctx.hasPERefs = pctx.hasPERefs
+	newctx.hasExternalPERef = pctx.hasExternalPERef
 }
 
 func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, externalID string) (Node, error) {
@@ -762,6 +850,21 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	}
 	if exceeded {
 		return nil, pctx.error(ctx, fmt.Errorf("external entity (URI=%s) exceeds maximum size of %d bytes", uri, externalEntityMaxBytes))
+	}
+
+	// An external parsed general entity's replacement text MAY begin with a
+	// TextDecl ('<?xml' VersionInfo? EncodingDecl S? '?>') — VersionInfo OPTIONAL,
+	// EncodingDecl REQUIRED, NO StandaloneDecl (XML §4.3.1). Consume it and decode
+	// the body per its declared encoding at the same shared chokepoint the external
+	// DTD subset and external parameter entities use, so the nested parse is handed
+	// post-TextDecl UTF-8 content. Without this the nested parseXMLDecl would reject
+	// a version-less TextDecl for a missing version, and a leading '<?xml' left in
+	// the decoded stream would be rejected by parseContent as a PI whose target may
+	// not be "xml". A malformed TextDecl (e.g. a standalone pseudo-attribute, or a
+	// version-only declaration) is rejected here by parseTextDecl.
+	content, err = pctx.decodeExternalPEContent(ctx, uri, content)
+	if err != nil {
+		return nil, err
 	}
 
 	// Charge the external content to the amplification counters. Without this an
@@ -828,13 +931,10 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
-	bcur := newctx.getByteCursor()
-	if bcur != nil && looksLikeXMLDecl(bcur) {
-		if err := newctx.parseXMLDecl(innerCtx); err != nil {
-			return nil, err
-		}
-	}
-
+	// A leading TextDecl (and any declared encoding) has already been consumed and
+	// the body decoded to UTF-8 by decodeExternalPEContent above, so the byte
+	// stream here never begins with a '<?xml' declaration; detectEncoding /
+	// switchEncoding still handle a BOM-only external entity carrying no TextDecl.
 	if err := newctx.switchEncoding(); err != nil {
 		return nil, err
 	}
@@ -866,7 +966,14 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 					if !pctx.options.IsSet(parseNoBaseFix) {
 						if elem, ok := e.(*Element); ok {
 							if _, exists := elem.GetAttributeNS("base", lexicon.NamespaceXML); !exists {
-								_, _ = elem.SetAttributeNS("base", uri, newNamespace("xml", lexicon.NamespaceXML))
+								if _, err := elem.SetAttributeNS("base", uri, newNamespace("xml", lexicon.NamespaceXML)); err == nil {
+									// Mark this xml:base as parser-synthesized so DTD
+									// validation does not treat it as an undeclared
+									// attribute (an authored xml:base is never marked).
+									if injected := elem.GetAttributeNodeNS("base", lexicon.NamespaceXML); injected != nil {
+										injected.syntheticBase = true
+									}
+								}
 							}
 						}
 					}
@@ -947,6 +1054,15 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	// document-level gate in parseDocument.
 	if err := newctx.cursorDecodeErr(); err != nil {
 		return nil, newctx.error(innerCtx, err)
+	}
+	// The replacement text must be well balanced with respect to element nesting
+	// (WFC: parsed entities must be well-formed; XML §4.3.2). parseContent stops
+	// at a "</" that would close an element opened OUTSIDE this chunk (the
+	// pseudo-root), leaving that end-tag — and anything after it — unconsumed. A
+	// non-exhausted cursor here therefore means the entity opens with, or crosses,
+	// an element boundary (e.g. "</foo><foo>"), which is a fatal error.
+	if lc := newctx.getCursor(); lc != nil && !lc.Done() {
+		return nil, newctx.error(innerCtx, ErrEntityNotWellBalanced)
 	}
 
 	if child := newctx.doc.FirstChild(); child != nil {

@@ -419,19 +419,24 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 
 	t.Run("internal subset", func(t *testing.T) {
 		t.Parallel()
-		// helium recognizes PE references in the internal subset (more permissive
-		// than the XML WFC), which lets us drive PE expansion through a path that
-		// propagates the validation error rather than swallowing it.
-		good := `<!DOCTYPE r [<!ENTITY % p "&#38;amp;"><!ENTITY e "%p; ok">]><r/>`
-		_, errGood := helium.NewParser().Parse(t.Context(), []byte(good))
-		require.NoError(t, errGood,
-			"a well-formed reference produced via a PE must be accepted")
+		// A PE reference inside an entity value in the internal subset violates
+		// the PEs in Internal Subset WFC (XML §2.8) and is rejected outright,
+		// before any general-reference well-formedness of the (would-be)
+		// replacement text is considered. This holds whether the PE would expand
+		// to a well-formed or a malformed general reference. The malformed
+		// general-reference-via-PE path itself is exercised in the external
+		// subset subtest, where PE references in entity values are permitted.
+		wouldBeGood := `<!DOCTYPE r [<!ENTITY % p "&#38;amp;"><!ENTITY e "%p; ok">]><r/>`
+		_, errGood := helium.NewParser().Parse(t.Context(), []byte(wouldBeGood))
+		require.Error(t, errGood,
+			"a PE reference in an internal-subset entity value is not well formed")
+		require.Contains(t, errGood.Error(), "PEReferences forbidden in internal subset")
 
-		bad := `<!DOCTYPE r [<!ENTITY % amp "&#38;"><!ENTITY e "%amp;broken">]><r/>`
-		_, errBad := helium.NewParser().Parse(t.Context(), []byte(bad))
+		wouldBeBad := `<!DOCTYPE r [<!ENTITY % amp "&#38;"><!ENTITY e "%amp;broken">]><r/>`
+		_, errBad := helium.NewParser().Parse(t.Context(), []byte(wouldBeBad))
 		require.Error(t, errBad,
-			"a malformed reference produced via a PE must be rejected")
-		require.Contains(t, errBad.Error(), "malformed entity reference in entity value")
+			"a PE reference in an internal-subset entity value is not well formed")
+		require.Contains(t, errBad.Error(), "PEReferences forbidden in internal subset")
 	})
 
 	t.Run("external subset", func(t *testing.T) {
@@ -496,6 +501,302 @@ func TestExternalSystemParameterEntityCaptured(t *testing.T) {
 	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
 	require.Equal(t, peSystemID, ent.SystemID(), "the SYSTEM literal must be recorded as the system ID")
 	require.Empty(t, ent.ExternalID(), "a SYSTEM declaration has no public ID")
+}
+
+// TestParameterEntityDeclFirstExternalSubset covers the case where a
+// parameter-entity DECLARATION (<!ENTITY % ...>) is the FIRST declaration of an
+// external subset. The '%' marker following <!ENTITY must not be mis-parsed as a
+// parameter-entity REFERENCE, which previously produced a spurious
+// "space required at line 1, column 2" (the psDTD-only marker guard did not
+// apply because parseMarkupDecl sets psDTD only AFTER the first declaration).
+func TestParameterEntityDeclFirstExternalSubset(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE doc SYSTEM "d.dtd"><doc/>`
+
+	testcases := []struct {
+		name string
+		dtd  string
+	}{
+		{
+			// Internal PE declared first, then referenced to supply the element decl.
+			name: "internal-pe-decl-first",
+			dtd:  `<!ENTITY % pe "<!ELEMENT doc EMPTY>">` + "\n" + `%pe;`,
+		},
+		{
+			// External PE declared first (never referenced): the declaration alone
+			// must not trip the marker guard.
+			name: "external-pe-decl-first",
+			dtd:  `<!ENTITY % bad SYSTEM "bad.ent">` + "\n" + `<!ELEMENT doc EMPTY>`,
+		},
+		{
+			// PE declaration is the first declaration INSIDE an INCLUDE section.
+			name: "pe-decl-first-in-include",
+			dtd: `<![INCLUDE[` + "\n" + `<!ENTITY % rootel "<!ELEMENT doc EMPTY>">` + "\n" +
+				`]]>` + "\n" + `%rootel;`,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{dtdSystemID: {Data: []byte(tc.dtd)}}
+			doc, err := helium.NewParser().BlockXXE(false).
+				LoadExternalDTD(true).SubstituteEntities(true).FS(fsys).
+				Parse(t.Context(), []byte(input))
+			require.NoError(t, err, "a parameter-entity declaration as the first external-subset declaration must parse")
+			require.NotNil(t, doc)
+		})
+	}
+}
+
+// TestConditionalSectionKeywordFromParameterEntity covers an external-subset
+// conditional section whose INCLUDE keyword is supplied by a parameter entity
+// (`<![ %e; ... ]]>` with %e; -> "INCLUDE["). The blank skip after "<![" must
+// leave the "%" for expansion (not consume it unexpanded), and the spent PE
+// cursor must be popped before the body floor is captured, so the body
+// declarations (here a defaulting <!ATTLIST>) are parsed and applied.
+func TestConditionalSectionKeywordFromParameterEntity(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc></doc>`
+	dtd := "<!ENTITY % e \"INCLUDE[\">\n" +
+		"<!ELEMENT doc (#PCDATA)>\n" +
+		"<![ %e; <!ATTLIST doc a1 CDATA \"v1\"> ]]>\n"
+	fsys := fstest.MapFS{dtdSystemID: {Data: []byte(dtd)}}
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).
+		FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	str, werr := helium.WriteString(doc.DocumentElement())
+	require.NoError(t, werr)
+	require.Contains(t, str, wantAttrA1V1, "the <!ATTLIST> inside the PE-supplied INCLUDE section must supply the default attribute")
+}
+
+// wantAttrA1V1 is the serialized default attribute the PE-in-markup fixtures
+// assemble; shared to keep the repeated literal in one place.
+const wantAttrA1V1 = `a1="v1"`
+
+// TestParameterEntityInMarkupDecl covers XML §4.4.8 "Included as PE": in the
+// EXTERNAL subset a parameter-entity reference is recognized and included
+// ANYWHERE a markup declaration occurs — INSIDE or ADJACENT to the declaration,
+// not only between declarations — and its replacement text is padded with one
+// leading and one trailing space. Each DTD here is a valid external subset that
+// must parse AND apply the resulting declaration (W3C xmlconf valid/not-sa
+// 019/020/021 and the japanese/spec.dtd content-model & common-attribute
+// patterns).
+func TestParameterEntityInMarkupDecl(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc></doc>`
+
+	testcases := []struct {
+		name string
+		dtd  string
+		want string // substring the serialized <doc> must contain
+	}{
+		{
+			// PE adjacent to an attribute type: `CDATA%e;` with %e; -> "'v1'". The
+			// §4.4.8 leading space separates the type from the default value.
+			name: "pe-adjacent-to-attribute-type",
+			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % e \"'v1'\">\n<!ATTLIST doc a1 CDATA%e;>\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies the element name immediately after <!ATTLIST (no space):
+			// `<!ATTLIST%e;a1` with %e; -> "doc".
+			name: "pe-supplies-element-name",
+			dtd:  "<!ENTITY % e \"doc\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST%e;a1 CDATA \"v1\">\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies most of the ATTLIST body: %e; -> "doc a1 CDATA".
+			name: "pe-supplies-attlist-body-head",
+			dtd:  "<!ENTITY % e \"doc a1 CDATA\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST %e; \"v1\">\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies the whole attribute definition list.
+			name: "pe-supplies-full-attlist-body",
+			dtd:  "<!ENTITY % att \"a1 CDATA 'v1'\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc %att;>\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE inside an element content model, recursively nested through an
+			// empty PE (the japanese/spec.dtd `%class;` idiom).
+			name: "pe-in-content-model",
+			dtd: "<!ENTITY % local \"\">\n<!ENTITY % kids \"a %local;\">\n" +
+				"<!ELEMENT a (#PCDATA)>\n<!ELEMENT head (#PCDATA)>\n" +
+				"<!ELEMENT doc (head?, (%kids;)*)>\n<!ATTLIST doc a1 CDATA 'v1'>\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies an ATTLIST enumeration name list: `(%vals;)`.
+			name: "pe-in-attribute-enumeration",
+			dtd:  "<!ENTITY % vals \"red|green|blue\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc a1 (%vals;) \"red\">\n",
+			want: `a1="red"`,
+		},
+		{
+			// PE supplies a #FIXED default value.
+			name: "pe-in-fixed-default",
+			dtd:  "<!ENTITY % v \"'red'\">\n<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc a1 CDATA #FIXED %v;>\n",
+			want: `a1="red"`,
+		},
+		{
+			// PE supplies a NOTATION type name list, plus the notation declarations.
+			name: "pe-in-notation-type-list",
+			dtd: "<!ENTITY % ns \"gif|jpg\">\n<!ELEMENT doc (#PCDATA)>\n" +
+				"<!NOTATION gif SYSTEM \"gif\">\n<!NOTATION jpg SYSTEM \"jpg\">\n" +
+				"<!ATTLIST doc t NOTATION (%ns;) #IMPLIED a1 CDATA 'v1'>\n",
+			want: wantAttrA1V1,
+		},
+		{
+			// PE supplies a NOTATION declaration's SYSTEM literal: `SYSTEM %sid;`.
+			name: "pe-in-notation-decl-system-id",
+			dtd: "<!ENTITY % sid \"'g.dtd'\">\n<!ELEMENT doc (#PCDATA)>\n" +
+				"<!NOTATION gif SYSTEM %sid;>\n<!ATTLIST doc a1 CDATA 'v1'>\n",
+			want: wantAttrA1V1,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{dtdSystemID: {Data: []byte(tc.dtd)}}
+			doc, err := helium.NewParser().BlockXXE(false).
+				LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).
+				ValidateDTD(true).FS(fsys).Parse(t.Context(), []byte(input))
+			require.NoError(t, err, "a valid external subset with a PE in/adjacent to a markup declaration must parse")
+			require.NotNil(t, doc)
+
+			str, werr := helium.WriteString(doc.DocumentElement())
+			require.NoError(t, werr)
+			require.Contains(t, str, tc.want, "the declaration assembled across the PE boundary must be applied")
+		})
+	}
+}
+
+// TestParameterEntitySuppliesEntityValue covers a parameter entity supplying an
+// internal general entity's value in the external subset:
+// `<!ENTITY greet %pub;>` with %pub; -> "'hello'" declares greet as an INTERNAL
+// entity whose value is `hello` (not an empty external entity), so a later
+// `&greet;` reference expands to `hello`.
+func TestParameterEntitySuppliesEntityValue(t *testing.T) {
+	t.Parallel()
+
+	dtd := "<!ENTITY % pub \"'hello'\">\n<!ELEMENT doc (#PCDATA)>\n<!ENTITY greet %pub;>\n"
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc>&greet;</doc>`
+	fsys := fstest.MapFS{dtdSystemID: {Data: []byte(dtd)}}
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).SubstituteEntities(true).
+		FS(fsys).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	str, werr := helium.WriteString(doc.DocumentElement())
+	require.NoError(t, werr)
+	require.Equal(t, "<doc>hello</doc>", str, "the PE-supplied internal entity value must expand, not become an empty external entity")
+}
+
+// TestInternalSubsetPEInMarkupRejected asserts the INTERNAL subset stays
+// byte-identical to origin: a parameter entity must NOT supply part of (or be
+// adjacent to) a markup declaration there (WFC: PEs in Internal Subset). PE
+// expansion inside markup is EXTERNAL-subset-only; a '%' where an "S", token, or
+// '>' is required is rejected exactly as before, never silently accepted.
+func TestInternalSubsetPEInMarkupRejected(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		name    string
+		doctype string
+	}{
+		{
+			// A '%' where an "S" or '>' is required in an <!ENTITY> declaration.
+			name:    "stray-percent-in-entity-decl",
+			doctype: `<!DOCTYPE doc [<!ELEMENT doc EMPTY><!ENTITY e SYSTEM "x"%p;>]><doc/>`,
+		},
+		{
+			// A PE supplying the <!ATTLIST> body in the internal subset.
+			name:    "pe-supplies-attlist-body",
+			doctype: `<!DOCTYPE doc [<!ELEMENT doc EMPTY><!ENTITY % att "a1 CDATA 'v1'"><!ATTLIST doc %att;>]><doc/>`,
+		},
+		{
+			// A PE supplying an <!ELEMENT> content model in the internal subset.
+			name:    "pe-supplies-content-model",
+			doctype: `<!DOCTYPE doc [<!ENTITY % m "#PCDATA"><!ELEMENT doc (%m;)>]><doc/>`,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).
+				Parse(t.Context(), []byte(tc.doctype))
+			require.Error(t, err, "a parameter entity inside a markup declaration in the internal subset must be rejected")
+		})
+	}
+}
+
+// TestParameterEntityMarkupBoundaryViolation covers the XML validity constraints
+// that a markup declaration (and a parenthesized content-model group) must start
+// and stop in the SAME entity: a closing '>' or ')' supplied by a DIFFERENT
+// parameter-entity replacement text than the one that opened the declaration/group
+// is a boundary violation and must be rejected (W3C xmlconf invalid cases E14,
+// invalid/002, ibm P49/P50/P51 invalid). Rejecting these must NOT regress the
+// valid PE-in-markup documents above.
+func TestParameterEntityMarkupBoundaryViolation(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE doc SYSTEM "d.dtd"><doc></doc>`
+
+	testcases := []struct {
+		name string
+		dtd  string
+	}{
+		{
+			// The ATTLIST closing '>' comes from inside the PE (W3C errata E14).
+			name: "attlist-close-in-pe",
+			dtd:  "<!ELEMENT doc ANY>\n<!ENTITY % e \"a1 CDATA #IMPLIED>\">\n<!ATTLIST doc %e;\n",
+		},
+		{
+			// Content-model '(' in a PE, ')' in the containing DTD (W3C invalid/002).
+			name: "content-model-open-in-pe-close-in-dtd",
+			dtd:  "<!ENTITY % e \"(#PCDATA\">\n<!ELEMENT doc %e;)>\n",
+		},
+		{
+			// Content-model '(' in one PE, ')' in another (W3C ibm P49 invalid).
+			name: "content-model-group-split-across-pes",
+			dtd: "<!ELEMENT a EMPTY>\n<!ELEMENT b (#PCDATA)>\n" +
+				"<!ENTITY % choice1 \"(a|b\">\n<!ENTITY % choice2 \"|c)\">\n" +
+				"<!ELEMENT c ANY>\n<!ELEMENT child1 %choice1;%choice2; >\n",
+		},
+		{
+			// The <!ENTITY> closing '>' comes from a PE (%close; -> ">").
+			name: "entity-close-in-pe",
+			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % close \">\">\n<!ENTITY greet 'hi'%close;\n",
+		},
+		{
+			// The <!NOTATION> closing '>' comes from a PE (%close; -> ">").
+			name: "notation-close-in-pe",
+			dtd:  "<!ELEMENT doc (#PCDATA)>\n<!ENTITY % close \">\">\n<!NOTATION gif SYSTEM 'gif'%close;\n",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fsys := fstest.MapFS{dtdSystemID: {Data: []byte(tc.dtd)}}
+			_, err := helium.NewParser().BlockXXE(false).
+				LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).
+				ValidateDTD(true).FS(fsys).Parse(t.Context(), []byte(input))
+			require.Error(t, err, "a markup declaration / group that crosses a PE boundary must be rejected")
+		})
+	}
 }
 
 // TestExternalPublicParameterEntityCaptured proves the PUBLIC external parameter
@@ -1218,12 +1519,32 @@ func TestEntityDepthLimit(t *testing.T) {
 }
 
 // TestParameterEntities exercises parameter-entity declaration and reference in
-// the internal subset.
+// the internal subset. A PE reference between declarations (supplying a whole
+// markup declaration) is well formed; a PE reference WITHIN a declaration — here
+// inside another entity's value — violates the "PEs in Internal Subset" WFC
+// (XML §2.8) and is fatal, matching libxml2.
 func TestParameterEntities(t *testing.T) {
 	t.Parallel()
 
-	// A parameter entity expanded inside another entity's value.
-	const src = `<?xml version="1.0"?>
+	// A parameter entity referenced BETWEEN declarations, supplying a complete
+	// markup declaration. This is where PE references may occur in the internal
+	// subset, so it must parse.
+	const good = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY % decls "<!ELEMENT doc (#PCDATA)>">
+%decls;
+<!ENTITY greeting "Hello World">
+]>
+<doc>&greeting;</doc>`
+
+	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(good))
+	require.NoError(t, err, "a PE reference between declarations is well formed")
+	require.NotNil(t, doc.DocumentElement())
+
+	// A parameter entity referenced WITHIN a markup declaration (inside an
+	// entity value) in the internal subset violates the PEs in Internal Subset
+	// WFC and is a fatal error.
+	const bad = `<?xml version="1.0"?>
 <!DOCTYPE doc [
 <!ENTITY % name "World">
 <!ENTITY greeting "Hello %name;">
@@ -1231,9 +1552,9 @@ func TestParameterEntities(t *testing.T) {
 ]>
 <doc>&greeting;</doc>`
 
-	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
-	require.NoError(t, err)
-	require.NotNil(t, doc.DocumentElement())
+	_, err = helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(bad))
+	require.Error(t, err, "a PE reference within a declaration in the internal subset is not well formed")
+	require.Contains(t, err.Error(), "PEReferences forbidden in internal subset")
 }
 
 // TestEntitySubstitution exercises entity expansion in content and attributes.
@@ -1600,4 +1921,163 @@ func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
 		"relative SYSTEM id must resolve against the windows-drive file: base")
 	_, found := doc.GetEntity("greet")
 	require.True(t, found, "entity from external DTD must be declared, proving the file: DTD URI was resolved")
+}
+
+// TestIndirectEntityRefInAttributeValue exercises the XML 1.0 attribute-value
+// well-formedness constraints ("No External Entity References", "No < in
+// Attribute Values") against an INDIRECT reference — a general entity whose OWN
+// replacement text is harmless but which transitively references an external or
+// unparsed entity, or reaches a literal '<'. Under SubstituteEntities(false) the
+// stricter attribute-value WFCs must fire on EVERY attribute occurrence,
+// independent of whether the entity was already expanded (and its weaker
+// element-content check recorded) in element content first.
+func TestIndirectEntityRefInAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	const head = "<!DOCTYPE r [\n" +
+		"<!ELEMENT r ANY>\n" +
+		"<!ELEMENT e EMPTY>\n" +
+		"<!ATTLIST e a CDATA #IMPLIED>\n"
+
+	testcases := []struct {
+		name    string
+		src     string
+		wantMsg string
+	}{
+		{
+			// The entity is expanded in element content FIRST (setting its
+			// checked bit), then referenced from an attribute. The checked bit
+			// must NOT suppress the attribute-value WFC re-validation.
+			name: "external-indirect-after-content",
+			src: head +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"]>\n<r>&outer;<e a=\"&outer;\"/></r>",
+			wantMsg: "attribute references external entity",
+		},
+		{
+			name: "external-indirect-attr-only",
+			src: head +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "attribute references external entity",
+		},
+		{
+			// An unparsed (NDATA) entity reached only through an attribute value.
+			name: "unparsed-indirect-attr-only",
+			src: head +
+				"<!NOTATION gif PUBLIC \"gif\">\n" +
+				"<!ENTITY pic SYSTEM \"nul\" NDATA gif>\n" +
+				"<!ENTITY outer \"&pic;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "entity reference to unparsed entity",
+		},
+		{
+			// A nested entity whose replacement text contains a '<' (via a char
+			// reference resolved into its stored content).
+			name: "lessthan-indirect-attr-only",
+			src: head +
+				"<!ENTITY inner \"x&#60;y\">\n" +
+				"<!ENTITY outer \"&inner;\">\n" +
+				"]>\n<r><e a=\"&outer;\"/></r>",
+			wantMsg: "'<' in entity is not allowed in attribute values",
+		},
+		{
+			// The nested external entity is declared AFTER the ATTLIST default
+			// value that transitively references it (forward reference). The WFC
+			// classification must NOT be memoized against the incomplete entity
+			// tables seen while the default value is parsed — a cached result
+			// would let the document be accepted once the entity is declared.
+			name: "external-indirect-attlist-default-forward",
+			src: "<!DOCTYPE r [\n" +
+				"<!ELEMENT r EMPTY>\n" +
+				"<!ENTITY outer \"&ext;\">\n" +
+				"<!ATTLIST r a CDATA \"&outer;\">\n" +
+				"<!ENTITY ext SYSTEM \"nul\">\n" +
+				"]>\n<r/>",
+			wantMsg: "not defined",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+				DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+				Parse(t.Context(), []byte(tc.src))
+			require.Error(t, err, "indirect entity reference must violate the attribute-value WFC")
+			require.Nil(t, doc, "no document on a fatal well-formedness error")
+			require.Contains(t, err.Error(), tc.wantMsg)
+		})
+	}
+}
+
+// TestIndirectHarmlessEntityRefInAttributeValue confirms the attribute-value WFC
+// walk does not over-reject: an indirect general entity whose transitive
+// replacement text is plain character data (no external/unparsed reference, no
+// '<') is accepted, including when referenced multiple times.
+func TestIndirectHarmlessEntityRefInAttributeValue(t *testing.T) {
+	t.Parallel()
+
+	src := "<!DOCTYPE r [\n" +
+		"<!ELEMENT r ANY>\n" +
+		"<!ELEMENT e EMPTY>\n" +
+		"<!ATTLIST e a CDATA #IMPLIED>\n" +
+		"<!ENTITY inner \"value\">\n" +
+		"<!ENTITY outer \"a&inner;b\">\n" +
+		"]>\n<r>&outer;<e a=\"&outer; &outer;\"/></r>"
+
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		Parse(t.Context(), []byte(src))
+	require.NoError(t, err, "a harmless indirect entity must be accepted in an attribute value")
+	require.NotNil(t, doc)
+}
+
+// TestForwardReferencedEntityInAttributeDefault covers a DTD attribute default
+// value that transitively references an external entity declared AFTER it (a
+// forward reference). The parse-time check cannot see the entity yet, so the
+// well-formedness violation is caught by the post-DTD re-validation once the
+// entity tables are complete. An external subset makes the early undefined
+// reference non-fatal, reproducing the case that would otherwise slip through.
+func TestForwardReferencedEntityInAttributeDefault(t *testing.T) {
+	t.Parallel()
+
+	const doc = "<!DOCTYPE r SYSTEM \"d.dtd\" [\n" +
+		"<!ELEMENT r EMPTY>\n" +
+		"<!ENTITY outer \"&ext;\">\n" +
+		"<!ATTLIST r a CDATA \"&outer;\">\n" +
+		"<!ENTITY ext SYSTEM \"x\">\n" +
+		"]>\n<r/>"
+	fsys := fstest.MapFS{"d.dtd": {Data: []byte("<!-- external subset -->")}}
+
+	got, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		FS(fsys).Parse(t.Context(), []byte(doc))
+	require.Error(t, err, "a forward-referenced external entity in a default value must be rejected")
+	require.Nil(t, got)
+	require.Contains(t, err.Error(), "attribute references external entity")
+}
+
+// TestDeepEntityChainInAttributeValueBounded confirms the attribute-value WFC
+// walk traverses a long acyclic chain of nested internal entities without native
+// call-stack recursion (the walker uses an explicit work stack) and does not
+// false-reject a harmless plain-text terminus.
+func TestDeepEntityChainInAttributeValueBounded(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	b.WriteString("<!DOCTYPE r [\n<!ELEMENT r EMPTY>\n")
+	const depth = 30 // stays under the entity-expansion depth guard
+	for i := range depth {
+		fmt.Fprintf(&b, "<!ENTITY e%d \"&e%d;\">\n", i, i+1)
+	}
+	fmt.Fprintf(&b, "<!ENTITY e%d \"end\">\n<!ATTLIST r a CDATA \"&e0;\">\n]>\n<r/>", depth)
+
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		DefaultDTDAttributes(true).SubstituteEntities(false).ValidateDTD(false).
+		Parse(t.Context(), []byte(b.String()))
+	require.NoError(t, err, "a harmless deep entity chain must be accepted")
+	require.NotNil(t, doc)
 }
