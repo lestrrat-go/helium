@@ -1,0 +1,321 @@
+<title>helium — W3C conformance across releases</title>
+<style>
+  .viz-root {
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
+    --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300; --s-xml:#b5359c;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1:#1a1a19; --page:#0d0d0d;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
+      --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300; --s-xml:#cc51b4;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
+    --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300; --s-xml:#cc51b4;
+  }
+  :root[data-theme="light"] .viz-root {
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
+    --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300; --s-xml:#b5359c;
+  }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page); color: var(--text-primary);
+    max-width: 920px; margin: 0 auto; padding: 28px 20px 48px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .viz-root h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .viz-root .sub { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 2px; }
+  .viz-root .prov { color: var(--muted); font-size: 0.76rem; margin: 6px 0 20px; font-variant-numeric: tabular-nums; }
+  .card { background: var(--surface-1); border: 1px solid var(--ring); border-radius: 12px; padding: 18px 18px 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 20px; margin: 4px 2px 16px; }
+  .legend .item { display: inline-flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-secondary); }
+  .legend .swatch { width: 22px; height: 3px; border-radius: 2px; }
+  .legend .item.off { opacity: 0.32; }
+  .chart-wrap { position: relative; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; }
+  .grid line { stroke: var(--grid); stroke-width: 1; }
+  .axis line { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--muted); font-size: 11px; }
+  .tick.x { font-size: 11.5px; }
+  .tickdate { fill: var(--muted); font-size: 9.5px; }
+  .series-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .series-dot { stroke: var(--surface-1); stroke-width: 2; }
+  .dlabel { font-size: 11px; font-weight: 600; }
+  .ylab { fill: var(--muted); font-size: 10.5px; }
+  .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; }
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .08s;
+    background: var(--surface-1); border: 1px solid var(--ring); border-radius: 9px;
+    padding: 9px 11px; font-size: 12px; color: var(--text-primary);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.16); min-width: 168px; z-index: 5;
+  }
+  .tip h4 { margin: 0 0 6px; font-size: 12px; font-weight: 650; }
+  .tip h4 .d { color: var(--muted); font-weight: 400; }
+  .tip .r { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0; }
+  .tip .r .nm { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+  .tip .r .sw { width: 9px; height: 9px; border-radius: 2px; }
+  .tip .r .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tip .r .sub2 { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .note { color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5; margin: 16px 2px 0; }
+  .note b { color: var(--text-primary); font-weight: 600; }
+  details { margin-top: 20px; }
+  summary { cursor: pointer; font-size: 0.86rem; color: var(--text-secondary); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--muted); font-weight: 600; }
+  tbody td.tag { color: var(--text-primary); font-weight: 600; }
+  td .pct { color: var(--text-primary); font-weight: 600; }
+  td .raw { color: var(--muted); }
+  .unmeas { color: var(--muted); font-style: italic; }
+</style>
+
+<div class="viz-root" id="viz">
+  <h1>helium — W3C conformance across releases</h1>
+  <p class="sub">Share of today's conformance suites passed by each tagged release, measured retroactively.</p>
+  <p class="prov" id="prov"></p>
+
+  <div class="card">
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 900 440" role="img" aria-label="Conformance pass rate by release"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+  </div>
+
+  <p class="note" id="metricnote"></p>
+
+  <details id="tablewrap">
+    <summary>Data table (raw counts)</summary>
+    <div style="overflow-x:auto"><table id="table"></table></div>
+  </details>
+
+  <details>
+    <summary>Method</summary>
+    <p class="note">
+      Each release's library code is measured <b>unmodified</b> by the current W3C test harness
+      (<code>helium-w3c-tests</code>). Because that harness didn't exist for the older tags and its test
+      glue targets today's API, a small per-tag <b>adapter branch</b> of the harness bridges API
+      differences — it never changes the library under test and never fabricates a passing result; where a
+      release lacks a feature, the harness degrades honestly and those cases fail.
+      The denominator for a suite is the set of cases the newest release (<span id="reftag"></span>) actually
+      <b>runs</b> with the unmodified harness: today's suite minus the cases the harness skips as
+      <b>inapplicable</b> — XML 1.0 editions 1–4 where helium implements the 5th, XML 1.1 / Namespaces 1.1
+      where helium targets 1.0, and the equivalent dependency gates in the other suites. Those cases are not
+      failures and never could be, so charging them to a release would understate every release. A release's
+      score is its passing cases over that fixed denominator, so cases it cannot enumerate (its parser or
+      schema compiler chokes before running them), cases it skips that the reference runs, and cases that
+      hang or exhaust its memory all count as not-passing.
+    </p>
+  </details>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+(function () {
+  const SUITES = DATA.suites;                 // [{key,label,denom}]
+  const CVAR = { xml:"--s-xml", xslt30:"--s-xslt30", qt3:"--s-qt3", xsd11:"--s-xsd11", xsd10:"--s-xsd10" };
+  const tags = DATA.tags;
+  const byTagSuite = {};
+  DATA.rows.forEach(r => { byTagSuite[r.tag + "|" + r.suite] = r; });
+  const hidden = new Set();
+
+  const css = v => getComputedStyle(document.getElementById("viz")).getPropertyValue(v).trim();
+
+  // Never round a near-miss up to "100%": 12,823/12,827 is not a perfect score, and showing
+  // it as 100.0% would hide a real regression. Only an exact sweep prints 100%.
+  const fmtPct = r => (r.passed === r.denom)
+    ? "100%"
+    : (r.pass_pct >= 99.9 ? r.pass_pct.toFixed(2) : r.pass_pct.toFixed(1)) + "%";
+
+  document.getElementById("prov").textContent =
+    `Generated ${DATA.generated} · reference ${DATA.reference_tag} · ${tags.length} releases · ${SUITES.length} suites`;
+  document.getElementById("reftag").textContent = DATA.reference_tag;
+  document.getElementById("metricnote").innerHTML =
+    "<b>Reading the chart:</b> 100% means passing every case in today's suite. Filled dots are complete runs; " +
+    "<b>hollow dots</b> are partial — the release crashes, hangs, or its compiler chokes before finishing the suite, " +
+    "so it can only pass a fraction of the cases (an honest reflection of its robustness). A <b>gap</b> means the suite " +
+    "hangs or OOMs badly enough that no result comes back at all. The XPath/XSLT engines were measurable and stable " +
+    "across every release; the XSD validators were crash-prone early and only run cleanly from the newest tags.";
+
+  // ---- Legend ----
+  const legend = document.getElementById("legend");
+  SUITES.forEach(s => {
+    const el = document.createElement("span");
+    el.className = "item"; el.dataset.suite = s.key;
+    const inap = s.inapplicable
+      ? ` (${s.inapplicable.toLocaleString()} inapplicable excluded)` : "";
+    el.innerHTML = `<span class="swatch" style="background:var(${CVAR[s.key]})"></span>${s.label} ` +
+      `<span style="color:var(--muted)" title="cases the harness skips as inapplicable to helium (wrong XML edition / version) are excluded from the denominator${inap ? "" : ""}">` +
+      `· /${s.denom.toLocaleString()}${inap}</span>`;
+    el.addEventListener("click", () => {
+      if (hidden.has(s.key)) hidden.delete(s.key); else hidden.add(s.key);
+      el.classList.toggle("off", hidden.has(s.key));
+      draw();
+    });
+    legend.appendChild(el);
+  });
+
+  // ---- Chart geometry ----
+  const W = 900, H = 440, M = { t: 18, r: 128, b: 52, l: 44 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+  const xAt = i => M.l + (tags.length === 1 ? iw/2 : (iw * i) / (tags.length - 1));
+  const yAt = v => M.t + ih * (1 - v / 100);
+  const svg = document.getElementById("chart");
+  const NS = "http://www.w3.org/2000/svg";
+  const mk = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+  function draw() {
+    svg.innerHTML = "";
+    // gridlines + y ticks
+    const g = mk("g", { class: "grid" });
+    [0, 25, 50, 75, 100].forEach(v => {
+      g.appendChild(mk("line", { x1: M.l, y1: yAt(v), x2: M.l + iw, y2: yAt(v) }));
+      const t = mk("text", { class: "ylab", x: M.l - 8, y: yAt(v) + 3, "text-anchor": "end" });
+      t.textContent = v + "%"; g.appendChild(t);
+    });
+    svg.appendChild(g);
+
+    // x axis line
+    const ax = mk("g", { class: "axis" });
+    ax.appendChild(mk("line", { x1: M.l, y1: M.t + ih, x2: M.l + iw, y2: M.t + ih }));
+    svg.appendChild(ax);
+
+    // x ticks (tag + date)
+    tags.forEach((tag, i) => {
+      const tx = mk("text", { class: "tick x", x: xAt(i), y: M.t + ih + 18, "text-anchor": "middle" });
+      tx.textContent = tag; svg.appendChild(tx);
+      const dt = DATA.dates[tag] || "";
+      if (dt) {
+        const td = mk("text", { class: "tickdate", x: xAt(i), y: M.t + ih + 32, "text-anchor": "middle" });
+        td.textContent = dt; svg.appendChild(td);
+      }
+    });
+
+    // series
+    SUITES.forEach(s => {
+      if (hidden.has(s.key)) return;
+      const color = css(CVAR[s.key]);
+      const pts = tags.map((tag, i) => {
+        const r = byTagSuite[tag + "|" + s.key];
+        return (r && r.measured) ? { i, x: xAt(i), y: yAt(r.pass_pct), r } : null;
+      });
+      // The trajectory line connects only COMPLETE runs (spanning gaps and
+      // partial points), so a crash-truncated low point never reads as a real
+      // conformance drop. Partial points appear as off-line hollow markers.
+      const linePts = pts.filter(p => p && !p.r.partial);
+      if (linePts.length >= 2) {
+        const d = linePts.map((p, k) => (k ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+        svg.appendChild(mk("path", { class: "series-line", d, stroke: color, "stroke-dasharray": "" }));
+      }
+      // dots — solid for a complete run, hollow for a partial one
+      pts.forEach(p => {
+        if (!p) return;
+        if (p.r.partial) {
+          svg.appendChild(mk("circle", { class: "series-dot", cx: p.x, cy: p.y, r: 4.5, fill: "var(--surface-1)", stroke: color, "stroke-width": 2 }));
+        } else {
+          svg.appendChild(mk("circle", { class: "series-dot", cx: p.x, cy: p.y, r: 4.5, fill: color }));
+        }
+      });
+      // direct label at last measured point
+      const last = [...pts].reverse().find(p => p);
+      if (last) {
+        const lab = mk("text", { class: "dlabel", x: last.x + 10, y: last.y + 4, fill: color });
+        lab.textContent = s.label + " " + last.r.pass_pct.toFixed(0) + "%";
+        svg.appendChild(lab);
+      }
+    });
+
+    // crosshair + hit layer
+    const cross = mk("line", { class: "crosshair", id: "cross", y1: M.t, y2: M.t + ih });
+    svg.appendChild(cross);
+    tags.forEach((tag, i) => {
+      const hit = mk("rect", {
+        x: xAt(i) - iw / (2 * Math.max(1, tags.length - 1)), y: M.t,
+        width: iw / Math.max(1, tags.length - 1), height: ih, fill: "transparent"
+      });
+      hit.style.cursor = "crosshair";
+      hit.addEventListener("mousemove", e => showTip(e, i, tag));
+      hit.addEventListener("mouseleave", hideTip);
+      svg.appendChild(hit);
+    });
+  }
+
+  const tip = document.getElementById("tip");
+  function showTip(e, i, tag) {
+    const cross = document.getElementById("cross");
+    cross.setAttribute("x1", xAt(i)); cross.setAttribute("x2", xAt(i)); cross.style.opacity = 1;
+    let rows = "";
+    SUITES.forEach(s => {
+      if (hidden.has(s.key)) return;
+      const r = byTagSuite[tag + "|" + s.key];
+      const color = css(CVAR[s.key]);
+      if (r && r.measured) {
+        const flag = r.partial ? ` <span class="sub2">◦ partial: ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}</span>` : "";
+        const crash = r.crashed ? ` <span class="sub2">✗ ${r.crashed} hang/OOM, counted as failures</span>` : "";
+        const xf = r.xfail ? ` <span class="sub2">⚠ ${r.xfail} xfail (intentional divergence), counted as not-passing</span>` : "";
+        rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
+          `<span class="v">${fmtPct(r)} <span class="sub2">${r.passed.toLocaleString()}/${r.denom.toLocaleString()}</span>${flag}${crash}${xf}</span></div>`;
+      } else {
+        rows += `<div class="r"><span class="nm"><span class="sw" style="background:${color}"></span>${s.label}</span>` +
+          `<span class="v sub2">not measured</span></div>`;
+      }
+    });
+    tip.innerHTML = `<h4>${tag} <span class="d">${DATA.dates[tag] || ""}</span></h4>${rows}`;
+    tip.style.opacity = 1;
+    // position (chart-wrap relative). SVG is 900 wide in viewBox units; scale to px.
+    const wrap = svg.parentElement.getBoundingClientRect();
+    const scale = wrap.width / W;
+    let left = xAt(i) * scale + 14;
+    if (left + 180 > wrap.width) left = xAt(i) * scale - 180;
+    tip.style.left = Math.max(0, left) + "px";
+    tip.style.top = (M.t + 8) * scale + "px";
+  }
+  function hideTip() {
+    tip.style.opacity = 0;
+    const c = document.getElementById("cross"); if (c) c.style.opacity = 0;
+  }
+
+  // ---- Table ----
+  const table = document.getElementById("table");
+  let thead = "<thead><tr><th>Release</th><th>Date</th>";
+  SUITES.forEach(s => thead += `<th>${s.label}</th>`);
+  thead += "</tr></thead>";
+  let tbody = "<tbody>";
+  tags.forEach(tag => {
+    tbody += `<tr><td class="tag">${tag}</td><td class="raw">${DATA.dates[tag] || ""}</td>`;
+    SUITES.forEach(s => {
+      const r = byTagSuite[tag + "|" + s.key];
+      if (r && r.measured) {
+        const mark = r.partial ? ' <span class="unmeas" title="partial run — this release&#39;s compiler chokes before the harness can enumerate the whole suite">◦</span>' : "";
+        const crashMark = r.crashed
+          ? ` <span class="unmeas" title="${r.crashed} case(s) hang or exhaust memory on this release; skipped so the suite can finish, and counted as failures">✗${r.crashed}</span>`
+          : "";
+        const xfMark = r.xfail
+          ? ` <span class="unmeas" title="${r.xfail} documented intentional divergence(s): helium is namespace-aware and the case expects a namespace-unaware result. Not counted as passes.">⚠${r.xfail}</span>`
+          : "";
+        const sub = r.partial ? `ran ${r.enumerated.toLocaleString()}/${r.denom.toLocaleString()}` : `${r.passed.toLocaleString()}/${r.denom.toLocaleString()}`;
+        tbody += `<td><span class="pct">${fmtPct(r)}</span>${mark}${crashMark}${xfMark}<br><span class="raw">${sub}</span></td>`;
+      } else {
+        tbody += `<td class="unmeas" title="not measured — no result recorded for this release/suite">—</td>`;
+      }
+    });
+    tbody += "</tr>";
+  });
+  tbody += "</tbody>";
+  table.innerHTML = thead + tbody;
+
+  draw();
+  window.addEventListener("resize", () => { /* svg scales via viewBox; tip recalcs on hover */ });
+})();
+</script>

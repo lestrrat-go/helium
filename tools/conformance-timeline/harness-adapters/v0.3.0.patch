@@ -1,0 +1,490 @@
+diff --git a/xpath3/qt3_helpers_test.go b/xpath3/qt3_helpers_test.go
+index d979cee..61dba8e 100644
+--- a/xpath3/qt3_helpers_test.go
++++ b/xpath3/qt3_helpers_test.go
+@@ -25,7 +25,6 @@ import (
+ 	"github.com/lestrrat-go/helium"
+ 	"github.com/lestrrat-go/helium/xpath3"
+ 	"github.com/lestrrat-go/helium/xsd"
+-	"github.com/lestrrat-go/helium/xslt3"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
+@@ -150,19 +149,13 @@ func qt3TransformBaseURI(tc qt3Test) string {
+ // {fn}transform stub for the QT3 harness. The adapter inherits the harness's
+ // combined HTTP+filesystem resolver and shared HTTP client.
+ func qt3TransformMutator(client *http.Client, baseURI string) qt3EvalMutator {
+-	return func(e xpath3.Evaluator) xpath3.Evaluator {
+-		transformOpts := []xslt3.TransformOption{
+-			xslt3.WithTransformURIResolver(qt3Resolver(client)),
+-			xslt3.WithTransformHTTPClient(client),
+-		}
+-		if baseURI != "" {
+-			transformOpts = append(transformOpts, xslt3.WithTransformBaseURI(baseURI))
+-		}
+-		fn := xslt3.TransformFunction(transformOpts...)
+-		return e.Functions(nil, map[xpath3.QualifiedName]xpath3.Function{
+-			{URI: xpath3.NSFn, Name: "transform"}: fn,
+-		})
+-	}
++	// v0.3.0 tag-adapt: fn:transform (xslt3.TransformFunction and its options)
++	// did not exist in helium v0.3.0. This is a behavior-neutral degrade-stub:
++	// return an identity mutator so the {fn}transform function is NOT registered.
++	// fn:transform QT3 cases then fail honestly as unsupported.
++	_ = client
++	_ = baseURI
++	return func(e xpath3.Evaluator) xpath3.Evaluator { return e }
+ }
+ 
+ type qt3CombinedResolver struct {
+@@ -435,7 +428,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
+ 				for _, param := range tc.Params {
+ 					paramEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
+ 					if len(vars) > 0 {
+-						paramEval = paramEval.Variables(vars)
++						paramEval = paramEval.Variables(xpath3.VariablesFromMap(vars))
+ 					}
+ 					compiledParam, err := xpath3.NewCompiler().Compile(param.Select)
+ 					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
+@@ -446,7 +439,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
+ 			}
+ 			if len(vars) > 0 {
+ 				v := vars
+-				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(v) })
++				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(xpath3.VariablesFromMap(v)) })
+ 			}
+ 			eval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
+ 			if reason, ok := exp.XFail[tc.Name]; ok {
+@@ -532,12 +525,12 @@ func qt3SchemaOpts(t *testing.T, ctx context.Context, tc qt3Test, doc helium.Nod
+ 		// targets live next to the schema; opt into host FS access. Default to
+ 		// XSD 1.1 (honoring an xsd-version="1.0" dependency), mirroring the
+ 		// production schema-aware paths.
+-		compiler := xsd.NewCompiler().FS(helium.PermissiveFS())
+-		if tc.SchemaVersion == "1.0" {
+-			compiler = compiler.Version(xsd.Version10)
+-		} else {
+-			compiler = compiler.DefaultVersion(xsd.Version11)
+-		}
++		// v0.3.0 tag-adapt: helium v0.3.0 is XSD-1.0-only; it has no
++		// Compiler.Version/DefaultVersion and no xsd.Version10/Version11.
++		// Compile every schema under the single (1.0) code path. XSD 1.1
++		// schemas then compile/validate under 1.0 semantics and 1.1-only
++		// cases fail honestly.
++		compiler := xsd.NewCompiler().FS(permissiveFS())
+ 		schema, err := compiler.CompileFile(ctx, schemaPath)
+ 		if err != nil {
+ 			t.Skipf("schema %q failed to compile: %v", sc.DocPath, err)
+@@ -563,12 +556,12 @@ func qt3SchemaOpts(t *testing.T, ctx context.Context, tc qt3Test, doc helium.Nod
+ 		if len(ann) > 0 {
+ 			muts = append(muts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.TypeAnnotations(ann) })
+ 		}
+-		if len(nilled) > 0 {
+-			muts = append(muts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.NilledElements(nilled) })
+-		}
+-		if len(ids) > 0 {
+-			muts = append(muts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.IDNodes(ids) })
+-		}
++		// v0.3.0 tag-adapt: Evaluator.NilledElements and Evaluator.IDNodes did
++		// not exist in helium v0.3.0. Drop those PSVI mutators (behavior-neutral
++		// degrade); fn:nilled and fn:id/fn:element-with-id PSVI cases fail
++		// honestly. The nilled/ids maps stay collected for signature parity.
++		_ = nilled
++		_ = ids
+ 	}
+ 	return muts
+ }
+@@ -579,121 +572,16 @@ func qt3SchemaOpts(t *testing.T, ctx context.Context, tc qt3Test, doc helium.Nod
+ // lets a schema-element()/schema-attribute() test or a schema-aware cast resolve
+ // against any in-scope namespace, not just one schema's.
+ func qt3AggregateSchemaDecls(schemas []*xsd.Schema) xpath3.SchemaDeclarations {
+-	if len(schemas) == 0 {
+-		return nil
+-	}
+-	decls := make(qt3AggregateDecls, 0, len(schemas))
+-	for _, s := range schemas {
+-		decls = append(decls, s.Declarations())
+-	}
+-	return decls
+-}
+-
+-// qt3AggregateDecls delegates each SchemaDeclarations method across the wrapped
+-// providers, first-hit for lookups and OR for predicates. A cast/validation
+-// method returns the first non-nil error (a schema that does not define the type
+-// reports "not found" as nil, so only the owning schema can report a facet
+-// violation).
+-type qt3AggregateDecls []xpath3.SchemaDeclarations
+-
+-func (a qt3AggregateDecls) LookupSchemaElement(local, ns string) (string, bool) {
+-	for _, d := range a {
+-		if t, ok := d.LookupSchemaElement(local, ns); ok {
+-			return t, true
+-		}
+-	}
+-	return "", false
+-}
+-
+-func (a qt3AggregateDecls) LookupSchemaAttribute(local, ns string) (string, bool) {
+-	for _, d := range a {
+-		if t, ok := d.LookupSchemaAttribute(local, ns); ok {
+-			return t, true
+-		}
+-	}
+-	return "", false
+-}
+-
+-func (a qt3AggregateDecls) LookupSchemaType(local, ns string) (string, bool) {
+-	for _, d := range a {
+-		if t, ok := d.LookupSchemaType(local, ns); ok {
+-			return t, true
+-		}
+-	}
+-	return "", false
+-}
+-
+-func (a qt3AggregateDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
+-	for _, d := range a {
+-		if d.IsSubtypeOf(typeName, baseTypeName) {
+-			return true
+-		}
+-	}
+-	return false
+-}
+-
+-func (a qt3AggregateDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+-	for _, d := range a {
+-		if d.IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS) {
+-			return true
+-		}
+-	}
+-	return false
+-}
+-
+-func (a qt3AggregateDecls) ValidateCast(ctx context.Context, value, typeName string) error {
+-	for _, d := range a {
+-		if err := d.ValidateCast(ctx, value, typeName); err != nil {
+-			return err
+-		}
+-	}
+-	return nil
+-}
+-
+-func (a qt3AggregateDecls) ValidateCastWithNS(ctx context.Context, value, typeName string, nsMap map[string]string) error {
+-	for _, d := range a {
+-		if err := d.ValidateCastWithNS(ctx, value, typeName, nsMap); err != nil {
+-			return err
+-		}
+-	}
+-	return nil
+-}
+-
+-func (a qt3AggregateDecls) ListItemType(typeName string) (string, bool) {
+-	for _, d := range a {
+-		if it, ok := d.ListItemType(typeName); ok {
+-			return it, true
+-		}
+-	}
+-	return "", false
+-}
+-
+-func (a qt3AggregateDecls) UnionMemberTypes(typeName string) []string {
+-	for _, d := range a {
+-		if m := d.UnionMemberTypes(typeName); m != nil {
+-			return m
+-		}
+-	}
++	// v0.3.0 tag-adapt: (*xsd.Schema).Declarations() did not exist in helium
++	// v0.3.0, so there is no way to project a compiled schema onto the
++	// xpath3.SchemaDeclarations provider interface. Skip the aggregation
++	// (behavior-neutral degrade): no SchemaDeclarations provider is installed,
++	// so schema-element()/schema-attribute()/schema-aware-cast qt3 cases fail
++	// honestly rather than fabricating declarations.
++	_ = schemas
+ 	return nil
+ }
+ 
+-// SchemaTypeContentKind satisfies the optional xpath3.ContentTypeKindProvider
+-// interface so fn:data can raise FOTY0012 for a complex-content element with no
+-// typed value. It consults each wrapped provider that implements the interface
+-// and returns the first that reports a hit, mirroring the first-hit lookups.
+-func (a qt3AggregateDecls) SchemaTypeContentKind(typeName string) (xpath3.ContentTypeKind, bool) {
+-	for _, d := range a {
+-		provider, ok := d.(xpath3.ContentTypeKindProvider)
+-		if !ok {
+-			continue
+-		}
+-		if kind, found := provider.SchemaTypeContentKind(typeName); found {
+-			return kind, true
+-		}
+-	}
+-	return 0, false
+-}
+-
+ // qt3AnnotateDoc validates node against the schema whose target namespace
+ // matches its root element and merges the resulting type annotations into ann,
+ // the PSVI nilled elements into nilled, and the PSVI is-id nodes into ids (both
+@@ -714,8 +602,12 @@ func qt3AnnotateDoc(t *testing.T, ctx context.Context, schemas []*xsd.Schema, no
+ 	}
+ 	local := make(xsd.TypeAnnotations)
+ 	localNilled := make(xsd.NilledElements)
+-	localIDs := make(xsd.IDNodes)
+-	validator := xsd.NewValidator(schema).Annotations(&local).NilledElements(&localNilled).IDNodes(&localIDs)
++	// v0.3.0 tag-adapt: xsd.IDNodes and Validator.IDNodes did not exist in
++	// helium v0.3.0. Drop the is-id PSVI collection (behavior-neutral degrade);
++	// the ids map stays empty and fn:id/fn:element-with-id PSVI cases fail
++	// honestly.
++	_ = ids
++	validator := xsd.NewValidator(schema).Annotations(&local).NilledElements(&localNilled)
+ 	if err := validator.Validate(ctx, d); err != nil {
+ 		t.Skipf("validating source (root ns %q) against schema %q: %v", qt3DocRootNS(d), schema.TargetNamespace(), err)
+ 	}
+@@ -725,9 +617,6 @@ func qt3AnnotateDoc(t *testing.T, ctx context.Context, schemas []*xsd.Schema, no
+ 	for e := range localNilled {
+ 		nilled[e] = struct{}{}
+ 	}
+-	for n := range localIDs {
+-		ids[n] = struct{}{}
+-	}
+ }
+ 
+ // qt3PickValidationSchema returns the schema whose target namespace exactly
+@@ -939,7 +828,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
+ 
+ 	queryEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
+ 	if len(vars) > 0 {
+-		queryEval = queryEval.Variables(vars)
++		queryEval = queryEval.Variables(xpath3.VariablesFromMap(vars))
+ 	}
+ 
+ 	for _, col := range tc.Collections {
+@@ -1229,7 +1118,7 @@ func qt3EvalExprSeq(expr string, ns map[string]string, seq xpath3.Sequence) (xpa
+ 	if seq == nil {
+ 		seq = xpath3.EmptySequence()
+ 	}
+-	eval = eval.Variables(map[string]xpath3.Sequence{"result": seq})
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{"result": seq}))
+ 	result, err := eval.Evaluate(context.Background(), compiled, nil)
+ 	if err != nil {
+ 		return nil, err
+@@ -1683,10 +1572,10 @@ func qt3NodesDeepEqual(a, b helium.Node) bool {
+ 	if err != nil {
+ 		return false
+ 	}
+-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
++	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		"qt3a": xpath3.ItemSlice{xpath3.NodeItem{Node: a}},
+ 		"qt3b": xpath3.ItemSlice{xpath3.NodeItem{Node: b}},
+-	})
++	}))
+ 	result, err := eval.Evaluate(context.Background(), compiled, nil)
+ 	if err != nil {
+ 		return false
+diff --git a/xpath3/zz_tagadapt_test.go b/xpath3/zz_tagadapt_test.go
+new file mode 100644
+index 0000000..a2766b0
+--- /dev/null
++++ b/xpath3/zz_tagadapt_test.go
+@@ -0,0 +1,22 @@
++package xpath3_test
++
++// This file adapts the harness to the helium v0.3.0 tagged release API.
++// v0.3.0 did not export helium.PermissiveFS; permissiveFS replicates its
++// behavior (an fs.FS that forwards any path verbatim to os.Open), matching
++// internal/iofs.PermissiveRoot which helium.PermissiveFS returns in later
++// releases. This is real old behavior, not a degrade-stub.
++
++import (
++	"io/fs"
++	"os"
++)
++
++type permissiveRootFS struct{}
++
++func (permissiveRootFS) Open(name string) (fs.File, error) {
++	return os.Open(name) //nolint:gosec // intentional passthrough, mirrors iofs.PermissiveRoot
++}
++
++func permissiveFS() fs.FS {
++	return permissiveRootFS{}
++}
+diff --git a/xsd/xsd11_harness_test.go b/xsd/xsd11_harness_test.go
+index 5b40f2e..1b0ef18 100644
+--- a/xsd/xsd11_harness_test.go
++++ b/xsd/xsd11_harness_test.go
+@@ -182,7 +182,6 @@ func runXSTS11Case(t *testing.T, o *caseOutcome, testdataRoot string, c xstsCase
+ 		cerr = perr
+ 	} else {
+ 		schema, cerr = xsd.NewCompiler().
+-			Version(xsd.Version11).
+ 			FS(slashFS{os.DirFS(testdataRoot)}).
+ 			BaseDir(path.Dir(c.SchemaRel)).
+ 			Compile(t.Context(), doc)
+diff --git a/xslt3/w3c_helpers_test.go b/xslt3/w3c_helpers_test.go
+index d3352f3..e458946 100644
+--- a/xslt3/w3c_helpers_test.go
++++ b/xslt3/w3c_helpers_test.go
+@@ -479,9 +479,9 @@ func evalRawResultXPath(t *testing.T, expr string, rawResult xpath3.Sequence) bo
+ 	}
+ 
+ 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+-	eval = eval.Variables(map[string]xpath3.Sequence{
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		xpathVarResult: rawResult,
+-	})
++	}))
+ 
+ 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
+ 	if err != nil {
+@@ -510,9 +510,9 @@ func evalRawXPathBool(expr string, rawResult xpath3.Sequence) bool {
+ 		return false
+ 	}
+ 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+-	eval = eval.Variables(map[string]xpath3.Sequence{
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		xpathVarResult: rawResult,
+-	})
++	}))
+ 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
+ 	if err != nil {
+ 		return false
+@@ -1049,7 +1049,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
+ 	}
+ 
+ 	if hasExplicitSource {
+-		sourceParser := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(helium.PermissiveFS())
++		sourceParser := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(permissiveFS())
+ 		if tc.SourceDocPath != "" {
+ 			sourceParser = sourceParser.SubstituteEntities(true).FixBaseURIs(false)
+ 			sourceParser = sourceParser.BaseURI(w3cAbsBaseURI(tc.SourceDocPath))
+@@ -1080,7 +1080,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
+ 			base := w3cAbsBaseURI(tc.SourceDocPath)
+ 			proc := xinclude.NewProcessor().
+ 				NoXIncludeMarkers().
+-				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
++				Resolver(xinclude.NewFSResolver(permissiveFS())).
+ 				BaseURI(base)
+ 			if _, xiErr := proc.Process(t.Context(), sourceDoc); xiErr != nil {
+ 				t.Fatalf("XInclude processing of source %q: %v", tc.SourceDocPath, xiErr)
+@@ -1116,7 +1116,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
+ 				// host access here. Default to XSD 1.1, mirroring the production
+ 				// xslt3 xsl:import-schema path (compile_schema.go), so a schema
+ 				// silent on version (no vc:minVersion) gets 1.1 semantics.
+-				schema, schemaErr := xsd.NewCompiler().DefaultVersion(xsd.Version11).FS(helium.PermissiveFS()).CompileFile(t.Context(), schemaPath)
++				schema, schemaErr := xsd.NewCompiler().FS(permissiveFS()).CompileFile(t.Context(), schemaPath)
+ 				if schemaErr != nil {
+ 					t.Fatalf("compile import schema %q: %v", sp, schemaErr)
+ 				}
+@@ -1141,7 +1141,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
+ 		if readErr != nil {
+ 			t.Fatalf("read stylesheet: %v", readErr)
+ 		}
+-		ssParser := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath).FS(helium.PermissiveFS())
++		ssParser := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath).FS(permissiveFS())
+ 		doc, parseErr := ssParser.Parse(t.Context(), data)
+ 		if parseErr != nil {
+ 			if tc.ExpectError {
+@@ -1365,7 +1365,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
+ 		// nested-schema FS access by default, so opt back into host access.
+ 		// Default to XSD 1.1, mirroring the production xslt3 source-schema path
+ 		// (source_schema.go), so a schema silent on version gets 1.1 semantics.
+-		schema, schemaErr := xsd.NewCompiler().DefaultVersion(xsd.Version11).FS(helium.PermissiveFS()).CompileFile(ctx, schemaPath)
++		schema, schemaErr := xsd.NewCompiler().FS(permissiveFS()).CompileFile(ctx, schemaPath)
+ 		if schemaErr != nil {
+ 			t.Fatalf("compile source schema %q: %v", schemaPath, schemaErr)
+ 		}
+@@ -2194,9 +2194,9 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
+ 		eval = eval.Namespaces(ns)
+ 	}
+ 
+-	eval = eval.Variables(map[string]xpath3.Sequence{
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+-	})
++	}))
+ 
+ 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
+ 	if err != nil {
+@@ -2296,9 +2296,9 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
+ 
+ 	// Bind $result to the document node so W3C assertions like
+ 	// deep-equal($result, ...) can reference the transformation output.
+-	eval = eval.Variables(map[string]xpath3.Sequence{
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+-	})
++	}))
+ 
+ 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
+ 	if err != nil {
+@@ -2354,9 +2354,9 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
+ 		eval = eval.Namespaces(ns)
+ 	}
+ 
+-	eval = eval.Variables(map[string]xpath3.Sequence{
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+-	})
++	}))
+ 
+ 	if annotations != nil {
+ 		eval = eval.TypeAnnotations(annotations)
+@@ -2377,9 +2377,9 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
+ 			if len(ns) > 0 {
+ 				evalPlain = evalPlain.Namespaces(ns)
+ 			}
+-			evalPlain = evalPlain.Variables(map[string]xpath3.Sequence{
++			evalPlain = evalPlain.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 				xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+-			})
++			}))
+ 			res2, err2 := evalPlain.Evaluate(context.TODO(), compiled, doc)
+ 			if err2 == nil {
+ 				res = res2
+@@ -2471,9 +2471,9 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
+ 	}
+ 
+ 	// Bind $result to the raw XDM sequence (preserves atomic types).
+-	eval = eval.Variables(map[string]xpath3.Sequence{
++	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+ 		xpathVarResult: rawResult,
+-	})
++	}))
+ 
+ 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
+ 	if err != nil {
+@@ -2747,7 +2747,7 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath).FS(helium.PermissiveFS())
++	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath).FS(permissiveFS())
+ 	doc, err := p.Parse(ctx, data)
+ 	if err != nil {
+ 		return nil, err
+diff --git a/xslt3/zz_tagadapt_test.go b/xslt3/zz_tagadapt_test.go
+new file mode 100644
+index 0000000..529a8c8
+--- /dev/null
++++ b/xslt3/zz_tagadapt_test.go
+@@ -0,0 +1,22 @@
++package xslt3_test
++
++// This file adapts the harness to the helium v0.3.0 tagged release API.
++// v0.3.0 did not export helium.PermissiveFS; permissiveFS replicates its
++// behavior (an fs.FS that forwards any path verbatim to os.Open), matching
++// internal/iofs.PermissiveRoot which helium.PermissiveFS returns in later
++// releases. This is real old behavior, not a degrade-stub.
++
++import (
++	"io/fs"
++	"os"
++)
++
++type permissiveRootFS struct{}
++
++func (permissiveRootFS) Open(name string) (fs.File, error) {
++	return os.Open(name) //nolint:gosec // intentional passthrough, mirrors iofs.PermissiveRoot
++}
++
++func permissiveFS() fs.FS {
++	return permissiveRootFS{}
++}
