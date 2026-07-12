@@ -1,6 +1,4 @@
-results/*.xml
-results/*.log
-results/*.work
-results/*.work.sum
-results/*-iso.json
-results/*-iso.json.err
+# Raw measurement output: recalculable by re-running run.sh, and bulky. Not committed --
+# the aggregated numbers in data.json (and the rendered CONFORMANCE.md) are what we keep.
+results/
+__pycache__/

@@ -11,8 +11,12 @@ Suites: **XML 1.0/1.1**, **XSD 1.0**, **XSD 1.1**, **XSLT 3.0**, **XPath/XQuery 
 - `conformance-timeline.html` — self-contained interactive graph (open in a
   browser). Pass-rate lines per suite across releases, legend, hover crosshair,
   and a raw-count data table.
-- `data.json` — the aggregated numbers behind the graph.
-- `results/*-summary.md` — per tag/suite Pass/Skip/Fail evidence.
+- `data.json` — the aggregated numbers behind the graph (committed: it is what
+  `CONFORMANCE.md` and the SVG are rendered from, so the doc can be re-rendered
+  without re-measuring).
+- `CONFORMANCE.md` (repo root) + `conformance-timeline.svg` — the committed report.
+- `results/` — raw per tag/suite JUnit + summaries. **Not committed**: it is bulky and
+  fully recalculable by re-running `run.sh` (which takes hours). Local artifact only.
 
 ## Method
 
