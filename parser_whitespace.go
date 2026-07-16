@@ -276,6 +276,15 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	// through to the heuristic keeps entity replacement text classified the same
 	// way as the equivalent literal characters (XML §4.4 entity/literal
 	// equivalence).
+	//
+	// One consequence is asymmetric and intentional: a whitespace-only entity
+	// sitting in element-only content is kept as a text node, while the literal
+	// whitespace in the same position is stripped. This is libxml2-faithful, not a
+	// bug — `xmllint --noent --noblanks` keeps the entity form's space and strips
+	// the literal form identically, because the entity's replacement text is parsed
+	// inside the synthetic pseudo-root and never consults the enclosing element's
+	// content model. Reclassifying the entity whitespace to match the literal path
+	// would DIVERGE from libxml2, which is the byte-parity target.
 	if ctx.doc != nil && !ctx.peekNode().synthetic {
 		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
 			switch dt {
