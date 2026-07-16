@@ -201,7 +201,10 @@ func (p Parser) LoadExternalDTD(v bool) Parser {
 }
 
 // DefaultDTDAttributes controls whether the parser adds default attributes
-// defined in the DTD. When set to true, also enables LoadExternalDTD.
+// defined in the DTD. The external subset is loaded when default-attribute
+// application, external-DTD loading, or DTD validation is requested; the three
+// intents are independent, so call order does not matter and turning this off
+// does not leave loading stuck on.
 // libxml2: XML_PARSE_DTDATTR
 // Default: false
 func (p Parser) DefaultDTDAttributes(v bool) Parser {
@@ -211,12 +214,14 @@ func (p Parser) DefaultDTDAttributes(v bool) Parser {
 		return p
 	}
 	p.cfg.options.Set(parseDTDAttr)
-	p.cfg.options.Set(parseDTDLoad)
 	return p
 }
 
 // ValidateDTD controls whether the parser validates the document against
-// its DTD after parsing. When set to true, also enables LoadExternalDTD.
+// its DTD after parsing. The external subset is loaded when DTD validation,
+// external-DTD loading, or default-attribute application is requested; the
+// three intents are independent, so call order does not matter and turning
+// this off does not leave loading stuck on.
 // libxml2: XML_PARSE_DTDVALID
 // Default: false
 func (p Parser) ValidateDTD(v bool) Parser {
@@ -226,7 +231,6 @@ func (p Parser) ValidateDTD(v bool) Parser {
 		return p
 	}
 	p.cfg.options.Set(parseDTDValid)
-	p.cfg.options.Set(parseDTDLoad)
 	return p
 }
 

@@ -136,7 +136,7 @@ Flow: `parseReference()` → `parseEntityRef()` → `entityCheck()` → parse co
 - `Characters` → AppendText (merges adjacent text)
 - `CDataBlock` → CDATASection; `Comment` → Comment; `ProcessingInstruction` → PI
 - `InternalSubset` → internal DTD
-- `ExternalSubset` → bounded read (`maxExtDTDSize`, `io.LimitReader`), baseURI scoping, TextDecl decode, PE-expanding declaration loop (`parseExternalSubsetDeclStep`), conditional sections — see the function's doc comments
+- `ExternalSubset` → load decision resolved ONCE from three independent intents (matching libxml2): load iff `parseDTDValid` (ValidateDTD) OR `DetectIDs` (LoadExternalDTD → parseDTDLoad) OR `CompleteAttrs` (DefaultDTDAttributes → parseDTDAttr) — so call order never changes whether the subset loads. The `LoadExternalDTD`/`DefaultDTDAttributes`/`ValidateDTD` setters each touch only their own option bit. A requested-but-failed `fsys.Open` (the gate passed, so loading WAS requested) emits a non-fatal `warning` (naming the resolved URI, gated by `parseNoWarning`) instead of a silent drop, then continues; under validation the missing content model surfaces downstream as `ErrDTDValidationFailed`. Then bounded read (`maxExtDTDSize`, `io.LimitReader`), baseURI scoping, TextDecl decode, PE-expanding declaration loop (`parseExternalSubsetDeclStep`), conditional sections — see the function's doc comments
 - `GetEntity`/`GetParameterEntity` → document entity table lookup
 
 Parent selection: DTD subset → add to DTD; no current element → add to document; else → append as child.
