@@ -80,10 +80,15 @@ var (
 	// blank-run cap. The cap fires during accumulation, before the whole run is
 	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
-	// ErrUnsupportedOutputEncoding is returned by the writer when an explicitly
-	// set OutputEncoding cannot be emitted faithfully. Two cases raise it, both
-	// scoped to the override — a document's own (parsed) encoding never becomes
-	// this error, keeping default output byte-identical:
+	// ErrUnsupportedOutputEncoding is returned by the writer for an effective
+	// encoding it cannot faithfully emit. A malformed EncName label — whether
+	// from an explicit OutputEncoding override OR a document's own encoding set
+	// via Document.SetEncoding — is rejected before any output byte is written
+	// (ahead of the transcoding encoder, whose deferred flush would emit a BOM).
+	// The two emit-failure cases below are additionally scoped to an
+	// explicit OutputEncoding override; a document's own PARSED encoding is
+	// always a valid EncName and stays declaration-only, keeping default output
+	// byte-identical:
 	//   1. The encoding is neither UTF-8/US-ASCII nor a name the internal encoder
 	//      table can load. Emitting UTF-8 octets under that declaration would make
 	//      the XML declaration disagree with the bytes, so the writer fails.
@@ -101,6 +106,16 @@ var (
 	//      but reference-less content (and character-map replacements) stay raw.
 	// Match with errors.Is.
 	ErrUnsupportedOutputEncoding = errors.New("unsupported output encoding")
+	// ErrInvalidOutputVersion is returned by the writer when the effective output
+	// XML version (the OutputVersion override, or the document's own version) is
+	// not a valid XML VersionNum production `'1.' [0-9]+` (XML §2.8). The version
+	// is written raw between the double quotes of the XML declaration's version
+	// pseudo-attribute, so a value carrying a quote or other illegal character
+	// would break out of the pseudo-attribute and inject markup; a malformed value
+	// would produce an unparseable declaration. The writer validates the version
+	// before emitting any output byte and fails closed, emitting nothing.
+	// Match with errors.Is.
+	ErrInvalidOutputVersion = errors.New("invalid output XML version")
 	// ErrNetworkAccessForbidden is returned when an external resource (an
 	// external DTD subset or external parsed entity) names a network URI —
 	// an http, https, or ftp scheme — but the parser was configured to forbid
