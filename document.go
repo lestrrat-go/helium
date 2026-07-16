@@ -741,17 +741,21 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 }
 
 // IsMixedElement reports whether the element named name is declared with mixed
-// (or EMPTY/ANY) content in the document's internal subset. It returns
-// ErrElementDeclNotFound (match with errors.Is) if no element declaration is
-// found for name.
+// (or EMPTY/ANY) content. It returns ErrElementDeclNotFound (match with
+// errors.Is) if no element declaration is found for name.
 //
-// This is a faithful port of libxml2's xmlIsMixedElement and deliberately keeps
-// its name and semantics: EMPTY and ANY are collapsed with MIXED into a single
+// It faithfully preserves the content-type classification of libxml2's
+// xmlIsMixedElement: EMPTY and ANY are collapsed with MIXED into a single
 // "mixed" true so validity-constraint callers get an error on, e.g.,
-// "<empty>     </empty>". Only an element-only content model returns false.
+// "<empty>     </empty>"; only an element-only content model returns false.
 // It is therefore NOT a pure "is this a #PCDATA mixed model" predicate; callers
 // needing the raw content-model type should inspect the element declaration
 // directly (see elementDeclType, which whitespace classification uses instead).
+//
+// Lookup searches ONLY the internal subset. libxml2's xmlIsMixedElement falls
+// back to the external subset when the internal subset has no declaration; this
+// method does not, so an element declared solely in an external DTD reports
+// ErrElementDeclNotFound rather than its external-subset content type.
 func (d *Document) IsMixedElement(name string) (bool, error) {
 	if d.intSubset == nil {
 		return false, ErrElementDeclNotFound
