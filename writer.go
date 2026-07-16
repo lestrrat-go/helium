@@ -485,6 +485,22 @@ func hasOnlyTextChildren(n Node) bool {
 	return true
 }
 
+// hasTextlikeChild returns true when any DIRECT child of n is a text, CDATA, or
+// entity-reference node. This mirrors libxml2's xmlNodeDumpOutputInternal
+// (xmlsave.c): an element with any such child has formatting of its children
+// disabled, so mixed content (non-whitespace text alongside element children)
+// is serialized inline rather than having indentation whitespace injected around
+// the children — which would alter the text content and not be idempotent.
+func hasTextlikeChild(n Node) bool {
+	for c := range Children(n) {
+		switch c.Type() {
+		case TextNode, CDATASectionNode, EntityRefNode:
+			return true
+		}
+	}
+	return false
+}
+
 // isNilNode reports whether node is nil, covering both a literal nil interface
 // and a typed-nil concrete pointer wrapped in a non-nil Node interface
 // (Go's interface nil trap).
@@ -869,7 +885,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	}
 
 	if n.FirstChild() != nil {
-		textOnly := effFormat && hasOnlyTextChildren(n)
+		textOnly := effFormat && (hasOnlyTextChildren(n) || hasTextlikeChild(n))
 		if effFormat && !textOnly {
 			d.writeString(out, "\n")
 			d.indent++

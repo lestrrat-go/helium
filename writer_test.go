@@ -709,6 +709,46 @@ func TestFormatOutput(t *testing.T) {
 		expected := "<?xml version=\"1.0\"?>\n<a>\n  <b>\n    <c>\n      <d>text</d>\n    </c>\n  </b>\n</a>\n"
 		require.Equal(t, expected, str)
 	})
+
+	t.Run("mixed content stays inline", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<resources><string name="welcome">Hello <b>world</b></string><version>1.0</version></resources>`
+
+		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		// The mixed-content <string> element (non-whitespace text alongside a <b>
+		// child) must not have indentation injected around its children — doing so
+		// would corrupt "Hello " into "Hello\n      ". Only the pure-element
+		// container <resources> is formatted.
+		expected := "<resources>\n  <string name=\"welcome\">Hello <b>world</b></string>\n  <version>1.0</version>\n</resources>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("mixed content format is idempotent", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<resources><string name="welcome">Hello <b>world</b></string><version>1.0</version></resources>`
+
+		format := func(src []byte) string {
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), src)
+			require.NoError(t, err)
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+			return buf.String()
+		}
+
+		first := format([]byte(input))
+		// Re-parsing and re-formatting the already-formatted output must yield the
+		// exact same bytes; injected whitespace inside mixed content would become a
+		// real text node on reparse and compound on each pass.
+		second := format([]byte(first))
+		require.Equal(t, first, second)
+	})
 }
 
 func TestXHTML(t *testing.T) {
