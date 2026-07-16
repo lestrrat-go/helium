@@ -803,7 +803,12 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.hasExternalPERef = pctx.hasExternalPERef
 }
 
-func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, externalID string) (Node, error) {
+// parseExternalEntityPrivate loads and parses an external general entity. uri is
+// the entity's RESOLVED URI (built from the declared system id against the base in
+// EntityDecl); declaredSystemID is the entity's system id AS DECLARED, used only to
+// gate the confined-FS base-relative retry (openExternalResource) on original
+// relativeness — the resolved uri is already absolute and cannot be distinguished.
+func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, declaredSystemID, externalID string) (Node, error) {
 	if pctx.options.IsSet(parseNoXXE) {
 		return nil, nil //nolint:nilnil
 	}
@@ -817,7 +822,12 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 
 	var input sax.ParseInput
 	if s := pctx.sax; s != nil {
+		// Gate the confined-FS retry for this reference on the declared system id's
+		// original relativeness, then clear it so a later ResolveEntity that does
+		// not set it cannot inherit a stale eligibility.
+		pctx.extRefRelative = systemIDRetryEligible(declaredSystemID)
 		resolved, err := s.ResolveEntity(ctx, externalID, uri)
+		pctx.extRefRelative = false
 		switch err {
 		case nil:
 			input = resolved

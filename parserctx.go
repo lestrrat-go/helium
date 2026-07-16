@@ -168,6 +168,7 @@ type parserCtx struct {
 	charBufferSize   int
 	baseURI          string          // document base URI for resolving external references
 	documentBaseURI  string          // fixed top-level document base URI, captured once at parse start; unlike baseURI it is not moved while an external subset/entity is parsed, so the confined-FS retry always relativizes against the document root
+	extRefRelative   bool            // whether the external reference currently being resolved through TreeBuilder.ResolveEntity declared a RELATIVE SYSTEM id (before URI resolution / catalog mapping) — the gate for the confined-FS base-relative retry (openExternalResource); an originally-absolute or file-URI SYSTEM id is never retried. Set by the entity loaders before each ResolveEntity call; the ExternalSubset path passes its own eligibility directly and does not use this field.
 	catalog          CatalogResolver // XML catalog for entity resolution
 	fsys             fs.FS           // filesystem for loading external DTDs and entities
 	elem             *Element        // current context element

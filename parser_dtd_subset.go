@@ -735,7 +735,13 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 
 	var input sax.ParseInput
 	if s := pctx.sax; s != nil {
+		// Gate the confined-FS retry (openExternalResource) for this PE on its
+		// DECLARED system id's original relativeness — e.URI() is already resolved
+		// to an absolute name and cannot be distinguished. Clear it after so a
+		// later ResolveEntity cannot inherit a stale eligibility.
+		pctx.extRefRelative = systemIDRetryEligible(e.systemID)
 		resolved, err := s.ResolveEntity(ctx, e.externalID, e.URI())
+		pctx.extRefRelative = false
 		switch err {
 		case nil:
 			input = resolved

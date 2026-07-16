@@ -89,13 +89,14 @@ func TestConfinedDirFSLoadsRelativeSystemID(t *testing.T) {
 		"a confined os.DirFS rooted at the document directory must load the external subset")
 }
 
-// The base-relative retry blocks PATH-based escape: a SYSTEM id that resolves
-// outside the FS root (absolute, or ascending via "..") is not a valid
-// fs.ValidPath, so it is never retried and the confined FS refuses it. The
-// out-of-tree file exists and is readable, proving the refusal is the path-shape
-// guard, not a missing file. (This is the fs.ValidPath path-escape guard, not a
-// symlink sandbox — os.DirFS follows an in-root symlink out of the root; only
-// os.Root.FS confines symlinks. See TestDirFSFollowsSymlinkButRootFSConfines.)
+// A SYSTEM id that resolves outside the FS root is refused. Here it is declared
+// as an absolute path, so it is not retry-eligible (originally absolute) and the
+// retry never fires — and even if it were, the base-relative name would ascend
+// via ".." and fail fs.ValidPath, so the confinement holds either way. The
+// out-of-tree file exists and is readable, proving the refusal is the guard, not a
+// missing file. (Neither guard is a symlink sandbox — os.DirFS follows an in-root
+// symlink out of the root; only os.Root.FS confines symlinks. See
+// TestDirFSFollowsSymlinkButRootFSConfines.)
 func TestConfinedDirFSRefusesPathTraversal(t *testing.T) {
 	t.Parallel()
 
@@ -116,13 +117,79 @@ func TestConfinedDirFSRefusesPathTraversal(t *testing.T) {
 		FS(os.DirFS(root)).
 		ParseFile(t.Context(), docPath)
 
-	// The load is refused (an absolute path is not a valid fs.ValidPath, so the
-	// retry never fires), but the parse stays lenient: no fatal error, document
-	// returned, subset not loaded.
+	// The load is refused (an originally-absolute id is not retry-eligible), but
+	// the parse stays lenient: no fatal error, document returned, subset not loaded.
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 	require.Nil(t, doc.ExtSubset(),
-		"the fs.ValidPath guard must not let an absolute-path SYSTEM id load outside the FS root")
+		"an out-of-root absolute-path SYSTEM id must not load through the confined FS")
+}
+
+// An originally-ABSOLUTE SYSTEM id that names an in-root file is NEVER retried,
+// even though its base-relative form ("sub.dtd") would be a valid fs.ValidPath
+// that os.DirFS could open. Only an originally-relative reference is eligible for
+// the confined-FS base-relative retry; eligibility — not the fs.ValidPath shape
+// of the derived name — enforces the promise (filepath.Rel would happily
+// re-relativize the in-root absolute id). The confinement property still holds,
+// but the documented "absolute SYSTEM id is never retried" promise is now true by
+// construction. The in-root file exists and is readable, proving the refusal is
+// the eligibility gate, not a missing file.
+func TestConfinedDirFSDoesNotRetryInRootAbsoluteSystemID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub.dtd"),
+		[]byte("<!ELEMENT doc (#PCDATA)>\n"), 0o600))
+	abs := filepath.Join(dir, "sub.dtd") // an ABSOLUTE path under the FS root
+	docPath := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE doc SYSTEM "`+abs+`">`+"\n"+
+			`<doc>hello</doc>`), 0o600))
+
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(os.DirFS(dir)).
+		ParseFile(t.Context(), docPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.Nil(t, doc.ExtSubset(),
+		"an originally-absolute in-root SYSTEM id must not be loaded via the base-relative retry")
+}
+
+// The supported confined-FS document base is an ABSOLUTE path (or file: URI): the
+// base-relative retry re-relativizes an absolute base to recover the original
+// relative name. This is the positive counterpart to the relative-base scope note
+// on openExternalResource — with an absolute base, a relative SYSTEM id that
+// resolution turns into an absolute path is recovered and the confined FS loads
+// it. (A RELATIVE document base is out of scope: BuildURI yields a valid-but-absent
+// relative path that fails with fs.ErrNotExist, not fs.ErrInvalid, so the retry
+// never fires — the deferred root-aware helium.DirFS(root) adapter is the general
+// fix for an FS rooted elsewhere than the document directory.)
+func TestConfinedDirFSAbsoluteBaseLoadsRelativeSystemID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub.dtd"),
+		[]byte("<!ELEMENT doc (#PCDATA)>\n"), 0o600))
+	absBase := filepath.Join(dir, "doc.xml")
+	doc := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE doc SYSTEM "sub.dtd">` + "\n" +
+		`<doc>hello</doc>`
+
+	parsed, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		BaseURI(absBase). // ABSOLUTE base — the supported confined-FS scenario
+		FS(os.DirFS(dir)).
+		Parse(t.Context(), []byte(doc))
+
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.NotNil(t, parsed.ExtSubset(),
+		"an absolute document base must let the confined FS recover the relative SYSTEM id")
 }
 
 // A network-scheme SYSTEM id is refused before any Open, independent of the FS,
