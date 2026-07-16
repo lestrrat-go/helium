@@ -1071,6 +1071,43 @@ func TestBuildURI(t *testing.T) {
 	}
 }
 
+func TestResolveURI(t *testing.T) {
+	t.Parallel()
+
+	// ResolveURI uses the conventional (base, ref) order and must agree with
+	// BuildURI(ref, base).
+	tests := []struct {
+		name string
+		base string
+		ref  string
+		want string
+	}{
+		{"relative against http base", "http://host/dir/doc.xml", "sib.dtd", "http://host/dir/sib.dtd"},
+		{"relative against file path", "/dir/doc.xml", "sib.dtd", "/dir/sib.dtd"},
+		{"nested relative against relative base", "docs/a.xml", "sub/c.xml", "docs/sub/c.xml"},
+		{"absolute ref is returned verbatim", "http://y/", "http://x/a.dtd", "http://x/a.dtd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := helium.ResolveURI(tt.base, tt.ref)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+			// The conventional-order wrapper must match the libxml2-parity
+			// primitive with the arguments swapped back.
+			require.Equal(t, helium.BuildURI(tt.ref, tt.base), got)
+		})
+	}
+
+	t.Run("unresolvable reference returns an error", func(t *testing.T) {
+		t.Parallel()
+		// An invalid percent-escape makes the underlying url.Parse fail, so
+		// BuildURI yields an empty string and ResolveURI reports an error.
+		_, err := helium.ResolveURI("http://host/dir/x", "%zz")
+		require.Error(t, err)
+	})
+}
+
 // TestNodeGetBaseAndSet exercises NodeGetBase with xml:base attributes and the
 // SetNodeBaseURI override.
 func TestNodeGetBaseAndSet(t *testing.T) {

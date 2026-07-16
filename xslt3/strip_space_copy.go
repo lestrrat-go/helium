@@ -74,7 +74,9 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// Deep-copy the internal DTD subset first (metadata + entities/elements/
 	// attributes/notations), matching helium.CopyDoc's ordering so the copy
 	// round-trips identically.
-	helium.CopyDTDInfo(src, dst)
+	if err := helium.CopyDTDInfo(src, dst); err != nil {
+		return nil, nil, err
+	}
 
 	// Carry over the source's EXTERNAL DTD subset too. CopyDTDInfo (like
 	// helium.CopyDoc) only handles the internal subset, but GetElementByID's lazy
