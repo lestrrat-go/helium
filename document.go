@@ -356,6 +356,11 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 	return nil
 }
 
+// CreateReference builds an entity-reference node and, when a matching entity
+// is declared in the document, attaches its replacement content — mirroring
+// libxml2's xmlNewReference. Like CreateCharRef (and libxml2's xmlNewCharRef)
+// the node is an EntityRefNode that serializes as "&" + Name() + ";"; the only
+// difference is the declared-entity lookup performed here.
 func (d *Document) CreateReference(name string) (*EntityRef, error) {
 	n, err := d.CreateCharRef(name)
 	if err != nil {
@@ -1000,6 +1005,16 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 	return
 }
 
+// CreateCharRef builds an entity-reference node, mirroring libxml2's
+// xmlNewCharRef. In the libxml2 DOM (which helium follows) a character
+// reference is NOT a distinct node type: both a character reference (&#123;,
+// &#xAB;) and a named entity reference (&amp;) are represented as an
+// EntityRefNode, and the serializer emits the node as "&" + Name() + ";".
+// The name is the reference body with any surrounding "&"/";" stripped, so a
+// name of "#123"/"#xAB" serializes as the character reference "&#123;"/"&#xAB;"
+// and a name of "amp" serializes as "&amp;". Unlike CreateReference, this does
+// NOT look up a declared entity or attach its replacement content — it only
+// constructs the bare reference node.
 func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 	if name == "" {
 		return nil, errors.New("empty name")

@@ -143,6 +143,37 @@ func TestCreateCharRefForms(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestCreateCharRefSerializes locks the create->serialize round-trip: an
+// EntityRefNode built by CreateCharRef with a "#NNN"/"#xHH" name serializes as
+// a character reference, and a plain name serializes as a named entity
+// reference, mirroring libxml2's xmlNewCharRef (both are XML_ENTITY_REF_NODE).
+func TestCreateCharRefSerializes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		want string
+	}{
+		{name: "#123", want: "&#123;"},
+		{name: "#xAB", want: "&#xAB;"},
+		{name: "amp", want: "&amp;"},
+	} {
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		ref, err := doc.CreateCharRef(tc.name)
+		require.NoError(t, err)
+		require.Equal(t, helium.EntityRefNode, ref.Type(), "CreateCharRef yields an EntityRefNode (libxml2 xmlNewCharRef)")
+		require.Equal(t, tc.name, ref.Name())
+		require.NoError(t, root.AddChild(ref))
+
+		str, err := helium.WriteString(root)
+		require.NoError(t, err)
+		require.Equal(t, "<root>"+tc.want+"</root>", str)
+	}
+}
+
 // TestValidCharRefForms parses documents with valid hex/decimal char refs to
 // drive the success branches of parseCharRef.
 func TestValidCharRefForms(t *testing.T) {
