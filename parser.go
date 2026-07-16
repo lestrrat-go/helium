@@ -975,12 +975,15 @@ func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
 		srcSize = fi.Size()
 	}
 
+	// Mirror Parse/ParseReader: a recoverable parse error (ParseRecover) or a
+	// DTD-validation failure returns the partial document ALONGSIDE the error, so
+	// ParseFile must not discard a non-nil doc. Set the source URL on any document
+	// produced (recovered or complete); only a nil doc returns as nil.
 	doc, err := p.BaseURI(abs).parseReader(ctx, f, srcSize)
-	if err != nil {
-		return nil, err
+	if doc != nil {
+		doc.SetURL(abs)
 	}
-	doc.SetURL(abs)
-	return doc, nil
+	return doc, err
 }
 
 // ParseInNodeContext parses an XML fragment in the context of an existing
