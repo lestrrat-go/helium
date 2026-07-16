@@ -321,10 +321,13 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 		return ErrNilNode
 	}
 
-	// The document element must be an element. Accepting any node kind here let a
-	// Text/Comment/DTD/NamespaceDecl node become the root, producing a document
-	// that is not well formed.
-	if root.Type() != ElementNode {
+	// The document element must be a concrete *Element. Accepting any node kind
+	// here let a Text/Comment/DTD/NamespaceDecl node become the root, producing a
+	// document that is not well formed. Checking the concrete type (not root.Type())
+	// also rejects a non-element node that merely REPORTS ElementNode — e.g. an
+	// XIncludeMarker constructed with ElementNode — which DocumentElement() would
+	// never return, leaving the document element effectively nil.
+	if _, ok := AsNode[*Element](root); !ok {
 		return fmt.Errorf("%w: document element must be an element node, got %s", ErrInvalidOperation, root.Type())
 	}
 

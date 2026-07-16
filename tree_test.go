@@ -79,6 +79,18 @@ func TestSetDocumentElement(t *testing.T) {
 		}
 	})
 
+	t.Run("element-kind marker that is not a concrete *Element is rejected", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		// An XIncludeMarker reports ElementNode but is not a real *Element, so it
+		// must not become the document element — DocumentElement() would never
+		// return it, leaving the document element effectively nil.
+		marker := helium.NewXIncludeMarker(doc, helium.ElementNode, "fake-element")
+		err := doc.SetDocumentElement(marker)
+		require.ErrorIs(t, err, helium.ErrInvalidOperation)
+		require.Nil(t, doc.FirstChild(), "spoofed-kind marker must not be linked as a child")
+		require.Nil(t, doc.DocumentElement(), "doc has no document element")
+	})
+
 	t.Run("nil receiver returns ErrNilNode", func(t *testing.T) {
 		var doc *helium.Document
 		err := doc.SetDocumentElement(helium.NewDefaultDocument().CreateElement("root"))
