@@ -117,7 +117,7 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 - `addChild(parent, child)` — append to end of children
 - `addSibling(node, sibling)` — append to end of siblings
 - `replaceNode(old, new)` — swap in same position. Attribute-aware: replacing an `Attribute` updates the owning `Element.properties` head/chain (NOT `firstChild`/`lastChild`), and an attribute may only be replaced by attribute node(s) (non-attribute replacement is rejected)
-- `AppendChildFast(parent, child)` — exported no-preflight append (wraps internal `appendFastChild`): links child as last child WITHOUT the cycle-guard / duplicate-attr checks. Only for freshly-built, provably-acyclic, dup-free trees (deep copies). Prefer `AddChild` otherwise.
+- `UnsafeAppendChild(parent, child)` — exported no-preflight append (wraps internal `appendFastChild`): links child as last child WITHOUT the cycle-guard / duplicate-attr checks. Explicitly-unsafe entry point (same boundary as `UnsafeSet*`): the caller guarantees an acyclic, dup-free child (deep copies, freshly-built trees). Ordinary code uses `AddChild`.
 - `AddNamespaceDecl(ns)` — append an EXISTING `*Namespace` to a node's `nsDefs` without allocating (unlike `DeclareNamespace`, which creates a fresh one). Lets a tree-builder reuse one Namespace object as both a declaration and an element's active ns.
 - `UnlinkNode(n)` — detach a `MutableNode` from parent and siblings (delegates to the internal `unlinkNode(Node)`)
 - `unlinkNode(n)` — internal detach that works for ANY sealed node via `baseDocNode()`, including non-`MutableNode` nodes like `NamespaceNodeWrapper`. Attribute-aware: an `Attribute` under an `*Element` is detached via `spliceOutAttribute`, repairing `Element.properties`

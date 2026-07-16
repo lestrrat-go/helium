@@ -912,22 +912,22 @@ func TestReplaceWithExistingSibling(t *testing.T) {
 	})
 }
 
-// TestAppendChildFast covers the public AppendChildFast helper across the
+// TestUnsafeAppendChild covers the public UnsafeAppendChild helper across the
 // empty-parent and non-empty-parent fast paths.
-func TestAppendChildFast(t *testing.T) {
+func TestUnsafeAppendChild(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	parent := doc.CreateElement("parent")
 
 	first := doc.CreateElement("first")
-	require.NoError(t, helium.AppendChildFast(parent, first), "fast-link first child")
+	require.NoError(t, helium.UnsafeAppendChild(parent, first), "fast-link first child")
 	require.Equal(t, helium.Node(first), parent.FirstChild())
 	require.Equal(t, helium.Node(first), parent.LastChild())
 	require.Equal(t, helium.Node(parent), first.Parent())
 
 	second := doc.CreateElement("second")
-	require.NoError(t, helium.AppendChildFast(parent, second), "fast-link second child")
+	require.NoError(t, helium.UnsafeAppendChild(parent, second), "fast-link second child")
 	require.Equal(t, helium.Node(second), parent.LastChild())
 	require.Equal(t, helium.Node(second), first.NextSibling())
 	require.Equal(t, helium.Node(first), second.PrevSibling())

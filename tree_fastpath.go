@@ -12,13 +12,14 @@ type attrNamespaceCacheEntry struct {
 	ns     *Namespace
 }
 
-// AppendChildFast links child as the last child of parent without running the
-// cycle-guard and duplicate-attribute preflight that AddChild performs. It is
-// intended for callers that are building a freshly-constructed, provably acyclic
-// and duplicate-free tree (e.g. a deep copy), where those safety checks are pure
-// overhead. Misuse on an arbitrary live tree can corrupt linkage; prefer AddChild
-// unless the no-preflight contract is known to hold.
-func AppendChildFast(parent MutableNode, child Node) error {
+// UnsafeAppendChild links child as the last child of parent without running the
+// cycle-guard and duplicate-attribute preflight that AddChild performs. Like the
+// UnsafeSet* functions, it is an explicitly-unsafe entry point: the CALLER is
+// responsible for passing a child that cannot create a cycle or a duplicate
+// attribute (e.g. a freshly-constructed node in a deep copy), because those
+// safety checks are skipped. Misuse on an arbitrary live tree can corrupt
+// linkage; ordinary code MUST use AddChild instead.
+func UnsafeAppendChild(parent MutableNode, child Node) error {
 	return appendFastChild(parent, child)
 }
 

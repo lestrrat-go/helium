@@ -31,7 +31,7 @@ type deepCopyOptions struct {
 	// degenerate source whose active namespace is not in scope anywhere.
 	overDeclareNS bool
 
-	// fastLink links children with AppendChildFast (no cycle/dup-attr preflight)
+	// fastLink links children with UnsafeAppendChild (no cycle/dup-attr preflight)
 	// when true. The copy core only ever builds a freshly-constructed,
 	// provably-acyclic, duplicate-free tree, so the preflight is pure overhead;
 	// the general path keeps AddChild (false) to remain byte-for-byte identical
