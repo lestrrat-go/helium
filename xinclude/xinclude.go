@@ -1205,22 +1205,12 @@ func ownerDocument(n helium.Node) *helium.Document {
 // entry document used to evaluate top-level same-document XPointer references
 // against the original infoset (before inclusions mutate the tree).
 //
-// helium.CopyDoc alone is insufficient: it reproduces the tree and the internal
-// DTD subset but drops the ID-resolution state that XPointer shorthand pointers
-// depend on (they resolve via Document.GetElementByID). Without carrying that
-// state a source parsed with SkipIDs(true) would wrongly START resolving
-// xml:id/ID attributes in the copy, and a source whose ids were declared in an
-// external DTD subset would resolve FEWER ids than the original. So the snapshot
-// additionally:
-//
-//   - carries the source's SkipIDs state (authoritative for GetElementByID), so
-//     a SkipIDs source yields a snapshot that resolves NO ids;
-//   - carries the source's external DTD subset (CopyDoc copies only the internal
-//     subset), which GetElementByID's lazy fallback consults for ID-typed
-//     attribute declarations;
-//   - rebuilds the copy's interned ID table by translating each source ID entry's
-//     element through the source->copy element correspondence, so a parsed
-//     source's ids resolve to the copy's elements rather than the source's.
+// helium.CopyDoc produces a complete, independent copy — the tree, both DTD
+// subsets, and the ID-resolution state (SkipIDs plus the interned ID table
+// rebuilt against the copy's own elements) that XPointer shorthand pointers
+// depend on (they resolve via Document.GetElementByID). So a SkipIDs source
+// yields a snapshot that resolves NO ids, and a parsed source's ids resolve to
+// the snapshot's elements rather than the original's.
 //
 // Returns nil when the copy fails; the caller then falls back to evaluating
 // against the live (possibly mutated) document.
@@ -1229,56 +1219,7 @@ func snapshotForXPointer(doc *helium.Document) *helium.Document {
 	if err != nil {
 		return nil
 	}
-
-	// Authoritative ID-skip state first: a SkipIDs source must resolve no ids in
-	// the snapshot either.
-	snap.SetSkipIDs(doc.SkipIDs())
-
-	// CopyDoc copies only the internal subset; carry the external subset too so
-	// the lazy GetElementByID fallback sees the same ID-typed ATTLIST decls.
-	helium.CopyExtSubset(doc, snap)
-
-	// Rebuild the interned ID table by element correspondence. Skip when the
-	// source skips ids (nothing resolves) or has no interned table (an API-built
-	// source relies on the lazy fallback, already reproduced via the DTD subsets).
-	srcIDs := doc.IDTable()
-	if doc.SkipIDs() || len(srcIDs) == 0 {
-		return snap
-	}
-
-	// CopyDoc reproduces the element spine 1:1 in document order, so a parallel
-	// pre-order walk of both trees yields the source->copy element correspondence.
-	var srcElems, cpElems []*helium.Element
-	collectElementsPreorder(doc, &srcElems)
-	collectElementsPreorder(snap, &cpElems)
-	if len(srcElems) != len(cpElems) {
-		// Defensive: shapes diverged unexpectedly; skip the rebuild rather than
-		// risk mismapping ids onto the wrong elements.
-		return snap
-	}
-	idx := make(map[*helium.Element]*helium.Element, len(srcElems))
-	for i := range srcElems {
-		idx[srcElems[i]] = cpElems[i]
-	}
-	for id, srcElem := range srcIDs {
-		if cp := idx[srcElem]; cp != nil {
-			snap.RegisterID(id, cp)
-		}
-	}
 	return snap
-}
-
-// collectElementsPreorder appends every element descendant of n (document order,
-// pre-order) to out. It descends only through element nodes — matching
-// helium.CopyDoc, which does not copy elements nested inside entity-reference
-// expansions — so the source and copy walks stay aligned.
-func collectElementsPreorder(n helium.Node, out *[]*helium.Element) {
-	for c := range helium.Children(n) {
-		if elem, ok := helium.AsNode[*helium.Element](c); ok {
-			*out = append(*out, elem)
-			collectElementsPreorder(elem, out)
-		}
-	}
 }
 
 // hasSameDocumentXPointer reports whether n or any descendant is an xi:include
