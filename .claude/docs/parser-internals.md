@@ -81,7 +81,7 @@ States: `psStart`, `psContent`, `psPrologue`, `psEpilogue`, `psCDATA`, `psDTD`, 
 - `attsDefault` — DTD default attributes
 - `inSubset int` — 0=none, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (SubstituteEntities(true))
-- `fsys fs.FS` — filesystem for external DTDs/entities; defaults to `internal/iofs.DenyAll{}` (safe-by-default), overridden via `Parser.FS()`; `catalogOpenName` (`tree_builder.go`) maps `file:` URIs to local paths
+- `fsys fs.FS` — filesystem for external DTDs/entities; defaults to `internal/iofs.DenyAll{}` (safe-by-default), overridden via `Parser.FS()`; `catalogOpenName` (`tree_builder.go`) maps `file:` URIs to local paths. `openExternalResource` (`tree_builder.go`) opens through `fsys`: it tries the resolved (absolute) name first (so `iofs.PermissiveRoot`/os.Open is unchanged), and on an `fs.ErrInvalid` rejection — returned by `os.DirFS`/`os.Root.FS`/`fs.Sub`, never by PermissiveRoot/DenyAll — retries with the name made relative to the base URI's directory (`baseRelativeFSName`), so a confined FS rooted at the document's directory resolves a SYSTEM id. The retry is a validated `fs.ValidPath` (leading `/` or surviving `..` disqualifies it → no path escape); the network-scheme guard runs before either open
 - Entity sub-parsers seed nested context via `inheritNestedParserState` (`parser_entity_decl.go`) — copies policy + running resource-accounting (depth, `ebcdicConsumed`); see its doc comment
 
 ### Entity Amplification Guard

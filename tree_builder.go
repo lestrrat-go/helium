@@ -5,7 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"net/url"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -364,6 +367,73 @@ func networkAccessForbidden(ctx *parserCtx, name string) bool {
 	}
 }
 
+// baseRelativeFSName derives a valid [fs.ValidPath] name for primary by making
+// it relative to the directory of base. primary is the resolved resource in
+// local-path form (post [catalogOpenName]); base is the document base URI.
+//
+// The parser resolves a relative SYSTEM id against the base URI into an absolute
+// path (see ExternalSubset / EntityDecl), which an fs.FS that enforces
+// [fs.ValidPath] — [os.DirFS], [os.Root.FS] (os.OpenRoot), [testing/fstest.MapFS]
+// — rejects. Re-relativizing against the base recovers the name a caller who
+// rooted such an FS at the document's own directory expects (a SYSTEM id
+// "sub.dtd" resolved against "/dir/doc.xml" becomes "sub.dtd" again).
+//
+// It reports ok=false — no usable fallback — when base is empty, when either name
+// still carries a URI scheme, when the two are not both path-shaped on the same
+// volume, or when the result would ascend above the FS root: a leading "/" or a
+// surviving ".." after cleaning makes it an invalid fs.ValidPath. The fallback
+// therefore can never reach outside the wrapped FS.
+func baseRelativeFSName(primary, base string) (string, bool) {
+	if base == "" || uripath.HasURIScheme(primary) {
+		return "", false
+	}
+	basePath := catalogOpenName(base)
+	if uripath.HasURIScheme(basePath) {
+		return "", false
+	}
+	rel, err := filepath.Rel(filepath.Dir(basePath), primary)
+	if err != nil {
+		return "", false
+	}
+	rel = path.Clean(filepath.ToSlash(rel))
+	if !fs.ValidPath(rel) {
+		return "", false
+	}
+	return rel, true
+}
+
+// openExternalResource opens name through the parser's fs.FS. name is the
+// resolved resource in local-path form. The resolved name is always tried first,
+// so [iofs.PermissiveRoot] (which wants the absolute path for os.Open) and every
+// existing configuration are unchanged.
+//
+// When that open fails specifically because the FS rejected the name as an
+// invalid io/fs path ([fs.ErrInvalid] — reported by [os.DirFS], [os.Root.FS] and
+// [io/fs.Sub], but never by PermissiveRoot or DenyAll, which use os.Open /
+// return fs.ErrNotExist), it retries with the name made relative to the base
+// URI's directory via [baseRelativeFSName]. This lets a confined fs.FS rooted at
+// the document's directory resolve a SYSTEM id that resolution turned into an
+// absolute path. The retry name is a validated fs.ValidPath that cannot escape
+// the FS root; callers apply networkAccessForbidden before calling.
+func (ctx *parserCtx) openExternalResource(name, base string) (fs.File, error) {
+	f, err := ctx.fsys.Open(name)
+	if err == nil {
+		return f, nil
+	}
+	if !errors.Is(err, fs.ErrInvalid) {
+		return nil, err //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	}
+	rel, ok := baseRelativeFSName(name, base)
+	if !ok || rel == name {
+		return nil, err //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	}
+	f2, err2 := ctx.fsys.Open(rel)
+	if err2 == nil {
+		return f2, nil
+	}
+	return nil, err //nolint:wrapcheck // report the primary (resolved-name) error
+}
+
 func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri string) error {
 	ctx := t.pctx(ctxif)
 
@@ -420,7 +490,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	if networkAccessForbidden(ctx, openName) {
 		return ErrNetworkAccessForbidden
 	}
-	f, err := ctx.fsys.Open(openName)
+	f, err := ctx.openExternalResource(openName, ctx.baseURI)
 	if err != nil {
 		// Loading was requested (the resolve-once gate above passed), so a failed
 		// open is a requested-but-failed load, not an absent DTD. Surface it as a
@@ -711,7 +781,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 			if networkAccessForbidden(ctx, openName) {
 				return nil, ErrNetworkAccessForbidden
 			}
-			f, err := ctx.fsys.Open(openName)
+			f, err := ctx.openExternalResource(openName, ctx.baseURI)
 			if err == nil {
 				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
 			}
@@ -725,7 +795,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 		if networkAccessForbidden(ctx, systemID) {
 			return nil, ErrNetworkAccessForbidden
 		}
-		f, err := ctx.fsys.Open(systemID)
+		f, err := ctx.openExternalResource(catalogOpenName(systemID), ctx.baseURI)
 		if err == nil {
 			return &fileParseInput{ReadCloser: f, uri: systemID}, nil
 		}

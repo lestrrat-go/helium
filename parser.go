@@ -577,13 +577,17 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 // host filesystem. To opt into host access, pass [PermissiveFS] (any os.Open
 // path) or — preferably — a confined [fs.FS] rooted at a trusted directory.
 //
-// Note: the names handed to the FS are built with [filepath.Join] against
-// the document's base URI, so they may be absolute and may use
-// OS-specific separators on Windows. FS implementations that enforce
-// [fs.ValidPath] (notably [os.DirFS] and [testing/fstest.MapFS]) will
-// reject those names. Sandboxing the loader behind such an FS requires
-// path normalization that is not yet performed by this package; for now,
-// supply an FS implementation that accepts OS-style names.
+// A relative SYSTEM id is resolved against the document's base URI, which is
+// absolute whenever one is set (e.g. [Parser.ParseFile] uses the file's
+// absolute path). The parser first hands the FS that resolved name — absolute,
+// and possibly a "file:" URI — which an FS that enforces [fs.ValidPath]
+// ([os.DirFS], [os.Root.FS], [testing/fstest.MapFS]) rejects. On that rejection
+// it retries with the name made relative to the base URI's directory, so a
+// confined FS rooted at the document's own directory resolves the reference. The
+// retry is a validated fs.ValidPath and cannot ascend above the FS root (a
+// leading "/" or a surviving ".." disqualifies it), and a network-scheme name is
+// refused before either attempt. [PermissiveFS], which loads any os.Open path,
+// is served by the first (absolute) attempt and is unaffected.
 func (p Parser) FS(fsys fs.FS) Parser {
 	p = p.clone()
 	if fsys == nil {

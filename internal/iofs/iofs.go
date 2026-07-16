@@ -30,15 +30,15 @@ const goosWindows = "windows"
 // It exists to preserve helium's historical behavior of opening any
 // path supplied to the parser, schema compilers, and XInclude processor.
 //
-// Note: the helium packages that consume this FS build the names they
-// pass to Open via [filepath.Join] against the document's base URI /
-// base dir, so those names may be absolute and may use OS-specific
-// separators on Windows. A caller-supplied FS that enforces
-// [fs.ValidPath] (such as [os.DirFS] or [os.OpenRoot]) will reject
-// those names. Sandboxing the loader behind such an FS requires path
-// normalization that is not yet performed by helium; until then,
-// PermissiveRoot is the only configuration that accepts OS-style
-// names end-to-end.
+// Note: the helium packages that consume this FS resolve each system id
+// against the document's base URI, so the name passed to Open may be absolute
+// and may use OS-specific separators on Windows. PermissiveRoot forwards such a
+// name to os.Open verbatim. A caller-supplied FS that enforces [fs.ValidPath]
+// (such as [os.DirFS] or [os.Root.FS]) rejects the absolute name; the parser
+// then retries with the name made relative to the base URI's directory, so a
+// confined FS rooted at the document's directory resolves the reference (see
+// the helium package's Parser.FS). PermissiveRoot needs no such retry because
+// os.Open accepts the absolute name directly.
 type PermissiveRoot struct{}
 
 // Open implements [fs.FS].
