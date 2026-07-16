@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"fmt"
 	"net/url"
 	"path"
 	"slices"
@@ -63,6 +64,15 @@ func SetNodeBaseURI(n Node, uri string) {
 }
 
 // BuildURI resolves a relative system ID against a base URI.
+//
+// ARGUMENT ORDER: the reference comes FIRST, the base SECOND —
+// BuildURI(reference, base). This is a byte-faithful port of libxml2's
+// xmlBuildURI(URI, base) and keeps its (reference, base) order for parity, which
+// is the OPPOSITE of Go's url.URL.ResolveReference and RFC 3986's resolve(base,
+// ref). Passing the arguments in the conventional (base, reference) order returns
+// a plausible-but-wrong result with no error. Callers who want the conventional
+// order should use [ResolveURI] instead.
+//
 // For local file paths (no scheme or file: scheme), it joins with
 // forward-slash (path) semantics. For other schemes, it uses
 // url.ResolveReference.
@@ -153,6 +163,20 @@ func BuildURI(systemID, base string) string {
 		return "file://" + result
 	}
 	return result
+}
+
+// ResolveURI resolves a relative reference against a base URI, using the
+// conventional (base, reference) argument order matching Go's
+// url.URL.ResolveReference and RFC 3986 resolve(base, ref). It wraps the
+// libxml2-parity primitive [BuildURI] (which takes its arguments in the reverse,
+// (reference, base) order) and returns an error when the reference cannot be
+// resolved against the base.
+func ResolveURI(base, ref string) (string, error) {
+	resolved := BuildURI(ref, base)
+	if resolved == "" {
+		return "", fmt.Errorf(`failed to resolve reference %q against base %q`, ref, base)
+	}
+	return resolved, nil
 }
 
 // isDriveRootedPath reports whether p has the shape "/X:/..." — a leading slash
