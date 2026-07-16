@@ -3013,6 +3013,36 @@ func TestParseFileMissingFileErrors(t *testing.T) {
 	require.Error(t, err, "parsing a missing file must error")
 }
 
+// TestParseFileReturnsRecoveredDoc guards that ParseFile propagates a recovered
+// partial document alongside the error, matching Parse/ParseReader. A recover
+// parse must not silently discard the tree it built.
+func TestParseFileReturnsRecoveredDoc(t *testing.T) {
+	t.Parallel()
+
+	// Malformed XML: mismatched close tag (same input as TestRecoverOnError).
+	const input = `<?xml version="1.0"?>
+<root>
+  <child>text</chld>
+</root>`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "malformed.xml")
+	require.NoError(t, os.WriteFile(path, []byte(input), 0o600))
+
+	// Without recover: error and no document, exactly as before.
+	doc, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.Error(t, err, "malformed file must error")
+	require.Nil(t, doc, "without recover, ParseFile returns no document")
+
+	// With recover: error AND the partial document, with its source URL set.
+	doc, err = helium.NewParser().RecoverOnError(true).ParseFile(t.Context(), path)
+	require.Error(t, err, "malformed file must still error under recover")
+	require.NotNil(t, doc, "with recover, ParseFile must return the partial document")
+	abs, absErr := filepath.Abs(path)
+	require.NoError(t, absErr)
+	require.Equal(t, abs, doc.URL(), "the recovered document keeps its source URL")
+}
+
 // TestParseFileEBCDICMatchesParse guards EBCDIC encoding parity across entry
 // points: an EBCDIC-encoded document must parse identically whether read via
 // ParseFile, ParseReader, or Parse([]byte). EBCDIC detection/decode relies on
