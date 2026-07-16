@@ -266,10 +266,10 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	// collapses EMPTY into "mixed"): ELEMENT content makes the whitespace
 	// ignorable; ANY or MIXED makes it significant; EMPTY or UNDEFINED — and no
 	// declaration at all — fall through to the heuristic below rather than being
-	// treated as mixed. This is why areBlanksBytes consults ElementDeclType
+	// treated as mixed. This is why areBlanksBytes consults elementDeclType
 	// (raw content-model type) instead of IsMixedElement (the mixed bool).
 	if ctx.doc != nil {
-		if dt, found := ctx.doc.ElementDeclType(ctx.peekNode().Name()); found {
+		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
 			switch dt {
 			case enum.ElementElementType:
 				return true
@@ -354,7 +354,7 @@ func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	// classification; it is kept in sync so both siblings state the fact
 	// identically.
 	if ctx.doc != nil {
-		if dt, found := ctx.doc.ElementDeclType(ctx.peekNode().Name()); found {
+		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
 			switch dt {
 			case enum.ElementElementType:
 				return true

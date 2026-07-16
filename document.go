@@ -736,7 +736,7 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 	return false, errElementDeclNotFound
 }
 
-// ElementDeclType returns the declared content-model type of the element named
+// elementDeclType returns the declared content-model type of the element named
 // name and reports whether a declaration was found. It searches the internal
 // subset first and consults the external subset only when the internal subset
 // has no declaration for name (mirroring libxml2 areBlanks' two-subset lookup,
@@ -749,7 +749,7 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 // content-model type so whitespace classification can apply libxml2 areBlanks'
 // own decl switch, in which EMPTY and UNDEFINED fall through to the heuristic
 // rather than being treated as mixed.
-func (d *Document) ElementDeclType(name string) (enum.ElementType, bool) {
+func (d *Document) elementDeclType(name string) (enum.ElementType, bool) {
 	for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
 		if dtd == nil {
 			continue
