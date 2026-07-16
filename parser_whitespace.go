@@ -3,6 +3,7 @@ package helium
 import (
 	"context"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
@@ -259,17 +260,82 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	if ctx.peekNode() == nil {
 		return false
 	}
-	if ctx.doc != nil {
-		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
-		return !ok
+
+	// If the element has a DTD declaration, its content-model TYPE decides,
+	// applying libxml2 areBlanks' own decl switch (NOT xmlIsMixedElement, which
+	// collapses EMPTY into "mixed"): ELEMENT content makes the whitespace
+	// ignorable; ANY or MIXED makes it significant; EMPTY or UNDEFINED — and no
+	// declaration at all — fall through to the heuristic below rather than being
+	// treated as mixed. This is why areBlanksBytes consults elementDeclType
+	// (raw content-model type) instead of IsMixedElement (the mixed bool).
+	//
+	// Skip the DTD lookup for the synthetic pseudo-root that wraps entity
+	// replacement text / a parsed fragment: its name is chosen by the parser, not
+	// the document, so a DTD element declaration colliding with pseudoRootName
+	// must not hijack the whitespace classification of entity content. Falling
+	// through to the heuristic keeps entity replacement text classified the same
+	// way as the equivalent literal characters (XML §4.4 entity/literal
+	// equivalence).
+	//
+	// One consequence is asymmetric and intentional: a whitespace-only entity
+	// sitting in element-only content is kept as a text node, while the literal
+	// whitespace in the same position is stripped. This is libxml2-faithful, not a
+	// bug — `xmllint --noent --noblanks` keeps the entity form's space and strips
+	// the literal form identically, because the entity's replacement text is parsed
+	// inside the synthetic pseudo-root and never consults the enclosing element's
+	// content model. Reclassifying the entity whitespace to match the literal path
+	// would DIVERGE from libxml2, which is the byte-parity target.
+	if ctx.doc != nil && !ctx.peekNode().synthetic {
+		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
+			switch dt {
+			case enum.ElementElementType:
+				return true
+			case enum.AnyElementType, enum.MixedElementType:
+				return false
+			}
+			// EMPTY or UNDEFINED: fall through to the heuristic below.
+		}
 	}
 
+	// Heuristic (no usable DTD decl): a blank run is ignorable whitespace only
+	// when it sits purely between markup, never when it abuts character data. A
+	// decoded entity reference (e.g. &gt;) becomes a text child, so whitespace
+	// next to it is significant exactly as whitespace next to a literal
+	// character is. Mirrors libxml2 areBlanks.
 	cur := ctx.getCursor()
 	if cur == nil {
 		return false
 	}
+	// The character after the run must open markup ('<') or be a CR; any other
+	// following byte means the run abuts character data.
 	if c := cur.Peek(); c != '<' && c != 0xD {
 		return false
+	}
+
+	elem := ctx.elem
+	if elem == nil {
+		// Pure-SAX path with no DOM: there are no children to inspect, so keep
+		// the original doc==nil behavior and treat the run as ignorable.
+		return true
+	}
+
+	pdn := elem.baseDocNode()
+	// An empty element about to close (e.g. <a>  </a>) keeps its whitespace as
+	// text content rather than dropping it.
+	if pdn.firstChild == nil && cur.Peek() == '<' && cur.PeekAt(1) == '/' {
+		return false
+	}
+	// Whitespace immediately after a text node — or where the element's first
+	// child is a text node — is part of that character-data run.
+	if last := pdn.lastChild; last != nil {
+		if _, ok := AsNode[*Text](last); ok {
+			return false
+		}
+	}
+	if first := pdn.firstChild; first != nil {
+		if _, ok := AsNode[*Text](first); ok {
+			return false
+		}
 	}
 
 	return true
@@ -295,9 +361,26 @@ func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	if ctx.peekNode() == nil {
 		return false
 	}
-	if ctx.doc != nil {
-		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
-		return !ok
+	// Apply the same content-model TYPE switch as areBlanksBytes (libxml2
+	// areBlanks' decl logic, not xmlIsMixedElement): ELEMENT content is
+	// ignorable; ANY or MIXED is significant; EMPTY, UNDEFINED, or no declaration
+	// fall through to the tentative-ignorable default below, where the streaming
+	// caller re-applies the end-of-run delimiter check (this variant omits the
+	// cursor lookahead). The synthetic pseudo-root guard mirrors areBlanksBytes:
+	// a DTD element declaration colliding with pseudoRootName must not classify
+	// entity/fragment content. The only caller (parseCharDataChunkedSAX) is
+	// entered solely when ctx.doc == nil, so the declaration branch never governs
+	// a live classification; it is kept in sync so both siblings state the fact
+	// identically.
+	if ctx.doc != nil && !ctx.peekNode().synthetic {
+		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
+			switch dt {
+			case enum.ElementElementType:
+				return true
+			case enum.AnyElementType, enum.MixedElementType:
+				return false
+			}
+		}
 	}
 	return true
 }
