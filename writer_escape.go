@@ -64,7 +64,7 @@ func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) erro
 		content = d.normalizeContent(content)
 		cm = nil
 	}
-	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, cm)
+	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, cm)
 }
 
 var (
@@ -264,7 +264,16 @@ func isInCharacterRange(r rune) bool {
 // replacement string, per XSLT/XQuery Serialization 3.1 §7 (character maps are
 // applied as the final step and the replacement is emitted verbatim, not
 // re-escaped).
-func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl string) (int, error) {
+//
+// A character-map replacement is never re-escaped, so a non-ASCII replacement
+// would leak raw UTF-8 under a US-ASCII output encoding. When rejectNonASCII is
+// set (the octet-producing US-ASCII path, not declaration-only fn:serialize)
+// such a replacement is rejected with a labelled early error before anything is
+// written; the output-writer net is the backstop.
+func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl string, rejectNonASCII bool) (int, error) {
+	if rejectNonASCII && hasNonASCII(repl) {
+		return last, unsupportedASCIIErr("character-map replacement")
+	}
 	if _, err := w.Write(s[last:cut]); err != nil {
 		return last, err
 	}
@@ -274,7 +283,7 @@ func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl st
 	return next, nil
 }
 
-func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectCharMapNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
 	var esc []byte
 	var hbuf [8]byte
 	var wbuf [10]byte
@@ -284,7 +293,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectI
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
 		if repl, ok := charMap[r]; ok {
-			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl)
+			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
 				return err
 			}
@@ -364,7 +373,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectI
 	return nil
 }
 
-func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutput, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
+func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutput, rejectCharMapNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
 	var esc []byte
 	var hbuf [8]byte
 	var wbuf [10]byte
@@ -374,7 +383,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
 		if repl, ok := charMap[r]; ok {
-			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl)
+			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
 				return err
 			}

@@ -6,8 +6,21 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/stretchr/testify/require"
 )
+
+// requireASCIIRejected asserts that a US-ASCII serialization failed with
+// ErrUnsupportedOutputEncoding and that no raw non-ASCII octet leaked into buf
+// before the error fired.
+func requireASCIIRejected(t *testing.T, buf *bytes.Buffer, err error) {
+	t.Helper()
+	require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
+	for i := range buf.Len() {
+		require.Less(t, buf.Bytes()[i], byte(0x80), "leaked non-ASCII octet 0x%X at %d", buf.Bytes()[i], i)
+	}
+}
 
 // TestOutputEncodingMatchesEmittedBytes asserts that when OutputEncoding
 // overrides the declaration to a transcodable encoding, the emitted octets are
@@ -237,6 +250,161 @@ func TestOutputEncodingUSASCIIRejectsNonASCIINames(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOutputEncodingUSASCIIRejectsCharMapReplacement asserts that under an
+// explicit US-ASCII OutputEncoding (the octet-producing WriteTo path) a
+// character-map replacement string carrying a non-ASCII character fails with a
+// labelled ErrUnsupportedOutputEncoding rather than emitting the raw replacement
+// verbatim (a character map is never re-escaped, so a non-ASCII replacement would
+// leak raw UTF-8 under the US-ASCII declaration). Covers U1 in both text and
+// attribute-value content.
+func TestOutputEncodingUSASCIIRejectsCharMapReplacement(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"text": `<?xml version="1.0" encoding="UTF-8"?><root>@</root>`,
+		"attr": `<?xml version="1.0" encoding="UTF-8"?><root a="@"/>`,
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			var buf bytes.Buffer
+			err = helium.NewWriter().
+				CharacterMap(map[rune]string{'@': "€"}). // '@' -> EURO SIGN
+				OutputEncoding("US-ASCII").
+				WriteTo(&buf, doc)
+			requireASCIIRejected(t, &buf, err)
+		})
+	}
+}
+
+// TestOutputEncodingUSASCIIAllowsASCIICharMapReplacement asserts the positive
+// case: an ASCII-only character-map replacement under US-ASCII succeeds and the
+// replacement is emitted verbatim.
+func TestOutputEncodingUSASCIIAllowsASCIICharMapReplacement(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0" encoding="UTF-8"?><root>@</root>`))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = helium.NewWriter().
+		CharacterMap(map[rune]string{'@': "[AT]"}).
+		OutputEncoding("US-ASCII").
+		WriteTo(&buf, doc)
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), "<root>[AT]</root>")
+}
+
+// TestOutputEncodingUSASCIIRejectsDTDLiterals asserts that under an explicit
+// US-ASCII OutputEncoding a non-ASCII value in a reference-less DTD literal —
+// DOCTYPE external/system ID, entity external/system ID, internal entity value,
+// an NDATA notation name, or a notation external/system ID — fails with
+// ErrUnsupportedOutputEncoding without leaking a raw non-ASCII octet. These
+// literals write to the output directly and are covered by the ASCII-reject net.
+// Covers U3–U7.
+func TestOutputEncodingUSASCIIRejectsDTDLiterals(t *testing.T) {
+	t.Parallel()
+
+	// nonASCII is a value carrying a non-ASCII character placed at each literal.
+	const nonASCII = "café" // "café"
+
+	build := map[string]func(*testing.T) *helium.Document{
+		"doctype-system-id": func(t *testing.T) *helium.Document {
+			doc := helium.NewDefaultDocument()
+			_, err := doc.CreateInternalSubset("root", "", nonASCII+".dtd")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			return doc
+		},
+		"doctype-public-id": func(t *testing.T) *helium.Document {
+			doc := helium.NewDefaultDocument()
+			_, err := doc.CreateInternalSubset("root", "-//"+nonASCII+"//EN", "sys.dtd")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			return doc
+		},
+		"entity-external-system-id": func(t *testing.T) *helium.Document {
+			doc := helium.NewDefaultDocument()
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.ExternalGeneralParsedEntity, "", nonASCII+".ent", "")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			return doc
+		},
+		"entity-internal-value": func(t *testing.T) *helium.Document {
+			doc := helium.NewDefaultDocument()
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", nonASCII)
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			return doc
+		},
+		"ndata-notation-name": func(t *testing.T) *helium.Document {
+			doc := helium.NewDefaultDocument()
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			// The NDATA notation name (the entity's content) is non-ASCII; the
+			// external ID literal is ASCII so the leak is isolated to the name.
+			_, err = dtd.AddEntity("e", enum.ExternalGeneralUnparsedEntity, "", "e.dat", nonASCII)
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			return doc
+		},
+		"notation-system-id": func(t *testing.T) *helium.Document {
+			doc := helium.NewDefaultDocument()
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddNotation("n", "", nonASCII+".not")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			return doc
+		},
+	}
+	for name, mk := range build {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			doc := mk(t)
+			var buf bytes.Buffer
+			err := helium.NewWriter().OutputEncoding("US-ASCII").WriteTo(&buf, doc)
+			requireASCIIRejected(t, &buf, err)
+		})
+	}
+}
+
+// TestSerializeDeclarationOnlyUSASCIIKeepsRawCharMap asserts that fn:serialize's
+// declaration-only US-ASCII mode (asciiOutput set, but the octets stay a UTF-8
+// string) keeps a non-ASCII character-map replacement RAW rather than rejecting
+// it: the ASCII-reject net and the character-map reject both key on
+// asciiOutput && !declOnlyEncoding, so declaration-only output is unchanged. Text
+// outside the character map is still char-referenced.
+func TestSerializeDeclarationOnlyUSASCIIKeepsRawCharMap(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root>@é</root>"))
+	require.NoError(t, err)
+
+	w := helium.NewWriter().
+		CharacterMap(map[rune]string{'@': "€"}). // '@' -> EURO SIGN
+		OutputEncoding("US-ASCII")
+	declOnly, ok := writerctl.EnableDeclarationOnlyEncoding(w).(helium.Writer)
+	require.True(t, ok)
+
+	var buf bytes.Buffer
+	require.NoError(t, declOnly.WriteTo(&buf, doc))
+
+	out := buf.String()
+	require.Contains(t, out, `encoding="US-ASCII"`)
+	// The character-map replacement stays raw (declaration-only keeps octets UTF-8).
+	require.Contains(t, out, "€")
+	// A non-mapped non-ASCII text character is still char-referenced.
+	require.Contains(t, out, "&#xE9;")
 }
 
 // TestOutputEncodingTrimsPaddedLabel asserts a whitespace-padded OutputEncoding

@@ -134,16 +134,25 @@ type writeSession struct {
 	// (by any IANA alias — us-ascii, ascii, csASCII, ANSI_X3.4-1968, …, matched
 	// via internal/encoding.IsASCII) on the Document serialization path: the
 	// writer installs no transcoding encoder but escapes every non-ASCII character
-	// as a hex character reference, so the emitted octets are pure US-ASCII and
-	// agree with the encoding declaration. Independent of escapeNonASCII (which
-	// only covers Latin-1) so BMP/astral characters are escaped too. In a context
-	// that cannot hold a character reference (comment text, CDATA, PI target/data,
-	// element/attribute name, namespace prefix, notation name, entity-reference
-	// name, or a DTD-internal name — DOCTYPE, <!ELEMENT>/<!ATTLIST>/<!ENTITY> names
-	// and enumeration tokens) a non-ASCII character has no faithful US-ASCII
-	// serialization, so it fails with ErrUnsupportedOutputEncoding instead. It is
-	// NEVER set on the bare
-	// element/fragment path — OutputEncoding affects the Document path only.
+	// in text and attribute-value content as a hex character reference, so the
+	// emitted octets are pure US-ASCII and agree with the encoding declaration.
+	// Independent of escapeNonASCII (which only covers Latin-1) so BMP/astral
+	// characters are escaped too.
+	//
+	// On the real octet-producing WriteTo path (asciiReject, i.e. asciiOutput &&
+	// !declOnlyEncoding) any non-ASCII byte that CANNOT be char-referenced has no
+	// faithful US-ASCII serialization and fails with ErrUnsupportedOutputEncoding:
+	// per-site guards give early, labelled errors for names, comments, CDATA,
+	// PI target/data, namespace prefixes, DTD-internal names, and character-map
+	// replacements, and an exhaustive output-writer net (asciiRejectWriter,
+	// installed in writeDoc) is the backstop that rejects any surviving byte
+	// >= 0x80 from any raw-write site. fn:serialize's declaration-only mode also
+	// sets asciiOutput but not asciiReject: it returns a UTF-8 string, so
+	// non-ASCII text/attr values still char-reference while reference-less content
+	// and character-map replacements stay raw.
+	//
+	// asciiOutput is NEVER set on the bare element/fragment path — OutputEncoding
+	// affects the Document path only.
 	asciiOutput bool
 	xml11       bool // true when the document declares XML 1.1: restricted control chars serialize as decimal character references
 	isXHTML     bool
@@ -233,14 +242,26 @@ func unsupportedASCIIErr(what string) error {
 	return fmt.Errorf("cannot serialize non-ASCII %s under US-ASCII output encoding: %w", what, ErrUnsupportedOutputEncoding)
 }
 
+// asciiReject reports whether a raw non-ASCII byte must be rejected on the
+// current path: an explicit US-ASCII OutputEncoding override on the real
+// octet-producing WriteTo path. It excludes declaration-only mode
+// (fn:serialize), where asciiOutput is also set but the string result keeps
+// octets as UTF-8 with char-reference escaping and preserves raw character-map
+// replacements — rejecting there would break fn:serialize semantics. Every
+// reference-less guard and the character-map reject key on this, not on
+// asciiOutput alone.
+func (s *writeSession) asciiReject() bool {
+	return s.asciiOutput && !s.declOnlyEncoding
+}
+
 // rejectNonASCIIStr records a sticky ErrUnsupportedOutputEncoding when
-// asciiOutput is on and s carries a non-ASCII byte. It guards contexts that
+// asciiReject is on and s carries a non-ASCII byte. It guards contexts that
 // cannot hold a character reference — element/attribute names, namespace
 // prefixes, PI target/data, notation names — where a US-ASCII output encoding
 // that cannot carry the character literally has no faithful serialization.
 // Returns true when it recorded the error.
 func (s *writeSession) rejectNonASCIIStr(what, str string) bool {
-	if !s.asciiOutput || !hasNonASCII(str) {
+	if !s.asciiReject() || !hasNonASCII(str) {
 		return false
 	}
 	s.check(unsupportedASCIIErr(what))
@@ -252,11 +273,39 @@ func (s *writeSession) rejectNonASCIIStr(what, str string) bool {
 // character reference). The offending content is not embedded in the error —
 // it may be large and attacker-controlled.
 func (s *writeSession) rejectNonASCIIBytes(what string, b []byte) bool {
-	if !s.asciiOutput || !hasNonASCII(b) {
+	if !s.asciiReject() || !hasNonASCII(b) {
 		return false
 	}
 	s.check(unsupportedASCIIErr(what))
 	return true
+}
+
+// asciiRejectWriter wraps the output writer under an explicit US-ASCII
+// OutputEncoding on the real octet-producing WriteTo path (never in
+// declaration-only fn:serialize mode). It is the exhaustive backstop for the
+// asciiOutput invariant: by the time any byte reaches it, text and attribute
+// values have already been char-referenced to pure ASCII and every
+// reference-less context has been guarded, so any surviving byte >= 0x80 is a
+// raw-write leak from an unguarded site (a character-map replacement, an
+// already-encoded textnoenc node, a DTD external/system/public-ID literal, an
+// entity or notation value/name). On the first such byte Write returns
+// ErrUnsupportedOutputEncoding without forwarding it, so no raw non-ASCII octet
+// is emitted; a pure-ASCII buffer forwards unchanged. The error is sticky so a
+// later write cannot slip a raw octet past it.
+type asciiRejectWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (a *asciiRejectWriter) Write(p []byte) (int, error) {
+	if a.err != nil {
+		return 0, a.err
+	}
+	if hasNonASCII(p) {
+		a.err = unsupportedASCIIErr("output")
+		return 0, a.err
+	}
+	return a.w.Write(p)
 }
 
 // hasXmlnsPrefix reports whether name carries the reserved "xmlns:" QName
@@ -717,6 +766,14 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 				// literally, so escape every one as a character reference — the
 				// octets are pure US-ASCII and match the declaration.
 				s.asciiOutput = true
+				// On the real octet-producing path (not declaration-only
+				// fn:serialize) install the exhaustive ASCII-reject net: the
+				// per-site guards and the escapers' char-referencing already keep
+				// every reachable value pure ASCII, so any byte >= 0x80 reaching
+				// this wrapper is a raw-write leak, caught before it is emitted.
+				if !d.declOnlyEncoding {
+					out = &asciiRejectWriter{w: out}
+				}
 			} else if henc.IsASCIIRawUTF8Alias(enc) {
 				// NO-OVERRIDE, one of the two aliases (ANSI_X3.4-1968, csASCII) the
 				// document serializer emits as raw UTF-8 via a UTF-8 passthrough:
@@ -926,7 +983,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				c = d.normalizeContent(c)
 				cm = nil
 			}
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, cm); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, cm); err != nil {
 				return err
 			}
 		}
@@ -1261,7 +1318,7 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElemen
 	}
 	d.writeString(out, `="`)
 	if d.err == nil {
-		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
 			d.err = err
 		}
 	}

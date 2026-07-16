@@ -87,13 +87,18 @@ var (
 	//   1. The encoding is neither UTF-8/US-ASCII nor a name the internal encoder
 	//      table can load. Emitting UTF-8 octets under that declaration would make
 	//      the XML declaration disagree with the bytes, so the writer fails.
-	//   2. The encoding is US-ASCII (any alias) and a non-ASCII character appears
-	//      in a context that cannot hold a character reference — comment text,
-	//      CDATA section, PI target/data, an element/attribute name, a namespace
-	//      prefix, a notation name, an entity-reference name, or a DTD-internal
-	//      name (DOCTYPE, <!ELEMENT>/<!ATTLIST>/<!ENTITY> names and enumeration
-	//      tokens). Text and attribute values stay character-referenced; only the
-	//      reference-less contexts fail.
+	//   2. The encoding is US-ASCII (any alias) on the octet-producing WriteTo
+	//      path and a non-ASCII character reaches the output where no character
+	//      reference can represent it. Text and attribute values are always
+	//      character-referenced to pure ASCII, so they never fail; ANY other
+	//      non-ASCII byte does — a name, comment, CDATA, PI, namespace prefix, a
+	//      character-map replacement, a DTD external/system/public-ID literal, an
+	//      entity or notation value/name, or any future raw-write site. An
+	//      exhaustive output-writer net rejects any surviving byte >= 0x80, with
+	//      per-site guards giving earlier, labelled errors on the common paths.
+	//      fn:serialize's declaration-only US-ASCII mode is excluded: it returns a
+	//      UTF-8 string, so non-ASCII text/attr values still character-reference
+	//      but reference-less content (and character-map replacements) stay raw.
 	// Match with errors.Is.
 	ErrUnsupportedOutputEncoding = errors.New("unsupported output encoding")
 	// ErrNetworkAccessForbidden is returned when an external resource (an
