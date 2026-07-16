@@ -593,10 +593,23 @@ func (p Parser) FS(fsys fs.FS) Parser {
 	return p
 }
 
-// ErrorHandler sets the handler for validation errors produced during
-// DTD validation ([ValidateDTD]). When set, individual errors are delivered
-// to the handler as they occur. The returned error from Parse is
-// [ErrDTDValidationFailed] on failure.
+// ErrorHandler sets the handler that receives individual errors produced
+// during DTD validation ([ValidateDTD]); the returned error from Parse is
+// [ErrDTDValidationFailed] on failure. The handler is not consulted for
+// well-formedness or namespace errors — those surface only as the error
+// returned from Parse.
+//
+// The handler is retained by reference and shared by every Parse call on the
+// returned Parser (and on any Parser derived from it by further configuration),
+// so it must tolerate the reuse and concurrency the caller subjects the Parser
+// to. Passing a nil handler is allowed and means "discard": at validation time
+// a nil handler is treated as [NilErrorHandler]. Parser values are immutable, so
+// calling ErrorHandler again returns a new Parser carrying the replacement
+// handler and leaves the original unchanged.
+//
+// If the handler implements [io.Closer] it is closed once at the end of each
+// Parse that performs DTD validation, so a Closer handler is not meant to be
+// shared across such Parse calls.
 func (p Parser) ErrorHandler(h ErrorHandler) Parser {
 	p = p.clone()
 	p.cfg.errorHandler = h

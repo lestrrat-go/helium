@@ -26,7 +26,7 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
-- `ErrorHandler` interface — async error delivery during parsing
+- `ErrorHandler` interface — delivers compilation/validation errors (synchronously unless the handler is `Sink`-backed); retained by reference and shared across operations, a nil handler is treated as `NilErrorHandler` (discard). The root `Parser` consults it only during DTD validation (see `Parser.ErrorHandler` above)
 - `ErrorLeveler` interface — optional `ErrorLevel() ErrorLevel` an error implements to report its severity; `ErrorCollector`'s level filter reads it via `errors.As` (default `ErrorLevelWarning`)
 - `DTDValidationError{Message, Level}` (`valid.go`) — structured DTD-validation diagnostic delivered to the `ErrorHandler` under `ValidateDTD(true)`; implements `ErrorLeveler` returning `ErrorLevelError`, so a level-filtered `ErrorCollector` keeps it. Recover via `errors.As`; `.Error()` returns `Message` (byte-identical to the prior `fmt.Errorf` text)
 - `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)

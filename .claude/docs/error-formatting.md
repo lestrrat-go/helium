@@ -50,6 +50,8 @@ Implementations:
 - **`NilErrorHandler`** — discards all errors
 - **`ErrorCollector`** — accumulates into slice via `Sink[error]`, filterable by level
 
+**Ownership & lifecycle**: a handler is retained by reference on the component it is set on (root `Parser`; `xsd`/`relaxng`/`schematron` compilers and validators; `xslt3`) and shared across every operation run on that configured value. These are immutable-value builders, so setting a handler returns a new value and leaves the original unchanged; there is no in-place replacement. A nil handler is normalized to `NilErrorHandler` (discard) at use time — never a panic. Which errors reach the handler is component-specific: the root `Parser` consults it ONLY during DTD validation (`ValidateDTD`); well-formedness/namespace errors surface solely as `Parse`'s returned error, not through the handler. When a handler also implements `io.Closer`, the component closes it once at the end of each operation that delivers to it (each DTD-validating `Parse`, each `Compile`/`Validate`) via a deferred `closeHandler`, so a `Closer` handler should not be shared across such operations.
+
 ## Package-Specific Error Formatting
 
 ### XSD (`xsd/errors.go`)
