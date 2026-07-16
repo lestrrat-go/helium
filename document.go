@@ -11,14 +11,36 @@ import (
 	"github.com/lestrrat-go/helium/internal/pool"
 )
 
+// DocumentStandaloneType records the state of a document's standalone
+// declaration, mirroring libxml2's xmlDoc.standalone. It is one of the
+// Standalone* constants; any other value is out of the defined space and is
+// treated the same as StandaloneImplicitNo — serialization emits no standalone
+// attribute for it and DTD validation treats it as not-standalone. The full
+// value space:
+//
+//   - StandaloneExplicitYes: the XML declaration carried standalone="yes".
+//   - StandaloneExplicitNo:  the XML declaration carried standalone="no".
+//   - StandaloneImplicitNo:  no explicit standalone="yes"/"no" was seen. This is
+//     the parser's default, and the value a parsed document carries both when the
+//     XML declaration is absent entirely and when it is present without a
+//     standalone pseudo-attribute. It is also the value to pass to NewDocument
+//     for an ordinary API-built document. Serialization emits no standalone
+//     attribute.
+//   - StandaloneNoXMLDecl:   a libxml2-compatible caller-selected sentinel for a
+//     constructed document with no XML declaration (used by NewHTMLDocument and
+//     the xslt3 serializer). The parser never produces it; serialization treats
+//     it as not-standalone and emits no standalone attribute.
+//   - StandaloneInvalidValue: an internal parser sentinel for a standalone
+//     value that has not been resolved yet; not meaningful on a finished
+//     document.
 type DocumentStandaloneType int
 
 const (
-	StandaloneInvalidValue = -99
-	StandaloneExplicitYes  = 1
-	StandaloneExplicitNo   = 0
-	StandaloneNoXMLDecl    = -1
-	StandaloneImplicitNo   = -2
+	StandaloneInvalidValue DocumentStandaloneType = -99
+	StandaloneExplicitYes  DocumentStandaloneType = 1
+	StandaloneExplicitNo   DocumentStandaloneType = 0
+	StandaloneNoXMLDecl    DocumentStandaloneType = -1
+	StandaloneImplicitNo   DocumentStandaloneType = -2
 )
 
 // DocProperties is a bitmask of document properties, mirroring
@@ -108,6 +130,9 @@ func NewHTMLDocument() *Document {
 
 // NewDocument allocates an empty XML Document with the given XML
 // declaration version, character encoding, and standalone status. The
+// standalone argument is one of the Standalone* constants (see
+// DocumentStandaloneType for the full value space); pass StandaloneImplicitNo
+// for an ordinary document with no explicit standalone declaration. The
 // returned document owns no children yet; use CreateElement and the other
 // Create* methods to build a tree, then attach the root via AddChild.
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
@@ -1067,20 +1092,30 @@ func (d *Document) RegisterID(id string, elem *Element) {
 // IDTable returns the document's ID->element table populated during parsing
 // (mirroring libxml2's xmlAddID). The returned map is the document's own, not a
 // copy, and is nil for documents built without an interned ID table (e.g. via the
-// API rather than the parser); callers must not mutate it. It lets a derived
-// document (e.g. an xsl:strip-space copy) rebuild an equivalent table by
-// translating each entry's element through the original->copy correspondence,
-// faithfully preserving id()/GetElementByID semantics — including for prefixed
-// elements whose qualified DTD ATTLIST the lazy GetElementByID fallback would
-// otherwise miss.
+// API rather than the parser); callers MUST NOT mutate it — writing to it
+// corrupts the document's ID index. It lets a derived document (e.g. an
+// xsl:strip-space copy) rebuild an equivalent table by translating each entry's
+// element through the original->copy correspondence, preserving the interned
+// table's identity and O(1) lookup fidelity rather than re-deriving ids through
+// the lazy O(n) GetElementByID fallback walk.
 func (d *Document) IDTable() map[string]*Element {
 	return d.ids
 }
 
-// GetElementByID returns the first element in the document whose ID matches
-// the given value. If the document's ID table has been populated (during
-// parsing), it performs an O(1) hash lookup. Otherwise it falls back to an
-// O(n) tree walk checking xml:id and DTD-declared ID attributes.
+// GetElementByID returns the element in the document whose ID matches the given
+// value, or nil if none matches. In a valid document an ID value is unique, so
+// there is at most one such element. If the document's ID table has been
+// populated (during parsing), it performs an O(1) hash lookup. Otherwise it
+// falls back to an O(n) tree walk checking xml:id and DTD-declared ID
+// attributes.
+//
+// Duplicate IDs make a document invalid, not not-well-formed: a document with
+// duplicate IDs still parses successfully with DocWellFormed set. If several
+// elements share an ID, the two paths pick different winners: the O(1) table
+// returns the last-registered element for that value — RegisterID overwrites by
+// call order, which is NOT necessarily last in document order — while the O(n)
+// fallback walk returns the first in document order. Do not rely on either for
+// duplicate IDs.
 //
 // The ID-skip state (see SetSkipIDs) is authoritative and is checked FIRST: a
 // document with SkipIDs() == true resolves NO ids — it returns nil without
