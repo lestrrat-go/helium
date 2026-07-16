@@ -80,8 +80,17 @@ var (
 	// blank-run cap. The cap fires during accumulation, before the whole run is
 	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
-	errParserStopped       = errors.New("parser stopped")
-	errNoCursor            = errors.New("parser has no input")
+	// ErrNetworkAccessForbidden is returned when an external resource (an
+	// external DTD subset or external parsed entity) names a network URI —
+	// an http, https, or ftp scheme — but the parser was configured to forbid
+	// network access via Parser.AllowNetwork(false) (libxml2 XML_PARSE_NONET,
+	// the default). helium has no dedicated network loader; every external load
+	// goes through the configured fs.FS, so this guard refuses a network-scheme
+	// name before it reaches a (possibly network-capable) caller-supplied FS.
+	// Match with errors.Is.
+	ErrNetworkAccessForbidden = errors.New("network access forbidden")
+	errParserStopped          = errors.New("parser stopped")
+	errNoCursor               = errors.New("parser has no input")
 )
 
 // isParseAbort reports whether err signals that parsing must stop immediately
