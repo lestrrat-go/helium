@@ -500,6 +500,32 @@ func nextOwnedChild(owner *docnode, child Node) Node {
 	return child.NextSibling()
 }
 
+// destinationDocument returns the document a node inserted under n would belong
+// to. For a Document receiver that is the document itself; for any other node it
+// is the node's owning document.
+func destinationDocument(n MutableNode) *Document {
+	if d, ok := n.(*Document); ok {
+		return d
+	}
+	return n.OwnerDocument()
+}
+
+// noteCrossDocumentEscape records that cur is being linked into a different
+// document than the one that owns it. A node's backing storage (its struct and
+// any text-content bytes) is drawn from its owning document's slab allocator, so
+// once the node is referenced from another document that owning document must no
+// longer recycle its slab chunks on Free — a later parse could otherwise reuse a
+// chunk still holding the moved node and overwrite it. Marking the SOURCE
+// document turns its Free into a no-op (GC reclaims the still-referenced chunks
+// instead). A nil owner (a heap-allocated standalone node) has no slab to guard.
+func noteCrossDocumentEscape(dest *Document, cur Node) {
+	curDoc := cur.OwnerDocument()
+	if curDoc == nil || curDoc == dest {
+		return
+	}
+	curDoc.slabEscaped = true
+}
+
 // addChildPreflight runs the shared self/cycle guard and auto-unlink that every
 // AddChild path must perform before relinking. It returns a non-nil error when
 // the operation must be rejected; on success cur is detached from any previous
@@ -509,6 +535,11 @@ func nextOwnedChild(owner *docnode, child Node) Node {
 // unlinked from its old parent first.
 func addChildPreflight(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
+
+	// A node linked into a different document keeps its slab-backed storage in its
+	// original document, so guard that document's Free against recycling it. Mark
+	// BEFORE any unlink, while cur still reports its original owner.
+	noteCrossDocumentEscape(destinationDocument(n), cur)
 
 	// Cycle guard: a node may not be inserted into itself, nor into one of
 	// its own descendants (which would make an ancestor a descendant of
@@ -595,6 +626,11 @@ func (n docnode) PrevSibling() Node {
 // its text-merge fast path cannot bypass the guard.
 func addSiblingPreflight(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
+
+	// A sibling of n shares n's document; if cur comes from elsewhere, guard its
+	// original document's Free against recycling its slab storage. Mark BEFORE any
+	// unlink, while cur still reports its original owner. See noteCrossDocumentEscape.
+	noteCrossDocumentEscape(n.OwnerDocument(), cur)
 
 	// Cycle guard: a sibling of n is installed under n's parent, so the same
 	// self/ancestor rule that protects addChild applies here against the
@@ -830,10 +866,16 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	// untouched. n itself is exempt: when n is among the replacements it stays
 	// live in place (handled below as replacedIsInserted).
 	parent := ndn.parent
+	replDoc := n.OwnerDocument()
 	for _, nn := range nodes {
 		if nn.baseDocNode() == ndn {
 			continue
 		}
+		// Each replacement takes n's place. If it comes from a different document,
+		// guard that document's Free against recycling its slab storage. Mark BEFORE
+		// any unlink, while nn still reports its original owner. See
+		// noteCrossDocumentEscape.
+		noteCrossDocumentEscape(replDoc, nn)
 		if wouldCreateCycle(parent, nn) {
 			return errors.New("cannot replace a node with one of its own ancestors")
 		}
