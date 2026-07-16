@@ -1556,3 +1556,170 @@ func TestWriterMapSettersCloneInput(t *testing.T) {
 		require.Contains(t, out, `xmlns:p="urn:p"`, "post-set inherited ns must not apply: %q", out)
 	})
 }
+
+// TestWriterStructuralErrorsMatchable verifies that each structural-serialization
+// failure the writer detects is reported via a named sentinel a caller can match
+// with errors.Is, rather than an anonymous string-literal error.
+func TestWriterStructuralErrorsMatchable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		build    func(t *testing.T) *helium.Document
+		sentinel error
+	}{
+		{
+			name: "invalid element name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement(`root injected="1"`)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidElementName,
+		},
+		{
+			name: "reserved element name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("xmlns:root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterReservedElementName,
+		},
+		{
+			name: "invalid attribute name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				_, err := root.SetAttribute(`x onmouseover`, "1")
+				require.NoError(t, err)
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidAttributeName,
+		},
+		{
+			name: "reserved attribute name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				_, err := root.SetAttribute("xmlns", "urn:evil")
+				require.NoError(t, err)
+				return doc
+			},
+			sentinel: helium.ErrWriterReservedAttributeName,
+		},
+		{
+			name: "reserved namespace prefix",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				require.NoError(t, root.DeclareNamespace("xmlns", "urn:x"))
+				return doc
+			},
+			sentinel: helium.ErrWriterReservedNamespacePrefix,
+		},
+		{
+			name: "invalid namespace prefix",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				require.NoError(t, root.DeclareNamespace("bad prefix", "urn:x"))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidNamespacePrefix,
+		},
+		{
+			name: "invalid comment content",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				require.NoError(t, root.AddChild(doc.CreateComment([]byte("a--b"))))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidComment,
+		},
+		{
+			name: "invalid PI target",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				require.NoError(t, root.AddChild(doc.CreatePI("1bad", "")))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidPITarget,
+		},
+		{
+			name: "invalid PI content",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root := doc.CreateElement("root")
+				require.NoError(t, doc.SetDocumentElement(root))
+				require.NoError(t, root.AddChild(doc.CreatePI("t", "a?>b")))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidPIContent,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := tc.build(t)
+			var buf strings.Builder
+			err := helium.Write(&buf, doc)
+			require.Error(t, err, "malformed node must be rejected")
+			require.ErrorIs(t, err, tc.sentinel, "error must match the named sentinel")
+		})
+	}
+}
+
+// TestWriterNormalizationRejectsInvalidForm verifies that an unrecognized
+// normalization-form value is observable (ErrUnsupportedNormalizationForm) rather
+// than silently disabling normalization, while the supported forms and the
+// disabling values ("", "none") are accepted.
+func TestWriterNormalizationRejectsInvalidForm(t *testing.T) {
+	t.Parallel()
+
+	newDoc := func(t *testing.T) *helium.Document {
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.AppendText([]byte("x")))
+		return doc
+	}
+
+	for _, form := range []string{"NFCC", "nfc", "fully-normalized", "NONE", "garbage"} {
+		t.Run("rejects "+form, func(t *testing.T) {
+			t.Parallel()
+			var buf strings.Builder
+			err := helium.NewWriter().Normalization(form).WriteTo(&buf, newDoc(t))
+			require.Error(t, err, "unrecognized normalization form must be rejected")
+			require.ErrorIs(t, err, helium.ErrUnsupportedNormalizationForm)
+			require.Empty(t, buf.String(), "no output byte before the rejection")
+		})
+	}
+
+	for _, form := range []string{"", "none", "NFC", "NFD", "NFKC", "NFKD"} {
+		t.Run("accepts "+form, func(t *testing.T) {
+			t.Parallel()
+			var buf strings.Builder
+			err := helium.NewWriter().Normalization(form).WriteTo(&buf, newDoc(t))
+			require.NoError(t, err, "supported normalization form must serialize")
+		})
+	}
+
+	// A bare element (non-Document) path is also validated.
+	t.Run("bare element path", func(t *testing.T) {
+		t.Parallel()
+		doc := newDoc(t)
+		var buf strings.Builder
+		err := helium.NewWriter().Normalization("bogus").WriteTo(&buf, doc.DocumentElement())
+		require.ErrorIs(t, err, helium.ErrUnsupportedNormalizationForm)
+	})
+}
