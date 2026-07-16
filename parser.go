@@ -335,20 +335,6 @@ func (p Parser) MergeCDATA(v bool) Parser {
 	return p
 }
 
-// CompactTextNodes controls whether the parser compacts small text nodes
-// to reduce memory usage.
-// libxml2: XML_PARSE_COMPACT
-// Default: false
-func (p Parser) CompactTextNodes(v bool) Parser {
-	p = p.clone()
-	if !v {
-		p.cfg.options.Clear(parseCompact)
-		return p
-	}
-	p.cfg.options.Set(parseCompact)
-	return p
-}
-
 // FixBaseURIs controls whether xml:base URIs are fixed up during
 // XInclude processing. When set to false, xml:base attributes are
 // not adjusted on included content.
