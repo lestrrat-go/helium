@@ -400,6 +400,54 @@ func TestValidateUndeclaredElement(t *testing.T) {
 	require.NotEmpty(t, errs, "an undeclared element is a validation error")
 }
 
+// TestDTDValidationErrorLevel verifies a DTD-validation diagnostic reports its
+// true severity so a level-filtered ErrorCollector receives it, and that the
+// structured DTDValidationError is recoverable via errors.As.
+func TestDTDValidationErrorLevel(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc/>`
+
+	t.Run("collected at error level", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+		ec := helium.NewErrorCollector(ctx, helium.ErrorLevelError)
+		_, err := helium.NewParser().
+			ValidateDTD(true).
+			ErrorHandler(ec).
+			Parse(ctx, []byte(src))
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+
+		errs := ec.Errors()
+		require.Len(t, errs, 1, "the error-level collector must receive the DTD diagnostic")
+
+		var dtdErr *helium.DTDValidationError
+		require.ErrorAs(t, errs[0], &dtdErr)
+		require.Equal(t, helium.ErrorLevelError, dtdErr.ErrorLevel())
+		require.Equal(t, "element doc: attribute id is required", dtdErr.Message)
+	})
+
+	t.Run("filtered out of warning-level collector", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+		ec := helium.NewErrorCollector(ctx, helium.ErrorLevelWarning)
+		_, err := helium.NewParser().
+			ValidateDTD(true).
+			ErrorHandler(ec).
+			Parse(ctx, []byte(src))
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+
+		require.Empty(t, ec.Errors(), "a genuine error must not be collected as a warning")
+	})
+}
+
 // TestValidateRootMismatch exercises the root-name-vs-DTD-name check.
 func TestValidateRootMismatch(t *testing.T) {
 	t.Parallel()
