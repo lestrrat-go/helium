@@ -295,8 +295,7 @@ func (d *Document) DocumentElement() *Element {
 
 func (d *Document) SetDocumentElement(root MutableNode) error {
 	if d == nil {
-		// what are you trying to do?
-		return nil
+		return ErrNilNode
 	}
 
 	// Reject a nil or typed-nil operand BEFORE any root.Type() dereference so the
@@ -305,8 +304,11 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 		return ErrNilNode
 	}
 
-	if root.Type() == NamespaceDeclNode {
-		return nil
+	// The document element must be an element. Accepting any node kind here let a
+	// Text/Comment/DTD/NamespaceDecl node become the root, producing a document
+	// that is not well formed.
+	if root.Type() != ElementNode {
+		return fmt.Errorf("%w: document element must be an element node, got %s", ErrInvalidOperation, root.Type())
 	}
 
 	// Do NOT link root to d here. Let AddChild/Replace perform the linking AFTER
@@ -439,7 +441,7 @@ func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *At
 	t := d.CreateText([]byte(value))
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
-	t.SetParent(attr)
+	t.parent = attr
 	return attr
 }
 

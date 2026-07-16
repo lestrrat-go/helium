@@ -61,6 +61,30 @@ func TestSetDocumentElement(t *testing.T) {
 		requireNoCycle(t, doc)
 	})
 
+	t.Run("non-element node is rejected and leaves doc untouched", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			node helium.MutableNode
+		}{
+			{"text node", helium.NewDefaultDocument().CreateText([]byte("x"))},
+			{"comment node", helium.NewDefaultDocument().CreateComment([]byte("c"))},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				doc := helium.NewDefaultDocument()
+				err := doc.SetDocumentElement(tc.node)
+				require.ErrorIs(t, err, helium.ErrInvalidOperation)
+				require.Nil(t, doc.FirstChild(), "rejected non-element must not be linked as a child")
+				require.Nil(t, doc.DocumentElement(), "doc has no document element")
+			})
+		}
+	})
+
+	t.Run("nil receiver returns ErrNilNode", func(t *testing.T) {
+		var doc *helium.Document
+		err := doc.SetDocumentElement(helium.NewDefaultDocument().CreateElement("root"))
+		require.ErrorIs(t, err, helium.ErrNilNode)
+	})
+
 	t.Run("replace document element with existing descendant", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		root := doc.CreateElement("root")
@@ -75,6 +99,23 @@ func TestSetDocumentElement(t *testing.T) {
 		requireNoCycle(t, doc)
 		requireNoCycle(t, child)
 	})
+}
+
+// TestRawLinkageBehindUnsafeSurface documents that raw single-pointer linkage
+// is only reachable through the explicitly-unsafe UnsafeSet* functions, while
+// the ordinary guarded path (AddChild) rejects the same cycle.
+func TestRawLinkageBehindUnsafeSurface(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	a := doc.CreateElement("a")
+	b := doc.CreateElement("b")
+	require.NoError(t, a.AddChild(b))
+
+	// The guarded path refuses to form a parent cycle.
+	require.Error(t, b.AddChild(a), "AddChild must reject a cycle")
+
+	// The unsafe primitive still builds one when a caller explicitly opts in.
+	helium.UnsafeSetParent(a, b)
+	require.Equal(t, helium.Node(b), a.Parent())
 }
 
 func TestUnlinkNode(t *testing.T) {

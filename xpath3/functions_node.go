@@ -753,9 +753,10 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	for cur := first; cur != nil; {
 		next := cur.NextSibling()
-		mn := cur.(helium.MutableNode) //nolint:forcetypeassert
-		mn.SetPrevSibling(nil)
-		mn.SetNextSibling(nil)
+		// Detach cur from the parsed fragment's sibling chain before re-parenting
+		// it under doc. UnlinkNode repairs the reciprocal links; next is already
+		// captured, so the walk is unaffected.
+		helium.UnlinkNode(cur.(helium.MutableNode)) //nolint:forcetypeassert
 		if err := doc.AddChild(cur); err != nil {
 			return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 		}

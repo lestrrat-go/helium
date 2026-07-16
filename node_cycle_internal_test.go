@@ -47,7 +47,7 @@ func TestChildReachesTerminatesOnCyclicSiblingList(t *testing.T) {
 		require.NoError(t, parent.AddChild(c))
 
 		// Corrupt the sibling list into a self-cycle: c.next = c.
-		c.SetNextSibling(c)
+		UnsafeSetNextSibling(c, c)
 
 		outside := doc.CreateElement("outside")
 		require.False(t, childReaches(parent, outside.baseDocNode()),
@@ -65,7 +65,7 @@ func TestChildReachesTerminatesOnCyclicSiblingList(t *testing.T) {
 		require.NoError(t, parent.AddChild(c2))
 
 		// Close a 2-cycle: c1 -> c2 -> c1.
-		c2.SetNextSibling(c1)
+		UnsafeSetNextSibling(c2, c1)
 
 		outside := doc.CreateElement("outside")
 		require.False(t, childReaches(parent, outside.baseDocNode()),
@@ -117,7 +117,7 @@ func TestContentTerminatesOnChildPointerCycle(t *testing.T) {
 	// advance and caught only by the active-path guard).
 	setFirstChild(b, a)
 	setLastChild(b, a)
-	a.SetParent(b)
+	UnsafeSetParent(a, b)
 
 	require.Equal(t, []byte("x"), a.Content(),
 		"Content must terminate on the child-pointer back-edge and still aggregate the text sibling")
@@ -137,7 +137,7 @@ func TestWalkRejectsSiblingCycle(t *testing.T) {
 	require.NoError(t, parent.AddChild(b))
 
 	// Close a 2-cycle in the sibling list: a -> b -> a.
-	b.SetNextSibling(a)
+	UnsafeSetNextSibling(b, a)
 
 	err := Walk(parent, NodeWalkerFunc(func(Node) error { return nil }))
 	require.ErrorIs(t, err, ErrWalkCycle,
