@@ -637,7 +637,11 @@ func (p Parser) ErrorHandler(h ErrorHandler) Parser {
 // — typically [xinclude.NewProcessor] configured with a resolver — is run over
 // the parsed document before it is returned, so xi:include elements are already
 // expanded in the result. When DTD validation is also requested ([ValidateDTD]),
-// it validates the expanded tree. Passing nil disables XInclude processing.
+// it validates the expanded tree. Passing a nil interface value disables
+// XInclude processing. (A caller-constructed typed-nil — a nil pointer of the
+// caller's own [XIncludeProcessor] implementation — is the standard Go typed-nil
+// footgun and is unsupported; xinclude.Processor is a value type and cannot be
+// typed-nil.)
 //
 // XInclude is off by default. Because the parser (and the processor's own
 // default) resolves no filesystem, grant access explicitly on the processor,
@@ -664,8 +668,18 @@ func (p Parser) finalize(ctx context.Context, doc *Document) (*Document, error) 
 	if doc == nil {
 		return doc, nil
 	}
+	// The disable signal is a nil interface value (see [Parser.XInclude] and the
+	// nil case in TestParserXIncludeInjection). A caller-supplied typed-nil — a
+	// nil pointer of the caller's own implementation — is caller-constructed
+	// nil-ness this package does not guard against; normalizing it away would be a
+	// reflective guard against caller API misuse.
 	if p.cfg.xincludeProc != nil {
 		if _, err := p.cfg.xincludeProc.Process(ctx, doc); err != nil {
+			// A cancelled/timed-out post-parse step follows Parse's contract:
+			// return the context error with a nil document, never a partial tree.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
 			return doc, err
 		}
 	}

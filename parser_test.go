@@ -4447,6 +4447,15 @@ func TestParserXIncludeInjection(t *testing.T) {
 		require.Contains(t, err.Error(), "xinclude boom")
 	})
 
+	t.Run("processor cancellation returns a nil document", func(t *testing.T) {
+		// A cancelled/timed-out post-parse step must follow Parse's contract:
+		// the context error with a nil document, never a partial tree.
+		rec := &recordingXInclude{err: context.Canceled}
+		doc, err := helium.NewParser().XInclude(rec).Parse(context.Background(), []byte(src))
+		require.ErrorIs(t, err, context.Canceled)
+		require.Nil(t, doc, "a cancelled post-parse step must not return a partial document")
+	})
+
 	t.Run("runs on the ParseReader path too", func(t *testing.T) {
 		rec := &recordingXInclude{n: 1}
 		doc, err := helium.NewParser().XInclude(rec).ParseReader(context.Background(), strings.NewReader(src))
