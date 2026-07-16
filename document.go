@@ -703,31 +703,37 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 var errElementDeclNotFound = errors.New("element declaration not found")
 
 // IsMixedElement reports whether the element named name is declared with mixed
-// (or EMPTY/ANY) content in the document's internal subset. It returns an error
-// if no element declaration is found for name.
+// (or EMPTY/ANY) content. It searches the internal subset first, then the
+// external subset (mirroring libxml2's areBlanks, which consults both
+// doc->intSubset and doc->extSubset), and returns an error only when neither
+// subset declares name.
 func (d *Document) IsMixedElement(name string) (bool, error) {
-	if d.intSubset == nil {
-		return false, errElementDeclNotFound
-	}
+	for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
+		if dtd == nil {
+			continue
+		}
 
-	edecl, ok := d.intSubset.GetElementDesc(name)
-	if !ok {
-		return false, errElementDeclNotFound
-	}
+		edecl, ok := dtd.GetElementDesc(name)
+		if !ok {
+			continue
+		}
 
-	switch edecl.decltype {
-	case enum.UndefinedElementType:
-		return false, errElementDeclNotFound
-	case enum.ElementElementType:
-		return false, nil
-	case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
-		/*
-		 * return 1 for EMPTY since we want VC error to pop up
-		 * on <empty>     </empty> for example
-		 */
+		switch edecl.decltype {
+		case enum.UndefinedElementType:
+			continue
+		case enum.ElementElementType:
+			return false, nil
+		case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
+			/*
+			 * return 1 for EMPTY since we want VC error to pop up
+			 * on <empty>     </empty> for example
+			 */
+			return true, nil
+		}
 		return true, nil
 	}
-	return true, nil
+
+	return false, errElementDeclNotFound
 }
 
 /*

@@ -465,6 +465,68 @@ func TestStripBlanksEntityEquivalence(t *testing.T) {
 	}
 }
 
+// TestStripBlanksExternalSubsetContentModel verifies that IsMixedElement
+// consults the EXTERNAL subset, not only the internal one. An element declared
+// ANY has a mixed-like content model, so whitespace inside it is significant and
+// must survive StripBlanks(true). libxml2's areBlanks checks both doc->intSubset
+// and doc->extSubset; declaring the model in the external DTD must behave exactly
+// like declaring it in the internal subset.
+func TestStripBlanksExternalSubsetContentModel(t *testing.T) {
+	const extDTD = `<!ELEMENT r ANY>
+<!ELEMENT c EMPTY>`
+
+	testcases := []struct {
+		name  string
+		build func() helium.Parser
+	}{
+		{
+			name: "internal subset ANY",
+			build: func() helium.Parser {
+				return helium.NewParser().StripBlanks(true)
+			},
+		},
+		{
+			name: "external subset ANY",
+			build: func() helium.Parser {
+				fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(extDTD)}}
+				return helium.NewParser().
+					StripBlanks(true).
+					BlockXXE(false).
+					LoadExternalDTD(true).
+					FS(fsys)
+			},
+		},
+	}
+
+	// The trailing space after <c/> abuts ANY (mixed-like) content, so it is
+	// significant and must be preserved as a text node under StripBlanks(true).
+	const internalInput = `<!DOCTYPE r [<!ELEMENT r ANY><!ELEMENT c EMPTY>]><r><c/> </r>`
+	const externalInput = `<!DOCTYPE r SYSTEM "d.dtd"><r><c/> </r>`
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := externalInput
+			if tc.name == "internal subset ANY" {
+				input = internalInput
+			}
+
+			doc, err := tc.build().Parse(t.Context(), []byte(input))
+			require.NoError(t, err, "Parse should succeed")
+
+			root := findDocumentElement(doc)
+			require.NotNil(t, root, "document element must exist")
+
+			var got []byte
+			for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+				if child.Type() == helium.TextNode {
+					got = append(got, child.Content()...)
+				}
+			}
+			require.Equal(t, " ", string(got), "trailing whitespace inside an ANY-content element must be preserved")
+		})
+	}
+}
+
 func TestMergeCDATA(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <root><![CDATA[hello]]></root>`
