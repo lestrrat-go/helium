@@ -749,6 +749,25 @@ func TestFormatOutput(t *testing.T) {
 		second := format([]byte(first))
 		require.Equal(t, first, second)
 	})
+
+	t.Run("mixed content suppresses formatting subtree-wide", func(t *testing.T) {
+		t.Parallel()
+
+		// A pure-element descendant (<b> holding only <i/>) nested inside a
+		// mixed-content element (<p>) must NOT be formatted: libxml2 disables
+		// formatting for the whole subtree of a mixed element until it closes, so
+		// no whitespace may be injected anywhere inside <p>.
+		const input = `<p>left<b><i/></b>right</p>`
+
+		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		expected := "<p>left<b><i/></b>right</p>\n"
+		require.Equal(t, expected, buf.String())
+	})
 }
 
 func TestXHTML(t *testing.T) {
