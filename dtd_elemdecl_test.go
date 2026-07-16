@@ -1,11 +1,117 @@
 package helium
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
+
+// TestAddElementDeclRejectsMalformedModel verifies that AddElementDecl rejects a
+// structurally-incomplete content model (a sequence/choice node with nil
+// children, as CreateElementContent alone produces) instead of storing it and
+// letting serialization nil-dereference.
+func TestAddElementDeclRejectsMalformedModel(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+
+	for _, etype := range []ElementContentType{ElementContentSeq, ElementContentOr} {
+		content, err := doc.CreateElementContent("", etype)
+		require.NoError(t, err)
+		_, err = dtd.AddElementDecl("root", enum.ElementElementType, content)
+		require.Error(t, err, "a seq/choice node with nil children must be rejected")
+
+		// A rejected model must not have been stored, so serialization must not panic.
+		var buf bytes.Buffer
+		require.NotPanics(t, func() {
+			_ = Write(&buf, doc)
+		})
+		require.NotContains(t, buf.String(), "<!ELEMENT root")
+	}
+}
+
+// TestCreateElementContentSeqChoice verifies the safe composite constructors
+// build a valid, serializable content model.
+func TestCreateElementContentSeqChoice(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+
+	a, err := doc.CreateElementContent("a", ElementContentElement)
+	require.NoError(t, err)
+	b, err := doc.CreateElementContent("b", ElementContentElement)
+	require.NoError(t, err)
+	c, err := doc.CreateElementContent("c", ElementContentElement)
+	require.NoError(t, err)
+
+	// (b | c)
+	choice, err := doc.CreateElementContentChoice(b, c, ElementContentOnce)
+	require.NoError(t, err)
+	// (a , (b | c)+)
+	_, err = choice.SetOccurrence(ElementContentPlus)
+	require.NoError(t, err)
+	seq, err := doc.CreateElementContentSeq(a, choice, ElementContentOnce)
+	require.NoError(t, err)
+
+	_, err = dtd.AddElementDecl("root", enum.ElementElementType, seq)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, Write(&buf, doc))
+	require.Contains(t, buf.String(), "<!ELEMENT root (a , (b | c)+)>")
+}
+
+// TestCreateElementContentSeqRejectsNilChild verifies the composite constructors
+// reject a nil or incomplete child.
+func TestCreateElementContentSeqRejectsNilChild(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	a, err := doc.CreateElementContent("a", ElementContentElement)
+	require.NoError(t, err)
+
+	_, err = doc.CreateElementContentSeq(a, nil, ElementContentOnce)
+	require.Error(t, err)
+
+	_, err = doc.CreateElementContentChoice(nil, a, ElementContentOnce)
+	require.Error(t, err)
+
+	// An incomplete child (bare seq leaf with nil children) is also rejected.
+	bad, err := doc.CreateElementContent("", ElementContentSeq)
+	require.NoError(t, err)
+	_, err = doc.CreateElementContentSeq(a, bad, ElementContentOnce)
+	require.Error(t, err)
+}
+
+// TestRemoveElementUnlinks verifies RemoveElement drops the declaration from the
+// serialized DTD (not just the lookup table) and returns it.
+func TestRemoveElementUnlinks(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+
+	_, err = dtd.AddElementDecl("root", enum.EmptyElementType, nil)
+	require.NoError(t, err)
+	// A second decl keeps the elements table non-empty so the [...] block is
+	// emitted; otherwise dumpDTD short-circuits and hides the leak.
+	_, err = dtd.AddElementDecl("keep", enum.EmptyElementType, nil)
+	require.NoError(t, err)
+
+	removed := dtd.RemoveElement("root", "")
+	require.NotNil(t, removed, "RemoveElement must return the removed declaration")
+	require.Equal(t, "root", removed.name)
+
+	_, ok := dtd.LookupElement("root", "")
+	require.False(t, ok, "removed decl must be unmapped")
+
+	var buf bytes.Buffer
+	require.NoError(t, Write(&buf, doc))
+	require.NotContains(t, buf.String(), "<!ELEMENT root", "removed decl must not be serialized")
+	require.Contains(t, buf.String(), "<!ELEMENT keep EMPTY>")
+
+	// Removing an absent key returns nil.
+	require.Nil(t, dtd.RemoveElement("nope", ""))
+}
 
 // TestGetElementDescKey verifies that an element declaration registered via
 // AddElementDecl can be retrieved through GetElementDesc using the same QName.

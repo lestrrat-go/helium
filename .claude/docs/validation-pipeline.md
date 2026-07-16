@@ -838,6 +838,13 @@ reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
 `ErrorHandler` via `validCtx.addf`; a failed validation returns
 `ErrDTDValidationFailed`.
 
+The content-model matcher (`matchContentModel`) and the DTD serializer assume every
+sequence/choice `ElementContent` node has both children present. `AddElementDecl`
+enforces this precondition when a declaration is registered — it rejects a
+structurally-incomplete model (`validateElementContentModel`, `valid.go`) before
+storing it — so both the matcher and serialization are nil-deref-safe regardless of
+how the model was built (parser or public builder API).
+
 **QName keying (element + attribute).** DTD validation matches names by their
 qualified form exactly as written — DTD validity is prefix-literal, not
 namespace-aware. The DOCTYPE name is the root element's QName, so the root-name
