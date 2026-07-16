@@ -11,6 +11,7 @@ import (
 
 	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"golang.org/x/text/unicode/norm"
 )
@@ -77,6 +78,16 @@ type Writer struct {
 	// declaration (the encoding serialization parameter). Empty keeps the
 	// document's own encoding, leaving default output byte-identical.
 	outputEncoding string
+	// declOnlyEncoding requests declaration-only encoding: the effective encoding
+	// labels the XML declaration (and the XHTML <meta charset>) but the
+	// transcoding encoder is NOT installed — octets stay UTF-8 with the existing
+	// escapeNonASCII char-reference behavior. It is an internal mode (no public
+	// setter) used by xpath3 fn:serialize, whose string result treats the encoding
+	// parameter as declaration-only per W3C Serialization (a non-representable
+	// character becomes a character reference, no octet transcoding). When false
+	// (the default, including every WriteTo-to-io.Writer caller) an OutputEncoding
+	// override installs a real transcoding encoder.
+	declOnlyEncoding bool
 	// normalize / normForm request Unicode normalization of text-node and
 	// attribute-value character content (the normalization-form serialization
 	// parameter, Serialization 3.1 §4 character-expansion phase). Normalization is
@@ -415,6 +426,29 @@ func (w Writer) Normalization(form string) Writer {
 	return w
 }
 
+// declarationOnlyEncoding returns a copy of the writer with declaration-only
+// encoding enabled (see the declOnlyEncoding field). It has no public setter;
+// it is reached only through the internal/writerctl hook, registered below.
+func (w Writer) declarationOnlyEncoding() Writer {
+	w.declOnlyEncoding = true
+	return w
+}
+
+func init() {
+	writerctl.EnableDeclarationOnlyEncoding = writerDeclarationOnlyEncoding
+}
+
+// writerDeclarationOnlyEncoding adapts declarationOnlyEncoding to the untyped
+// internal/writerctl hook (any in, any out) so a sibling package can enable the
+// mode without a public method or an import cycle.
+func writerDeclarationOnlyEncoding(w any) any {
+	ww, ok := w.(Writer)
+	if !ok {
+		return w
+	}
+	return ww.declarationOnlyEncoding()
+}
+
 // effectiveEncoding returns the encoding driving the XML-declaration
 // pseudo-attribute: the OutputEncoding override when set, otherwise the
 // document's own encoding.
@@ -544,24 +578,42 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
 	// When an encoder is present, pass them through for re-encoding.
+	//
+	// The encoder keys off the EFFECTIVE encoding (the OutputEncoding override
+	// when set, else the document's own encoding) — the same value the XML
+	// declaration and the XHTML <meta> use — so the emitted bytes agree with the
+	// declaration. Declaration-only mode (fn:serialize) skips the encoder entirely:
+	// the label is set from the effective encoding but octets stay UTF-8 with
+	// char-reference escaping.
 	s.escapeNonASCII = !d.noEscapeNonASCII
-	if enc := doc.encoding; enc != "" {
-		lower := strings.ToLower(enc)
-		if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
-			if e := henc.Load(enc); e != nil {
-				s.escapeNonASCII = false
-				w := e.NewEncoder().Writer(out)
-				if closer, ok := w.(io.Closer); ok {
-					defer func() { _ = closer.Close() }()
+	if !d.declOnlyEncoding {
+		if enc := d.effectiveEncoding(doc); enc != "" {
+			lower := strings.ToLower(enc)
+			if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
+				e := henc.Load(enc)
+				// An explicitly-set OutputEncoding the writer cannot emit is a hard
+				// error: emitting UTF-8 under that declaration would make the bytes
+				// disagree with it. Without an override the effective encoding is the
+				// document's own (parsed) encoding, which stays declaration-only when
+				// unloadable — keeping default output byte-identical.
+				if e == nil && d.outputEncoding != "" {
+					return fmt.Errorf("cannot serialize with output encoding %q: %w", enc, ErrUnsupportedOutputEncoding)
 				}
-				out = w
+				if e != nil {
+					s.escapeNonASCII = false
+					w := e.NewEncoder().Writer(out)
+					if closer, ok := w.(io.Closer); ok {
+						defer func() { _ = closer.Close() }()
+					}
+					out = w
+				}
 			}
 		}
 	}
 
 	// Detect XHTML. Mirrors xmlSaveDocInternal in xmlsave.c.
 	s.isXHTML = false
-	s.encoding = doc.encoding
+	s.encoding = d.effectiveEncoding(doc)
 	if dtd := doc.intSubset; dtd != nil {
 		s.isXHTML = isXHTMLDTD(dtd)
 	}

@@ -80,8 +80,17 @@ var (
 	// blank-run cap. The cap fires during accumulation, before the whole run is
 	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
-	errParserStopped       = errors.New("parser stopped")
-	errNoCursor            = errors.New("parser has no input")
+	// ErrUnsupportedOutputEncoding is returned by the writer when an explicitly
+	// set OutputEncoding names an encoding the writer cannot emit — the encoding
+	// is neither UTF-8/US-ASCII nor a name the internal encoder table can load.
+	// Emitting UTF-8 octets under that declaration would make the XML declaration
+	// disagree with the bytes, so the writer fails instead. It is scoped to the
+	// OutputEncoding override: a document's own (parsed) encoding that the writer
+	// cannot load is never turned into this error — it stays declaration-only,
+	// keeping default output byte-identical. Match with errors.Is.
+	ErrUnsupportedOutputEncoding = errors.New("unsupported output encoding")
+	errParserStopped             = errors.New("parser stopped")
+	errNoCursor                  = errors.New("parser has no input")
 )
 
 // isParseAbort reports whether err signals that parsing must stop immediately
