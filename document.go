@@ -77,6 +77,14 @@ type Document struct {
 	// Slab allocator for parsed text content bytes.
 	textContentSlab   []byte
 	textContentChunks []*[textContentSlabSize]byte
+
+	// slabEscaped records that at least one slab-backed node owned by this
+	// document was linked into another document (an XInclude/XSLT-style
+	// cross-document move). Once set, Free must NOT return this document's chunks
+	// to the pool: a moved node still points into one of them, and recycling it
+	// would let a later parse overwrite the live node. Set by the tree-insertion
+	// paths (node.go noteCrossDocumentEscape).
+	slabEscaped bool
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
@@ -117,7 +125,16 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 // Free returns pooled slab chunks for reuse by future parse calls.
 // This is optional — if not called, GC handles cleanup normally.
 // Calling Free on a document that is still in use causes undefined behavior.
+//
+// If any of this document's slab-backed nodes was moved into another document
+// (via AddChild/AddSibling/Replace), Free does NOT recycle its chunks: a moved
+// node still references one of them, so returning it to the pool would let a
+// later parse overwrite the live node. In that case Free is a no-op and GC
+// reclaims the chunks once they are no longer referenced.
 func (d *Document) Free() {
+	if d.slabEscaped {
+		return
+	}
 	for _, c := range d.elemChunks {
 		elemChunkPool.Put(c)
 	}
