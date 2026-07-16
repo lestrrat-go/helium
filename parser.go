@@ -335,22 +335,6 @@ func (p Parser) MergeCDATA(v bool) Parser {
 	return p
 }
 
-// XIncludeNodes controls whether XINCLUDE START/END marker nodes are
-// generated in the DOM tree during XInclude processing.
-// libxml2: XML_PARSE_NOXINCNODE (note: semantics are inverted — libxml2
-// sets this flag to *suppress* marker nodes, whereas XIncludeNodes(false)
-// suppresses them)
-// Default: true (marker nodes are generated)
-func (p Parser) XIncludeNodes(v bool) Parser {
-	p = p.clone()
-	if !v {
-		p.cfg.options.Set(parseNoXIncNode)
-		return p
-	}
-	p.cfg.options.Clear(parseNoXIncNode)
-	return p
-}
-
 // CompactTextNodes controls whether the parser compacts small text nodes
 // to reduce memory usage.
 // libxml2: XML_PARSE_COMPACT

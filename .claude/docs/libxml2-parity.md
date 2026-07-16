@@ -126,7 +126,6 @@ libxml2.
 | AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network. **Default false** (NONET set by NewParser). helium has no dedicated network loader; every external load (DTD subset, general/parameter entity) goes through the configured `fs.FS`. When false, the three `fs.FS.Open` sites in `tree_builder.go` (`ExternalSubset`, `ResolveEntity`) refuse a name whose URI scheme is `http`/`https`/`ftp` (case-insensitive) with `ErrNetworkAccessForbidden` before reaching the FS — defense-in-depth for a caller-supplied network-capable FS. A schemeless name, a `file:` scheme, or a bare path is not a network resource and loads as usual |
 | CleanNamespaces(bool) | XML_PARSE_NSCLEAN | ✅ | Remove redundant NS decls |
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
-| XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
 | FixBaseURIs(bool) | XML_PARSE_NOBASEFIX | ✅ | Inverted: false → skip fixup |
 | MaxNameLength(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max name length (0=default 50000, <0=unlimited) |
 | MaxEntityAmplification(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max entity-amplification ratio (0=default 5, <0=ratio check off; 1 GiB hard ceiling always applies) |
