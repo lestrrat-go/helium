@@ -18,6 +18,23 @@ type ErrorLeveler interface {
 // ErrorHandler receives errors reported during parsing, compilation,
 // or validation. Implementations may log, accumulate, or discard errors.
 //
+// Which errors reach a handler depends on the component it is set on: the root
+// [Parser] consults it only for DTD validation; the xinclude Processor delivers
+// non-fatal XInclude warnings during Process/ProcessTree; the xsd, relaxng, and
+// schematron compilers and validators deliver their compilation and validation
+// diagnostics; and the catalog Loader delivers its catalog-loading diagnostics.
+// xslt3 has no ErrorHandler of its own — it drives the xsd compiler's handler
+// internally. In every case the handler is retained by reference and shared
+// across each operation run on the configured value, which is an immutable-value
+// builder; setting a nil handler is allowed and is treated as [NilErrorHandler]
+// (discard) at use time — never a panic.
+//
+// Close ownership differs by component: the [Parser] (after each DTD-validating
+// parse) and the xsd, relaxng, and schematron compilers and validators (after
+// each Compile/Validate) close a handler that implements io.Closer, so such a
+// handler must not be shared across those operations; the catalog Loader and the
+// xinclude Processor never close the handler — the caller owns its lifecycle.
+//
 // Handle is called synchronously at the point of error detection unless
 // the implementation itself introduces asynchrony (e.g. Sink[error]).
 //
