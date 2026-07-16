@@ -1482,3 +1482,77 @@ func TestWriteReconcilesSubtreeNamespaces(t *testing.T) {
 		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
 	})
 }
+
+// TestWriterMapSettersCloneInput verifies the value-style contract for every
+// map-taking Writer setter: the setter copies its input, so mutating the
+// caller's map AFTER the setter call does not change the configured Writer.
+// Without cloning the setters would retain the caller's map by reference, so a
+// post-set mutation (or a concurrent write) would silently change serialization.
+func TestWriterMapSettersCloneInput(t *testing.T) {
+	t.Parallel()
+
+	serialize := func(t *testing.T, w helium.Writer, n helium.Node) string {
+		t.Helper()
+		var buf bytes.Buffer
+		require.NoError(t, w.WriteTo(&buf, n))
+		return buf.String()
+	}
+
+	parse := func(t *testing.T, src string) *helium.Document {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		return doc
+	}
+
+	t.Run("CharacterMap", func(t *testing.T) {
+		t.Parallel()
+		doc := parse(t, `<a>o</a>`)
+		m := map[rune]string{}
+		w := helium.NewWriter().CharacterMap(m)
+		m['o'] = "0" // mutate after set — must not reach the Writer
+		out := serialize(t, w, doc)
+		require.Contains(t, out, ">o</a>", "unmutated char preserved: %q", out)
+		require.NotContains(t, out, ">0</a>", "post-set mutation must not apply: %q", out)
+	})
+
+	t.Run("CDATASectionElements", func(t *testing.T) {
+		t.Parallel()
+		doc := parse(t, `<a>hi</a>`)
+		m := map[string]struct{}{}
+		w := helium.NewWriter().CDATASectionElements(m)
+		m["{}a"] = struct{}{} // mutate after set
+		out := serialize(t, w, doc)
+		require.NotContains(t, out, "CDATA", "post-set mutation must not apply: %q", out)
+	})
+
+	t.Run("SuppressIndentElements", func(t *testing.T) {
+		t.Parallel()
+		doc := parse(t, `<a><b>x</b></a>`)
+		m := map[string]struct{}{}
+		w := helium.NewWriter().XMLDeclaration(false).Format(true).SuppressIndentElements(m)
+		m["{}a"] = struct{}{} // mutate after set
+		out := serialize(t, w, doc)
+		// With no suppression the formatter indents <b> onto its own line.
+		require.Contains(t, out, "\n", "output stays formatted: %q", out)
+		require.NotContains(t, out, "<a><b>", "post-set suppression must not apply: %q", out)
+	})
+
+	t.Run("InheritedNamespaces", func(t *testing.T) {
+		t.Parallel()
+		firstElem := func(n helium.Node) helium.Node {
+			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+				if c.Type() == helium.ElementNode {
+					return c
+				}
+			}
+			return n
+		}
+		doc := parse(t, `<root xmlns:p="urn:p"><p:child>text</p:child></root>`)
+		m := map[string]string{}
+		w := helium.NewWriter().XMLDeclaration(false).InheritedNamespaces(m)
+		m["p"] = "urn:p" // mutate after set — must not suppress the redeclaration
+		out := serialize(t, w, firstElem(doc.DocumentElement()))
+		require.Contains(t, out, `xmlns:p="urn:p"`, "post-set inherited ns must not apply: %q", out)
+	})
+}
