@@ -169,14 +169,14 @@ func TestIsMixedElementDeclTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, mixed)
 
-	// Undeclared element => error.
+	// Undeclared element => ErrElementDeclNotFound.
 	_, err = doc.IsMixedElement("nope")
-	require.Error(t, err)
+	require.ErrorIs(t, err, helium.ErrElementDeclNotFound)
 
-	// Document without an internal subset => error.
+	// Document without an internal subset => ErrElementDeclNotFound.
 	bare := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	_, err = bare.IsMixedElement("x")
-	require.Error(t, err)
+	require.ErrorIs(t, err, helium.ErrElementDeclNotFound)
 }
 
 // TestInternalSubsetErrors covers InternalSubset and CreateInternalSubset error

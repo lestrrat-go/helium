@@ -740,24 +740,31 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 	return nil, false
 }
 
-var errElementDeclNotFound = errors.New("element declaration not found")
-
 // IsMixedElement reports whether the element named name is declared with mixed
-// (or EMPTY/ANY) content in the document's internal subset. It returns an error
-// if no element declaration is found for name.
+// (or EMPTY/ANY) content in the document's internal subset. It returns
+// ErrElementDeclNotFound (match with errors.Is) if no element declaration is
+// found for name.
+//
+// This is a faithful port of libxml2's xmlIsMixedElement and deliberately keeps
+// its name and semantics: EMPTY and ANY are collapsed with MIXED into a single
+// "mixed" true so validity-constraint callers get an error on, e.g.,
+// "<empty>     </empty>". Only an element-only content model returns false.
+// It is therefore NOT a pure "is this a #PCDATA mixed model" predicate; callers
+// needing the raw content-model type should inspect the element declaration
+// directly (see elementDeclType, which whitespace classification uses instead).
 func (d *Document) IsMixedElement(name string) (bool, error) {
 	if d.intSubset == nil {
-		return false, errElementDeclNotFound
+		return false, ErrElementDeclNotFound
 	}
 
 	edecl, ok := d.intSubset.GetElementDesc(name)
 	if !ok {
-		return false, errElementDeclNotFound
+		return false, ErrElementDeclNotFound
 	}
 
 	switch edecl.decltype {
 	case enum.UndefinedElementType:
-		return false, errElementDeclNotFound
+		return false, ErrElementDeclNotFound
 	case enum.ElementElementType:
 		return false, nil
 	case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
