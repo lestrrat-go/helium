@@ -52,12 +52,16 @@ type MutableNode interface {
 	AppendText([]byte) error
 	Replace(...Node) error
 	SetLine(int)
-	SetNextSibling(Node)
 	SetOwnerDocument(doc *Document)
-	SetParent(Node)
-	SetPrevSibling(Node)
 	SetTreeDoc(doc *Document)
 }
+
+// Raw single-pointer linkage (parent/prev/next) is deliberately NOT part of
+// MutableNode. Those pointers are maintained by the guarded AddChild /
+// AddSibling / Replace / UnlinkNode operations, which keep the reciprocal
+// back-pointers consistent and reject cycles. The unchecked primitives that set
+// exactly one pointer live behind the explicitly-unsafe UnsafeSet* package
+// functions below, so ordinary tree mutation cannot reach them by accident.
 
 // docnode is responsible for handling the basic tree-ish operations
 type docnode struct {
@@ -156,7 +160,7 @@ type Namespacer interface {
 // be bad:
 //
 // func (n *docnode) MakeMeYourParent(cur Node) {
-//   cur.SetParent(n)
+//   cur.baseDocNode().parent = n
 // }
 //
 // Wait, you just passed a pointer to the docnode, not the container node
@@ -719,16 +723,26 @@ func addSibling(n MutableNode, cur Node) error {
 	return errors.New("cannot add sibling to nil node")
 }
 
-func (n *docnode) SetPrevSibling(cur Node) {
-	n.prev = cur
+// UnsafeSetParent sets ONLY n's parent pointer. It performs none of the cycle
+// detection, auto-unlinking, or reciprocal back-pointer maintenance that
+// AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the tree
+// inconsistent or cyclic. It exists for low-level tree construction and for
+// tests that must build a deliberately corrupt tree to exercise the traversal
+// cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
+func UnsafeSetParent(n Node, parent Node) {
+	n.baseDocNode().parent = parent
 }
 
-func (n *docnode) SetNextSibling(cur Node) {
-	n.next = cur
+// UnsafeSetPrevSibling sets ONLY n's previous-sibling pointer, with the same
+// no-safeguards contract as UnsafeSetParent.
+func UnsafeSetPrevSibling(n Node, prev Node) {
+	n.baseDocNode().prev = prev
 }
 
-func (n *docnode) SetParent(cur Node) {
-	n.parent = cur
+// UnsafeSetNextSibling sets ONLY n's next-sibling pointer, with the same
+// no-safeguards contract as UnsafeSetParent.
+func UnsafeSetNextSibling(n Node, next Node) {
+	n.baseDocNode().next = next
 }
 
 // UnlinkNode detaches a node from its parent and sibling chain.

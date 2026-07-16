@@ -105,7 +105,7 @@ func TestMixedFixedCorruptSiblingCycleFailsClosed(t *testing.T) {
 	// ownedNext keeps returning text — an unbounded loop without the guard.
 	text := doc.CreateText([]byte("a"))
 	require.NoError(t, ent.AddChild(text))
-	text.SetNextSibling(text)
+	helium.UnsafeSetNextSibling(text, text)
 
 	root := doc.CreateElement("root")
 	require.NoError(t, doc.SetDocumentElement(root))

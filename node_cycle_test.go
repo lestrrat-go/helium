@@ -170,7 +170,7 @@ func TestContentTerminatesOnCyclicSiblingList(t *testing.T) {
 	require.NoError(t, root.AddChild(txt))
 
 	// Corrupt the sibling list into a self-cycle.
-	txt.SetNextSibling(txt)
+	helium.UnsafeSetNextSibling(txt, txt)
 
 	require.Equal(t, []byte("a"), root.Content(),
 		"Content must terminate on a cyclic sibling list instead of looping forever")
@@ -190,7 +190,7 @@ func TestWalkRejectsSelfSiblingLoop(t *testing.T) {
 	require.NoError(t, parent.AddChild(c))
 
 	// Corrupt the sibling list into a one-node self-loop: c.next = c.
-	c.SetNextSibling(c)
+	helium.UnsafeSetNextSibling(c, c)
 
 	err := helium.Walk(parent, helium.NodeWalkerFunc(func(helium.Node) error { return nil }))
 	require.ErrorIs(t, err, helium.ErrWalkCycle,

@@ -80,7 +80,7 @@ func (n *Element) SetLiteralAttribute(name, value string) error {
 	t.doc = n.doc
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
-	t.SetParent(attr)
+	t.parent = attr
 	n.addProperty(attr)
 	return nil
 }
@@ -122,7 +122,7 @@ func (n *Element) addProperty(attr *Attribute) {
 	p := n.properties
 	if p == nil {
 		n.properties = attr
-		attr.SetParent(n)
+		attr.parent = n
 		return
 	}
 
@@ -177,7 +177,7 @@ func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) 
 	t.doc = n.doc
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
-	t.SetParent(attr)
+	t.parent = attr
 	n.addProperty(attr)
 	return nil
 }
@@ -192,7 +192,7 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Eleme
 	p := n.properties
 	if p == nil {
 		n.properties = attr
-		attr.SetParent(n)
+		attr.parent = n
 		return n, nil
 	}
 
@@ -212,9 +212,9 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Eleme
 		last = p
 	}
 
-	last.SetNextSibling(attr)
-	attr.SetPrevSibling(last)
-	attr.SetParent(n)
+	last.next = attr
+	attr.prev = last
+	attr.parent = n
 
 	return n, nil
 }
