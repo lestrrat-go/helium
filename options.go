@@ -36,7 +36,6 @@ const (
 	parsePedantic       = parser.Pedantic
 	parseNoBlanks       = parser.NoBlanks
 	parseNoNet          = parser.NoNet
-	parseNoDict         = parser.NoDict
 	parseNsClean        = parser.NsClean
 	parseNoCDATA        = parser.NoCDATA
 	parseCompact        = parser.Compact

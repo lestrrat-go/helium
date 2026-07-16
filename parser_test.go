@@ -3820,7 +3820,6 @@ func TestParserOptionSetters(t *testing.T) {
 		MaxContentModelDepth(-1).MaxContentModelDepth(0).
 		IgnoreEncoding(true).IgnoreEncoding(false).
 		BlockXXE(true).BlockXXE(false).
-		ReuseDict(true).ReuseDict(false).
 		SkipIDs(true).SkipIDs(false).
 		LenientXMLDecl(true).LenientXMLDecl(false).
 		CharBufferSize(8192).

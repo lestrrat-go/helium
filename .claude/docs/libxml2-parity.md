@@ -134,7 +134,6 @@ libxml2.
 | IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
 | BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks. **Default true** (NOXXE set by NewParser; libxml2 defaults off) |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
-| ReuseDict(bool) | XML_PARSE_NODICT | no-op | Accepted for libxml2 parity but currently has no effect: `ReuseDict(false)` sets the `XML_PARSE_NODICT` bit, but nothing reads it. Name interning always uses the global well-known table plus a per-parse `nameCache` (see `intern.go`) regardless of this flag, so it never disables interning or selects a fresh dictionary |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
 | MaxExternalDTDBytes(int) | *(helium extension)* | ✅ | Byte cap for external DTD subset reads; ≤0 → `MaxExternalDTDSize` (10 MiB). Enforced against actual bytes read; over-cap → `ErrExternalDTDTooLarge` |
 | CompactTextNodes(bool) | XML_PARSE_COMPACT | no-op | Go memory model |
