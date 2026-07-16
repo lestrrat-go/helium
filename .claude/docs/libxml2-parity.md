@@ -122,7 +122,7 @@ libxml2.
 | SuppressWarnings(bool) | XML_PARSE_NOWARNING | ✅ | Suppress warnings |
 | PedanticErrors(bool) | XML_PARSE_PEDANTIC | ✅ | Pedantic error reporting |
 | StripBlanks(bool) | XML_PARSE_NOBLANKS | ✅ | Remove blank nodes |
-| ProcessXInclude(bool) | XML_PARSE_XINCLUDE | ✅ | XInclude processing |
+| XInclude(XIncludeProcessor) | XML_PARSE_XINCLUDE | ✅ | XInclude substitution; inject a configured `xinclude.Processor`, run over the tree during Parse (dependency-inversion seam — helium can't import xinclude) |
 | AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network. **Default false** (NONET set by NewParser); cosmetic — core parser has no network loader |
 | CleanNamespaces(bool) | XML_PARSE_NSCLEAN | ✅ | Remove redundant NS decls |
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |

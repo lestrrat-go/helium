@@ -485,6 +485,23 @@ func hasOnlyTextChildren(n Node) bool {
 	return true
 }
 
+// hasTextlikeChild returns true when any DIRECT child of n is a text, CDATA, or
+// entity-reference node. This mirrors libxml2's xmlNodeDumpOutputInternal
+// (xmlsave.c): an element with any such child is mixed content, so it is marked
+// suppressed and formatting is disabled for its ENTIRE subtree (via suppressDepth)
+// until it closes — the children, and their descendants, are serialized inline
+// rather than having indentation whitespace injected. Formatting a mixed element's
+// subtree would alter the text content and not be idempotent.
+func hasTextlikeChild(n Node) bool {
+	for c := range Children(n) {
+		switch c.Type() {
+		case TextNode, CDATASectionNode, EntityRefNode:
+			return true
+		}
+	}
+	return false
+}
+
 // isNilNode reports whether node is nil, covering both a literal nil interface
 // and a typed-nil concrete pointer wrapped in a non-nil Node interface
 // (Go's interface nil trap).
@@ -860,7 +877,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	// section-elements: an element named in the cdata set has its direct text
 	// children emitted as CDATA sections. Both flags are saved/restored around
 	// the children so sibling and ancestor state is unaffected.
-	elemSuppressed := d.suppressDepth > 0 || matchesNameSet(d.suppressIndent, n)
+	elemSuppressed := d.suppressDepth > 0 || matchesNameSet(d.suppressIndent, n) ||
+		(d.format && hasTextlikeChild(n))
 	effFormat := d.format && !elemSuppressed
 	savedCDATA := d.cdataText
 	d.cdataText = matchesNameSet(d.cdataElements, n)

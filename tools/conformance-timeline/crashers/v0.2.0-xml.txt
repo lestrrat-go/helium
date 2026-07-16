@@ -1,0 +1,12 @@
+ibm-not-wf-p28a-ibm28an01.xml	fail	hang on v0.2.0; reference v0.5.1=pass
+weekly-little	fail	hang on v0.2.0; reference v0.5.1=pass
+weekly-utf-16	fail	hang on v0.2.0; reference v0.5.1=pass
+o-p28pass5	fail	hang on v0.2.0; reference v0.5.1=pass
+o-p31fail1	fail	hang on v0.2.0; reference v0.5.1=pass
+o-p62fail2	fail	hang on v0.2.0; reference v0.5.1=pass
+o-p64fail1	fail	hang on v0.2.0; reference v0.5.1=pass
+not-wf-not-sa-001	fail	hang on v0.2.0; reference v0.5.1=pass
+not-wf-not-sa-004	fail	hang on v0.2.0; reference v0.5.1=pass
+not-wf-not-sa-007	fail	hang on v0.2.0; reference v0.5.1=pass
+not-wf-not-sa-009	fail	hang on v0.2.0; reference v0.5.1=pass
+valid-not-sa-024	fail	hang on v0.2.0; reference v0.5.1=pass

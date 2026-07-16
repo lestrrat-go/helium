@@ -1,0 +1,8 @@
+ibm-valid-P09-ibm09v04.xml	fail	oom on v0.0.1; reference v0.5.1=pass
+ibm-valid-P10-ibm10v05.xml	fail	oom on v0.0.1; reference v0.5.1=pass
+ibm-valid-P10-ibm10v06.xml	fail	oom on v0.0.1; reference v0.5.1=pass
+ibm-valid-P10-ibm10v07.xml	fail	oom on v0.0.1; reference v0.5.1=pass
+ibm-valid-P10-ibm10v08.xml	fail	oom on v0.0.1; reference v0.5.1=pass
+pr-xml-little	fail	oom on v0.0.1; reference v0.5.1=pass
+pr-xml-utf-16	fail	oom on v0.0.1; reference v0.5.1=pass
+pr-xml-utf-8	fail	oom on v0.0.1; reference v0.5.1=pass

@@ -43,6 +43,7 @@ testdata/saxon/source/
 !THIRD_PARTY_NOTICES.md
 !AGENTS.md
 !CLAUDE.md
+!CONFORMANCE.md
 # Committed W3C XML conformance evidence for the core parser (the other suites'
 # summaries live in their package dirs; the XML suite tests the root package).
 !summary-xml.md

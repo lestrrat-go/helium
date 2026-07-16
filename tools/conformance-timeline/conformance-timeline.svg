@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720" role="img" aria-label="helium W3C conformance by release">
+<style>
+    .bg{fill:#ffffff}.grid{stroke:#e1e0d9}.axis{stroke:#c3c2b7}
+    .tick{fill:#6b6a66;font:11px system-ui,sans-serif}
+    .leg{fill:#3d3c39;font:12px system-ui,sans-serif}
+    .ttl{fill:#0b0b0b;font:13px system-ui,sans-serif;font-weight:600}
+    .pt{fill:#3d3c39;font:11.5px system-ui,sans-serif;font-weight:600}
+    .sub{fill:#6b6a66;font:10.5px system-ui,sans-serif}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d0d0d}.grid{stroke:#2c2c2a}.axis{stroke:#3a3a37}
+      .tick,.sub{fill:#8f8e88}.ttl{fill:#f2f2f0}.leg,.pt{fill:#d7d6d0}
+    }
+  </style>
+<rect class="bg" x="0" y="0" width="900" height="720"/>
+<text class="ttl" x="62" y="20">Share of each suite's applicable cases passed, by release</text>
+<line x1="62" y1="34" x2="84" y2="34" stroke="#b5359c" stroke-width="3" stroke-linecap="round"/>
+<circle cx="73" cy="34" r="3.4" fill="#b5359c"/>
+<text class="leg" x="91" y="38">XML</text>
+<line x1="139.6" y1="34" x2="161.6" y2="34" stroke="#008300" stroke-width="3" stroke-linecap="round"/>
+<circle cx="150.6" cy="34" r="3.4" fill="#008300"/>
+<text class="leg" x="168.6" y="38">XSD 1.0</text>
+<line x1="246.0" y1="34" x2="268.0" y2="34" stroke="#d98800" stroke-width="3" stroke-linecap="round"/>
+<circle cx="257.0" cy="34" r="3.4" fill="#d98800"/>
+<text class="leg" x="275.0" y="38">XSD 1.1</text>
+<line x1="352.4" y1="34" x2="374.4" y2="34" stroke="#2a78d6" stroke-width="3" stroke-linecap="round"/>
+<circle cx="363.4" cy="34" r="3.4" fill="#2a78d6"/>
+<text class="leg" x="381.4" y="38">XSLT 3.0</text>
+<line x1="466.0" y1="34" x2="488.0" y2="34" stroke="#1baf7a" stroke-width="3" stroke-linecap="round"/>
+<circle cx="477.0" cy="34" r="3.4" fill="#1baf7a"/>
+<text class="leg" x="495.0" y="38">QT3 (XPath/XQuery)</text>
+<text class="pt" x="62" y="52">Full range</text>
+<line class="grid" x1="62" y1="364.0" x2="852" y2="364.0"/>
+<text class="tick" x="54" y="368.0" text-anchor="end">0%</text>
+<line class="grid" x1="62" y1="334.0" x2="852" y2="334.0"/>
+<text class="tick" x="54" y="338.0" text-anchor="end">10%</text>
+<line class="grid" x1="62" y1="304.0" x2="852" y2="304.0"/>
+<text class="tick" x="54" y="308.0" text-anchor="end">20%</text>
+<line class="grid" x1="62" y1="274.0" x2="852" y2="274.0"/>
+<text class="tick" x="54" y="278.0" text-anchor="end">30%</text>
+<line class="grid" x1="62" y1="244.0" x2="852" y2="244.0"/>
+<text class="tick" x="54" y="248.0" text-anchor="end">40%</text>
+<line class="grid" x1="62" y1="214.0" x2="852" y2="214.0"/>
+<text class="tick" x="54" y="218.0" text-anchor="end">50%</text>
+<line class="grid" x1="62" y1="184.0" x2="852" y2="184.0"/>
+<text class="tick" x="54" y="188.0" text-anchor="end">60%</text>
+<line class="grid" x1="62" y1="154.0" x2="852" y2="154.0"/>
+<text class="tick" x="54" y="158.0" text-anchor="end">70%</text>
+<line class="grid" x1="62" y1="124.0" x2="852" y2="124.0"/>
+<text class="tick" x="54" y="128.0" text-anchor="end">80%</text>
+<line class="grid" x1="62" y1="94.0" x2="852" y2="94.0"/>
+<text class="tick" x="54" y="98.0" text-anchor="end">90%</text>
+<line class="grid" x1="62" y1="64.0" x2="852" y2="64.0"/>
+<text class="tick" x="54" y="68.0" text-anchor="end">100%</text>
+<line class="grid" x1="62.0" y1="64" x2="62.0" y2="364"/>
+<text class="tick" x="62.0" y="381" text-anchor="middle">v0.0.1</text>
+<text class="sub" x="62.0" y="394" text-anchor="middle">2026-03-29</text>
+<line class="grid" x1="174.9" y1="64" x2="174.9" y2="364"/>
+<text class="tick" x="174.9" y="381" text-anchor="middle">v0.0.2</text>
+<text class="sub" x="174.9" y="394" text-anchor="middle">2026-06-15</text>
+<line class="grid" x1="287.7" y1="64" x2="287.7" y2="364"/>
+<text class="tick" x="287.7" y="381" text-anchor="middle">v0.1.0</text>
+<text class="sub" x="287.7" y="394" text-anchor="middle">2026-06-17</text>
+<line class="grid" x1="400.6" y1="64" x2="400.6" y2="364"/>
+<text class="tick" x="400.6" y="381" text-anchor="middle">v0.2.0</text>
+<text class="sub" x="400.6" y="394" text-anchor="middle">2026-06-19</text>
+<line class="grid" x1="513.4" y1="64" x2="513.4" y2="364"/>
+<text class="tick" x="513.4" y="381" text-anchor="middle">v0.3.0</text>
+<text class="sub" x="513.4" y="394" text-anchor="middle">2026-06-22</text>
+<line class="grid" x1="626.3" y1="64" x2="626.3" y2="364"/>
+<text class="tick" x="626.3" y="381" text-anchor="middle">v0.4.0</text>
+<text class="sub" x="626.3" y="394" text-anchor="middle">2026-07-08</text>
+<line class="grid" x1="739.1" y1="64" x2="739.1" y2="364"/>
+<text class="tick" x="739.1" y="381" text-anchor="middle">v0.5.0</text>
+<text class="sub" x="739.1" y="394" text-anchor="middle">2026-07-10</text>
+<line class="grid" x1="852.0" y1="64" x2="852.0" y2="364"/>
+<text class="tick" x="852.0" y="381" text-anchor="middle">v0.5.1</text>
+<text class="sub" x="852.0" y="394" text-anchor="middle">2026-07-11</text>
+<line class="axis" x1="62" y1="364" x2="852" y2="364"/>
+<path d="M62.0,120.4 L174.9,113.6 L287.7,108.2 L400.6,104.2 L513.4,100.9 L626.3,97.4 L739.1,65.2 L852.0,65.2" fill="none" stroke="#b5359c" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="120.4" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="174.9" cy="113.6" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="287.7" cy="108.2" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="400.6" cy="104.2" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="513.4" cy="100.9" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="626.3" cy="97.4" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="739.1" cy="65.2" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="852.0" cy="65.2" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<path d="M62.0,279.0 L174.9,279.0 L287.7,278.8 L400.6,282.0 L513.4,282.0 L626.3,64.3 L739.1,64.3 L852.0,64.3" fill="none" stroke="#008300" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="279.0" r="3.4" fill="none" stroke="#008300" stroke-width="2"/>
+<circle cx="174.9" cy="279.0" r="3.4" fill="none" stroke="#008300" stroke-width="2"/>
+<circle cx="287.7" cy="278.8" r="3.4" fill="none" stroke="#008300" stroke-width="2"/>
+<circle cx="400.6" cy="282.0" r="3.4" fill="none" stroke="#008300" stroke-width="2"/>
+<circle cx="513.4" cy="282.0" r="3.4" fill="none" stroke="#008300" stroke-width="2"/>
+<circle cx="626.3" cy="64.3" r="3.4" fill="#008300" stroke="#008300" stroke-width="2"/>
+<circle cx="739.1" cy="64.3" r="3.4" fill="#008300" stroke="#008300" stroke-width="2"/>
+<circle cx="852.0" cy="64.3" r="3.4" fill="#008300" stroke="#008300" stroke-width="2"/>
+<path d="M62.0,249.0 L174.9,248.7 L287.7,249.3 L400.6,307.1 L513.4,294.2 L626.3,64.3 L739.1,64.3 L852.0,64.3" fill="none" stroke="#d98800" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="249.0" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="174.9" cy="248.7" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="287.7" cy="249.3" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="400.6" cy="307.1" r="3.4" fill="none" stroke="#d98800" stroke-width="2"/>
+<circle cx="513.4" cy="294.2" r="3.4" fill="none" stroke="#d98800" stroke-width="2"/>
+<circle cx="626.3" cy="64.3" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="739.1" cy="64.3" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="852.0" cy="64.3" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<path d="M62.0,79.2 L174.9,79.2 L287.7,79.2 L400.6,79.1 L513.4,79.1 L626.3,64.0 L739.1,64.1 L852.0,64.0" fill="none" stroke="#2a78d6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="79.2" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="174.9" cy="79.2" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="287.7" cy="79.2" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="400.6" cy="79.1" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="513.4" cy="79.1" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="626.3" cy="64.0" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="739.1" cy="64.1" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="852.0" cy="64.0" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<path d="M62.0,67.2 L174.9,67.2 L287.7,67.2 L400.6,67.2 L513.4,67.2 L626.3,64.1 L739.1,64.1 L852.0,64.1" fill="none" stroke="#1baf7a" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="67.2" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="174.9" cy="67.2" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="287.7" cy="67.2" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="400.6" cy="67.2" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="513.4" cy="67.2" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="626.3" cy="64.1" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="739.1" cy="64.1" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="852.0" cy="64.1" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<text class="pt" x="62" y="418">Detail — the 94–100% band, where every suite ends up</text>
+<line class="grid" x1="62" y1="640.0" x2="852" y2="640.0"/>
+<text class="tick" x="54" y="644.0" text-anchor="end">94%</text>
+<line class="grid" x1="62" y1="605.0" x2="852" y2="605.0"/>
+<text class="tick" x="54" y="609.0" text-anchor="end">95%</text>
+<line class="grid" x1="62" y1="570.0" x2="852" y2="570.0"/>
+<text class="tick" x="54" y="574.0" text-anchor="end">96%</text>
+<line class="grid" x1="62" y1="535.0" x2="852" y2="535.0"/>
+<text class="tick" x="54" y="539.0" text-anchor="end">97%</text>
+<line class="grid" x1="62" y1="500.0" x2="852" y2="500.0"/>
+<text class="tick" x="54" y="504.0" text-anchor="end">98%</text>
+<line class="grid" x1="62" y1="465.0" x2="852" y2="465.0"/>
+<text class="tick" x="54" y="469.0" text-anchor="end">99%</text>
+<line class="grid" x1="62" y1="430.0" x2="852" y2="430.0"/>
+<text class="tick" x="54" y="434.0" text-anchor="end">100%</text>
+<line class="grid" x1="62.0" y1="430" x2="62.0" y2="640"/>
+<text class="tick" x="62.0" y="657" text-anchor="middle">v0.0.1</text>
+<text class="sub" x="62.0" y="670" text-anchor="middle">2026-03-29</text>
+<line class="grid" x1="174.9" y1="430" x2="174.9" y2="640"/>
+<text class="tick" x="174.9" y="657" text-anchor="middle">v0.0.2</text>
+<text class="sub" x="174.9" y="670" text-anchor="middle">2026-06-15</text>
+<line class="grid" x1="287.7" y1="430" x2="287.7" y2="640"/>
+<text class="tick" x="287.7" y="657" text-anchor="middle">v0.1.0</text>
+<text class="sub" x="287.7" y="670" text-anchor="middle">2026-06-17</text>
+<line class="grid" x1="400.6" y1="430" x2="400.6" y2="640"/>
+<text class="tick" x="400.6" y="657" text-anchor="middle">v0.2.0</text>
+<text class="sub" x="400.6" y="670" text-anchor="middle">2026-06-19</text>
+<line class="grid" x1="513.4" y1="430" x2="513.4" y2="640"/>
+<text class="tick" x="513.4" y="657" text-anchor="middle">v0.3.0</text>
+<text class="sub" x="513.4" y="670" text-anchor="middle">2026-06-22</text>
+<line class="grid" x1="626.3" y1="430" x2="626.3" y2="640"/>
+<text class="tick" x="626.3" y="657" text-anchor="middle">v0.4.0</text>
+<text class="sub" x="626.3" y="670" text-anchor="middle">2026-07-08</text>
+<line class="grid" x1="739.1" y1="430" x2="739.1" y2="640"/>
+<text class="tick" x="739.1" y="657" text-anchor="middle">v0.5.0</text>
+<text class="sub" x="739.1" y="670" text-anchor="middle">2026-07-10</text>
+<line class="grid" x1="852.0" y1="430" x2="852.0" y2="640"/>
+<text class="tick" x="852.0" y="657" text-anchor="middle">v0.5.1</text>
+<text class="sub" x="852.0" y="670" text-anchor="middle">2026-07-11</text>
+<line class="axis" x1="62" y1="640" x2="852" y2="640"/>
+<path d="M739.1,444.0 L852.0,444.0" fill="none" stroke="#b5359c" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="739.1" cy="444.0" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<circle cx="852.0" cy="444.0" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
+<path d="M626.3,433.8 L739.1,433.8 L852.0,433.8" fill="none" stroke="#008300" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="626.3" cy="433.8" r="3.4" fill="#008300" stroke="#008300" stroke-width="2"/>
+<circle cx="739.1" cy="433.8" r="3.4" fill="#008300" stroke="#008300" stroke-width="2"/>
+<circle cx="852.0" cy="433.8" r="3.4" fill="#008300" stroke="#008300" stroke-width="2"/>
+<path d="M626.3,433.5 L739.1,433.5 L852.0,433.5" fill="none" stroke="#d98800" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="626.3" cy="433.5" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="739.1" cy="433.5" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<circle cx="852.0" cy="433.5" r="3.4" fill="#d98800" stroke="#d98800" stroke-width="2"/>
+<path d="M62.0,607.4 L174.9,607.4 L287.7,607.8 L400.6,606.4 L513.4,606.7 L626.3,430.0 L739.1,431.1 L852.0,430.0" fill="none" stroke="#2a78d6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="607.4" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="174.9" cy="607.4" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="287.7" cy="607.8" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="400.6" cy="606.4" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="513.4" cy="606.7" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="626.3" cy="430.0" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="739.1" cy="431.1" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="852.0" cy="430.0" r="3.4" fill="#2a78d6" stroke="#2a78d6" stroke-width="2"/>
+<path d="M62.0,467.4 L174.9,467.4 L287.7,467.4 L400.6,467.1 L513.4,467.1 L626.3,430.7 L739.1,430.7 L852.0,430.7" fill="none" stroke="#1baf7a" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="467.4" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="174.9" cy="467.4" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="287.7" cy="467.4" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="400.6" cy="467.1" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="513.4" cy="467.1" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="626.3" cy="430.7" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="739.1" cy="430.7" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="852.0" cy="430.7" r="3.4" fill="#1baf7a" stroke="#1baf7a" stroke-width="2"/>
+<text class="sub" x="62" y="712">Hollow dot = the release could not enumerate the whole suite (its compiler chokes first). A line missing from the lower panel is below 94% at that release.</text>
+</svg>

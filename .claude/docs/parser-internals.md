@@ -46,7 +46,7 @@ INPUT ([]byte or io.Reader)
     → parseEndTag() → EndElementNS SAX
   → parseMisc() — epilogue
   → EndDocument SAX
-  → DTD validation (if ValidateDTD(true))
+  → finalize(): XInclude substitution (if XInclude(proc) injected) then DTD validation (if ValidateDTD(true))
   → RETURN Document + error
 ```
 

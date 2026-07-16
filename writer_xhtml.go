@@ -103,6 +103,18 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		return err
 	}
 
+	// Mixed-content / suppress-indentation, computed exactly as writeNode does so
+	// both serializers agree (libxml2 applies the rule in xmlNodeDumpOutputInternal
+	// AND xhtmlNodeDumpOutput). An element with any text-like direct child (mixed
+	// content), a name in the suppress set, or any suppressed ancestor is emitted
+	// without indentation. suppressDepth propagates the suppression across the whole
+	// subtree — both the recursive dumpXHTMLNode child path and the plain writeNode
+	// child path consult it — so text content stays byte-for-byte and a second
+	// format pass is idempotent.
+	elemSuppressed := d.suppressDepth > 0 || matchesNameSet(d.suppressIndent, n) ||
+		(d.format && hasTextlikeChild(e))
+	effFormat := d.format && !elemSuppressed
+
 	addMeta := false
 	if localName == "head" {
 		if parent := e.parent; parent != nil {
@@ -120,13 +132,13 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		} else {
 			if addMeta {
 				d.writeString(out, ">")
-				if d.format {
+				if effFormat {
 					d.writeString(out, "\n")
 					d.indent++
 					d.writeIndent(out)
 				}
 				d.writeMetaContentType(out)
-				if d.format {
+				if effFormat {
 					d.writeString(out, "\n")
 					d.indent--
 					d.writeIndent(out)
@@ -143,43 +155,59 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 
 	d.writeString(out, ">")
 
-	textOnly := d.format && hasOnlyTextChildren(e)
-	if d.format && !textOnly {
+	// Suppress formatting across the whole subtree while the children are written,
+	// restoring on every return path (matching writeNode).
+	if elemSuppressed {
+		d.suppressDepth++
+	}
+
+	textOnly := effFormat && hasOnlyTextChildren(e)
+	if effFormat && !textOnly {
 		d.writeString(out, "\n")
 		d.indent++
 	}
 
 	if addMeta {
-		if d.format && !textOnly {
+		if effFormat && !textOnly {
 			d.writeIndent(out)
 		}
 		d.writeMetaContentType(out)
-		if d.format && !textOnly {
+		if effFormat && !textOnly {
 			d.writeString(out, "\n")
 		}
 	}
 
 	for child := range Children(e) {
-		if d.format && !textOnly {
+		if effFormat && !textOnly {
 			d.writeIndent(out)
 		}
 		if child.Type() == ElementNode {
 			if err := d.dumpXHTMLNode(out, child); err != nil {
+				if elemSuppressed {
+					d.suppressDepth--
+				}
 				return err
 			}
 		} else {
 			if err := d.writeNode(out, child); err != nil {
+				if elemSuppressed {
+					d.suppressDepth--
+				}
 				return err
 			}
 		}
-		if d.format && !textOnly {
+		if effFormat && !textOnly {
 			d.writeString(out, "\n")
 		}
 	}
 
-	if d.format && !textOnly {
+	if effFormat && !textOnly {
 		d.indent--
 		d.writeIndent(out)
+	}
+
+	if elemSuppressed {
+		d.suppressDepth--
 	}
 
 	d.writeString(out, "</")
