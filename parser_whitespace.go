@@ -3,6 +3,7 @@ package helium
 import (
 	"context"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
@@ -260,17 +261,22 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 		return false
 	}
 
-	// If the element has a DTD declaration, its content model decides:
-	// element-only content makes the whitespace ignorable, mixed/ANY makes it
-	// significant. Trust this ONLY when a declaration was actually found; when
-	// none is (errElementDeclNotFound — no DTD, or no decl for this element)
-	// fall through to the heuristic below rather than treating the run as
-	// ignorable unconditionally. Mirrors libxml2 areBlanks, which consults the
-	// heuristic whenever elemDecl == NULL.
+	// If the element has a DTD declaration, its content-model TYPE decides,
+	// applying libxml2 areBlanks' own decl switch (NOT xmlIsMixedElement, which
+	// collapses EMPTY into "mixed"): ELEMENT content makes the whitespace
+	// ignorable; ANY or MIXED makes it significant; EMPTY or UNDEFINED — and no
+	// declaration at all — fall through to the heuristic below rather than being
+	// treated as mixed. This is why areBlanksBytes consults ElementDeclType
+	// (raw content-model type) instead of IsMixedElement (the mixed bool).
 	if ctx.doc != nil {
-		ok, err := ctx.doc.IsMixedElement(ctx.peekNode().Name())
-		if err == nil {
-			return !ok
+		if dt, found := ctx.doc.ElementDeclType(ctx.peekNode().Name()); found {
+			switch dt {
+			case enum.ElementElementType:
+				return true
+			case enum.AnyElementType, enum.MixedElementType:
+				return false
+			}
+			// EMPTY or UNDEFINED: fall through to the heuristic below.
 		}
 	}
 
@@ -338,9 +344,24 @@ func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	if ctx.peekNode() == nil {
 		return false
 	}
+	// Apply the same content-model TYPE switch as areBlanksBytes (libxml2
+	// areBlanks' decl logic, not xmlIsMixedElement): ELEMENT content is
+	// ignorable; ANY or MIXED is significant; EMPTY, UNDEFINED, or no declaration
+	// fall through to the tentative-ignorable default below, where the streaming
+	// caller re-applies the end-of-run delimiter check (this variant omits the
+	// cursor lookahead). The only caller (parseCharDataChunkedSAX) is entered
+	// solely when ctx.doc == nil, so the declaration branch never governs a live
+	// classification; it is kept in sync so both siblings state the fact
+	// identically.
 	if ctx.doc != nil {
-		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
-		return !ok
+		if dt, found := ctx.doc.ElementDeclType(ctx.peekNode().Name()); found {
+			switch dt {
+			case enum.ElementElementType:
+				return true
+			case enum.AnyElementType, enum.MixedElementType:
+				return false
+			}
+		}
 	}
 	return true
 }

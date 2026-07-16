@@ -527,6 +527,70 @@ func TestStripBlanksExternalSubsetContentModel(t *testing.T) {
 	}
 }
 
+// TestStripBlanksEmptyContentModel verifies that an EMPTY-declared element does
+// NOT preserve a stray inter-element whitespace run under StripBlanks(true).
+// libxml2's areBlanks uses its own decl switch (distinct from xmlIsMixedElement,
+// which maps EMPTY to "mixed"): only ELEMENT content is ignorable and only
+// ANY/MIXED is significant; EMPTY and UNDEFINED fall through to the heuristic,
+// which here classifies the run as ignorable. So whitespace must be stripped for
+// an EMPTY-declared element, matching an element-content model rather than an
+// ANY/MIXED one. Both the internal and external subset declaration paths must
+// behave identically (areBlanks consults doc->intSubset then doc->extSubset).
+func TestStripBlanksEmptyContentModel(t *testing.T) {
+	const extDTD = `<!ELEMENT r EMPTY>
+<!ELEMENT c EMPTY>`
+
+	// <c/> inside an EMPTY-declared r is technically invalid, but a non-validating
+	// parse still builds the tree; the trailing space after <c/> sits purely
+	// between markup, so it is ignorable whitespace and dropped by StripBlanks.
+	const internalInput = `<!DOCTYPE r [<!ELEMENT r EMPTY><!ELEMENT c EMPTY>]><r><c/> </r>`
+	const externalInput = `<!DOCTYPE r SYSTEM "d.dtd"><r><c/> </r>`
+
+	testcases := []struct {
+		name  string
+		input string
+		build func() helium.Parser
+	}{
+		{
+			name:  "internal subset EMPTY",
+			input: internalInput,
+			build: func() helium.Parser {
+				return helium.NewParser().StripBlanks(true)
+			},
+		},
+		{
+			name:  "external subset EMPTY",
+			input: externalInput,
+			build: func() helium.Parser {
+				fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(extDTD)}}
+				return helium.NewParser().
+					StripBlanks(true).
+					BlockXXE(false).
+					LoadExternalDTD(true).
+					FS(fsys)
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := tc.build().Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err, "Parse should succeed")
+
+			root := findDocumentElement(doc)
+			require.NotNil(t, root, "document element must exist")
+
+			var got []byte
+			for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+				if child.Type() == helium.TextNode {
+					got = append(got, child.Content()...)
+				}
+			}
+			require.Equal(t, "", string(got), "inter-element whitespace inside an EMPTY-content element must be stripped")
+		})
+	}
+}
+
 func TestMergeCDATA(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <root><![CDATA[hello]]></root>`
