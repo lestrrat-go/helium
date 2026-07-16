@@ -20,10 +20,16 @@ import (
 //
 //   - StandaloneExplicitYes: the XML declaration carried standalone="yes".
 //   - StandaloneExplicitNo:  the XML declaration carried standalone="no".
-//   - StandaloneNoXMLDecl:   the document had no XML declaration at all.
-//   - StandaloneImplicitNo:  there was an XML declaration but no standalone
-//     attribute (the standalone default, "no", was not stated). This is the
-//     value to pass to NewDocument for an ordinary API-built document.
+//   - StandaloneImplicitNo:  no explicit standalone="yes"/"no" was seen. This is
+//     the parser's default, and the value a parsed document carries both when the
+//     XML declaration is absent entirely and when it is present without a
+//     standalone pseudo-attribute. It is also the value to pass to NewDocument
+//     for an ordinary API-built document. Serialization emits no standalone
+//     attribute.
+//   - StandaloneNoXMLDecl:   a libxml2-compatible caller-selected sentinel for a
+//     constructed document with no XML declaration (used by NewHTMLDocument and
+//     the xslt3 serializer). The parser never produces it; serialization treats
+//     it as not-standalone and emits no standalone attribute.
 //   - StandaloneInvalidValue: an internal parser sentinel for a standalone
 //     value that has not been resolved yet; not meaningful on a finished
 //     document.
@@ -1073,17 +1079,19 @@ func (d *Document) IDTable() map[string]*Element {
 }
 
 // GetElementByID returns the element in the document whose ID matches the given
-// value, or nil if none matches. In a well-formed document an ID value is
-// unique, so there is at most one such element. If the document's ID table has
-// been populated (during parsing), it performs an O(1) hash lookup. Otherwise it
+// value, or nil if none matches. In a valid document an ID value is unique, so
+// there is at most one such element. If the document's ID table has been
+// populated (during parsing), it performs an O(1) hash lookup. Otherwise it
 // falls back to an O(n) tree walk checking xml:id and DTD-declared ID
 // attributes.
 //
-// If several elements share an ID (which is invalid XML), the two paths pick
-// different winners: the O(1) table returns the last element registered for that
-// value (the last in document order, since RegisterID overwrites), while the
-// O(n) fallback walk returns the first in document order. Do not rely on either
-// for duplicate IDs.
+// Duplicate IDs make a document invalid, not not-well-formed: a document with
+// duplicate IDs still parses successfully with DocWellFormed set. If several
+// elements share an ID, the two paths pick different winners: the O(1) table
+// returns the last-registered element for that value — RegisterID overwrites by
+// call order, which is NOT necessarily last in document order — while the O(n)
+// fallback walk returns the first in document order. Do not rely on either for
+// duplicate IDs.
 //
 // The ID-skip state (see SetSkipIDs) is authoritative and is checked FIRST: a
 // document with SkipIDs() == true resolves NO ids — it returns nil without
