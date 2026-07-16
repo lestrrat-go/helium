@@ -708,32 +708,28 @@ var errElementDeclNotFound = errors.New("element declaration not found")
 // doc->intSubset and doc->extSubset), and returns an error only when neither
 // subset declares name.
 func (d *Document) IsMixedElement(name string) (bool, error) {
-	for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
-		if dtd == nil {
-			continue
-		}
-
-		edecl, ok := dtd.GetElementDesc(name)
-		if !ok {
-			continue
-		}
-
-		switch edecl.decltype {
-		case enum.UndefinedElementType:
-			continue
-		case enum.ElementElementType:
-			return false, nil
-		case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
-			/*
-			 * return 1 for EMPTY since we want VC error to pop up
-			 * on <empty>     </empty> for example
-			 */
-			return true, nil
-		}
-		return true, nil
+	if d.intSubset == nil {
+		return false, errElementDeclNotFound
 	}
 
-	return false, errElementDeclNotFound
+	edecl, ok := d.intSubset.GetElementDesc(name)
+	if !ok {
+		return false, errElementDeclNotFound
+	}
+
+	switch edecl.decltype {
+	case enum.UndefinedElementType:
+		return false, errElementDeclNotFound
+	case enum.ElementElementType:
+		return false, nil
+	case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
+		/*
+		 * return 1 for EMPTY since we want VC error to pop up
+		 * on <empty>     </empty> for example
+		 */
+		return true, nil
+	}
+	return true, nil
 }
 
 // elementDeclType returns the declared content-model type of the element named
