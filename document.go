@@ -730,6 +730,31 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 	return true, nil
 }
 
+// elementDeclType returns the declared content-model type of the element named
+// name and reports whether a declaration was found. It searches the internal
+// subset first and consults the external subset only when the internal subset
+// has no declaration for name (mirroring libxml2 areBlanks' two-subset lookup,
+// where doc->extSubset is checked only if the doc->intSubset lookup is NULL). An
+// internal-subset placeholder declaration (UndefinedElementType) counts as found
+// and stops the search, exactly as a non-NULL elemDecl does in libxml2.
+//
+// Unlike IsMixedElement (which collapses EMPTY/ANY/MIXED into a single "mixed"
+// bool for VC-error callers, mirroring xmlIsMixedElement), this returns the raw
+// content-model type so whitespace classification can apply libxml2 areBlanks'
+// own decl switch, in which EMPTY and UNDEFINED fall through to the heuristic
+// rather than being treated as mixed.
+func (d *Document) elementDeclType(name string) (enum.ElementType, bool) {
+	for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
+		if dtd == nil {
+			continue
+		}
+		if edecl, ok := dtd.GetElementDesc(name); ok {
+			return edecl.decltype, true
+		}
+	}
+	return enum.UndefinedElementType, false
+}
+
 /*
  * @doc:  the document
  * @value:  the value of the attribute
