@@ -431,8 +431,11 @@ func (w Writer) Normalization(form string) Writer {
 // serialized as a self-contained fragment whose in-scope ancestor namespaces are
 // supplied externally (for example, capturing an element's inner XML while its
 // ancestors are not serialized). A nil or empty map leaves output byte-identical.
+//
+// The map is copied, so later mutation of the caller's map does not affect the
+// Writer (the value-style contract above).
 func (w Writer) InheritedNamespaces(bindings map[string]string) Writer {
-	w.initialNSScope = bindings
+	w.initialNSScope = maps.Clone(bindings)
 	return w
 }
 
