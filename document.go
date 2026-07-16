@@ -271,6 +271,10 @@ func (d *Document) HasProperty(p DocProperties) bool {
 	return d.properties&p == p
 }
 
+// IntSubset returns the document's internal DTD subset, or nil when none is
+// present. The abbreviated name mirrors libxml2's xmlGetIntSubset and the
+// intSubset document field. InternalSubset is the equivalent accessor that
+// reports absence as an error instead of nil.
 func (d *Document) IntSubset() *DTD {
 	return d.intSubset
 }
@@ -287,6 +291,9 @@ func (d *Document) RemoveInternalSubset() {
 	d.intSubset = nil
 }
 
+// ExtSubset returns the document's external DTD subset, or nil when none is
+// present. The abbreviated name mirrors libxml2's extSubset document field,
+// matching the IntSubset accessor.
 func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
@@ -480,6 +487,8 @@ func (d *Document) CreateDTD() (*DTD, error) {
 	return dtd, nil
 }
 
+// InternalSubset returns the document's internal DTD subset, reporting absence
+// as an error. IntSubset is the equivalent accessor that returns nil instead.
 func (d *Document) InternalSubset() (*DTD, error) {
 	// equiv: xmlGetIntSubset (tree.c)
 	if d.intSubset == nil {
