@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -180,18 +181,32 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 // nodes (not a copy) keeps the bytes identical to what a verifier canonicalizing
 // the same nodes in place would produce.
 //
-// The throwaway document is rooted at a proxy element that carries the caller
-// document element's in-scope namespace declarations, and root is placed under
-// that proxy. This reproduces the ancestor namespace context target will have
-// once the caller places the returned Signature under the caller document
-// element: inclusive Canonical XML emits every in-scope namespace on the
-// node-set apex, including ones inherited from ancestors and not visibly used,
-// so a bare-rooted throwaway document would drop the caller root's namespaces
-// and produce a digest no verifier can match. The proxy is never part of the
-// canonicalized node set (only target's own subtree is), so it changes the
-// namespace context only, never the emitted bytes of the subtree. Exclusive
-// Canonical XML emits only visibly-utilized namespaces, so an unused inherited
-// namespace leaves its output byte-identical.
+// The throwaway document is rooted at a proxy element that reproduces the FULL
+// inherited canonicalization context target will have once the caller places the
+// returned Signature under the caller document element, and root is placed under
+// that proxy. Canonicalization of a node-set apex inherits two dimensions from
+// its omitted ancestors, and the proxy stands in for the caller document element
+// (target's nearest omitted element-ancestor once placed) by carrying both:
+//
+//   - Every in-scope namespace declaration. Inclusive Canonical XML emits every
+//     in-scope namespace on the node-set apex, including ones inherited from
+//     ancestors and not visibly used, so a bare-rooted throwaway document would
+//     drop the caller root's namespaces and produce a digest no verifier can
+//     match.
+//   - The inherited xml:* attributes xml:base, xml:lang and xml:space. Both
+//     Canonical XML 1.0 (in node-set mode) and Canonical XML 1.1 re-render these
+//     on the apex by walking omitted ancestors: 1.0 imports the nearest ancestor
+//     value for each name, 1.1 inherits xml:lang/xml:space and lexically joins
+//     xml:base across the omitted-ancestor chain. Without the caller root's xml:*
+//     on the proxy the apex would inherit nothing at signing but inherit those
+//     values at verification, so the digests would differ. xml:id is NOT
+//     inherited and is deliberately not copied.
+//
+// The proxy is never part of the canonicalized node set (only target's own
+// subtree is), so it changes the inherited context only, never the emitted bytes
+// of the subtree itself. Exclusive Canonical XML emits only visibly-utilized
+// namespaces and performs NO xml:* inheritance, so both an unused inherited
+// namespace and any inherited xml:* on the proxy leave its output byte-identical.
 func canonicalizeDetachedSubtree(method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
 	origDoc := root.OwnerDocument()
 	tmp := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
@@ -203,6 +218,9 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 				if err := proxy.DeclareNamespace(prefix, ns.URI()); err != nil {
 					return nil, err
 				}
+			}
+			if err := copyInheritedXMLAttrs(proxy, docElem); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -229,6 +247,35 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 	root.SetTreeDoc(tmp)
 
 	return canonicalizeSubtree(method, target, prefixes)
+}
+
+// inheritedXMLAttrNames are the xml-namespace attributes that canonicalization
+// re-renders on a node-set apex by inheriting them from omitted ancestors:
+// xml:base, xml:lang and xml:space. xml:id is intentionally excluded — it is not
+// an inherited attribute under either Canonical XML 1.0 or 1.1.
+var inheritedXMLAttrNames = []string{"base", "lang", "space"}
+
+// copyInheritedXMLAttrs copies the caller document element's own xml:base,
+// xml:lang and xml:space attributes onto the proxy so that, as target's nearest
+// omitted element-ancestor, the proxy contributes the same inherited xml:* values
+// the caller document element will contribute once the Signature is placed under
+// it. The document element is the root, so its ancestor-or-self inherited context
+// is exactly its own xml:* attributes. The xml namespace is predeclared and never
+// emitted, so a fresh xml Namespace on each copied attribute is sufficient.
+func copyInheritedXMLAttrs(proxy, docElem *helium.Element) error {
+	for _, localName := range inheritedXMLAttrNames {
+		for _, attr := range docElem.Attributes() {
+			if attr.URI() != lexicon.NamespaceXML || attr.LocalName() != localName {
+				continue
+			}
+			xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
+			if err := proxy.SetLiteralAttributeNS(localName, attr.Value(), xmlNS); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	return nil
 }
 
 // isDescendantOrSelf reports whether n is root itself or lives inside root's

@@ -11,6 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// uriManifest is the same-document reference URI used by the #1220 in-Object
+// reference tests, pointing at the <ds:Manifest Id="manifest"> under <ds:Object>.
+const uriManifest = "#manifest"
+
 // Regression for #1220: SignEnveloping must resolve a same-document reference
 // (URI="#id") that points INTO the Signature's own <Object> content — here a
 // <Manifest Id="manifest"> supplied via the content nodes. Before the fix the
@@ -48,7 +52,7 @@ func TestSignEnveloping_ReferenceIntoOwnObject(t *testing.T) {
 			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 		}).
 		Reference(xmldsig1.ReferenceConfig{
-			URI:             "#manifest",
+			URI:             uriManifest,
 			DigestAlgorithm: xmldsig1.DigestSHA256,
 			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 		}).
@@ -66,7 +70,7 @@ func TestSignEnveloping_ReferenceIntoOwnObject(t *testing.T) {
 	walk = func(n helium.Node) {
 		if e, ok := n.(*helium.Element); ok {
 			if e.LocalName() == "Reference" {
-				if uri, ok := e.GetAttribute("URI"); ok && uri == "#manifest" {
+				if uri, ok := e.GetAttribute("URI"); ok && uri == uriManifest {
 					haveManifestRef = true
 				}
 			}
@@ -161,7 +165,7 @@ func TestSignEnveloping_InclusiveC14NInObjectRef_UnusedRootNamespace(t *testing.
 		CanonicalizationMethod(xmldsig1.C14N10).
 		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 		Reference(xmldsig1.ReferenceConfig{
-			URI:             "#manifest",
+			URI:             uriManifest,
 			DigestAlgorithm: xmldsig1.DigestSHA256,
 			Transforms:      []xmldsig1.Transform{xmldsig1.C14NTransform(xmldsig1.C14N10)},
 		}).
@@ -203,7 +207,7 @@ func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
 		CanonicalizationMethod(xmldsig1.ExcC14N10).
 		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 		Reference(xmldsig1.ReferenceConfig{
-			URI:             "#manifest",
+			URI:             uriManifest,
 			DigestAlgorithm: xmldsig1.DigestSHA256,
 			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 		}).
@@ -258,6 +262,70 @@ func TestSignEnveloping_AmbiguousIDAcrossTrees(t *testing.T) {
 	_, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{manifest}, key)
 	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference,
 		"an id present in both the document and the Signature's Object must be rejected")
+}
+
+// Regression for #1220: an in-Object reference canonicalized with an INCLUSIVE
+// method (C14N 1.0 or 1.1) inherits not just namespaces but the xml:* attributes
+// (xml:base, xml:lang, xml:space) from the caller document element. Signing must
+// reproduce that inherited context so the sign-time and verify-time digests
+// agree. Each case declares an xml:* attribute (or several) on the caller root,
+// signs a reference into the Signature's own <Object>, places the Signature under
+// that root, and verifies. An exclusive-C14N case is included as the byte-parity
+// guard: exclusive canonicalization performs no xml:* inheritance, so it must
+// still verify regardless of the inherited context.
+func TestSignEnveloping_InclusiveC14NInObjectRef_InheritedXMLAttrs(t *testing.T) {
+	testcases := []struct {
+		name     string
+		rootAttr string // attributes on the caller document element
+		method   string
+		xform    xmldsig1.Transform
+	}{
+		{name: "c14n10-xml-lang", rootAttr: `xml:lang="en"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		{name: "c14n11-xml-lang", rootAttr: `xml:lang="en"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
+		{name: "c14n10-xml-space", rootAttr: `xml:space="preserve"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		{name: "c14n11-xml-space", rootAttr: `xml:space="preserve"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
+		{name: "c14n10-xml-base", rootAttr: `xml:base="http://example.com/a/"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		{name: "c14n11-xml-base", rootAttr: `xml:base="http://example.com/a/"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
+		{name: "c14n10-combined", rootAttr: `xml:lang="en" xml:space="preserve" xml:base="http://example.com/a/"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		{name: "c14n11-combined", rootAttr: `xml:lang="en" xml:space="preserve" xml:base="http://example.com/a/"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
+		{name: "exclusive-byte-parity", rootAttr: `xml:lang="en" xml:base="http://example.com/a/"`, method: xmldsig1.ExcC14N10, xform: xmldsig1.ExcC14NTransform()},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			key := generateRSAKey(t)
+			doc := mustParseXML(t, `<Foo `+tc.rootAttr+`><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
+
+			manifest := doc.CreateElement("Manifest")
+			require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
+			require.NoError(t, manifest.SetLiteralAttribute("Id", "manifest"))
+			child := doc.CreateElement("SignatureProperties")
+			require.NoError(t, child.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
+			require.NoError(t, child.AddChild(doc.CreateText([]byte("content"))))
+			require.NoError(t, manifest.AddChild(child))
+
+			signer := xmldsig1.NewSigner().
+				CanonicalizationMethod(tc.method).
+				SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+				Reference(xmldsig1.ReferenceConfig{
+					URI:             uriManifest,
+					DigestAlgorithm: xmldsig1.DigestSHA256,
+					Transforms:      []xmldsig1.Transform{tc.xform},
+				}).
+				KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+
+			sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{manifest}, key)
+			require.NoError(t, err)
+			require.Nil(t, sigElem.Parent())
+
+			// Placed under the caller root (which carries the inherited xml:*
+			// context) the signature must verify: signing reproduced that context.
+			require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+			verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+			_, err = verifier.Verify(t.Context(), doc)
+			require.NoError(t, err, "in-Object reference must verify under the caller root's inherited xml:* context")
+		})
+	}
 }
 
 // digestValueForURI returns the base64 DigestValue text of the Reference whose

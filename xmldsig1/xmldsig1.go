@@ -124,6 +124,14 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // subtree, byte-identical to a signature with no such internal reference. An
 // id that matches in both the document and the Signature's own Object content
 // is rejected as an ambiguous reference (ErrAmbiguousReference).
+//
+// An in-Object target is canonicalized under a proxy that reproduces the full
+// inherited canonicalization context the target will have once the caller
+// places the Signature under the document element — both every in-scope
+// namespace declaration and the inherited xml:base, xml:lang and xml:space
+// attributes — so a reference into the Object verifies under inclusive
+// Canonical XML 1.0 or 1.1. Exclusive Canonical XML inherits neither, so its
+// digests are unaffected.
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
 	return signEnveloping(ctx, s.cfg, doc, content, key)
 }
