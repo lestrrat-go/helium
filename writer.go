@@ -469,8 +469,11 @@ func (w Writer) RejectInvalidChars(v bool) Writer {
 // attribute-value content is replaced by its literal replacement string,
 // emitted verbatim (not re-escaped), per XSLT/XQuery Serialization 3.1 §7. A nil
 // or empty map disables the feature.
+//
+// The map is copied, so later mutation of the caller's map does not affect the
+// Writer (the value-style contract above).
 func (w Writer) CharacterMap(m map[rune]string) Writer {
-	w.charMap = m
+	w.charMap = maps.Clone(m)
 	return w
 }
 
@@ -478,8 +481,11 @@ func (w Writer) CharacterMap(m map[rune]string) Writer {
 // whose direct text children are serialized as CDATA sections instead of escaped
 // text (the cdata-section-elements serialization parameter). Matching is by exact
 // expanded name. A nil or empty map disables the feature.
+//
+// The map is copied, so later mutation of the caller's map does not affect the
+// Writer (the value-style contract above).
 func (w Writer) CDATASectionElements(m map[string]struct{}) Writer {
-	w.cdataElements = m
+	w.cdataElements = maps.Clone(m)
 	return w
 }
 
@@ -487,8 +493,11 @@ func (w Writer) CDATASectionElements(m map[string]struct{}) Writer {
 // whose subtree is serialized without indentation even when Format is enabled
 // (the suppress-indentation serialization parameter). Matching is by exact
 // expanded name. A nil or empty map disables the feature.
+//
+// The map is copied, so later mutation of the caller's map does not affect the
+// Writer (the value-style contract above).
 func (w Writer) SuppressIndentElements(m map[string]struct{}) Writer {
-	w.suppressIndent = m
+	w.suppressIndent = maps.Clone(m)
 	return w
 }
 

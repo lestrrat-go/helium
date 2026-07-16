@@ -354,7 +354,9 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		newDoc := helium.NewDefaultDocument()
 		if srcDoc != nil {
 			// Copy DTD information to preserve unparsed entities.
-			helium.CopyDTDInfo(srcDoc, newDoc)
+			if err := helium.CopyDTDInfo(srcDoc, newDoc); err != nil {
+				return err
+			}
 			newDoc.SetURL(srcDoc.URL())
 		}
 
@@ -822,7 +824,9 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 			srcDoc, _ := node.(*helium.Document)
 			newDoc := helium.NewDefaultDocument()
 			if srcDoc != nil {
-				helium.CopyDTDInfo(srcDoc, newDoc)
+				if err := helium.CopyDTDInfo(srcDoc, newDoc); err != nil {
+					return err
+				}
 				newDoc.SetURL(srcDoc.URL())
 			}
 			for child := range helium.Children(node) {
@@ -844,7 +848,9 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 		// continue to work on the result tree.
 		if srcDoc, ok := node.(*helium.Document); ok && srcDoc.IntSubset() != nil {
 			if targetDoc := out.doc; targetDoc != nil && targetDoc.IntSubset() == nil {
-				helium.CopyDTDInfo(srcDoc, targetDoc)
+				if err := helium.CopyDTDInfo(srcDoc, targetDoc); err != nil {
+					return err
+				}
 			}
 		}
 		for child := range helium.Children(node) {
