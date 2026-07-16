@@ -703,10 +703,8 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 var errElementDeclNotFound = errors.New("element declaration not found")
 
 // IsMixedElement reports whether the element named name is declared with mixed
-// (or EMPTY/ANY) content. It searches the internal subset first, then the
-// external subset (mirroring libxml2's areBlanks, which consults both
-// doc->intSubset and doc->extSubset), and returns an error only when neither
-// subset declares name.
+// (or EMPTY/ANY) content in the document's internal subset. It returns an error
+// if no element declaration is found for name.
 func (d *Document) IsMixedElement(name string) (bool, error) {
 	if d.intSubset == nil {
 		return false, errElementDeclNotFound
