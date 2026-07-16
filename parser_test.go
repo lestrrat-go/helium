@@ -426,6 +426,45 @@ func TestStripBlanks(t *testing.T) {
 	require.Equal(t, helium.ElementNode, first.Type(), "first child should be element, not blank text")
 }
 
+// TestStripBlanksEntityEquivalence verifies that, under StripBlanks(true),
+// whitespace adjacent to a decoded entity reference (e.g. &gt;) is treated
+// exactly like whitespace adjacent to a literal character. Per XML 1.0 §4.4 an
+// entity reference and the character it expands to are equivalent, so both
+// forms must yield identical text content. The whitespace here abuts character
+// data (it is not ignorable inter-element whitespace) and must be preserved.
+func TestStripBlanksEntityEquivalence(t *testing.T) {
+	testcases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "literal trailing space", input: `<r>x </r>`, want: "x "},
+		{name: "entity trailing space", input: `<r>&gt; </r>`, want: "> "},
+		{name: "entity leading space", input: `<r> &gt;</r>`, want: " >"},
+		{name: "entity surrounded by spaces", input: `<r> &gt; </r>`, want: " > "},
+		{name: "entity then literal", input: `<r>&gt;x</r>`, want: ">x"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := helium.NewParser().StripBlanks(true)
+			doc, err := p.Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err, "Parse should succeed")
+
+			root := findDocumentElement(doc)
+			require.NotNil(t, root, "document element must exist")
+
+			var got []byte
+			for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+				if child.Type() == helium.TextNode {
+					got = append(got, child.Content()...)
+				}
+			}
+			require.Equal(t, tc.want, string(got), "text content must match; entity and literal whitespace are equivalent")
+		})
+	}
+}
+
 func TestMergeCDATA(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <root><![CDATA[hello]]></root>`

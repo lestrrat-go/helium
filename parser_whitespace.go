@@ -259,17 +259,60 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	if ctx.peekNode() == nil {
 		return false
 	}
+
+	// If the element has a DTD declaration, its content model decides:
+	// element-only content makes the whitespace ignorable, mixed/ANY makes it
+	// significant. Trust this ONLY when a declaration was actually found; when
+	// none is (errElementDeclNotFound — no DTD, or no decl for this element)
+	// fall through to the heuristic below rather than treating the run as
+	// ignorable unconditionally. Mirrors libxml2 areBlanks, which consults the
+	// heuristic whenever elemDecl == NULL.
 	if ctx.doc != nil {
-		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
-		return !ok
+		ok, err := ctx.doc.IsMixedElement(ctx.peekNode().Name())
+		if err == nil {
+			return !ok
+		}
 	}
 
+	// Heuristic (no usable DTD decl): a blank run is ignorable whitespace only
+	// when it sits purely between markup, never when it abuts character data. A
+	// decoded entity reference (e.g. &gt;) becomes a text child, so whitespace
+	// next to it is significant exactly as whitespace next to a literal
+	// character is. Mirrors libxml2 areBlanks.
 	cur := ctx.getCursor()
 	if cur == nil {
 		return false
 	}
+	// The character after the run must open markup ('<') or be a CR; any other
+	// following byte means the run abuts character data.
 	if c := cur.Peek(); c != '<' && c != 0xD {
 		return false
+	}
+
+	elem := ctx.elem
+	if elem == nil {
+		// Pure-SAX path with no DOM: there are no children to inspect, so keep
+		// the original doc==nil behavior and treat the run as ignorable.
+		return true
+	}
+
+	pdn := elem.baseDocNode()
+	// An empty element about to close (e.g. <a>  </a>) keeps its whitespace as
+	// text content rather than dropping it.
+	if pdn.firstChild == nil && cur.Peek() == '<' && cur.PeekAt(1) == '/' {
+		return false
+	}
+	// Whitespace immediately after a text node — or where the element's first
+	// child is a text node — is part of that character-data run.
+	if last := pdn.lastChild; last != nil {
+		if _, ok := AsNode[*Text](last); ok {
+			return false
+		}
+	}
+	if first := pdn.firstChild; first != nil {
+		if _, ok := AsNode[*Text](first); ok {
+			return false
+		}
 	}
 
 	return true
