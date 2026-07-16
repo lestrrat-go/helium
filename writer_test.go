@@ -183,6 +183,58 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	})
 }
 
+func TestWriteActiveDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	t.Run("active default namespace emits xmlns", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.SetActiveNamespace("", "urn:x"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, `xmlns="urn:x"`)
+	})
+
+	t.Run("active prefixed namespace still emits xmlns:p", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, `xmlns:p="urn:x"`)
+	})
+
+	t.Run("parsed default namespace declared exactly once", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<x xmlns="urn:x"/>`))
+		require.NoError(t, err)
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, strings.Count(str, `xmlns="urn:x"`))
+	})
+
+	t.Run("unprefixed attribute gains no spurious xmlns", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
+		_, err := root.SetAttribute("id", "1")
+		require.NoError(t, err)
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.NotContains(t, str, `xmlns=""`)
+	})
+}
+
 func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
 	t.Parallel()
 

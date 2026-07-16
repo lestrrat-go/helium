@@ -1197,15 +1197,27 @@ func elementText(elem *helium.Element) string {
 }
 
 func innerXML(elem *helium.Element) string {
-	if elem == nil {
+	if elem == nil || elem.FirstChild() == nil {
 		return ""
 	}
+	// Serialize elem as a whole and strip its own start and end tags, rather
+	// than serializing each child in isolation. This keeps elem's in-scope
+	// namespaces (including any inherited from an ancestor) established while the
+	// children are written, so a child inheriting a namespace is not given a
+	// spurious xmlns re-declaration — matching encoding/xml's raw innerxml
+	// capture. Text and attribute values escape '<' and '>', so the first '>'
+	// terminates elem's start tag and the last '<' begins elem's end tag.
 	var b bytes.Buffer
-	w := helium.NewWriter().XMLDeclaration(false)
-	for child := range helium.Children(elem) {
-		_ = w.WriteTo(&b, child)
+	if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&b, elem); err != nil {
+		return ""
 	}
-	return b.String()
+	s := b.String()
+	start := strings.IndexByte(s, '>')
+	end := strings.LastIndexByte(s, '<')
+	if start < 0 || end < 0 || start+1 > end {
+		return ""
+	}
+	return s[start+1 : end]
 }
 
 func elementComment(elem *helium.Element) string {

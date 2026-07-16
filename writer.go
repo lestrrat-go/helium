@@ -950,9 +950,11 @@ func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespace
 		saved = d.nsScopePush(ns.prefix, ns.href, saved)
 	}
 
-	// The element's active namespace.
+	// The element's active namespace. The empty prefix is allowed here so an
+	// element whose active DEFAULT namespace was set (SetActiveNamespace("", uri))
+	// without a matching declaration gets an xmlns="uri" synthesized.
 	if ns := nser.Namespace(); ns != nil {
-		saved = d.reconcileOne(out, ns.prefix, ns.href, saved)
+		saved = d.reconcileOne(out, ns.prefix, ns.href, true, saved)
 	}
 
 	// Namespaced attributes. The per-list seen guard bounds a corrupt attribute
@@ -966,21 +968,26 @@ func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespace
 			}
 			seen[key] = struct{}{}
 			if ans := attr.ns; ans != nil {
-				saved = d.reconcileOne(out, ans.prefix, ans.href, saved)
+				saved = d.reconcileOne(out, ans.prefix, ans.href, false, saved)
 			}
 		}
 	}
 	return saved
 }
 
-// reconcileOne emits an "xmlns:prefix" declaration for a namespace used by the
-// current element or one of its attributes when that prefix is not already in
-// the output scope with the same URI, and records the new binding. The default
-// namespace (empty prefix) and the reserved xml/xmlns prefixes are never
-// synthesized: attributes cannot use the default namespace, and xml is
-// implicitly bound. Appends the recorded binding to saved and returns it.
-func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, saved []nsSaved) []nsSaved {
-	if prefix == "" || prefix == lexicon.PrefixXML || prefix == lexicon.PrefixXMLNS || href == "" {
+// reconcileOne emits an xmlns declaration for a namespace used by the current
+// element or one of its attributes when that prefix is not already in the
+// output scope with the same URI, and records the new binding. The reserved
+// xml/xmlns prefixes are never synthesized (xml is implicitly bound). The empty
+// prefix (default namespace) is synthesized only for the element's own active
+// namespace (isElement) as xmlns="href"; an attribute's empty prefix is skipped
+// because an unprefixed attribute is never in a namespace. Appends the recorded
+// binding to saved and returns it.
+func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElement bool, saved []nsSaved) []nsSaved {
+	if prefix == lexicon.PrefixXML || prefix == lexicon.PrefixXMLNS || href == "" {
+		return saved
+	}
+	if prefix == "" && !isElement {
 		return saved
 	}
 	if d.nsScope != nil {
@@ -988,13 +995,17 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, saved []
 			return saved
 		}
 	}
-	// The prefix is emitted verbatim; reject one that is not a valid NCName so a
-	// crafted prefix cannot inject raw markup into the start tag.
-	if !d.checkNamespacePrefix(prefix) {
-		return saved
+	if prefix == "" {
+		d.writeString(out, " xmlns")
+	} else {
+		// The prefix is emitted verbatim; reject one that is not a valid NCName so
+		// a crafted prefix cannot inject raw markup into the start tag.
+		if !d.checkNamespacePrefix(prefix) {
+			return saved
+		}
+		d.writeString(out, " xmlns:")
+		d.writeString(out, prefix)
 	}
-	d.writeString(out, " xmlns:")
-	d.writeString(out, prefix)
 	d.writeString(out, `="`)
 	if d.err == nil {
 		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil); err != nil {
