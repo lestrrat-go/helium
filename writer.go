@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -88,6 +89,14 @@ type Writer struct {
 	// byte-identical when no normalization is requested.
 	normalize bool
 	normForm  norm.Form
+	// initialNSScope seeds the serializer's namespace scope with bindings
+	// (prefix -> URI; empty prefix = default namespace) treated as already in
+	// force on an ancestor that is not itself part of the serialized output. A
+	// node using such a prefix is not given a redundant xmlns declaration, so a
+	// subtree can be serialized as a self-contained fragment whose in-scope
+	// ancestor namespaces are supplied externally. Nil/empty leaves output
+	// byte-identical.
+	initialNSScope map[string]string
 }
 
 // standaloneMode controls how the writer emits the standalone pseudo-attribute
@@ -415,6 +424,18 @@ func (w Writer) Normalization(form string) Writer {
 	return w
 }
 
+// InheritedNamespaces seeds the serializer's namespace scope with bindings
+// (prefix -> URI; the empty prefix is the default namespace) treated as already
+// in force on an ancestor outside the serialized output. A node using such a
+// prefix is not given a redundant xmlns re-declaration, so a subtree can be
+// serialized as a self-contained fragment whose in-scope ancestor namespaces are
+// supplied externally (for example, capturing an element's inner XML while its
+// ancestors are not serialized). A nil or empty map leaves output byte-identical.
+func (w Writer) InheritedNamespaces(bindings map[string]string) Writer {
+	w.initialNSScope = bindings
+	return w
+}
+
 // effectiveEncoding returns the encoding driving the XML-declaration
 // pseudo-attribute: the OutputEncoding override when set, otherwise the
 // document's own encoding.
@@ -531,6 +552,7 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 	// OutputVersion("1.1") override enables XML 1.1 serialization here; without
 	// it, output stays byte-identical to the prior behavior.
 	s.xml11 = d.outputVersion == "1.1"
+	s.seedNSScope()
 	return s.writeNode(out, node)
 }
 
@@ -774,6 +796,17 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			name = nser.LocalName()
 		}
 		nslist = nser.Namespaces()
+		// When the element's active namespace is a default (empty prefix) whose
+		// URI differs from a default declaration in its own nsDefs, the active
+		// binding is authoritative — it qualifies the element — so drop the
+		// conflicting declared default. Emitting both would put two xmlns
+		// attributes on the start tag, which is not reparseable. reconcileOne
+		// then synthesizes the single active default. A matching (equal-URI)
+		// declared default is kept, so a normally parsed <e xmlns="u"/> still
+		// declares its default exactly once.
+		if active := nser.Namespace(); active != nil && active.prefix == "" && active.href != "" {
+			nslist = dropConflictingDefaultNS(nslist, active.href)
+		}
 	} else {
 		name = n.Name()
 	}
@@ -938,6 +971,33 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 // returns every binding it added to the scope so the caller can restore the
 // scope after the element's children are serialized, or nil when the element
 // neither declares nor uses a namespace (the plain-XML path stays alloc-free).
+// dropConflictingDefaultNS returns nslist without any default-namespace
+// declaration (empty prefix) whose URI differs from activeHref. The element's
+// active default namespace is authoritative, so a conflicting declared default
+// must not also be emitted — two xmlns attributes on one start tag are not
+// reparseable. When no declaration conflicts, nslist is returned unchanged so the
+// common path allocates nothing. Callers pass a non-empty activeHref.
+func dropConflictingDefaultNS(nslist []*Namespace, activeHref string) []*Namespace {
+	conflict := false
+	for _, ns := range nslist {
+		if ns.prefix == "" && ns.href != activeHref {
+			conflict = true
+			break
+		}
+	}
+	if !conflict {
+		return nslist
+	}
+	out := make([]*Namespace, 0, len(nslist))
+	for _, ns := range nslist {
+		if ns.prefix == "" && ns.href != activeHref {
+			continue
+		}
+		out = append(out, ns)
+	}
+	return out
+}
+
 func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespacer, nslist []*Namespace) []nsSaved {
 	var saved []nsSaved
 
@@ -1014,6 +1074,17 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElemen
 	}
 	d.writeString(out, `"`)
 	return d.nsScopePush(prefix, href, saved)
+}
+
+// seedNSScope initializes the output namespace scope from InheritedNamespaces,
+// copying the caller's map so it is never mutated during serialization. It is a
+// no-op (and allocates nothing) when no inherited bindings were supplied.
+func (d *writeSession) seedNSScope() {
+	if len(d.initialNSScope) == 0 {
+		return
+	}
+	d.nsScope = make(map[string]string, len(d.initialNSScope))
+	maps.Copy(d.nsScope, d.initialNSScope)
 }
 
 // nsScopePush binds prefix to href in the output namespace scope, appending the

@@ -233,6 +233,63 @@ func TestWriteActiveDefaultNamespace(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, str, `xmlns=""`)
 	})
+
+	t.Run("conflicting declared and active default emits a single reparseable xmlns", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		// A declared default that conflicts with the element's active default: the
+		// active binding wins and only one xmlns is emitted, so the output reparses.
+		require.NoError(t, root.DeclareNamespace("", "urn:declared"))
+		require.NoError(t, root.SetActiveNamespace("", "urn:active"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, strings.Count(str, "xmlns="), "exactly one default declaration: %s", str)
+		require.Contains(t, str, `xmlns="urn:active"`)
+		require.NotContains(t, str, `xmlns="urn:declared"`)
+
+		_, err = helium.NewParser().Parse(t.Context(), []byte(str))
+		require.NoError(t, err, "serialized output must reparse: %s", str)
+	})
+}
+
+func TestWriteInheritedNamespaces(t *testing.T) {
+	t.Parallel()
+
+	t.Run("seeded prefix is not re-declared on a using element", func(t *testing.T) {
+		t.Parallel()
+		// A fragment whose prefix is bound only on an ancestor outside the output:
+		// seeding that binding suppresses the otherwise-synthesized re-declaration.
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root xmlns:p="urn:p"><child><p:leaf/></child></root>`))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		child := root.FirstChild()
+		require.NotNil(t, child)
+
+		var b bytes.Buffer
+		w := helium.NewWriter().XMLDeclaration(false).
+			InheritedNamespaces(map[string]string{"p": "urn:p"})
+		require.NoError(t, w.WriteTo(&b, child))
+		require.Equal(t, `<child><p:leaf/></child>`, b.String())
+	})
+
+	t.Run("without seeding the inherited prefix is re-declared", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root xmlns:p="urn:p"><child><p:leaf/></child></root>`))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild()
+		require.NotNil(t, child)
+
+		var b bytes.Buffer
+		w := helium.NewWriter().XMLDeclaration(false)
+		require.NoError(t, w.WriteTo(&b, child))
+		require.Contains(t, b.String(), `xmlns:p="urn:p"`)
+	})
 }
 
 func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
