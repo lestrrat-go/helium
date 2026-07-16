@@ -136,7 +136,6 @@ libxml2.
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
 | MaxExternalDTDBytes(int) | *(helium extension)* | ✅ | Byte cap for external DTD subset reads; ≤0 → `MaxExternalDTDSize` (10 MiB). Enforced against actual bytes read; over-cap → `ErrExternalDTDTooLarge` |
-| CompactTextNodes(bool) | XML_PARSE_COMPACT | no-op | Go memory model |
 | *(dropped)* | XML_PARSE_NOUNZIP | no-op | No decompression support |
 | *(dropped)* | XML_PARSE_NOSYSCATALOG | no-op | No global catalog |
 | *(dropped)* | XML_PARSE_CATALOGPI | no-op | Not yet implemented |

@@ -38,7 +38,6 @@ const (
 	parseNoNet          = parser.NoNet
 	parseNsClean        = parser.NsClean
 	parseNoCDATA        = parser.NoCDATA
-	parseCompact        = parser.Compact
 	parseNoBaseFix      = parser.NoBaseFix
 	parseIgnoreEnc      = parser.IgnoreEnc
 	parseNoXXE          = parser.NoXXE
