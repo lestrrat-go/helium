@@ -59,12 +59,14 @@ type Entity struct {
 	 * and if it contains '<' */
 }
 
+// Predefined XML entity singletons (XML §4.6). Internal: callers resolve
+// these through the parser, never by name from outside the package.
 var (
-	EntityLT         = newEntity("lt", enum.InternalPredefinedEntity, "", "", "<", "&lt;")
-	EntityGT         = newEntity("gt", enum.InternalPredefinedEntity, "", "", ">", "&gt;")
-	EntityAmpersand  = newEntity("amp", enum.InternalPredefinedEntity, "", "", "&", "&amp;")
-	EntityApostrophe = newEntity("apos", enum.InternalPredefinedEntity, "", "", "'", "&apos;")
-	EntityQuote      = newEntity("quot", enum.InternalPredefinedEntity, "", "", `"`, "&quot;")
+	entityLT         = newEntity("lt", enum.InternalPredefinedEntity, "", "", "<", "&lt;")
+	entityGT         = newEntity("gt", enum.InternalPredefinedEntity, "", "", ">", "&gt;")
+	entityAmpersand  = newEntity("amp", enum.InternalPredefinedEntity, "", "", "&", "&amp;")
+	entityApostrophe = newEntity("apos", enum.InternalPredefinedEntity, "", "", "'", "&apos;")
+	entityQuote      = newEntity("quot", enum.InternalPredefinedEntity, "", "", `"`, "&quot;")
 )
 
 // predefinedEntityContent maps predefined entity names to their required
@@ -135,15 +137,15 @@ func resolveCharRefs(s string) string {
 func resolvePredefinedEntity(name string) (*Entity, error) {
 	switch name {
 	case "lt":
-		return EntityLT, nil
+		return entityLT, nil
 	case "gt":
-		return EntityGT, nil
+		return entityGT, nil
 	case "amp":
-		return EntityAmpersand, nil
+		return entityAmpersand, nil
 	case "apos":
-		return EntityApostrophe, nil
+		return entityApostrophe, nil
 	case "quot":
-		return EntityQuote, nil
+		return entityQuote, nil
 	default:
 		return nil, errors.New("entity not found")
 	}

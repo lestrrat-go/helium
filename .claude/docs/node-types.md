@@ -113,7 +113,7 @@ The QName→(name, prefix) split (`AddElementDecl`/`GetElementDesc`) splits on t
 The text-bearing leaves (Text, Comment, CDATASection) store content in an internal mutable `content []byte`. Their exported `Content()` returns a **defensive copy** (`bytes.Clone`) so a caller mutating the result cannot corrupt the DOM. Internal read-only hot paths (serializers in `writer.go`/`writer_xhtml.go`) use the package-level `rawContent(Node)` helper — backed by an unexported `rawContent()` method on each of those three leaf types — to get the raw slice without the copy. The `rawContentNode` interface gates the no-copy path; for any other node `rawContent` falls back to `Content()`. PI/EntityRef/Entity/NamespaceNodeWrapper already returned string-derived copies and are unaffected.
 
 ### Predefined Entities
-5 singletons: `EntityLT`, `EntityGT`, `EntityAmpersand`, `EntityApostrophe`, `EntityQuote`. Type `InternalPredefinedEntity`. Cannot be redeclared.
+5 unexported singletons: `entityLT`, `entityGT`, `entityAmpersand`, `entityApostrophe`, `entityQuote` (resolved by name through `resolvePredefinedEntity`). Type `InternalPredefinedEntity`. Cannot be redeclared.
 
 ### NamespaceDeclNode Special Case
 Skipped in `setTreeDoc()` — sentinel type rarely instantiated.

@@ -997,10 +997,13 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 		}
 	}
 
-	return nil, ErrParseSucceeded
+	return nil, errParseSucceeded
 }
 
-var ErrParseSucceeded = errors.New("parse succeeded")
+// errParseSucceeded is an internal control-flow sentinel: an entity-parse
+// helper returns it (in place of nil) to signal a successful parse to its
+// caller's error switch. It never escapes the package.
+var errParseSucceeded = errors.New("parse succeeded")
 
 func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []byte) (Node, error) {
 	pctx.depth++
@@ -1089,5 +1092,5 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 		}
 	}
 
-	return nil, ErrParseSucceeded
+	return nil, errParseSucceeded
 }
