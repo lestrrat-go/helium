@@ -343,6 +343,27 @@ func catalogOpenName(ref string) string {
 	return p
 }
 
+// networkAccessForbidden reports whether opening name must be refused because it
+// names a network resource and the parser was configured to forbid network
+// access (Parser.AllowNetwork(false) → parseNoNet / libxml2 XML_PARSE_NONET,
+// the default). It is the enforcement point for NONET: helium has no dedicated
+// network loader, so every external-resource load goes through fs.FS.Open, and
+// this guard refuses a network-scheme name before it reaches the (possibly
+// network-capable) caller-supplied fs.FS. A name with no scheme, a "file:"
+// scheme, or a bare path is never a network resource and loads as usual; scheme
+// matching is case-insensitive (uripath.URIScheme lowercases its result).
+func networkAccessForbidden(ctx *parserCtx, name string) bool {
+	if !ctx.options.IsSet(parseNoNet) {
+		return false
+	}
+	switch uripath.URIScheme(name) {
+	case "http", "https", "ftp":
+		return true
+	default:
+		return false
+	}
+}
+
 func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri string) error {
 	ctx := t.pctx(ctxif)
 
@@ -386,7 +407,11 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// resolved may be a "file:" URI (e.g. "file:///C:/dir/inc.dtd" from a
 	// drive-rooted base); convert it to a native path before Open, the same way
 	// a catalog-resolved file: URI is handled. A plain path is returned verbatim.
-	f, err := ctx.fsys.Open(catalogOpenName(resolved))
+	openName := catalogOpenName(resolved)
+	if networkAccessForbidden(ctx, openName) {
+		return ErrNetworkAccessForbidden
+	}
+	f, err := ctx.fsys.Open(openName)
 	if err != nil {
 		// Silently ignore missing external DTDs
 		return nil
@@ -667,6 +692,9 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 			// A catalog may resolve to a "file:" URI; convert it to a local
 			// path before opening (CAT-001).
 			openName := catalogOpenName(resolved)
+			if networkAccessForbidden(ctx, openName) {
+				return nil, ErrNetworkAccessForbidden
+			}
 			f, err := ctx.fsys.Open(openName)
 			if err == nil {
 				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
@@ -678,6 +706,9 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 	// is the entity's resolved URI (built from system ID + base URI in
 	// EntityDecl). Try opening it as a file path.
 	if systemID != "" {
+		if networkAccessForbidden(ctx, systemID) {
+			return nil, ErrNetworkAccessForbidden
+		}
 		f, err := ctx.fsys.Open(systemID)
 		if err == nil {
 			return &fileParseInput{ReadCloser: f, uri: systemID}, nil

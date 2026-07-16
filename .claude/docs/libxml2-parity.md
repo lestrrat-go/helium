@@ -123,7 +123,7 @@ libxml2.
 | PedanticErrors(bool) | XML_PARSE_PEDANTIC | ✅ | Pedantic error reporting |
 | StripBlanks(bool) | XML_PARSE_NOBLANKS | ✅ | Remove blank nodes |
 | XInclude(XIncludeProcessor) | XML_PARSE_XINCLUDE | ✅ | XInclude substitution; inject a configured `xinclude.Processor`, run over the tree during Parse (dependency-inversion seam — helium can't import xinclude) |
-| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network. **Default false** (NONET set by NewParser); cosmetic — core parser has no network loader |
+| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network. **Default false** (NONET set by NewParser). helium has no dedicated network loader; every external load (DTD subset, general/parameter entity) goes through the configured `fs.FS`. When false, the three `fs.FS.Open` sites in `tree_builder.go` (`ExternalSubset`, `ResolveEntity`) refuse a name whose URI scheme is `http`/`https`/`ftp` (case-insensitive) with `ErrNetworkAccessForbidden` before reaching the FS — defense-in-depth for a caller-supplied network-capable FS. A schemeless name, a `file:` scheme, or a bare path is not a network resource and loads as usual |
 | CleanNamespaces(bool) | XML_PARSE_NSCLEAN | ✅ | Remove redundant NS decls |
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
 | XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
