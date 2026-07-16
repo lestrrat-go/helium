@@ -521,10 +521,13 @@ func (p Parser) LenientXMLDecl(v bool) Parser {
 //
 // Passing nil is allowed and does not panic — every event dispatch is nil-
 // guarded. With a nil handler no events are delivered and no tree is built, so
-// [Parser.Parse] (and the other Parse* methods) return a nil *Document and a nil
-// error for well-formed input. Pass a nil handler only to run the parser purely
-// for its well-formedness/validation side effects; provide a TreeBuilder (or
-// another handler) to obtain output.
+// [Parser.Parse] (and the other Parse* methods) return a nil *Document. For
+// simple well-formed input that does not depend on handler-backed state the
+// error is nil too; but parsing that relies on the built tree or handler will
+// not succeed with a nil handler — e.g. resolving a declared entity reference
+// still reports an undeclared-entity error, and DTD validation (ValidateDTD)
+// does nothing because it requires a built document. Provide a [TreeBuilder]
+// (or another handler) to obtain output or to use entity/DTD-dependent features.
 func (p Parser) SAXHandler(s sax.SAX2Handler) Parser {
 	p = p.clone()
 	p.cfg.sax = s
