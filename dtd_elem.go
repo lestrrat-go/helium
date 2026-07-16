@@ -1,6 +1,10 @@
 package helium
 
-import "github.com/lestrrat-go/helium/enum"
+import (
+	"errors"
+
+	"github.com/lestrrat-go/helium/enum"
+)
 
 // ElementDecl is an xml element declaration from DTD.
 type ElementDecl struct {
@@ -62,6 +66,17 @@ type ElementContent struct {
 	c1     *ElementContent
 	c2     *ElementContent
 	parent *ElementContent
+}
+
+// SetOccurrence sets this content node's occurrence indicator (once, ?, *, +)
+// and returns the node for fluent composition. It returns an error if occur is
+// not one of the defined [ElementContentOccur] values.
+func (c *ElementContent) SetOccurrence(occur ElementContentOccur) (*ElementContent, error) {
+	if !isValidElementContentOccur(occur) {
+		return nil, errors.New("invalid element content occurrence")
+	}
+	c.coccur = occur
+	return c, nil
 }
 
 func newElementDecl() *ElementDecl {

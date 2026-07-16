@@ -664,15 +664,38 @@ func (d *Document) CreateCDATASection(value []byte) *CDATASection {
 	return e
 }
 
-// CreateElementContent builds an ElementContent node of the given type for use
-// in a DTD content model. It returns an error if name and etype are not a valid
-// combination.
+// CreateElementContent builds an ElementContent leaf node of the given type for
+// use in a DTD content model: an element-reference leaf ([ElementContentElement],
+// which requires a name) or a #PCDATA leaf ([ElementContentPCDATA], which
+// requires an empty name). To build a sequence (,) or choice (|) node use
+// [Document.CreateElementContentSeq] / [Document.CreateElementContentChoice],
+// which attach and validate the two children; a bare sequence/choice leaf built
+// here has nil children and cannot be serialized. The node defaults to the
+// "once" occurrence; use [ElementContent.SetOccurrence] to change it.
 func (d *Document) CreateElementContent(name string, etype ElementContentType) (*ElementContent, error) {
 	e, err := newElementContent(name, etype)
 	if err != nil {
 		return nil, err
 	}
 	return e, nil
+}
+
+// CreateElementContentSeq builds a sequence (,) content node with the two given
+// children and occurrence indicator. Both children must be non-nil and
+// structurally complete; otherwise it returns an error. This is the safe way to
+// compose a multi-particle content model — the resulting node can be serialized
+// and matched without a nil dereference.
+func (d *Document) CreateElementContentSeq(c1, c2 *ElementContent, occur ElementContentOccur) (*ElementContent, error) {
+	return newElementContentBinary(ElementContentSeq, c1, c2, occur)
+}
+
+// CreateElementContentChoice builds a choice (|) content node with the two given
+// children and occurrence indicator. Both children must be non-nil and
+// structurally complete; otherwise it returns an error. This is the safe way to
+// compose a multi-particle content model — the resulting node can be serialized
+// and matched without a nil dereference.
+func (d *Document) CreateElementContentChoice(c1, c2 *ElementContent, occur ElementContentOccur) (*ElementContent, error) {
+	return newElementContentBinary(ElementContentOr, c1, c2, occur)
 }
 
 // GetEntity looks up a general entity declaration by name, searching the

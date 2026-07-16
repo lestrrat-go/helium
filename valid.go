@@ -45,6 +45,72 @@ func newElementContent(name string, ctype ElementContentType) (*ElementContent, 
 	return &ret, nil
 }
 
+// newElementContentBinary builds a sequence or choice content node with two
+// validated children and the given occurrence indicator, setting each child's
+// parent pointer. It rejects a nil or structurally-incomplete child so the
+// resulting node is always safe to serialize and match.
+func newElementContentBinary(ctype ElementContentType, c1, c2 *ElementContent, occur ElementContentOccur) (*ElementContent, error) {
+	if !isValidElementContentOccur(occur) {
+		return nil, errors.New("invalid element content occurrence")
+	}
+	if err := validateElementContentModel(c1); err != nil {
+		return nil, fmt.Errorf("invalid first child: %w", err)
+	}
+	if err := validateElementContentModel(c2); err != nil {
+		return nil, fmt.Errorf("invalid second child: %w", err)
+	}
+	ret := &ElementContent{ctype: ctype, coccur: occur, c1: c1, c2: c2}
+	c1.parent = ret
+	c2.parent = ret
+	return ret, nil
+}
+
+// isValidElementContentOccur reports whether occur is one of the four defined
+// occurrence indicators.
+func isValidElementContentOccur(occur ElementContentOccur) bool {
+	switch occur {
+	case ElementContentOnce, ElementContentOpt, ElementContentMult, ElementContentPlus:
+		return true
+	}
+	return false
+}
+
+// validateElementContentModel reports whether a content-model tree is
+// structurally complete. A sequence (,) or choice (|) node must have both
+// children present, an element-reference leaf must carry a name, and every node
+// must have a recognized content type and occurrence indicator. An incomplete
+// model (e.g. a sequence node with nil children, as produced by
+// CreateElementContent alone) would nil-dereference in the serializer
+// (writer_dtd.go) and the matcher, so AddElementDecl rejects it here before it
+// can be stored.
+func validateElementContentModel(c *ElementContent) error {
+	if c == nil {
+		return errors.New("content model node must not be nil")
+	}
+	if !isValidElementContentOccur(c.coccur) {
+		return errors.New("content model node has an invalid occurrence indicator")
+	}
+	switch c.ctype {
+	case ElementContentPCDATA:
+		return nil
+	case ElementContentElement:
+		if c.name == "" {
+			return errors.New("element-reference content leaf must have a name")
+		}
+		return nil
+	case ElementContentSeq, ElementContentOr:
+		if c.c1 == nil || c.c2 == nil {
+			return errors.New("sequence/choice content node must have both children")
+		}
+		if err := validateElementContentModel(c.c1); err != nil {
+			return err
+		}
+		return validateElementContentModel(c.c2)
+	default:
+		return errors.New("invalid element content type")
+	}
+}
+
 // rawName returns the element leaf's raw qualified name as declared in the
 // DTD (prefix:local when a prefix is present, else the local name). DTD
 // content-model validation is NOT namespace-aware: the prefix is an opaque

@@ -143,6 +143,12 @@ func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *Eleme
 		if content == nil {
 			return nil, errors.New("content must be non-nil for MIXED/ELEMENT elements")
 		}
+		// Reject a structurally-incomplete model (e.g. a sequence/choice node with
+		// nil children) before it is stored, so serialization can never nil-deref.
+		// Validated first, before any mutation of the DTD tables below.
+		if err := validateElementContentModel(content); err != nil {
+			return nil, fmt.Errorf("invalid content model: %w", err)
+		}
 	default:
 		return nil, errors.New("invalid ElementContent")
 	}
@@ -222,11 +228,20 @@ func (dtd *DTD) LookupElement(name, prefix string) (*ElementDecl, bool) {
 	return decl, true
 }
 
-// RemoveElement deletes the element declaration registered under the given
-// local name and prefix, if present.
-func (dtd *DTD) RemoveElement(name, prefix string) {
+// RemoveElement removes the element declaration registered under the given
+// local name and prefix. It deletes the lookup-table entry AND unlinks the
+// declaration node from the DTD child list, so the declaration is no longer
+// serialized. It returns the removed declaration, or nil if none was registered
+// under that key.
+func (dtd *DTD) RemoveElement(name, prefix string) *ElementDecl {
 	key := name + ":" + prefix
+	decl, ok := dtd.elements[key]
+	if !ok {
+		return nil
+	}
 	delete(dtd.elements, key)
+	unlinkNode(decl)
+	return decl
 }
 
 // LookupAttribute returns the attribute declaration registered for the given
