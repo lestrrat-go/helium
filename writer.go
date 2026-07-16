@@ -2,7 +2,6 @@ package helium
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -100,6 +99,12 @@ type Writer struct {
 	// byte-identical when no normalization is requested.
 	normalize bool
 	normForm  norm.Form
+	// normFormRaw is the exact form string passed to Normalization, retained so
+	// WriteTo can reject an unrecognized value (a typo, or a form the writer does
+	// not implement) with ErrUnsupportedNormalizationForm rather than silently
+	// disabling normalization. Empty (the default) is valid and means "no
+	// normalization requested".
+	normFormRaw string
 	// initialNSScope seeds the serializer's namespace scope with bindings
 	// (prefix -> URI; empty prefix = default namespace) treated as already in
 	// force on an ancestor that is not itself part of the serialized output. A
@@ -332,11 +337,11 @@ func hasXmlnsPrefix(name string) bool {
 // well-formed XML); "xmlns" is reserved only as an attribute name.
 func (s *writeSession) checkElementName(name string) bool {
 	if hasXmlnsPrefix(name) {
-		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace", name))
+		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace: %w", name, ErrWriterReservedElementName))
 		return false
 	}
 	if !xmlchar.IsValidQName(name) {
-		s.check(fmt.Errorf("helium: invalid element name %q", name))
+		s.check(fmt.Errorf("helium: invalid element name %q: %w", name, ErrWriterInvalidElementName))
 		return false
 	}
 	// An element name cannot hold a character reference, so a non-ASCII name has
@@ -360,11 +365,11 @@ func (s *writeSession) checkElementName(name string) bool {
 // user-supplied misuse.
 func (s *writeSession) checkAttributeName(name string) bool {
 	if name == "xmlns" || hasXmlnsPrefix(name) {
-		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace", name))
+		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace: %w", name, ErrWriterReservedAttributeName))
 		return false
 	}
 	if !xmlchar.IsValidQName(name) {
-		s.check(fmt.Errorf("helium: invalid attribute name %q", name))
+		s.check(fmt.Errorf("helium: invalid attribute name %q: %w", name, ErrWriterInvalidAttributeName))
 		return false
 	}
 	// An attribute name cannot hold a character reference, so a non-ASCII name
@@ -387,11 +392,11 @@ func (s *writeSession) checkAttributeName(name string) bool {
 // and XHTML serialization paths so they cannot diverge.
 func (s *writeSession) checkNamespacePrefix(prefix string) bool {
 	if prefix == "xmlns" {
-		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared", prefix))
+		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared: %w", prefix, ErrWriterReservedNamespacePrefix))
 		return false
 	}
 	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
-		s.check(fmt.Errorf("helium: invalid namespace prefix %q", prefix))
+		s.check(fmt.Errorf("helium: invalid namespace prefix %q: %w", prefix, ErrWriterInvalidNamespacePrefix))
 		return false
 	}
 	// A namespace prefix cannot hold a character reference, so a non-ASCII prefix
@@ -598,14 +603,18 @@ func (w Writer) OutputEncoding(v string) Writer {
 
 // Normalization requests Unicode normalization of text-node and attribute-value
 // character content (the normalization-form serialization parameter). form is one
-// of "NFC", "NFD", "NFKC", "NFKD"; "", "none", or any other value disables it,
-// leaving output byte-identical. Normalization is scoped to text and attribute
-// nodes (Serialization 3.1 §4 character-expansion phase) — element/attribute
-// names, comments, PIs, the DOCTYPE, and the XML declaration are never normalized.
-// A character map (CharacterMap) is expected to carry normalization-inert
-// replacements (fn:serialize substitutes sentinel runes), so a mapped character's
-// replacement is not normalized.
+// of "NFC", "NFD", "NFKC", "NFKD" to enable it, or "" / "none" to disable it
+// (leaving output byte-identical). Any other value is an error: WriteTo fails with
+// ErrUnsupportedNormalizationForm before emitting any output byte, so a typo or an
+// unsupported form (e.g. "fully-normalized") is observable rather than silently
+// swallowed. Normalization is scoped to text and attribute nodes (Serialization
+// 3.1 §4 character-expansion phase) — element/attribute names, comments, PIs, the
+// DOCTYPE, and the XML declaration are never normalized. A character map
+// (CharacterMap) is expected to carry normalization-inert replacements
+// (fn:serialize substitutes sentinel runes), so a mapped character's replacement
+// is not normalized.
 func (w Writer) Normalization(form string) Writer {
+	w.normFormRaw = form
 	w.normForm, w.normalize = xmlNormalizationForm(form)
 	return w
 }
@@ -757,6 +766,14 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 	// get ErrNilNode instead of a panic from method calls on the nil node.
 	if isNilNode(node) {
 		return ErrNilNode
+	}
+	// Reject an unrecognized normalization-form (a typo, or a form the writer does
+	// not implement) before any output byte, on both the Document and bare-element
+	// paths: Normalization stores the raw value and defers the check here so the
+	// failure is observable rather than a silent no-op. "" (the default) and "none"
+	// are valid and disable normalization.
+	if !validNormalizationForm(d.normFormRaw) {
+		return fmt.Errorf("helium: unsupported normalization form %q: %w", d.normFormRaw, ErrUnsupportedNormalizationForm)
 	}
 	if doc, ok := node.(*Document); ok {
 		return d.writeDoc(out, doc)
@@ -966,7 +983,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		if bytes.Contains(content, []byte("--")) || (len(content) > 0 && content[len(content)-1] == '-') {
 			// check() keeps the first sticky error, so an earlier I/O failure is
 			// not clobbered by this validation error.
-			d.check(errors.New("helium: comment content must not contain \"--\" or end with \"-\""))
+			d.check(fmt.Errorf("helium: comment content must not contain \"--\" or end with \"-\": %w", ErrWriterInvalidComment))
 			return d.err
 		}
 		// Comment text cannot hold a character reference, so a non-ASCII comment
@@ -987,14 +1004,14 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if !xmlchar.IsValidPITarget(pi.target) {
 				// check() keeps the first sticky error, so an earlier I/O failure
 				// is not clobbered by this validation error.
-				d.check(errors.New("helium: invalid PI target"))
+				d.check(fmt.Errorf("helium: invalid PI target: %w", ErrWriterInvalidPITarget))
 				return d.err
 			}
 			// PI data must not contain "?>", which would terminate the PI early.
 			if strings.Contains(pi.data, "?>") {
 				// check() keeps the first sticky error, so an earlier I/O failure
 				// is not clobbered by this validation error.
-				d.check(errors.New("helium: PI content must not contain \"?>\""))
+				d.check(fmt.Errorf("helium: PI content must not contain \"?>\": %w", ErrWriterInvalidPIContent))
 				return d.err
 			}
 			// Neither the PI target nor its data can hold a character reference, so

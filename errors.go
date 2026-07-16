@@ -116,6 +116,40 @@ var (
 	// before emitting any output byte and fails closed, emitting nothing.
 	// Match with errors.Is.
 	ErrInvalidOutputVersion = errors.New("invalid output XML version")
+	// ErrWriterReservedElementName, ErrWriterReservedAttributeName, and
+	// ErrWriterReservedNamespacePrefix flag a name reserved for namespace
+	// declarations (the "xmlns" name or prefix); such declarations must go through
+	// DeclareNamespace, not a literal name. These, and the sibling writer
+	// structural sentinels below, flag a DOM node Writer.WriteTo cannot serialize
+	// into well-formed XML. Each is wrapped (via %w) into a descriptive,
+	// value-bearing message, so a caller can branch on the failure class with
+	// errors.Is while still surfacing the human-readable text.
+	ErrWriterReservedElementName     = errors.New("reserved element name")
+	ErrWriterReservedAttributeName   = errors.New("reserved attribute name")
+	ErrWriterReservedNamespacePrefix = errors.New("reserved namespace prefix")
+	// ErrWriterInvalidElementName, ErrWriterInvalidAttributeName, and
+	// ErrWriterInvalidNamespacePrefix flag a name that is not a valid XML
+	// QName/NCName and would inject raw markup if emitted verbatim.
+	ErrWriterInvalidElementName     = errors.New("invalid element name")
+	ErrWriterInvalidAttributeName   = errors.New("invalid attribute name")
+	ErrWriterInvalidNamespacePrefix = errors.New("invalid namespace prefix")
+	// ErrWriterInvalidComment flags comment content that contains "--" or ends
+	// with "-" (either would break the "-->" delimiter).
+	ErrWriterInvalidComment = errors.New("invalid comment content")
+	// ErrWriterInvalidPITarget flags a processing-instruction target that is not a
+	// valid PITarget; ErrWriterInvalidPIContent flags PI content containing "?>".
+	ErrWriterInvalidPITarget  = errors.New("invalid processing-instruction target")
+	ErrWriterInvalidPIContent = errors.New("invalid processing-instruction content")
+	// ErrWriterInvalidDTDNode flags a DTD node (element-content particle, entity,
+	// element/attribute declaration) whose type/enum field holds an unrecognized
+	// value, so it cannot be serialized.
+	ErrWriterInvalidDTDNode = errors.New("invalid DTD node")
+	// ErrUnsupportedNormalizationForm is returned by Writer.WriteTo when
+	// Writer.Normalization was given a value outside the supported set
+	// ("", "none", "NFC", "NFD", "NFKC", "NFKD"). The writer fails closed before
+	// emitting any output byte instead of silently disabling normalization.
+	// Match with errors.Is.
+	ErrUnsupportedNormalizationForm = errors.New("unsupported normalization form")
 	// ErrNetworkAccessForbidden is returned when an external resource (an
 	// external DTD subset or external parsed entity) names a network URI —
 	// an http, https, or ftp scheme — but the parser was configured to forbid

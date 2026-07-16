@@ -2,7 +2,6 @@ package helium
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -169,7 +168,7 @@ func (d *writeSession) dumpElementContent(out io.Writer, n *ElementContent, glob
 			}
 		}
 	default:
-		return errors.New("invalid ElementContent")
+		return fmt.Errorf("invalid ElementContent: %w", ErrWriterInvalidDTDNode)
 	}
 
 	if glob {
@@ -313,7 +312,7 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 			d.check(dumpQuotedString(out, ent.systemID))
 		}
 	default:
-		return errors.New("invalid entity type")
+		return fmt.Errorf("invalid entity type: %w", ErrWriterInvalidDTDNode)
 	}
 	return d.err
 }
@@ -357,7 +356,7 @@ func (d *writeSession) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 		}
 		d.writeString(out, ">\n")
 	default:
-		return errors.New("invalid element decl")
+		return fmt.Errorf("invalid element decl: %w", ErrWriterInvalidDTDNode)
 	}
 	return d.err
 }
@@ -401,7 +400,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 			return err
 		}
 	default:
-		return errors.New("invalid AttributeDecl type")
+		return fmt.Errorf("invalid AttributeDecl type: %w", ErrWriterInvalidDTDNode)
 	}
 
 	switch n.def {
@@ -413,7 +412,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 	case enum.AttrDefaultFixed:
 		d.writeString(out, " #FIXED")
 	default:
-		return errors.New("invalid AttributeDecl default value type")
+		return fmt.Errorf("invalid AttributeDecl default value type: %w", ErrWriterInvalidDTDNode)
 	}
 
 	if n.defvalue != "" {

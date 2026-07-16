@@ -12,9 +12,10 @@ import (
 
 // xmlNormalizationForm maps a normalization-form parameter name to its
 // golang.org/x/text norm.Form and reports whether normalization is active. "NFC",
-// "NFD", "NFKC", and "NFKD" enable it; "", "none", and any other value disable it
-// (the caller — fn:serialize — rejects "fully-normalized" as SESU0011 before
-// reaching the writer).
+// "NFD", "NFKC", and "NFKD" enable it; "" and "none" disable it. Any other value
+// also returns active=false here, but validNormalizationForm rejects it so WriteTo
+// fails rather than silently disabling normalization (the caller — fn:serialize —
+// rejects "fully-normalized" as SESU0011 before reaching the writer).
 func xmlNormalizationForm(form string) (norm.Form, bool) {
 	switch form {
 	case "NFC":
@@ -27,6 +28,19 @@ func xmlNormalizationForm(form string) (norm.Form, bool) {
 		return norm.NFKD, true
 	}
 	return norm.NFC, false
+}
+
+// validNormalizationForm reports whether form is a normalization-form value the
+// writer accepts: "" and "none" disable normalization; "NFC", "NFD", "NFKC", and
+// "NFKD" enable it. Any other value (a typo, or a form the writer does not
+// implement such as "fully-normalized") is rejected so WriteTo can surface
+// ErrUnsupportedNormalizationForm instead of silently disabling normalization.
+func validNormalizationForm(form string) bool {
+	switch form {
+	case "", "none", "NFC", "NFD", "NFKC", "NFKD":
+		return true
+	}
+	return false
 }
 
 // normalizeContent applies the writer's requested Unicode normalization to a text
