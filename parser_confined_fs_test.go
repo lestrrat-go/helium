@@ -2,15 +2,39 @@ package helium_test
 
 import (
 	"bytes"
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
+
+// remapToInRootAbsCatalog stands in for a catalog that maps a scheme-carrying
+// SYSTEM id to an in-root ABSOLUTE path. It matches any system id containing
+// marker (the declared id reaches Resolve verbatim for the external subset,
+// and as the entity's already-resolved URI for ResolveEntity), returning the
+// absolute target. It is the adversarial case for systemIDRetryEligible: the
+// declared id carries a URI scheme (or drive letter), so even though the target
+// is a valid in-root file whose base-relative form would open, the confined-FS
+// retry must NOT fire.
+type remapToInRootAbsCatalog struct {
+	marker string
+	target string
+}
+
+func (c remapToInRootAbsCatalog) Resolve(_ context.Context, _, sysID string) string {
+	if strings.Contains(sysID, c.marker) {
+		return c.target
+	}
+	return ""
+}
+
+func (c remapToInRootAbsCatalog) ResolveURI(_ context.Context, _ string) string { return "" }
 
 // validPathFS is a caller-supplied, network-capable fs.FS that ALSO enforces
 // fs.ValidPath the way os.DirFS / os.Root.FS / fstest.MapFS do: an invalid
@@ -398,4 +422,114 @@ func TestDirectResolveEntityPreservesFileURIPrimaryName(t *testing.T) {
 	require.NotNil(t, de)
 	require.NotNil(t, de.FirstChild(), "the external general entity must have resolved and expanded")
 	require.Equal(t, "child", de.FirstChild().Name())
+}
+
+// A one-letter-scheme SYSTEM id ("x:opaque") is a valid absolute URI per RFC
+// 3986 (scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )). It must NEVER be
+// retried through the confined FS, even when a catalog remaps it to an in-root
+// absolute DTD whose base-relative form would open. This is the external-subset
+// path: eligibility is captured from the DECLARED id ("x:opaque") before catalog
+// mapping. The in-root file exists and is readable, so a load would succeed if
+// the retry fired — proving the refusal is the eligibility gate, not a miss.
+func TestConfinedDirFSDoesNotRetrySchemeSystemIDExternalSubset(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub.dtd"),
+		[]byte("<!ELEMENT doc (#PCDATA)>\n"), 0o600))
+	target := filepath.Join(dir, "sub.dtd") // an in-root ABSOLUTE path
+	docPath := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE doc SYSTEM "x:opaque">`+"\n"+
+			`<doc>hello</doc>`), 0o600))
+
+	rec := &recordingFS{inner: os.DirFS(dir)}
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		Catalog(remapToInRootAbsCatalog{marker: "x:opaque", target: target}).
+		FS(rec).
+		ParseFile(t.Context(), docPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.Nil(t, doc.ExtSubset(),
+		"a one-letter-scheme SYSTEM id must not load the external subset via the confined-FS retry")
+	require.False(t, rec.wasOpened("sub.dtd"),
+		"the base-relative retry name must never be opened for a scheme-carrying SYSTEM id")
+}
+
+// The ResolveEntity general-entity path: an external general entity declared
+// with a one-letter-scheme SYSTEM id ("x:opaque") that a catalog remaps to an
+// in-root absolute file must NOT be retried. Its eligibility is gated on the
+// declared id via parserCtx.extRefRelative.
+func TestConfinedDirFSDoesNotRetrySchemeSystemIDGeneralEntity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ent.xml"),
+		[]byte(`<child>x</child>`), 0o600))
+	target := filepath.Join(dir, "ent.xml") // an in-root ABSOLUTE path
+	docPath := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE root [<!ENTITY e SYSTEM "x:opaque">]>`+"\n"+
+			`<root>&e;</root>`), 0o600))
+
+	rec := &recordingFS{inner: os.DirFS(dir)}
+	_, err := helium.NewParser().
+		BlockXXE(false).
+		SubstituteEntities(true).
+		LoadExternalDTD(true).
+		Catalog(remapToInRootAbsCatalog{marker: "x:opaque", target: target}).
+		FS(rec).
+		ParseFile(t.Context(), docPath)
+
+	// The retry is refused, so the scheme-carrying general entity never resolves;
+	// with entity substitution requested, an unresolvable external general entity
+	// is a fatal parse error. The load never reaching the in-root file is the
+	// point — the base-relative retry name must never be opened.
+	require.Error(t, err,
+		"a scheme-carrying external general entity must not resolve via the confined-FS retry")
+	require.False(t, rec.wasOpened("ent.xml"),
+		"the base-relative retry name must never be opened for a scheme-carrying general-entity SYSTEM id")
+}
+
+// The ResolveEntity parameter-entity path: an external parameter entity declared
+// with a one-letter-scheme SYSTEM id ("x:opaque") that a catalog remaps to an
+// in-root absolute DTD must NOT be retried. Its eligibility is gated on the
+// declared id (loadExternalParameterEntityContent → systemIDRetryEligible).
+func TestConfinedDirFSDoesNotRetrySchemeSystemIDParameterEntity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "decls.dtd"),
+		[]byte(`<!ENTITY greeting "hello from PE">`+"\n"), 0o600))
+	target := filepath.Join(dir, "decls.dtd") // an in-root ABSOLUTE path
+	docPath := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE doc [`+"\n"+
+			`<!ENTITY % pe SYSTEM "x:opaque">`+"\n"+
+			`%pe;`+"\n"+
+			`]>`+"\n"+
+			`<doc>&greeting;</doc>`), 0o600))
+
+	rec := &recordingFS{inner: os.DirFS(dir)}
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		Catalog(remapToInRootAbsCatalog{marker: "x:opaque", target: target}).
+		FS(rec).
+		ParseFile(t.Context(), docPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.False(t, rec.wasOpened("decls.dtd"),
+		"the base-relative retry name must never be opened for a scheme-carrying parameter-entity SYSTEM id")
+	_, ok := doc.GetEntity("greeting")
+	require.False(t, ok,
+		"a scheme-carrying external parameter entity must not load its declarations via the confined-FS retry")
 }

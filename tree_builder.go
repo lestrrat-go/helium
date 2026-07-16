@@ -370,16 +370,34 @@ func networkAccessForbidden(ctx *parserCtx, name string) bool {
 // systemIDRetryEligible reports whether a declared SYSTEM id is eligible for the
 // confined-FS base-relative retry (openExternalResource). Only an ORIGINALLY
 // relative reference is eligible: the id must be neither an absolute path (POSIX
-// or Windows, GOOS-independent) nor carry a URI scheme (e.g. "file:", "http:").
-// It is evaluated on the id AS DECLARED — before URI resolution against the base
-// and before any catalog mapping — because the confined-FS retry only ever wants
-// to recover the relative name a caller who rooted the FS at the document
-// directory expects; an absolute or file-URI SYSTEM id is never retried.
+// or Windows, GOOS-independent), nor carry a URI scheme (e.g. "file:", "http:"),
+// nor carry a colon anywhere in its FIRST path segment (the part before the
+// first '/' or '\\'). It is evaluated on the id AS DECLARED — before URI
+// resolution against the base and before any catalog mapping — because the
+// confined-FS retry only ever wants to recover the relative name a caller who
+// rooted the FS at the document directory expects; an absolute or file-URI
+// SYSTEM id is never retried.
+//
+// The first-segment colon check catches every scheme-looking id that
+// [uripath.HasURIScheme] deliberately does not: a one-letter URI scheme
+// ("x:opaque" — valid per RFC 3986, scheme = ALPHA *( ALPHA / DIGIT / "+" /
+// "-" / "." )) reads as a Windows drive letter to that helper (whose 2-char
+// minimum disambiguates "C:\\path"), and a bare drive letter itself. A genuine
+// relative path never carries a colon in its first segment — RFC 3986 makes
+// such a reference scheme-ambiguous — so excluding it cannot misclassify a real
+// relative id.
 func systemIDRetryEligible(declaredSystemID string) bool {
 	if declaredSystemID == "" {
 		return false
 	}
-	return !uripath.IsAbsolutePath(declaredSystemID) && !uripath.HasURIScheme(declaredSystemID)
+	if uripath.IsAbsolutePath(declaredSystemID) || uripath.HasURIScheme(declaredSystemID) {
+		return false
+	}
+	firstSeg := declaredSystemID
+	if i := strings.IndexAny(firstSeg, `/\`); i >= 0 {
+		firstSeg = firstSeg[:i]
+	}
+	return !strings.Contains(firstSeg, ":")
 }
 
 // baseRelativeFSName derives a valid [fs.ValidPath] name for primary by making
