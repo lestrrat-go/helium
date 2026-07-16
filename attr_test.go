@@ -62,6 +62,68 @@ func TestSetAttribute(t *testing.T) {
 		err = elem.SetLiteralAttribute("lang", "en")
 		require.NoError(t, err)
 	})
+
+	t.Run("parse setters resolve entity references; literal setters store verbatim", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		elem := doc.CreateElement("root")
+		ns := helium.NewNamespace("p", "urn:x")
+
+		// SetAttribute / SetAttributeNS parse the value as attribute-value
+		// content, so "&amp;" is resolved to a single '&'.
+		_, err := elem.SetAttribute("a", "x&amp;y")
+		require.NoError(t, err)
+		v, ok := elem.GetAttribute("a")
+		require.True(t, ok)
+		require.Equal(t, "x&y", v)
+
+		_, err = elem.SetAttributeNS("c", "x&amp;y", ns)
+		require.NoError(t, err)
+		v, ok = elem.GetAttributeNS("c", "urn:x")
+		require.True(t, ok)
+		require.Equal(t, "x&y", v)
+
+		// The literal setters store the value verbatim (no entity parsing).
+		require.NoError(t, elem.SetLiteralAttribute("b", "x&amp;y"))
+		v, ok = elem.GetAttribute("b")
+		require.True(t, ok)
+		require.Equal(t, "x&amp;y", v)
+
+		require.NoError(t, elem.SetLiteralAttributeNS("d", "x&amp;y", ns))
+		v, ok = elem.GetAttributeNS("d", "urn:x")
+		require.True(t, ok)
+		require.Equal(t, "x&amp;y", v)
+	})
+
+	t.Run("all four setters replace an existing attribute in place", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		ns := helium.NewNamespace("p", "urn:x")
+
+		e1 := doc.CreateElement("r")
+		_, err := e1.SetAttribute("a", "1")
+		require.NoError(t, err)
+		_, err = e1.SetAttribute("a", "2")
+		require.NoError(t, err)
+		require.Len(t, e1.Attributes(), 1)
+
+		e2 := doc.CreateElement("r")
+		require.NoError(t, e2.SetLiteralAttribute("a", "1"))
+		require.NoError(t, e2.SetLiteralAttribute("a", "2"))
+		require.Len(t, e2.Attributes(), 1)
+
+		e3 := doc.CreateElement("r")
+		_, err = e3.SetAttributeNS("a", "1", ns)
+		require.NoError(t, err)
+		_, err = e3.SetAttributeNS("a", "2", ns)
+		require.NoError(t, err)
+		require.Len(t, e3.Attributes(), 1)
+
+		e4 := doc.CreateElement("r")
+		require.NoError(t, e4.SetLiteralAttributeNS("a", "1", ns))
+		require.NoError(t, e4.SetLiteralAttributeNS("a", "2", ns))
+		require.Len(t, e4.Attributes(), 1)
+	})
 }
 
 func TestAttributeAType(t *testing.T) {
@@ -590,7 +652,7 @@ func TestGetAttributeNodeNS(t *testing.T) {
 func TestSetAttributeNSDuplicate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("same namespace URI via different Namespace pointers is a duplicate", func(t *testing.T) {
+	t.Run("same namespace URI via different Namespace pointers replaces in place", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("root")
@@ -598,7 +660,9 @@ func TestSetAttributeNSDuplicate(t *testing.T) {
 		// Two distinct *Namespace values that share the same URI. Per XML
 		// rules an element may not carry two attributes with the same
 		// (namespace URI, local name), regardless of which namespace
-		// declaration (pointer) they reference.
+		// declaration (pointer) they reference. Like every other Set*Attribute
+		// entry point, SetAttributeNS treats these as the SAME attribute and
+		// replaces in place rather than appending a second property or erroring.
 		ns1 := helium.NewNamespace("a", "http://example.com/ns")
 		ns2 := helium.NewNamespace("b", "http://example.com/ns")
 
@@ -606,7 +670,14 @@ func TestSetAttributeNSDuplicate(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = e.SetAttributeNS("attr", "second", ns2)
-		require.ErrorIs(t, err, helium.ErrDuplicateAttribute)
+		require.NoError(t, err)
+
+		attrs := e.Attributes()
+		require.Len(t, attrs, 1)
+		require.Equal(t, "second", attrs[0].Value())
+		v, ok := e.GetAttributeNS("attr", "http://example.com/ns")
+		require.True(t, ok)
+		require.Equal(t, "second", v)
 	})
 
 	t.Run("genuinely different namespaces are not duplicates", func(t *testing.T) {

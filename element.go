@@ -53,8 +53,10 @@ func (n *Element) SetTreeDoc(doc *Document) {
 }
 
 // SetAttribute creates or replaces the attribute named name, parsing value for
-// entity references, and returns the element for chaining. The name must not
-// contain a colon; use SetAttributeNS for namespaced attributes.
+// entity references, and returns the element for chaining. An existing
+// attribute with the same QName is replaced in place. The name must not
+// contain a colon; use SetAttributeNS for namespaced attributes, or
+// SetLiteralAttribute to store value verbatim without parsing.
 func (n *Element) SetAttribute(name, value string) (*Element, error) {
 	attr, err := n.doc.CreateAttribute(name, value, nil)
 	if err != nil {
@@ -107,9 +109,10 @@ func (n *Element) SetBooleanAttribute(name string) error {
 // q:a both bound to {urn:x}a); the QName test catches duplicates among
 // no-namespace attributes and any other identical serialization.
 //
-// This is the single attribute-identity check shared by every
-// attribute-creation entry point (addProperty, which backs SetAttribute
-// and SetLiteralAttribute(NS), and SetAttributeNS).
+// This is the single attribute-identity check used by addProperty, which
+// backs every attribute-creation entry point (SetAttribute, SetAttributeNS,
+// SetLiteralAttribute, and SetLiteralAttributeNS). A matching attribute is
+// replaced in place; a new one is appended.
 func attrMatches(existing *Attribute, qname, nsURI, localName string) bool {
 	if existing.URI() == nsURI && existing.LocalName() == localName {
 		return true
@@ -182,40 +185,19 @@ func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) 
 	return nil
 }
 
-// SetAttributeNS creates an attribute with the given local name, value, and namespace.
+// SetAttributeNS creates or replaces the attribute with the given local name
+// and namespace, parsing value for entity references, and returns the element
+// for chaining. An existing attribute with the same expanded name (namespace
+// URI + local name) or serialized QName is replaced in place. The local name
+// must not contain a colon. This is the namespaced analogue of SetAttribute;
+// use SetLiteralAttributeNS to store value verbatim without parsing.
 func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Element, error) {
 	attr, err := n.doc.CreateAttribute(localname, value, ns)
 	if err != nil {
 		return nil, err
 	}
 
-	p := n.properties
-	if p == nil {
-		n.properties = attr
-		attr.parent = n
-		return n, nil
-	}
-
-	// Use the same attribute-identity check as addProperty: an attribute is
-	// a duplicate when EITHER its expanded name (namespace URI + local name)
-	// OR its serialized QName matches an existing one. Comparing by URI
-	// value rather than *Namespace pointer identity means distinct namespace
-	// declarations carrying the same URI still collide.
-	qname := attr.Name()
-	nsURI := attr.URI()
-
-	var last *Attribute
-	for ; p != nil; p = p.NextAttribute() {
-		if attrMatches(p, qname, nsURI, localname) {
-			return nil, ErrDuplicateAttribute
-		}
-		last = p
-	}
-
-	last.next = attr
-	attr.prev = last
-	attr.parent = n
-
+	n.addProperty(attr)
 	return n, nil
 }
 

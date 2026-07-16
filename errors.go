@@ -37,10 +37,9 @@ const (
 
 // Sentinel errors for DOM operations.
 var (
-	ErrNilNode            = errors.New("nil node")
-	ErrInvalidOperation   = errors.New("operation cannot be performed")
-	ErrDuplicateAttribute = errors.New("duplicate attribute")
-	ErrEntityBoundary     = errors.New("entity boundary violation")
+	ErrNilNode          = errors.New("nil node")
+	ErrInvalidOperation = errors.New("operation cannot be performed")
+	ErrEntityBoundary   = errors.New("entity boundary violation")
 	// ErrEntityVersionMismatch is returned when an external parsed entity (or
 	// the external DTD subset) declares, in its TextDecl, an XML version later
 	// than the referencing document's (XML §4.3.4). Helium targets XML 1.0, so a
