@@ -7,15 +7,21 @@ import (
 )
 
 // CopyDTDInfo copies DTD information (entities, notations, element/attribute
-// declarations) from src to dst. This preserves unparsed entity information
-// when creating document copies via xsl:copy.
-func CopyDTDInfo(src, dst *Document) {
+// declarations) from src's internal subset to dst. This preserves unparsed
+// entity information when creating document copies via xsl:copy.
+//
+// It returns an error when the copy cannot be performed — most importantly when
+// dst already has an internal subset (copyDTD calls CreateInternalSubset, which
+// refuses to replace one). A nil src or dst is a no-op and returns nil.
+func CopyDTDInfo(src, dst *Document) error {
 	if src == nil || dst == nil {
-		return
+		return nil
 	}
-	if dtd := src.intSubset; dtd != nil {
-		_ = copyDTD(dtd, dst)
+	dtd := src.intSubset
+	if dtd == nil {
+		return nil
 	}
+	return copyDTD(dtd, dst)
 }
 
 // copyDTD deep-copies src into dst's internal subset, including all
