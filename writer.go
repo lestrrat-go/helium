@@ -520,9 +520,36 @@ func (w Writer) OmitStandalone() Writer {
 // pseudo-attribute of the XML declaration AND the XML 1.1 serialization rules
 // (restricted-character references and namespace undeclarations). An empty
 // string keeps the document's own version, leaving default output byte-identical.
+//
+// The effective version must be a valid XML VersionNum (`'1.' [0-9]+`, e.g. "1.0"
+// or "1.1"); a value that is malformed or carries an illegal character (which
+// would inject markup into the declaration) fails serialization with
+// ErrInvalidOutputVersion and emits nothing.
 func (w Writer) OutputVersion(v string) Writer {
 	w.outputVersion = v
 	return w
+}
+
+// isValidXMLVersion reports whether v is a valid XML VersionNum (XML §2.8):
+//
+//	VersionNum ::= '1.' [0-9]+
+//
+// The version is emitted raw into the XML declaration's version pseudo-attribute
+// between double quotes, so this rejects a value carrying a quote or other
+// illegal character (which would inject markup) or an otherwise-malformed version
+// (which would produce an unparseable declaration). The '1.' prefix is the spec
+// grammar for an XML 1.0/1.1 processor; it is ASCII-only and allocation-free.
+func isValidXMLVersion(v string) bool {
+	rest, ok := strings.CutPrefix(v, "1.")
+	if !ok || rest == "" {
+		return false
+	}
+	for i := range len(rest) {
+		if rest[i] < '0' || rest[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // effectiveVersion returns the version driving serialization: the OutputVersion
@@ -542,6 +569,12 @@ func (d Writer) effectiveVersion(doc *Document) string {
 // own encoding, leaving default output byte-identical. It affects the Document
 // serialization path only; a bare element/fragment is byte-identical to output
 // without an override.
+//
+// The effective encoding must be a valid XML EncName (`[A-Za-z] ([A-Za-z0-9._] |
+// '-')*`); a malformed label (one carrying a quote or other illegal character,
+// which would inject markup into the declaration) fails serialization with
+// ErrUnsupportedOutputEncoding before any output byte is written. An empty
+// effective encoding simply omits the encoding pseudo-attribute.
 //
 // When set on a WriteTo-to-io.Writer path the emitted octets are re-encoded to
 // the named encoding so the bytes agree with the declaration. US-ASCII (by any
@@ -735,10 +768,31 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 
 func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	s := writeSession{Writer: d}
+
+	// Validate the effective version and encoding BEFORE any output byte is
+	// produced: both are caller-controlled (OutputVersion/SetVersion,
+	// OutputEncoding/SetEncoding) and are emitted raw between the declaration's
+	// pseudo-attribute quotes, so an illegal character would inject markup and a
+	// malformed value would produce an unparseable declaration. This runs ahead of
+	// the transcoding-encoder setup below because that encoder's deferred Close
+	// flushes a BOM at EOF — installing it before validation would leak that BOM to
+	// the caller even when the declaration itself is never written. Nothing has been
+	// written yet, so return the error directly. This is a separate, earlier check
+	// than the US-ASCII transcoding reject (asciiReject) — that one rejects a
+	// legal-but-unrepresentable label; this one rejects a label that is not a
+	// well-formed VersionNum/EncName.
+	version := d.effectiveVersion(doc)
+	if !isValidXMLVersion(version) {
+		return fmt.Errorf("helium: invalid output XML version %q: %w", version, ErrInvalidOutputVersion)
+	}
+	if enc := d.effectiveEncoding(doc); enc != "" && !xmlchar.IsValidEncName(enc) {
+		return fmt.Errorf("helium: invalid output encoding name %q: %w", enc, ErrUnsupportedOutputEncoding)
+	}
+
 	// An XML 1.1 document (or an OutputVersion("1.1") override) may carry
 	// restricted control characters; serialize them as decimal character
 	// references. XML 1.0 output is unaffected.
-	s.xml11 = d.effectiveVersion(doc) == "1.1"
+	s.xml11 = version == "1.1"
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
@@ -837,10 +891,19 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 	if !ok {
 		return nil
 	}
-	d.writeString(out, `<?xml version="`)
-	d.writeString(out, d.effectiveVersion(doc)+`"`)
 
-	if encoding := d.effectiveEncoding(doc); encoding != "" {
+	// The effective version and encoding are validated at the writeDoc entry —
+	// before any output byte (including the transcoding encoder's BOM) — so both are
+	// well-formed here: version is a valid VersionNum and, when non-empty, encoding
+	// is a valid EncName. They are emitted raw between the declaration's
+	// pseudo-attribute quotes.
+	version := d.effectiveVersion(doc)
+	encoding := d.effectiveEncoding(doc)
+
+	d.writeString(out, `<?xml version="`)
+	d.writeString(out, version+`"`)
+
+	if encoding != "" {
 		d.writeString(out, ` encoding="`+encoding+`"`)
 	}
 

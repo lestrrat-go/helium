@@ -237,6 +237,22 @@ type standaloneNormAttr struct {
 // to the configured [ErrorHandler].
 var ErrDTDValidationFailed = errors.New("dtd: validation failed")
 
+// DTDValidationError is a single DTD-validation diagnostic delivered to the
+// configured [ErrorHandler]. It implements [ErrorLeveler], reporting its true
+// severity, so a level-filtered [ErrorCollector] classifies it at that level
+// instead of defaulting it to a warning. Callers can recover it via
+// [errors.As] to inspect the [DTDValidationError.Message].
+type DTDValidationError struct {
+	Message string
+	Level   ErrorLevel
+}
+
+// Error returns the human-readable diagnostic message.
+func (e *DTDValidationError) Error() string { return e.Message }
+
+// ErrorLevel reports the diagnostic's severity, satisfying [ErrorLeveler].
+func (e *DTDValidationError) ErrorLevel() ErrorLevel { return e.Level }
+
 // validCtx carries validation state through the document walk.
 type validCtx struct {
 	handler ErrorHandler
@@ -247,7 +263,10 @@ type validCtx struct {
 
 func (vc *validCtx) addf(ctx context.Context, format string, args ...any) {
 	vc.failed = true
-	vc.handler.Handle(ctx, fmt.Errorf(format, args...))
+	vc.handler.Handle(ctx, &DTDValidationError{
+		Message: fmt.Sprintf(format, args...),
+		Level:   ErrorLevelError,
+	})
 }
 
 // docDTDs returns the DTDs to search for declarations, internal subset first.
