@@ -467,20 +467,6 @@ func (p Parser) IgnoreEncoding(v bool) Parser {
 	return p
 }
 
-// BigLineNumbers controls whether large line numbers are stored in the
-// text PSVI field, allowing line numbers above 65535.
-// libxml2: XML_PARSE_BIG_LINES
-// Default: false
-func (p Parser) BigLineNumbers(v bool) Parser {
-	p = p.clone()
-	if !v {
-		p.cfg.options.Clear(parseBigLines)
-		return p
-	}
-	p.cfg.options.Set(parseBigLines)
-	return p
-}
-
 // BlockXXE controls whether loading of external entities and DTDs is
 // blocked, preventing XML External Entity (XXE) attacks.
 // libxml2: XML_PARSE_NOXXE

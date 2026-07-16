@@ -3819,7 +3819,6 @@ func TestParserOptionSetters(t *testing.T) {
 		MaxEntityAmplification(-1).MaxEntityAmplification(0).
 		MaxContentModelDepth(-1).MaxContentModelDepth(0).
 		IgnoreEncoding(true).IgnoreEncoding(false).
-		BigLineNumbers(true).BigLineNumbers(false).
 		BlockXXE(true).BlockXXE(false).
 		ReuseDict(true).ReuseDict(false).
 		SkipIDs(true).SkipIDs(false).

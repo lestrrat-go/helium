@@ -42,7 +42,6 @@ const (
 	parseCompact        = parser.Compact
 	parseNoBaseFix      = parser.NoBaseFix
 	parseIgnoreEnc      = parser.IgnoreEnc
-	parseBigLines       = parser.BigLines
 	parseNoXXE          = parser.NoXXE
 	parseNoUnzip        = parser.NoUnzip
 	parseNoSysCatalog   = parser.NoSysCatalog
