@@ -35,7 +35,6 @@ const (
 	parseNoWarning      = parser.NoWarning
 	parsePedantic       = parser.Pedantic
 	parseNoBlanks       = parser.NoBlanks
-	parseXInclude       = parser.XInclude
 	parseNoNet          = parser.NoNet
 	parseNoDict         = parser.NoDict
 	parseNsClean        = parser.NsClean

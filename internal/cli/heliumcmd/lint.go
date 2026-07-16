@@ -337,7 +337,6 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			cfg.c14nMode = 3
 		case "--xinclude":
 			cfg.doXInclude = true
-			cfg.parser = cfg.parser.ProcessXInclude(true)
 		case "--catalogs":
 			cfg.catalogs = true
 		case "--nocatalogs":

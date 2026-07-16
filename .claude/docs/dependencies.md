@@ -9,6 +9,7 @@ shim           → helium, stream, enum, internal/encoding, internal/xmlchar
 xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/lexicon, internal/uripath
                   → xpath1 (via xpointer)
                   → internal/xmlchar (via xpointer)
+                  (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
 xpath1         → helium, internal/lexicon, internal/domutil
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil
 xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, xslt3/internal/elements

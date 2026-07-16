@@ -3603,7 +3603,6 @@ func TestParserOptionSetters(t *testing.T) {
 		SuppressWarnings(true).SuppressWarnings(false).
 		PedanticErrors(true).PedanticErrors(false).
 		StripBlanks(true).StripBlanks(false).
-		ProcessXInclude(true).ProcessXInclude(false).
 		AllowNetwork(true).AllowNetwork(false).
 		CleanNamespaces(true).CleanNamespaces(false).
 		MergeCDATA(true).MergeCDATA(false).
@@ -4399,4 +4398,60 @@ func TestParseReaderReadErrorInXMLDeclNotMaskedAsSyntaxError(t *testing.T) {
 			require.Nil(t, doc, "a failed parse must not return a partial document")
 		})
 	}
+}
+
+// recordingXInclude is a fake helium.XIncludeProcessor that records how the
+// parser invokes it, without pulling the real xinclude package into the core
+// parser tests. The end-to-end path is exercised by an Example in examples/.
+type recordingXInclude struct {
+	calls int
+	doc   *helium.Document
+	n     int
+	err   error
+}
+
+func (r *recordingXInclude) Process(_ context.Context, doc *helium.Document) (int, error) {
+	r.calls++
+	r.doc = doc
+	return r.n, r.err
+}
+
+func TestParserXIncludeInjection(t *testing.T) {
+	const src = `<doc xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="x.xml"/></doc>`
+
+	t.Run("processor runs and receives the parsed document", func(t *testing.T) {
+		rec := &recordingXInclude{n: 1}
+		doc, err := helium.NewParser().XInclude(rec).Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+		require.Equal(t, 1, rec.calls)
+		require.Same(t, doc, rec.doc, "the processor must run on the document Parse returns")
+	})
+
+	t.Run("no processor means no XInclude step", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
+
+	t.Run("nil processor disables processing", func(t *testing.T) {
+		doc, err := helium.NewParser().XInclude(nil).Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
+
+	t.Run("processor error propagates from Parse", func(t *testing.T) {
+		rec := &recordingXInclude{err: errors.New("xinclude boom")}
+		_, err := helium.NewParser().XInclude(rec).Parse(context.Background(), []byte(src))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "xinclude boom")
+	})
+
+	t.Run("runs on the ParseReader path too", func(t *testing.T) {
+		rec := &recordingXInclude{n: 1}
+		doc, err := helium.NewParser().XInclude(rec).ParseReader(context.Background(), strings.NewReader(src))
+		require.NoError(t, err)
+		require.Equal(t, 1, rec.calls)
+		require.Same(t, doc, rec.doc)
+	})
 }
