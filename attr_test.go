@@ -95,34 +95,124 @@ func TestSetAttribute(t *testing.T) {
 		require.Equal(t, "x&amp;y", v)
 	})
 
-	t.Run("all four setters replace an existing attribute in place", func(t *testing.T) {
+	// Each of the four setters must REPLACE a same-name attribute in place:
+	// no duplicate appended, the second value wins (not the stale first), the
+	// target keeps its original position between its siblings, and the original
+	// attribute node is detached. Siblings are added before and after the target
+	// so a re-ordering or append regression is caught, and the second value
+	// differs from the first so a "success without replacing" regression fails.
+	t.Run("SetAttribute replaces in place", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := doc.CreateElement("r")
+
+		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
+		_, err := e.SetAttribute("a", "1")
+		require.NoError(t, err)
+		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
+
+		orig, ok := e.FindAttribute(helium.LocalNamePredicate("a"))
+		require.True(t, ok)
+		require.Equal(t, "1", orig.Value())
+
+		_, err = e.SetAttribute("a", "2")
+		require.NoError(t, err)
+
+		attrs := e.Attributes()
+		require.Len(t, attrs, 3, "replacement must not append a duplicate")
+		require.Equal(t,
+			[]string{"before", "a", "after"},
+			[]string{attrs[0].LocalName(), attrs[1].LocalName(), attrs[2].LocalName()},
+			"order preserved, target stays between its siblings")
+		require.Equal(t, "2", attrs[1].Value(), "target holds the second value, not the stale first")
+		require.Equal(t, "b0", attrs[0].Value(), "sibling before the target untouched")
+		require.Equal(t, "a0", attrs[2].Value(), "sibling after the target untouched")
+		require.Nil(t, orig.Parent(), "original target node detached after replacement")
+	})
+
+	t.Run("SetLiteralAttribute replaces in place", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := doc.CreateElement("r")
+
+		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
+		require.NoError(t, e.SetLiteralAttribute("a", "1"))
+		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
+
+		orig, ok := e.FindAttribute(helium.LocalNamePredicate("a"))
+		require.True(t, ok)
+		require.Equal(t, "1", orig.Value())
+
+		require.NoError(t, e.SetLiteralAttribute("a", "2"))
+
+		attrs := e.Attributes()
+		require.Len(t, attrs, 3, "replacement must not append a duplicate")
+		require.Equal(t,
+			[]string{"before", "a", "after"},
+			[]string{attrs[0].LocalName(), attrs[1].LocalName(), attrs[2].LocalName()},
+			"order preserved, target stays between its siblings")
+		require.Equal(t, "2", attrs[1].Value(), "target holds the second value, not the stale first")
+		require.Equal(t, "b0", attrs[0].Value(), "sibling before the target untouched")
+		require.Equal(t, "a0", attrs[2].Value(), "sibling after the target untouched")
+		require.Nil(t, orig.Parent(), "original target node detached after replacement")
+	})
+
+	t.Run("SetAttributeNS replaces in place", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		ns := helium.NewNamespace("p", "urn:x")
+		e := doc.CreateElement("r")
 
-		e1 := doc.CreateElement("r")
-		_, err := e1.SetAttribute("a", "1")
+		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
+		_, err := e.SetAttributeNS("a", "1", ns)
 		require.NoError(t, err)
-		_, err = e1.SetAttribute("a", "2")
-		require.NoError(t, err)
-		require.Len(t, e1.Attributes(), 1)
+		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
 
-		e2 := doc.CreateElement("r")
-		require.NoError(t, e2.SetLiteralAttribute("a", "1"))
-		require.NoError(t, e2.SetLiteralAttribute("a", "2"))
-		require.Len(t, e2.Attributes(), 1)
+		orig := e.GetAttributeNodeNS("a", "urn:x")
+		require.NotNil(t, orig)
+		require.Equal(t, "1", orig.Value())
 
-		e3 := doc.CreateElement("r")
-		_, err = e3.SetAttributeNS("a", "1", ns)
+		_, err = e.SetAttributeNS("a", "2", ns)
 		require.NoError(t, err)
-		_, err = e3.SetAttributeNS("a", "2", ns)
-		require.NoError(t, err)
-		require.Len(t, e3.Attributes(), 1)
 
-		e4 := doc.CreateElement("r")
-		require.NoError(t, e4.SetLiteralAttributeNS("a", "1", ns))
-		require.NoError(t, e4.SetLiteralAttributeNS("a", "2", ns))
-		require.Len(t, e4.Attributes(), 1)
+		attrs := e.Attributes()
+		require.Len(t, attrs, 3, "replacement must not append a duplicate")
+		require.Equal(t,
+			[]string{"before", "a", "after"},
+			[]string{attrs[0].LocalName(), attrs[1].LocalName(), attrs[2].LocalName()},
+			"order preserved, target stays between its siblings")
+		require.Equal(t, "2", attrs[1].Value(), "target holds the second value, not the stale first")
+		require.Equal(t, "b0", attrs[0].Value(), "sibling before the target untouched")
+		require.Equal(t, "a0", attrs[2].Value(), "sibling after the target untouched")
+		require.Nil(t, orig.Parent(), "original target node detached after replacement")
+	})
+
+	t.Run("SetLiteralAttributeNS replaces in place", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		ns := helium.NewNamespace("p", "urn:x")
+		e := doc.CreateElement("r")
+
+		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
+		require.NoError(t, e.SetLiteralAttributeNS("a", "1", ns))
+		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
+
+		orig := e.GetAttributeNodeNS("a", "urn:x")
+		require.NotNil(t, orig)
+		require.Equal(t, "1", orig.Value())
+
+		require.NoError(t, e.SetLiteralAttributeNS("a", "2", ns))
+
+		attrs := e.Attributes()
+		require.Len(t, attrs, 3, "replacement must not append a duplicate")
+		require.Equal(t,
+			[]string{"before", "a", "after"},
+			[]string{attrs[0].LocalName(), attrs[1].LocalName(), attrs[2].LocalName()},
+			"order preserved, target stays between its siblings")
+		require.Equal(t, "2", attrs[1].Value(), "target holds the second value, not the stale first")
+		require.Equal(t, "b0", attrs[0].Value(), "sibling before the target untouched")
+		require.Equal(t, "a0", attrs[2].Value(), "sibling after the target untouched")
+		require.Nil(t, orig.Parent(), "original target node detached after replacement")
 	})
 }
 
