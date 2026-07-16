@@ -57,6 +57,18 @@ type parserConfig struct {
 	maxCMDepth     int
 	maxNodeContent int
 	errorHandler   ErrorHandler
+	xincludeProc   XIncludeProcessor
+}
+
+// XIncludeProcessor performs XInclude substitution on a parsed document,
+// replacing xi:include elements with the content they reference. It is satisfied
+// by xinclude.Processor.
+//
+// The parser cannot import the xinclude package directly (xinclude depends on
+// helium), so a configured processor is injected through this interface with
+// [Parser.XInclude]. Process returns the number of substitutions made.
+type XIncludeProcessor interface {
+	Process(ctx context.Context, doc *Document) (int, error)
 }
 
 // Parser holds configuration for XML parsing (libxml2: xmlParserCtxt).
@@ -245,20 +257,6 @@ func (p Parser) StripBlanks(v bool) Parser {
 		return p
 	}
 	p.cfg.options.Set(parseNoBlanks)
-	return p
-}
-
-// ProcessXInclude controls whether XInclude substitution is performed
-// during parsing.
-// libxml2: XML_PARSE_XINCLUDE
-// Default: false
-func (p Parser) ProcessXInclude(v bool) Parser {
-	p = p.clone()
-	if !v {
-		p.cfg.options.Clear(parseXInclude)
-		return p
-	}
-	p.cfg.options.Set(parseXInclude)
 	return p
 }
 
@@ -635,12 +633,68 @@ func (p Parser) ErrorHandler(h ErrorHandler) Parser {
 	return p
 }
 
+// XInclude enables XInclude substitution during parsing. The supplied processor
+// — typically [xinclude.NewProcessor] configured with a resolver — is run over
+// the parsed document before it is returned, so xi:include elements are already
+// expanded in the result. When DTD validation is also requested ([ValidateDTD]),
+// it validates the expanded tree. Passing a nil interface value disables
+// XInclude processing. (A caller-constructed typed-nil — a nil pointer of the
+// caller's own [XIncludeProcessor] implementation — is the standard Go typed-nil
+// footgun and is unsupported; xinclude.Processor is a value type and cannot be
+// typed-nil.)
+//
+// XInclude is off by default. Because the parser (and the processor's own
+// default) resolves no filesystem, grant access explicitly on the processor,
+// e.g. xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(fsys)).
+func (p Parser) XInclude(proc XIncludeProcessor) Parser {
+	p = p.clone()
+	p.cfg.xincludeProc = proc
+	return p
+}
+
 func (p Parser) closeHandler() {
 	if p.cfg != nil && p.cfg.errorHandler != nil {
 		if cl, ok := p.cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
 		}
 	}
+}
+
+// finalize runs post-parse steps on a successfully built document: XInclude
+// substitution when a processor was injected via [Parser.XInclude], followed by
+// DTD validation when [Parser.ValidateDTD] is set. XInclude runs first so that
+// DTD validation, if requested, sees the expanded tree.
+func (p Parser) finalize(ctx context.Context, doc *Document) (*Document, error) {
+	if doc == nil {
+		return doc, nil
+	}
+	// The disable signal is a nil interface value (see [Parser.XInclude] and the
+	// nil case in TestParserXIncludeInjection). A caller-supplied typed-nil — a
+	// nil pointer of the caller's own implementation — is caller-constructed
+	// nil-ness this package does not guard against; normalizing it away would be a
+	// reflective guard against caller API misuse.
+	if p.cfg.xincludeProc != nil {
+		if _, err := p.cfg.xincludeProc.Process(ctx, doc); err != nil {
+			// A cancelled/timed-out post-parse step follows Parse's contract:
+			// return the context error with a nil document, never a partial tree.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			return doc, err
+		}
+	}
+	if p.cfg.options.IsSet(parseDTDValid) {
+		handler := p.cfg.errorHandler
+		if handler == nil {
+			handler = NilErrorHandler{}
+		}
+		err := validateDocument(ctx, doc, handler)
+		p.closeHandler()
+		if err != nil {
+			return doc, err
+		}
+	}
+	return doc, nil
 }
 
 // --- Terminal methods ---
@@ -690,20 +744,8 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 		return nil, err
 	}
 
-	// DTD validation: run post-parse document validation when requested.
-	if p.cfg.options.IsSet(parseDTDValid) && pctx.doc != nil {
-		handler := p.cfg.errorHandler
-		if handler == nil {
-			handler = NilErrorHandler{}
-		}
-		err := validateDocument(ctx, pctx.doc, handler)
-		p.closeHandler()
-		if err != nil {
-			return pctx.doc, err
-		}
-	}
-
-	return pctx.doc, nil
+	// Post-parse steps (XInclude substitution, DTD validation) on the built tree.
+	return p.finalize(ctx, pctx.doc)
 }
 
 // ParseReader parses XML from an io.Reader and returns the resulting Document
@@ -935,19 +977,7 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		return nil, err
 	}
 
-	if p.cfg.options.IsSet(parseDTDValid) && pctx.doc != nil {
-		handler := p.cfg.errorHandler
-		if handler == nil {
-			handler = NilErrorHandler{}
-		}
-		err := validateDocument(ctx, pctx.doc, handler)
-		p.closeHandler()
-		if err != nil {
-			return pctx.doc, err
-		}
-	}
-
-	return pctx.doc, nil
+	return p.finalize(ctx, pctx.doc)
 }
 
 // ParseFile reads and parses an XML file. The document's URL is set to the
