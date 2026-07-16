@@ -49,6 +49,23 @@ var asciiEncodingNames = map[string]struct{}{
 	"cp367":         {},
 }
 
+// asciiRawUTF8Names is the subset of US-ASCII aliases the no-override document
+// serializer emits as raw UTF-8 (via a UTF-8 passthrough encoder) rather than as
+// numeric character references. It is deliberately narrower than
+// asciiEncodingNames (IsASCII): every other US-ASCII alias is
+// character-referenced on the no-override path.
+var asciiRawUTF8Names = map[string]struct{}{
+	"ansix341968": {},
+	"csascii":     {},
+}
+
+// IsASCIIRawUTF8Alias reports whether name is one of the two US-ASCII aliases the
+// no-override document serializer emits as raw UTF-8 (see asciiRawUTF8Names).
+func IsASCIIRawUTF8Alias(name string) bool {
+	_, ok := asciiRawUTF8Names[normalizeEncodingName(name)]
+	return ok
+}
+
 func Load(name string) enc.Encoding {
 	norm := normalizeEncodingName(name)
 	if _, ok := asciiEncodingNames[norm]; ok {

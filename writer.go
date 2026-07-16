@@ -138,9 +138,11 @@ type writeSession struct {
 	// agree with the encoding declaration. Independent of escapeNonASCII (which
 	// only covers Latin-1) so BMP/astral characters are escaped too. In a context
 	// that cannot hold a character reference (comment text, CDATA, PI target/data,
-	// element/attribute name, namespace prefix, notation name) a non-ASCII
-	// character has no faithful US-ASCII serialization, so it fails with
-	// ErrUnsupportedOutputEncoding instead. It is NEVER set on the bare
+	// element/attribute name, namespace prefix, notation name, entity-reference
+	// name, or a DTD-internal name — DOCTYPE, <!ELEMENT>/<!ATTLIST>/<!ENTITY> names
+	// and enumeration tokens) a non-ASCII character has no faithful US-ASCII
+	// serialization, so it fails with ErrUnsupportedOutputEncoding instead. It is
+	// NEVER set on the bare
 	// element/fragment path — OutputEncoding affects the Document path only.
 	asciiOutput bool
 	xml11       bool // true when the document declares XML 1.1: restricted control chars serialize as decimal character references
@@ -557,10 +559,12 @@ func (w Writer) InheritedNamespaces(bindings map[string]string) Writer {
 
 // effectiveEncoding returns the encoding driving the XML-declaration
 // pseudo-attribute: the OutputEncoding override when set, otherwise the
-// document's own encoding.
+// document's own encoding. The override is whitespace-trimmed so the encoder
+// lookup (which trims) and the emitted label agree and the declaration carries a
+// valid EncName rather than a padded, unparseable one.
 func (d Writer) effectiveEncoding(doc *Document) string {
 	if d.outputEncoding != "" {
-		return d.outputEncoding
+		return strings.TrimSpace(d.outputEncoding)
 	}
 	if doc != nil {
 		return doc.encoding
@@ -706,15 +710,21 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 		case lower == "utf-8" || lower == encUTF8:
 			// UTF-8 represents every character; no encoder and no extra escaping.
 		case henc.IsASCII(enc):
-			// US-ASCII (by any IANA alias — csASCII, ANSI_X3.4-1968, iso-ir-6, …).
-			// US-ASCII installs no transcoding encoder. An explicit OutputEncoding
-			// override cannot carry a non-ASCII character literally, so escape every
-			// one as a character reference — the octets are pure US-ASCII, matching
-			// the declaration. Without an override (the document's own parsed
-			// encoding), the no-override path stays byte-identical to prior output
-			// (encoder-free, Latin-1 escaping only), like an unloadable parsed
-			// encoding staying declaration-only.
-			s.asciiOutput = d.outputEncoding != ""
+			// US-ASCII by any IANA alias (us-ascii, ascii, csASCII, ANSI_X3.4-1968,
+			// iso-ir-6, …). No transcoding encoder is installed either way.
+			if d.outputEncoding != "" {
+				// OVERRIDE: the declaration cannot carry a non-ASCII character
+				// literally, so escape every one as a character reference — the
+				// octets are pure US-ASCII and match the declaration.
+				s.asciiOutput = true
+			} else if henc.IsASCIIRawUTF8Alias(enc) {
+				// NO-OVERRIDE, one of the two aliases (ANSI_X3.4-1968, csASCII) the
+				// document serializer emits as raw UTF-8 via a UTF-8 passthrough:
+				// disable non-ASCII escaping so the bytes stay byte-identical. Every
+				// other US-ASCII alias keeps default Latin-1 character-reference
+				// escaping on the no-override path.
+				s.escapeNonASCII = false
+			}
 		case !d.declOnlyEncoding:
 			e := henc.Load(enc)
 			// An explicitly-set OutputEncoding the writer cannot emit is a hard
@@ -873,6 +883,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 		return d.err
 	case EntityRefNode:
+		// An entity-reference name is emitted verbatim between "&" and ";", so it
+		// cannot hold a character reference: a non-ASCII name has no faithful
+		// US-ASCII serialization. Guard before the first write so no raw octet
+		// leaks ahead of the sticky error.
+		if d.rejectNonASCIIStr("entity reference name", n.Name()) {
+			return d.err
+		}
 		d.writeString(out, "&")
 		d.writeString(out, n.Name())
 		d.writeString(out, ";")

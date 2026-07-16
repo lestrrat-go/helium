@@ -23,6 +23,12 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 		return nil
 	}
 	d.writeString(out, "<!DOCTYPE ")
+	// A DOCTYPE name is emitted verbatim and cannot hold a character reference, so
+	// a non-ASCII name has no faithful US-ASCII serialization. Guard before the
+	// write so no raw octet leaks ahead of the sticky error.
+	if d.rejectNonASCIIStr("DOCTYPE name", dtd.Name()) {
+		return d.err
+	}
 	d.writeString(out, dtd.Name())
 
 	if d.err == nil && dtd.externalID != "" {
@@ -64,6 +70,12 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
 	l := len(n)
 	for i, v := range n {
+		// An enumeration token (NMTOKEN / NOTATION name) is emitted verbatim and
+		// cannot hold a character reference, so a non-ASCII token has no faithful
+		// US-ASCII serialization. Guard before the write.
+		if d.rejectNonASCIIStr("enumeration token", v) {
+			return d.err
+		}
 		d.writeString(out, v)
 		if i != l-1 {
 			d.writeString(out, " | ")
@@ -78,6 +90,14 @@ func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
 // writeString order so the sticky-error handling is identical to the
 // inline sequences it replaces.
 func (d *writeSession) writePrefixedName(out io.Writer, prefix, name string) {
+	// The prefix and name are emitted verbatim and cannot hold a character
+	// reference, so a non-ASCII component has no faithful US-ASCII serialization.
+	// Guard before the first write so no raw octet leaks ahead of the sticky
+	// error. This is the shared chokepoint for <!ELEMENT>/<!ATTLIST> names and
+	// element-content child names.
+	if d.rejectNonASCIIStr("DTD declaration name", prefix) || d.rejectNonASCIIStr("DTD declaration name", name) {
+		return
+	}
 	if prefix != "" {
 		d.writeString(out, prefix)
 		d.writeString(out, ":")
@@ -217,6 +237,14 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		return nil
 	}
 
+	// The entity name is emitted verbatim in every branch below and cannot hold a
+	// character reference, so a non-ASCII name has no faithful US-ASCII
+	// serialization. Guard once before any write so no raw octet leaks ahead of
+	// the sticky error.
+	if d.rejectNonASCIIStr("entity name", ent.name) {
+		return d.err
+	}
+
 	switch etype := ent.entityType; etype {
 	case enum.InternalGeneralEntity:
 		d.writeString(out, "<!ENTITY ")
@@ -336,6 +364,12 @@ func (d *writeSession) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 
 func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	d.writeString(out, "<!ATTLIST ")
+	// The element name is emitted verbatim and cannot hold a character reference,
+	// so a non-ASCII name has no faithful US-ASCII serialization. Guard before the
+	// write. (The attribute name/prefix are guarded inside writePrefixedName.)
+	if d.rejectNonASCIIStr("attribute-list element name", n.elem) {
+		return d.err
+	}
 	d.writeString(out, n.elem)
 	d.writeString(out, " ")
 	d.writePrefixedName(out, n.prefix, n.name)

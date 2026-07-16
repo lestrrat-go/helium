@@ -90,8 +90,10 @@ var (
 	//   2. The encoding is US-ASCII (any alias) and a non-ASCII character appears
 	//      in a context that cannot hold a character reference — comment text,
 	//      CDATA section, PI target/data, an element/attribute name, a namespace
-	//      prefix, or a notation name. Text and attribute values stay
-	//      character-referenced; only the reference-less contexts fail.
+	//      prefix, a notation name, an entity-reference name, or a DTD-internal
+	//      name (DOCTYPE, <!ELEMENT>/<!ATTLIST>/<!ENTITY> names and enumeration
+	//      tokens). Text and attribute values stay character-referenced; only the
+	//      reference-less contexts fail.
 	// Match with errors.Is.
 	ErrUnsupportedOutputEncoding = errors.New("unsupported output encoding")
 	// ErrNetworkAccessForbidden is returned when an external resource (an

@@ -205,3 +205,106 @@ func TestSerializeNoEncodingOverrideUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, buf2.String(), `encoding="x-unknown-enc"`)
 }
+
+// TestOutputEncodingUSASCIIRejectsNonASCIINames asserts that under an explicit
+// US-ASCII OutputEncoding a non-ASCII entity-reference name or DTD-internal name
+// (DOCTYPE, <!ENTITY>, <!ELEMENT>, <!ATTLIST> element/attribute name, enumeration
+// token) fails with ErrUnsupportedOutputEncoding rather than emitting raw UTF-8
+// under a US-ASCII declaration, and that no raw non-ASCII octet leaks into the
+// buffer before the error fires.
+func TestOutputEncodingUSASCIIRejectsNonASCIINames(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"entity-ref-and-decl": `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE root [<!ENTITY é "x">]><root>&é;</root>`,
+		"element-decl-name":   `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE root [<!ELEMENT rôot ANY>]><root/>`,
+		"attlist-attr-name":   `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE root [<!ATTLIST root ättr CDATA #IMPLIED>]><root/>`,
+		"enumeration-token":   `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE root [<!ATTLIST root a (é|b) #IMPLIED>]><root/>`,
+		"doctype-name":        `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE rôot [<!ELEMENT a ANY>]><rôot/>`,
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			var buf bytes.Buffer
+			err = helium.NewWriter().OutputEncoding("US-ASCII").WriteTo(&buf, doc)
+			require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
+			// No raw non-ASCII octet may have leaked before the error fired.
+			for i := range buf.Len() {
+				require.Less(t, buf.Bytes()[i], byte(0x80), "leaked non-ASCII octet 0x%X", buf.Bytes()[i])
+			}
+		})
+	}
+}
+
+// TestOutputEncodingTrimsPaddedLabel asserts a whitespace-padded OutputEncoding
+// label is trimmed before it reaches the declaration, so the encoder lookup and
+// the emitted EncName agree and the declaration is well-formed. The body is
+// transcoded to the resolved encoding and the result reparses.
+func TestOutputEncodingTrimsPaddedLabel(t *testing.T) {
+	t.Parallel()
+
+	src := []byte(`<?xml version="1.0" encoding="UTF-8"?><root>é</root>`)
+	doc, err := helium.NewParser().Parse(t.Context(), src)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = helium.NewWriter().EscapeNonASCII(false).OutputEncoding(" ISO-8859-1 ").WriteTo(&buf, doc)
+	require.NoError(t, err)
+
+	out := buf.String()
+	// The declaration carries the trimmed, valid EncName — not the padded label.
+	require.Contains(t, out, `encoding="ISO-8859-1"`)
+	require.NotContains(t, out, `encoding=" ISO-8859-1 "`)
+	// Body byte 0xE9 confirms the ISO-8859-1 encoder was actually installed.
+	require.Contains(t, out, "\xe9")
+	require.NotContains(t, out, "\xc3\xa9")
+
+	// The declaration is a valid EncName, so the output reparses and the content
+	// round-trips. Re-serialize forcing UTF-8 so the recovered character is the
+	// raw UTF-8 "é" rather than its Latin-1 byte.
+	rt, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
+	var rtbuf bytes.Buffer
+	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).OutputEncoding("UTF-8").WriteTo(&rtbuf, rt))
+	require.Contains(t, rtbuf.String(), "é")
+}
+
+// TestSerializeNoOverrideASCIIAliasBytesUnchanged asserts the NO-OVERRIDE path
+// stays byte-identical to origin for US-ASCII aliases recorded on the document:
+// csASCII / ANSI_X3.4-1968 emit raw UTF-8 (via the historical passthrough), while
+// us-ascii / ascii / iso-ir-6 character-reference. This is the binding non-goal —
+// no OutputEncoding override, so nothing may divert these bytes.
+func TestSerializeNoOverrideASCIIAliasBytesUnchanged(t *testing.T) {
+	t.Parallel()
+
+	// raw: the doc encoding names whose no-override output keeps the non-ASCII
+	// character as raw UTF-8 octets. charref: those that emit a hex reference.
+	raw := []string{"csASCII", "ANSI_X3.4-1968"}
+	charref := []string{"us-ascii", "ascii", "iso-ir-6"}
+
+	build := func(t *testing.T, enc string) string {
+		t.Helper()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.AddChild(doc.CreateText([]byte("é"))))
+		doc.SetEncoding(enc)
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	for _, enc := range raw {
+		out := build(t, enc)
+		require.Contains(t, out, "\xc3\xa9", "no-override %q must emit raw UTF-8", enc)
+		require.NotContains(t, out, "&#xE9;", "no-override %q must not char-reference", enc)
+	}
+	for _, enc := range charref {
+		out := build(t, enc)
+		require.Contains(t, out, "&#xE9;", "no-override %q must char-reference", enc)
+		require.NotContains(t, out, "\xc3\xa9", "no-override %q must not emit raw UTF-8", enc)
+	}
+}
