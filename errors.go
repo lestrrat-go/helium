@@ -80,10 +80,14 @@ var (
 	// blank-run cap. The cap fires during accumulation, before the whole run is
 	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
-	// ErrUnsupportedOutputEncoding is returned by the writer when an explicitly
-	// set OutputEncoding cannot be emitted faithfully. Two cases raise it, both
-	// scoped to the override — a document's own (parsed) encoding never becomes
-	// this error, keeping default output byte-identical:
+	// ErrUnsupportedOutputEncoding is returned by the writer for an effective
+	// encoding it cannot faithfully emit. A malformed EncName label — whether
+	// from an explicit OutputEncoding override OR a document's own encoding set
+	// via Document.SetEncoding — is rejected before any declaration byte is
+	// written. The two emit-failure cases below are additionally scoped to an
+	// explicit OutputEncoding override; a document's own PARSED encoding is
+	// always a valid EncName and stays declaration-only, keeping default output
+	// byte-identical:
 	//   1. The encoding is neither UTF-8/US-ASCII nor a name the internal encoder
 	//      table can load. Emitting UTF-8 octets under that declaration would make
 	//      the XML declaration disagree with the bytes, so the writer fails.
