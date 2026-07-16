@@ -379,7 +379,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 
 	if n.defvalue != "" {
 		d.writeString(out, ` "`)
-		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil))
+		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)
 	}
 	d.writeString(out, ">\n")
@@ -436,7 +436,7 @@ func (d *writeSession) dumpNs(out io.Writer, ns *Namespace) error {
 	if _, err := io.WriteString(out, `="`); err != nil {
 		return err
 	}
-	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil); err != nil {
+	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, nil); err != nil {
 		return err
 	}
 	if _, err := io.WriteString(out, `"`); err != nil {

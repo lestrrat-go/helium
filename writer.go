@@ -121,11 +121,18 @@ const (
 type writeSession struct {
 	Writer
 	escapeNonASCII bool
-	xml11          bool // true when the document declares XML 1.1: restricted control chars serialize as decimal character references
-	isXHTML        bool
-	encoding       string // document encoding, used for XHTML meta injection
-	indent         int    // current indent depth (used when format is true)
-	err            error  // sticky write error; once set, further writes are skipped
+	// asciiOutput is set when the effective output encoding is US-ASCII (or its
+	// "ascii" synonym): the writer installs no transcoding encoder but escapes
+	// every non-ASCII character as a hex character reference, so the emitted octets
+	// are pure US-ASCII and agree with the encoding declaration. Independent of
+	// escapeNonASCII (which only covers Latin-1) so BMP/astral characters are
+	// escaped too.
+	asciiOutput bool
+	xml11       bool // true when the document declares XML 1.1: restricted control chars serialize as decimal character references
+	isXHTML     bool
+	encoding    string // document encoding, used for XHTML meta injection
+	indent      int    // current indent depth (used when format is true)
+	err         error  // sticky write error; once set, further writes are skipped
 	// cdataText reports that the element currently being serialized is a
 	// cdata-section-element, so its direct text children are emitted as CDATA
 	// sections rather than escaped text.
@@ -449,6 +456,15 @@ func writerDeclarationOnlyEncoding(w any) any {
 	return ww.declarationOnlyEncoding()
 }
 
+// isASCIIFamilyEncoding reports whether enc names US-ASCII (or its "ascii"
+// synonym), matched case-insensitively. US-ASCII output installs no transcoding
+// encoder; instead the writer escapes every non-ASCII character as a character
+// reference.
+func isASCIIFamilyEncoding(enc string) bool {
+	lower := strings.ToLower(enc)
+	return lower == "us-ascii" || lower == "ascii"
+}
+
 // effectiveEncoding returns the encoding driving the XML-declaration
 // pseudo-attribute: the OutputEncoding override when set, otherwise the
 // document's own encoding.
@@ -565,6 +581,10 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 	// OutputVersion("1.1") override enables XML 1.1 serialization here; without
 	// it, output stays byte-identical to the prior behavior.
 	s.xml11 = d.outputVersion == "1.1"
+	// A bare element has no XML declaration, but an explicit US-ASCII
+	// OutputEncoding still cannot carry a non-ASCII character literally, so escape
+	// them for consistency with the document path.
+	s.asciiOutput = isASCIIFamilyEncoding(d.effectiveEncoding(nil))
 	return s.writeNode(out, node)
 }
 
@@ -582,31 +602,43 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	// The encoder keys off the EFFECTIVE encoding (the OutputEncoding override
 	// when set, else the document's own encoding) — the same value the XML
 	// declaration and the XHTML <meta> use — so the emitted bytes agree with the
-	// declaration. Declaration-only mode (fn:serialize) skips the encoder entirely:
-	// the label is set from the effective encoding but octets stay UTF-8 with
-	// char-reference escaping.
+	// declaration. Declaration-only mode (fn:serialize) skips the transcoding
+	// encoder entirely: the label is set from the effective encoding but octets stay
+	// UTF-8 with char-reference escaping. US-ASCII output still forces non-ASCII
+	// characters to references even in declaration-only mode, since a US-ASCII string
+	// cannot hold them literally either.
 	s.escapeNonASCII = !d.noEscapeNonASCII
-	if !d.declOnlyEncoding {
-		if enc := d.effectiveEncoding(doc); enc != "" {
-			lower := strings.ToLower(enc)
-			if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
-				e := henc.Load(enc)
-				// An explicitly-set OutputEncoding the writer cannot emit is a hard
-				// error: emitting UTF-8 under that declaration would make the bytes
-				// disagree with it. Without an override the effective encoding is the
-				// document's own (parsed) encoding, which stays declaration-only when
-				// unloadable — keeping default output byte-identical.
-				if e == nil && d.outputEncoding != "" {
-					return fmt.Errorf("cannot serialize with output encoding %q: %w", enc, ErrUnsupportedOutputEncoding)
+	if enc := d.effectiveEncoding(doc); enc != "" {
+		lower := strings.ToLower(enc)
+		switch {
+		case lower == "utf-8" || lower == encUTF8:
+			// UTF-8 represents every character; no encoder and no extra escaping.
+		case lower == "us-ascii" || lower == "ascii":
+			// US-ASCII installs no transcoding encoder. An explicit OutputEncoding
+			// override cannot carry a non-ASCII character literally, so escape every
+			// one as a character reference — the octets are pure US-ASCII, matching
+			// the declaration. Without an override (the document's own parsed
+			// encoding), the no-override path stays byte-identical to prior output
+			// (encoder-free, Latin-1 escaping only), like an unloadable parsed
+			// encoding staying declaration-only.
+			s.asciiOutput = d.outputEncoding != ""
+		case !d.declOnlyEncoding:
+			e := henc.Load(enc)
+			// An explicitly-set OutputEncoding the writer cannot emit is a hard
+			// error: emitting UTF-8 under that declaration would make the bytes
+			// disagree with it. Without an override the effective encoding is the
+			// document's own (parsed) encoding, which stays declaration-only when
+			// unloadable — keeping default output byte-identical.
+			if e == nil && d.outputEncoding != "" {
+				return fmt.Errorf("cannot serialize with output encoding %q: %w", enc, ErrUnsupportedOutputEncoding)
+			}
+			if e != nil {
+				s.escapeNonASCII = false
+				w := e.NewEncoder().Writer(out)
+				if closer, ok := w.(io.Closer); ok {
+					defer func() { _ = closer.Close() }()
 				}
-				if e != nil {
-					s.escapeNonASCII = false
-					w := e.NewEncoder().Writer(out)
-					if closer, ok := w.(io.Closer); ok {
-						defer func() { _ = closer.Close() }()
-					}
-					out = w
-				}
+				out = w
 			}
 		}
 	}
@@ -768,7 +800,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				c = d.normalizeContent(c)
 				cm = nil
 			}
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.rejectInvalidChars, d.xml11, cm); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, cm); err != nil {
 				return err
 			}
 		}
@@ -1049,7 +1081,7 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, saved []
 	d.writeString(out, prefix)
 	d.writeString(out, `="`)
 	if d.err == nil {
-		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.asciiOutput, d.rejectInvalidChars, d.xml11, nil); err != nil {
 			d.err = err
 		}
 	}
