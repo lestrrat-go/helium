@@ -3813,7 +3813,6 @@ func TestParserOptionSetters(t *testing.T) {
 		AllowNetwork(true).AllowNetwork(false).
 		CleanNamespaces(true).CleanNamespaces(false).
 		MergeCDATA(true).MergeCDATA(false).
-		XIncludeNodes(true).XIncludeNodes(false).
 		CompactTextNodes(true).CompactTextNodes(false).
 		FixBaseURIs(true).FixBaseURIs(false).
 		MaxNameLength(-1).MaxNameLength(0).

@@ -39,7 +39,6 @@ const (
 	parseNoDict         = parser.NoDict
 	parseNsClean        = parser.NsClean
 	parseNoCDATA        = parser.NoCDATA
-	parseNoXIncNode     = parser.NoXIncNode
 	parseCompact        = parser.Compact
 	parseNoBaseFix      = parser.NoBaseFix
 	parseIgnoreEnc      = parser.IgnoreEnc
