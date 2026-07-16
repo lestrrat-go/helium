@@ -732,6 +732,11 @@ func TestCommentNodeMethods(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	c := doc.CreateComment([]byte("hello"))
 	require.Equal(t, []byte("hello"), c.Content())
+	// A comment carries the "(comment)" sentinel name, matching the parenthesized
+	// sentinel convention its sibling leaf types (Text "(text)", CDATA "(CDATA)")
+	// use for nodes without a real XML name.
+	require.Equal(t, "(comment)", c.Name(), "comment sentinel name")
+	require.Equal(t, "(comment)", c.LocalName(), "comment sentinel local name")
 
 	// Merging another (unlinked) comment appends its content.
 	other := doc.CreateComment([]byte(" world"))

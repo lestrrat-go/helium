@@ -61,6 +61,7 @@ func newComment(b []byte) *Comment {
 	t := Comment{}
 	t.etype = CommentNode
 	t.content = bytes.Clone(b)
+	t.name = "(comment)"
 	return &t
 }
 
