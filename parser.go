@@ -74,6 +74,11 @@ type XIncludeProcessor interface {
 // Parser holds configuration for XML parsing (libxml2: xmlParserCtxt).
 // It uses clone-on-write semantics: each builder method returns
 // a new Parser sharing the underlying config until mutation.
+//
+// The zero value is usable and behaves exactly like [NewParser]: a
+// `var p Parser` parses with the same secure defaults (see NewParser) and can
+// head an option-method chain. NewParser remains the explicit, self-documenting
+// way to construct one.
 type Parser struct {
 	cfg *parserConfig
 }
@@ -96,6 +101,14 @@ const defaultMaxDepth = 256
 // likewise off by default. Opt back in explicitly per setting, e.g.
 // NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).
 func NewParser() Parser {
+	return Parser{cfg: newParserConfig()}
+}
+
+// newParserConfig builds the default parser configuration — the secure defaults
+// documented on [NewParser]. It is also what a zero-value Parser resolves to
+// (see [Parser.normalized]), so `var p Parser` parses identically to
+// NewParser().
+func newParserConfig() *parserConfig {
 	cfg := &parserConfig{
 		sax:      NewTreeBuilder(),
 		fsys:     iofs.DenyAll{},
@@ -103,7 +116,19 @@ func NewParser() Parser {
 	}
 	cfg.options.Set(parseNoXXE)
 	cfg.options.Set(parseNoNet)
-	return Parser{cfg: cfg}
+	return cfg
+}
+
+// normalized resolves a zero-value Parser (nil config) to one carrying the same
+// secure defaults NewParser installs, so `var p Parser` behaves like
+// NewParser(). An already-configured Parser is returned unchanged. The returned
+// config is shared, not cloned — safe because every method that MUTATES the
+// config goes through clone first.
+func (p Parser) normalized() Parser {
+	if p.cfg == nil {
+		return Parser{cfg: newParserConfig()}
+	}
+	return p
 }
 
 // PermissiveFS returns an [fs.FS] that opens any path via [os.Open] — absolute,
@@ -127,6 +152,7 @@ func PermissiveFS() fs.FS {
 }
 
 func (p Parser) clone() Parser {
+	p = p.normalized()
 	cp := *p.cfg
 	return Parser{cfg: &cp}
 }
@@ -718,6 +744,8 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 		ctx = context.Background()
 	}
 
+	p = p.normalized()
+
 	pctx := &parserCtx{rawInput: b, baseURI: p.cfg.baseURI}
 	if err := pctx.init(p.cfg, bytes.NewReader(b)); err != nil {
 		return nil, err
@@ -790,6 +818,8 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	p = p.normalized()
 
 	// Honor an already-cancelled context BEFORE touching r: the EBCDIC sniff
 	// below reads from r, and r may be a non-context-aware reader that blocks
@@ -1018,6 +1048,8 @@ func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	p = p.normalized()
 
 	if node == nil {
 		return nil, errors.New("node must not be nil")
