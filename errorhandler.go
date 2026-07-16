@@ -19,9 +19,11 @@ type ErrorLeveler interface {
 // or validation. Implementations may log, accumulate, or discard errors.
 //
 // Which errors reach a handler depends on the component it is set on: the root
-// [Parser] consults it only for DTD validation, whereas the xsd, relaxng,
-// schematron, and xslt3 compilers and validators deliver their compilation and
-// validation diagnostics to it. In every case the handler is retained by
+// [Parser] consults it only for DTD validation, whereas the xsd, relaxng, and
+// schematron compilers and validators deliver their compilation and validation
+// diagnostics to it, and the catalog Loader delivers its catalog-loading
+// diagnostics to it. xslt3 has no ErrorHandler of its own — it drives the xsd
+// compiler's handler internally. In every case the handler is retained by
 // reference and shared across each operation run on the configured value, which
 // is an immutable-value builder; setting a nil handler is allowed and is treated
 // as [NilErrorHandler] (discard) at use time — never a panic.
