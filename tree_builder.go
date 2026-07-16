@@ -350,7 +350,16 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		return nil
 	}
 
-	if !ctx.loadsubset.IsSet(DetectIDs) {
+	// Resolve the load decision once from three independent intents, matching
+	// libxml2 (parser.c xmlSAX2ExternalSubset / SAX2.c): the external subset is
+	// loaded iff DTD validation (parseDTDValid), external-DTD loading (DetectIDs,
+	// from LoadExternalDTD), or default-attribute application (CompleteAttrs,
+	// from DefaultDTDAttributes) was requested. Reading all three here — rather
+	// than a single bit that the setters coupled together — makes the decision
+	// independent of the order the setters were called.
+	if !ctx.options.IsSet(parseDTDValid) &&
+		!ctx.loadsubset.IsSet(DetectIDs) &&
+		!ctx.loadsubset.IsSet(CompleteAttrs) {
 		return nil
 	}
 
@@ -388,7 +397,14 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// a catalog-resolved file: URI is handled. A plain path is returned verbatim.
 	f, err := ctx.fsys.Open(catalogOpenName(resolved))
 	if err != nil {
-		// Silently ignore missing external DTDs
+		// Loading was requested (the resolve-once gate above passed), so a failed
+		// open is a requested-but-failed load, not an absent DTD. Surface it as a
+		// non-fatal warning rather than swallowing it silently — a caller that
+		// asked to load/validate against the external subset gets a signal, while
+		// the parse stays lenient (matching libxml2, which warns but continues).
+		// Under DTD validation the missing content model then surfaces downstream
+		// as a validation failure. The warning is gated by parseNoWarning.
+		_ = ctx.warning(ctxif, "failed to load external DTD subset %q: %s", resolved, err)
 		return nil
 	}
 
