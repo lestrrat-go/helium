@@ -420,7 +420,12 @@ func TestSignatureGateRejectsNonStringForStringParam(t *testing.T) {
 // A 10M-item lazy range would allocate ~1GB if atomized eagerly; the cap keeps
 // allocation and time tiny.
 func TestSignatureGateRejectsLongSequencePromptly(t *testing.T) {
-	t.Parallel()
+	// NOT t.Parallel: the allocation check below reads runtime.MemStats.TotalAlloc,
+	// which is a process-wide cumulative counter, not per-goroutine. Under
+	// t.Parallel the measured delta would also capture every sibling parallel
+	// test allocating during this test's window, inflating it past the bound
+	// on busy CI runners (a flake). Running serially — while parallel tests are
+	// paused — makes the delta reflect essentially only this test's own work.
 
 	var m1, m2 runtime.MemStats
 	runtime.GC()
