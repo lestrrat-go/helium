@@ -83,8 +83,9 @@ var (
 	// ErrUnsupportedOutputEncoding is returned by the writer for an effective
 	// encoding it cannot faithfully emit. A malformed EncName label — whether
 	// from an explicit OutputEncoding override OR a document's own encoding set
-	// via Document.SetEncoding — is rejected before any declaration byte is
-	// written. The two emit-failure cases below are additionally scoped to an
+	// via Document.SetEncoding — is rejected before any output byte is written
+	// (ahead of the transcoding encoder, whose deferred flush would emit a BOM).
+	// The two emit-failure cases below are additionally scoped to an
 	// explicit OutputEncoding override; a document's own PARSED encoding is
 	// always a valid EncName and stays declaration-only, keeping default output
 	// byte-identical:
@@ -112,7 +113,7 @@ var (
 	// pseudo-attribute, so a value carrying a quote or other illegal character
 	// would break out of the pseudo-attribute and inject markup; a malformed value
 	// would produce an unparseable declaration. The writer validates the version
-	// before emitting any declaration bytes and fails closed, emitting nothing.
+	// before emitting any output byte and fails closed, emitting nothing.
 	// Match with errors.Is.
 	ErrInvalidOutputVersion = errors.New("invalid output XML version")
 	// ErrNetworkAccessForbidden is returned when an external resource (an

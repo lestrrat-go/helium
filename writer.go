@@ -573,7 +573,7 @@ func (d Writer) effectiveVersion(doc *Document) string {
 // The effective encoding must be a valid XML EncName (`[A-Za-z] ([A-Za-z0-9._] |
 // '-')*`); a malformed label (one carrying a quote or other illegal character,
 // which would inject markup into the declaration) fails serialization with
-// ErrUnsupportedOutputEncoding before any declaration byte is written. An empty
+// ErrUnsupportedOutputEncoding before any output byte is written. An empty
 // effective encoding simply omits the encoding pseudo-attribute.
 //
 // When set on a WriteTo-to-io.Writer path the emitted octets are re-encoded to
@@ -768,10 +768,31 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 
 func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	s := writeSession{Writer: d}
+
+	// Validate the effective version and encoding BEFORE any output byte is
+	// produced: both are caller-controlled (OutputVersion/SetVersion,
+	// OutputEncoding/SetEncoding) and are emitted raw between the declaration's
+	// pseudo-attribute quotes, so an illegal character would inject markup and a
+	// malformed value would produce an unparseable declaration. This runs ahead of
+	// the transcoding-encoder setup below because that encoder's deferred Close
+	// flushes a BOM at EOF — installing it before validation would leak that BOM to
+	// the caller even when the declaration itself is never written. Nothing has been
+	// written yet, so return the error directly. This is a separate, earlier check
+	// than the US-ASCII transcoding reject (asciiReject) — that one rejects a
+	// legal-but-unrepresentable label; this one rejects a label that is not a
+	// well-formed VersionNum/EncName.
+	version := d.effectiveVersion(doc)
+	if !isValidXMLVersion(version) {
+		return fmt.Errorf("helium: invalid output XML version %q: %w", version, ErrInvalidOutputVersion)
+	}
+	if enc := d.effectiveEncoding(doc); enc != "" && !xmlchar.IsValidEncName(enc) {
+		return fmt.Errorf("helium: invalid output encoding name %q: %w", enc, ErrUnsupportedOutputEncoding)
+	}
+
 	// An XML 1.1 document (or an OutputVersion("1.1") override) may carry
 	// restricted control characters; serialize them as decimal character
 	// references. XML 1.0 output is unaffected.
-	s.xml11 = d.effectiveVersion(doc) == "1.1"
+	s.xml11 = version == "1.1"
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
@@ -871,24 +892,13 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 		return nil
 	}
 
-	// Validate the effective version and encoding BEFORE writing any declaration
-	// bytes: both are caller-controlled (OutputVersion/SetVersion,
-	// OutputEncoding/SetEncoding) and are emitted raw between the pseudo-attribute
-	// quotes, so an illegal character would inject markup and a malformed value
-	// would produce an unparseable declaration. On an invalid value set the sticky
-	// error and emit nothing. This is a separate, earlier check than the US-ASCII
-	// transcoding reject (asciiReject) — that one rejects a legal-but-unrepresentable
-	// label; this one rejects a label that is not a well-formed VersionNum/EncName.
+	// The effective version and encoding are validated at the writeDoc entry —
+	// before any output byte (including the transcoding encoder's BOM) — so both are
+	// well-formed here: version is a valid VersionNum and, when non-empty, encoding
+	// is a valid EncName. They are emitted raw between the declaration's
+	// pseudo-attribute quotes.
 	version := d.effectiveVersion(doc)
-	if !isValidXMLVersion(version) {
-		d.check(fmt.Errorf("helium: invalid output XML version %q: %w", version, ErrInvalidOutputVersion))
-		return d.err
-	}
 	encoding := d.effectiveEncoding(doc)
-	if encoding != "" && !xmlchar.IsValidEncName(encoding) {
-		d.check(fmt.Errorf("helium: invalid output encoding name %q: %w", encoding, ErrUnsupportedOutputEncoding))
-		return d.err
-	}
 
 	d.writeString(out, `<?xml version="`)
 	d.writeString(out, version+`"`)

@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -81,6 +82,54 @@ func TestDeclarationEncodingInjectionRejected(t *testing.T) {
 		out, err := helium.WriteString(doc)
 		require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
 		require.NotContains(t, out, "<?xml")
+	})
+}
+
+// TestDeclarationInvalidValueEmptyOutput asserts that an invalid effective
+// version or encoding aborts serialization with ZERO bytes written to the
+// caller's io.Writer. The validation runs at the writeDoc entry, ahead of the
+// transcoding-encoder setup, so no encoder is installed and no BOM is flushed —
+// a stronger guarantee than "no <?xml": a UTF-16/UTF-32 BOM contains no "<?xml"
+// yet is still a leaked byte. The malformed labels below (UTF:16, UTF 16, UCS:4)
+// are ones the internal encoder table would normalize and load — installing that
+// encoder previously flushed its BOM before the EncName check rejected the label.
+func TestDeclarationInvalidValueEmptyOutput(t *testing.T) {
+	t.Parallel()
+
+	t.Run("encoding UTF:16 leaks no BOM", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputEncoding("UTF:16").WriteTo(&buf, doc)
+		require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
+		require.Zero(t, buf.Len())
+	})
+
+	t.Run("encoding UTF 16 leaks no BOM", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputEncoding("UTF 16").WriteTo(&buf, doc)
+		require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
+		require.Zero(t, buf.Len())
+	})
+
+	t.Run("encoding UCS:4 leaks no BOM", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputEncoding("UCS:4").WriteTo(&buf, doc)
+		require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
+		require.Zero(t, buf.Len())
+	})
+
+	t.Run("invalid version writes nothing", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputVersion("2.0").WriteTo(&buf, doc)
+		require.ErrorIs(t, err, helium.ErrInvalidOutputVersion)
+		require.Zero(t, buf.Len())
 	})
 }
 
