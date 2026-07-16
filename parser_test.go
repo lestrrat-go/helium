@@ -507,12 +507,15 @@ func TestStripBlanksEntityPseudorootCollision(t *testing.T) {
 	}
 }
 
-// TestStripBlanksExternalSubsetContentModel verifies that IsMixedElement
-// consults the EXTERNAL subset, not only the internal one. An element declared
-// ANY has a mixed-like content model, so whitespace inside it is significant and
-// must survive StripBlanks(true). libxml2's areBlanks checks both doc->intSubset
-// and doc->extSubset; declaring the model in the external DTD must behave exactly
-// like declaring it in the internal subset.
+// TestStripBlanksExternalSubsetContentModel verifies that whitespace
+// classification (StripBlanks) consults the EXTERNAL subset, not only the
+// internal one. An element declared ANY has a mixed-like content model, so
+// whitespace inside it is significant and must survive StripBlanks(true).
+// libxml2's areBlanks checks both doc->intSubset and doc->extSubset; helium's
+// whitespace path uses elementDeclType, which likewise searches both subsets,
+// so declaring the model in the external DTD must behave exactly like declaring
+// it in the internal subset. (The public Document.IsMixedElement searches only
+// the internal subset — see its doc comment — and is not the path exercised here.)
 func TestStripBlanksExternalSubsetContentModel(t *testing.T) {
 	const extDTD = `<!ELEMENT r ANY>
 <!ELEMENT c EMPTY>`
