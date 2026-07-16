@@ -117,7 +117,13 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // nodes in a <ds:Object>. Returns the (detached) Signature element for the
 // caller to place. A configured Reference may point at an element inside the
 // content by its Id (URI="#id") — for example a <ds:Manifest> or
-// <ds:SignatureProperties> — and it is resolved and digested during signing.
+// <ds:SignatureProperties> — and it is resolved and digested during signing
+// without ever inserting the Signature into the caller's document: an
+// in-Object target is canonicalized on its own, and a target in the document
+// (URI="#root", even the document element) is digested over its unchanged
+// subtree, byte-identical to a signature with no such internal reference. An
+// id that matches in both the document and the Signature's own Object content
+// is rejected as an ambiguous reference (ErrAmbiguousReference).
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
 	return signEnveloping(ctx, s.cfg, doc, content, key)
 }

@@ -41,7 +41,7 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 
 	// Process references: compute digests and add Reference elements.
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
 			return err
@@ -115,29 +115,15 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
-	// Attach the Signature into the document tree so a same-document reference
-	// (URI="#id") pointing INTO the Signature's own <Object> content — e.g. a
-	// <Manifest> or <SignatureProperties> carrying an Id — can be resolved while
-	// its digest is computed. resolveReference walks the document from its root,
-	// so the referenced element must be reachable there. The Signature is
-	// detached again before returning so the caller receives a free-standing
-	// element to place wherever they choose.
-	//
-	// This does not change the canonical bytes of any reference: a fragment
-	// reference is canonicalized over its target's own subtree, whose exclusive
-	// c14n output depends only on that target's ancestors, and attaching the
-	// Signature as a trailing child of the document element leaves every
-	// existing element's ancestor chain unchanged. Callers with no such internal
-	// reference get byte-identical output.
-	if doc.DocumentElement() != nil && sigElem.Parent() == nil {
-		if err := doc.DocumentElement().AddChild(sigElem); err != nil {
-			return nil, err
-		}
-		defer helium.UnlinkNode(sigElem)
-	}
-
+	// Process references. A same-document reference (URI="#id") may point INTO
+	// the Signature's own <Object> content — e.g. a <Manifest> or
+	// <SignatureProperties> carrying an Id — so the Signature itself is searched
+	// as an extra resolution root and a target found there is canonicalized while
+	// the Signature stays detached. The Signature is never inserted into the
+	// caller's document, so a reference to a document element (URI="#root") sees
+	// an unchanged subtree and produces byte-identical output.
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, sigElem); err != nil {
 			return nil, err
 		}
 	}
@@ -192,7 +178,7 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 	}
 
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -273,9 +259,19 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 
 // processReference computes the digest for a single Reference and adds the
 // Reference element to SignedInfo.
-func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, allowSHA1 bool) error {
-	// Resolve the reference target.
-	target, err := resolveReference(doc, ref.URI)
+// internalRoot, when non-nil, is the enveloping Signature whose own (detached)
+// <Object> content may hold the reference target; it is searched in addition to
+// the document and a target found inside it is canonicalized while detached.
+func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, allowSHA1 bool, internalRoot *helium.Element) error {
+	// Resolve the reference target. For an enveloping signature the target may
+	// live inside the Signature's own detached Object content, so search it too.
+	var target *helium.Element
+	var err error
+	if internalRoot != nil {
+		target, err = resolveReference(doc, ref.URI, internalRoot)
+	} else {
+		target, err = resolveReference(doc, ref.URI)
+	}
 	if err != nil {
 		return err
 	}
@@ -301,6 +297,11 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.URI == "", prefixes)
 	case ref.URI == "":
 		canonical, err = canonicalize(c14nMethod, doc, prefixes)
+	case internalRoot != nil && isDescendantOrSelf(target, internalRoot):
+		// The target lives inside the enveloping Signature's own detached
+		// <Object> content; canonicalize it without inserting the Signature
+		// into the caller's document.
+		canonical, err = canonicalizeDetachedSubtree(c14nMethod, internalRoot, target, prefixes)
 	default:
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}

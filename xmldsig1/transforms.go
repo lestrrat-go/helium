@@ -169,6 +169,47 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 	return canon.CanonicalizeTo(elem.OwnerDocument())
 }
 
+// canonicalizeDetachedSubtree canonicalizes target, an element that lives inside
+// the detached subtree rooted at root — an enveloping Signature whose <Object>
+// content carries a same-document reference (URI="#id") but which has not yet
+// been placed in a document. The c14n canonicalizer walks from a document root,
+// so a detached node set would canonicalize to nothing. We move the LIVE root
+// into a private throwaway document for the duration of the canonicalization —
+// never touching the caller's document — then move it back out and restore its
+// owning document, leaving root detached exactly as it was. Using the live
+// nodes (not a copy) keeps the bytes identical to what a verifier canonicalizing
+// the same nodes in place would produce.
+func canonicalizeDetachedSubtree(method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
+	origDoc := root.OwnerDocument()
+	tmp := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	if err := tmp.SetDocumentElement(root); err != nil {
+		return nil, err
+	}
+	// Propagate the throwaway document onto the whole subtree so canonicalizeSubtree,
+	// which reaches the document via target.OwnerDocument(), can walk it.
+	root.SetTreeDoc(tmp)
+
+	canonical, err := canonicalizeSubtree(method, target, prefixes)
+
+	// Restore: detach root from the throwaway document and give the subtree back
+	// its original owning document, leaving root detached as the caller expects.
+	helium.UnlinkNode(root)
+	root.SetTreeDoc(origDoc)
+
+	return canonical, err
+}
+
+// isDescendantOrSelf reports whether n is root itself or lives inside root's
+// subtree, walking n's ancestor chain by parent pointers.
+func isDescendantOrSelf(n helium.Node, root *helium.Element) bool {
+	for cur := n; cur != nil; cur = cur.Parent() {
+		if e, ok := helium.AsNode[*helium.Element](cur); ok && e == root {
+			return true
+		}
+	}
+	return false
+}
+
 // canonicalizeEnveloped computes the canonical bytes for an enveloped
 // signature reference WITHOUT mutating the caller's document. The
 // enveloped-signature transform is defined as canonicalizing the reference
@@ -369,21 +410,29 @@ func inScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 
 // resolveReference resolves a Reference URI to the target node.
 // For URI="" (enveloped), returns the document element.
-// For URI="#id", returns the unique element with that ID. If more than one
-// element matches the ID, returns ErrAmbiguousReference — this is the
-// primary defense against XML Signature Wrapping (XSW) attacks where an
-// attacker injects a duplicate-ID element containing malicious content.
-func resolveReference(doc *helium.Document, uri string) (*helium.Element, error) {
+// For URI="#id", returns the unique element with that ID, searched across the
+// document tree and any extraRoots. An enveloping signature passes its own
+// (detached) Signature element as an extra root so a reference into its own
+// <Object> content resolves before the Signature is placed in a document.
+// If more than one element matches the ID — in either tree, or one in each —
+// returns ErrAmbiguousReference. This is the primary defense against XML
+// Signature Wrapping (XSW) attacks where an attacker injects a duplicate-ID
+// element containing malicious content, and it also rejects an id that
+// collides between the document and the Signature's own Object content.
+func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
 	if uri == "" {
 		return doc.DocumentElement(), nil
 	}
 	if strings.HasPrefix(uri, "#") {
 		id := uri[1:]
-		// Walk the tree once and collect every candidate. We accept matches
+		// Walk each tree once and collect every candidate. We accept matches
 		// from any of: a DTD/schema-declared ID-typed attribute, xml:id, or
 		// the "id" attribute token in the casings "Id", "ID", or "id". We
 		// refuse to resolve the reference if more than one element matches.
-		matches := findElementsByID(doc, id)
+		matches := findElementsByIDUnder(doc.DocumentElement(), id)
+		for _, root := range extraRoots {
+			matches = append(matches, findElementsByIDUnder(root, id)...)
+		}
 		switch len(matches) {
 		case 0:
 			return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
@@ -396,8 +445,9 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 	return nil, fmt.Errorf("%w: external references not supported: %s", ErrReferenceNotFound, uri)
 }
 
-// findElementsByID walks the entire document tree and returns every element
-// whose ID matches the given value. The walk is exhaustive — it never
+// findElementsByIDUnder walks the subtree rooted at root (root included) and
+// returns every element whose ID matches the given value. root may be nil, in
+// which case it returns no matches. The walk is exhaustive — it never
 // short-circuits — so that duplicate IDs are surfaced to the caller rather
 // than silently masked. We do NOT consult Document.GetElementByID: its
 // underlying ID table is keyed by ID value and Document.RegisterID
@@ -415,7 +465,7 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 // — they are ID-typed only by their own schemas — so a document that relies
 // on them must declare that typing (DTD/schema, or by marking the attribute
 // AType == enum.AttrID) rather than have this heuristic guess.
-func findElementsByID(doc *helium.Document, id string) []*helium.Element {
+func findElementsByIDUnder(root helium.Node, id string) []*helium.Element {
 	var matches []*helium.Element
 	var walk func(helium.Node)
 	walk = func(n helium.Node) {
@@ -440,6 +490,6 @@ func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 			walk(child)
 		}
 	}
-	walk(doc.DocumentElement())
+	walk(root)
 	return matches
 }
