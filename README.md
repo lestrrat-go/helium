@@ -170,11 +170,16 @@ read through a fixed byte cap regardless of the `fs.FS` in use. Opt into host
 access with `Compiler.FS(helium.PermissiveFS())` or a confined `fs.FS`;
 `Compiler.FS(nil)` restores the deny-all default.
 
-**Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
-External-resource paths are joined against the document base URI and may be
-absolute or use OS-specific separators, so `os.DirFS`-style roots (which enforce
-`fs.ValidPath`) reject them. Until path normalization lands, rely on the deny-all
-default for confinement rather than a chroot-style `fs.FS`.
+**Confining the loader:** external-resource references are resolved against the
+document base URI into an absolute name. The parser hands that name to the `FS`
+first, then — if an `fs.ValidPath`-enforcing FS rejects it — retries with the
+name made relative to the document's directory, so a confined `fs.FS` rooted at
+that directory (`os.DirFS`, `os.Root.FS`) resolves the reference. The retry is a
+validated `fs.ValidPath`, which blocks `../` and absolute-path escape above the
+root. It does **not** confine symlinks: `os.DirFS` follows an in-root symlink out
+of its root. For symlink-safe confinement, prefer `os.Root.FS` (`os.OpenRoot`,
+Go 1.24+), which refuses any open that escapes the root through a symlink. A
+network-scheme name is refused before it reaches the `FS`.
 
 The `xmldsig1` (signatures) and `xmlenc1` (encryption) packages are
 **experimental** and should not be relied on inside a security or compliance

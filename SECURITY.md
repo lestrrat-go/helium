@@ -28,9 +28,11 @@ The following are **not** treated as vulnerabilities:
   `FS(helium.PermissiveFS())`, or removing the entity-amplification, name-length,
   or content-model-depth guards. Opting out of a protection is the caller's
   responsibility.
-- The documented incomplete-sandbox caveat for permissive or directory-rooted
-  `fs.FS` values (see the README Security section); rely on the deny-all default
-  for confinement.
+- The documented symlink caveat for a directory-rooted `fs.FS` (see the README
+  Security section): `os.DirFS` blocks `../`/absolute-path escape but FOLLOWS an
+  in-root symlink out of its root, so it is not a symlink sandbox. Use
+  `os.Root.FS` for symlink-safe confinement, or the deny-all default to load
+  nothing. `PermissiveFS` is an explicit opt-out of confinement.
 
 The `xmldsig1` (XML Digital Signatures) and `xmlenc1` (XML Encryption) packages are
 **experimental** and fall outside the security-support boundary until they

@@ -575,15 +575,25 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 // The default (and what a nil value restores) is a deny-all FS that refuses
 // every open: a parser from [NewParser] loads no external resources from the
 // host filesystem. To opt into host access, pass [PermissiveFS] (any os.Open
-// path) or — preferably — a confined [fs.FS] rooted at a trusted directory.
+// path) or — preferably — a confined [fs.FS] rooted at a trusted directory. For
+// a confined FS, prefer [os.Root.FS] (os.OpenRoot, Go 1.24+): it refuses any
+// open that escapes the root through a symlink. [os.DirFS] blocks "../"- and
+// absolute-path escape but FOLLOWS an in-root symlink out of the root, so it is
+// path-escape-safe but not a symlink sandbox.
 //
-// Note: the names handed to the FS are built with [filepath.Join] against
-// the document's base URI, so they may be absolute and may use
-// OS-specific separators on Windows. FS implementations that enforce
-// [fs.ValidPath] (notably [os.DirFS] and [testing/fstest.MapFS]) will
-// reject those names. Sandboxing the loader behind such an FS requires
-// path normalization that is not yet performed by this package; for now,
-// supply an FS implementation that accepts OS-style names.
+// A relative SYSTEM id is resolved against the document's base URI, which is
+// absolute whenever one is set (e.g. [Parser.ParseFile] uses the file's
+// absolute path). The parser first hands the FS that resolved name — absolute,
+// and possibly a "file:" URI — which an FS that enforces [fs.ValidPath]
+// ([os.DirFS], [os.Root.FS], [testing/fstest.MapFS]) rejects. On that rejection
+// it retries with the name made relative to the document base's directory, so a
+// confined FS rooted at the document's own directory resolves the reference
+// (including a nested resource in a subdirectory, which relativizes against the
+// document root). The retry is a validated fs.ValidPath, so a "../"- or
+// absolute-path escape above the FS root is disqualified (a leading "/" or a
+// surviving ".."); a network-scheme name is refused before either attempt.
+// [PermissiveFS], which loads any os.Open path, is served by the first
+// (absolute) attempt and is unaffected.
 func (p Parser) FS(fsys fs.FS) Parser {
 	p = p.clone()
 	if fsys == nil {

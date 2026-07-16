@@ -5,7 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"net/url"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -364,6 +367,152 @@ func networkAccessForbidden(ctx *parserCtx, name string) bool {
 	}
 }
 
+// systemIDRetryEligible reports whether a declared SYSTEM id is eligible for the
+// confined-FS base-relative retry (openExternalResource). Only an ORIGINALLY
+// relative reference is eligible: the id must be neither an absolute path (POSIX
+// or Windows, GOOS-independent), nor carry a URI scheme (e.g. "file:", "http:"),
+// nor carry a colon anywhere in its FIRST path segment (the part before the
+// first '/' or '\\'). It is evaluated on the id AS DECLARED — before URI
+// resolution against the base and before any catalog mapping — because the
+// confined-FS retry only ever wants to recover the relative name a caller who
+// rooted the FS at the document directory expects; an absolute or file-URI
+// SYSTEM id is never retried.
+//
+// The first-segment colon check catches every scheme-looking id that
+// [uripath.HasURIScheme] deliberately does not: a one-letter URI scheme
+// ("x:opaque" — valid per RFC 3986, scheme = ALPHA *( ALPHA / DIGIT / "+" /
+// "-" / "." )) reads as a Windows drive letter to that helper (whose 2-char
+// minimum disambiguates "C:\\path"), and a bare drive letter itself. A genuine
+// relative path never carries a colon in its first segment — RFC 3986 makes
+// such a reference scheme-ambiguous — so excluding it cannot misclassify a real
+// relative id.
+func systemIDRetryEligible(declaredSystemID string) bool {
+	if declaredSystemID == "" {
+		return false
+	}
+	if uripath.IsAbsolutePath(declaredSystemID) || uripath.HasURIScheme(declaredSystemID) {
+		return false
+	}
+	firstSeg := declaredSystemID
+	if i := strings.IndexAny(firstSeg, `/\`); i >= 0 {
+		firstSeg = firstSeg[:i]
+	}
+	return !strings.Contains(firstSeg, ":")
+}
+
+// baseRelativeFSName derives a valid [fs.ValidPath] name for primary by making
+// it relative to the directory of base. primary is the resolved resource in
+// local-path form (post [catalogOpenName]); base is the fixed top-level document
+// base URI (parserCtx.documentBaseURI), NOT the moving per-resource baseURI — so
+// a nested resource in a subdirectory relativizes against the document root and
+// yields the correct root-relative name (a nested SYSTEM id resolved to
+// "/dir/sub/x.dtd" against document base "/dir/doc.xml" becomes "sub/x.dtd").
+//
+// The parser resolves a relative SYSTEM id against the base URI into an absolute
+// path (see ExternalSubset / EntityDecl), which an fs.FS that enforces
+// [fs.ValidPath] — [os.DirFS], [os.Root.FS] (os.OpenRoot), [testing/fstest.MapFS]
+// — rejects. Re-relativizing against the document base recovers the name a caller
+// who rooted such an FS at the document's own directory expects (a SYSTEM id
+// "sub.dtd" resolved against "/dir/doc.xml" becomes "sub.dtd" again).
+//
+// Eligibility (the reference was ORIGINALLY relative) is enforced by the caller
+// via [systemIDRetryEligible] BEFORE this runs — filepath.Rel here would happily
+// re-relativize an in-root absolute id ("/dir/sub.dtd" against "/dir/doc.xml"
+// becomes "sub.dtd"), so the path-shape guard below is NOT what keeps an absolute
+// SYSTEM id from being retried; the caller's eligibility gate is.
+//
+// It reports ok=false — no usable fallback — when base is empty, when either name
+// still carries a URI scheme, when the two are not both path-shaped on the same
+// volume, or when the result would ascend above the FS root: a leading "/" or a
+// surviving ".." after cleaning makes it an invalid fs.ValidPath. That result
+// guard blocks a "../"- or absolute-path escape above the FS root; it does NOT
+// stop a symlink inside the root from pointing outside (only [os.Root.FS]
+// confines symlinks — see openExternalResource).
+func baseRelativeFSName(primary, base string) (string, bool) {
+	if base == "" || uripath.HasURIScheme(primary) {
+		return "", false
+	}
+	basePath := catalogOpenName(base)
+	if uripath.HasURIScheme(basePath) {
+		return "", false
+	}
+	rel, err := filepath.Rel(filepath.Dir(basePath), primary)
+	if err != nil {
+		return "", false
+	}
+	rel = path.Clean(filepath.ToSlash(rel))
+	if !fs.ValidPath(rel) {
+		return "", false
+	}
+	return rel, true
+}
+
+// openExternalResource opens primary through the parser's fs.FS. primary is the
+// resolved resource name: for the direct entity/DTD paths it is the raw
+// (historical) name — a "file:" URI or an absolute path — tried verbatim first,
+// so [iofs.PermissiveRoot] (which wants the absolute path for os.Open) and a
+// caller FS keyed on the file-URI name are unchanged.
+//
+// This is the single enforcement point for the NONET network-access guard: it
+// runs [networkAccessForbidden] on primary AND on the derived retry name, so a
+// base-relative retry that turns into a network-scheme name is refused just like
+// a network-scheme primary. A forbidden name returns [ErrNetworkAccessForbidden];
+// callers must treat that error distinctly from an ordinary open failure.
+//
+// When the primary open fails specifically because the FS rejected the name as an
+// invalid io/fs path ([fs.ErrInvalid] — reported by [os.DirFS], [os.Root.FS] and
+// [io/fs.Sub], but never by PermissiveRoot or DenyAll, which use os.Open /
+// return fs.ErrNotExist), it retries with the name made relative to the fixed
+// top-level document base's directory (parserCtx.documentBaseURI) via
+// [baseRelativeFSName]. This lets a confined fs.FS rooted at the document's
+// directory resolve a SYSTEM id that resolution turned into an absolute path.
+//
+// The retry fires ONLY when retryEligible is true — i.e. the reference's declared
+// SYSTEM id was ORIGINALLY relative (see [systemIDRetryEligible]). An originally
+// absolute or file-URI SYSTEM id is never retried, even when it names an in-root
+// file whose base-relative form would be a valid fs.ValidPath: filepath.Rel would
+// re-relativize such an id, so eligibility — not the fs.ValidPath shape of the
+// retry name — is what enforces that promise.
+//
+// The supported confined-FS document base is an ABSOLUTE path or "file:" URI (as
+// ParseFile always sets): re-relativizing needs an absolute base to recover the
+// original relative name. A RELATIVE document base is out of scope — BuildURI
+// yields a valid-but-absent relative path that fails with fs.ErrNotExist (not
+// fs.ErrInvalid), so the retry never fires; serving an fs.FS rooted elsewhere than
+// the document directory is the job of the deferred root-aware helium.DirFS(root)
+// adapter (a separate public-API proposal), not this retry.
+//
+// The retry name is a validated fs.ValidPath, so a "../"- or absolute-path escape
+// above the FS root is blocked. That path-shape guard does NOT confine symlinks:
+// [os.DirFS] follows an in-root symlink that points outside its root, so os.DirFS
+// is path-escape-safe but not a symlink sandbox. For symlink-safe confinement use
+// [os.Root.FS] (os.OpenRoot, Go 1.24+), which refuses any open that escapes the
+// root through a symlink.
+func (ctx *parserCtx) openExternalResource(primary string, retryEligible bool) (fs.File, error) {
+	if networkAccessForbidden(ctx, primary) {
+		return nil, ErrNetworkAccessForbidden
+	}
+	f, err := ctx.fsys.Open(primary)
+	if err == nil {
+		return f, nil
+	}
+	if !retryEligible || !errors.Is(err, fs.ErrInvalid) {
+		return nil, err //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	}
+	rel, ok := baseRelativeFSName(catalogOpenName(primary), ctx.documentBaseURI)
+	if !ok || rel == primary {
+		return nil, err //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	}
+	if networkAccessForbidden(ctx, rel) {
+		return nil, ErrNetworkAccessForbidden
+	}
+	f2, err2 := ctx.fsys.Open(rel)
+	if err2 == nil {
+		return f2, nil
+	}
+	return nil, err //nolint:wrapcheck // report the primary (resolved-name) error
+}
+
 func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri string) error {
 	ctx := t.pctx(ctxif)
 
@@ -383,6 +532,12 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		!ctx.loadsubset.IsSet(CompleteAttrs) {
 		return nil
 	}
+
+	// Capture retry eligibility from the SYSTEM id AS DECLARED — before catalog
+	// mapping and before BuildURI resolution below. Only an originally relative
+	// SYSTEM id is eligible for the confined-FS base-relative retry; an absolute
+	// or file-URI id is never retried (see openExternalResource).
+	retryEligible := systemIDRetryEligible(uri)
 
 	// Try catalog resolution first. A catalog may resolve the identifier to a
 	// "file:" URI, which is not a filesystem path; convert it before it reaches
@@ -417,10 +572,12 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// drive-rooted base); convert it to a native path before Open, the same way
 	// a catalog-resolved file: URI is handled. A plain path is returned verbatim.
 	openName := catalogOpenName(resolved)
-	if networkAccessForbidden(ctx, openName) {
+	f, err := ctx.openExternalResource(openName, retryEligible)
+	if errors.Is(err, ErrNetworkAccessForbidden) {
+		// A network-scheme name (primary or the base-relative retry) is refused
+		// hard while network access is forbidden, not downgraded to a warning.
 		return ErrNetworkAccessForbidden
 	}
-	f, err := ctx.fsys.Open(openName)
 	if err != nil {
 		// Loading was requested (the resolve-once gate above passed), so a failed
 		// open is a requested-but-failed load, not an absent DTD. Surface it as a
@@ -708,10 +865,10 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 			// A catalog may resolve to a "file:" URI; convert it to a local
 			// path before opening (CAT-001).
 			openName := catalogOpenName(resolved)
-			if networkAccessForbidden(ctx, openName) {
+			f, err := ctx.openExternalResource(openName, ctx.extRefRelative)
+			if errors.Is(err, ErrNetworkAccessForbidden) {
 				return nil, ErrNetworkAccessForbidden
 			}
-			f, err := ctx.fsys.Open(openName)
 			if err == nil {
 				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
 			}
@@ -720,12 +877,14 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 
 	// Fall back to direct file-based resolution. The systemID at this point
 	// is the entity's resolved URI (built from system ID + base URI in
-	// EntityDecl). Try opening it as a file path.
+	// EntityDecl). Open it verbatim first — a "file:" URI or absolute path — so a
+	// caller FS keyed on that historical name still resolves; openExternalResource
+	// normalizes it only for the confined-FS base-relative retry.
 	if systemID != "" {
-		if networkAccessForbidden(ctx, systemID) {
+		f, err := ctx.openExternalResource(systemID, ctx.extRefRelative)
+		if errors.Is(err, ErrNetworkAccessForbidden) {
 			return nil, ErrNetworkAccessForbidden
 		}
-		f, err := ctx.fsys.Open(systemID)
 		if err == nil {
 			return &fileParseInput{ReadCloser: f, uri: systemID}, nil
 		}

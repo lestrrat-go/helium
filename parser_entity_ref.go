@@ -95,7 +95,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 				return err
 			}
 		} else if ent.EntityType() == enum.ExternalGeneralParsedEntity {
-			parsedEnt, err = pctx.parseExternalEntityPrivate(ctx, ent.uri, ent.externalID)
+			parsedEnt, err = pctx.parseExternalEntityPrivate(ctx, ent.uri, ent.systemID, ent.externalID)
 			switch err {
 			case nil, ErrParseSucceeded:
 			default:
@@ -142,7 +142,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 					return err
 				}
 			} else if ent.EntityType() == enum.ExternalGeneralParsedEntity {
-				parsedEnt, err = pctx.parseExternalEntityPrivate(ctx, ent.uri, ent.externalID)
+				parsedEnt, err = pctx.parseExternalEntityPrivate(ctx, ent.uri, ent.systemID, ent.externalID)
 				_ = parsedEnt
 				switch err {
 				case nil, ErrParseSucceeded:
