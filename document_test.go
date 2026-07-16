@@ -167,6 +167,67 @@ func TestGetElementByID(t *testing.T) {
 		require.NotNil(t, b, "internal-whitespace xml:id collapses to a single space")
 		require.Equal(t, "b", b.LocalName())
 	})
+
+	t.Run("duplicate id resolves via table to last registered", func(t *testing.T) {
+		t.Parallel()
+		// Duplicate ids are invalid XML, but the documented behavior of the O(1)
+		// table path is that RegisterID overwrites, so a lookup returns the LAST
+		// element registered for that value.
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		first := doc.CreateElement("a")
+		second := doc.CreateElement("b")
+		doc.RegisterID("dup", first)
+		doc.RegisterID("dup", second)
+
+		got := doc.GetElementByID("dup")
+		require.Same(t, second, got,
+			"table path must return the last-registered element for a duplicate id")
+	})
+}
+
+// TestIDTable documents that IDTable returns the document's own live map (not a
+// copy): a subsequent RegisterID is visible through a previously returned map,
+// and a bare API-built document has no interned table.
+func TestIDTable(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	require.Nil(t, doc.IDTable(), "an API-built document has no interned ID table")
+
+	elem := doc.CreateElement("a")
+	doc.RegisterID("k1", elem)
+
+	tbl := doc.IDTable()
+	require.NotNil(t, tbl)
+	require.Same(t, elem, tbl["k1"])
+
+	// The returned map aliases the internal one: a later RegisterID shows through
+	// the map already handed out.
+	elem2 := doc.CreateElement("b")
+	doc.RegisterID("k2", elem2)
+	require.Same(t, elem2, tbl["k2"],
+		"IDTable returns the live internal map, so later registrations are visible")
+}
+
+// TestStandaloneValueSpace round-trips each Standalone* constant through
+// NewDocument/Standalone and confirms the constants are distinct.
+func TestStandaloneValueSpace(t *testing.T) {
+	t.Parallel()
+
+	cases := []helium.DocumentStandaloneType{
+		helium.StandaloneExplicitYes,
+		helium.StandaloneExplicitNo,
+		helium.StandaloneNoXMLDecl,
+		helium.StandaloneImplicitNo,
+		helium.StandaloneInvalidValue,
+	}
+	seen := make(map[helium.DocumentStandaloneType]bool)
+	for _, s := range cases {
+		doc := helium.NewDocument("1.0", "", s)
+		require.Equal(t, s, doc.Standalone(), "standalone must round-trip through NewDocument")
+		require.False(t, seen[s], "each Standalone* constant must be a distinct value")
+		seen[s] = true
+	}
 }
 
 func TestDocProperties(t *testing.T) {
@@ -243,7 +304,7 @@ func TestDocumentAccessors(t *testing.T) {
 	doc.SetSkipIDs(false)
 	require.False(t, doc.SkipIDs())
 
-	require.Equal(t, helium.DocumentStandaloneType(helium.StandaloneExplicitYes), doc.Standalone())
+	require.Equal(t, helium.StandaloneExplicitYes, doc.Standalone())
 
 	// AddSibling/Replace on a document are rejected.
 	require.Error(t, doc.AddSibling(doc.CreateElement("x")))
