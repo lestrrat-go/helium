@@ -101,6 +101,16 @@ var (
 	//      but reference-less content (and character-map replacements) stay raw.
 	// Match with errors.Is.
 	ErrUnsupportedOutputEncoding = errors.New("unsupported output encoding")
+	// ErrInvalidOutputVersion is returned by the writer when the effective output
+	// XML version (the OutputVersion override, or the document's own version) is
+	// not a valid XML VersionNum production `'1.' [0-9]+` (XML §2.8). The version
+	// is written raw between the double quotes of the XML declaration's version
+	// pseudo-attribute, so a value carrying a quote or other illegal character
+	// would break out of the pseudo-attribute and inject markup; a malformed value
+	// would produce an unparseable declaration. The writer validates the version
+	// before emitting any declaration bytes and fails closed, emitting nothing.
+	// Match with errors.Is.
+	ErrInvalidOutputVersion = errors.New("invalid output XML version")
 	// ErrNetworkAccessForbidden is returned when an external resource (an
 	// external DTD subset or external parsed entity) names a network URI —
 	// an http, https, or ftp scheme — but the parser was configured to forbid
