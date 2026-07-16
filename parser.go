@@ -290,13 +290,25 @@ func (p Parser) StripBlanks(v bool) Parser {
 	return p
 }
 
-// AllowNetwork controls whether the parser is allowed to fetch resources
-// over the network (e.g. external DTDs, entities). When set to false,
-// all network access is forbidden.
-// libxml2: XML_PARSE_NONET (note: semantics are inverted — libxml2 sets
-// this flag to *forbid* network access, whereas AllowNetwork(true)
-// *permits* it)
-// Default: false (network access is forbidden)
+// AllowNetwork controls whether the parser may reach an external resource (an
+// external DTD subset or external parsed entity) whose reference names a network
+// URI — an http, https, or ftp scheme.
+//
+// helium has NO built-in network loader: every external-resource load goes
+// through the configured [fs.FS] (see [Parser.FS]). This flag does not itself
+// fetch anything — it only gates a guard in front of that fs.FS:
+//
+//   - AllowNetwork(false) (the default) refuses any network-scheme reference with
+//     [ErrNetworkAccessForbidden] before it reaches the fs.FS.
+//   - AllowNetwork(true) lifts that guard, so a network-scheme reference is
+//     handed to the configured fs.FS like any other name. An actual network
+//     fetch happens only if that fs.FS itself opens network URIs; the default
+//     deny-all FS and [PermissiveFS] (os.Open) do not, so AllowNetwork(true)
+//     alone loads nothing over the network.
+//
+// libxml2: XML_PARSE_NONET (semantics inverted — libxml2 sets that flag to
+// *forbid* network access, whereas AllowNetwork(true) *permits* it).
+// Default: false (network-scheme references are refused).
 func (p Parser) AllowNetwork(v bool) Parser {
 	p = p.clone()
 	if !v {
@@ -499,7 +511,20 @@ func (p Parser) LenientXMLDecl(v bool) Parser {
 
 // --- Non-flag configuration ---
 
-// SAXHandler sets the SAX2 event handler for parsing.
+// SAXHandler sets the SAX2 event handler that receives parse events. The
+// default (installed by [NewParser]) is a [TreeBuilder], which assembles the
+// events into the *Document that Parse returns.
+//
+// Like every Parser option, this replaces — it does not merge: the value from
+// the most recent call wins, and each call returns a new Parser (clone-on-write)
+// leaving the receiver unchanged.
+//
+// Passing nil is allowed and does not panic — every event dispatch is nil-
+// guarded. With a nil handler no events are delivered and no tree is built, so
+// [Parser.Parse] (and the other Parse* methods) return a nil *Document and a nil
+// error for well-formed input. Pass a nil handler only to run the parser purely
+// for its well-formedness/validation side effects; provide a TreeBuilder (or
+// another handler) to obtain output.
 func (p Parser) SAXHandler(s sax.SAX2Handler) Parser {
 	p = p.clone()
 	p.cfg.sax = s
