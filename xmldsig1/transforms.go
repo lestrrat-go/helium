@@ -193,14 +193,15 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 //     ancestors and not visibly used, so a bare-rooted throwaway document would
 //     drop the caller root's namespaces and produce a digest no verifier can
 //     match.
-//   - The inherited xml:* attributes xml:base, xml:lang and xml:space. Both
-//     Canonical XML 1.0 (in node-set mode) and Canonical XML 1.1 re-render these
-//     on the apex by walking omitted ancestors: 1.0 imports the nearest ancestor
-//     value for each name, 1.1 inherits xml:lang/xml:space and lexically joins
-//     xml:base across the omitted-ancestor chain. Without the caller root's xml:*
-//     on the proxy the apex would inherit nothing at signing but inherit those
-//     values at verification, so the digests would differ. xml:id is NOT
-//     inherited and is deliberately not copied.
+//   - The inherited xml:* attributes, copied per the C14N version so the set
+//     matches EXACTLY what helium's own canonicalizer inherits to a node-set
+//     apex (see copyInheritedXMLAttrs): Canonical XML 1.0 inherits every
+//     xml:*-namespace attribute across an omitted-ancestor gap (including
+//     xml:id), while Canonical XML 1.1 inherits only xml:lang/xml:space and
+//     lexically joins xml:base (xml:id NOT inherited). Deriving the copied set
+//     from the caller root's own xml:* attributes per version keeps sign-time
+//     (proxy) and verify-time (real placement) inheritance identical by
+//     construction, so no inherited xml:* dimension can be missed.
 //
 // The proxy is never part of the canonicalized node set (only target's own
 // subtree is), so it changes the inherited context only, never the emitted bytes
@@ -208,6 +209,11 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 // namespaces and performs NO xml:* inheritance, so both an unused inherited
 // namespace and any inherited xml:* on the proxy leave its output byte-identical.
 func canonicalizeDetachedSubtree(method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
+	mode, _, err := resolveC14NMode(method)
+	if err != nil {
+		return nil, err
+	}
+
 	origDoc := root.OwnerDocument()
 	tmp := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 
@@ -219,7 +225,7 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 					return nil, err
 				}
 			}
-			if err := copyInheritedXMLAttrs(proxy, docElem); err != nil {
+			if err := copyInheritedXMLAttrs(proxy, docElem, mode); err != nil {
 				return nil, err
 			}
 		}
@@ -249,33 +255,52 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 	return canonicalizeSubtree(method, target, prefixes)
 }
 
-// inheritedXMLAttrNames are the xml-namespace attributes that canonicalization
-// re-renders on a node-set apex by inheriting them from omitted ancestors:
-// xml:base, xml:lang and xml:space. xml:id is intentionally excluded — it is not
-// an inherited attribute under either Canonical XML 1.0 or 1.1.
-var inheritedXMLAttrNames = []string{"base", "lang", "space"}
-
-// copyInheritedXMLAttrs copies the caller document element's own xml:base,
-// xml:lang and xml:space attributes onto the proxy so that, as target's nearest
-// omitted element-ancestor, the proxy contributes the same inherited xml:* values
-// the caller document element will contribute once the Signature is placed under
-// it. The document element is the root, so its ancestor-or-self inherited context
-// is exactly its own xml:* attributes. The xml namespace is predeclared and never
-// emitted, so a fresh xml Namespace on each copied attribute is sufficient.
-func copyInheritedXMLAttrs(proxy, docElem *helium.Element) error {
-	for _, localName := range inheritedXMLAttrNames {
-		for _, attr := range docElem.Attributes() {
-			if attr.URI() != lexicon.NamespaceXML || attr.LocalName() != localName {
-				continue
-			}
-			xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
-			if err := proxy.SetLiteralAttributeNS(localName, attr.Value(), xmlNS); err != nil {
-				return err
-			}
-			break
+// copyInheritedXMLAttrs copies the caller document element's inherited xml:*
+// attributes onto the proxy so that, as target's nearest omitted
+// element-ancestor, the proxy contributes exactly the xml:* values helium's own
+// canonicalizer inherits to a node-set apex under the given C14N mode. The set is
+// derived programmatically from the document element's xml-namespace attributes
+// per the version rule (inheritedUnderMode) rather than a hardcoded name list, so
+// an unusual or future xml:* attribute is never missed. The document element is
+// the root, so its ancestor-or-self inherited context is exactly its own xml:*
+// attributes. The xml namespace is predeclared and never emitted, so a fresh xml
+// Namespace on each copied attribute is sufficient.
+func copyInheritedXMLAttrs(proxy, docElem *helium.Element, mode c14n.Mode) error {
+	for _, attr := range docElem.Attributes() {
+		if attr.URI() != lexicon.NamespaceXML {
+			continue
+		}
+		if !inheritedUnderMode(mode, attr.LocalName()) {
+			continue
+		}
+		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
+		if err := proxy.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), xmlNS); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// inheritedUnderMode reports whether an xml:<localName> attribute on an omitted
+// ancestor is inherited to the node-set apex under the given C14N mode, matching
+// helium's own canonicalizer (canonicalizer.go):
+//
+//   - Canonical XML 1.0 (inheritXMLAttrs10) inherits EVERY xml:*-namespace
+//     attribute across an omitted-ancestor gap, including xml:id.
+//   - Canonical XML 1.1 inherits only xml:lang and xml:space
+//     (processSimpleInheritable11) and lexically joins xml:base
+//     (processXMLBase11); xml:id is NOT inherited.
+//   - Exclusive Canonical XML performs no xml:* inheritance, so nothing is copied
+//     (its output is byte-identical regardless of the proxy's xml:* attributes).
+func inheritedUnderMode(mode c14n.Mode, localName string) bool {
+	switch mode {
+	case c14n.C14N10:
+		return true
+	case c14n.C14N11:
+		return localName == "base" || localName == "lang" || localName == "space"
+	default:
+		return false
+	}
 }
 
 // isDescendantOrSelf reports whether n is root itself or lives inside root's

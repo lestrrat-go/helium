@@ -265,12 +265,19 @@ func TestSignEnveloping_AmbiguousIDAcrossTrees(t *testing.T) {
 }
 
 // Regression for #1220: an in-Object reference canonicalized with an INCLUSIVE
-// method (C14N 1.0 or 1.1) inherits not just namespaces but the xml:* attributes
-// (xml:base, xml:lang, xml:space) from the caller document element. Signing must
-// reproduce that inherited context so the sign-time and verify-time digests
+// method (C14N 1.0 or 1.1) inherits not just namespaces but xml:* attributes
+// from the caller document element. The inherited set is version-specific:
+// Canonical XML 1.0 inherits EVERY xml:*-namespace attribute (including xml:id),
+// while Canonical XML 1.1 inherits only xml:lang/xml:space and lexically joins
+// xml:base (xml:id NOT inherited). Signing must reproduce exactly that
+// version-specific inherited context so the sign-time and verify-time digests
 // agree. Each case declares an xml:* attribute (or several) on the caller root,
 // signs a reference into the Signature's own <Object>, places the Signature under
-// that root, and verifies. An exclusive-C14N case is included as the byte-parity
+// that root, and verifies. The xml:id cases guard the copy-per-version rule:
+// under C14N 1.0 the proxy must carry xml:id (it is inherited), and under C14N
+// 1.1 xml:id is not inherited on either side, so both must still verify. The
+// two-attribute xml:id case guards the "copy every xml:* attribute, not a fixed
+// list" behavior under 1.0. An exclusive-C14N case is included as the byte-parity
 // guard: exclusive canonicalization performs no xml:* inheritance, so it must
 // still verify regardless of the inherited context.
 func TestSignEnveloping_InclusiveC14NInObjectRef_InheritedXMLAttrs(t *testing.T) {
@@ -286,6 +293,10 @@ func TestSignEnveloping_InclusiveC14NInObjectRef_InheritedXMLAttrs(t *testing.T)
 		{name: "c14n11-xml-space", rootAttr: `xml:space="preserve"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
 		{name: "c14n10-xml-base", rootAttr: `xml:base="http://example.com/a/"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
 		{name: "c14n11-xml-base", rootAttr: `xml:base="http://example.com/a/"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
+		{name: "c14n10-xml-id", rootAttr: `xml:id="rootid"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		{name: "c14n11-xml-id", rootAttr: `xml:id="rootid"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
+		{name: "c14n10-xml-id-and-lang", rootAttr: `xml:id="rootid" xml:lang="en"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		{name: "c14n11-xml-id-and-lang", rootAttr: `xml:id="rootid" xml:lang="en"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
 		{name: "c14n10-combined", rootAttr: `xml:lang="en" xml:space="preserve" xml:base="http://example.com/a/"`, method: xmldsig1.C14N10, xform: xmldsig1.C14NTransform(xmldsig1.C14N10)},
 		{name: "c14n11-combined", rootAttr: `xml:lang="en" xml:space="preserve" xml:base="http://example.com/a/"`, method: xmldsig1.C14N11URI, xform: xmldsig1.C14NTransform(xmldsig1.C14N11URI)},
 		{name: "exclusive-byte-parity", rootAttr: `xml:lang="en" xml:base="http://example.com/a/"`, method: xmldsig1.ExcC14N10, xform: xmldsig1.ExcC14NTransform()},
