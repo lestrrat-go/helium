@@ -2,6 +2,7 @@ package helium
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/lestrrat-go/helium/sink"
@@ -56,7 +57,8 @@ type errorAccumulator struct {
 func (a *errorAccumulator) Handle(_ context.Context, err error) {
 	if a.level != 0 {
 		level := ErrorLevelWarning
-		if l, ok := err.(ErrorLeveler); ok {
+		var l ErrorLeveler
+		if errors.As(err, &l) {
 			level = l.ErrorLevel()
 		}
 		if level != a.level {

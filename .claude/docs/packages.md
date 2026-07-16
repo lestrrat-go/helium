@@ -27,6 +27,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
 - `ErrorHandler` interface — async error delivery during parsing
+- `ErrorLeveler` interface — optional `ErrorLevel() ErrorLevel` an error implements to report its severity; `ErrorCollector`'s level filter reads it via `errors.As` (default `ErrorLevelWarning`)
+- `DTDValidationError{Message, Level}` (`valid.go`) — structured DTD-validation diagnostic delivered to the `ErrorHandler` under `ValidateDTD(true)`; implements `ErrorLeveler` returning `ErrorLevelError`, so a level-filtered `ErrorCollector` keeps it. Recover via `errors.As`; `.Error()` returns `Message` (byte-identical to the prior `fmt.Errorf` text)
 - `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)
 - `ErrExternalDTDTooLarge` — sentinel error returned when a loaded external DTD subset exceeds the byte cap; enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`
 - `ErrNodeContentTooLarge` — sentinel returned when a single CDATA/comment/PI/char-data run or attribute value — or a single contiguous run of XML whitespace (a blank skip) — exceeds `MaxNodeContentSize` (or `DefaultMaxNodeContentSize`); match with `errors.Is`
