@@ -167,6 +167,7 @@ type parserCtx struct {
 	loadsubset       LoadSubsetOption
 	charBufferSize   int
 	baseURI          string          // document base URI for resolving external references
+	documentBaseURI  string          // fixed top-level document base URI, captured once at parse start; unlike baseURI it is not moved while an external subset/entity is parsed, so the confined-FS retry always relativizes against the document root
 	catalog          CatalogResolver // XML catalog for entity resolution
 	fsys             fs.FS           // filesystem for loading external DTDs and entities
 	elem             *Element        // current context element
@@ -626,6 +627,11 @@ func (c *countingReader) Read(p []byte) (int, error) {
 }
 
 func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
+	// Capture the top-level document base once, before any external subset or
+	// entity parse moves ctx.baseURI. The confined-FS retry (openExternalResource)
+	// relativizes against this fixed root so a nested resource in a subdirectory
+	// resolves against the document root, not its own moving base.
+	ctx.documentBaseURI = ctx.baseURI
 	ctx.pushInput(strcursor.NewByteCursor(in))
 	ctx.detectedEncoding = encUTF8
 	ctx.encoding = ""

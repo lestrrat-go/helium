@@ -35,10 +35,12 @@ const goosWindows = "windows"
 // and may use OS-specific separators on Windows. PermissiveRoot forwards such a
 // name to os.Open verbatim. A caller-supplied FS that enforces [fs.ValidPath]
 // (such as [os.DirFS] or [os.Root.FS]) rejects the absolute name; the parser
-// then retries with the name made relative to the base URI's directory, so a
-// confined FS rooted at the document's directory resolves the reference (see
+// then retries with the name made relative to the document base's directory, so
+// a confined FS rooted at the document's directory resolves the reference (see
 // the helium package's Parser.FS). PermissiveRoot needs no such retry because
-// os.Open accepts the absolute name directly.
+// os.Open accepts the absolute name directly. The retry's fs.ValidPath check
+// blocks "../"- and absolute-path escape, but only [os.Root.FS] confines
+// symlinks — [os.DirFS] follows an in-root symlink out of its root.
 type PermissiveRoot struct{}
 
 // Open implements [fs.FS].

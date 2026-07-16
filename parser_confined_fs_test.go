@@ -1,13 +1,64 @@
 package helium_test
 
 import (
+	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
+
+// validPathFS is a caller-supplied, network-capable fs.FS that ALSO enforces
+// fs.ValidPath the way os.DirFS / os.Root.FS / fstest.MapFS do: an invalid
+// (absolute / "..") name is rejected with fs.ErrInvalid, any valid name is
+// served with fixed content. It records every name it is asked to open.
+type validPathFS struct {
+	content []byte
+	opened  *[]string
+}
+
+func (f validPathFS) Open(name string) (fs.File, error) {
+	*f.opened = append(*f.opened, name)
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
+	}
+	return &memFile{Reader: bytes.NewReader(f.content)}, nil
+}
+
+// exactNameFS accepts ONLY one exact name (the historical file-URI name) and
+// records every open, standing in for a permissive caller FS keyed on the
+// file:// URI name rather than a normalized path.
+type exactNameFS struct {
+	accept  string
+	content []byte
+	opened  *[]string
+}
+
+func (f exactNameFS) Open(name string) (fs.File, error) {
+	*f.opened = append(*f.opened, name)
+	if name == f.accept {
+		return &memFile{Reader: bytes.NewReader(f.content)}, nil
+	}
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+type memFile struct{ *bytes.Reader }
+
+func (f *memFile) Stat() (fs.FileInfo, error) { return memInfo{size: f.Size()}, nil }
+func (f *memFile) Close() error               { return nil }
+
+type memInfo struct{ size int64 }
+
+func (memInfo) Name() string       { return "m" }
+func (i memInfo) Size() int64      { return i.size }
+func (memInfo) Mode() fs.FileMode  { return 0 }
+func (memInfo) ModTime() time.Time { return time.Time{} }
+func (memInfo) IsDir() bool        { return false }
+func (memInfo) Sys() any           { return nil }
 
 // A confined os.DirFS rooted at the document's own directory must resolve a
 // relative SYSTEM id even though the parser resolves it against the document's
@@ -38,11 +89,14 @@ func TestConfinedDirFSLoadsRelativeSystemID(t *testing.T) {
 		"a confined os.DirFS rooted at the document directory must load the external subset")
 }
 
-// The base-relative retry is confined: a SYSTEM id that resolves outside the FS
-// root (absolute, or ascending via "..") is not a valid fs.ValidPath, so it is
-// never retried and the confined FS refuses it. The out-of-tree file exists and
-// is readable, proving the refusal is the confinement, not a missing file.
-func TestConfinedDirFSRefusesTraversal(t *testing.T) {
+// The base-relative retry blocks PATH-based escape: a SYSTEM id that resolves
+// outside the FS root (absolute, or ascending via "..") is not a valid
+// fs.ValidPath, so it is never retried and the confined FS refuses it. The
+// out-of-tree file exists and is readable, proving the refusal is the path-shape
+// guard, not a missing file. (This is the fs.ValidPath path-escape guard, not a
+// symlink sandbox — os.DirFS follows an in-root symlink out of the root; only
+// os.Root.FS confines symlinks. See TestDirFSFollowsSymlinkButRootFSConfines.)
+func TestConfinedDirFSRefusesPathTraversal(t *testing.T) {
 	t.Parallel()
 
 	outside := t.TempDir()
@@ -62,12 +116,13 @@ func TestConfinedDirFSRefusesTraversal(t *testing.T) {
 		FS(os.DirFS(root)).
 		ParseFile(t.Context(), docPath)
 
-	// The load is refused (a confined FS cannot reach outside its root), but the
-	// parse stays lenient: no fatal error, document returned, subset not loaded.
+	// The load is refused (an absolute path is not a valid fs.ValidPath, so the
+	// retry never fires), but the parse stays lenient: no fatal error, document
+	// returned, subset not loaded.
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 	require.Nil(t, doc.ExtSubset(),
-		"a confined os.DirFS must not load an external subset outside its root")
+		"the fs.ValidPath guard must not let an absolute-path SYSTEM id load outside the FS root")
 }
 
 // A network-scheme SYSTEM id is refused before any Open, independent of the FS,
@@ -115,4 +170,165 @@ func TestPermissiveFSLoadsAbsolute(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 	require.NotNil(t, doc.ExtSubset())
+}
+
+// A nested external parameter entity that sits in a subdirectory must load
+// through a confined os.DirFS rooted at the document directory. The retry
+// relativizes against the FIXED document-root base, not the nested resource's
+// own moving base, so it yields "dtd/declarations.dtd" (root-relative) rather
+// than "declarations.dtd" (relative to dtd/, which does not exist at the root).
+func TestConfinedDirFSLoadsNestedRelativeSystemID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "dtd"), 0o755))
+	// declarations.dtd sits BESIDE main.dtd, inside dtd/.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "dtd", "declarations.dtd"),
+		[]byte(`<!ENTITY greeting "hello from nested PE">`+"\n"), 0o600))
+	// main.dtd references declarations.dtd with a RELATIVE system id (beside it).
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "dtd", "main.dtd"),
+		[]byte(`<!ENTITY % decls SYSTEM "declarations.dtd">`+"\n"+`%decls;`+"\n"+
+			`<!ELEMENT doc (#PCDATA)>`+"\n"), 0o600))
+	docPath := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE doc SYSTEM "dtd/main.dtd">`+"\n"+
+			`<doc>&greeting;</doc>`), 0o600))
+
+	rec := &recordingFS{inner: os.DirFS(dir)}
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		FS(rec).
+		ParseFile(t.Context(), docPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.True(t, rec.wasOpened("dtd/declarations.dtd"),
+		"the nested PE must be retried at the document-root-relative name dtd/declarations.dtd")
+
+	de := doc.DocumentElement()
+	require.NotNil(t, de)
+	require.NotNil(t, de.FirstChild())
+	require.Equal(t, "hello from nested PE", string(de.FirstChild().Content()),
+		"the nested PE's general entity must have loaded and expanded")
+}
+
+// The base-relative retry name is subject to the same network-access guard as
+// the primary name: a SYSTEM id whose retry name carries a network scheme is
+// refused before any Open, so it never reaches a network-capable caller FS, and
+// the parse returns ErrNetworkAccessForbidden.
+func TestConfinedFSRefusesNetworkSchemeRetryName(t *testing.T) {
+	t.Parallel()
+
+	// "./http:/evil.dtd" resolves against "/tmp/doc.xml" to "/tmp/http:/evil.dtd"
+	// (scheme "", primary passes the guard, rejected as a non-ValidPath), whose
+	// base-relative retry is "http:/evil.dtd" (scheme "http").
+	doc := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE doc SYSTEM "./http:/evil.dtd">` + "\n" +
+		`<doc>hello</doc>`
+
+	var opened []string
+	_, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		BaseURI("/tmp/doc.xml").
+		FS(validPathFS{content: []byte("<!ELEMENT doc (#PCDATA)>\n"), opened: &opened}).
+		Parse(t.Context(), []byte(doc))
+
+	require.ErrorIs(t, err, helium.ErrNetworkAccessForbidden)
+	for _, n := range opened {
+		require.NotContains(t, []string{"http", "https", "ftp"}, schemeOf(n),
+			"a network-scheme retry name %q must be refused before it reaches Open", n)
+	}
+}
+
+// schemeOf mirrors internal/uripath.URIScheme for the ASCII-scheme cases the
+// network guard checks (first char a letter, a ':' at index >= 2).
+func schemeOf(s string) string {
+	isLetter := func(b byte) bool { return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') }
+	if len(s) < 2 || !isLetter(s[0]) {
+		return ""
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case isLetter(c) || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.':
+		case c == ':':
+			if i < 2 {
+				return ""
+			}
+			return string(bytes.ToLower([]byte(s[:i])))
+		default:
+			return ""
+		}
+	}
+	return ""
+}
+
+// os.DirFS is NOT a symlink-confinement boundary: it follows an in-root symlink
+// that points outside the root and reads the out-of-root target through a plain
+// valid fs.ValidPath name. os.Root.FS (Go 1.24+) IS symlink-safe and refuses the
+// same open. This documents why the parser recommends os.Root.FS for confinement
+// and why the fs.ValidPath retry guard is a path-escape guard, not a sandbox.
+func TestDirFSFollowsSymlinkButRootFSConfines(t *testing.T) {
+	t.Parallel()
+
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.dtd")
+	require.NoError(t, os.WriteFile(secret, []byte("TOP SECRET OUT-OF-ROOT\n"), 0o600))
+
+	root := t.TempDir()
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, "escape")))
+
+	name := "escape/secret.dtd" // a valid fs.ValidPath: no "..", not absolute
+	require.True(t, fs.ValidPath(name))
+
+	// os.DirFS follows the symlink and reads the out-of-root file.
+	data, err := fs.ReadFile(os.DirFS(root), name)
+	require.NoError(t, err, "os.DirFS follows an in-root symlink out of the root")
+	require.Equal(t, "TOP SECRET OUT-OF-ROOT\n", string(data))
+
+	// os.Root.FS refuses the symlink escape.
+	r, err := os.OpenRoot(root)
+	require.NoError(t, err)
+	defer r.Close()
+	_, err = fs.ReadFile(r.FS(), name)
+	require.Error(t, err, "os.Root.FS must refuse an open that escapes the root via a symlink")
+}
+
+// The direct (non-catalog) ResolveEntity branch opens the entity's raw resolved
+// systemID first — a "file:" URI verbatim — so a permissive caller FS keyed on
+// the file-URI name still resolves the entity. Normalization to a local path is
+// applied only for the confined-FS base-relative retry, never to the primary.
+func TestDirectResolveEntityPreservesFileURIPrimaryName(t *testing.T) {
+	t.Parallel()
+
+	doc := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE root [<!ENTITY e SYSTEM "file:///virtual/entity.xml">]>` + "\n" +
+		`<root>&e;</root>`
+
+	var opened []string
+	parsed, err := helium.NewParser().
+		BlockXXE(false).
+		SubstituteEntities(true).
+		LoadExternalDTD(true).
+		FS(exactNameFS{
+			accept:  "file:///virtual/entity.xml",
+			content: []byte(`<child>x</child>`),
+			opened:  &opened,
+		}).
+		Parse(t.Context(), []byte(doc))
+
+	require.NoError(t, err)
+	require.NotEmpty(t, opened)
+	require.Equal(t, "file:///virtual/entity.xml", opened[0],
+		"the direct ResolveEntity branch must open the raw file-URI systemID first")
+
+	require.NotNil(t, parsed)
+	de := parsed.DocumentElement()
+	require.NotNil(t, de)
+	require.NotNil(t, de.FirstChild(), "the external general entity must have resolved and expanded")
+	require.Equal(t, "child", de.FirstChild().Name())
 }

@@ -786,6 +786,10 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.fsys = pctx.fsys
 	newctx.catalog = pctx.catalog
 	newctx.baseURI = pctx.baseURI
+	// Carry the fixed top-level document base so a confined-FS retry inside a
+	// nested entity sub-parse still relativizes against the document root, not the
+	// nested resource's own (moved) baseURI.
+	newctx.documentBaseURI = pctx.documentBaseURI
 	// Carry the document-scope DTD state that gates the "Entity Declared" VC so a
 	// nested entity-replacement sub-parse makes the SAME lenient/strict decision
 	// as the top-level document: an undeclared general entity is a validity error
