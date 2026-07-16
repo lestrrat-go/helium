@@ -481,22 +481,6 @@ func (p Parser) BlockXXE(v bool) Parser {
 	return p
 }
 
-// ReuseDict controls whether the parser reuses the context dictionary
-// for interned strings. When set to false, a fresh dictionary is used.
-// libxml2: XML_PARSE_NODICT (note: semantics are inverted — libxml2
-// sets this flag to *disable* dictionary reuse, whereas ReuseDict(false)
-// disables it)
-// Default: true (dictionary is reused)
-func (p Parser) ReuseDict(v bool) Parser {
-	p = p.clone()
-	if !v {
-		p.cfg.options.Set(parseNoDict)
-		return p
-	}
-	p.cfg.options.Clear(parseNoDict)
-	return p
-}
-
 // SkipIDs controls whether ID attribute interning is skipped during
 // parsing. When true, the parser does not build the ID table.
 // libxml2: XML_PARSE_SKIP_IDS
