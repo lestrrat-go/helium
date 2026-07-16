@@ -80,6 +80,27 @@ var (
 	// blank-run cap. The cap fires during accumulation, before the whole run is
 	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
+	// ErrUnsupportedOutputEncoding is returned by the writer when an explicitly
+	// set OutputEncoding cannot be emitted faithfully. Two cases raise it, both
+	// scoped to the override — a document's own (parsed) encoding never becomes
+	// this error, keeping default output byte-identical:
+	//   1. The encoding is neither UTF-8/US-ASCII nor a name the internal encoder
+	//      table can load. Emitting UTF-8 octets under that declaration would make
+	//      the XML declaration disagree with the bytes, so the writer fails.
+	//   2. The encoding is US-ASCII (any alias) on the octet-producing WriteTo
+	//      path and a non-ASCII character reaches the output where no character
+	//      reference can represent it. Text and attribute values are always
+	//      character-referenced to pure ASCII, so they never fail; ANY other
+	//      non-ASCII byte does — a name, comment, CDATA, PI, namespace prefix, a
+	//      character-map replacement, a DTD external/system/public-ID literal, an
+	//      entity or notation value/name, or any future raw-write site. An
+	//      exhaustive output-writer net rejects any surviving byte >= 0x80, with
+	//      per-site guards giving earlier, labelled errors on the common paths.
+	//      fn:serialize's declaration-only US-ASCII mode is excluded: it returns a
+	//      UTF-8 string, so non-ASCII text/attr values still character-reference
+	//      but reference-less content (and character-map replacements) stay raw.
+	// Match with errors.Is.
+	ErrUnsupportedOutputEncoding = errors.New("unsupported output encoding")
 	// ErrNetworkAccessForbidden is returned when an external resource (an
 	// external DTD subset or external parsed entity) names a network URI —
 	// an http, https, or ftp scheme — but the parser was configured to forbid

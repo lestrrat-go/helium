@@ -64,7 +64,7 @@ func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) erro
 		content = d.normalizeContent(content)
 		cm = nil
 	}
-	return escapeAttrValue(out, content, d.escapeNonASCII, d.rejectInvalidChars, d.xml11, cm)
+	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, cm)
 }
 
 var (
@@ -220,6 +220,34 @@ func hexCharRef(buf *[8]byte, r rune) []byte {
 	return buf[:n]
 }
 
+// hexCharRefWide writes r as an uppercase-hex character reference ("&#xNN...;")
+// into buf, handling the full XML character range (up to U+10FFFF, six hex
+// digits). hexCharRef is limited to two digits (r <= 0xFF); this variant is used
+// for US-ASCII output, where every non-ASCII character — including astral and BMP
+// characters beyond Latin-1 — must be emitted as a reference.
+func hexCharRefWide(buf *[10]byte, r rune) []byte {
+	n := len(buf)
+	n--
+	buf[n] = ';'
+	v := int(r)
+	if v == 0 {
+		n--
+		buf[n] = '0'
+	}
+	for v > 0 {
+		n--
+		buf[n] = upperHex[v&0x0F]
+		v >>= 4
+	}
+	n--
+	buf[n] = 'x'
+	n--
+	buf[n] = '#'
+	n--
+	buf[n] = '&'
+	return buf[n:]
+}
+
 func isInCharacterRange(r rune) bool {
 	return r == 0x09 ||
 		r == 0x0A ||
@@ -236,7 +264,16 @@ func isInCharacterRange(r rune) bool {
 // replacement string, per XSLT/XQuery Serialization 3.1 §7 (character maps are
 // applied as the final step and the replacement is emitted verbatim, not
 // re-escaped).
-func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl string) (int, error) {
+//
+// A character-map replacement is never re-escaped, so a non-ASCII replacement
+// would leak raw UTF-8 under a US-ASCII output encoding. When rejectNonASCII is
+// set (the octet-producing US-ASCII path, not declaration-only fn:serialize)
+// such a replacement is rejected with a labelled early error before anything is
+// written; the output-writer net is the backstop.
+func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl string, rejectNonASCII bool) (int, error) {
+	if rejectNonASCII && hasNonASCII(repl) {
+		return last, unsupportedASCIIErr("character-map replacement")
+	}
 	if _, err := w.Write(s[last:cut]); err != nil {
 		return last, err
 	}
@@ -246,16 +283,17 @@ func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl st
 	return next, nil
 }
 
-func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectCharMapNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
 	var esc []byte
 	var hbuf [8]byte
+	var wbuf [10]byte
 	var dbuf [12]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
 		if repl, ok := charMap[r]; ok {
-			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl)
+			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
 				return err
 			}
@@ -294,6 +332,15 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, 
 				esc = decimalCharRef(&dbuf, r)
 				break
 			}
+			// US-ASCII output cannot represent a non-ASCII character literally, so
+			// every valid non-ASCII character is emitted as a hex character reference
+			// (the full range, not just Latin-1) — the octets stay pure US-ASCII,
+			// consistent with the encoding declaration. Checked before the Latin-1-only
+			// escapeNonASCII branch so BMP/astral characters are covered too.
+			if asciiOutput && r >= 0x80 && isInCharacterRange(r) {
+				esc = hexCharRefWide(&wbuf, r)
+				break
+			}
 			if escapeNonASCII && !(0x20 <= r && r < 0x80) { //nolint:staticcheck
 				if r < 0x100 {
 					esc = hexCharRef(&hbuf, r)
@@ -326,16 +373,17 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, rejectInvalidChars, 
 	return nil
 }
 
-func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
+func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutput, rejectCharMapNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
 	var esc []byte
 	var hbuf [8]byte
+	var wbuf [10]byte
 	var dbuf [12]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
 		if repl, ok := charMap[r]; ok {
-			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl)
+			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
 				return err
 			}
@@ -371,6 +419,15 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, rejectInva
 			// branch and the out-of-range replacement).
 			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
+				break
+			}
+			// US-ASCII output cannot represent a non-ASCII character literally, so
+			// every valid non-ASCII character is emitted as a hex character reference
+			// (the full range, not just Latin-1) — the octets stay pure US-ASCII,
+			// consistent with the encoding declaration. Checked before the Latin-1-only
+			// escapeNonASCII branch so BMP/astral characters are covered too.
+			if asciiOutput && r >= 0x80 && isInCharacterRange(r) {
+				esc = hexCharRefWide(&wbuf, r)
 				break
 			}
 			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { //nolint:staticcheck

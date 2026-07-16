@@ -11,7 +11,7 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   → internal/xmlchar (via xpointer)
                   (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
 xpath1         → helium, internal/lexicon, internal/domutil
-xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil
+xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl
 xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, xslt3/internal/elements
 xsd            → helium, xpath1, xpath3, internal/lexicon, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
@@ -24,7 +24,8 @@ html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
-helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs, internal/writerctl
+                  (helium installs a hook in internal/writerctl in init so xpath3 fn:serialize can enable the writer's declaration-only encoding mode without a public method; the writerctl package imports nothing, so the edge is one-way)
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
@@ -37,6 +38,7 @@ internal/unparsedtext → internal/xmlchar, internal/uripath, internal/iofs
 internal/catalog → internal/uripath
 internal/uripath → (none)
 internal/xsdregex → (none)
+internal/writerctl → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
 internal/xpathstream → xpath3, internal/lexicon

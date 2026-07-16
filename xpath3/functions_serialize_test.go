@@ -90,6 +90,28 @@ func mustCompile(t *testing.T, expr string) *xpath3.Expression {
 	return c
 }
 
+// TestSerialize_EncodingIsDeclarationOnly locks in that fn:serialize treats the
+// encoding parameter as declaration-only (W3C Serialization): the returned
+// string is a UTF-8 Go string whose XML declaration carries the requested
+// encoding label, but the octets are NOT transcoded. This guards against the
+// writer's real-transcoding path (used by WriteTo-to-io.Writer callers) leaking
+// into the fn:serialize string result — which, for a character the requested
+// encoding cannot represent, would fail with "rune not supported by encoding".
+func TestSerialize_EncodingIsDeclarationOnly(t *testing.T) {
+	// U+2603 (☃) is NOT representable in ISO-8859-1: real transcoding would error.
+	doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><root>☃</root>`)
+
+	res, err := evaluate(t.Context(), doc, `serialize(., map{"encoding":"iso-8859-1","omit-xml-declaration":false()})`)
+	require.NoError(t, err)
+	out := res.StringValue()
+
+	// The declaration carries the requested encoding label...
+	require.Contains(t, out, `encoding="iso-8859-1"`)
+	// ...but the octets stay UTF-8: ☃ is its raw 3-byte UTF-8 sequence, not
+	// transcoded or replaced.
+	require.Contains(t, out, "\xe2\x98\x83")
+}
+
 // Sequence normalization (Serialization 3.1 §2, step 3): with an absent
 // item-separator a single space separates only adjacent atomic-value strings,
 // never adjacent nodes nor a node-and-atomic pair. A specified item-separator is

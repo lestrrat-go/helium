@@ -11,6 +11,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"golang.org/x/text/unicode/norm"
@@ -1829,7 +1830,19 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	// declaration (Serialization 3.1 §5.1.6: the declaration includes an encoding
 	// declaration). When the param is unset it is empty, and the writer keeps the
 	// document's own encoding, leaving default output byte-identical.
+	//
+	// fn:serialize returns a string, so the encoding parameter is DECLARATION-ONLY
+	// (W3C Serialization): the declaration carries the label but the octets are not
+	// transcoded — a non-representable character becomes a character reference. The
+	// writer's declaration-only mode (an internal mode with no public method,
+	// reached through internal/writerctl) sets the label from the effective
+	// encoding while leaving octets UTF-8 with char-reference escaping, so a
+	// Document node serializes to a UTF-8 Go string regardless of the encoding
+	// parameter.
 	writer = writer.OutputEncoding(opts.encoding)
+	if declOnly, ok := writerctl.EnableDeclarationOnlyEncoding(writer).(helium.Writer); ok {
+		writer = declOnly
+	}
 	// The DTD / internal subset of a source document node is NOT part of the XDM
 	// data model (an XDM document node's children are element/PI/comment/text
 	// nodes only), so fn:serialize must never reproduce it. A document type
