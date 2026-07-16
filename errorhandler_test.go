@@ -17,6 +17,7 @@ var (
 	_ io.Closer           = (*helium.ErrorCollector)(nil)
 	_ helium.ErrorHandler = (*sink.Sink[error])(nil)
 	_ helium.ErrorLeveler = helium.ErrParseError{}
+	_ helium.ErrorLeveler = (*helium.DTDValidationError)(nil)
 )
 
 func TestNilErrorHandler(t *testing.T) {
