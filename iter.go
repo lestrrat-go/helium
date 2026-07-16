@@ -18,8 +18,13 @@ import "iter"
 // Children advances between siblings using the owned-boundary rule: a child
 // whose Parent() is not n (an entity reference's shared Entity child, owned by
 // the DTD, whose sibling pointers belong to another list) ends the iteration,
-// so Children never spills into another list's siblings, and a cyclic sibling
-// pointer terminates the iteration instead of looping forever.
+// so Children never spills into another list's siblings. A cyclic sibling
+// pointer — reachable only on a corrupt or hand-built graph, e.g. through the
+// raw SetNextSibling/SetPrevSibling link setters — terminates the iteration
+// instead of looping forever, yielding the partial set gathered up to that
+// point. A range-over-func iterator has no error channel, so this truncation is
+// silent; to DETECT a cycle rather than silently stop at it, traverse with
+// [Walk], which returns [ErrWalkCycle].
 func Children(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
 		if n == nil {
@@ -53,9 +58,12 @@ func Children(n Node) iter.Seq[Node] {
 // such as an entity reference's shared Entity child, ends its sibling list) and
 // carries the set of nodes on the current descent path: it visits a back-edge
 // node but does not descend through it, so a child-pointer cycle terminates
-// cleanly instead of looping. A shared DAG node reached on a different path is
-// not on the descent path and is still visited on each occurrence, so DAG
-// traversal is unchanged.
+// cleanly instead of looping, yielding the partial set gathered up to that
+// point. A range-over-func iterator has no error channel, so this truncation is
+// silent; to DETECT a cycle rather than silently stop at it, traverse with
+// [Walk], which returns [ErrWalkCycle]. A shared DAG node reached on a different
+// path is not on the descent path and is still visited on each occurrence, so
+// DAG traversal is unchanged.
 func Descendants(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
 		if n == nil {
@@ -105,7 +113,10 @@ func Descendants(n Node) iter.Seq[Node] {
 // visited more than once.
 //
 // Like [Children], ChildElements advances between siblings using the
-// owned-boundary rule and terminates on a cyclic sibling pointer.
+// owned-boundary rule and terminates on a cyclic sibling pointer, yielding the
+// partial set gathered up to that point. A range-over-func iterator has no error
+// channel, so this truncation is silent; to DETECT a cycle rather than silently
+// stop at it, traverse with [Walk], which returns [ErrWalkCycle].
 func ChildElements(n Node) iter.Seq[*Element] {
 	return func(yield func(*Element) bool) {
 		if n == nil {
