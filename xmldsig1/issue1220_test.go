@@ -135,6 +135,105 @@ func TestSignEnveloping_ReferenceToDocumentElement(t *testing.T) {
 	require.NoError(t, err, "enveloping ref to the document element must verify in a sibling placement")
 }
 
+// Regression for #1220: an INCLUSIVE-C14N reference into the Signature's own
+// <Object> content must be digested in the same ancestor namespace context it
+// will have once the caller places the Signature under the document element.
+// Inclusive Canonical XML emits every in-scope namespace on the node-set apex,
+// including one declared on the caller root that the referenced subtree does not
+// use; if signing digests the detached subtree without that context the digest
+// can never match a verifier's, so signing succeeds but Verify reports a digest
+// mismatch.
+func TestSignEnveloping_InclusiveC14NInObjectRef_UnusedRootNamespace(t *testing.T) {
+	key := generateRSAKey(t)
+	// The caller root declares xmlns:extra, which the manifest subtree never
+	// uses. Inclusive C14N still emits it on the apex once the Signature sits
+	// under this root.
+	doc := mustParseXML(t, `<Foo xmlns:extra="urn:extra"><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
+
+	manifest := doc.CreateElement("Manifest")
+	require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
+	require.NoError(t, manifest.SetLiteralAttribute("Id", "manifest"))
+	child := doc.CreateElement("SignatureProperties")
+	require.NoError(t, child.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
+	require.NoError(t, manifest.AddChild(child))
+
+	signer := xmldsig1.NewSigner().
+		CanonicalizationMethod(xmldsig1.C14N10).
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#manifest",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.C14NTransform(xmldsig1.C14N10)},
+		}).
+		KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+
+	sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{manifest}, key)
+	require.NoError(t, err)
+	require.Nil(t, sigElem.Parent())
+
+	// Placed under the caller root (which declares xmlns:extra) the signature
+	// must verify: signing reproduced that root's namespace context.
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	_, err = verifier.Verify(t.Context(), doc)
+	require.NoError(t, err, "inclusive-C14N reference into own Object must verify under the caller root")
+}
+
+// Regression for #1220: a panic during canonicalization of an in-Object
+// reference must still leave the Signature detached with its original owning
+// document restored. canonicalizeDetachedSubtree temporarily moves the live
+// Signature into a throwaway document; if canonicalization panics, the library
+// must undo that move on the unwinding path rather than leaving the caller's
+// Signature parented to a throwaway document. The panic here is forced by a
+// caller-corrupted Manifest (a nil namespace declaration); preventing the panic
+// itself is out of scope — restoring the node's state is the requirement.
+func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, `<Foo><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
+
+	manifest := doc.CreateElement("Manifest")
+	require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
+	require.NoError(t, manifest.SetLiteralAttribute("Id", "manifest"))
+	// Corrupt the manifest with a nil namespace declaration so canonicalizing it
+	// dereferences a nil pointer. This models any downstream canonicalization
+	// panic.
+	manifest.AddNamespaceDecl(nil)
+
+	signer := xmldsig1.NewSigner().
+		CanonicalizationMethod(xmldsig1.ExcC14N10).
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#manifest",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		}).
+		KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+
+	var panicked bool
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+		}()
+		_, _ = signer.SignEnveloping(t.Context(), doc, []helium.Node{manifest}, key)
+	}()
+	require.True(t, panicked, "the corrupted manifest must force a canonicalization panic")
+
+	// Walk up from the manifest (still under the Signature's Object) to find the
+	// Signature. It must be detached and re-owned by the caller document.
+	var sig *helium.Element
+	for n := helium.Node(manifest); n != nil; n = n.Parent() {
+		if e, ok := n.(*helium.Element); ok && e.LocalName() == "Signature" {
+			sig = e
+		}
+	}
+	require.NotNil(t, sig, "the Signature must still be reachable from the manifest")
+	require.Nil(t, sig.Parent(), "the Signature must be detached after a canonicalization panic")
+	require.Equal(t, doc, sig.OwnerDocument(),
+		"the Signature's owning document must be restored to the caller document")
+}
+
 // An id that exists BOTH in the caller's document and in the Signature's own
 // Object content is an ambiguous cross-tree collision and must be rejected
 // rather than silently resolving to one of them.

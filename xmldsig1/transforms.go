@@ -179,24 +179,56 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 // owning document, leaving root detached exactly as it was. Using the live
 // nodes (not a copy) keeps the bytes identical to what a verifier canonicalizing
 // the same nodes in place would produce.
+//
+// The throwaway document is rooted at a proxy element that carries the caller
+// document element's in-scope namespace declarations, and root is placed under
+// that proxy. This reproduces the ancestor namespace context target will have
+// once the caller places the returned Signature under the caller document
+// element: inclusive Canonical XML emits every in-scope namespace on the
+// node-set apex, including ones inherited from ancestors and not visibly used,
+// so a bare-rooted throwaway document would drop the caller root's namespaces
+// and produce a digest no verifier can match. The proxy is never part of the
+// canonicalized node set (only target's own subtree is), so it changes the
+// namespace context only, never the emitted bytes of the subtree. Exclusive
+// Canonical XML emits only visibly-utilized namespaces, so an unused inherited
+// namespace leaves its output byte-identical.
 func canonicalizeDetachedSubtree(method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
 	origDoc := root.OwnerDocument()
 	tmp := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-	if err := tmp.SetDocumentElement(root); err != nil {
+
+	proxy := tmp.CreateElement("proxy")
+	if origDoc != nil {
+		if docElem := origDoc.DocumentElement(); docElem != nil {
+			for prefix, ns := range domutil.InScopeNamespaces(docElem, true) {
+				if err := proxy.DeclareNamespace(prefix, ns.URI()); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	if err := tmp.SetDocumentElement(proxy); err != nil {
 		return nil, err
 	}
+	if err := proxy.AddChild(root); err != nil {
+		return nil, err
+	}
+
+	// root is now grafted into the throwaway document. Restore it on EVERY exit —
+	// normal return, error, AND a panic unwinding out of canonicalization: detach
+	// root from the throwaway document and give the subtree back its original
+	// owning document, leaving root detached exactly as the caller expects. The
+	// library must always undo its own temporary mutation, even when a downstream
+	// panic (whatever its cause) unwinds through it.
+	defer func() {
+		helium.UnlinkNode(root)
+		root.SetTreeDoc(origDoc)
+	}()
+
 	// Propagate the throwaway document onto the whole subtree so canonicalizeSubtree,
 	// which reaches the document via target.OwnerDocument(), can walk it.
 	root.SetTreeDoc(tmp)
 
-	canonical, err := canonicalizeSubtree(method, target, prefixes)
-
-	// Restore: detach root from the throwaway document and give the subtree back
-	// its original owning document, leaving root detached as the caller expects.
-	helium.UnlinkNode(root)
-	root.SetTreeDoc(origDoc)
-
-	return canonical, err
+	return canonicalizeSubtree(method, target, prefixes)
 }
 
 // isDescendantOrSelf reports whether n is root itself or lives inside root's
