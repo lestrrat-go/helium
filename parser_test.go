@@ -465,6 +465,48 @@ func TestStripBlanksEntityEquivalence(t *testing.T) {
 	}
 }
 
+// TestStripBlanksEntityPseudorootCollision verifies that a DTD element
+// declaration whose name collides with the parser's internal synthetic
+// pseudo-root (used to wrap entity replacement text) cannot hijack the
+// whitespace classification of the entity's content. Under
+// StripBlanks(true)+SubstituteEntities(true), an entity expanding to "> " must
+// yield the same text as the literal "> ", even when the document declares
+// <!ELEMENT pseudoroot (pseudoroot)> (element content) — the synthetic
+// wrapper's name is chosen by the parser, not the document, so the DTD lookup
+// is skipped for it and the trailing space is preserved (XML §4.4 entity/literal
+// equivalence).
+func TestStripBlanksEntityPseudorootCollision(t *testing.T) {
+	testcases := []struct {
+		name  string
+		input string
+	}{
+		{name: "literal", input: `<r>&gt; </r>`},
+		{
+			name:  "general entity with colliding pseudoroot decl",
+			input: `<!DOCTYPE r [<!ELEMENT pseudoroot (pseudoroot)><!ENTITY e "&gt; ">]><r>&e;</r>`,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := helium.NewParser().StripBlanks(true).SubstituteEntities(true)
+			doc, err := p.Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err, "Parse should succeed")
+
+			root := findDocumentElement(doc)
+			require.NotNil(t, root, "document element must exist")
+
+			var got []byte
+			for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+				if child.Type() == helium.TextNode {
+					got = append(got, child.Content()...)
+				}
+			}
+			require.Equal(t, "> ", string(got), "entity content whitespace must match the literal regardless of a colliding pseudoroot decl")
+		})
+	}
+}
+
 // TestStripBlanksExternalSubsetContentModel verifies that IsMixedElement
 // consults the EXTERNAL subset, not only the internal one. An element declared
 // ANY has a mixed-like content model, so whitespace inside it is significant and

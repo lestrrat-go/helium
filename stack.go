@@ -12,6 +12,12 @@ type nodeEntry struct {
 	prefix string
 	uri    string
 	qname  string
+	// synthetic marks the internal pseudo-root that wraps entity replacement
+	// text / a parsed fragment (see pseudoRootName). Its name is chosen by the
+	// parser, not the document, so whitespace classification must NOT consult a
+	// DTD element declaration that happens to match that synthetic name — see
+	// areBlanksBytes / whitespaceContextIgnorable.
+	synthetic bool
 }
 
 func (e *nodeEntry) Name() string {

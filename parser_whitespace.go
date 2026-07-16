@@ -268,7 +268,15 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	// declaration at all — fall through to the heuristic below rather than being
 	// treated as mixed. This is why areBlanksBytes consults elementDeclType
 	// (raw content-model type) instead of IsMixedElement (the mixed bool).
-	if ctx.doc != nil {
+	//
+	// Skip the DTD lookup for the synthetic pseudo-root that wraps entity
+	// replacement text / a parsed fragment: its name is chosen by the parser, not
+	// the document, so a DTD element declaration colliding with pseudoRootName
+	// must not hijack the whitespace classification of entity content. Falling
+	// through to the heuristic keeps entity replacement text classified the same
+	// way as the equivalent literal characters (XML §4.4 entity/literal
+	// equivalence).
+	if ctx.doc != nil && !ctx.peekNode().synthetic {
 		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
 			switch dt {
 			case enum.ElementElementType:
@@ -349,11 +357,13 @@ func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	// ignorable; ANY or MIXED is significant; EMPTY, UNDEFINED, or no declaration
 	// fall through to the tentative-ignorable default below, where the streaming
 	// caller re-applies the end-of-run delimiter check (this variant omits the
-	// cursor lookahead). The only caller (parseCharDataChunkedSAX) is entered
-	// solely when ctx.doc == nil, so the declaration branch never governs a live
-	// classification; it is kept in sync so both siblings state the fact
+	// cursor lookahead). The synthetic pseudo-root guard mirrors areBlanksBytes:
+	// a DTD element declaration colliding with pseudoRootName must not classify
+	// entity/fragment content. The only caller (parseCharDataChunkedSAX) is
+	// entered solely when ctx.doc == nil, so the declaration branch never governs
+	// a live classification; it is kept in sync so both siblings state the fact
 	// identically.
-	if ctx.doc != nil {
+	if ctx.doc != nil && !ctx.peekNode().synthetic {
 		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
 			switch dt {
 			case enum.ElementElementType:
