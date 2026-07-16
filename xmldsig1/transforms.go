@@ -250,6 +250,17 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 
 	// Propagate the throwaway document onto the whole subtree so canonicalizeSubtree,
 	// which reaches the document via target.OwnerDocument(), can walk it.
+	//
+	// The deferred restore above is complete for any tree built through the guarded
+	// APIs: SetTreeDoc's walk (helium setListDoc) can only panic mid-walk on a
+	// typed-nil sibling pointer, and every guarded construction path (parser,
+	// AddChild/AddSibling/Replace, Create*, SetDocumentElement) rejects nil and
+	// typed-nil up front via isNilNode/ErrNilNode, so a well-formed subtree's
+	// owner-change walk never panics part-way and origDoc is fully restored. A
+	// typed-nil sibling is reachable only through the explicitly-unsafe
+	// helium.UnsafeSet* family, whose contract states a misuse leaves the tree
+	// inconsistent; a caller that corrupts the subtree that way owns the result, so
+	// a partial restore after such a caller-corrupted tree is not a defect here.
 	root.SetTreeDoc(tmp)
 
 	return canonicalizeSubtree(method, target, prefixes)
