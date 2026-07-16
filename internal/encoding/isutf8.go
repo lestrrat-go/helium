@@ -48,14 +48,13 @@ func IsUTF8(name string) bool {
 	return false
 }
 
-// IsASCII returns true if the named encoding is one of the US-ASCII aliases.
+// IsASCII returns true if the named encoding is US-ASCII by any of its
+// IANA-registered aliases (matched after case-folding and separator stripping).
 // Load maps these to a strict ASCII encoding whose encoder delegates to UTF-8,
 // so callers that need byte-valid output for the declared encoding must detect
-// ASCII separately.
+// ASCII separately. It shares asciiEncodingNames with Load so the alias set
+// stays in one place.
 func IsASCII(name string) bool {
-	switch normalizeEncodingName(name) {
-	case "usascii", "ascii", "ansix341968", "csascii":
-		return true
-	}
-	return false
+	_, ok := asciiEncodingNames[normalizeEncodingName(name)]
+	return ok
 }

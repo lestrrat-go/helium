@@ -121,12 +121,18 @@ const (
 type writeSession struct {
 	Writer
 	escapeNonASCII bool
-	// asciiOutput is set when the effective output encoding is US-ASCII (or its
-	// "ascii" synonym): the writer installs no transcoding encoder but escapes
-	// every non-ASCII character as a hex character reference, so the emitted octets
-	// are pure US-ASCII and agree with the encoding declaration. Independent of
-	// escapeNonASCII (which only covers Latin-1) so BMP/astral characters are
-	// escaped too.
+	// asciiOutput is set when an explicit OutputEncoding override names US-ASCII
+	// (by any IANA alias — us-ascii, ascii, csASCII, ANSI_X3.4-1968, …, matched
+	// via internal/encoding.IsASCII) on the Document serialization path: the
+	// writer installs no transcoding encoder but escapes every non-ASCII character
+	// as a hex character reference, so the emitted octets are pure US-ASCII and
+	// agree with the encoding declaration. Independent of escapeNonASCII (which
+	// only covers Latin-1) so BMP/astral characters are escaped too. In a context
+	// that cannot hold a character reference (comment text, CDATA, PI target/data,
+	// element/attribute name, namespace prefix, notation name) a non-ASCII
+	// character has no faithful US-ASCII serialization, so it fails with
+	// ErrUnsupportedOutputEncoding instead. It is NEVER set on the bare
+	// element/fragment path — OutputEncoding affects the Document path only.
 	asciiOutput bool
 	xml11       bool // true when the document declares XML 1.1: restricted control chars serialize as decimal character references
 	isXHTML     bool
@@ -198,6 +204,50 @@ func (s *writeSession) check(err error) {
 	}
 }
 
+// hasNonASCII reports whether s contains a byte >= 0x80, i.e. any non-ASCII
+// character in its UTF-8 encoding. Works over both string and []byte.
+func hasNonASCII[T ~string | ~[]byte](s T) bool {
+	for i := range len(s) {
+		if s[i] >= 0x80 {
+			return true
+		}
+	}
+	return false
+}
+
+// unsupportedASCIIErr builds an ErrUnsupportedOutputEncoding for a non-ASCII
+// character appearing in a context (what) that cannot hold a character
+// reference under a US-ASCII output encoding.
+func unsupportedASCIIErr(what string) error {
+	return fmt.Errorf("cannot serialize non-ASCII %s under US-ASCII output encoding: %w", what, ErrUnsupportedOutputEncoding)
+}
+
+// rejectNonASCIIStr records a sticky ErrUnsupportedOutputEncoding when
+// asciiOutput is on and s carries a non-ASCII byte. It guards contexts that
+// cannot hold a character reference — element/attribute names, namespace
+// prefixes, PI target/data, notation names — where a US-ASCII output encoding
+// that cannot carry the character literally has no faithful serialization.
+// Returns true when it recorded the error.
+func (s *writeSession) rejectNonASCIIStr(what, str string) bool {
+	if !s.asciiOutput || !hasNonASCII(str) {
+		return false
+	}
+	s.check(unsupportedASCIIErr(what))
+	return true
+}
+
+// rejectNonASCIIBytes is the []byte counterpart of rejectNonASCIIStr, for the
+// content of comments and CDATA sections (which likewise cannot hold a
+// character reference). The offending content is not embedded in the error —
+// it may be large and attacker-controlled.
+func (s *writeSession) rejectNonASCIIBytes(what string, b []byte) bool {
+	if !s.asciiOutput || !hasNonASCII(b) {
+		return false
+	}
+	s.check(unsupportedASCIIErr(what))
+	return true
+}
+
 // hasXmlnsPrefix reports whether name carries the reserved "xmlns:" QName
 // prefix. Namespaces-in-XML forbids using "xmlns" as an element/attribute
 // prefix; such a name (e.g. "xmlns:root") would be serialized as a forbidden
@@ -225,11 +275,16 @@ func (s *writeSession) checkElementName(name string) bool {
 		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace", name))
 		return false
 	}
-	if xmlchar.IsValidQName(name) {
-		return true
+	if !xmlchar.IsValidQName(name) {
+		s.check(fmt.Errorf("helium: invalid element name %q", name))
+		return false
 	}
-	s.check(fmt.Errorf("helium: invalid element name %q", name))
-	return false
+	// An element name cannot hold a character reference, so a non-ASCII name has
+	// no faithful US-ASCII serialization.
+	if s.rejectNonASCIIStr("element name", name) {
+		return false
+	}
+	return true
 }
 
 // checkAttributeName validates an attribute name about to be emitted verbatim.
@@ -248,11 +303,16 @@ func (s *writeSession) checkAttributeName(name string) bool {
 		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace", name))
 		return false
 	}
-	if xmlchar.IsValidQName(name) {
-		return true
+	if !xmlchar.IsValidQName(name) {
+		s.check(fmt.Errorf("helium: invalid attribute name %q", name))
+		return false
 	}
-	s.check(fmt.Errorf("helium: invalid attribute name %q", name))
-	return false
+	// An attribute name cannot hold a character reference, so a non-ASCII name
+	// has no faithful US-ASCII serialization.
+	if s.rejectNonASCIIStr("attribute name", name) {
+		return false
+	}
+	return true
 }
 
 // checkNamespacePrefix validates a namespace declaration prefix about to be
@@ -270,11 +330,17 @@ func (s *writeSession) checkNamespacePrefix(prefix string) bool {
 		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared", prefix))
 		return false
 	}
-	if prefix == "" || xmlchar.IsValidNCName(prefix) {
-		return true
+	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
+		s.check(fmt.Errorf("helium: invalid namespace prefix %q", prefix))
+		return false
 	}
-	s.check(fmt.Errorf("helium: invalid namespace prefix %q", prefix))
-	return false
+	// A namespace prefix cannot hold a character reference, so a non-ASCII prefix
+	// has no faithful US-ASCII serialization. (The namespace URI is an attribute
+	// value and stays char-referenced.)
+	if s.rejectNonASCIIStr("namespace prefix", prefix) {
+		return false
+	}
+	return true
 }
 
 // NewWriter creates a new Writer with default settings.
@@ -413,7 +479,16 @@ func (d Writer) effectiveVersion(doc *Document) string {
 
 // OutputEncoding overrides the encoding pseudo-attribute of the XML declaration
 // (the encoding serialization parameter). An empty string keeps the document's
-// own encoding, leaving default output byte-identical.
+// own encoding, leaving default output byte-identical. It affects the Document
+// serialization path only; a bare element/fragment is byte-identical to output
+// without an override.
+//
+// When set on a WriteTo-to-io.Writer path the emitted octets are re-encoded to
+// the named encoding so the bytes agree with the declaration. US-ASCII (by any
+// alias) installs no encoder but escapes every non-ASCII character as a numeric
+// character reference; a non-ASCII character in a context that cannot hold a
+// reference (comment, CDATA, PI, a name), or an encoding the writer cannot
+// otherwise emit, fails with ErrUnsupportedOutputEncoding.
 func (w Writer) OutputEncoding(v string) Writer {
 	w.outputEncoding = v
 	return w
@@ -454,15 +529,6 @@ func writerDeclarationOnlyEncoding(w any) any {
 		return w
 	}
 	return ww.declarationOnlyEncoding()
-}
-
-// isASCIIFamilyEncoding reports whether enc names US-ASCII (or its "ascii"
-// synonym), matched case-insensitively. US-ASCII output installs no transcoding
-// encoder; instead the writer escapes every non-ASCII character as a character
-// reference.
-func isASCIIFamilyEncoding(enc string) bool {
-	lower := strings.ToLower(enc)
-	return lower == "us-ascii" || lower == "ascii"
 }
 
 // effectiveEncoding returns the encoding driving the XML-declaration
@@ -581,10 +647,11 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 	// OutputVersion("1.1") override enables XML 1.1 serialization here; without
 	// it, output stays byte-identical to the prior behavior.
 	s.xml11 = d.outputVersion == "1.1"
-	// A bare element has no XML declaration, but an explicit US-ASCII
-	// OutputEncoding still cannot carry a non-ASCII character literally, so escape
-	// them for consistency with the document path.
-	s.asciiOutput = isASCIIFamilyEncoding(d.effectiveEncoding(nil))
+	// OutputEncoding affects the Document path only. A bare element/fragment has
+	// no XML declaration to disagree with, so asciiOutput stays off here and the
+	// serialized bytes are byte-identical to output without an OutputEncoding
+	// override (an out-of-range character stays escaped by escapeNonASCII exactly
+	// as before).
 	return s.writeNode(out, node)
 }
 
@@ -613,7 +680,8 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 		switch {
 		case lower == "utf-8" || lower == encUTF8:
 			// UTF-8 represents every character; no encoder and no extra escaping.
-		case lower == "us-ascii" || lower == "ascii":
+		case henc.IsASCII(enc):
+			// US-ASCII (by any IANA alias — csASCII, ANSI_X3.4-1968, iso-ir-6, …).
 			// US-ASCII installs no transcoding encoder. An explicit OutputEncoding
 			// override cannot carry a non-ASCII character literally, so escape every
 			// one as a character reference — the octets are pure US-ASCII, matching
@@ -737,6 +805,11 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			d.check(errors.New("helium: comment content must not contain \"--\" or end with \"-\""))
 			return d.err
 		}
+		// Comment text cannot hold a character reference, so a non-ASCII comment
+		// has no faithful US-ASCII serialization.
+		if d.rejectNonASCIIBytes("comment content", content) {
+			return d.err
+		}
 		d.writeString(out, "<!--")
 		d.writeBytes(out, content)
 		d.writeString(out, "-->")
@@ -758,6 +831,11 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				// check() keeps the first sticky error, so an earlier I/O failure
 				// is not clobbered by this validation error.
 				d.check(errors.New("helium: PI content must not contain \"?>\""))
+				return d.err
+			}
+			// Neither the PI target nor its data can hold a character reference, so
+			// non-ASCII in either has no faithful US-ASCII serialization.
+			if d.rejectNonASCIIStr("PI target", pi.target) || d.rejectNonASCIIStr("PI data", pi.data) {
 				return d.err
 			}
 			d.writeString(out, "<?")
@@ -790,6 +868,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			// one or more CDATA sections instead of escaping it. A CDATA section
 			// serializes a text node, so its content is normalized too (character
 			// maps are not applied inside a CDATA section).
+			//
+			// A CDATA section cannot hold a character reference, so non-ASCII
+			// content has no faithful US-ASCII serialization.
+			if d.rejectNonASCIIBytes("CDATA section", c) {
+				return d.err
+			}
 			if d.normalize {
 				c = d.normForm.Bytes(c)
 			}
@@ -812,6 +896,11 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// section serializes a text node, so its content is normalized when
 		// requested (the delimiters are markup and stay verbatim).
 		cdata := rawContent(n)
+		// A CDATA section cannot hold a character reference, so non-ASCII content
+		// has no faithful US-ASCII serialization.
+		if d.rejectNonASCIIBytes("CDATA section", cdata) {
+			return d.err
+		}
 		if d.normalize {
 			cdata = d.normForm.Bytes(cdata)
 		}

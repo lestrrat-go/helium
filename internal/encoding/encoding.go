@@ -31,12 +31,32 @@ func normalizeEncodingName(name string) string {
 	return encodingNameNormalizer.Replace(name)
 }
 
+// asciiEncodingNames is the set of normalized names (see normalizeEncodingName)
+// that denote US-ASCII, covering every IANA-registered alias plus the common
+// "ascii" synonym. It is the single source of truth for both Load (which returns
+// the strict US-ASCII codec) and IsASCII.
+var asciiEncodingNames = map[string]struct{}{
+	"usascii":       {},
+	"ascii":         {},
+	"ansix341968":   {},
+	"ansix341986":   {},
+	"csascii":       {},
+	"isoir6":        {},
+	"iso646us":      {},
+	"iso646irv1991": {},
+	"us":            {},
+	"ibm367":        {},
+	"cp367":         {},
+}
+
 func Load(name string) enc.Encoding {
-	switch normalizeEncodingName(name) {
+	norm := normalizeEncodingName(name)
+	if _, ok := asciiEncodingNames[norm]; ok {
+		return asciiEncoding{}
+	}
+	switch norm {
 	case "utf8", "unicode11utf8", "unicode20utf8", "xunicode20utf8":
 		return unicode.UTF8
-	case "usascii", "ascii", "ansix341968", "csascii":
-		return asciiEncoding{}
 	case "utf16le", "unicodefeff":
 		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM), 2, orderLE2, false)
 	case "utf16be", "unicodefffe":

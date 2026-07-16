@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -82,6 +83,94 @@ func TestOutputEncodingUSASCIIEscapesNonASCII(t *testing.T) {
 	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).WriteTo(&rtbuf, rt))
 	require.Contains(t, rtbuf.String(), "☃")
 	require.Contains(t, rtbuf.String(), "é")
+}
+
+// TestOutputEncodingUSASCIIRejectsNonCharRefContexts asserts that under an
+// explicit US-ASCII OutputEncoding a non-ASCII character in a context that
+// cannot hold a character reference — comment text, CDATA section, PI
+// target/data, an element/attribute name — fails with
+// ErrUnsupportedOutputEncoding rather than emitting raw UTF-8 under a US-ASCII
+// declaration.
+func TestOutputEncodingUSASCIIRejectsNonCharRefContexts(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"comment":        `<?xml version="1.0" encoding="UTF-8"?><root><!--é--></root>`,
+		"cdata":          `<?xml version="1.0" encoding="UTF-8"?><root><![CDATA[é]]></root>`,
+		"pi-data":        `<?xml version="1.0" encoding="UTF-8"?><root><?pi dáta?></root>`,
+		"element-name":   `<?xml version="1.0" encoding="UTF-8"?><rôot></rôot>`,
+		"attribute-name": `<?xml version="1.0" encoding="UTF-8"?><root ättr="v"></root>`,
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			var buf bytes.Buffer
+			err = helium.NewWriter().OutputEncoding("US-ASCII").WriteTo(&buf, doc)
+			require.ErrorIs(t, err, helium.ErrUnsupportedOutputEncoding)
+			// No raw non-ASCII octet may have leaked before the error fired.
+			for i := range buf.Len() {
+				require.Less(t, buf.Bytes()[i], byte(0x80), "leaked non-ASCII octet 0x%X", buf.Bytes()[i])
+			}
+		})
+	}
+}
+
+// TestOutputEncodingASCIIAliasesMatchUSASCII asserts that every registered
+// US-ASCII alias takes the same char-referencing path as the canonical
+// "US-ASCII" name, rather than emitting raw UTF-8 because the loaded encoder
+// delegates to UTF-8.
+func TestOutputEncodingASCIIAliasesMatchUSASCII(t *testing.T) {
+	t.Parallel()
+
+	src := []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root a=\"é\">☃</root>")
+	doc, err := helium.NewParser().Parse(t.Context(), src)
+	require.NoError(t, err)
+
+	serialize := func(t *testing.T, enc string) string {
+		t.Helper()
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().OutputEncoding(enc).WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// The canonical form, minus the declaration line (which carries the differing
+	// encoding label), is the body every alias must reproduce.
+	canonical := serialize(t, "US-ASCII")
+	canonicalBody := canonical[strings.IndexByte(canonical, '\n'):]
+
+	for _, alias := range []string{"csASCII", "ANSI_X3.4-1968", "ANSI_X3.4-1986", "iso-ir-6", "ISO646-US", "us", "ascii"} {
+		out := serialize(t, alias)
+		require.Contains(t, out, `encoding="`+alias+`"`)
+		require.Contains(t, out, "&#x2603;")
+		require.Contains(t, out, "&#xE9;")
+		for i := range len(out) {
+			require.Less(t, out[i], byte(0x80), "alias %q leaked non-ASCII octet 0x%X", alias, out[i])
+		}
+		require.Equal(t, canonicalBody, out[strings.IndexByte(out, '\n'):], "alias %q body differs from US-ASCII", alias)
+	}
+}
+
+// TestOutputEncodingElementFragmentUnchanged asserts OutputEncoding affects the
+// Document path only: serializing a bare element (a fragment, which carries no
+// XML declaration) with OutputEncoding("US-ASCII") is byte-identical to
+// serializing it with no override. A character above Latin-1 (which the default
+// escapeNonASCII does not touch) makes any leaked US-ASCII escaping observable.
+func TestOutputEncodingElementFragmentUnchanged(t *testing.T) {
+	t.Parallel()
+
+	src := []byte(`<?xml version="1.0" encoding="UTF-8"?><root>世</root>`)
+	doc, err := helium.NewParser().Parse(t.Context(), src)
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+
+	var plain, ascii bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&plain, root))
+	require.NoError(t, helium.NewWriter().OutputEncoding("US-ASCII").WriteTo(&ascii, root))
+	require.Equal(t, plain.String(), ascii.String())
+	require.Contains(t, plain.String(), "世")
 }
 
 // TestSerializeNoEncodingOverrideUnchanged asserts the no-override path is

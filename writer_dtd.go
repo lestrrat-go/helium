@@ -291,6 +291,11 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 }
 
 func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
+	// A notation name cannot hold a character reference, so a non-ASCII name has
+	// no faithful US-ASCII serialization.
+	if d.rejectNonASCIIStr("notation name", n.name) {
+		return d.err
+	}
 	d.writeString(out, "<!NOTATION ")
 	d.writeString(out, n.name)
 	if n.publicID != "" {
