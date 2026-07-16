@@ -213,6 +213,36 @@ func TestUnmarshalTagSemanticsMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut.Text, shimOut.Text, "chardata mismatch")
 }
 
+func TestUnmarshalInnerXMLNamespaceParityStdlib(t *testing.T) {
+	type parent struct {
+		Inner string `xml:",innerxml"`
+	}
+	type root struct {
+		Parent parent `xml:"parent"`
+	}
+
+	inputs := []string{
+		// A prefixed prefix inherited from an ancestor but not used on the parent:
+		// the child must not re-declare it (encoding/xml captures raw bytes).
+		`<root xmlns:p="urn:p"><parent><p:child/></parent></root>`,
+		`<root xmlns:p="urn:p"><parent><p:child>text</p:child></parent></root>`,
+		// A default namespace inherited from an ancestor.
+		`<root xmlns="urn:d"><parent><child/></parent></root>`,
+		// A child that genuinely declares its own namespace keeps that declaration.
+		`<root xmlns:p="urn:p"><parent><p:child/><q:c xmlns:q="urn:q"/></parent></root>`,
+		// The parent redeclares the inherited prefix to a different URI.
+		`<root xmlns:p="urn:p"><parent xmlns:p="urn:p2"><p:child/></parent></root>`,
+	}
+
+	for _, in := range inputs {
+		var std root
+		require.NoError(t, stdxml.Unmarshal([]byte(in), &std))
+		var got root
+		require.NoError(t, shim.Unmarshal([]byte(in), &got))
+		require.Equal(t, std.Parent.Inner, got.Parent.Inner, "innerxml mismatch for %s", in)
+	}
+}
+
 func TestUnmarshalRepeatedConsistency(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"item"`

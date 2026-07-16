@@ -1197,15 +1197,61 @@ func elementText(elem *helium.Element) string {
 }
 
 func innerXML(elem *helium.Element) string {
-	if elem == nil {
+	if elem == nil || elem.FirstChild() == nil {
 		return ""
 	}
+	// Serialize elem as a whole and strip its own start and end tags, rather
+	// than serializing each child in isolation. This keeps elem's in-scope
+	// namespaces (including any inherited from an ancestor) established while the
+	// children are written, so a child inheriting a namespace is not given a
+	// spurious xmlns re-declaration — matching encoding/xml's raw innerxml
+	// capture. Text and attribute values escape '<' and '>', so the first '>'
+	// terminates elem's start tag and the last '<' begins elem's end tag.
 	var b bytes.Buffer
 	w := helium.NewWriter().XMLDeclaration(false)
-	for child := range helium.Children(elem) {
-		_ = w.WriteTo(&b, child)
+	// Seed the namespaces in force on elem's ancestors so an inherited prefix
+	// elem itself does not use is not re-declared on a child. encoding/xml's raw
+	// ,innerxml capture carries no such re-declaration.
+	if inherited := inheritedNamespaces(elem); len(inherited) > 0 {
+		w = w.InheritedNamespaces(inherited)
 	}
-	return b.String()
+	if err := w.WriteTo(&b, elem); err != nil {
+		return ""
+	}
+	s := b.String()
+	start := strings.IndexByte(s, '>')
+	end := strings.LastIndexByte(s, '<')
+	if start < 0 || end < 0 || start+1 > end {
+		return ""
+	}
+	return s[start+1 : end]
+}
+
+// inheritedNamespaces collects the namespace bindings in force on elem's
+// ancestors (prefix -> URI; empty prefix = default namespace), with the nearest
+// ancestor winning for a repeated prefix. Seeding these into the serializer keeps
+// an inherited prefix that elem itself does not declare from being re-declared on
+// a child, matching encoding/xml's raw ,innerxml capture. Returns nil when elem
+// has no ancestor namespace declarations.
+func inheritedNamespaces(elem *helium.Element) map[string]string {
+	var out map[string]string
+	for anc := elem.Parent(); anc != nil; anc = anc.Parent() {
+		nser, ok := anc.(helium.Namespacer)
+		if !ok {
+			continue
+		}
+		for _, ns := range nser.Namespaces() {
+			prefix := ns.Prefix()
+			if _, seen := out[prefix]; seen {
+				continue
+			}
+			if out == nil {
+				out = make(map[string]string)
+			}
+			out[prefix] = ns.URI()
+		}
+	}
+	return out
 }
 
 func elementComment(elem *helium.Element) string {
