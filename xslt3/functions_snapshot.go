@@ -190,7 +190,9 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 	// that unparsed-entity-uri() / unparsed-entity-public-id() work on
 	// the snapshot.
 	if origDoc != nil {
-		helium.CopyDTDInfo(origDoc, snapDoc)
+		if err := helium.CopyDTDInfo(origDoc, snapDoc); err != nil {
+			return nil, err
+		}
 	}
 
 	// Deep-copy the target node itself.
