@@ -115,6 +115,27 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
+	// Attach the Signature into the document tree so a same-document reference
+	// (URI="#id") pointing INTO the Signature's own <Object> content — e.g. a
+	// <Manifest> or <SignatureProperties> carrying an Id — can be resolved while
+	// its digest is computed. resolveReference walks the document from its root,
+	// so the referenced element must be reachable there. The Signature is
+	// detached again before returning so the caller receives a free-standing
+	// element to place wherever they choose.
+	//
+	// This does not change the canonical bytes of any reference: a fragment
+	// reference is canonicalized over its target's own subtree, whose exclusive
+	// c14n output depends only on that target's ancestors, and attaching the
+	// Signature as a trailing child of the document element leaves every
+	// existing element's ancestor chain unchanged. Callers with no such internal
+	// reference get byte-identical output.
+	if doc.DocumentElement() != nil && sigElem.Parent() == nil {
+		if err := doc.DocumentElement().AddChild(sigElem); err != nil {
+			return nil, err
+		}
+		defer helium.UnlinkNode(sigElem)
+	}
+
 	for _, ref := range cfg.references {
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			return nil, err

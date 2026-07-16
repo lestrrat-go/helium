@@ -114,7 +114,10 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 }
 
 // SignEnveloping creates an enveloping signature wrapping the given content
-// nodes. Returns the Signature element.
+// nodes in a <ds:Object>. Returns the (detached) Signature element for the
+// caller to place. A configured Reference may point at an element inside the
+// content by its Id (URI="#id") — for example a <ds:Manifest> or
+// <ds:SignatureProperties> — and it is resolved and digested during signing.
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
 	return signEnveloping(ctx, s.cfg, doc, content, key)
 }

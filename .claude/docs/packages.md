@@ -324,6 +324,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - **NewSigner() → Signer** — create fluent builder for signing (clone-on-write value type)
   - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`, `SignatureID(id)`, `AllowSHA1(bool)` — builder methods
   - `SignEnveloped(ctx, doc, parent, key)`, `SignEnveloping(ctx, doc, content, key)`, `SignDetached(ctx, doc, key)` — terminal methods
+  - `SignEnveloping` wraps the content nodes in a `<ds:Object>` and, while processing References, temporarily attaches the Signature into the document tree so a same-document reference (`URI="#id"`) pointing INTO the Signature's own Object content (e.g. a `<ds:Manifest>`/`<ds:SignatureProperties>` carrying an `Id`) resolves and is digested. The Signature is detached again before it is returned, and the temporary attachment does not change the canonical bytes of any reference — subtree canonicalization depends only on the target's own ancestors — so callers with no such internal reference get byte-identical output.
 - **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
   - `AllowSHA1(bool)` — builder method
   - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods
