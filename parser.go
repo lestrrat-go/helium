@@ -177,7 +177,9 @@ func PermissiveFS() fs.FS {
 // outside root is refused. DirFS is therefore both path-escape-safe and a
 // symlink sandbox — stronger than [os.DirFS], which follows an in-root symlink
 // out of its root. A relative root is resolved against the process working
-// directory when DirFS is called.
+// directory when DirFS is called; if that resolution fails (the working
+// directory is unavailable) the FS fails closed — every open returns the error
+// rather than resolving against a working directory current at open time.
 func DirFS(root string) fs.FS {
 	return iofs.NewConfinedDir(root)
 }

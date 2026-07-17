@@ -31,21 +31,34 @@ import (
 // bare [os.DirFS], which follows an in-root symlink out of its root.
 type ConfinedDir struct {
 	root string // absolute, cleaned directory path
+	// err records a failure to resolve root to an absolute path at
+	// construction (filepath.Abs fails when os.Getwd fails, e.g. the working
+	// directory was removed). It fails closed: every Open returns it rather
+	// than opening against a relative root that would resolve against whatever
+	// working directory happens to be current at Open time.
+	err error
 }
 
 // NewConfinedDir returns a ConfinedDir rooted at dir. dir is resolved to an
 // absolute, cleaned path; a relative dir is taken relative to the process
-// working directory at call time.
+// working directory at call time. If that resolution fails (filepath.Abs
+// returns an error, e.g. os.Getwd fails because the working directory was
+// removed) the error is retained and every Open returns it — the FS fails
+// closed rather than fall back to a relative root that would be resolved
+// against a possibly-different working directory at Open time.
 func NewConfinedDir(dir string) ConfinedDir {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		abs = filepath.Clean(dir)
+		return ConfinedDir{err: err}
 	}
 	return ConfinedDir{root: abs}
 }
 
 // Open implements [fs.FS].
 func (c ConfinedDir) Open(name string) (fs.File, error) {
+	if c.err != nil {
+		return nil, &fs.PathError{Op: opOpen, Path: name, Err: c.err}
+	}
 	p, err := c.localPath(name)
 	if err != nil {
 		return nil, err
