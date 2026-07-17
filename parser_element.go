@@ -352,63 +352,6 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	return nil
 }
 
-// reservedPrefixedNamespaceViolation reports why binding prefix to uri via a
-// prefixed namespace declaration (xmlns:prefix="uri") violates the Namespaces in
-// XML reserved-prefix/URI rules, or nil if the binding is permitted by those
-// rules. It covers ONLY the reserved-prefix/URI constraints — the reserved xml
-// prefix must map to the XML namespace, the xmlns prefix may not be redeclared,
-// and the reserved XML/XMLNS namespace URIs may not be bound to a non-reserved
-// prefix. The empty-URI (undeclaration) and pedantic absolute-URI checks are NOT
-// covered here because they depend on parser state (XML version, pedantic mode);
-// the parser applies them separately. This pure predicate is shared between the
-// parser's start-tag path and DTD.AddAttributeDecl so the two cannot drift.
-func reservedPrefixedNamespaceViolation(prefix, uri string) error {
-	if prefix == lexicon.PrefixXML {
-		if uri != lexicon.NamespaceXML {
-			return errors.New("xml namespace prefix mapped to wrong URI")
-		}
-		return nil
-	}
-	if uri == lexicon.NamespaceXML {
-		return fmt.Errorf("xmlns:%s: only the xml prefix may be bound to the reserved XML namespace", prefix)
-	}
-	if prefix == lexicon.PrefixXMLNS {
-		return errors.New("redefinition of the xmlns prefix forbidden")
-	}
-	if uri == lexicon.NamespaceXMLNS {
-		return errors.New("reuse of the xmlns namespace name if forbidden")
-	}
-	return nil
-}
-
-// reservedDefaultNamespaceViolation reports why binding the default namespace to
-// uri (xmlns="uri") violates the Namespaces in XML reserved-URI rules, or nil if
-// permitted: per Namespaces in XML 1.0 (errata NE13) §3, neither reserved
-// namespace name (XML or XMLNS) may be declared as the default namespace. Shared
-// between the parser's start-tag path and DTD.AddAttributeDecl.
-func reservedDefaultNamespaceViolation(uri string) error {
-	if uri == lexicon.NamespaceXML {
-		return errors.New("xml namespace URI cannot be the default namespace")
-	}
-	if uri == lexicon.NamespaceXMLNS {
-		return errors.New("reuse of the xmlns namespace name is forbidden")
-	}
-	return nil
-}
-
-// validNamespaceURI reports whether uri is syntactically a valid URI reference,
-// the check a prefixed namespace declaration's bound value must pass. It is the
-// shared authority for the URI-syntax test applied both by the parser's
-// prefixed-namespace-declaration path (validatePrefixedNamespaceDecl) and by
-// DTD.AddAttributeDecl's namespace-declaration-default validation
-// (checkNamespaceDeclDefault), so the two cannot drift. It does NOT enforce the
-// pedantic absolute-URI rule — that depends on parser state (pedantic mode) and
-// each caller applies it separately when relevant.
-func validNamespaceURI(uri string) bool {
-	_, err := url.Parse(uri)
-	return err == nil
-}
-
 // validatePrefixedNamespaceDecl enforces the Namespaces in XML constraints
 // that apply to a prefixed namespace declaration (xmlns:prefix="uri"),
 // regardless of whether the declaration is literal on a start tag or supplied
@@ -418,13 +361,20 @@ func validNamespaceURI(uri string) bool {
 // mode, the URI must be absolute. It returns a non-nil namespace error when any
 // constraint is violated.
 func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix, uri string) error {
-	if err := reservedPrefixedNamespaceViolation(prefix, uri); err != nil {
-		return pctx.namespaceError(ctx, err)
-	}
 	if prefix == lexicon.PrefixXML {
-		// The reserved xml prefix bound to its own URI: nothing further to check
-		// (no empty-URI or pedantic-absolute check applies).
+		if uri != lexicon.NamespaceXML {
+			return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
+		}
 		return nil
+	}
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: only the xml prefix may be bound to the reserved XML namespace", prefix))
+	}
+	if prefix == lexicon.PrefixXMLNS {
+		return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
+	}
+	if uri == lexicon.NamespaceXMLNS {
+		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
 	}
 	if uri == "" {
 		// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an
@@ -437,16 +387,12 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 		}
 		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
 	}
-	if !validNamespaceURI(uri) {
+	u, err := url.Parse(uri)
+	if err != nil {
 		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", prefix, uri))
 	}
-	if pctx.pedantic {
-		// The URI is already known valid; re-parse only to inspect its scheme for
-		// the pedantic absolute-URI rule.
-		u, _ := url.Parse(uri)
-		if u.Scheme == "" {
-			return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, uri))
-		}
+	if pctx.pedantic && u.Scheme == "" {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, uri))
 	}
 	return nil
 }
@@ -459,8 +405,11 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 // either reserved URI is used. An empty value (xmlns="") is a legal default
 // namespace undeclaration and is accepted.
 func (pctx *parserCtx) validateDefaultNamespaceDecl(ctx context.Context, uri string) error {
-	if err := reservedDefaultNamespaceViolation(uri); err != nil {
-		return pctx.namespaceError(ctx, err)
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, errors.New("xml namespace URI cannot be the default namespace"))
+	}
+	if uri == lexicon.NamespaceXMLNS {
+		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name is forbidden"))
 	}
 	return nil
 }
@@ -1376,7 +1325,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	if normalize {
 		if entities > 0 {
-			nv := attrNormalizeSpace(v)
+			nv := pctx.attrNormalizeSpace(v)
 			if nv != v {
 				pctx.attrNormChanged = true
 			}

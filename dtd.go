@@ -3,12 +3,9 @@ package helium
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // DTD represents an XML Document Type Definition (libxml2: xmlDtd).
@@ -275,75 +272,51 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 // registers it as a child node, so it serializes as an <!ATTLIST> declaration
 // (mirroring how AddElementDecl/AddEntity/AddNotation link their declarations).
 //
-// Every parameter is validated against the same rules the parser's <!ATTLIST>
-// path enforces, so a declaration returned with a nil error always serializes to
-// an <!ATTLIST> that a validating parser accepts and recovers equivalently:
+// It validates the enum parameters — atype must be a valid enum.Attr* type and
+// def a valid enum.AttrDefaultNone/Required/Implied/Fixed kind — and rejects a
+// duplicate. name may be a QName; its prefix is split off for keying on the FIRST
+// colon, exactly as AddElementDecl does.
 //
-//   - elem and name must be valid XML Names (the parser's Name production, which
-//     permits a colon). name may be a QName; its prefix is split off for keying
-//     on the FIRST colon, exactly as AddElementDecl does. A name that STARTS with
-//     a colon is rejected: it is a legal Name but not a valid QName, and the
-//     parser would split it as (prefix="", local="x") — never matching the whole
-//     ":x" key stored here — so it could not round-trip.
-//   - name "xml:id" must have atype enum.AttrID.
-//   - atype must be a valid enum.Attr* type and def a valid
-//     enum.AttrDefaultNone/Required/Implied/Fixed kind.
-//   - for enum.AttrEnumeration / enum.AttrNotation, enumValues must be a non-empty
-//     list of well-formed, distinct tokens (enumeration tokens are NMTOKENs, which
-//     permit a colon; NOTATION tokens are colon-free Names, because a NotationDecl
-//     name forbids a colon); it is ignored for other types.
-//   - #REQUIRED and #IMPLIED must NOT carry a default value (checked against the
-//     value as given, before normalization); enum.AttrDefaultNone and #FIXED carry
-//     one (possibly the empty string), validated against atype, and an
-//     enumeration/NOTATION default must be one of enumValues. Every character of a
-//     value-bearing default must be a legal XML Char, and it must not contain a raw
-//     '&' (which the <!ATTLIST> default-value serializer cannot round-trip).
-//   - an ID attribute's default must be #IMPLIED or #REQUIRED (never a value or
-//     #FIXED), per the ID Attribute Default VC.
-//   - a namespace-declaration attribute — one named "xmlns" (the default
-//     namespace) or one carrying the reserved "xmlns" prefix (xmlns:<prefix>) —
-//     that carries a value-bearing default (enum.AttrDefaultNone or #FIXED, with a
-//     non-empty value) must bind a value the Namespaces in XML rules permit: the
-//     xml prefix may bind only the XML namespace URI; the xmlns prefix may not be
-//     declared; neither reserved URI (the XML namespace or the xmlns namespace) may
-//     be bound to any other prefix or to the default namespace; and a prefixed
-//     declaration's value must be a syntactically valid URI (the default-namespace
-//     "xmlns" carries no URI-syntax check, mirroring the parser). The parser applies
-//     such a default as a namespace binding on a matching element and rejects a
-//     violation, so it is rejected here too. An empty default never binds, so it is
-//     not checked; and an ordinary
-//     attribute whose name merely starts with "xml" (xml:space, xml:lang, …) is not
-//     a namespace declaration and is unaffected.
+// Like its sibling constructors (AddNotation checks only the duplicate; AddEntity
+// only the type enum; AddElementDecl only the content-model structure), it TRUSTS
+// the Go caller to supply well-formed input. It does NOT validate the element or
+// attribute name against the Name grammar, the default value's characters, a
+// namespace-declaration default's URI, or any cross-declaration validity
+// constraint (those are enforced by ValidateDTD when the document is validated).
+// A caller that passes a malformed name or value gets a declaration that may not
+// round-trip through a validating parse — that is the caller's responsibility,
+// exactly as for the siblings.
 //
-// A cross-declaration VC that needs the owning element declaration — a NOTATION
-// attribute is not allowed on an EMPTY element (§3.3.1) — is out of scope here (it
-// is enforced by ValidateDTD), so it is not checked against these parameters.
+// The caller's enumValues slice is cloned before it is stored, so a later mutation
+// of the caller's slice cannot corrupt the serialized declaration.
 //
 // It returns an error wrapping ErrDuplicateDeclaration when an attribute with the
 // same local name, prefix, and owning element is already declared, or an error
-// wrapping ErrInvalidArgument for any parameter violation above. The duplicate
-// check runs BEFORE the non-identity parameter checks, matching the parser: a
-// later declaration of the same attribute is ignored entirely, so its (possibly
-// invalid) type/default must not mask the duplicate.
+// wrapping ErrInvalidArgument when atype or def is out of range.
 func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) (*AttributeDecl, error) {
-	// Identity validation: only what is needed to split the QName and build the
-	// lookup key, so the duplicate check below can run before the non-identity
-	// parameter checks.
-	local, prefix, err := validateAttrDeclIdentity(elem, name)
-	if err != nil {
-		return nil, err
+	switch atype {
+	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
+	default:
+		return nil, fmt.Errorf("invalid attribute type: %w", ErrInvalidArgument)
+	}
+
+	switch def {
+	case enum.AttrDefaultNone, enum.AttrDefaultRequired, enum.AttrDefaultImplied, enum.AttrDefaultFixed:
+	default:
+		return nil, fmt.Errorf("invalid attribute default declaration: %w", ErrInvalidArgument)
+	}
+
+	// Split the QName into prefix + local on the FIRST colon, mirroring
+	// AddElementDecl.
+	local := name
+	var prefix string
+	if i := strings.IndexByte(name, ':'); i > 0 {
+		prefix = name[:i]
+		local = name[i+1:]
 	}
 
 	if _, ok := dtd.LookupAttribute(local, prefix, elem); ok {
 		return nil, fmt.Errorf("duplicate attribute %s declared for element %s: %w", name, elem, ErrDuplicateDeclaration)
-	}
-
-	// Non-identity validation, and normalize the tokenized default the way the
-	// parser normalizes it, so the value stored here matches the value the parser
-	// recovers on a round-trip.
-	defvalue, err = validateAndNormalizeAttrDecl(name, atype, def, defvalue, enumValues)
-	if err != nil {
-		return nil, err
 	}
 
 	attr := newAttributeDecl()
@@ -367,230 +340,6 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 		return nil, err
 	}
 	return attr, nil
-}
-
-// validateAttrDeclIdentity validates the parts of an AddAttributeDecl call that
-// determine the attribute's identity — the owning element name and the attribute
-// QName — and returns the QName split into local + prefix on its FIRST colon,
-// mirroring AddElementDecl. It is the minimum needed to build the lookup key, so
-// AddAttributeDecl can run its duplicate check before the non-identity parameter
-// checks. Every violation wraps ErrInvalidArgument.
-func validateAttrDeclIdentity(elem, name string) (local, prefix string, err error) {
-	if elem == "" {
-		return "", "", fmt.Errorf("element name required: %w", ErrInvalidArgument)
-	}
-	if name == "" {
-		return "", "", fmt.Errorf("attribute name required: %w", ErrInvalidArgument)
-	}
-	if !isValidNameWithColon(elem) {
-		return "", "", fmt.Errorf("invalid element name %q: %w", elem, ErrInvalidArgument)
-	}
-	if !isValidNameWithColon(name) {
-		return "", "", fmt.Errorf("invalid attribute name %q: %w", name, ErrInvalidArgument)
-	}
-	// A leading-colon name is a legal Name but not a valid QName: the parser splits
-	// it as (prefix="", local="x"), which never matches the whole ":x" key kept
-	// here, so it could not round-trip.
-	if name[0] == ':' {
-		return "", "", fmt.Errorf("attribute name %q must not start with a colon: %w", name, ErrInvalidArgument)
-	}
-	local = name
-	if i := strings.IndexByte(name, ':'); i > 0 {
-		prefix = name[:i]
-		local = name[i+1:]
-	}
-	// A trailing colon leaves an empty local part (e.g. "p:"): keying it would store
-	// a degenerate empty-local declaration, so reject it.
-	if local == "" {
-		return "", "", fmt.Errorf("attribute name %q must not end with a colon: %w", name, ErrInvalidArgument)
-	}
-	return local, prefix, nil
-}
-
-// validateAndNormalizeAttrDecl checks the non-identity AddAttributeDecl parameters
-// against the same rules the parser's <!ATTLIST> path enforces (parser_dtd_attr.go
-// addAttributeDecl / TreeBuilder.AttributeDecl) and the declaration-time validity
-// constraints (valid_dtd_decl.go), so a declaration that passes here serializes to
-// an <!ATTLIST> that parses back and validates equivalently. It returns the
-// default value normalized the way the parser normalizes a tokenized default.
-// name is the full QName (for the xml:id check). Every violation wraps
-// ErrInvalidArgument.
-func validateAndNormalizeAttrDecl(name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) (string, error) {
-	if name == lexicon.QNameXMLID && atype != enum.AttrID {
-		return "", fmt.Errorf("attribute %q must have type ID: %w", name, ErrInvalidArgument)
-	}
-
-	switch atype {
-	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
-	default:
-		return "", fmt.Errorf("invalid attribute type: %w", ErrInvalidArgument)
-	}
-
-	switch def {
-	case enum.AttrDefaultNone, enum.AttrDefaultRequired, enum.AttrDefaultImplied, enum.AttrDefaultFixed:
-	default:
-		return "", fmt.Errorf("invalid attribute default declaration: %w", ErrInvalidArgument)
-	}
-
-	// ID Attribute Default VC (§3.3.1): an ID attribute must be #IMPLIED or
-	// #REQUIRED, else ValidateDTD(true) would reject the round-tripped declaration.
-	// The predicate is shared with the declaration-time validator so the two paths
-	// cannot drift.
-	if idAttrDefaultInvalid(atype, def) {
-		return "", fmt.Errorf("ID attribute must be declared #IMPLIED or #REQUIRED: %w", ErrInvalidArgument)
-	}
-
-	// An enumeration or NOTATION type needs a non-empty list of well-formed,
-	// distinct tokens, or the serialized "(...)" would not re-parse. Enumeration
-	// tokens are NMTOKENs (parseNmtoken, colon permitted). A NOTATION token names a
-	// notation, and a NotationDecl Name forbids a colon (parser_dtd_attr.go
-	// parseNotationDecl rejects it as "colons are forbidden from notation names",
-	// Namespaces in XML §6): a colon-bearing token could not be declared as a
-	// notation and so could not round-trip, so validate it with the colon-free Name
-	// production (isValidName), matching the parser's effective rule.
-	if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
-		if len(enumValues) == 0 {
-			return "", fmt.Errorf("enumeration/notation attribute requires at least one token: %w", ErrInvalidArgument)
-		}
-		seen := make(map[string]struct{}, len(enumValues))
-		for _, tok := range enumValues {
-			ok := isValidNmtoken(tok)
-			if atype == enum.AttrNotation {
-				ok = isValidName(tok)
-			}
-			if !ok {
-				return "", fmt.Errorf("invalid enumeration/notation token %q: %w", tok, ErrInvalidArgument)
-			}
-			if _, dup := seen[tok]; dup {
-				return "", fmt.Errorf("duplicate enumeration/notation token %q: %w", tok, ErrInvalidArgument)
-			}
-			seen[tok] = struct{}{}
-		}
-	}
-
-	// Default-declaration value-presence rules (DefaultDecl grammar):
-	// #REQUIRED / #IMPLIED carry no value; enum.AttrDefaultNone and #FIXED carry
-	// an AttValue (possibly the empty string) that must be legal for the type.
-	switch def {
-	case enum.AttrDefaultRequired, enum.AttrDefaultImplied:
-		// Checked against the value AS GIVEN (before normalization): a spaces-only
-		// value must not be collapsed into acceptance.
-		if defvalue != "" {
-			return "", fmt.Errorf("a #REQUIRED/#IMPLIED attribute must not carry a default value: %w", ErrInvalidArgument)
-		}
-	case enum.AttrDefaultNone, enum.AttrDefaultFixed:
-		// A tokenized (non-CDATA) default is space-normalized the way the parser
-		// normalizes it (attrNormalizeSpace, #x20 only, NOT strings.Fields, which
-		// would also fold TAB/NBSP and diverge from the parser).
-		if atype != enum.AttrCDATA {
-			defvalue = attrNormalizeSpace(defvalue)
-		}
-		if err := checkAttrDefaultChars(defvalue); err != nil {
-			return "", err
-		}
-		if err := validateAttributeValueInternal(nil, atype, defvalue); err != nil {
-			return "", fmt.Errorf("invalid default value %q: %w: %w", defvalue, err, ErrInvalidArgument)
-		}
-		// A value-bearing default on a namespace-declaration attribute (name
-		// "xmlns" or a name with the reserved "xmlns" prefix) is applied by the
-		// parser as a namespace binding when a matching element is defaulted, so a
-		// binding the parser would reject must be rejected here to keep the
-		// round-trip contract. Only a non-empty value binds.
-		if defvalue != "" {
-			if err := checkNamespaceDeclDefault(name, defvalue); err != nil {
-				return "", err
-			}
-		}
-		if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
-			if !slices.Contains(enumValues, defvalue) {
-				return "", fmt.Errorf("default value %q is not one of the declared tokens: %w", defvalue, ErrInvalidArgument)
-			}
-		}
-	}
-	return defvalue, nil
-}
-
-// checkAttrDefaultChars rejects a value-bearing default value that the
-// default-value serializer cannot round-trip equivalently:
-//
-//   - a character outside the XML Char production (a NUL or other C0/C1 control, an
-//     out-of-range code point) or invalid UTF-8, either of which would serialize to
-//     a "&#x0;"-style reference (or a lone U+FFFD) the parser cannot recover. It
-//     reuses the writer's isInCharacterRange predicate so the accept/reject
-//     boundary matches serialization exactly.
-//   - a literal '&'. The writer escapes '&' as "&amp;", but the parser stores an
-//     unsubstituted '&'-producing reference in an <!ATTLIST> default as the literal
-//     text "&#38;" (parser_element.go parseAttributeValueInternal), not a bare '&',
-//     so the value GROWS on each serialize→parse cycle ("&amp;" → "&amp;#38;" → …)
-//     and never stabilizes. The other characters the writer escapes ('<', '>', '"',
-//     TAB/LF/CR) each decode back to themselves and round-trip, so only '&' is
-//     rejected here. (This is a pre-existing writer/parser escaping asymmetry for
-//     '&' in attribute values; guarding the constructor keeps AddAttributeDecl's
-//     round-trip contract without touching the shared escaping.)
-//
-// Every violation wraps ErrInvalidArgument.
-func checkAttrDefaultChars(s string) error {
-	for i := 0; i < len(s); {
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && size == 1 {
-			return fmt.Errorf("default value %q contains invalid UTF-8: %w", s, ErrInvalidArgument)
-		}
-		if r == '&' {
-			return fmt.Errorf("default value %q must not contain a raw '&' (it does not round-trip through the <!ATTLIST> default-value serializer): %w", s, ErrInvalidArgument)
-		}
-		if !isInCharacterRange(r) {
-			return fmt.Errorf("default value %q contains a character outside the XML Char range (U+%04X): %w", s, r, ErrInvalidArgument)
-		}
-		i += size
-	}
-	return nil
-}
-
-// checkNamespaceDeclDefault rejects a value-bearing namespace-declaration
-// attribute default whose bound URI the validating parser would reject when it
-// applies the default as a namespace binding on a matching element (parseStartTag
-// attribute defaulting in parser_element.go). A namespace-declaration attribute is
-// one named "xmlns" (the default namespace) or one carrying the reserved "xmlns"
-// prefix (xmlns:<prefix>). name is the full QName; uri is the non-empty,
-// already-normalized default value (an empty default is never applied by the
-// parser, so it never reaches here). The checks mirror the parser's start-tag
-// path exactly: the reserved-prefix/URI rules via the same pure predicates
-// (reservedPrefixedNamespaceViolation / reservedDefaultNamespaceViolation), and —
-// on the prefixed path only, matching validatePrefixedNamespaceDecl — a
-// URI-syntax check (validNamespaceURI). The default-namespace path applies no
-// URI-syntax check because the parser's validateDefaultNamespaceDecl does not, so
-// an accepted declaration round-trips. An ordinary attribute whose name merely starts
-// with "xml" (xml:space, xml:lang, …) is NOT a namespace declaration and is left
-// alone. Every violation wraps ErrInvalidArgument.
-func checkNamespaceDeclDefault(name, uri string) error {
-	local := name
-	var prefix string
-	if i := strings.IndexByte(name, ':'); i > 0 {
-		prefix = name[:i]
-		local = name[i+1:]
-	}
-	switch {
-	case prefix == lexicon.PrefixXMLNS:
-		// xmlns:<local>="uri": the declared prefix is local. Mirror the parser's
-		// validatePrefixedNamespaceDecl: the reserved-prefix/URI rules, then the
-		// URI-syntax check. The reserved xml prefix binds its own (valid) URI and
-		// the parser short-circuits before the syntax check, so it is skipped here
-		// too; every other prefix's bound value must be a syntactically valid URI.
-		if err := reservedPrefixedNamespaceViolation(local, uri); err != nil {
-			return fmt.Errorf("namespace-declaration attribute %q cannot bind %q (%s): %w", name, uri, err, ErrInvalidArgument)
-		}
-		if local != lexicon.PrefixXML && !validNamespaceURI(uri) {
-			return fmt.Errorf("namespace-declaration attribute %q cannot bind %q (not a valid URI): %w", name, uri, ErrInvalidArgument)
-		}
-	case prefix == "" && local == lexicon.PrefixXMLNS:
-		// xmlns="uri": default namespace declaration. The parser's
-		// validateDefaultNamespaceDecl applies only the reserved-URI rules and NO
-		// URI-syntax check, so neither do we — matching the parser exactly.
-		if err := reservedDefaultNamespaceViolation(uri); err != nil {
-			return fmt.Errorf("namespace-declaration attribute %q cannot bind %q (%s): %w", name, uri, err, ErrInvalidArgument)
-		}
-	}
-	return nil
 }
 
 // registerAttribute records an already-built attribute declaration in the DTD's

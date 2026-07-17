@@ -11,16 +11,6 @@ import (
 const (
 	attrDeclElem  = "item"
 	attrDeclCount = "count"
-
-	// Namespace-declaration attribute names reused across the reserved-namespace
-	// axis tests.
-	nsAttrDefault  = "xmlns"
-	nsAttrXMLPfx   = "xmlns:xml"
-	nsAttrXMLNSPfx = "xmlns:xmlns"
-	nsAttrPPfx     = "xmlns:p"
-
-	nsURIXML   = "http://www.w3.org/XML/1998/namespace"
-	nsURIXMLNS = "http://www.w3.org/2000/xmlns/"
 )
 
 // TestAddAttributeDeclSerializes verifies AddAttributeDecl builds a declaration
@@ -128,34 +118,6 @@ func TestAddAttributeDeclQNameSplit(t *testing.T) {
 	require.Contains(t, buf.String(), "<!ATTLIST item x:id ID #REQUIRED>")
 }
 
-// TestAddAttributeDeclNoneDefaultEmptyValue verifies an enum.AttrDefaultNone
-// declaration carrying the empty default value serializes as `""` (not a bare,
-// DefaultDecl-less declaration) and round-trips through a validating parser.
-func TestAddAttributeDeclNoneDefaultEmptyValue(t *testing.T) {
-	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-	require.NoError(t, err)
-
-	_, err = dtd.AddElementDecl(attrDeclElem, enum.EmptyElementType, nil)
-	require.NoError(t, err)
-	_, err = dtd.AddAttributeDecl(attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
-	require.NoError(t, err)
-
-	root := doc.CreateElement(attrDeclElem)
-	require.NoError(t, doc.SetDocumentElement(root))
-
-	var buf bytes.Buffer
-	require.NoError(t, Write(&buf, doc))
-	require.Contains(t, buf.String(), `<!ATTLIST item label CDATA "">`)
-
-	parsed, err := NewParser().ValidateDTD(true).Parse(t.Context(), buf.Bytes())
-	require.NoError(t, err)
-	d, ok := parsed.IntSubset().LookupAttribute("label", "", attrDeclElem)
-	require.True(t, ok)
-	require.Equal(t, enum.AttrDefaultNone, d.def)
-	require.Equal(t, "", d.defvalue)
-}
-
 // TestAddAttributeDeclClonesEnumValues verifies the token list is cloned, so a
 // caller mutating the slice after the call cannot corrupt the serialized decl.
 func TestAddAttributeDeclClonesEnumValues(t *testing.T) {
@@ -191,44 +153,18 @@ func TestAddAttributeDeclDuplicate(t *testing.T) {
 	require.ErrorIs(t, err, ErrDuplicateDeclaration)
 }
 
-// TestAddAttributeDeclRejects verifies every input that would build a
-// non-round-tripping <!ATTLIST> is rejected (wrapping ErrInvalidArgument) BEFORE
-// registration, so nothing is registered or serialized.
+// TestAddAttributeDeclRejects verifies an out-of-range enum parameter is rejected
+// (wrapping ErrInvalidArgument) before registration, so nothing is registered or
+// serialized. Like its sibling constructors, AddAttributeDecl validates only the
+// enum parameters — it trusts the caller for well-formed names and values.
 func TestAddAttributeDeclRejects(t *testing.T) {
 	tests := []struct {
-		name     string
-		elem     string
-		attr     string
-		atype    enum.AttributeType
-		def      enum.AttributeDefault
-		defvalue string
-		enumv    Enumeration
+		name  string
+		atype enum.AttributeType
+		def   enum.AttributeDefault
 	}{
-		{"empty element name", "", attrDeclCount, enum.AttrCDATA, enum.AttrDefaultImplied, "", nil},
-		{"empty attribute name", attrDeclElem, "", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil},
-		{"invalid element name", "bad elem", attrDeclCount, enum.AttrCDATA, enum.AttrDefaultImplied, "", nil},
-		{"invalid attribute name", attrDeclElem, "bad name", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil},
-		{"leading colon attribute name", attrDeclElem, ":x", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil},
-		{"xml:id must be ID", attrDeclElem, "xml:id", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil},
-		{"invalid attribute type", attrDeclElem, attrDeclCount, enum.AttributeType(999), enum.AttrDefaultImplied, "", nil},
-		{"invalid default declaration", attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttributeDefault(999), "", nil},
-		{"enumeration without tokens", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", nil},
-		{"enumeration token not an NMTOKEN", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", Enumeration{"a b"}},
-		{"duplicate enumeration token", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", Enumeration{"a", "a"}},
-		{"notation token not a Name", attrDeclElem, "note", enum.AttrNotation, enum.AttrDefaultImplied, "", Enumeration{"1abc"}},
-		// A NOTATION token naming a notation whose <!NOTATION> declaration cannot hold
-		// a colon (the parser rejects "colons are forbidden from notation names") must
-		// itself be colon-free, or the serialized decl could not round-trip.
-		{"notation token with a colon", attrDeclElem, "note", enum.AttrNotation, enum.AttrDefaultImplied, "", Enumeration{"p:n"}},
-		{"enumeration default not a member", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultNone, "c", Enumeration{"a", "b"}},
-		{"REQUIRED carrying a default value", attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttrDefaultRequired, "x", nil},
-		{"IMPLIED carrying a default value", attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttrDefaultImplied, "x", nil},
-		{"invalid ID default value", attrDeclElem, "id", enum.AttrID, enum.AttrDefaultNone, "not a name", nil},
-		// A raw '&' in a value-bearing default does not round-trip: the writer escapes
-		// it as "&amp;" but the parser stores the unsubstituted reference as literal
-		// "&#38;", so the value grows on every serialize→parse cycle.
-		{"FIXED default with a raw ampersand", attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultFixed, "&", nil},
-		{"bare default with a raw ampersand", attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultNone, "a&b", nil},
+		{"invalid attribute type", enum.AttributeType(999), enum.AttrDefaultImplied},
+		{"invalid default declaration", enum.AttrCDATA, enum.AttributeDefault(999)},
 	}
 
 	for _, tc := range tests {
@@ -237,7 +173,7 @@ func TestAddAttributeDeclRejects(t *testing.T) {
 			dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
 			require.NoError(t, err)
 
-			adecl, err := dtd.AddAttributeDecl(tc.elem, tc.attr, tc.atype, tc.def, tc.defvalue, tc.enumv)
+			adecl, err := dtd.AddAttributeDecl(attrDeclElem, attrDeclCount, tc.atype, tc.def, "", nil)
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrInvalidArgument)
 			require.Nil(t, adecl)
@@ -285,141 +221,9 @@ func TestAddAttributeDeclNoKeyCollision(t *testing.T) {
 	require.Len(t, dtd.attributes, 2)
 }
 
-// TestAddAttributeDeclRejectsOutOfRangeDefault verifies a value-bearing default
-// carrying a NUL or other out-of-XML-Char character is rejected before
-// registration (it would serialize as "&#x0;" and fail to reparse).
-func TestAddAttributeDeclRejectsOutOfRangeDefault(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		defvalue string
-	}{
-		{"NUL", "a\x00b"},
-		{"C0 control", "a\x01b"},
-		{"invalid UTF-8", "a\xffb"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-			dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-			require.NoError(t, err)
-
-			adecl, err := dtd.AddAttributeDecl(attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultFixed, tc.defvalue, nil)
-			require.Error(t, err)
-			require.ErrorIs(t, err, ErrInvalidArgument)
-			require.Nil(t, adecl)
-			require.Empty(t, dtd.attributes)
-		})
-	}
-}
-
-// TestAddAttributeDeclRejectsIDDefault verifies an ID attribute paired with a
-// value-bearing default (#FIXED or a bare default) is rejected — the ID Attribute
-// Default VC requires #IMPLIED or #REQUIRED, so such a decl would be rejected by
-// ValidateDTD(true) on a round-trip.
-func TestAddAttributeDeclRejectsIDDefault(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		def      enum.AttributeDefault
-		defvalue string
-	}{
-		{"ID + FIXED", enum.AttrDefaultFixed, "x1"},
-		{"ID + bare default", enum.AttrDefaultNone, "x1"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-			dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-			require.NoError(t, err)
-
-			adecl, err := dtd.AddAttributeDecl(attrDeclElem, "id", enum.AttrID, tc.def, tc.defvalue, nil)
-			require.Error(t, err)
-			require.ErrorIs(t, err, ErrInvalidArgument)
-			require.Nil(t, adecl)
-			require.Empty(t, dtd.attributes)
-		})
-	}
-}
-
-// TestAddAttributeDeclTabDefaultNotFolded verifies the tokenized-default
-// normalization collapses ONLY #x20 (attrNormalizeSpace), matching the parser, not
-// all Unicode whitespace (strings.Fields).
-//
-//   - A #x20-separated NMTOKENS default round-trips: the two normalizers agree on
-//     #x20, so the stored value keeps its single-space separators verbatim.
-//   - A TAB-bearing NMTOKENS default is REJECTED, not silently folded: #x20-only
-//     normalization keeps the TAB inside the token, and a TAB is not an NMTOKEN
-//     character, matching the parser, which normalizes the same way and rejects it.
-//     strings.Fields would fold the TAB into a boundary and wrongly accept.
-func TestAddAttributeDeclTabDefaultNotFolded(t *testing.T) {
-	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-	require.NoError(t, err)
-
-	adecl, err := dtd.AddAttributeDecl(attrDeclElem, "toks", enum.AttrNmtokens, enum.AttrDefaultFixed, "a b c", nil)
-	require.NoError(t, err)
-	require.Equal(t, "a b c", adecl.defvalue, "#x20 separators are preserved verbatim")
-
-	adecl, err = dtd.AddAttributeDecl(attrDeclElem, "tabbed", enum.AttrNmtokens, enum.AttrDefaultFixed, "a\tb", nil)
-	require.Error(t, err, "a TAB must not be folded into a spuriously-valid token boundary")
-	require.ErrorIs(t, err, ErrInvalidArgument)
-	require.Nil(t, adecl)
-}
-
-// TestAddAttributeDeclSpacesOnlyRequired verifies a #REQUIRED (or #IMPLIED)
-// non-CDATA attribute whose default is spaces-only is rejected: the check runs
-// against the value AS GIVEN, so normalization cannot erase it into acceptance.
-func TestAddAttributeDeclSpacesOnlyRequired(t *testing.T) {
-	for _, def := range []enum.AttributeDefault{enum.AttrDefaultRequired, enum.AttrDefaultImplied} {
-		doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-		dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-		require.NoError(t, err)
-
-		adecl, err := dtd.AddAttributeDecl(attrDeclElem, "tok", enum.AttrNmtoken, def, "   ", nil)
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrInvalidArgument)
-		require.Nil(t, adecl)
-	}
-}
-
-// TestAddAttributeDeclDuplicateBeforeParams verifies a duplicate declaration whose
-// parameters are ALSO invalid returns ErrDuplicateDeclaration (the duplicate check
-// runs before the non-identity parameter checks), matching the parser: a repeat
-// declaration is ignored entirely, so its invalid type must not surface as
-// ErrInvalidArgument.
-func TestAddAttributeDeclDuplicateBeforeParams(t *testing.T) {
-	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-	require.NoError(t, err)
-
-	_, err = dtd.AddAttributeDecl(attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
-	require.NoError(t, err)
-
-	// Same identity, but an invalid attribute type. The duplicate wins.
-	adecl, err := dtd.AddAttributeDecl(attrDeclElem, attrDeclCount, enum.AttributeType(999), enum.AttrDefaultImplied, "", nil)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrDuplicateDeclaration)
-	require.NotErrorIs(t, err, ErrInvalidArgument)
-	require.Nil(t, adecl)
-}
-
-// TestAddAttributeDeclRejectsTrailingColon verifies a name ending in a colon
-// (empty local part) is rejected, so no degenerate empty-local declaration is
-// stored.
-func TestAddAttributeDeclRejectsTrailingColon(t *testing.T) {
-	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
-	require.NoError(t, err)
-
-	adecl, err := dtd.AddAttributeDecl(attrDeclElem, "p:", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrInvalidArgument)
-	require.Nil(t, adecl)
-	require.Empty(t, dtd.attributes)
-}
-
-// TestAddAttributeDeclEnumerationTokenColonAccepted verifies the colon rule
-// difference between the two enumerated types: an enumeration token is an NMTOKEN,
-// whose grammar permits a colon (the parser reads it with parseNmtoken), so a
-// colon-bearing enumeration token is accepted and round-trips — unlike a NOTATION
-// token, which names a colon-forbidding notation.
+// TestAddAttributeDeclEnumerationTokenColonAccepted verifies a well-formed
+// enumeration whose tokens carry a colon is accepted and round-trips through a
+// validating parser.
 func TestAddAttributeDeclEnumerationTokenColonAccepted(t *testing.T) {
 	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
 	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
@@ -447,10 +251,9 @@ func TestAddAttributeDeclEnumerationTokenColonAccepted(t *testing.T) {
 // TestAddAttributeDeclDefaultRoundTripEquivalence verifies an accepted
 // value-bearing default is stable across serialize→parse→serialize: the default
 // value the parser recovers is identical, and re-serializing the reparsed document
-// yields the same <!ATTLIST> line. It exercises defaults that DO round-trip through
+// yields the same <!ATTLIST> line. It exercises defaults that round-trip through
 // the default-value serializer — a '<' (escaped as "&lt;" and decoded back), a '"'
-// (escaped as "&quot;"), and a plain value — so the round-trip contract is proven,
-// not just the rejection of the '&' that does not.
+// (escaped as "&quot;"), a CDATA-end sequence, and a plain value.
 func TestAddAttributeDeclDefaultRoundTripEquivalence(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -487,143 +290,6 @@ func TestAddAttributeDeclDefaultRoundTripEquivalence(t *testing.T) {
 			var buf2 bytes.Buffer
 			require.NoError(t, Write(&buf2, parsed))
 			require.Contains(t, buf2.String(), tc.want, "re-serialized <!ATTLIST> is stable")
-		})
-	}
-}
-
-// TestAddAttributeDeclReservedNamespaceRejects verifies that a value-bearing
-// default (enum.AttrDefaultNone or #FIXED) on a namespace-declaration attribute
-// (name "xmlns" or a name with the reserved "xmlns" prefix) whose bound URI the
-// validating parser would reject as a namespace binding is rejected before
-// registration. Each cell mirrors a Namespaces in XML rule the parser enforces
-// during attribute defaulting (parser_element.go validatePrefixedNamespaceDecl /
-// validateDefaultNamespaceDecl): the reserved-prefix/URI predicates
-// (reservedPrefixedNamespaceViolation / reservedDefaultNamespaceViolation) and,
-// on the prefixed path, the URI-syntax check (validNamespaceURI).
-func TestAddAttributeDeclReservedNamespaceRejects(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		attr     string
-		def      enum.AttributeDefault
-		defvalue string
-	}{
-		// Default namespace bound to a reserved URI.
-		{"xmlns = XML URI (fixed)", nsAttrDefault, enum.AttrDefaultFixed, nsURIXML},
-		{"xmlns = XML URI (bare)", nsAttrDefault, enum.AttrDefaultNone, nsURIXML},
-		{"xmlns = xmlns URI (fixed)", nsAttrDefault, enum.AttrDefaultFixed, nsURIXMLNS},
-		{"xmlns = xmlns URI (bare)", nsAttrDefault, enum.AttrDefaultNone, nsURIXMLNS},
-		// The xml prefix bound to any non-XML URI.
-		{"xmlns:xml = xmlns URI", nsAttrXMLPfx, enum.AttrDefaultFixed, nsURIXMLNS},
-		{"xmlns:xml = other URI", nsAttrXMLPfx, enum.AttrDefaultFixed, "urn:bad"},
-		{"xmlns:xml = other URI (bare)", nsAttrXMLPfx, enum.AttrDefaultNone, "urn:bad"},
-		// The xmlns prefix may not be declared, whatever the URI.
-		{"xmlns:xmlns = XML URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, nsURIXML},
-		{"xmlns:xmlns = xmlns URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, nsURIXMLNS},
-		{"xmlns:xmlns = other URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, "urn:ok"},
-		// A non-reserved prefix bound to a reserved URI.
-		{"xmlns:p = XML URI", nsAttrPPfx, enum.AttrDefaultFixed, nsURIXML},
-		{"xmlns:p = xmlns URI", nsAttrPPfx, enum.AttrDefaultFixed, nsURIXMLNS},
-		// A prefixed declaration bound to a syntactically invalid URI: the parser's
-		// validatePrefixedNamespaceDecl rejects it ("is not a validURI"), so it must
-		// not round-trip. "%" is a legal XML Char sequence (it clears the character
-		// checks) but a malformed percent-escape that url.Parse rejects.
-		{"xmlns:p = malformed URI", nsAttrPPfx, enum.AttrDefaultFixed, "%"},
-		{"xmlns:p = malformed URI (bare)", nsAttrPPfx, enum.AttrDefaultNone, "%"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-			dtd, err := doc.CreateInternalSubset("root", "", "")
-			require.NoError(t, err)
-
-			adecl, err := dtd.AddAttributeDecl("root", tc.attr, enum.AttrCDATA, tc.def, tc.defvalue, nil)
-			require.Error(t, err)
-			require.ErrorIs(t, err, ErrInvalidArgument)
-			require.Nil(t, adecl)
-
-			// Nothing registered or serialized.
-			require.Empty(t, dtd.attributes)
-			var buf bytes.Buffer
-			require.NoError(t, Write(&buf, doc))
-			require.NotContains(t, buf.String(), "<!ATTLIST")
-		})
-	}
-}
-
-// TestAddAttributeDeclReservedNamespaceAllows verifies the ALLOW cells of the
-// reserved-namespace axis. A permitted namespace-declaration default round-trips
-// through a validating parser (which applies it as a binding on the instance
-// element), and the non-binding cases (a non-value-bearing default, or an ordinary
-// xml:*-named attribute) are accepted unchanged.
-func TestAddAttributeDeclReservedNamespaceAllows(t *testing.T) {
-	// Cells whose accepted declaration must round-trip through a validating parse
-	// of an instance element that triggers attribute defaulting.
-	for _, tc := range []struct {
-		name     string
-		attr     string
-		def      enum.AttributeDefault
-		defvalue string
-		want     string
-	}{
-		{"xmlns:xml = XML URI (fixed)", nsAttrXMLPfx, enum.AttrDefaultFixed, nsURIXML, `<!ATTLIST root xmlns:xml CDATA #FIXED "` + nsURIXML + `">`},
-		{"xmlns:p = ok URI (fixed)", nsAttrPPfx, enum.AttrDefaultFixed, "urn:ok", `<!ATTLIST root xmlns:p CDATA #FIXED "urn:ok">`},
-		{"xmlns = ok URI (bare)", nsAttrDefault, enum.AttrDefaultNone, "urn:ok", `<!ATTLIST root xmlns CDATA "urn:ok">`},
-		// A well-formed relative-reference URI on the prefixed path: url.Parse accepts
-		// it and the parser applies it as a binding, so we must NOT over-reject it.
-		{"xmlns:p = relative-ref URI", nsAttrPPfx, enum.AttrDefaultFixed, "urn/rel", `<!ATTLIST root xmlns:p CDATA #FIXED "urn/rel">`},
-		// The default-namespace "xmlns" path carries no URI-syntax check (the parser's
-		// validateDefaultNamespaceDecl applies none), so a value that would be rejected
-		// on the prefixed path is accepted here and round-trips, matching the parser.
-		{"xmlns = malformed URI (no syntax check)", nsAttrDefault, enum.AttrDefaultFixed, "%", `<!ATTLIST root xmlns CDATA #FIXED "%">`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-			dtd, err := doc.CreateInternalSubset("root", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddElementDecl("root", enum.AnyElementType, nil)
-			require.NoError(t, err)
-
-			_, err = dtd.AddAttributeDecl("root", tc.attr, enum.AttrCDATA, tc.def, tc.defvalue, nil)
-			require.NoError(t, err)
-
-			root := doc.CreateElement("root")
-			require.NoError(t, doc.SetDocumentElement(root))
-
-			var buf bytes.Buffer
-			require.NoError(t, Write(&buf, doc))
-			require.Contains(t, buf.String(), tc.want)
-
-			// The validating parser applies the default as a binding on <root/>
-			// and accepts it.
-			_, err = NewParser().ValidateDTD(true).Parse(t.Context(), buf.Bytes())
-			require.NoError(t, err, "accepted namespace-declaration default must round-trip")
-		})
-	}
-
-	// Non-binding cells: accepted, no reserved-namespace check applies.
-	for _, tc := range []struct {
-		name     string
-		attr     string
-		def      enum.AttributeDefault
-		defvalue string
-	}{
-		// A non-value-bearing default never binds, so even a reserved prefix is
-		// accepted as a (vacuous) declaration.
-		{"xmlns:xmlns #IMPLIED", nsAttrXMLNSPfx, enum.AttrDefaultImplied, ""},
-		{"xmlns:xml #IMPLIED", nsAttrXMLPfx, enum.AttrDefaultImplied, ""},
-		{"xmlns:xml #REQUIRED", nsAttrXMLPfx, enum.AttrDefaultRequired, ""},
-		// An empty value-bearing default never binds either.
-		{"xmlns:xml #FIXED empty", nsAttrXMLPfx, enum.AttrDefaultFixed, ""},
-		// Ordinary xml:*-named attributes are not namespace declarations.
-		{"xml:space #FIXED", "xml:space", enum.AttrDefaultFixed, "preserve"},
-		{"xml:lang #FIXED", "xml:lang", enum.AttrDefaultFixed, "en"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
-			dtd, err := doc.CreateInternalSubset("root", "", "")
-			require.NoError(t, err)
-
-			_, err = dtd.AddAttributeDecl("root", tc.attr, enum.AttrCDATA, tc.def, tc.defvalue, nil)
-			require.NoError(t, err)
 		})
 	}
 }

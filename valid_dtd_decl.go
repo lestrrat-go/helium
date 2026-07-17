@@ -122,7 +122,9 @@ func collectMixedLeaves(content *ElementContent, out *[]*ElementContent) {
 //   - Attribute Default Legal (§3.3.2): an enumerated or NOTATION attribute's
 //     default value must be one of the declared tokens.
 func validateAttributeDeclLegal(ctx context.Context, adecl *AttributeDecl, vctx *validCtx) {
-	if idAttrDefaultInvalid(adecl.atype, adecl.def) {
+	if adecl.atype == enum.AttrID &&
+		adecl.def != enum.AttrDefaultImplied &&
+		adecl.def != enum.AttrDefaultRequired {
 		vctx.addf(ctx, "element %s: ID attribute %s must be declared #IMPLIED or #REQUIRED", adecl.elem, adecl.name)
 	}
 
@@ -161,17 +163,6 @@ func validateAttributeDeclLegal(ctx context.Context, adecl *AttributeDecl, vctx 
 // carry none.
 func attrHasDefaultValue(def enum.AttributeDefault) bool {
 	return def == enum.AttrDefaultNone || def == enum.AttrDefaultFixed
-}
-
-// idAttrDefaultInvalid reports whether an ID attribute's DefaultDecl violates the
-// ID Attribute Default VC (§3.3.1): an attribute of type ID must be declared
-// #IMPLIED or #REQUIRED (never a bare default or #FIXED). Shared by the
-// declaration-time validator (validateAttributeDeclLegal) and the public
-// DTD.AddAttributeDecl input check so the two cannot drift.
-func idAttrDefaultInvalid(atype enum.AttributeType, def enum.AttributeDefault) bool {
-	return atype == enum.AttrID &&
-		def != enum.AttrDefaultImplied &&
-		def != enum.AttrDefaultRequired
 }
 
 // validateNotationEnumDeclared implements the Notation Declared VC (§4.7) for a

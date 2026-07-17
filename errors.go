@@ -40,13 +40,11 @@ var (
 	ErrNilNode          = errors.New("nil node")
 	ErrInvalidOperation = errors.New("operation cannot be performed")
 	ErrEntityBoundary   = errors.New("entity boundary violation")
-	// ErrInvalidArgument is returned when a public builder is given an argument
-	// that cannot produce a well-formed result — e.g. an AddAttributeDecl
-	// element/attribute name that is not a valid XML Name, an out-of-range
-	// attribute type or default-declaration kind, a malformed enumeration/NOTATION
-	// token, or a default value that is illegal for the declared type. It is
-	// wrapped (via %w) into a message describing the specific violation, so a
-	// caller can branch on it with errors.Is while still surfacing the text.
+	// ErrInvalidArgument is returned when a public builder is given an
+	// out-of-range enum argument — e.g. an AddAttributeDecl attribute type or
+	// default-declaration kind that is not a defined enum value. It is wrapped
+	// (via %w) into a message describing the specific violation, so a caller can
+	// branch on it with errors.Is while still surfacing the text.
 	ErrInvalidArgument = errors.New("invalid argument")
 	// ErrNoInternalSubset is returned by Document.InternalSubset when the
 	// document has no internal DTD subset associated with it. Match with

@@ -415,13 +415,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 		return fmt.Errorf("invalid AttributeDecl default value type: %w", ErrWriterInvalidDTDNode)
 	}
 
-	// The DefaultDecl grammar attaches an AttValue to exactly the NONE and #FIXED
-	// kinds; #REQUIRED/#IMPLIED never carry one. Emit the quoted value for those
-	// two kinds even when it is the empty string, so a NONE/#FIXED "" default
-	// serializes as `""` (a bare `<!ATTLIST … CDATA>` would have no DefaultDecl
-	// and could not re-parse).
-	switch n.def {
-	case enum.AttrDefaultNone, enum.AttrDefaultFixed:
+	if n.defvalue != "" {
 		d.writeString(out, ` "`)
 		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)
