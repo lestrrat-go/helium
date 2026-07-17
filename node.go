@@ -1112,6 +1112,9 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 		return fmt.Errorf("cannot rebind namespace prefix %q while it is in use on this element: %w", prefix, ErrInvalidOperation)
 	}
 	for i, ns := range n.nsDefs {
+		if ns == nil {
+			continue
+		}
 		if ns.Prefix() != prefix {
 			continue
 		}
@@ -1170,6 +1173,9 @@ func (n *node) AddNamespaceDecl(ns *Namespace) {
 		return
 	}
 	for i, existing := range n.nsDefs {
+		if existing == nil {
+			continue
+		}
 		if existing.Prefix() != prefix {
 			continue
 		}

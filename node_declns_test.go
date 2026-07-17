@@ -39,6 +39,23 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.Equal(t, 1, strings.Count(str, `xmlns:q="urn:q"`))
 	})
 
+	t.Run("nil nsDefs entry is skipped by the dedup scan", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		// AddNamespaceDecl(nil) appends a nil entry verbatim (a deliberate
+		// corruption path). A subsequent dedup scan must skip it, not panic.
+		root.AddNamespaceDecl(nil)
+		require.NotPanics(t, func() {
+			require.NoError(t, root.DeclareNamespace("p", "urn:p"))
+		})
+		require.NotPanics(t, func() {
+			root.AddNamespaceDecl(helium.NewNamespace("q", "urn:q"))
+		})
+	})
+
 	t.Run("case2 same prefix and uri is a no-op", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
