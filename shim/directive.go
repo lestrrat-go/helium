@@ -403,3 +403,21 @@ func (s *prologScanner) scanDirective() (Token, error) {
 func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
+
+// isWhitespaceToken reports whether tok is CharData consisting only of XML
+// whitespace (or is empty). Such a token is the leading-whitespace CharData
+// that XMLDecl permits ahead of a declaration; every other token, including a
+// non-whitespace CharData, counts as content that displaces a later
+// declaration from the start of the document.
+func isWhitespaceToken(tok Token) bool {
+	cd, ok := tok.(CharData)
+	if !ok {
+		return false
+	}
+	for _, b := range cd {
+		if !isWhitespace(b) {
+			return false
+		}
+	}
+	return true
+}

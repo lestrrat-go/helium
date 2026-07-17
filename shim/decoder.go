@@ -69,6 +69,7 @@ type Decoder struct {
 	saxStarted      bool        // true once SAX goroutine has been started
 	detectedCharset string      // non-UTF-8 encoding from XML declaration
 	pendingEvent    *tokenEvent // lookahead event saved during CharData merging
+	sawContent      bool        // TokenReader path: a non-whitespace token has been seen
 }
 
 func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
@@ -493,9 +494,25 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	// prolog scanner read. The SAX emitter suppresses its own, so a declaration
 	// only ever reaches this point from a TokenReader.
 	if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
+		// XMLDecl is only legal as the very first thing in a document
+		// (prolog ::= XMLDecl? Misc* ...), with only whitespace ahead of it.
+		// d.sawContent records whether a non-whitespace token already reached
+		// the caller on the TokenReader path — mirroring prologScanner.sawContent
+		// on the reader path — so a declaration after a comment, PI, doctype,
+		// earlier declaration, or the root start tag is rejected here too.
+		if d.sawContent {
+			return nil, errDeclNotAtStart
+		}
 		if err := d.checkXMLDecl(string(pi.Inst)); err != nil {
 			return nil, err
 		}
+	}
+
+	// Record prior content for the TokenReader path's placement rule above.
+	// Leading whitespace CharData does not count, matching the reader path,
+	// where scanProlog accumulates it as CharData without setting sawContent.
+	if d.tokenReader != nil && !isWhitespaceToken(tok) {
+		d.sawContent = true
 	}
 
 	d.lastToken = tok
