@@ -23,7 +23,7 @@ All error formatting matches libxml2 output for golden test compatibility.
 `ErrNilNode`, `ErrInvalidOperation`, and `ErrCyclicNode` back the guarded tree API and are all matchable via `errors.Is`:
 
 - **`ErrNilNode`** — a nil or typed-nil node (including Go's interface nil trap, e.g. the typed-nil `*Element` `Document.DocumentElement()` returns for a rootless doc) reached `AddChild`/`AddSibling`/`Replace`/`Walk`/`CopyNode`/`ParseInNodeContext`/`SetDocumentElement`.
-- **`ErrInvalidOperation`** — an unsupported structural op: an empty `Replace()` (matching `Document.Replace`), a non-attribute sibling/replacement of a property attribute, or duplicate replacement operands.
+- **`ErrInvalidOperation`** — an unsupported structural op: an empty `Replace()` (matching `Document.Replace`), a non-attribute sibling/replacement of a property attribute, duplicate replacement operands, or a `DeclareNamespace` redeclaration that conflicts with an attribute already bound to that prefix at a different URI.
 - **`ErrCyclicNode`** — a `wouldCreateCycle` rejection in `AddChild`/`AddSibling`/`Replace` (inserting a node into itself or a descendant, or replacing a node with an ancestor).
 
 The `ErrInvalidOperation`/`ErrCyclicNode` mutation sites wrap a descriptive message via `%w`, so the human text is preserved while `errors.Is` still matches.

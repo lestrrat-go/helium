@@ -1026,23 +1026,82 @@ func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 // DeclareNamespace declares a namespace on this node without making it the
 // node's active namespace (libxml2: xmlNewNs).
 //
-// The declaration is idempotent per prefix: if the prefix is already declared
-// on this node with the same URI the call is a no-op, and if it is declared
-// with a different URI the existing declaration is updated in place. The node
-// therefore holds at most one declaration per prefix, so serialization never
-// emits a duplicate or conflicting xmlns for the same prefix.
+// The declaration is idempotent per prefix and leaves the node holding at most
+// one declaration for the prefix: if the prefix is already declared with the
+// same URI the call is a no-op; if it is declared with a different URI (or is
+// declared more than once) the first declaration is rebound to uri and every
+// other declaration of the same prefix is dropped. The first declaration is
+// replaced with a fresh Namespace rather than rewriting the existing object, so
+// a Namespace a caller supplied via AddNamespaceDecl is never mutated. When the
+// node's active namespace uses the same prefix it is repointed to the single
+// surviving declaration. Serialization therefore never emits a duplicate or
+// conflicting xmlns for the prefix.
+//
+// The call is rejected with an error wrapping ErrInvalidOperation, leaving the
+// node unchanged, when an attribute on the node binds the same prefix to a
+// different URI: rebinding the prefix would change that attribute's namespace,
+// and keeping the attribute's binding would force a second, conflicting xmlns
+// for the prefix, so the at-most-one-declaration guarantee cannot be met.
 func (n *node) DeclareNamespace(prefix, uri string) error {
-	for _, ns := range n.nsDefs {
-		if ns.Prefix() == prefix {
-			ns.href = uri
-			return nil
+	// An attribute genuinely bound to this prefix at a different URI cannot be
+	// reconciled to a single declaration without changing its meaning. Checked
+	// before any mutation so the node is unchanged on rejection.
+	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
+		if ans := attr.ns; ans != nil && ans.prefix == prefix && ans.href != uri {
+			return fmt.Errorf("%w: attribute binds prefix %q to a conflicting namespace %q", ErrInvalidOperation, prefix, ans.href)
 		}
 	}
-	ns, err := n.doc.CreateNamespace(prefix, uri)
+
+	activeSamePrefix := n.ns != nil && n.ns.prefix == prefix
+
+	// Fast path: the prefix is already declared exactly once with this URI and the
+	// active namespace (if it uses the prefix) already resolves to this URI, so
+	// there is nothing to reconcile and no allocation is needed.
+	matches := 0
+	var firstMatch *Namespace
+	for _, ns := range n.nsDefs {
+		if ns.Prefix() == prefix {
+			matches++
+			if firstMatch == nil {
+				firstMatch = ns
+			}
+		}
+	}
+	if matches == 1 && firstMatch.href == uri && (!activeSamePrefix || n.ns.href == uri) {
+		return nil
+	}
+
+	decl, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
 		return err
 	}
-	n.nsDefs = append(n.nsDefs, ns)
+
+	// Rebind the first declaration of the prefix to uri and drop every later one,
+	// so the node holds at most one declaration per prefix. The first slot is
+	// replaced with the fresh Namespace rather than rewriting a possibly
+	// caller-owned object.
+	replaced := false
+	kept := n.nsDefs[:0]
+	for _, ns := range n.nsDefs {
+		if ns.Prefix() != prefix {
+			kept = append(kept, ns)
+			continue
+		}
+		if !replaced {
+			kept = append(kept, decl)
+			replaced = true
+		}
+	}
+	if !replaced {
+		kept = append(kept, decl)
+	}
+	n.nsDefs = kept
+
+	// When the active namespace uses this prefix it must resolve to the single
+	// surviving declaration, not a stale second object serialized separately.
+	if activeSamePrefix {
+		n.ns = decl
+	}
 	return nil
 }
 

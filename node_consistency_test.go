@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -84,6 +85,89 @@ func TestDeclareNamespaceIdempotent(t *testing.T) {
 		require.NoError(t, el.DeclareNamespace("p", "urn:a"))
 		require.NoError(t, el.DeclareNamespace("q", "urn:b"))
 		require.Len(t, el.Namespaces(), 2)
+	})
+}
+
+// countXmlnsP returns how many times `xmlns:p="` appears in s.
+func countXmlnsP(s string) int {
+	return strings.Count(s, `xmlns:p="`)
+}
+
+// TestDeclareNamespaceSingleXmlns covers the serialization post-condition: after
+// DeclareNamespace returns nil the element emits at most one xmlns:p and the
+// output parses back without a duplicate-attribute error, even when an active
+// namespace or a pre-existing duplicate declaration used the same prefix.
+func TestDeclareNamespaceSingleXmlns(t *testing.T) {
+	// FINDING 1: an active namespace object carrying the old URI must not be
+	// serialized as a second declaration after the prefix is rebound.
+	t.Run("active namespace with same prefix is reconciled", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		el := doc.CreateElement("root")
+		require.NoError(t, el.DeclareNamespace("p", "urn:old"))
+		require.NoError(t, el.SetActiveNamespace("p", "urn:old"))
+		require.NoError(t, el.DeclareNamespace("p", "urn:new"))
+
+		nss := el.Namespaces()
+		require.Len(t, nss, 1)
+		require.Equal(t, "urn:new", nss[0].URI())
+		require.NotNil(t, el.Namespace())
+		require.Equal(t, "urn:new", el.Namespace().URI(),
+			"active namespace must resolve to the surviving declaration")
+
+		out, err := helium.WriteString(el)
+		require.NoError(t, err)
+		require.Equal(t, 1, countXmlnsP(out),
+			"exactly one xmlns:p must be emitted, got: %s", out)
+
+		_, err = helium.NewParser().Parse(context.Background(), []byte(out))
+		require.NoError(t, err, "serialized output must parse back cleanly")
+	})
+
+	// FINDING 2: two same-prefix declarations added via AddNamespaceDecl must
+	// collapse to one after a redeclaration, without mutating the caller objects.
+	t.Run("pre-existing duplicate declaration collapses", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		el := doc.CreateElement("root")
+		first := helium.NewNamespace("p", "urn:first")
+		second := helium.NewNamespace("p", "urn:second")
+		el.AddNamespaceDecl(first)
+		el.AddNamespaceDecl(second)
+		require.NoError(t, el.DeclareNamespace("p", "urn:new"))
+
+		nss := el.Namespaces()
+		require.Len(t, nss, 1, "later duplicate declaration must be dropped")
+		require.Equal(t, "urn:new", nss[0].URI())
+		// The caller-owned objects must not have been rewritten in place.
+		require.Equal(t, "urn:first", first.URI())
+		require.Equal(t, "urn:second", second.URI())
+
+		out, err := helium.WriteString(el)
+		require.NoError(t, err)
+		require.Equal(t, 1, countXmlnsP(out),
+			"exactly one xmlns:p must be emitted, got: %s", out)
+
+		_, err = helium.NewParser().Parse(context.Background(), []byte(out))
+		require.NoError(t, err, "serialized output must parse back cleanly")
+	})
+
+	// The reject path: an attribute bound to the prefix at a conflicting URI
+	// cannot be collapsed, so the redeclaration is rejected and the node is
+	// left unchanged.
+	t.Run("attribute conflict is rejected", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		el := doc.CreateElement("root")
+		require.NoError(t, el.DeclareNamespace("p", "urn:old"))
+		attrNS := helium.NewNamespace("p", "urn:old")
+		_, err := el.SetAttributeNS("attr", "v", attrNS)
+		require.NoError(t, err)
+
+		err = el.DeclareNamespace("p", "urn:new")
+		require.ErrorIs(t, err, helium.ErrInvalidOperation)
+
+		nss := el.Namespaces()
+		require.Len(t, nss, 1)
+		require.Equal(t, "urn:old", nss[0].URI(),
+			"a rejected redeclaration must leave the declaration unchanged")
 	})
 }
 
