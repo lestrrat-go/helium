@@ -205,8 +205,9 @@ func (d *Document) AddSibling(_ Node) error {
 	return errors.New("can't add sibling to a document")
 }
 
-// SetTreeDoc sets doc as the owning document of this node and of each
-// descendant not already owned by doc.
+// SetTreeDoc sets doc as this node's owning document, propagating to
+// descendants only when this node's owner changes. It is a no-op when this node
+// already owns doc.
 func (d *Document) SetTreeDoc(doc *Document) {
 	setTreeDoc(d, doc)
 }
@@ -427,9 +428,9 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 }
 
 // CreateAttribute builds an attribute node named name, with value parsed into
-// its child node list, and optional namespace ns, owned by this document. A
-// colon in name is rejected; supply a namespaced name through ns instead. name
-// is not otherwise checked against the XML Name/NCName grammar.
+// its child node list, and optional namespace ns. A colon in name is rejected;
+// supply a namespaced name through ns instead. name is not otherwise checked
+// against the XML Name/NCName grammar.
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
 	if strings.ContainsRune(name, ':') {
 		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
