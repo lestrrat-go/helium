@@ -601,7 +601,7 @@ func TestFindElementsByID(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.xml))
 			require.NoError(t, err)
 
-			matches := findElementsByID(doc, tc.id)
+			matches := findElementsByIDUnder(doc.DocumentElement(), tc.id)
 			require.Len(t, matches, tc.count)
 		})
 	}
